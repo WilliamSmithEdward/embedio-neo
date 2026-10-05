@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Documented multiple static-folder mounts and explicit missing-file pass-through
+  for upstream #599, with eight regression cases. Routing defaults are unchanged.
+
 - Added upstream #601 regression coverage and MAUI Mac Catalyst startup guidance.
   The reported SWAN Console.WindowHeight failure path was already removed in
   1.0.0. The sandboxed MAUI Mac Catalyst HTTP/WebView smoke passed in CI;
