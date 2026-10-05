@@ -30,6 +30,8 @@
       href: compatibility/migration.md
 - name: Platforms
   items:
+    - name: MAUI HTTPS validation
+      href: platforms/maui-https-validation.md
     - name: MAUI Android
       href: platforms/maui-android.md
     - name: MAUI Mac Catalyst

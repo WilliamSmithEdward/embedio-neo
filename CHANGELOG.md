@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Added required native MAUI HTTPS fixtures for Windows, iOS, Mac Catalyst and
+  Android, with disposable CA provisioning, normal client/WebView trust checks,
+  external HTTPS verification and a reusable physical-device probe for feature #26.
+  Simulator/emulator results do not establish legacy Xamarin or physical-device support.
+
 - Fixed internal listener stop/dispose leaving pending accepts and missing Stopped
   notifications; shutdown now drains stale queued contexts without spinning.
   Added cancellation, queue concurrency, disconnect, and two-server regressions

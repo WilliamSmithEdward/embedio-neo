@@ -4,7 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 
 // Disposable test credentials, never production credentials. Only the leaf key
 // is exported; the test CA private key exists solely in this process.
-if (args.Length != 1) throw new ArgumentException("Specify the test certificate output directory.");
+if (args.Length < 1) throw new ArgumentException("Specify the test certificate output directory and optional device DNS names/IPs.");
 Directory.CreateDirectory(args[0]);
 var start = DateTimeOffset.UtcNow.AddMinutes(-5);
 var end = start.AddDays(2);
@@ -19,7 +19,14 @@ var leafRequest = new CertificateRequest("CN=localhost", leafKey, HashAlgorithmN
 var names = new SubjectAlternativeNameBuilder();
 names.AddDnsName("localhost");
 names.AddIpAddress(IPAddress.Loopback);
+foreach (var host in args.Skip(1))
+{
+    if (IPAddress.TryParse(host, out var address)) names.AddIpAddress(address);
+    else names.AddDnsName(host);
+}
 leafRequest.CertificateExtensions.Add(names.Build());
+leafRequest.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(leafRequest.PublicKey, false));
+leafRequest.CertificateExtensions.Add(X509AuthorityKeyIdentifierExtension.CreateFromCertificate(root, true, false));
 leafRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
 leafRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));
 leafRequest.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, true));

@@ -5,11 +5,9 @@ import json
 import os
 from pathlib import Path
 import plistlib
-import ssl
 import subprocess
 import time
-import urllib.error
-import urllib.request
+from maui_https_probe import validate
 
 parser = argparse.ArgumentParser()
 parser.add_argument('platform', choices=['windows', 'ios', 'maccatalyst', 'android'])
@@ -23,9 +21,7 @@ CERTS = Path('TestResults/maui-https/certificates').resolve()
 PACKAGE = 'io.embedioneo.https'
 PORT = 59626
 BASE = f'https://127.0.0.1:{PORT}/'
-EXPECTED = 'EmbedIO MAUI HTTPS rendered'
 CA_SHA1 = hashlib.sha1((CERTS / 'https-test-root.cer').read_bytes()).hexdigest().upper()
-context = ssl.create_default_context(cafile=str(CERTS / 'https-test-root.pem'))
 process = None
 simulator = None
 trust_installed = False
@@ -43,34 +39,11 @@ def unique(pattern):
     return matches[0].resolve()
 
 
-def request(path, data=None):
-    with urllib.request.urlopen(urllib.request.Request(BASE + path, data=data), context=context, timeout=10) as response:
-        if response.status != 200:
-            raise RuntimeError(f'Unexpected HTTP status {response.status}')
-        return response.read()
-
-
-def wait_for_ready():
-    deadline = time.monotonic() + 180
-    last = None
-    while time.monotonic() < deadline:
-        try:
-            last = json.loads(request('state'))
-            if last.get('error') or last.get('phase') == 'failed':
-                raise RuntimeError(f'App tests failed: {last}')
-            if last.get('phase') == 'ready':
-                return last
-        except (urllib.error.URLError, TimeoutError, OSError) as error:
-            last = str(error)
-        if process is not None and process.poll() is not None:
-            raise RuntimeError(f'App exited with {process.returncode}; last state: {last}')
-        time.sleep(1)
-    raise RuntimeError(f'App did not become ready; last state: {last}')
-
-
 try:
     if args.platform == 'windows':
-        invoke('certutil', '-user', '-addstore', 'Root', str(CERTS / 'https-test-root.cer'))
+        invoke('pwsh', '-NoProfile', '-Command',
+               "Import-Certificate -FilePath '" + str(CERTS / 'https-test-root.cer').replace("'", "''")
+               + "' -CertStoreLocation Cert:\\CurrentUser\\Root -ErrorAction Stop | Out-Null")
         trust_installed = True
         app = unique('net10.0-windows10.0.19041.0/win-x64/EmbedIO.MauiHttpsSmoke.exe')
         process_log = (ROOT / 'app.log').open('w')
@@ -116,22 +89,7 @@ try:
         invoke(adb, 'forward', f'tcp:{PORT}', f'tcp:{PORT}')
         invoke(adb, 'shell', 'am', 'start', '-n', PACKAGE + '/.MainActivity')
 
-    initial = wait_for_ready()
-    if EXPECTED not in request('').decode('utf-8'):
-        raise RuntimeError('External HTTPS client did not retrieve the expected page.')
-    # A context without the test CA must reject it, including on Windows where
-    # the fixture has deliberately added that CA to the disposable user's store.
-    try:
-        urllib.request.urlopen(BASE, context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=10).close()
-        raise RuntimeError('External untrusted client unexpectedly accepted the test CA.')
-    except urllib.error.URLError as error:
-        if not isinstance(error.reason, ssl.SSLCertVerificationError):
-            raise
-    final = json.loads(request('finish', data=b''))
-    required = ['transport_and_untrusted_certificate', 'platform_client_trust', 'webview_trust_and_render', 'external_https']
-    if final.get('passed') is not True or any(final.get('checks', {}).get(name) != 'passed' for name in required):
-        raise RuntimeError(f'Incomplete app validation: {final}')
-    final['host_negative_trust'] = 'passed'
+    final = validate(BASE, CERTS / 'https-test-root.pem')
     final['ca_sha1'] = CA_SHA1
     final['app'] = str(app)
     if args.platform == 'ios':
@@ -145,6 +103,11 @@ except Exception as error:
     (ROOT / 'result.json').write_text(json.dumps({'passed': False, 'error': str(error)}, indent=2))
     raise
 finally:
+    if args.platform == 'maccatalyst':
+        container = Path.home() / 'Library/Containers/io.embedioneo.https/Data'
+        if container.exists():
+            for report in container.rglob('https-result.json'):
+                (ROOT / 'app-result.json').write_bytes(report.read_bytes())
     if args.platform == 'android':
         try:
             (ROOT / 'logcat.txt').write_text(invoke(adb, 'logcat', '-d'))

@@ -37,6 +37,14 @@ public sealed class SmokeApp : Application
         platform = DeviceInfo.Platform.ToString(), pid = Environment.ProcessId,
     };
 
+    private void WriteReport()
+    {
+        var directory = DeviceInfo.Platform == DevicePlatform.WinUI
+            ? Environment.GetEnvironmentVariable("EMBEDIO_HTTPS_RESULTS") ?? FileSystem.AppDataDirectory
+            : FileSystem.AppDataDirectory;
+        File.WriteAllText(Path.Combine(directory, "https-result.json"), JsonSerializer.Serialize(Report()));
+    }
+
     private async Task RunAsync(WebView view)
     {
         const string url = "https://127.0.0.1:59626/";
@@ -103,14 +111,14 @@ public sealed class SmokeApp : Application
                 stop.Cancel();
                 await running.WaitAsync(TimeSpan.FromSeconds(10));
             }
-            File.WriteAllText(Path.Combine(FileSystem.AppDataDirectory, "https-result.json"), JsonSerializer.Serialize(Report()));
+            WriteReport();
             Environment.Exit(0);
         }
         catch (Exception error)
         {
             _error = error.ToString();
             _phase = "failed";
-            File.WriteAllText(Path.Combine(FileSystem.AppDataDirectory, "https-result.json"), JsonSerializer.Serialize(Report()));
+            WriteReport();
             Console.Error.WriteLine(_error);
             Environment.Exit(1);
         }

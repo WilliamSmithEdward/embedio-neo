@@ -21,6 +21,13 @@ does not substitute for approval.
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
 The tests target .NET 10.
 
+The required `MAUI HTTPS` CI jobs also run a test-only native app on Windows,
+iOS, Mac Catalyst and Android. They exercise platform client trust, HTTPS WebView
+rendering and a separate strict HTTPS client. The app and certificate generator
+remain outside the solution and shipped packages. See
+[MAUI HTTPS validation](docs/platforms/maui-https-validation.md) for pinned
+toolchains, per-platform dependency locks, artifacts and physical-device steps.
+
 Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 `latestFeature` allows later feature bands), then run:
 
