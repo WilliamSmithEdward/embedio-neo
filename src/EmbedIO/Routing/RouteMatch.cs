@@ -147,7 +147,7 @@ namespace EmbedIO.Routing
         }
 
         /// <inheritdoc />
-        public bool ContainsKey(string key) => Names.Any(n => n == key);
+        public bool ContainsKey(string key) => IndexOf(key) >= 0;
 
         /// <inheritdoc />
         public bool TryGetValue(string key, out string? value)
@@ -174,6 +174,11 @@ namespace EmbedIO.Routing
         /// route parameters have the specified name.</returns>
         public int IndexOf(string name)
         {
+            if (Names is List<string> list)
+                return list.IndexOf(name);
+            if (Names is string[] array)
+                return Array.IndexOf(array, name);
+
             var count = Names.Count;
             for (var i = 0; i < count; i++)
             {

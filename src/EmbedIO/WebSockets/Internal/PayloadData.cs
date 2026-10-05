@@ -1,10 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using EmbedIO.Internal;
-using EmbedIO.Net.Internal;
 
 namespace EmbedIO.WebSockets.Internal
 {
@@ -37,7 +34,7 @@ namespace EmbedIO.WebSockets.Internal
                 if (!_code.HasValue)
                 {
                     _code = _data.Length > 1
-                            ? BitConverter.ToUInt16(_data.Take(2).ToArray().ToHostOrder(Endianness.Big), 0)
+                            ? (ushort)((_data[0] << 8) | _data[1])
                             : (ushort)1005;
                 }
 
@@ -54,13 +51,13 @@ namespace EmbedIO.WebSockets.Internal
 
         internal static byte[] Append(ushort code, string? reason)
         {
-            var ret = code.ToByteArray(Endianness.Big);
-            if (string.IsNullOrEmpty(reason)) return ret;
-
-            var buff = new List<byte>(ret);
-            buff.AddRange(Encoding.UTF8.GetBytes(reason));
-
-            return buff.ToArray();
+            var length = string.IsNullOrEmpty(reason) ? 0 : Encoding.UTF8.GetByteCount(reason);
+            var result = new byte[2 + length];
+            result[0] = (byte)(code >> 8);
+            result[1] = (byte)code;
+            if (length > 0)
+                Encoding.UTF8.GetBytes(reason!, 0, reason!.Length, result, 2);
+            return result;
         }
 
         internal void Mask(byte[] key)

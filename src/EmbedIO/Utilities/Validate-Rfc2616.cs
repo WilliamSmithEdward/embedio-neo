@@ -1,11 +1,10 @@
 ﻿using System;
-using System.Linq;
 
 namespace EmbedIO.Utilities
 {
     partial class Validate
     {
-        private static readonly char[] ValidRfc2616TokenChars = GetValidRfc2616TokenChars();
+        private static readonly bool[] ValidRfc2616TokenChars = GetValidRfc2616TokenChars();
 
         /// <summary>
         /// <para>Ensures that a <see langword="string"/> argument is valid as a token as defined by
@@ -44,12 +43,26 @@ namespace EmbedIO.Utilities
         }
 
         internal static bool IsRfc2616Token(string value)
-            => !string.IsNullOrEmpty(value)
-            && !value.Any(c => c < '\x21' || c > '\x7E' || Array.BinarySearch(ValidRfc2616TokenChars, c) < 0);
+        {
+            if (string.IsNullOrEmpty(value))
+                return false;
 
-        private static char[] GetValidRfc2616TokenChars()
-            => "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'*+-.^_`|~"
-                .OrderBy(c => c)
-                .ToArray();
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                if (c < '\x21' || c > '\x7E' || !ValidRfc2616TokenChars[c])
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static bool[] GetValidRfc2616TokenChars()
+        {
+            var result = new bool[128];
+            foreach (var c in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'*+-.^_`|~")
+                result[c] = true;
+            return result;
+        }
     }
 }

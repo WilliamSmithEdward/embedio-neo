@@ -27,6 +27,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Dual-stack localhost](user-reports/dual-stack-localhost.md): loopback registration, routing and cleanup.
 
+- [Additional performance audit](user-reports/performance-audit-second-pass.md): negotiation, header parsing, WebSocket metadata and request-history improvements.
 - [Performance and code audit](user-reports/performance-audit.md): measured allocation reductions, cache eviction fixes and compatibility checks.
 - [Server header](user-reports/server-header.md): customize HTTP responses and understand backend/upgrade limits.
 

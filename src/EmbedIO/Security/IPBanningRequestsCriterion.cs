@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Linq;
+using System.Collections.Generic;
 using System.Net;
 using System.Threading.Tasks;
 
@@ -17,7 +17,8 @@ namespace EmbedIO.Security
         /// </summary>
         public const int DefaultMaxRequestsPerSecond = 50;
 
-        private static readonly ConcurrentDictionary<IPAddress, ConcurrentBag<long>> Requests = new ConcurrentDictionary<IPAddress, ConcurrentBag<long>>();
+        // Histories retain global ownership; each list is also its private synchronization lock.
+        private static readonly ConcurrentDictionary<IPAddress, List<long>> Requests = new ConcurrentDictionary<IPAddress, List<long>>();
 
         private readonly int _maxRequestsPerSecond;
 
@@ -39,16 +40,35 @@ namespace EmbedIO.Security
         /// <inheritdoc />
         public Task<bool> ValidateIPAddress(IPAddress address)
         {
-            Requests.GetOrAdd(address, _ => new ConcurrentBag<long>()).Add(DateTime.Now.Ticks);
+            var attempts = Requests.GetOrAdd(address, _ => new List<long>());
+            var requestedAt = DateTime.Now.Ticks;
+            while (true)
+            {
+                lock (attempts)
+                {
+                    // A purge or explicit reset may remove this history while we wait.
+                    if (!Requests.TryGetValue(address, out var current) || !ReferenceEquals(current, attempts))
+                    {
+                        attempts = Requests.GetOrAdd(address, _ => new List<long>());
+                        continue;
+                    }
 
-            var lastSecond = DateTime.Now.AddSeconds(-1).Ticks;
-            var lastMinute = DateTime.Now.AddMinutes(-1).Ticks;
+                    attempts.Add(requestedAt);
+                    var lastSecond = DateTime.Now.AddSeconds(-1).Ticks;
+                    var lastMinute = DateTime.Now.AddMinutes(-1).Ticks;
+                    var secondCount = 0;
+                    var minuteCount = 0;
+                    for (var i = 0; i < attempts.Count; i++)
+                    {
+                        var time = attempts[i];
+                        if (time >= lastSecond) secondCount++;
+                        if (time >= lastMinute) minuteCount++;
+                    }
 
-            var shouldBan = Requests.TryGetValue(address, out var attempts) &&
-                (attempts.Count(x => x >= lastSecond) >= _maxRequestsPerSecond ||
-                 (attempts.Count(x => x >= lastMinute) / 60) >= _maxRequestsPerSecond);
-
-            return Task.FromResult(shouldBan);
+                    return Task.FromResult(secondCount >= _maxRequestsPerSecond
+                        || minuteCount / 60 >= _maxRequestsPerSecond);
+                }
+            }
         }
 
         /// <inheritdoc />
@@ -60,15 +80,20 @@ namespace EmbedIO.Security
         {
             var minTime = DateTime.Now.AddMinutes(-1).Ticks;
 
-            foreach (var k in Requests.Keys)
+            foreach (var pair in Requests)
             {
-                if (!Requests.TryGetValue(k, out var requests)) continue;
+                var attempts = pair.Value;
+                lock (attempts)
+                {
+                    if (!Requests.TryGetValue(pair.Key, out var current) || !ReferenceEquals(current, attempts))
+                        continue;
 
-                var recentRequests = new ConcurrentBag<long>(requests.Where(x => x >= minTime));
-                if (!recentRequests.Any())
-                    Requests.TryRemove(k, out _);
-                else
-                    Requests.AddOrUpdate(k, recentRequests, (x, y) => recentRequests);
+                    attempts.RemoveAll(time => time < minTime);
+                    if (attempts.Count == 0)
+                        ((ICollection<KeyValuePair<IPAddress, List<long>>>)Requests).Remove(pair);
+                    else
+                        attempts.TrimExcess();
+                }
             }
         }
 

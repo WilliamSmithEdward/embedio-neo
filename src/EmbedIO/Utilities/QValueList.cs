@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Text.RegularExpressions;
 
 namespace EmbedIO.Utilities
 {
@@ -21,19 +20,6 @@ namespace EmbedIO.Utilities
         /// is OK for me".</para>
         /// </summary>
         public const string Wildcard = "*";
-
-        // This will match a quality value between two semicolons
-        // or between a semicolon and the end of a string.
-        // Match groups will be:
-        // Groups[0] = The matching string
-        // Groups[1] = If group is successful, "0"; otherwise, the weight is 1.000
-        // Groups[2] = If group is successful, the decimal digits after 0
-        // The part of string before the match contains the value and parameters (if any).
-        // The part of string after the match contains the extensions (if any).
-        // If there is no match, the whole string is just value and parameters (if any).
-        private static readonly Regex QualityValueRegex = new Regex(
-            @";[ \t]*q=(?:(?:1(?:\.(?:0{1,3}))?)|(?:(0)(?:\.(\d{1,3}))?))[ \t]*(?:;|,|$)",
-            RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="QValueList"/> class
@@ -185,45 +171,64 @@ namespace EmbedIO.Utilities
                 if (stop < 0)
                     stop = length;
 
-                string name;
-                var weight = 1000;
-                var match = QualityValueRegex.Match(text, position, stop - position);
-                if (match.Success)
-                {
-                    var groups = match.Groups;
-                    var wholeMatch = groups[0];
-                    name = text.Substring(position, wholeMatch.Index - position).Trim();
-                    if (groups[1].Success)
-                    {
-                        weight = 0;
-                        if (groups[2].Success)
-                        {
-                            var digits = groups[2].Value;
-                            var n = 0;
-                            while (n < digits.Length)
-                            {
-                                weight = (10 * weight) + (digits[n] - '0');
-                                n++;
-                            }
-
-                            while (n < 3)
-                            {
-                                weight = 10 * weight;
-                                n++;
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    name = text.Substring(position, stop - position).Trim();
-                }
+                FindQuality(text, position, stop, out var nameEnd, out var weight);
+                var name = text.Substring(position, nameEnd - position).Trim();
 
                 if (!string.IsNullOrEmpty(name))
                     dictionary[name] = (weight, ordinal);
 
                 position = stop + 1;
                 ordinal++;
+            }
+        }
+
+
+        // Find the first quality field accepted by the legacy grammar.
+        private static void FindQuality(string text, int start, int end, out int nameEnd, out int weight)
+        {
+            nameEnd = end;
+            weight = 1000;
+            for (var separator = text.IndexOf(';', start, end - start); separator >= 0;
+                separator = text.IndexOf(';', separator + 1, end - separator - 1))
+            {
+                var position = separator + 1;
+                while (position < end && (text[position] == ' ' || text[position] == '\t'))
+                    position++;
+                if (position + 2 >= end || text[position] != 'q' || text[position + 1] != '=')
+                    continue;
+                position += 2;
+                var one = text[position] == '1';
+                if (!one && text[position] != '0')
+                    continue;
+                position++;
+                var candidate = one ? 1000 : 0;
+                if (position < end && text[position] == '.')
+                {
+                    position++;
+                    var digits = 0;
+                    candidate = 0;
+                    while (position < end && digits < 3
+                        && (one ? text[position] == '0' : char.IsDigit(text[position])))
+                    {
+                        candidate = 10 * candidate + text[position++] - '0';
+                        digits++;
+                    }
+                    if (digits == 0)
+                        continue;
+                    if (one)
+                        candidate = 1000;
+                    else
+                        while (digits++ < 3) candidate *= 10;
+                }
+                while (position < end && (text[position] == ' ' || text[position] == '\t'))
+                    position++;
+                // The original regex's end anchor also accepted a single final LF.
+                if (position < end && text[position] != ';'
+                    && !(position == end - 1 && text[position] == '\n'))
+                    continue;
+                nameEnd = separator;
+                weight = candidate;
+                return;
             }
         }
 

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Reduce content-negotiation, header/token parsing, WebSocket metadata and frame-read
+  allocations. Avoid rate-history snapshots and preserve request records during
+  concurrent purges. Keep existing thresholds, shared history ownership, parser
+  behavior, APIs, defaults and dependencies; add 49 regression cases and CI budgets.
+
 - Preserve pre-existing endpoint prefixes when a live alias registration fails; roll back only the prefixes actually added by that attempt.
 
 - Register managed localhost prefixes on both enabled loopback families, with rollback and ownership-safe endpoint cleanup. Keep failed live additions retryable and reject duplicate ownership or incompatible HTTP/HTTPS endpoint registrations.
