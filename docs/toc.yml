@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Progress events
+      href: user-reports/progress-events.md
     - name: Streaming response closure
       href: user-reports/streaming-response-close.md
     - name: macOS accept reset crashes

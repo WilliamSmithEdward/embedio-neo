@@ -25,6 +25,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [Progress events](user-reports/progress-events.md): a complete SSE progress server and browser client, plus the additive event writer.
 - [Streaming response closure](user-reports/streaming-response-close.md): SSE, completion callbacks, server cancellation and disconnect detection.
 
 - [macOS accept reset crashes](user-reports/mac-accept-reset.md): mitigation, thread cost, and stress coverage.
