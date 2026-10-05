@@ -30,12 +30,12 @@ namespace EmbedIO.Net.Internal
 
             _sock.Bind(_endpoint);
             _sock.Listen(500);
+            _prefixes = new Dictionary<ListenerPrefix, HttpListener>();
+            _unregistered = new Dictionary<HttpConnection, HttpConnection>();
             var args = new SocketAsyncEventArgs { UserToken = this };
             args.Completed += OnAccept;
             Socket? dummy = null;
             Accept(_sock, args, ref dummy);
-            _prefixes = new Dictionary<ListenerPrefix, HttpListener>();
-            _unregistered = new Dictionary<HttpConnection, HttpConnection>();
         }
 
         internal HttpListener Listener { get; }

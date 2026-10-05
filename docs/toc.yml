@@ -2,6 +2,8 @@
   href: README.md
 - name: Usage guides
   items:
+    - name: HTTPS
+      href: guides/https.md
     - name: Command-line server
       href: guides/cli.md
     - name: Static folders

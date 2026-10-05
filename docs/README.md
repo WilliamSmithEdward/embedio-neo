@@ -6,6 +6,7 @@ Start with the [project README](../README.md) for installation and a working ser
 
 ## Usage guides
 
+- [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
 - [Command-line server](guides/cli.md): options, static serving, plugins, and CLI provenance.
 - [Multiple static folders](guides/multiple-static-folders.md): mount order and explicit fallback.
 - [Asynchronous outbound requests](guides/async-outbound-requests.md): controller return types,

@@ -246,7 +246,12 @@ namespace EmbedIONeoExample
 
 ## Support for SSL
 
-Both HTTP listeners (Microsoft and EmbedIO) can open a web server using SSL. This support is for Windows only (for now) and you need to manually register your certificate or use the `WebServerOptions` class to initialize a new `WebServer` instance. This section will provide some examples of how to use SSL but first a brief explanation of how SSL works on Windows.
+The EmbedIO listener uses the runtime's TLS provider with an application-supplied
+private-key certificate. Select `HttpListenerMode.EmbedIO` and `WithCertificate`
+for hosting independently of Windows certificate registration. See the
+[HTTPS guide](docs/guides/https.md) for desktop and .NET MAUI configuration,
+client trust requirements, and platform validation limits. The Windows-only
+restriction applies to the automatic certificate-store/`netsh` helpers below.
 
 On Windows, Network Shell (`netsh`) maps an IP-port to a certificate. EmbedIO can
 read or register certificates in the default store (My/LocalMachine) and use a

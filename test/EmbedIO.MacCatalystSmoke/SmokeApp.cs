@@ -21,6 +21,7 @@ public sealed class SmokeApp : Application
         Directory.CreateDirectory(root);
         try
         {
+            await PlatformTests.HttpsSmoke.RunAsync();
             const string marker = "EmbedIO issue 601 passed";
             File.WriteAllText(Path.Combine(root, "index.html"), $"<!doctype html><html><body>{marker}</body></html>");
             using var port = new TcpListener(IPAddress.Loopback, 0);
@@ -57,7 +58,7 @@ public sealed class SmokeApp : Application
                 await running.WaitAsync(TimeSpan.FromSeconds(10));
             }
 
-            File.WriteAllText(result, JsonSerializer.Serialize(new { passed = true, os = Environment.OSVersion.ToString(), runtime = Environment.Version.ToString() }));
+            File.WriteAllText(result, JsonSerializer.Serialize(new { passed = true, https = "passed", os = Environment.OSVersion.ToString(), runtime = Environment.Version.ToString() }));
             Environment.Exit(0);
         }
         catch (Exception error)
