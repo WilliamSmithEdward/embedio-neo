@@ -241,6 +241,53 @@ namespace EmbedIO.Tests.Issues
             Assert.That(secure.IsListening, Is.True);
         }
 
+        [TestCase("*")]
+        [TestCase("+")]
+        public async Task FailedWildcardAliasDoesNotRemoveItsExistingRegistration(string host)
+        {
+            var port = new Uri(Resources.GetServerAddress()).Port;
+            var prefix = $"http://{host}:{port}/";
+            var alias = $"http://{host}:{port:D6}/";
+            using var listener = new Net.HttpListener();
+            listener.AddPrefix(prefix); listener.Start();
+            Assert.Throws<HttpListenerException>(() => listener.AddPrefix(alias));
+            Assert.That(listener.Prefixes, Does.Not.Contain(alias));
+            await AssertListenerServesAsync(listener, port);
+        }
+
+        [Test]
+        public async Task FailedAliasExpansionDoesNotRollBackAnAlreadyOwnedPrefix()
+        {
+            if (!Socket.OSSupportsIPv6) Assert.Ignore("IPv6 is unavailable.");
+            var previous = Net.EndPointManager.UseIpv6;
+            var url = Resources.GetServerAddress(); var port = new Uri(url).Port;
+            using var occupied = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp);
+            occupied.Bind(new IPEndPoint(IPAddress.IPv6Loopback, port)); occupied.Listen(1);
+            using var listener = new Net.HttpListener(); listener.AddPrefix(url);
+            try
+            {
+                Net.EndPointManager.UseIpv6 = false; listener.Start();
+                Net.EndPointManager.UseIpv6 = true;
+                Assert.Throws<SocketException>(() => listener.AddPrefix(url.Replace("localhost", "LOCALHOST", StringComparison.Ordinal)));
+                await AssertListenerServesAsync(listener, port);
+            }
+            finally { Net.EndPointManager.UseIpv6 = previous; }
+        }
+
+        private static async Task AssertListenerServesAsync(Net.HttpListener listener, int port)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var client = CreateClient(IPAddress.Loopback);
+            var accept = listener.GetContextAsync(timeout.Token);
+            var request = client.GetStringAsync($"http://localhost:{port}/", timeout.Token);
+            // Observe a connection failure immediately rather than waiting on the accept timeout.
+            if (await Task.WhenAny(accept, request) == request) await request;
+            var context = await accept;
+            await context.SendStringAsync("owned", "text/plain", Encoding.UTF8);
+            context.Close();
+            Assert.That(await request, Is.EqualTo("owned"));
+        }
+
         private static WebServer CreateServer(string url, string body)
             => new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new ActionModule("/", HttpVerbs.Any, c => c.SendStringAsync(body, "text/plain", Encoding.UTF8)));

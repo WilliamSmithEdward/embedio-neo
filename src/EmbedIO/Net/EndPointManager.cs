@@ -85,6 +85,7 @@ namespace EmbedIO.Net
                 if (Registrations.TryGetValue(listener, out var prefixes) && prefixes.ContainsKey(p))
                     return;
                 var endpoints = new List<EndPointListener>();
+                var added = new List<EndPointListener>();
                 try
                 {
                     foreach (var address in ResolveAddresses(lp.Host))
@@ -93,13 +94,14 @@ namespace EmbedIO.Net
                         var endpoint = ports.GetOrAdd(lp.Port, port => new EndPointListener(listener, address, port, lp.Secure));
                         if (endpoint.Secure != lp.Secure)
                             throw new HttpListenerException(400, "HTTP and HTTPS cannot share a listening endpoint.");
+                        if (endpoint.AddPrefix(lp, listener))
+                            added.Add(endpoint);
                         endpoints.Add(endpoint);
-                        endpoint.AddPrefix(lp, listener);
                     }
                 }
                 catch
                 {
-                    foreach (var endpoint in endpoints)
+                    foreach (var endpoint in added)
                         endpoint.RemovePrefix(lp, listener);
                     throw;
                 }
