@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- Added upstream #601 regression coverage and MAUI Mac Catalyst startup guidance.
+  The reported SWAN Console.WindowHeight failure path was already removed in
+  1.0.0; signed MAUI app confirmation remains outstanding.
+
 ## [1.0.0] - 2026-10-04
 
 First independent Neo release, continuing Unosquare's EmbedIO, Extras JsonServer,

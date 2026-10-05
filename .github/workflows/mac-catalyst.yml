@@ -1,0 +1,39 @@
+name: Mac Catalyst smoke
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    name: MAUI Mac Catalyst smoke
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.401
+      - name: Install the pinned Mac Catalyst workload
+        run: dotnet workload install maui-maccatalyst --version 10.0.401
+      - name: Build the sandboxed smoke app
+        run: dotnet build test/EmbedIO.MacCatalystSmoke/EmbedIO.MacCatalystSmoke.csproj -c Debug -p:RunAnalyzers=false
+      - name: Verify entitlements and run the app
+        run: |
+          mkdir -p TestResults/mac-catalyst
+          app=test/EmbedIO.MacCatalystSmoke/bin/Debug/net10.0-maccatalyst/maccatalyst-arm64/EmbedIO.MacCatalystSmoke.app
+          codesign --verify --deep --strict "$app"
+          codesign -d --entitlements :- "$app" > TestResults/mac-catalyst/entitlements.plist
+          python3 scripts/run_mac_catalyst_smoke.py "$app"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mac-catalyst-smoke
+          path: |
+            TestResults/mac-catalyst/
+            test/EmbedIO.MacCatalystSmoke/packages.lock.json
+          if-no-files-found: error
