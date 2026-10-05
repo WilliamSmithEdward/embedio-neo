@@ -36,7 +36,18 @@ jobs:
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=false
       - name: Run the regression suite with coverage
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 430 --coverlet
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 473 --coverlet
+      - name: Stress immediate client resets on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for iteration in 1 2 3 4 5; do
+            dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
+              --filter 'FullyQualifiedName~Issue38_MacAcceptReset|FullyQualifiedName~IncompleteAndDisconnectedClientsDoNotStopHealthyRequests' \
+              --report-trx --results-directory "TestResults/mac-reset-$iteration" \
+              --timeout 2m --minimum-expected-tests 17
+          done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

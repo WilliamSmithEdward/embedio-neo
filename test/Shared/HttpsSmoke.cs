@@ -21,6 +21,7 @@ namespace EmbedIO.PlatformTests
             var names = new SubjectAlternativeNameBuilder();
             names.AddDnsName("localhost");
             names.AddIpAddress(IPAddress.Loopback);
+            names.AddIpAddress(IPAddress.IPv6Loopback);
             request.CertificateExtensions.Add(names.Build());
             request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
             request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));

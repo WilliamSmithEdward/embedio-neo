@@ -91,3 +91,7 @@ MAUI app on a newer runtime does not reproduce it.
 
 For production certificate ownership, provisioning and client trust, see the
 [HTTPS guide](../guides/https.md).
+The [macOS reset guide](../user-reports/mac-accept-reset.md) describes the
+runtime accept-crash mitigation and its additional thread per IPv6 endpoint.
+Immediate-reset HTTP/TLS regressions and repeated macOS stress runs remain
+required alongside this native HTTPS fixture.
