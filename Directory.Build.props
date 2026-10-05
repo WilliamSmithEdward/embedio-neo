@@ -6,7 +6,7 @@
 
   <PropertyGroup>
     <Copyright>Copyright (C) Unosquare 2013-2021; Copyright (C) 2026 William Smith (EmbedIO-Neo modifications)</Copyright>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <PackageIcon>embedio_neo_icons.png</PackageIcon>
     <PackageTags>cross-platform;csharp;dotnet;embed;embedded;embedio;embedio-modules;http;http-server;io;lightweight;rest-api;webapi;webserver;websocket</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
