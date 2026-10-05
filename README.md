@@ -14,12 +14,12 @@ A small, cross-platform, modular web server for .NET, maintained by William Smit
 
 For MAUI apps on Mac Catalyst, see the [local server startup guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/maui-mac-catalyst.md), including upstream issue #601 and sandbox entitlements.
 This is an independent fork of [EmbedIO](https://github.com/unosquare/embedio).
-Original copyright and third-party notices are preserved in [LICENSE](LICENSE).
+Original copyright and third-party notices are preserved in [LICENSE](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/LICENSE).
 
 Development focuses on compatible enhancements, simpler internals, bug fixes,
 and measured performance improvements. Breaking changes require William's
 explicit approval before implementation, with documented migration steps.
-See [Contributing](CONTRIBUTING.md) for the compatibility policy and build commands.
+See [Contributing](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/CONTRIBUTING.md) for the compatibility policy and build commands.
 
 Report issues and contribute at
 [WilliamSmithEdward/embedio-neo](https://github.com/WilliamSmithEdward/embedio-neo).
@@ -132,7 +132,7 @@ catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
 
 The controller methods below are excerpts for a `WebApiController` subclass.
 Supply your application's `SaveData` method and request types, and register the
-controller through `WithWebApi` as shown in [CLI.md](CLI.md#plugins).
+controller through `WithWebApi` as shown in [CLI.md](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/cli.md#plugins).
 ### Reading from a POST body as a dictionary (application/x-www-form-urlencoded)
 
 For reading a dictionary from an HTTP Request body inside a WebAPI method you can add an argument to your method with the attribute `FormData`.
@@ -148,7 +148,7 @@ For reading a dictionary from an HTTP Request body inside a WebAPI method you ca
 
 ### Reading from a POST body as a JSON payload (application/json)
 
-For reading a JSON payload and deserialize it to an object from an HTTP Request body you can use [GetRequestDataAsync<T>](src/EmbedIO/HttpContextExtensions-Requests.cs). This method works directly from `IHttpContext` and returns an object of the type specified in the generic type.
+For reading a JSON payload and deserialize it to an object from an HTTP Request body you can use [GetRequestDataAsync<T>](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/src/EmbedIO/HttpContextExtensions-Requests.cs). This method works directly from `IHttpContext` and returns an object of the type specified in the generic type.
 
 ```csharp
     [Route(HttpVerbs.Post, "/data")]
@@ -267,7 +267,7 @@ If you already have a certificate on the default certificate store and the bindi
 ## Included modules
 
 The solution contains the core server, test helpers, and
-[`EmbedIO.JsonServer`](src/EmbedIO.JsonServer). JsonServer serves a JSON file as
+[`EmbedIO.JsonServer`](https://github.com/WilliamSmithEdward/embedio-neo/tree/main/src/EmbedIO.JsonServer). JsonServer serves a JSON file as
 REST collections without adding a runtime dependency beyond the core library.
 
 ```csharp
@@ -282,19 +282,21 @@ await server.RunAsync();
 For a file containing `{"posts":[{"id":1,"title":"Hello"}]}`, use
 `GET /api/posts`, `GET /api/posts/1`, `POST /api/posts`, `PUT /api/posts/1`, or
 `DELETE /api/posts/1`. Authenticate access before exposing mutable data.
-See [Contributing](CONTRIBUTING.md#extras-integration) for provenance, persistence
+See [Contributing](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/CONTRIBUTING.md#extras-integration) for provenance, persistence
 limits, and the disposition of the other archived Extras modules.
 
 Build with the .NET 10 SDK specified in `global.json`. Libraries retain
-.NET Standard 2.0 for existing consumers and also target .NET 10. Tests run on .NET 10. SWAN has been removed. The .NET 10 core has no external runtime packages; .NET Standard 2.0 uses Microsoft System.Text.Json. See the [migration guide](MIGRATION.md) for the approved API and JSON changes.
+.NET Standard 2.0 for existing consumers and also target .NET 10. Tests run on .NET 10. SWAN has been removed. The .NET 10 core has no external runtime packages; .NET Standard 2.0 uses Microsoft System.Text.Json. See the [migration guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/migration.md) for the approved API and JSON changes.
 
 ## Command-line server
 
-The [integrated CLI](CLI.md) serves local folders and Web API/WebSocket plugins.
+The [integrated CLI](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/cli.md) serves local folders and Web API/WebSocket plugins.
 It shares this repository's core library and versioning and requires .NET 10.
 Run `dotnet run --project src/EmbedIO.Cli -- --help` to get started.
 
-See [Neo baseline and direction](docs/embed_io_neo.md) for the initial changes,
+Browse the [documentation index](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/README.md) for usage, platform, and migration guides.
+
+See [Neo baseline and direction](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/embed_io_neo.md) for the initial changes,
 validation, acknowledgments, and planned work.
 
 For configurable cycle handling in JSON responses, see the [circular-reference guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/json-circular-references.md).

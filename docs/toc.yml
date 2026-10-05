@@ -1,0 +1,16 @@
+- name: Documentation
+  href: README.md
+- name: Command-line server
+  href: cli.md
+- name: Static folders
+  href: multiple-static-folders.md
+- name: Async outbound requests
+  href: async-outbound-requests.md
+- name: Circular JSON references
+  href: json-circular-references.md
+- name: Migration
+  href: migration.md
+- name: MAUI Mac Catalyst
+  href: maui-mac-catalyst.md
+- name: Baseline and direction
+  href: embed_io_neo.md
