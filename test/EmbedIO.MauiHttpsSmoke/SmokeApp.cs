@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using EmbedIO.Actions;
@@ -100,7 +101,8 @@ public sealed class SmokeApp : Application
                     throw new InvalidOperationException("Trusted HTTPS WebView navigation failed.");
                 var rendered = false;
                 string? lastDom = null;
-                for (var attempt = 0; attempt < 100; attempt++)
+                var domWait = Stopwatch.StartNew();
+                while (domWait.Elapsed < TimeSpan.FromSeconds(10))
                 {
                     lastDom = await view.EvaluateJavaScriptAsync(
                         "document.readyState === 'complete' && document.body ? document.body.textContent : ''")
