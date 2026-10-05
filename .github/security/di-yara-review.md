@@ -51,7 +51,7 @@ retained locally under ignored `TestResults/di-implementation/yara-evidence`.
 ## Acceptance boundary
 
 Accept this rule only for the two `EmbedIO.DependencyInjection.dll` paths in
-the 1.0.0 package and the two review files named in the acceptance list.
+the 1.0.1 package and the two review files named in the acceptance list.
 The review Markdown and acceptance TOML repeat the inspected filename as
 evidence; the pinned scanner confirmed that these text references also match.
 A full local YARA scan found only these four expected paths across 500 files.
@@ -59,3 +59,25 @@ Other rules, other files, scan errors, missing scans and
 accepted paths that cease matching remain failures. A new package version or
 changed rule requires review of the acceptance paths and evidence. Preserve
 full scanning of source files, packages and unpacked assemblies.
+
+## 1.0.1 release revalidation
+
+The [release PR scan](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37284977164)
+reported the same four matches and no scanner errors; ClamAV found zero matches.
+The assembly paths changed with the package version. Both scanner/rule archive
+hashes were verified against `yara.json`, the rule was reread, and the full pinned
+rules were rerun with printed matching strings in a network-disabled container
+against the downloaded `scanned-nupkg` artifact.
+
+| Target | Offset | Match | Assembly SHA-256 |
+| --- | --- | --- | --- |
+| net10.0 | `0x5350` | `Injection.pdb` | `c97db9492f3f48aadfb848c09dab0adf7c8bba8088f6cf86f659130a64293dbc` |
+| netstandard2.0 | `0x558f` | `Injection.pdb` | `bc17229a4bd527b9be4d9d8f399c666f18cbf49a41beab999cc1fbfbf528c80c` |
+
+PEReader again confirmed the matching bytes belong to the same CodeView paths
+listed above. No other strings or rules matched the two assemblies. This review
+covers PR merge commit `aaacbb5e1379844edc144529ea8a7d27155529ad` and preserves
+the exact rule/path acceptance boundary. Only the two package-version paths
+change; other rules, paths, errors and stale acceptances continue to fail.
+Raw scanner output and extracted metadata are retained under ignored
+`TestResults/release-1.0.1/TestResults/release-validation`.

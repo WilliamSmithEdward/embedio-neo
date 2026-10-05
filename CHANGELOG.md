@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-05
+
+Patch release with managed-listener shutdown, HTTPS and macOS accept fixes.
+The four existing packages retain their identities and target frameworks; the
+optional `EmbedIO-Neo.DependencyInjection` package joins the release family.
+
 - Added required native MAUI HTTPS fixtures for Windows, iOS, Mac Catalyst and
   Android, with disposable CA provisioning, normal client/WebView trust checks,
   external HTTPS verification and a reusable physical-device probe for feature #26.
