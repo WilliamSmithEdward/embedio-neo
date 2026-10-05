@@ -265,6 +265,26 @@ namespace EmbedIO.WebApi
                 throw new ArgumentException($"Type {controllerType.Name} contains no controller methods.");
         }
 
+        /// <summary>
+        /// Registers request-aware activation with explicit ownership. Release is awaited
+        /// after the handler and serializer, including when either throws.
+        /// </summary>
+        /// <param name="controllerType">The concrete controller type.</param>
+        /// <param name="factory">Creates a fresh controller for the request.</param>
+        /// <param name="release">Releases the controller, or does nothing for container-owned instances.</param>
+        protected void RegisterControllerTypeWithContext(
+            Type controllerType,
+            Func<IHttpContext, WebApiController> factory,
+            Func<IHttpContext, WebApiController, Task> release)
+        {
+            EnsureConfigurationNotLocked();
+            controllerType = ValidateControllerType(nameof(controllerType), controllerType, true);
+            Validate.NotNull(nameof(factory), factory);
+            Validate.NotNull(nameof(release), release);
+            if (!TryRegisterControllerTypeCore(controllerType, Expression.Default(controllerType), factory, release))
+                throw new ArgumentException($"Type {controllerType.Name} contains no controller methods.");
+        }
+
         private static int IndexOfRouteParameter(RouteMatcher matcher, string name)
         {
             var names = matcher.ParameterNames;
@@ -319,7 +339,10 @@ namespace EmbedIO.WebApi
         // - serializes the returned object (or the result of the returned task),
         //   unless the return type of the controller method is void or Task;
         // - if the controller implements IDisposable, disposes it.
-        private RouteHandlerCallback CompileHandler(Expression factoryExpression, MethodInfo method, RouteMatcher matcher)
+        private RouteHandlerCallback CompileHandler(
+            Expression factoryExpression, MethodInfo method, RouteMatcher matcher,
+            Func<IHttpContext, WebApiController>? contextFactory,
+            Func<IHttpContext, WebApiController, Task>? release)
         {
             // Lambda parameters
             var contextInLambda = Expression.Parameter(typeof(IHttpContext), "context");
@@ -500,6 +523,39 @@ namespace EmbedIO.WebApi
                     Expression.Convert(callMethod, typeof(object)));
             }
 
+            if (contextFactory != null)
+            {
+                // Compile binding/invocation once, with activation and awaited release
+                // outside the expression tree. The legacy path below is unchanged.
+                var instance = Expression.Parameter(typeof(WebApiController), "instance");
+                var invoke = Expression.Lambda<Func<WebApiController, IHttpContext, RouteMatch, Task>>(
+                    Expression.Block(locals,
+                        Expression.Assign(controller, Expression.Convert(instance, controllerType)),
+                        Expression.Call(controller, PreProcessRequestMethod),
+                        callMethod),
+                    instance, contextInLambda, routeInLambda).Compile();
+
+                return async (context, route) => {
+                    var created = contextFactory(context);
+                    if (created == null)
+                        throw new InvalidOperationException($"The factory for {controllerType.FullName} returned null.");
+
+                    try
+                    {
+                        if (!controllerType.IsInstanceOfType(created))
+                            throw new InvalidOperationException($"The factory for {controllerType.FullName} returned {created.GetType().FullName}.");
+
+                        created.HttpContext = context;
+                        created.Route = route;
+                        await invoke(created, context, route).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        await release!(context, created).ConfigureAwait(false);
+                    }
+                };
+            }
+
             // Operations to perform on the controller.
             // Pseudocode:
             //     controller.PreProcessRequest();
@@ -569,7 +625,10 @@ namespace EmbedIO.WebApi
             return value;
         }
 
-        private bool TryRegisterControllerTypeCore(Type controllerType, Expression factoryExpression)
+        private bool TryRegisterControllerTypeCore(
+            Type controllerType, Expression factoryExpression,
+            Func<IHttpContext, WebApiController>? contextFactory = null,
+            Func<IHttpContext, WebApiController, Task>? release = null)
         {
             var handlerCount = 0;
             var methods = controllerType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
@@ -585,7 +644,7 @@ namespace EmbedIO.WebApi
 
                 foreach (var attribute in attributes)
                 {
-                    AddHandler(attribute.Verb, attribute.Matcher, CompileHandler(factoryExpression, method, attribute.Matcher));
+                    AddHandler(attribute.Verb, attribute.Matcher, CompileHandler(factoryExpression, method, attribute.Matcher, contextFactory, release));
                     handlerCount++;
                 }
             }

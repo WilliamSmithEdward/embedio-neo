@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <AssemblyName>EmbedIO.DependencyInjection</AssemblyName>
+    <PackageId>EmbedIO-Neo.DependencyInjection</PackageId>
+    <Description>Optional dependency injection and Generic Host integration for EmbedIO-Neo.</Description>
+    <Authors>William Smith; EmbedIO contributors</Authors>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <RepositoryUrl>https://github.com/WilliamSmithEdward/embedio-neo</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../EmbedIO/EmbedIO.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <None Include="../../LICENSE" Link="LICENSE" Pack="true" PackagePath="" />
+  </ItemGroup>
+</Project>

@@ -90,5 +90,19 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type,Func{WebApiController})"/>
         public void RegisterController(Type controllerType, Func<WebApiController> factory)
             => RegisterControllerType(controllerType, factory);
+
+        /// <summary>
+        /// Registers a context-aware factory and an explicit asynchronous release callback.
+        /// The callback is awaited after binding, invocation and serialization, including failures.
+        /// Existing registration overloads retain their original lifetime behavior.
+        /// </summary>
+        /// <param name="controllerType">The controller type.</param>
+        /// <param name="factory">Creates a fresh instance for each request.</param>
+        /// <param name="release">Releases the instance; use a completed task when its container owns it.</param>
+        public void RegisterControllerWithContext(
+            Type controllerType,
+            Func<IHttpContext, WebApiController> factory,
+            Func<IHttpContext, WebApiController, Task> release)
+            => RegisterControllerTypeWithContext(controllerType, factory, release);
     }
 }

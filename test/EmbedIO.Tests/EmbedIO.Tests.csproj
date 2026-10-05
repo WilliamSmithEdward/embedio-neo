@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\EmbedIO.Testing\EmbedIO.Testing.csproj" />
+    <ProjectReference Include="../../src/EmbedIO.DependencyInjection/EmbedIO.DependencyInjection.csproj" />
     <ProjectReference Include="../../src/EmbedIO.Cli/EmbedIO.Cli.csproj" />
     <ProjectReference Include="../EmbedIO.Cli.TestPlugin/EmbedIO.Cli.TestPlugin.csproj" />
     <ProjectReference Include="..\..\src\EmbedIO.JsonServer\EmbedIO.JsonServer.csproj" />

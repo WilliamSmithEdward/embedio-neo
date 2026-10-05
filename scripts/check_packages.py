@@ -1,4 +1,4 @@
-"""Check the four local packages, including the licenses shipped to consumers."""
+"""Check local packages, including the licenses shipped to consumers."""
 
 from pathlib import Path
 import sys
@@ -7,8 +7,8 @@ from zipfile import ZipFile
 
 def main(directory):
     packages = list(Path(directory).glob("*.nupkg"))
-    if len(packages) != 4:
-        raise ValueError(f"Expected four packages, found {len(packages)}")
+    if len(packages) != 5:
+        raise ValueError(f"Expected five packages, found {len(packages)}")
     root = Path(__file__).resolve().parents[1]
     expected_readme = (root / "README.md").read_bytes()
     expected_license = (root / "LICENSE").read_bytes()
@@ -31,7 +31,7 @@ def main(directory):
                             "tools/net10.0/any/EmbedIO.dll",
                             "tools/net10.0/any/DotnetToolSettings.xml"}
             else:
-                identity = next((name for name in ("EmbedIO-Neo.JsonServer", "EmbedIO-Neo.Testing", "EmbedIO-Neo")
+                identity = next((name for name in ("EmbedIO-Neo.DependencyInjection", "EmbedIO-Neo.JsonServer", "EmbedIO-Neo.Testing", "EmbedIO-Neo")
                                  if package.name.startswith(name + ".")), None)
                 if identity is None:
                     raise ValueError(f"Unexpected package: {package.name}")
