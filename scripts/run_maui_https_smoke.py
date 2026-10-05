@@ -133,5 +133,7 @@ finally:
     if trust_installed and args.platform == 'windows':
         invoke('certutil', '-user', '-delstore', 'Root', CA_SHA1)
     if trust_installed and args.platform == 'maccatalyst':
-        invoke('sudo', 'security', 'remove-trusted-cert', '-d', str(CERTS / 'https-test-root.cer'))
+        # remove-trusted-cert can block on an inaccessible authorization dialog
+        # on hosted Apple Silicon runners (runner-images#12116). Delete the CA
+        # itself; residual trust metadata dies with this disposable runner.
         invoke('sudo', 'security', 'delete-certificate', '-Z', CA_SHA1, '/Library/Keychains/System.keychain')

@@ -27,8 +27,11 @@ No WebView delegate bypasses certificate errors. Windows uses a temporary entry
 in the disposable runner user's root store, Mac Catalyst uses a temporary root
 and trust setting in the runner's system keychain, iOS uses a fresh simulator
 keychain, and Android uses a test-APK network-security configuration that trusts
-the generated root only for `127.0.0.1`. Trust entries are removed in `finally`
-and the created iOS simulator is deleted. The provisioning script refuses to run
+the generated root only for `127.0.0.1`. Installed CA certificates are removed in
+`finally` and the created iOS simulator is deleted. Mac Catalyst removes the CA
+certificate from the keychain; residual administrative trust metadata expires
+with the disposable runner because macOS can require an interactive dialog to
+remove it. The provisioning script refuses to run
 outside GitHub Actions. Never copy the test credentials or trust policy into a
 production app.
 
