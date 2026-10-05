@@ -14,6 +14,7 @@ public sealed class SmokeHost
     private bool _stoppingBackend;
     private int _generation, _observed;
     private string? _error;
+    private string _https = "pending";
     private readonly SemaphoreSlim _restart = new(1, 1);
     private readonly List<Task> _workers = new();
 
@@ -48,6 +49,7 @@ public sealed class SmokeHost
                 throw new InvalidOperationException("The listener did not start.");
             Interlocked.Increment(ref _generation);
             _ = ObserveServerAsync(_running);
+            if (_generation == 1) _ = ObserveHttpsAsync();
         }
         catch (Exception error)
         {
@@ -66,6 +68,7 @@ public sealed class SmokeHost
         configured = Configured,
         observed = _observed,
         error = _error,
+        https = _https,
         listener = _server?.Listener.Name,
         backend_state = _server?.State.ToString(),
         frontend_state = _frontend?.State.ToString(),
@@ -74,6 +77,16 @@ public sealed class SmokeHost
         runtime = Environment.Version.ToString(),
         os = Environment.OSVersion.ToString(),
     };
+
+    private async Task ObserveHttpsAsync()
+    {
+        try
+        {
+            await PlatformTests.HttpsSmoke.RunAsync();
+            _https = "passed";
+        }
+        catch (Exception error) { _error = error.ToString(); Console.Error.WriteLine(_error); }
+    }
 
     private async Task ObserveServerAsync(Task running)
     {

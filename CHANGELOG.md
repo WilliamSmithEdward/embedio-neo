@@ -8,6 +8,12 @@
   plus Android two-listener load/lifecycle coverage for upstream #595. The original
   device stall cause is not confirmed.
 
+- Moved managed-listener TLS authentication out of the socket accept callback
+  and under the first-request timeout, with pending handshakes tracked for shutdown.
+  Added six desktop HTTPS regression cases, Android and Mac Catalyst HTTPS smoke
+  coverage, and certificate/trust guidance for feature #26. Platform execution
+  evidence and remaining MAUI app-model work are tracked in that feature.
+
 - Added MAUI Android lifecycle and supervised-background-work guidance for upstream
   #597, four real-listener regressions, and a required Android 10 emulator smoke.
   Production behavior is unchanged; the original application crash has no supplied

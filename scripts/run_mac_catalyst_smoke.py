@@ -23,7 +23,7 @@ while time.monotonic() < deadline:
         data = json.loads(results[0].read_text())
         (output / "smoke-result.json").write_text(json.dumps(data, indent=2) + "\n")
         print(json.dumps(data))
-        if data.get("passed") is not True:
+        if data.get("passed") is not True or data.get("https") != "passed":
             raise SystemExit("Mac Catalyst smoke failed.")
         break
     time.sleep(1)

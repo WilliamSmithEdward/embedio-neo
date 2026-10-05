@@ -54,7 +54,7 @@ try:
     adb('forward', 'tcp:59697', 'tcp:59697')
     adb('forward', 'tcp:59698', 'tcp:59698')
     launch()
-    initial = wait_for(state, lambda value: value['generation'] == 1 and value['resumed'] > 0 and value['frontend_state'] == 'Listening' and value['backend_state'] == 'Listening')
+    initial = wait_for(state, lambda value: value['generation'] == 1 and value['resumed'] > 0 and value['frontend_state'] == 'Listening' and value['backend_state'] == 'Listening' and value['https'] == 'passed')
     observations = {'initial': initial}
     def pair(_):
         with urllib.request.urlopen('http://127.0.0.1:59698/index.html', timeout=10) as response:
