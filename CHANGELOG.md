@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 - Add MimeType.Xml and MimeType.TextXml constants and document opt-in controller XML responses using existing serializers; preserve default JSON behavior.
+- Reduce content-negotiation, header/token parsing, WebSocket metadata and frame-read
+  allocations. Avoid rate-history snapshots and preserve request records during
+  concurrent purges. Keep existing thresholds, shared history ownership, parser
+  behavior, APIs, defaults and dependencies; add 49 regression cases and CI budgets.
 
 - Preserve pre-existing endpoint prefixes when a live alias registration fails; roll back only the prefixes actually added by that attempt.
 

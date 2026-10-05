@@ -5,6 +5,11 @@
     /// </summary>
     public static class QValueListExtensions
     {
+        private static readonly CompressionMethod[] CompressionFirstMethods = { CompressionMethod.Gzip, CompressionMethod.Deflate, CompressionMethod.None };
+        private static readonly string[] CompressionFirstNames = { CompressionMethodNames.Gzip, CompressionMethodNames.Deflate, CompressionMethodNames.None };
+        private static readonly CompressionMethod[] IdentityFirstMethods = { CompressionMethod.None, CompressionMethod.Gzip, CompressionMethod.Deflate };
+        private static readonly string[] IdentityFirstNames = { CompressionMethodNames.None, CompressionMethodNames.Gzip, CompressionMethodNames.Deflate };
+
         /// <summary>
         /// <para>Attempts to proactively negotiate a compression method for a response,
         /// based on the contents of a <see cref="QValueList"/>.</para>
@@ -49,12 +54,8 @@
                 return true;
             }
 
-            var acceptableMethods = preferCompression
-                ? new[] { CompressionMethod.Gzip, CompressionMethod.Deflate, CompressionMethod.None }
-                : new[] { CompressionMethod.None, CompressionMethod.Gzip, CompressionMethod.Deflate };
-            var acceptableMethodNames = preferCompression
-                ? new[] { CompressionMethodNames.Gzip, CompressionMethodNames.Deflate, CompressionMethodNames.None }
-                : new[] { CompressionMethodNames.None, CompressionMethodNames.Gzip, CompressionMethodNames.Deflate };
+            var acceptableMethods = preferCompression ? CompressionFirstMethods : IdentityFirstMethods;
+            var acceptableMethodNames = preferCompression ? CompressionFirstNames : IdentityFirstNames;
 
             var acceptableMethodIndex = @this.FindPreferredIndex(acceptableMethodNames);
             if (acceptableMethodIndex < 0)

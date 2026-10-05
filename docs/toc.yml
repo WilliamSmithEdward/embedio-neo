@@ -30,6 +30,8 @@
       href: user-reports/xml-responses.md
     - name: Dual-stack localhost
       href: user-reports/dual-stack-localhost.md
+    - name: Additional performance audit
+      href: user-reports/performance-audit-second-pass.md
     - name: Performance and code audit
       href: user-reports/performance-audit.md
     - name: Server header

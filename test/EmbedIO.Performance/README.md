@@ -11,6 +11,6 @@ This dependency-free, unpackaged project is intentionally outside `EmbedIO.sln`.
 Desktop CI runs it alongside the regression suite. Allocation ceilings catch
 regressions; timings are informational and should be compared on the same machine.
 
-See [the audit report](../../docs/user-reports/performance-audit.md) for the baseline,
+See [the additional audit](../../docs/user-reports/performance-audit-second-pass.md) for negotiation, header, byte-order and history workloads. See [the audit report](../../docs/user-reports/performance-audit.md) for the baseline,
 measurement method, coverage and limits. Omit `--verify-allocations` for baseline
 measurements, using the same runner source against each revision.
