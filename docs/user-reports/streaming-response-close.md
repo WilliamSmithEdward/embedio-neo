@@ -135,7 +135,8 @@ listener defaults and disconnect-token semantics are unchanged.
 Eight real-listener regressions exercise both listener modes: ordinary streaming
 completion, server cancellation, remote reset with strict writes, and remote
 reset with suppressed writes. They verify a real Web API route, an initial SSE
-event, the token lifetime, and exactly one close callback after the handler exits.
+event, the token lifetime, exactly one close callback after the handler exits,
+and healthy fresh connections after completion or reset.
 A ninth in-process regression checks asynchronous cleanup followed by close
 callbacks after a flush failure, including isolation of a failing callback.
 The sample uses existing APIs available in 1.0.1; the cleanup correction is an

@@ -61,6 +61,8 @@ namespace EmbedIO.Tests.Issues
                 await scenario.Exited.Task.WaitAsync(TimeSpan.FromSeconds(5));
                 await scenario.Closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
                 Assert.That(scenario.CloseCount, Is.EqualTo(1));
+                if (!cancelServer)
+                    Assert.That(await client.GetStringAsync(url + "health"), Is.EqualTo("healthy"));
             }
             finally
             {
@@ -112,6 +114,10 @@ namespace EmbedIO.Tests.Issues
                 scenario.Finish.TrySetResult();
                 await scenario.Closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
                 Assert.That(scenario.CloseCount, Is.EqualTo(1));
+                using var healthy = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                healthy.DefaultRequestHeaders.ConnectionClose = true;
+                for (var request = 0; request < 3; request++)
+                    Assert.That(await healthy.GetStringAsync(url + "health"), Is.EqualTo("healthy"));
                 Assert.That(server.State, Is.EqualTo(WebServerState.Listening));
             }
             finally
@@ -142,6 +148,9 @@ namespace EmbedIO.Tests.Issues
             private readonly Scenario _scenario;
 
             public StreamingController(Scenario scenario) => _scenario = scenario;
+
+            [Route(HttpVerbs.Get, "/health")]
+            public Task Health() => HttpContext.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding);
 
             [Route(HttpVerbs.Get, "/events")]
             public async Task Events()
