@@ -1,16 +1,24 @@
 - name: Documentation
   href: README.md
-- name: Command-line server
-  href: cli.md
-- name: Static folders
-  href: multiple-static-folders.md
-- name: Async outbound requests
-  href: async-outbound-requests.md
-- name: Circular JSON references
-  href: json-circular-references.md
-- name: Migration
-  href: migration.md
-- name: MAUI Mac Catalyst
-  href: maui-mac-catalyst.md
-- name: Baseline and direction
-  href: embed_io_neo.md
+- name: Usage guides
+  items:
+    - name: Command-line server
+      href: guides/cli.md
+    - name: Static folders
+      href: guides/multiple-static-folders.md
+    - name: Async outbound requests
+      href: guides/async-outbound-requests.md
+    - name: Circular JSON references
+      href: guides/json-circular-references.md
+- name: Compatibility
+  items:
+    - name: Migration
+      href: compatibility/migration.md
+- name: Platforms
+  items:
+    - name: MAUI Mac Catalyst
+      href: platforms/maui-mac-catalyst.md
+- name: Project
+  items:
+    - name: Baseline and direction
+      href: project/embed_io_neo.md

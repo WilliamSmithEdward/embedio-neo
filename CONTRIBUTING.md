@@ -103,7 +103,7 @@ tools separate from shipped runtime dependencies. Do not replace dependencies
 by copying their public types into a different assembly and claiming binary
 compatibility.
 
-SWAN has been fully removed with William's explicit approval. Built-in .NET APIs and local helpers replace its services. The .NET 10 core has no runtime package dependencies; .NET Standard 2.0 requires Microsoft System.Text.Json and its support packages. See [MIGRATION.md](docs/migration.md) for the approved breaking changes.
+SWAN has been fully removed with William's explicit approval. Built-in .NET APIs and local helpers replace its services. The .NET 10 core has no runtime package dependencies; .NET Standard 2.0 requires Microsoft System.Text.Json and its support packages. See [MIGRATION.md](docs/compatibility/migration.md) for the approved breaking changes.
 
 The unused Nullable polyfill and legacy FxCop package have been removed. SDK
 analyzers and EditorConfig-based style checks replace StyleCop; inherited warnings are
@@ -165,5 +165,5 @@ improvement is claimed without a benchmark.
 The CLI is maintained in `src/EmbedIO.Cli` in this solution, targeting .NET 10
 and referencing the local core without new runtime packages. Its command contract,
 upstream provenance, local packaging, and approved plugin migration are documented
-in [CLI.md](docs/cli.md). `test/EmbedIO.Cli.TestPlugin` is an unpackaged fixture used
+in [CLI.md](docs/guides/cli.md). `test/EmbedIO.Cli.TestPlugin` is an unpackaged fixture used
 to test real assembly loading, controller routes, and WebSocket plugins.
