@@ -102,9 +102,12 @@ namespace EmbedIO.Net
                 IsListening = false;
                 // Disposing SemaphoreSlim alone does not complete its pending waits.
                 _acceptStop.Cancel();
-                Close();
-                _ctxQueueSem.Dispose();
-                _acceptStop.Dispose();
+                try { Close(); }
+                finally
+                {
+                    _ctxQueueSem.Dispose();
+                    _acceptStop.Dispose();
+                }
             }
         }
 

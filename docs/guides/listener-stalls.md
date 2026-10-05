@@ -94,8 +94,12 @@ listener, sends 320 request pairs with eight concurrent clients, checks both
 listeners through rotation, activity recreation and brief Home/resume, replaces
 them, then disposes only the backend while verifying the frontend still serves
 files and the backend run task completes. CI retains JSON observations and logs
-in `android-smoke`. Configuration of the job alone is not a passing result;
-inspect its completed run.
+in `android-smoke`. The Android job in [run 37271010975](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37271010975)
+passed on API 29 with runtime 10.0.12: all request pairs were served, the process
+ID stayed unchanged, and backend disposal completed its run task while the
+frontend stayed listening and served files. That initial workflow also exposed
+a sync-wait problem in the new desktop test helper; its cleanup was corrected
+to use asynchronous disposal before final cross-platform validation.
 
 If a stall persists, please supply a minimal runnable app and exact library,
 MAUI/.NET, OS and device versions; listener modes/prefixes; lifecycle start/stop
