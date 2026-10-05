@@ -27,6 +27,8 @@ High Level Guardrail(s) -->
 
 ## Upstream backlog workflow
 
+- Current upstream #580 completion: fork #71 / PR #72 merged as 795e41f and closed as answered. Existing TraceSource listener filtering was verified with eight real-listener runs against published 1.0.1/current source; no production change. All required gates passed, all 656 desktop cases reported without failures, and five CI packages checked against source. Reply 6003793691 mentions faljse. William authorized next upstream #579: Server-header customization. Its participants are mirror222, etherealbacon (also the sole issue reaction author) and zhangzhezh; both comment reaction lists are empty. No further backlog issue is authorized.
+
 - Current upstream #583 completion: fork #67 / PR #68 merged as 450db0f; issue closed for the reproduced comma-folded WebSocket Set-Cookie defect. Ten new cases passed on all three desktop platforms (621 total); required PR gates passed after a fresh iOS simulator rerun of an unchanged WebView navigation timeout. Main CI 37355206868 subsequently passed. Publish dry run 37355217965 passed; all five packages and seven report hashes verified against the merged source. Outcome reply 6000481242 mentions anatoly-abramov. Legacy request-cookie echo is preserved; no release published. William now authorized the next issue, newest to oldest: upstream #580, a selective request-logging support question. No further backlog issue is authorized.
 
 - Use the title format `Upstream #<number>: <specific description>` consistently for migrated backlog issues and their associated PRs. Keep the upstream number at the beginning; use sentence case for the description. Align existing related titles when correcting a mismatch.

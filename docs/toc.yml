@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Server header
+      href: user-reports/server-header.md
     - name: Request logging
       href: user-reports/request-logging.md
     - name: WebSocket cookies
