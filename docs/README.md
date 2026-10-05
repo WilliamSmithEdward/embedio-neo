@@ -23,6 +23,10 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Listener stalls](guides/listener-stalls.md): two-server diagnostics, shutdown fixes, and regression scope.
 
+## User reports
+
+- [Request URL scheme and HTTPS](user-reports/request-url-scheme.md): transport security and URL reconstruction fixes.
+
 ## Compatibility
 
 - [Migration](compatibility/migration.md): approved SWAN/JSON changes and consumer migration.

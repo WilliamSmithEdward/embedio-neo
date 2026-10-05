@@ -7,6 +7,11 @@
   external HTTPS verification and a reusable physical-device probe for feature #26.
   Simulator/emulator results do not establish legacy Xamarin or physical-device support.
 
+- Fixed managed-listener HTTPS requests reporting HTTP URLs (upstream #593).
+  Request URL reconstruction now preserves absolute-target path/query case and
+  bracketed IPv6 hosts without a port; added real HTTP/TLS regressions and
+  platform HTTPS URL-scheme validation.
+
 - Fixed internal listener stop/dispose leaving pending accepts and missing Stopped
   notifications; shutdown now drains stale queued contexts without spinning.
   Added cancellation, queue concurrency, disconnect, and two-server regressions

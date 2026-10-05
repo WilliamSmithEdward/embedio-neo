@@ -24,6 +24,10 @@
       href: guides/json-circular-references.md
     - name: Listener stalls
       href: guides/listener-stalls.md
+- name: User reports
+  items:
+    - name: Request URL scheme and HTTPS
+      href: user-reports/request-url-scheme.md
 - name: Compatibility
   items:
     - name: Migration

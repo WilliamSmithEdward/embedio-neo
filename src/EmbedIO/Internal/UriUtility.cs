@@ -21,27 +21,12 @@ namespace EmbedIO.Internal
             return result;
         }
 
-        // Returns true if string starts with "http:", "https:", "ws:", or "wss:"
+        // URI schemes are case-insensitive; the path and query must retain their case.
         private static bool CanBeAbsoluteUrl(string str)
             => !string.IsNullOrEmpty(str)
-            && str[0] switch {
-                   'h' => str.Length >= 5
-                       && str[1] == 't'
-                       && str[2] == 't'
-                       && str[3] == 'p'
-                       && str[4] switch {
-                              ':' => true,
-                              's' => str.Length >= 6 && str[5] == ':',
-                              _ => false
-                          },
-                   'w' => str.Length >= 3
-                       && str[1] == 's'
-                       && str[2] switch {
-                              ':' => true,
-                              's' => str.Length >= 4 && str[3] == ':',
-                              _ => false
-                          },
-                   _ => false
-               };
+            && (str.StartsWith("http:", StringComparison.OrdinalIgnoreCase)
+                || str.StartsWith("https:", StringComparison.OrdinalIgnoreCase)
+                || str.StartsWith("ws:", StringComparison.OrdinalIgnoreCase)
+                || str.StartsWith("wss:", StringComparison.OrdinalIgnoreCase));
     }
 }
