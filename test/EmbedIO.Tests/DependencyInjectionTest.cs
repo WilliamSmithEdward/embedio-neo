@@ -340,7 +340,7 @@ namespace EmbedIO.Tests
             await TestWebServer.UseAsync(server => server.WithWebApi("/api", module => module.WithController(() => controller)), async client =>
             {
                 var request = client.GetAsync("/api/legacy");
-                await probe.FirstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
                 Assert.That(controller.Disposed, Is.True);
                 probe.Release.TrySetResult(true);
                 await request;
@@ -431,8 +431,8 @@ namespace EmbedIO.Tests
             var host = provider.GetRequiredService<IHostedService>();
             try
             {
-                await Assert.ThatAsync(() => host.StartAsync(timeout.Token), Throws.Exception);
-                await Assert.ThatAsync(() => host.StopAsync(timeout.Token), Throws.Exception);
+                await Assert.ThatAsync(() => host.StartAsync(timeout.Token), Throws.TypeOf<InvalidOperationException>().With.Message.EqualTo("startup"));
+                await Assert.ThatAsync(() => host.StopAsync(timeout.Token), Throws.TypeOf<InvalidOperationException>().With.Message.EqualTo("startup"));
             }
             finally
             {
@@ -566,7 +566,7 @@ namespace EmbedIO.Tests
                 await probe.Release.Task;
                 return "ok";
             }
-            public void Dispose() => Disposed = true;
+            public void Dispose() { Disposed = true; probe.BothEntered.TrySetResult(true); }
         }
         private sealed class TestLifetime : IHostApplicationLifetime
         {
