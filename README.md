@@ -11,6 +11,8 @@
 ![EmbedIO-Neo](https://raw.githubusercontent.com/WilliamSmithEdward/embedio-neo/dcd0e9f3c27d0a618cf4aade10c7fea269db6d57/images/embedio_neo.png)
 
 A small, cross-platform, modular web server for .NET, maintained by William Smith.
+
+For MAUI apps on Mac Catalyst, see the [local server startup guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/maui-mac-catalyst.md), including upstream issue #601 and sandbox entitlements.
 This is an independent fork of [EmbedIO](https://github.com/unosquare/embedio).
 Original copyright and third-party notices are preserved in [LICENSE](LICENSE).
 

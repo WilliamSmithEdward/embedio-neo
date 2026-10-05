@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Added upstream #601 regression coverage and MAUI Mac Catalyst startup guidance.
+  The reported SWAN Console.WindowHeight failure path was already removed in
+  1.0.0. The sandboxed MAUI Mac Catalyst HTTP/WebView smoke passed in CI;
+  confirmation on the reporter's original environment remains outstanding.
 - Documented opt-in .NET JSON cycle handling for upstream #600 and added eight
   response-serialization regression cases. Existing default behavior is unchanged.
 
