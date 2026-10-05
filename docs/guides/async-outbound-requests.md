@@ -95,9 +95,11 @@ Please include the following in a minimal reproduction:
    operation completes. Log before and after the await to locate the boundary.
 
 The fork's investigation is tracked in [issue #18](https://github.com/WilliamSmithEdward/embedio-neo/issues/18).
-It remains open because the original controller and outbound service were not
-provided. This guide is support information, not a claim that the reporter's
-application has been reproduced or repaired.
+The support question is closed as answered after the supported async pattern was
+documented and verified. The original controller and outbound service were not
+provided, so the exact empty-response cause is unconfirmed. This guide does not
+claim that the reporter's application was reproduced or repaired. A minimal
+reproduction can support reopening the issue if the behavior persists.
 
 Six integration cases use a real EmbedIO listener and a second HTTP request to
 a gated local backend. They verify that a genuinely suspended `SendAsync` finishes
