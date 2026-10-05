@@ -1,5 +1,13 @@
 # EmbedIO-Neo
 
+[![NuGet version](https://img.shields.io/nuget/v/EmbedIO-Neo)](https://www.nuget.org/packages/EmbedIO-Neo)
+[![Downloads](https://img.shields.io/nuget/dt/EmbedIO-Neo)](https://www.nuget.org/packages/EmbedIO-Neo)
+[![CI](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/ci.yml)
+[![Security](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml)
+[![Malware scan](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/WilliamSmithEdward/embedio-neo/badge)](https://scorecard.dev/viewer/?uri=github.com/WilliamSmithEdward/embedio-neo)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/LICENSE)
+
 ![EmbedIO-Neo](images/embedio_neo.png)
 
 A small, cross-platform, modular web server for .NET, maintained by William Smith.
@@ -64,23 +72,23 @@ The major version 3.0 includes a lot of changes in how the webserver process the
 
 ## Installation:
 
-To use this fork before a fork-specific package is configured, build the source
+Until the first Neo package is published, build the source
 or add a project reference to `src/EmbedIO/EmbedIO.csproj`.
 
-The commands below install the original upstream `EmbedIO` package, not a release
-of EmbedIO-Neo. The package ID remains unchanged in source while publishing
-identity is decided separately.
+After the first release, use the commands below to install `EmbedIO-Neo`.
+The archived `EmbedIO` package is a separate upstream distribution. Neo's package
+ID changes, while the library's assembly name and namespaces remain `EmbedIO`.
 
 ### Package Manager
 
 ```
-PM> Install-Package EmbedIO
+PM> Install-Package EmbedIO-Neo
 ```
 
 ### .NET CLI
 
 ```
-> dotnet add package EmbedIO
+> dotnet add package EmbedIO-Neo
 ```
 
 ## Usage

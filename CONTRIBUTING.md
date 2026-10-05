@@ -21,24 +21,27 @@ does not substitute for approval.
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
 The tests target .NET 10.
 
-Install the .NET 10 SDK selected by `global.json` (10.0.400 or a later patch
-in the same feature band), then run:
+Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
+`latestFeature` allows later feature bands), then run:
 
 ```sh
-dotnet restore EmbedIO.sln
+dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 366
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 367
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
 to verified commit SHAs when changing workflows. SDK, test-runtime, and CI
 modernization should be reviewed separately from library behavior changes.
+Commit every project's `packages.lock.json`. When deliberately updating a package,
+run `dotnet restore EmbedIO.sln --force-evaluate`, inspect the lock-file changes
+for every target, and verify a subsequent locked restore succeeds.
 
 Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 366 executed/reported test cases to catch accidental discovery loss; update
+least 367 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. NUnit 5 async assertions
 must be awaited.
 
@@ -85,9 +88,10 @@ and analyzer packages remain development-only. Library targets are unchanged.
 - Obtain William's review before merging. Any accepted breaking change must
   include the approval reference and migration documentation described above.
 
-The inherited `EmbedIO` package ID and version are retained for compatibility.
-A fork-specific NuGet publishing identity and release process must be agreed
-before publishing. Do not treat the original package's releases as fork releases.
+The approved NuGet IDs are `EmbedIO-Neo`, `EmbedIO-Neo.JsonServer`,
+`EmbedIO-Neo.Testing`, and `EmbedIO-Neo.Cli`. Assembly names and namespaces remain
+unchanged; downstream users change their package references. The inherited 3.5.0
+version is still a development placeholder. Do not treat upstream releases as Neo releases.
 
 
 
@@ -140,14 +144,16 @@ Other Extras modules were assessed but not imported:
   point to WilliamSmithEdward/embedio-neo. Original license notices remain intact.
 - Libraries add a .NET 10 target while retaining .NET Standard 2.0; tests require .NET 10. CI actions are pinned to commit hashes.
 - GitHub Actions replaces the inherited AppVeyor build/publishing configuration.
-  No package publication or documentation deployment is configured.
+  Publish prepares GitHub assets and NuGet packages through trusted publishing
+  on an approved version tag; manual runs are dry runs. Documentation deployment
+  remains unconfigured. NuGet policy registration precedes the first release.
 - Wildcard listener prefixes (`*` and `+`) are parsed separately from ordinary
   URI hostnames so wildcard servers can start. Existing namespaces, package IDs,
   and assembly names remain unchanged.
 - JsonServer is maintained in this solution, with the persistence corrections
   described above. SWAN removal is an approved breaking change; consumers must rebuild and follow MIGRATION.md.
 
-Before release, select an appropriate major version and fork-specific NuGet IDs, run cross-platform CI, complete
+Before release, select an appropriate version, register the trusted-publishing policy, run cross-platform CI, complete
 an API compatibility check against a recorded upstream binary, and address
 remaining analyzer warnings. No performance improvement is claimed without a
 benchmark.

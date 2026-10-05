@@ -7,6 +7,8 @@
   <PropertyGroup>
     <Copyright>Copyright (C) Unosquare 2013-2021; Copyright (C) 2026 William Smith (EmbedIO-Neo modifications)</Copyright>
     <Version>3.5.0</Version>
+    <PackageIcon>embedio_neo_icons.png</PackageIcon>
+    <PackageReadmeFile Condition="'$(MSBuildProjectName)' != 'EmbedIO.Cli'">README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -15,7 +17,14 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>10.0</AnalysisLevel>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)images/embedio_neo_icons.png" Pack="true" PackagePath="" />
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath=""
+          Condition="'$(MSBuildProjectName)' != 'EmbedIO.Cli'" />
+  </ItemGroup>
 
 </Project>

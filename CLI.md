@@ -90,13 +90,15 @@ identity; the command remains `embedio-cli`.
 
 ```sh
 dotnet pack src/EmbedIO.Cli -c Release -o ./artifacts
-dotnet tool install EmbedIO.Neo.Cli --add-source ./artifacts --tool-path ./tools --version 3.5.0
+dotnet tool install EmbedIO-Neo.Cli --add-source ./artifacts --tool-path ./tools --version 3.5.0
 ./tools/embedio-cli --help
 ```
 
 The version shown is the repository's current development placeholder, not a
-published release. These commands build and install locally; no publication is
-configured. Use an isolated tool path if the old tool is installed globally.
+published release. These commands build and install locally. The standards Publish
+workflow prepares GitHub assets and NuGet publication through trusted publishing.
+Package identities and the first release still require approval. Use an
+isolated tool path if the old tool is installed globally.
 
 ## Provenance and migration
 

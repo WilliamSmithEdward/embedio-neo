@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
     <AssemblyName>EmbedIO.JsonServer</AssemblyName>
+    <PackageId>EmbedIO-Neo.JsonServer</PackageId>
     <RootNamespace>EmbedIO.JsonServer</RootNamespace>
     <Description>JSON file-backed REST module for EmbedIO-Neo.</Description>
     <Authors>William Smith; EmbedIO contributors</Authors>

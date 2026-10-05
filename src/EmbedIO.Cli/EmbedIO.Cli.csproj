@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>embedio-cli</ToolCommandName>
-    <PackageId>EmbedIO.Neo.Cli</PackageId>
+    <PackageId>EmbedIO-Neo.Cli</PackageId>
     <Description>EmbedIO-Neo command-line development server.</Description>
     <Authors>William Smith; EmbedIO CLI contributors</Authors>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
