@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Globalization;
 using EmbedIO.Net.Internal;
@@ -100,11 +101,18 @@ namespace EmbedIO.WebSockets.Internal
 
         internal int ExtendedPayloadLengthCount => PayloadLength < 126 ? 0 : (PayloadLength == 126 ? 2 : 8);
 
-        internal ulong FullPayloadLength => PayloadLength < 126
-            ? PayloadLength
-            : PayloadLength == 126
-                ? BitConverter.ToUInt16(ExtendedPayloadLength.ToHostOrder(Endianness.Big), 0)
-                : BitConverter.ToUInt64(ExtendedPayloadLength.ToHostOrder(Endianness.Big), 0);
+        internal ulong FullPayloadLength
+        {
+            get
+            {
+                if (PayloadLength < 126)
+                    return PayloadLength;
+
+                return PayloadLength == 126
+                    ? BinaryPrimitives.ReadUInt16BigEndian(ExtendedPayloadLength)
+                    : BinaryPrimitives.ReadUInt64BigEndian(ExtendedPayloadLength);
+            }
+        }
 
         public IEnumerator<byte> GetEnumerator() => ((IEnumerable<byte>)ToArray()).GetEnumerator();
 

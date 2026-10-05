@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Linq;
 using EmbedIO.Internal;
 
 namespace EmbedIO.Net.Internal
@@ -30,11 +29,6 @@ namespace EmbedIO.Net.Internal
 
             return bytes;
         }
-
-        internal static byte[] ToHostOrder(this byte[] source, Endianness sourceOrder)
-            => source.Length < 1 ? source
-            : sourceOrder.IsHostOrder() ? source
-            : Enumerable.Reverse(source).ToArray();
 
         // true: !(true ^ true) or !(false ^ false)
         // false: !(true ^ false) or !(false ^ true)

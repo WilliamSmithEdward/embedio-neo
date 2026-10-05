@@ -20,15 +20,17 @@ namespace EmbedIO.Utilities
         /// with their values.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         public static Dictionary<string, object?> ToDictionary(this NameValueCollection @this)
-            => @this.Keys.Cast<string>().ToDictionary(key => key, key => {
+            => @this.Keys.Cast<string>().ToDictionary(key => key, key =>
+            {
                 var values = @this.GetValues(key);
                 if (values == null)
                     return null;
 
-                return values.Length switch {
+                return values.Length switch
+                {
                     0 => null,
-                    1 => (object) values[0],
-                    _ => (object) values
+                    1 => (object)values[0],
+                    _ => (object)values
                 };
             });
 
@@ -103,8 +105,21 @@ namespace EmbedIO.Utilities
         public static bool Contains(this NameValueCollection @this, string name, string? value, StringComparison comparisonType)
         {
             value = value?.Trim();
-            return @this[name]?.SplitByComma()
-               .Any(val => string.Equals(val?.Trim(), value, comparisonType)) ?? false;
+            var header = @this[name];
+            if (header == null)
+                return false;
+
+            var position = 0;
+            while (true)
+            {
+                var comma = header.IndexOf(',', position);
+                var end = comma < 0 ? header.Length : comma;
+                if (string.Equals(header.Substring(position, end - position).Trim(), value, comparisonType))
+                    return true;
+                if (comma < 0)
+                    return false;
+                position = comma + 1;
+            }
         }
     }
 }

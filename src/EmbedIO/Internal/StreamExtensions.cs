@@ -36,7 +36,8 @@ namespace EmbedIO.Internal
                 if (read == 0) break;
                 output.Write(buffer, 0, read);
             }
-            return output.ToArray();
+            // Return the owned buffer only when every byte is part of the result.
+            return output.Length == output.Capacity ? output.GetBuffer() : output.ToArray();
         }
     }
 }
