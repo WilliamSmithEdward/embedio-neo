@@ -1,0 +1,11 @@
+/
+///a//b///
+?a=1&a=2&flag
+a[0]=one&a[1]=two
+%00=%FF%FE
+?=&=&&
+%2F%2e%2e%2F
+%ED%A0%80
+name=a+b%20c
+name=%E2%82%AC
+%=&unfinished%2

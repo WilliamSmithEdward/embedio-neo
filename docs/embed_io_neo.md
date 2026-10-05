@@ -201,10 +201,15 @@ The standard AGENTS.md block and CLAUDE.md import are tracked instead of ignored
 Publish builds GitHub package assets with security/malware reports and provenance
 from approved version tags. Manual runs produce a release-preview artifact only.
 The owner approved preparation of NuGet trusted publishing through the nuget
-environment and WilliamSmithE profile; policy registration and package identities
-precede the first release. The inherited development version cannot be tagged as
+environment and WilliamSmithE profile, and registered the policy. Approved package
+IDs are EmbedIO-Neo and its JsonServer, Testing and Cli companions, with existing
+assembly names and namespaces retained. Tags and release titles use vX.Y.Z.
+The inherited development version cannot be tagged as
 a release. README examples were corrected and the
 complete server and WebSocket snippets compiled against the current library.
+Scheduled fuzzing mutates a committed corpus for URL paths and query data; the
+first local seed passed 100,000 iterations. Listener and WebSocket frame fuzzing
+are not claimed by that harness.
 
 The aim is a maintained, coherent EmbedIO continuation: easier to build, test,
 understand, and extend, while treating existing users and the original authors'

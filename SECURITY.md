@@ -57,10 +57,13 @@ Malware scan runs daily.
 - **Malware:** ClamAV, with signatures freshclam fetches and verifies on every
   run, and YARA-X with pinned YARA Forge rules scan every tracked file and the
   four built packages, packed and unpacked.
+- **Fuzzing:** a dependency-free .NET mutation/property harness checks URL paths
+  and URL-encoded query data against a committed seed corpus, on parser changes
+  and daily. Failures print the seed and input for replay and regression tests.
+  This is not a gate and does not cover listener or WebSocket frame parsing.
 - **OpenSSF Scorecard** rates the repository's security practices on every change
   to main and weekly, and the README badge shows the result. It is not a merge gate.
-  No dedicated C# fuzzing workflow is configured yet; request and protocol parsers
-  remain candidates for a future fuzz harness, beyond existing regression tests.
+  Request and WebSocket protocol parsing remain candidates for expanded fuzzing.
 
 ## Accepted findings
 
