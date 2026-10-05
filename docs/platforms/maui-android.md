@@ -119,6 +119,9 @@ worker errors, rotation, explicit activity recreation, brief Home/resume, and
 orderly listener replacement while recording process IDs and listener
 generations. CI retains JSON observations, logcat, activity state, and emulator
 logs in the `android-smoke` artifact. Android is included in the `CI passed` gate.
+The [verified emulator run](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37267444705)
+passed on API 29 with runtime 10.0.12: the process ID stayed unchanged across all
+phases, and only the explicit listener replacement advanced its generation.
 The fixture has its own locked test dependencies and is excluded from shipped
 NuGet packages and the ordinary solution.
 
