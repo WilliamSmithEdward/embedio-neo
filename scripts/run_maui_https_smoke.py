@@ -43,7 +43,7 @@ try:
     if args.platform == 'windows':
         invoke('pwsh', '-NoProfile', '-Command',
                "Import-Certificate -FilePath '" + str(CERTS / 'https-test-root.cer').replace("'", "''")
-               + "' -CertStoreLocation Cert:\\CurrentUser\\Root -ErrorAction Stop | Out-Null")
+               + "' -CertStoreLocation Cert:\\LocalMachine\\Root -ErrorAction Stop | Out-Null")
         trust_installed = True
         app = unique('net10.0-windows10.0.19041.0/win-x64/EmbedIO.MauiHttpsSmoke.exe')
         process_log = (ROOT / 'app.log').open('w')
@@ -131,7 +131,7 @@ finally:
     if process_log is not None:
         process_log.close()
     if trust_installed and args.platform == 'windows':
-        invoke('certutil', '-user', '-delstore', 'Root', CA_SHA1)
+        invoke('certutil', '-delstore', 'Root', CA_SHA1)
     if trust_installed and args.platform == 'maccatalyst':
         # remove-trusted-cert can block on an inaccessible authorization dialog
         # on hosted Apple Silicon runners (runner-images#12116). Delete the CA

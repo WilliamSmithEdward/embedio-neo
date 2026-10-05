@@ -24,7 +24,7 @@ real EmbedIO listener and checks:
    without the CA rejects it.
 
 No WebView delegate bypasses certificate errors. Windows uses a temporary entry
-in the disposable runner user's root store, Mac Catalyst uses a temporary root
+in the disposable runner's machine root store, Mac Catalyst uses a temporary root
 and trust setting in the runner's system keychain, iOS uses a fresh simulator
 keychain, and Android uses a test-APK network-security configuration that trusts
 the generated root only for `127.0.0.1`. Installed CA certificates are removed in
