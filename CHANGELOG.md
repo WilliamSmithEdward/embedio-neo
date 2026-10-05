@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Mitigated macOS IPv6 accept-completion process crashes after immediate client
+  resets (#38). A dedicated background accept worker catches invalid peer-address
+  errors and continues accepting, while request/TLS I/O remains asynchronous.
+  macOS IPv6 endpoints use one additional thread each; other endpoints retain
+  asynchronous accept. Added reset stress and worker shutdown regressions.
+
 - Fixed managed-listener HTTPS requests reporting HTTP URLs (upstream #593).
   Request URL reconstruction now preserves absolute-target path/query case and
   bracketed IPv6 hosts without a port; added real HTTP/TLS regressions and

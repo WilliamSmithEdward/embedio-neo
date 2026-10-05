@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal
 {
@@ -12,6 +15,8 @@ namespace EmbedIO.Net.Internal
         private readonly Dictionary<HttpConnection, HttpConnection> _unregistered;
         private readonly IPEndPoint _endpoint;
         private readonly Socket _sock;
+        private readonly Task? _acceptWorker;
+        private int _disposed;
         private Dictionary<ListenerPrefix, HttpListener> _prefixes;
         private List<ListenerPrefix>? _unhandled; // unhandled; host = '*'
         private List<ListenerPrefix>? _all; //  all;  host = '+
@@ -32,10 +37,21 @@ namespace EmbedIO.Net.Internal
             _sock.Listen(500);
             _prefixes = new Dictionary<ListenerPrefix, HttpListener>();
             _unregistered = new Dictionary<HttpConnection, HttpConnection>();
-            var args = new SocketAsyncEventArgs { UserToken = this };
-            args.Completed += OnAccept;
-            Socket? dummy = null;
-            Accept(_sock, args, ref dummy);
+            if (address.AddressFamily == AddressFamily.InterNetworkV6
+                && RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                // macOS can throw during BCL async accept completion, before OnAccept.
+                // A dedicated blocking accept keeps endpoint-construction errors catchable.
+                _acceptWorker = Task.Factory.StartNew(AcceptOnWorker, CancellationToken.None,
+                    TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            }
+            else
+            {
+                var args = new SocketAsyncEventArgs { UserToken = this };
+                args.Completed += OnAccept;
+                Socket? dummy = null;
+                Accept(_sock, args, ref dummy);
+            }
         }
 
         internal HttpListener Listener { get; }
@@ -61,6 +77,10 @@ namespace EmbedIO.Net.Internal
 
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+
+            // Closing the listening socket also interrupts the blocking macOS accept.
             _sock.Dispose();
             List<HttpConnection> connections;
 
@@ -245,7 +265,52 @@ namespace EmbedIO.Net.Internal
                 return;
             }
 
-            if (epl.Secure && epl.Listener.Certificate == null)
+            epl.ProcessAcceptedSocket(accepted);
+        }
+
+        private void AcceptOnWorker()
+        {
+            var reportedInvalidAddress = false;
+            while (Volatile.Read(ref _disposed) == 0)
+            {
+                Socket accepted;
+                try
+                {
+                    accepted = _sock.Accept();
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+                catch (ArgumentException exception) when (exception.ParamName == "socketAddress")
+                {
+                    // A reset can leave macOS with an unusable peer address. Drop that
+                    // connection and continue accepting; report once to avoid log flooding.
+                    if (!reportedInvalidAddress)
+                    {
+                        "Discarded an accepted socket with an invalid peer address on macOS.".Warn();
+                        reportedInvalidAddress = true;
+                    }
+
+                    continue;
+                }
+                catch (SocketException)
+                {
+                    if (Volatile.Read(ref _disposed) != 0)
+                        return;
+
+                    // Transient reset/resource errors must not stop the endpoint or spin.
+                    Thread.Sleep(100);
+                    continue;
+                }
+
+                ProcessAcceptedSocket(accepted);
+            }
+        }
+
+        private void ProcessAcceptedSocket(Socket accepted)
+        {
+            if (Volatile.Read(ref _disposed) != 0 || (Secure && Listener.Certificate == null))
             {
                 accepted.Dispose();
                 return;
@@ -254,19 +319,28 @@ namespace EmbedIO.Net.Internal
             HttpConnection conn;
             try
             {
-                conn = new HttpConnection(accepted, epl);
+                conn = new HttpConnection(accepted, this);
             }
             catch
             {
+                accepted.Dispose();
                 return;
             }
 
-            lock (epl._unregistered)
+            var registered = false;
+            lock (_unregistered)
             {
-                epl._unregistered[conn] = conn;
+                if (Volatile.Read(ref _disposed) == 0)
+                {
+                    _unregistered[conn] = conn;
+                    registered = true;
+                }
             }
 
-            _ = conn.BeginReadRequest();
+            if (registered)
+                _ = conn.BeginReadRequest();
+            else
+                conn.Dispose();
         }
 
         private static void OnAccept(object sender, SocketAsyncEventArgs e) => ProcessAccept(e);

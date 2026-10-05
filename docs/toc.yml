@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: macOS accept reset crashes
+      href: user-reports/mac-accept-reset.md
     - name: Request URL scheme and HTTPS
       href: user-reports/request-url-scheme.md
 
