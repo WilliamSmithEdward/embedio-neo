@@ -159,6 +159,7 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(false)]
         [TestCase(true)]
+        [Repeat(5)]
         public async Task ClosingDuringInFlightRequestsCompletesAcceptLoop(bool dispose)
         {
             var url = Resources.GetServerAddress();
@@ -177,6 +178,8 @@ namespace EmbedIO.Tests.Issues
                 try { using var response = await client.GetAsync(url); }
                 catch (HttpRequestException) { }
                 catch (OperationCanceledException) { }
+                // Linux HttpClient can expose the connect/dispose race directly instead of wrapping it.
+                catch (SocketException error) when (error.SocketErrorCode == SocketError.NotConnected) { }
             }).ToArray();
             try
             {
