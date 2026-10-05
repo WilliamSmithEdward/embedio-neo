@@ -55,8 +55,8 @@ separately maintained forks or external dependencies on the archived packages.
 - Corrected unverified README platform claims, limited CodeQL to the remaining
   C# codebase, and removed Git-flagged trailing whitespace without changing logic.
 - Configured the intended GitHub remote. Removed inherited publishing configuration
-  that targeted the original project. Nothing is configured to publish packages
-  or deploy documentation automatically.
+  that targeted the original project. The initial baseline had no publication
+  workflow; the subsequent standards onboarding adds the release path below.
 - The local folder is `F:\GitHub\embedio-neo`, and repository links and the Git
   remote use `WilliamSmithEdward/embedio-neo`.
 - Retained inherited library assembly names, namespaces, and package identities
@@ -189,6 +189,22 @@ historical-provenance limits are recorded in [licenses/README.md](../licenses/RE
 6. Discuss and document future breaking changes before implementation. William
    controls release identities, versions, publication, and when this prepared
    baseline is committed or pushed.
+
+## Repository standards onboarding
+
+The next maintenance step adopts William's `repo-standards` as the controlling
+configuration. CI, Security and Malware scan provide aggregate merge gates;
+SDK and NuGet dependencies are locked, actions use full SHAs, and scanner images
+and YARA assets are pinned. SECURITY.md describes the scope and reporting policy.
+The standard AGENTS.md block and CLAUDE.md import are tracked instead of ignored.
+
+Publish builds GitHub package assets with security/malware reports and provenance
+from approved version tags. Manual runs produce a release-preview artifact only.
+The owner approved preparation of NuGet trusted publishing through the nuget
+environment and WilliamSmithE profile; policy registration and package identities
+precede the first release. The inherited development version cannot be tagged as
+a release. README examples were corrected and the
+complete server and WebSocket snippets compiled against the current library.
 
 The aim is a maintained, coherent EmbedIO continuation: easier to build, test,
 understand, and extend, while treating existing users and the original authors'

@@ -1,5 +1,13 @@
 # EmbedIO-Neo
 
+[![Latest release](https://img.shields.io/github/v/release/WilliamSmithEdward/embedio-neo)](https://github.com/WilliamSmithEdward/embedio-neo/releases)
+[![Downloads](https://img.shields.io/github/downloads/WilliamSmithEdward/embedio-neo/total)](https://github.com/WilliamSmithEdward/embedio-neo/releases)
+[![CI](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/ci.yml)
+[![Security](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml)
+[![Malware scan](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/WilliamSmithEdward/embedio-neo/badge)](https://scorecard.dev/viewer/?uri=github.com/WilliamSmithEdward/embedio-neo)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/LICENSE)
+
 ![EmbedIO-Neo](images/embedio_neo.png)
 
 A small, cross-platform, modular web server for .NET, maintained by William Smith.

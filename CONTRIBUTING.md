@@ -21,11 +21,11 @@ does not substitute for approval.
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
 The tests target .NET 10.
 
-Install the .NET 10 SDK selected by `global.json` (10.0.400 or a later patch
-in the same feature band), then run:
+Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
+`latestFeature` allows later feature bands), then run:
 
 ```sh
-dotnet restore EmbedIO.sln
+dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 366
 ```
@@ -33,6 +33,9 @@ dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Re
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
 to verified commit SHAs when changing workflows. SDK, test-runtime, and CI
 modernization should be reviewed separately from library behavior changes.
+Commit every project's `packages.lock.json`. When deliberately updating a package,
+run `dotnet restore EmbedIO.sln --force-evaluate`, inspect the lock-file changes
+for every target, and verify a subsequent locked restore succeeds.
 
 Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
@@ -140,7 +143,9 @@ Other Extras modules were assessed but not imported:
   point to WilliamSmithEdward/embedio-neo. Original license notices remain intact.
 - Libraries add a .NET 10 target while retaining .NET Standard 2.0; tests require .NET 10. CI actions are pinned to commit hashes.
 - GitHub Actions replaces the inherited AppVeyor build/publishing configuration.
-  No package publication or documentation deployment is configured.
+  Publish prepares GitHub assets and NuGet packages through trusted publishing
+  on an approved version tag; manual runs are dry runs. Documentation deployment
+  remains unconfigured. NuGet policy registration precedes the first release.
 - Wildcard listener prefixes (`*` and `+`) are parsed separately from ordinary
   URI hostnames so wildcard servers can start. Existing namespaces, package IDs,
   and assembly names remain unchanged.

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Restore from the lock files
+        run: dotnet restore EmbedIO.sln --locked-mode
+      - name: Build the tests
+        run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=false
+      - name: Run the regression suite with coverage
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 366 --coverlet
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: TestResults/
+          if-no-files-found: error
+
+  static-analysis:
+    name: Static analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Restore from the lock files
+        run: dotnet restore EmbedIO.sln --locked-mode
+      # Inherited CA/IDE warnings remain visible. New analyzer errors fail;
+      # eliminating the warning baseline is documented follow-up work.
+      - name: Run the SDK and NUnit analyzers
+        run: dotnet build EmbedIO.sln -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
+
+  build:
+    name: Build and check the NuGet packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Restore from the lock files
+        run: dotnet restore EmbedIO.sln --locked-mode
+      - name: Build and pack both library targets and the CLI
+        run: dotnet pack EmbedIO.sln -c Release --no-restore -o dist -p:RunAnalyzers=false
+      - name: Check package contents and source notices
+        run: python3 scripts/check_packages.py dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nupkg
+          path: dist/*.nupkg
+          if-no-files-found: error
+
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [test, static-analysis, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check every CI job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for result in $RESULTS; do
+            [ "$result" = success ] || exit 1
+          done
