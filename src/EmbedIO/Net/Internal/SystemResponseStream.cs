@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -30,7 +31,9 @@ namespace EmbedIO.Net.Internal
         public override void Write(byte[] buffer, int offset, int count)
         {
             ValidateWrite(buffer, offset, count);
-            _prepareHeaders();
+            // Unix ignores synchronous empty writes without computing response headers.
+            if (count != 0 || RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                _prepareHeaders();
             _stream.Write(buffer, offset, count);
         }
 
@@ -57,12 +60,7 @@ namespace EmbedIO.Net.Internal
             _stream.Flush();
         }
 
-        public override Task FlushAsync(CancellationToken cancellationToken)
-        {
-            if (cancellationToken.IsCancellationRequested)
-                return Task.FromCanceled(cancellationToken);
-            return _stream.FlushAsync(cancellationToken);
-        }
+        public override Task FlushAsync(CancellationToken cancellationToken) => _stream.FlushAsync(cancellationToken);
 
         private static void ValidateWrite(byte[] buffer, int offset, int count)
         {

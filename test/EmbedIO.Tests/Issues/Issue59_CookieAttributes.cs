@@ -29,6 +29,8 @@ namespace EmbedIO.Tests.Issues
                 // Acquiring the stream must not commit headers or snapshot cookies.
                 var output = context.Response.OutputStream;
                 await output.FlushAsync();
+                if (mode == HttpListenerMode.Microsoft && !OperatingSystem.IsWindows())
+                    output.Write(Array.Empty<byte>(), 0, 0);
                 context.Response.Cookies.Add(new Cookie("primary", "old", "/area"));
                 context.Response.Cookies.Add(new Cookie("primary", "new", "/area")
                 {
