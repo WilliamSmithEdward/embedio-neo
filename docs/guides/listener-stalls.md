@@ -23,6 +23,8 @@ original application:
 
 The listener now cancels pending accepts on shutdown, sets `IsListening` false,
 and removes queued contexts explicitly before closing their connections.
+Semaphore resources are disposed only after the last active accept finishes,
+following the [.NET disposal contract](https://learn.microsoft.com/en-us/dotnet/api/system.threading.semaphoreslim.dispose?view=net-10.0).
 Registration, dequeue, and lifecycle transitions are coordinated. A canceled
 accept returns a consumed queue signal rather than stranding another waiter's
 request; dequeue continues past keys removed by another operation.
@@ -94,12 +96,10 @@ listener, sends 320 request pairs with eight concurrent clients, checks both
 listeners through rotation, activity recreation and brief Home/resume, replaces
 them, then disposes only the backend while verifying the frontend still serves
 files and the backend run task completes. CI retains JSON observations and logs
-in `android-smoke`. The Android job in [run 37271010975](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37271010975)
+in `android-smoke`. The Android job in [run 37271010975](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37271010975/job/111637802828)
 passed on API 29 with runtime 10.0.12: all request pairs were served, the process
 ID stayed unchanged, and backend disposal completed its run task while the
-frontend stayed listening and served files. That initial workflow also exposed
-a sync-wait problem in the new desktop test helper; its cleanup was corrected
-to use asynchronous disposal before final cross-platform validation.
+frontend stayed listening and served files.
 
 If a stall persists, please supply a minimal runnable app and exact library,
 MAUI/.NET, OS and device versions; listener modes/prefixes; lifecycle start/stop

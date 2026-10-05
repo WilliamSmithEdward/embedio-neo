@@ -62,6 +62,12 @@ namespace EmbedIO.Tests.Issues
                 var errors = await Task.WhenAll(accepts.Select(Observe)).WaitAsync(TimeSpan.FromSeconds(2));
                 Assert.That(errors.All(error => error is HttpListenerException { ErrorCode: 995 }), Is.True);
                 Assert.That(listener.IsListening, Is.False);
+                if (dispose)
+                {
+                    var semaphore = (SemaphoreSlim)typeof(Net.HttpListener)
+                        .GetField("_ctxQueueSem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(listener)!;
+                    Assert.Throws<ObjectDisposedException>(() => semaphore.Wait(0));
+                }
             }
             finally { cleanup.Cancel(); }
         }

@@ -25,6 +25,7 @@ namespace EmbedIO.Net
         private readonly ConcurrentDictionary<HttpConnection, object> _connections;
         private readonly HttpListenerPrefixCollection _prefixes;
         private bool _disposed;
+        private int _pendingAccepts;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HttpListener" /> class.
@@ -105,8 +106,7 @@ namespace EmbedIO.Net
                 try { Close(); }
                 finally
                 {
-                    _ctxQueueSem.Dispose();
-                    _acceptStop.Dispose();
+                    if (_pendingAccepts == 0) DisposeAcceptResources();
                 }
             }
         }
@@ -119,40 +119,58 @@ namespace EmbedIO.Net
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(HttpListener));
                 linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _acceptStop.Token);
+                _pendingAccepts++;
             }
 
-            using (linked)
+            try
             {
-                try
+                using (linked)
                 {
-                    while (true)
+                    try
                     {
-                        await _ctxQueueSem.WaitAsync(linked.Token).ConfigureAwait(false);
-                        lock (_lifecycleSync)
+                        while (true)
                         {
-                            if (linked.IsCancellationRequested)
+                            await _ctxQueueSem.WaitAsync(linked.Token).ConfigureAwait(false);
+                            lock (_lifecycleSync)
                             {
-                                // A canceled accept must not consume another waiter's queue signal.
-                                if (!_disposed) _ = _ctxQueueSem.Release();
-                                linked.Token.ThrowIfCancellationRequested();
-                            }
+                                if (linked.IsCancellationRequested)
+                                {
+                                    // A canceled accept must not consume another waiter's queue signal.
+                                    if (!_disposed) _ = _ctxQueueSem.Release();
+                                    linked.Token.ThrowIfCancellationRequested();
+                                }
 
-                            foreach (var key in _ctxQueue.Keys)
-                            {
-                                if (_ctxQueue.TryRemove(key, out var context)) return context;
+                                foreach (var key in _ctxQueue.Keys)
+                                {
+                                    if (_ctxQueue.TryRemove(key, out var context)) return context;
+                                }
                             }
                         }
                     }
-                }
-                catch (OperationCanceledException error) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw new OperationCanceledException("Accept canceled.", error, cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw new HttpListenerException(995, "The listener stopped accepting requests.");
+                    catch (OperationCanceledException error) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException("Accept canceled.", error, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw new HttpListenerException(995, "The listener stopped accepting requests.");
+                    }
                 }
             }
+            finally
+            {
+                lock (_lifecycleSync)
+                {
+                    // Cancellation completes asynchronously; wait until no semaphore operation remains.
+                    if (--_pendingAccepts == 0 && _disposed) DisposeAcceptResources();
+                }
+            }
+        }
+
+        private void DisposeAcceptResources()
+        {
+            _ctxQueueSem.Dispose();
+            _acceptStop.Dispose();
         }
 
         internal void RegisterContext(HttpListenerContext context)
