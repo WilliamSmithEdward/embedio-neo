@@ -13,6 +13,12 @@
   bracketed IPv6 hosts without a port; added real HTTP/TLS regressions and
   platform HTTPS URL-scheme validation.
 
+- Added optional `EmbedIO-Neo.DependencyInjection` integration with per-request
+  scopes, constructor and explicit handler-argument injection, awaited resource
+  cleanup, and Generic Host lifecycle support. Existing registration APIs and
+  core dependency requirements are unchanged. See
+  `docs/architecture/dependency-injection.md` for setup, ownership, and limits.
+
 - Fixed internal listener stop/dispose leaving pending accepts and missing Stopped
   notifications; shutdown now drains stale queued contexts without spinning.
   Added cancellation, queue concurrency, disconnect, and two-server regressions

@@ -275,8 +275,17 @@ namespace EmbedIO
                 }
                 finally
                 {
-                    await context.Response.OutputStream.FlushAsync(context.CancellationToken)
-                        .ConfigureAwait(false);
+                    // Opt-in asynchronous cleanup must also run when flushing fails.
+                    // Leave the legacy close path unchanged for contexts without callbacks.
+                    try
+                    {
+                        await context.Response.OutputStream.FlushAsync(context.CancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        await HttpContextExtensions.CompleteRequestAsync(context).ConfigureAwait(false);
+                    }
 
                     var statusCode = context.Response.StatusCode;
                     var statusDescription = context.Response.StatusDescription;
