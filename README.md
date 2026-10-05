@@ -44,7 +44,7 @@ A small, modular, MIT-licensed web server targeting .NET 10 and .NET Standard 2.
 * Small memory footprint
 * Create REST APIs quickly with the out-of-the-box Web API module
 * Serve static or embedded files with 1 line of code (also out-of-the-box)
-* Handle sessions with the built-in LocalSessionWebModule
+* Handle sessions with the built-in LocalSessionManager
 * WebSockets support
 * CORS support. Origin, Header and Method validation with OPTIONS preflight
 * HTTP 206 Partial Content support
@@ -89,70 +89,42 @@ Working with EmbedIO is pretty simple, check the follow sections to start coding
 
 ### WebServer Setup
 
-Please note the comments are the important part here. The examples below demonstrate the core API.
+This complete example serves a directory and waits for shutdown. Create `wwwroot`
+with the files you intend to expose before running it. Press Ctrl+C to stop.
 
 ```csharp
-namespace EmbedIONeoExample
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using EmbedIO;
+
+using var shutdown = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) =>
 {
-    using System;
-    using EmbedIO;
-    using EmbedIO.WebApi;
+    e.Cancel = true;
+    shutdown.Cancel();
+};
 
-    class Program
-    {
-        /// <summary>
-        /// Defines the entry point of the application.
-        /// </summary>
-        /// <param name="args">The arguments.</param>
-        static void Main(string[] args)
-        {
-            var url = "http://localhost:9696/";
-            if (args.Length > 0)
-                url = args[0];
+using var server = new WebServer(o => o
+        .WithUrlPrefix("http://localhost:9696/")
+        .WithMode(HttpListenerMode.EmbedIO))
+    .WithLocalSessionManager()
+    .WithStaticFolder("/", Path.GetFullPath("wwwroot"), true);
 
-            // Our web server is disposable.
-            using (var server = CreateWebServer(url))
-            {
-                // Once we've registered our modules and configured them, we call the RunAsync() method.
-                server.RunAsync();
-
-                var browser = new System.Diagnostics.Process()
-                {
-                    StartInfo = new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }
-                };
-                browser.Start();
-                // Wait for any key to be pressed before disposing of our web server.
-                // In a service, we'd manage the lifecycle of our web server using
-                // something like a BackgroundWorker or a ManualResetEvent.
-                Console.ReadKey(true);
-            }
-        }
-
-	// Create and configure our web server.
-        private static WebServer CreateWebServer(string url)
-        {
-            var server = new WebServer(o => o
-                    .WithUrlPrefix(url)
-                    .WithMode(HttpListenerMode.EmbedIO))
-		 // First, we will configure our web server by adding Modules.
-                .WithLocalSessionManager()
-                .WithWebApi("/api", m => m
-                    .WithController<PeopleController>())
-                .WithModule(new WebSocketChatModule("/chat"))
-                .WithModule(new WebSocketTerminalModule("/terminal"))
-                .WithStaticFolder("/", HtmlRootPath, true, m => m
-                    .WithContentCaching(UseFileCache)) // Add static files after other modules to avoid conflicts
-                .WithModule(new ActionModule("/", HttpVerbs.Any, ctx => ctx.SendDataAsync(new { Message = "Error" })));
-
-            // Listen for state changes.
-            server.StateChanged += (s, e) => $"WebServer New State - {e.NewState}".Info();
-
-            return server;
-        }
-    }
+server.StateChanged += (_, e) => Console.WriteLine($"Server state: {e.NewState}");
+try
+{
+    await server.RunAsync(shutdown.Token);
+}
+catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+{
 }
 ```
 
+The controller methods below are excerpts for a `WebApiController` subclass.
+Supply your application's `SaveData` method and request types, and register the
+controller through `WithWebApi` as shown in [CLI.md](CLI.md#plugins).
 ### Reading from a POST body as a dictionary (application/x-www-form-urlencoded)
 
 For reading a dictionary from an HTTP Request body inside a WebAPI method you can add an argument to your method with the attribute `FormData`.
@@ -168,7 +140,7 @@ For reading a dictionary from an HTTP Request body inside a WebAPI method you ca
 
 ### Reading from a POST body as a JSON payload (application/json)
 
-For reading a JSON payload and deserialize it to an object from an HTTP Request body you can use [GetRequestDataAsync<T>](#). This method works directly from `IHttpContext` and returns an object of the type specified in the generic type.
+For reading a JSON payload and deserialize it to an object from an HTTP Request body you can use [GetRequestDataAsync<T>](src/EmbedIO/HttpContextExtensions-Requests.cs). This method works directly from `IHttpContext` and returns an object of the type specified in the generic type.
 
 ```csharp
     [Route(HttpVerbs.Post, "/data")]
@@ -200,7 +172,7 @@ There is [another solution](http://stackoverflow.com/questions/7460088/reading-f
 
 ### Writing a binary stream
 
-You can open the Response Output Stream with the extension [OpenResponseStream]().
+You can open the Response Output Stream with the extension `OpenResponseStream`.
 
 ```csharp
     [Route(HttpVerbs.Get, "/binary")]
@@ -208,7 +180,7 @@ You can open the Response Output Stream with the extension [OpenResponseStream](
     {
 	// Call a fictional external source
 	using (var stream = HttpContext.OpenResponseStream())
-                await stream.WriteAsync(dataBuffer, 0, 0);
+                await stream.WriteAsync(dataBuffer, 0, dataBuffer.Length);
     }
 ```
 
@@ -217,7 +189,7 @@ You can open the Response Output Stream with the extension [OpenResponseStream](
 Working with WebSocket is pretty simple, you just need to implement the abstract class `WebSocketModule` and register the module to your Web server as follow:
 
 ```csharp
-server.WithModule(new WebSocketChatModule("/chat"));
+server.WithModule(new WebSocketsChatServer("/chat"));
 ```
 
 And our web sockets server class looks like:
@@ -225,6 +197,8 @@ And our web sockets server class looks like:
 ```csharp
 namespace EmbedIONeoExample
 {
+    using System.Text;
+    using System.Threading.Tasks;
     using EmbedIO.WebSockets;
 
     /// <summary>
