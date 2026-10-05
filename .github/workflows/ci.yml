@@ -31,7 +31,7 @@ jobs:
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=false
       - name: Run the regression suite with coverage
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 391 --coverlet
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 395 --coverlet
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -84,10 +84,14 @@ jobs:
     name: Mac Catalyst
     uses: ./.github/workflows/mac-catalyst.yml
 
+  android:
+    name: Android
+    uses: ./.github/workflows/android-smoke.yml
+
   ci-passed:
     name: CI passed
     if: always()
-    needs: [test, static-analysis, build, mac-catalyst]
+    needs: [test, static-analysis, build, mac-catalyst, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

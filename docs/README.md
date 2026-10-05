@@ -18,6 +18,7 @@ Start with the [project README](../README.md) for installation and a working ser
 
 ## Platforms
 
+- [MAUI Android](platforms/maui-android.md): background work, listener ownership, and restart diagnostics.
 - [MAUI Mac Catalyst](platforms/maui-mac-catalyst.md): listener startup and sandbox entitlements.
 
 ## Project and contribution

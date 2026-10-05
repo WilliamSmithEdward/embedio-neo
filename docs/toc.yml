@@ -16,6 +16,8 @@
       href: compatibility/migration.md
 - name: Platforms
   items:
+    - name: MAUI Android
+      href: platforms/maui-android.md
     - name: MAUI Mac Catalyst
       href: platforms/maui-mac-catalyst.md
 - name: Project
