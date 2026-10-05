@@ -56,8 +56,13 @@ namespace EmbedIO.PlatformTests
 
         internal static WebServer CreateServer(string url, X509Certificate2 certificate)
             => new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithCertificate(certificate))
-                .WithModule(new ActionModule("/", HttpVerbs.Get, context => context.SendStringAsync(
-                    context.Request.IsSecureConnection ? "encrypted" : "plaintext", "text/plain", WebServer.Utf8NoBomEncoding)));
+                .WithModule(new ActionModule("/", HttpVerbs.Get, context =>
+                {
+                    if (context.Request.Url.Scheme != (context.Request.IsSecureConnection ? "https" : "http"))
+                        throw new InvalidOperationException("Request URL scheme disagrees with transport security.");
+                    return context.SendStringAsync(context.Request.IsSecureConnection ? "encrypted" : "plaintext",
+                        "text/plain", WebServer.Utf8NoBomEncoding);
+                }));
 
         internal static async Task RunAsync()
         {

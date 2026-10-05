@@ -78,7 +78,7 @@ namespace EmbedIO.Net.Internal
         public bool HasEntityBody => ContentLength64 > 0;
 
         /// <inheritdoc />
-        public NameValueCollection Headers { get; } = new ();
+        public NameValueCollection Headers { get; } = new();
 
         /// <inheritdoc />
         public string HttpMethod { get; private set; } = string.Empty;
@@ -124,7 +124,7 @@ namespace EmbedIO.Net.Internal
         public Version ProtocolVersion { get; private set; } = HttpVersion.Version11;
 
         /// <inheritdoc />
-        public NameValueCollection QueryString { get; } = new ();
+        public NameValueCollection QueryString { get; } = new();
 
         /// <inheritdoc />
         public string RawUrl { get; private set; } = string.Empty;
@@ -210,7 +210,7 @@ namespace EmbedIO.Net.Internal
                 return;
             }
 
-            var rawUri = UriUtility.StringToAbsoluteUri(RawUrl.ToLowerInvariant());
+            var rawUri = UriUtility.StringToAbsoluteUri(RawUrl);
             var path = rawUri?.PathAndQuery ?? RawUrl;
 
             if (string.IsNullOrEmpty(host))
@@ -219,13 +219,12 @@ namespace EmbedIO.Net.Internal
             }
 
             var colon = host.LastIndexOf(':');
-            if (colon >= 0)
+            if (colon >= 0 && colon > host.LastIndexOf(']'))
             {
                 host = host.Substring(0, colon);
             }
 
-            // var baseUri = $"{(IsSecureConnection ? "https" : "http")}://{host}:{LocalEndPoint.Port}";
-            var baseUri = $"http://{host}:{LocalEndPoint.Port}";
+            var baseUri = $"{(IsSecureConnection ? "https" : "http")}://{host}:{LocalEndPoint.Port}";
 
             if (!Uri.TryCreate(baseUri + path, UriKind.Absolute, out var url))
             {
