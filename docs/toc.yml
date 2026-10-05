@@ -10,6 +10,8 @@
       href: guides/async-outbound-requests.md
     - name: Circular JSON references
       href: guides/json-circular-references.md
+    - name: Listener stalls
+      href: guides/listener-stalls.md
 - name: Compatibility
   items:
     - name: Migration

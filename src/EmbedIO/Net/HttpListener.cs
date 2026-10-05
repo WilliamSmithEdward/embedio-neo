@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Net.Internal;
+using HttpListenerException = System.Net.HttpListenerException;
 
 namespace EmbedIO.Net
 {
@@ -17,7 +18,9 @@ namespace EmbedIO.Net
     /// <seealso cref="IDisposable" />
     public sealed class HttpListener : IHttpListener
     {
-        private readonly SemaphoreSlim _ctxQueueSem = new (0);
+        private readonly SemaphoreSlim _ctxQueueSem = new(0);
+        private readonly object _lifecycleSync = new();
+        private CancellationTokenSource _acceptStop = new();
         private readonly ConcurrentDictionary<string, HttpListenerContext> _ctxQueue;
         private readonly ConcurrentDictionary<HttpConnection, object> _connections;
         private readonly HttpListenerPrefixCollection _prefixes;
@@ -59,20 +62,31 @@ namespace EmbedIO.Net
         /// <inheritdoc />
         public void Start()
         {
-            if (IsListening)
+            lock (_lifecycleSync)
             {
-                return;
-            }
+                if (_disposed) throw new ObjectDisposedException(nameof(HttpListener));
+                if (IsListening) return;
+                if (_acceptStop.IsCancellationRequested)
+                {
+                    _acceptStop.Dispose();
+                    _acceptStop = new CancellationTokenSource();
+                }
 
-            EndPointManager.AddListener(this);
-            IsListening = true;
+                EndPointManager.AddListener(this);
+                IsListening = true;
+            }
         }
 
         /// <inheritdoc />
         public void Stop()
         {
-            IsListening = false;
-            Close(false);
+            lock (_lifecycleSync)
+            {
+                if (_disposed) return;
+                IsListening = false;
+                _acceptStop.Cancel();
+                Close();
+            }
         }
 
         /// <inheritdoc />
@@ -81,43 +95,73 @@ namespace EmbedIO.Net
         /// <inheritdoc />
         public void Dispose()
         {
-            if (_disposed)
+            lock (_lifecycleSync)
             {
-                return;
+                if (_disposed) return;
+                _disposed = true;
+                IsListening = false;
+                // Disposing SemaphoreSlim alone does not complete its pending waits.
+                _acceptStop.Cancel();
+                Close();
+                _ctxQueueSem.Dispose();
+                _acceptStop.Dispose();
             }
-
-            Close(true);
-            _ctxQueueSem.Dispose();
-            _disposed = true;
         }
 
         /// <inheritdoc />
         public async Task<IHttpContextImpl> GetContextAsync(CancellationToken cancellationToken)
         {
-            while (true)
+            CancellationTokenSource linked;
+            lock (_lifecycleSync)
             {
-                await _ctxQueueSem.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (_disposed) throw new ObjectDisposedException(nameof(HttpListener));
+                linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _acceptStop.Token);
+            }
 
-                foreach (var key in _ctxQueue.Keys)
+            using (linked)
+            {
+                try
                 {
-                    if (_ctxQueue.TryRemove(key, out var context))
+                    while (true)
                     {
-                        return context;
-                    }
+                        await _ctxQueueSem.WaitAsync(linked.Token).ConfigureAwait(false);
+                        lock (_lifecycleSync)
+                        {
+                            if (linked.IsCancellationRequested)
+                            {
+                                // A canceled accept must not consume another waiter's queue signal.
+                                if (!_disposed) _ = _ctxQueueSem.Release();
+                                linked.Token.ThrowIfCancellationRequested();
+                            }
 
-                    break;
+                            foreach (var key in _ctxQueue.Keys)
+                            {
+                                if (_ctxQueue.TryRemove(key, out var context)) return context;
+                            }
+                        }
+                    }
+                }
+                catch (OperationCanceledException error) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException("Accept canceled.", error, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw new HttpListenerException(995, "The listener stopped accepting requests.");
                 }
             }
         }
 
         internal void RegisterContext(HttpListenerContext context)
         {
-            if (!_ctxQueue.TryAdd(context.Id, context))
+            lock (_lifecycleSync)
             {
-                throw new InvalidOperationException("Unable to register context");
+                if (_disposed || !IsListening)
+                    throw new HttpListenerException(995, "The listener stopped accepting requests.");
+                if (!_ctxQueue.TryAdd(context.Id, context))
+                    throw new InvalidOperationException("Unable to register context");
+                _ = _ctxQueueSem.Release();
             }
-
-            _ = _ctxQueueSem.Release();
         }
 
         internal void UnregisterContext(HttpListenerContext context) => _ctxQueue.TryRemove(context.Id, out _);
@@ -126,7 +170,7 @@ namespace EmbedIO.Net
 
         internal void RemoveConnection(HttpConnection cnc) => _connections.TryRemove(cnc, out _);
 
-        private void Close(bool closeExisting)
+        private void Close()
         {
             EndPointManager.RemoveListener(this);
 
@@ -141,16 +185,12 @@ namespace EmbedIO.Net
                 list[i].Close(true);
             }
 
-            if (!closeExisting)
-            {
-                return;
-            }
-
             while (!_ctxQueue.IsEmpty)
             {
                 foreach (var key in _ctxQueue.Keys.ToArray())
                 {
-                    if (_ctxQueue.TryGetValue(key, out var context))
+                    // A previously closed connection cannot unbind its context again.
+                    if (_ctxQueue.TryRemove(key, out var context))
                     {
                         context.Connection.Close(true);
                     }

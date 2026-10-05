@@ -7,9 +7,11 @@ public sealed class SmokeHost
 {
     public static readonly SmokeHost Instance = new();
     public static int Created, Resumed, Stopped, Configured;
-    private WebServer? _server;
+    private WebServer? _server, _frontend;
     private CancellationTokenSource? _stop;
-    private Task? _running;
+    private Task? _running, _frontRunning;
+    private int _requests;
+    private bool _stoppingBackend;
     private int _generation, _observed;
     private string? _error;
     private readonly SemaphoreSlim _restart = new(1, 1);
@@ -22,20 +24,9 @@ public sealed class SmokeHost
             _stop = new CancellationTokenSource();
             _server = new WebServer(options => options.WithUrlPrefix("http://127.0.0.1:59697/")
                 .WithMode(HttpListenerMode.EmbedIO))
-                .WithModule(new ActionModule("/state", HttpVerbs.Get, context => context.SendDataAsync(new
-                {
-                    pid = Environment.ProcessId,
-                    generation = _generation,
-                    created = Created,
-                    resumed = Resumed,
-                    stopped = Stopped,
-                    configured = Configured,
-                    observed = _observed,
-                    error = _error,
-                    listener = _server?.Listener.Name,
-                    runtime = Environment.Version.ToString(),
-                    os = Environment.OSVersion.ToString(),
-                })))
+                .WithModule(new ActionModule("/state", HttpVerbs.Get, context => context.SendDataAsync(GetState())))
+                .WithModule(new ActionModule("/api", HttpVerbs.Get, context =>
+                    context.SendDataAsync(new { request = Interlocked.Increment(ref _requests) })))
                 .WithModule(new ActionModule("/work", HttpVerbs.Post, context =>
                 {
                     // The worker owns its exception handling and never retains this HTTP context.
@@ -43,6 +34,15 @@ public sealed class SmokeHost
                     context.Response.StatusCode = 200;
                     return context.SendStringAsync("accepted", "text/plain", WebServer.Utf8NoBomEncoding);
                 }));
+            var directory = Path.Combine(Microsoft.Maui.Storage.FileSystem.CacheDirectory, "embedio-smoke");
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "index.html"), "frontend");
+            _frontend = new WebServer(options => options.WithUrlPrefix("http://127.0.0.1:59698/")
+                .WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new ActionModule("/host-state", HttpVerbs.Get, context => context.SendDataAsync(GetState())))
+                .WithStaticFolder("/", directory, false);
+            _frontRunning = _frontend.RunAsync(_stop.Token);
+            _ = ObserveServerAsync(_frontRunning);
             _running = _server.RunAsync(_stop.Token);
             if (_server.State != WebServerState.Listening)
                 throw new InvalidOperationException("The listener did not start.");
@@ -56,9 +56,29 @@ public sealed class SmokeHost
         }
     }
 
+    private object GetState() => new
+    {
+        pid = Environment.ProcessId,
+        generation = _generation,
+        created = Created,
+        resumed = Resumed,
+        stopped = Stopped,
+        configured = Configured,
+        observed = _observed,
+        error = _error,
+        listener = _server?.Listener.Name,
+        backend_state = _server?.State.ToString(),
+        frontend_state = _frontend?.State.ToString(),
+        backend_completed = _running?.IsCompleted,
+        requests = _requests,
+        runtime = Environment.Version.ToString(),
+        os = Environment.OSVersion.ToString(),
+    };
+
     private async Task ObserveServerAsync(Task running)
     {
         try { await running; }
+        catch (System.Net.HttpListenerException) when (_stoppingBackend) { }
         catch (Exception error) { _error = error.ToString(); Console.Error.WriteLine(_error); }
     }
 
@@ -79,15 +99,28 @@ public sealed class SmokeHost
         try
         {
             _stop!.Cancel();
-            await _running!.WaitAsync(TimeSpan.FromSeconds(10));
+            await Task.WhenAll(_running!, _frontRunning!).WaitAsync(TimeSpan.FromSeconds(10));
             Task[] workers;
             lock (_workers) { workers = _workers.ToArray(); _workers.Clear(); }
             await Task.WhenAll(workers).WaitAsync(TimeSpan.FromSeconds(10));
             _server!.Dispose();
+            _frontend!.Dispose();
             _stop.Dispose();
             Start();
         }
         catch (Exception error) { _error = error.ToString(); Console.Error.WriteLine(_error); }
         finally { _restart.Release(); }
     }
+    public async Task StopBackendObservedAsync()
+    {
+        _stoppingBackend = true;
+        try
+        {
+            _server!.Dispose();
+            try { await _running!.WaitAsync(TimeSpan.FromSeconds(10)); }
+            catch (System.Net.HttpListenerException error) when (error.NativeErrorCode == 995) { }
+        }
+        catch (Exception error) { _error = error.ToString(); Console.Error.WriteLine(_error); }
+    }
+
 }

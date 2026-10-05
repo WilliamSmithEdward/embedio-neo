@@ -41,6 +41,7 @@ public sealed class MainActivity : MauiAppCompatActivity
         switch (intent?.GetStringExtra("smoke_action"))
         {
             case "recreate": Recreate(); break;
+            case "dispose-backend": _ = SmokeHost.Instance.StopBackendObservedAsync(); break;
             case "restart": _ = SmokeHost.Instance.RestartObservedAsync(); break;
         }
     }

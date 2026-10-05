@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Fixed internal listener stop/dispose leaving pending accepts and missing Stopped
+  notifications; shutdown now drains stale queued contexts without spinning.
+  Added cancellation, queue concurrency, disconnect, and two-server regressions
+  plus Android two-listener load/lifecycle coverage for upstream #595. The original
+  device stall cause is not confirmed.
+
 - Added MAUI Android lifecycle and supervised-background-work guidance for upstream
   #597, four real-listener regressions, and a required Android 10 emulator smoke.
   Production behavior is unchanged; the original application crash has no supplied

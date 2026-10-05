@@ -12,6 +12,8 @@ Start with the [project README](../README.md) for installation and a working ser
   completed JSON results, and troubleshooting.
 - [Circular JSON references](guides/json-circular-references.md): opt-in .NET serialization settings.
 
+- [Listener stalls](guides/listener-stalls.md): two-server diagnostics, shutdown fixes, and regression scope.
+
 ## Compatibility
 
 - [Migration](compatibility/migration.md): approved SWAN/JSON changes and consumer migration.
