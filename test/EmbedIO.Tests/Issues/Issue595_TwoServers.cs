@@ -23,10 +23,10 @@ namespace EmbedIO.Tests.Issues
             await File.WriteAllTextAsync(Path.Combine(directory, "index.html"), "frontend");
             var frontUrl = Resources.GetServerAddress();
             var apiUrl = sharedPort ? frontUrl : Resources.GetServerAddress();
-            using var front = new Host(new WebServer(options => options
+            await using var front = new Host(new WebServer(options => options
                 .WithUrlPrefix(frontUrl + "front/").WithMode(HttpListenerMode.EmbedIO))
                 .WithStaticFolder("/front", directory, false));
-            using var api = new Host(new WebServer(options => options
+            await using var api = new Host(new WebServer(options => options
                 .WithUrlPrefix(apiUrl + "api/").WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new ActionModule("/api", HttpVerbs.Get, async context =>
                 {
@@ -59,7 +59,7 @@ namespace EmbedIO.Tests.Issues
         public async Task IncompleteAndDisconnectedClientsDoNotStopHealthyRequests()
         {
             var url = Resources.GetServerAddress();
-            using var host = new Host(new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+            await using var host = new Host(new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new ActionModule("/", HttpVerbs.Any, context =>
                     context.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding))));
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -82,7 +82,7 @@ namespace EmbedIO.Tests.Issues
         {
             var url = Resources.GetServerAddress();
             var observed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var host = new Host(new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+            await using var host = new Host(new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new ActionModule("/", HttpVerbs.Get, context =>
                 {
                     context.OnClose(_ =>
@@ -103,7 +103,7 @@ namespace EmbedIO.Tests.Issues
         public async Task FatalListenerCleanupCompletesAcceptLoopAndReportsStopped()
         {
             using var server = new FatalServer(Resources.GetServerAddress());
-            using var host = new Host(server);
+            await using var host = new Host(server);
             server.TriggerFatalCleanup();
             await host.ObserveCompletion();
             Assert.That(host.Server.State, Is.EqualTo(WebServerState.Stopped));
@@ -123,7 +123,7 @@ namespace EmbedIO.Tests.Issues
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var handled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var host = new Host(new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+            await using var host = new Host(new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new ActionModule("/", HttpVerbs.Any, async context =>
                 {
                     if (context.Request.Url.AbsolutePath == "/abort")
@@ -164,7 +164,7 @@ namespace EmbedIO.Tests.Issues
             var url = Resources.GetServerAddress();
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var host = new Host(new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+            await using var host = new Host(new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new ActionModule("/", HttpVerbs.Any, async context =>
                 {
                     entered.TrySetResult();
@@ -197,7 +197,7 @@ namespace EmbedIO.Tests.Issues
             }
         }
 
-        private sealed class Host : IDisposable
+        private sealed class Host : IAsyncDisposable
         {
             private readonly CancellationTokenSource _stop = new();
             private readonly Task _running;
@@ -212,14 +212,14 @@ namespace EmbedIO.Tests.Issues
 
             public async Task ObserveCompletion()
             {
-                try { await _running.WaitAsync(TimeSpan.FromSeconds(5)); }
+                try { await _running.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
                 catch (Exception) when (_running.IsFaulted) { }
             }
 
-            public void Dispose()
+            public async ValueTask DisposeAsync()
             {
                 _stop.Cancel();
-                try { ObserveCompletion().GetAwaiter().GetResult(); }
+                try { await ObserveCompletion().ConfigureAwait(false); }
                 finally { Server.Dispose(); _stop.Dispose(); }
             }
         }
