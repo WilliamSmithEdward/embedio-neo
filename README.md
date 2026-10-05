@@ -45,8 +45,8 @@ A small, modular, MIT-licensed web server targeting .NET 10 and .NET Standard 2.
 * Written entirely in C#, using built-in .NET APIs on .NET 10
 * Network operations use the async/await pattern: Responses are handled asynchronously
 * Multiple implementations support: EmbedIO can use Microsoft `HttpListener` or internal Http Listener based on [Mono](https://www.mono-project.com/)/[websocket-sharp](https://github.com/sta/websocket-sharp/) projects
-* The Neo baseline is tested on Windows/.NET 10. Linux and macOS CI is configured
-  but has not run yet. The .NET Standard 2.0 target is retained for legacy consumers;
+* The Neo regression suite passes on Windows, Linux and macOS with .NET 10.
+  The .NET Standard 2.0 target is retained for legacy consumers;
   older runtimes, including .NET Framework and Mono, have not been validated for Neo.
 * Extensible: write your own modules, or use the JsonServer module included in this repository.
 * Small memory footprint
@@ -72,10 +72,8 @@ The major version 3.0 includes a lot of changes in how the webserver process the
 
 ## Installation:
 
-Until the first Neo package is published, build the source
-or add a project reference to `src/EmbedIO/EmbedIO.csproj`.
-
-After the first release, use the commands below to install `EmbedIO-Neo`.
+Use the commands below to install `EmbedIO-Neo`, or build the source
+and add a project reference to `src/EmbedIO/EmbedIO.csproj`.
 The archived `EmbedIO` package is a separate upstream distribution. Neo's package
 ID changes, while the library's assembly name and namespaces remain `EmbedIO`.
 

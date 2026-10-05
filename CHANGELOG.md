@@ -1,10 +1,16 @@
 # Changelog
 
-## [3.5.0] - Unreleased development baseline
+## [1.0.0] - 2026-10-04
 
-This inherited version is a development placeholder. It must not be tagged or
-published as a compatible upstream 3.x release. William will select a release
-version before publication. The approved NuGet package family is `EmbedIO-Neo`.
+First independent Neo release, continuing Unosquare's EmbedIO, Extras JsonServer,
+and CLI. Thank you to Unosquare, Mario A. Di Vece, Giovanni Perez, and the original
+contributors for the foundation we can maintain and build upon. Original MIT
+copyright and embedded third-party notices remain in the source and packages.
+
+The package family is `EmbedIO-Neo`, `EmbedIO-Neo.JsonServer`,
+`EmbedIO-Neo.Testing`, and `EmbedIO-Neo.Cli`. Existing assembly names, namespaces,
+and the `embedio-cli` command are retained. Neo's version sequence starts at
+1.0.0 independently of upstream's 3.x versions.
 
 - Consolidated EmbedIO, JsonServer and the CLI into one repository.
 - Added .NET 10 while retaining .NET Standard 2.0 library targets.
@@ -14,5 +20,26 @@ version before publication. The approved NuGet package family is `EmbedIO-Neo`.
   update and release-preview workflows.
 - Escaped carriage returns and newlines in trace output to prevent request data
   from forging additional log records; diagnostic observers retain the original data.
+- Added daily URL path/query fuzzing with a committed corpus and signed package
+  provenance through GitHub attestations in the release workflow.
+
+### Approved migration changes
+
+SWAN removal changes configuration, JSON options, logging and exception APIs.
+Rebuild downstream applications and follow [MIGRATION.md](MIGRATION.md), including
+validation of JSON client contracts. Archived EmbedIO 2.x CLI plugins must be
+rebuilt and adapted as described in [CLI.md](CLI.md#provenance-and-migration).
+These migrations were approved before implementation; this release adds no
+further runtime behavior changes.
+
+### Validation and limits
+
+The 367-case regression suite passes on Windows, Linux and macOS with .NET 10.
+Locked package builds, security and malware scans, and the release preview are
+required before publication. .NET Standard 2.0 is retained; older runtimes and
+.NET 8 have not received equivalent runtime validation. Inherited analyzer
+warnings remain. Fuzzing covers URL paths and query data, not listener or
+WebSocket-frame parsing. JsonServer's persistence limitations are documented in
+CONTRIBUTING.md. No measured performance improvement is claimed.
 
 The detailed initial baseline is recorded in docs/embed_io_neo.md.

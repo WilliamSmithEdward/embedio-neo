@@ -13,8 +13,7 @@ and the advisory is published with it, crediting you unless you ask otherwise.
 
 ## Supported versions
 
-Neo has no published release yet. Fixes currently target the latest source on
-main. Once released, only the latest Neo release receives security fixes;
+Neo's release series starts at 1.0.0. Only the latest Neo release receives security fixes;
 archived upstream packages and older releases are not maintained separately.
 
 ## Scope
