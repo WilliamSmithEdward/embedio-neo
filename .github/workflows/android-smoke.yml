@@ -9,6 +9,8 @@ jobs:
     name: MAUI Android 10 lifecycle smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    env:
+      ANDROID_AVD_HOME: ${{ runner.temp }}/embedio-avd
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,7 +28,9 @@ jobs:
       - name: Boot Android 10 and exercise the lifecycle
         run: |
           printf 'y\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-29;google_apis;x86_64'
-          printf 'no\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n embedio597 -k 'system-images;android-29;google_apis;x86_64' --force
+          mkdir -p "$ANDROID_AVD_HOME"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n embedio597 -k 'system-images;android-29;google_apis;x86_64' --device pixel_2 --path "$ANDROID_AVD_HOME/embedio597.avd" --force
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx embedio597
           sudo chown "$USER" /dev/kvm
           "$ANDROID_HOME/emulator/emulator" -avd embedio597 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect > TestResults/android/emulator.log 2>&1 &
           python3 scripts/run_android_smoke.py
