@@ -18,6 +18,7 @@ namespace EmbedIO.Internal
         {
             foreach (var (name, module) in WithSafeNames)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 $"Starting module {name}...".Debug(_logSource);
                 module.Start(cancellationToken);
             }

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Avoid compiling unused parameterless base-route regexes during configuration.
+  Signal synchronous startup readiness without polling; stop failed listeners,
+  honor startup cancellation and enforce the documented single RunAsync call.
+  Add 30 cold-start and port-reuse regression cases and fresh-process allocation budgets.
+
 - Add MimeType.Xml and MimeType.TextXml constants and document opt-in controller XML responses using existing serializers; preserve default JSON behavior.
 - Reduce content-negotiation, header/token parsing, WebSocket metadata and frame-read
   allocations. Avoid rate-history snapshots and preserve request records during
