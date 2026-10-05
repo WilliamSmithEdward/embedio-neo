@@ -19,9 +19,9 @@ namespace EmbedIO.Net.Internal
     {
         private readonly System.Net.HttpListenerContext _context;
 
-        private readonly TimeKeeper _ageKeeper = new ();
+        private readonly TimeKeeper _ageKeeper = new();
 
-        private readonly Stack<Action<IHttpContext>> _closeCallbacks = new ();
+        private readonly Stack<Action<IHttpContext>> _closeCallbacks = new();
 
         private bool _closed;
 
@@ -100,18 +100,23 @@ namespace EmbedIO.Net.Internal
         {
             _closed = true;
 
-            // Always close the response stream no matter what.
-            Response.Close();
-
-            foreach (var callback in _closeCallbacks)
+            // Run completion callbacks even when the transport cannot close cleanly.
+            try
             {
-                try
+                Response.Close();
+            }
+            finally
+            {
+                foreach (var callback in _closeCallbacks)
                 {
-                    callback(this);
-                }
-                catch (Exception e)
-                {
-                    e.Log("HTTP context", "[Id] Exception thrown by a HTTP context close callback.");
+                    try
+                    {
+                        callback(this);
+                    }
+                    catch (Exception e)
+                    {
+                        e.Log("HTTP context", "[Id] Exception thrown by a HTTP context close callback.");
+                    }
                 }
             }
         }

@@ -22,6 +22,10 @@ namespace EmbedIO
         /// <summary>
         /// Gets a <see cref="CancellationToken" /> used to stop processing of this context.
         /// </summary>
+        /// <remarks>
+        /// The web server supplies its RunAsync cancellation token. A remote client disconnect
+        /// does not automatically cancel this token; streaming handlers must also handle transport errors.
+        /// </remarks>
         CancellationToken CancellationToken { get; }
 
         /// <summary>
@@ -122,6 +126,10 @@ namespace EmbedIO
         /// <summary>
         /// Registers a callback to be called when processing is finished on a context.
         /// </summary>
+        /// <remarks>
+        /// This is a request-completion callback, not a remote-disconnect notification.
+        /// A handler must finish before its callbacks run. Use finally for resources owned by the handler.
+        /// </remarks>
         /// <param name="callback">The callback.</param>
         void OnClose(Action<IHttpContext> callback);
     }

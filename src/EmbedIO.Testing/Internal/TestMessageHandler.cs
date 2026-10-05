@@ -34,6 +34,9 @@ namespace EmbedIO.Testing.Internal
             };
 
             await _handler.HandleContextAsync(context).ConfigureAwait(false);
+            // Cleanup may produce a response body even for a canceled request.
+            // Preserve the client's cancellation contract after cleanup completes.
+            cancellationToken.ThrowIfCancellationRequested();
             var serverResponse = context.TestResponse;
             var responseCookies = serverResponse.Headers.Get(HttpHeaderNames.SetCookie);
             if (!string.IsNullOrEmpty(responseCookies))
@@ -70,7 +73,8 @@ namespace EmbedIO.Testing.Internal
         // because nobody outside the .NET team will ever need them, right?
         // https://github.com/dotnet/corefx/blob/master/src/System.Net.Http/src/System/Net/Http/Headers/KnownHeaders.cs
         // Here are the "content" headers, extracted on 2019-07-06:
-        private static ResponseHeaderType GetResponseHeaderType(string name) => name switch {
+        private static ResponseHeaderType GetResponseHeaderType(string name) => name switch
+        {
             // Content-Length is set automatically and shall not be touched
             HttpHeaderNames.ContentLength => ResponseHeaderType.None,
             // These headers belong to Content

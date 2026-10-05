@@ -34,7 +34,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 473
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 482
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -48,7 +48,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 473 executed/reported test cases to catch accidental discovery loss; update
+least 482 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. NUnit 5 async assertions
 must be awaited.
 
@@ -127,7 +127,7 @@ visible and should be resolved in focused changes. The console sample and its Tu
 ## Extras integration
 
 JsonServer was imported from `unosquare/embedio-extras` commit
-`62234731c1b261494d0acee7174cfee5dcac60cf`. Its MIT notice is preserved in
+`62234821c1b261494d0acee7174cfee5dcac60cf`. Its MIT notice is preserved in
 `licenses/embedio-extras-LICENSE` and included in its package. The project keeps
 the `EmbedIO.JsonServer` assembly/namespace and references this repository's core.
 No new runtime package is required. Typed collection operations replace dynamic

@@ -18,11 +18,11 @@ namespace EmbedIO.Net.Internal
     // Provides access to the request and response objects used by the HttpListener class.
     internal sealed class HttpListenerContext : IHttpContextImpl
     {
-        private readonly Lazy<IDictionary<object, object>> _items = new (() => new Dictionary<object, object>(), true);
+        private readonly Lazy<IDictionary<object, object>> _items = new(() => new Dictionary<object, object>(), true);
 
-        private readonly TimeKeeper _ageKeeper = new ();
+        private readonly TimeKeeper _ageKeeper = new();
 
-        private readonly Stack<Action<IHttpContext>> _closeCallbacks = new ();
+        private readonly Stack<Action<IHttpContext>> _closeCallbacks = new();
 
         private bool _closed;
 
@@ -57,7 +57,7 @@ namespace EmbedIO.Net.Internal
 
         public IHttpResponse Response => HttpListenerResponse;
 
-        public IPrincipal User { get; set;  }
+        public IPrincipal User { get; set; }
 
         public ISessionProxy Session { get; set; }
 
@@ -93,18 +93,23 @@ namespace EmbedIO.Net.Internal
         {
             _closed = true;
 
-            // Always close the response stream no matter what.
-            Response.Close();
-
-            foreach (var callback in _closeCallbacks)
+            // Run completion callbacks even when the transport cannot close cleanly.
+            try
             {
-                try
+                Response.Close();
+            }
+            finally
+            {
+                foreach (var callback in _closeCallbacks)
                 {
-                    callback(this);
-                }
-                catch (Exception e)
-                {
-                    e.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback.");
+                    try
+                    {
+                        callback(this);
+                    }
+                    catch (Exception e)
+                    {
+                        e.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback.");
+                    }
                 }
             }
         }
