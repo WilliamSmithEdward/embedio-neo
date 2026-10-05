@@ -64,11 +64,17 @@ namespace EmbedIO.Tests.Issues
                     context.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding))));
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             var address = new Uri(url);
+            // Force each health request through a fresh accept. The queued
+            // incomplete connection must be accepted before this later one.
+            // Resetting before accept exercises dotnet/runtime#121848 instead
+            // of EmbedIO's handling of an accepted incomplete request on macOS.
+            client.DefaultRequestHeaders.ConnectionClose = true;
             for (var batch = 0; batch < 20; batch++)
             {
                 using var socket = new TcpClient();
                 await socket.ConnectAsync(address.Host, address.Port);
                 await socket.GetStream().WriteAsync(Encoding.ASCII.GetBytes("GET / HTTP/1.1\r\nHost:"));
+                Assert.That(await client.GetStringAsync(url), Is.EqualTo("healthy"));
                 socket.Client.LingerState = new LingerOption(true, 0);
                 socket.Close();
                 Assert.That(await client.GetStringAsync(url), Is.EqualTo("healthy"));
