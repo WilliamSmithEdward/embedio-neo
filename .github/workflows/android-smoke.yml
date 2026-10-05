@@ -25,7 +25,7 @@ jobs:
       - name: Build the test-only Android app
         run: |
           mkdir -p TestResults/android
-          dotnet restore test/EmbedIO.AndroidSmoke/EmbedIO.AndroidSmoke.csproj
+          dotnet restore test/EmbedIO.AndroidSmoke/EmbedIO.AndroidSmoke.csproj --locked-mode
           dotnet build test/EmbedIO.AndroidSmoke/EmbedIO.AndroidSmoke.csproj -c Debug --no-restore -p:RunAnalyzers=false
       - name: Boot Android 10 and exercise the lifecycle
         run: |

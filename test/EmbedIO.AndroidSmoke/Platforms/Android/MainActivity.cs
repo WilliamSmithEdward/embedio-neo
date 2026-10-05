@@ -30,7 +30,7 @@ public sealed class MainActivity : MauiAppCompatActivity
         base.OnStop();
     }
 
-    public override void OnConfigurationChanged(Configuration configuration)
+    public override void OnConfigurationChanged(global::Android.Content.Res.Configuration configuration)
     {
         base.OnConfigurationChanged(configuration);
         Interlocked.Increment(ref SmokeHost.Configured);
