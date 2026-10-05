@@ -87,12 +87,33 @@ public sealed class SmokeApp : Application
                     throw new InvalidOperationException("Platform HTTP client did not retrieve the TLS page.");
                 _checks["platform_client_trust"] = "passed";
                 var navigation = new TaskCompletionSource<WebNavigationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-                view.Navigated += (_, e) => navigation.TrySetResult(e.Result);
+                var expectedUrl = new Uri(url);
+                view.Navigated += (_, e) =>
+                {
+                    // Initial about:blank navigation can finish after the view
+                    // loads. Only the requested HTTPS navigation is evidence.
+                    if (Uri.TryCreate(e.Url, UriKind.Absolute, out var actualUrl) && actualUrl == expectedUrl)
+                        navigation.TrySetResult(e.Result);
+                };
                 view.Source = url;
                 if (await navigation.Task.WaitAsync(TimeSpan.FromSeconds(45)) != WebNavigationResult.Success)
                     throw new InvalidOperationException("Trusted HTTPS WebView navigation failed.");
-                if (!(await view.EvaluateJavaScriptAsync("document.body.textContent")).Contains(marker, StringComparison.Ordinal))
-                    throw new InvalidOperationException("WebView did not render the HTTPS page.");
+                var rendered = false;
+                string? lastDom = null;
+                for (var attempt = 0; attempt < 100; attempt++)
+                {
+                    lastDom = await view.EvaluateJavaScriptAsync(
+                        "document.readyState === 'complete' && document.body ? document.body.textContent : ''")
+                        .WaitAsync(TimeSpan.FromSeconds(2));
+                    if (lastDom?.Contains(marker, StringComparison.Ordinal) == true)
+                    {
+                        rendered = true;
+                        break;
+                    }
+                    await Task.Delay(100);
+                }
+                if (!rendered)
+                    throw new InvalidOperationException($"WebView did not render the HTTPS page; last DOM result: {lastDom}");
                 _checks["webview_trust_and_render"] = "passed";
                 _phase = "ready";
                 await finish.Task.WaitAsync(TimeSpan.FromMinutes(3));
