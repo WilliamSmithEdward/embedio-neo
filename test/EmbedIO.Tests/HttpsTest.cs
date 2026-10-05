@@ -18,7 +18,7 @@ namespace EmbedIO.Tests
         private const string HttpsUrl = "https://localhost:5555";
 
         [Test]
-        public void OpenWebServerHttpsWithLinuxOrMac_ThrowsInvalidOperation()
+        public void AutoLoadCertificateOutsideWindows_ThrowsPlatformNotSupported()
         {
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
                 Assert.Ignore("Ignore Windows");

@@ -52,7 +52,7 @@ try:
     adb('install', '-r', str(apks[0]), timeout=180)
     adb('forward', 'tcp:59697', 'tcp:59697')
     launch()
-    initial = wait_for(state, lambda value: value['generation'] == 1 and value['resumed'] > 0)
+    initial = wait_for(state, lambda value: value['generation'] == 1 and value['resumed'] > 0 and value['https'] == 'passed')
     observations = {'initial': initial}
     with urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:59697/work', data=b'', method='POST'), timeout=10) as response:
         if response.status != 200 or response.read() != b'accepted':

@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../Shared/HttpsSmoke.cs" Link="PlatformTests/HttpsSmoke.cs" />
     <None Update="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="coverlet.MTP" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" PrivateAssets="all" />

@@ -3,6 +3,7 @@ using System.IO;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
@@ -36,25 +37,13 @@ namespace EmbedIO.Net.Internal
             _sock = sock;
             _epl = epl;
             IsSecure = epl.Secure;
-            LocalEndPoint = (IPEndPoint) sock.LocalEndPoint;
-            RemoteEndPoint = (IPEndPoint) sock.RemoteEndPoint;
+            LocalEndPoint = (IPEndPoint)sock.LocalEndPoint;
+            RemoteEndPoint = (IPEndPoint)sock.RemoteEndPoint;
 
             Stream = new NetworkStream(sock, false);
             if (IsSecure)
             {
-                var sslStream = new SslStream(Stream, true);
-
-                try
-                {
-                    sslStream.AuthenticateAsServer(epl.Listener.Certificate);
-                }
-                catch
-                {
-                    CloseSocket();
-                    throw;
-                }
-
-                Stream = sslStream;
+                Stream = new SslStream(Stream, false);
             }
 
             _timer = new Timer(OnTimeout, null, Timeout.Infinite, Timeout.Infinite);
@@ -100,6 +89,14 @@ namespace EmbedIO.Net.Internal
 
                 _ = _timer.Change(_sTimeout, Timeout.Infinite);
 
+                // Authenticate outside the socket accept callback. The request timer also
+                // bounds a client that connects without completing its TLS handshake.
+                if (Stream is SslStream sslStream && !sslStream.IsAuthenticated)
+                {
+                    await sslStream.AuthenticateAsServerAsync(_epl.Listener.Certificate,
+                        false, SslProtocols.None, false).ConfigureAwait(false);
+                }
+
                 var data = await Stream.ReadAsync(_buffer, 0, BufferSize).ConfigureAwait(false);
                 await OnReadInternal(data).ConfigureAwait(false);
             }
@@ -116,7 +113,7 @@ namespace EmbedIO.Net.Internal
             if (_iStream == null)
             {
                 var buffer = _ms.ToArray();
-                var length = (int) _ms.Length;
+                var length = (int)_ms.Length;
                 _ms = null;
 
                 _iStream = new RequestStream(Stream, buffer, _position, length - _position, contentLength);
