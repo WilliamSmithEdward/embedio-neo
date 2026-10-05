@@ -103,7 +103,7 @@ disables script injection as well as watching. Current core file handling replac
 the archived hand-written static server. Plugin loading uses the shared core
 assembly and supports current Web API controllers and WebSocket modules.
 
-The tool packs locally as `EmbedIO.Neo.Cli`, using the shared version. This is a
+The tool packs locally as `EmbedIO-Neo.Cli`, using the shared version. This is a
 prepared package identity, not an existing published release. See [CLI.md](../CLI.md)
 for commands, plugin requirements, and local installation.
 

@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <AssemblyTitle>EmbedIO-Neo Web Server Testing</AssemblyTitle>
+    <PackageId>EmbedIO-Neo.Testing</PackageId>
     <Authors>William Smith; EmbedIO contributors</Authors>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl>https://github.com/WilliamSmithEdward/embedio-neo</RepositoryUrl>

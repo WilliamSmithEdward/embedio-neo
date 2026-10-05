@@ -15,24 +15,27 @@ def main(directory):
     for package in packages:
         with ZipFile(package) as archive:
             names = set(archive.namelist())
+            if not {"README.md", "embedio_neo_icons.png"} <= names:
+                raise ValueError(f"Missing package README or icon: {package.name}")
             if archive.read("LICENSE") != expected_license:
                 raise ValueError(f"License differs from source: {package.name}")
             for name in (b"Samuel Neff", b"Novell", b"Xamarin", b"sta.blockhead"):
                 if name not in expected_license:
                     raise ValueError(f"Missing embedded source attribution: {name!r}")
-            if package.name.startswith("EmbedIO.Neo.Cli."):
-                identity = "EmbedIO.Neo.Cli"
+            if package.name.startswith("EmbedIO-Neo.Cli."):
+                identity = "EmbedIO-Neo.Cli"
                 required = {"README.md", "licenses/embedio-cli-LICENSE",
                             "tools/net10.0/any/EmbedIO.dll",
                             "tools/net10.0/any/DotnetToolSettings.xml"}
             else:
-                identity = next((name for name in ("EmbedIO.JsonServer", "EmbedIO.Testing", "EmbedIO")
+                identity = next((name for name in ("EmbedIO-Neo.JsonServer", "EmbedIO-Neo.Testing", "EmbedIO-Neo")
                                  if package.name.startswith(name + ".")), None)
                 if identity is None:
                     raise ValueError(f"Unexpected package: {package.name}")
-                required = {f"lib/{target}/{identity}.dll"
+                assembly = identity.replace("EmbedIO-Neo", "EmbedIO", 1)
+                required = {f"lib/{target}/{assembly}.dll"
                             for target in ("netstandard2.0", "net10.0")}
-                if identity == "EmbedIO.JsonServer":
+                if identity == "EmbedIO-Neo.JsonServer":
                     required.add("licenses/embedio-extras-LICENSE")
             if identity in identities or not required <= names:
                 raise ValueError(f"Duplicate identity or missing contents: {package.name}: {required - names}")

@@ -7,6 +7,11 @@ changes must not ship as a compatible 3.x update. Nothing has been published.
 
 ## API replacements
 
+Neo's approved NuGet identities are `EmbedIO-Neo`, `EmbedIO-Neo.JsonServer`,
+`EmbedIO-Neo.Testing`, and `EmbedIO-Neo.Cli`. Replace corresponding archived
+package references when adopting Neo. Assembly names, namespaces and the CLI
+command remain unchanged. No Neo package has been published yet.
+
 | Previous dependency/API | Replacement |
 | --- | --- |
 | `Swan.Configuration.ConfiguredObject` | `EmbedIO.Configuration.ConfiguredObject` |

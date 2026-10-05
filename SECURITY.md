@@ -93,7 +93,9 @@ attests the package files, and creates a GitHub release with reports and signed
 provenance. The development placeholder 3.5.0 cannot be released. The publish job
 uses the `nuget` environment and NuGet/login for the WilliamSmithE profile. The
 owner must register the policy for WilliamSmithEdward/embedio-neo, publish.yml,
-environment nuget, and approve fork-specific package identities before release.
+environment nuget, with glob `EmbedIO-Neo*` and permission to publish new packages
+and versions. The approved IDs are EmbedIO-Neo and its JsonServer, Testing and Cli
+companions. Both tags and GitHub release titles use `vX.Y.Z`.
 
 Starting Publish by hand is always a dry run. It builds and scans, then stores the
 packages, reports and changelog notes as a release-preview artifact. It creates

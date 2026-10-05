@@ -88,9 +88,10 @@ and analyzer packages remain development-only. Library targets are unchanged.
 - Obtain William's review before merging. Any accepted breaking change must
   include the approval reference and migration documentation described above.
 
-The inherited `EmbedIO` package ID and version are retained for compatibility.
-A fork-specific NuGet publishing identity and release process must be agreed
-before publishing. Do not treat the original package's releases as fork releases.
+The approved NuGet IDs are `EmbedIO-Neo`, `EmbedIO-Neo.JsonServer`,
+`EmbedIO-Neo.Testing`, and `EmbedIO-Neo.Cli`. Assembly names and namespaces remain
+unchanged; downstream users change their package references. The inherited 3.5.0
+version is still a development placeholder. Do not treat upstream releases as Neo releases.
 
 
 
@@ -152,7 +153,7 @@ Other Extras modules were assessed but not imported:
 - JsonServer is maintained in this solution, with the persistence corrections
   described above. SWAN removal is an approved breaking change; consumers must rebuild and follow MIGRATION.md.
 
-Before release, select an appropriate major version and fork-specific NuGet IDs, run cross-platform CI, complete
+Before release, select an appropriate version, register the trusted-publishing policy, run cross-platform CI, complete
 an API compatibility check against a recorded upstream binary, and address
 remaining analyzer warnings. No performance improvement is claimed without a
 benchmark.

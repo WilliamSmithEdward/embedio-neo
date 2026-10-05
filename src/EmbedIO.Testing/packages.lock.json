@@ -77,7 +77,7 @@
           "System.Runtime.CompilerServices.Unsafe": "6.1.2"
         }
       },
-      "embedio": {
+      "EmbedIO-Neo": {
         "type": "Project",
         "dependencies": {
           "System.Text.Json": "[10.0.12, )"
@@ -100,7 +100,7 @@
       }
     },
     "net10.0": {
-      "embedio": {
+      "EmbedIO-Neo": {
         "type": "Project"
       }
     }

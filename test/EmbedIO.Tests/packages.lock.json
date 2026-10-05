@@ -184,31 +184,31 @@
         "resolved": "18.4.0",
         "contentHash": "4L6m2kS2pY5uJ9cpeRxzW22opr6ttScIRqsOpMDQpgENp/ZwxkkQCcmc6LRSURo2dFaaSW5KVflQZvroiJ7Wzg=="
       },
-      "embedio": {
+      "EmbedIO-Neo": {
         "type": "Project"
+      },
+      "EmbedIO-Neo.Cli": {
+        "type": "Project",
+        "dependencies": {
+          "EmbedIO-Neo": "[3.5.0, )"
+        }
+      },
+      "EmbedIO-Neo.JsonServer": {
+        "type": "Project",
+        "dependencies": {
+          "EmbedIO-Neo": "[3.5.0, )"
+        }
+      },
+      "EmbedIO-Neo.Testing": {
+        "type": "Project",
+        "dependencies": {
+          "EmbedIO-Neo": "[3.5.0, )"
+        }
       },
       "embedio.cli.testplugin": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO": "[3.5.0, )"
-        }
-      },
-      "embedio.jsonserver": {
-        "type": "Project",
-        "dependencies": {
-          "EmbedIO": "[3.5.0, )"
-        }
-      },
-      "EmbedIO.Neo.Cli": {
-        "type": "Project",
-        "dependencies": {
-          "EmbedIO": "[3.5.0, )"
-        }
-      },
-      "embedio.testing": {
-        "type": "Project",
-        "dependencies": {
-          "EmbedIO": "[3.5.0, )"
+          "EmbedIO-Neo": "[3.5.0, )"
         }
       }
     }

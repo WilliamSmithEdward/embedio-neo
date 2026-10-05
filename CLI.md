@@ -90,7 +90,7 @@ identity; the command remains `embedio-cli`.
 
 ```sh
 dotnet pack src/EmbedIO.Cli -c Release -o ./artifacts
-dotnet tool install EmbedIO.Neo.Cli --add-source ./artifacts --tool-path ./tools --version 3.5.0
+dotnet tool install EmbedIO-Neo.Cli --add-source ./artifacts --tool-path ./tools --version 3.5.0
 ./tools/embedio-cli --help
 ```
 
