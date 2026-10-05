@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Specialized;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -21,9 +22,24 @@ namespace EmbedIO.Net.Internal
             Headers[HttpHeaderNames.Upgrade] = "websocket";
             Headers[HttpHeaderNames.Connection] = "Upgrade";
 
+            var configuredNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var value = new StringBuilder();
+            foreach (var cookie in context.Response.Cookies)
+            {
+                if (cookie.Name.Length == 0)
+                    continue;
+                configuredNames.Add(cookie.Name);
+                value.Clear();
+                HttpListenerResponse.AppendCookieHeaderValue(value, cookie);
+                Headers.Add(HttpHeaderNames.SetCookie, value.ToString());
+            }
+
+            // Retain legacy request-cookie echo unless an explicit response cookie replaces it.
+            // Request headers do not contain the response cookie's scope or security attributes.
             foreach (var cookie in context.Request.Cookies)
             {
-                Headers.Add("Set-Cookie", cookie.ToString());
+                if (!configuredNames.Contains(cookie.Name))
+                    Headers.Add(HttpHeaderNames.SetCookie, cookie.ToString());
             }
         }
 

@@ -273,7 +273,12 @@ namespace EmbedIO.Net.Internal
             }
 
             _ = sb.Append("Set-Cookie: ");
+            AppendCookieHeaderValue(sb, cookie);
+            _ = sb.Append("\r\n");
+        }
 
+        internal static void AppendCookieHeaderValue(StringBuilder sb, Cookie cookie)
+        {
             if (cookie.Version > 0)
             {
                 _ = sb.Append("Version=").Append(cookie.Version).Append("; ");
@@ -316,7 +321,6 @@ namespace EmbedIO.Net.Internal
                 _ = sb.Append("; HttpOnly");
             }
 
-            _ = sb.Append("\r\n");
         }
 
         private static string QuotedString(Cookie cookie, string value)
