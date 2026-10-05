@@ -13,6 +13,8 @@ namespace EmbedIO.DependencyInjection
         private readonly ILogger<EmbedIOHostedService> _logger;
         private readonly CancellationTokenSource _stop = new CancellationTokenSource();
         private readonly TaskCompletionSource<bool> _listening = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly object _lifecycle = new object();
+        private bool _disposed;
         private Task? _run;
         private Task? _shutdown;
 
@@ -25,7 +27,7 @@ namespace EmbedIO.DependencyInjection
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            if (_run != null) throw new InvalidOperationException("The EmbedIO hosted server cannot be restarted.");
+            if (_run != null || _shutdown != null) throw new InvalidOperationException("The EmbedIO hosted server cannot be restarted.");
             cancellationToken.ThrowIfCancellationRequested();
             _server.StateChanged += OnStateChanged;
             _run = Task.Run(RunServerAsync);
@@ -75,10 +77,16 @@ namespace EmbedIO.DependencyInjection
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
-            _shutdown ??= ShutdownAsync();
-            await WaitWithCancellationAsync(_shutdown, cancellationToken).ConfigureAwait(false);
+            await WaitWithCancellationAsync(GetShutdownTask(), cancellationToken).ConfigureAwait(false);
         }
 
+        private Task GetShutdownTask()
+        {
+            lock (_lifecycle)
+            {
+                return _shutdown ??= Task.Run(ShutdownAsync);
+            }
+        }
         private async Task ShutdownAsync()
         {
             _stop.Cancel();
@@ -109,12 +117,18 @@ namespace EmbedIO.DependencyInjection
         {
             try
             {
-                _shutdown ??= ShutdownAsync();
-                await _shutdown.ConfigureAwait(false);
+                await GetShutdownTask().ConfigureAwait(false);
             }
             finally
             {
-                _stop.Dispose();
+                lock (_lifecycle)
+                {
+                    if (!_disposed)
+                    {
+                        _stop.Dispose();
+                        _disposed = true;
+                    }
+                }
             }
         }
 

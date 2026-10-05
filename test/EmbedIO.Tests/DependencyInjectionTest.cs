@@ -441,6 +441,19 @@ namespace EmbedIO.Tests
             }
         }
 
+        [Test]
+        public async Task ConcurrentHostedStopCallsShareOneShutdownAndReleaseModulesOnce()
+        {
+            var probe = new Probe();
+            var owned = new OwnedModule();
+            await using var provider = BuildHost(probe, Resources.GetServerAddress(), server => server.WithModule(owned));
+            var host = provider.GetRequiredService<IHostedService>();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await host.StartAsync(timeout.Token);
+            await Task.WhenAll(host.StopAsync(timeout.Token), host.StopAsync(timeout.Token));
+            await ((IAsyncDisposable)host).DisposeAsync();
+            Assert.That(owned.DisposeCount, Is.EqualTo(1));
+        }
         public sealed class Probe
         {
             public ConcurrentQueue<RequestService> Requests { get; } = new();
@@ -563,6 +576,14 @@ namespace EmbedIO.Tests
             public void StopApplication() { }
         }
 
+        private sealed class OwnedModule : WebModuleBase, IDisposable
+        {
+            public OwnedModule() : base("/") { }
+            public int DisposeCount;
+            public override bool IsFinalHandler => false;
+            protected override Task OnRequestAsync(IHttpContext context) => Task.CompletedTask;
+            public void Dispose() => Interlocked.Increment(ref DisposeCount);
+        }
         private sealed class FailingStartModule : WebModuleBase
         {
             public FailingStartModule() : base("/") { }
@@ -572,5 +593,3 @@ namespace EmbedIO.Tests
         }
     }
 }
-
-
