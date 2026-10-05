@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Register managed localhost prefixes on both enabled loopback families, with rollback and ownership-safe endpoint cleanup. Keep failed live additions retryable and reject duplicate ownership or incompatible HTTP/HTTPS endpoint registrations.
 - Repair static-file cache eviction, replacement accounting and cleaner ownership.
   Reduce HTTP, routing, diagnostics and WebSocket allocations; remove dormant
   internal WebSocket compression paths while preserving compressed-frame rejection.

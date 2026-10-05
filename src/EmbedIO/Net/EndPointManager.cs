@@ -13,7 +13,9 @@ namespace EmbedIO.Net
     /// </summary>
     public static class EndPointManager
     {
-        private static readonly ConcurrentDictionary<IPAddress, ConcurrentDictionary<int, EndPointListener>> IPToEndpoints = new ();
+        private static readonly ConcurrentDictionary<IPAddress, ConcurrentDictionary<int, EndPointListener>> IPToEndpoints = new();
+        private static readonly object RegistrationLock = new();
+        private static readonly Dictionary<HttpListener, Dictionary<string, List<EndPointListener>>> Registrations = new();
 
         /// <summary>
         /// Gets or sets a value indicating whether [use IPv6]. By default, this flag is set.
@@ -78,17 +80,51 @@ namespace EmbedIO.Net
                 throw new HttpListenerException(400, "Invalid path.");
             }
 
-            // listens on all the interfaces if host name cannot be parsed by IPAddress.
-            var epl = GetEpListener(lp.Host, lp.Port, listener, lp.Secure);
-            epl.AddPrefix(lp, listener);
+            lock (RegistrationLock)
+            {
+                if (Registrations.TryGetValue(listener, out var prefixes) && prefixes.ContainsKey(p))
+                    return;
+                var endpoints = new List<EndPointListener>();
+                try
+                {
+                    foreach (var address in ResolveAddresses(lp.Host))
+                    {
+                        var ports = IPToEndpoints.GetOrAdd(address, _ => new ConcurrentDictionary<int, EndPointListener>());
+                        var endpoint = ports.GetOrAdd(lp.Port, port => new EndPointListener(listener, address, port, lp.Secure));
+                        if (endpoint.Secure != lp.Secure)
+                            throw new HttpListenerException(400, "HTTP and HTTPS cannot share a listening endpoint.");
+                        endpoints.Add(endpoint);
+                        endpoint.AddPrefix(lp, listener);
+                    }
+                }
+                catch
+                {
+                    foreach (var endpoint in endpoints)
+                        endpoint.RemovePrefix(lp, listener);
+                    throw;
+                }
+
+                if (prefixes == null)
+                {
+                    prefixes = new Dictionary<string, List<EndPointListener>>(StringComparer.Ordinal);
+                    Registrations.Add(listener, prefixes);
+                }
+                prefixes.Add(p, endpoints);
+            }
         }
 
-        private static EndPointListener GetEpListener(string host, int port, HttpListener listener, bool secure = false)
+        private static IEnumerable<IPAddress> ResolveAddresses(string host)
         {
-            var address = ResolveAddress(host);
-
-            var p = IPToEndpoints.GetOrAdd(address, x => new ConcurrentDictionary<int, EndPointListener>());
-            return p.GetOrAdd(port, x => new EndPointListener(listener, address, x, secure));
+            // Localhost is loopback on both families; do not depend on DNS result order.
+            // Preserve existing resolution/binding scope for every other hostname.
+            if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return IPAddress.Loopback;
+                if (UseIpv6 && Socket.OSSupportsIPv6)
+                    yield return IPAddress.IPv6Loopback;
+                yield break;
+            }
+            yield return ResolveAddress(host);
         }
 
         private static IPAddress ResolveAddress(string host)
@@ -105,7 +141,8 @@ namespace EmbedIO.Net
 
             try
             {
-                var hostEntry = new IPHostEntry {
+                var hostEntry = new IPHostEntry
+                {
                     HostName = host,
                     AddressList = Dns.GetHostAddresses(host),
                 };
@@ -120,21 +157,17 @@ namespace EmbedIO.Net
 
         private static void RemovePrefix(string prefix, HttpListener listener)
         {
-            try
+            lock (RegistrationLock)
             {
-                var lp = new ListenerPrefix(prefix);
-
-                if (!lp.IsValid())
-                {
+                if (!Registrations.TryGetValue(listener, out var prefixes)
+                    || !prefixes.TryGetValue(prefix, out var endpoints))
                     return;
-                }
-
-                var epl = GetEpListener(lp.Host, lp.Port, listener, lp.Secure);
-                epl.RemovePrefix(lp);
-            }
-            catch (SocketException)
-            {
-                // ignored
+                var parsed = new ListenerPrefix(prefix);
+                foreach (var endpoint in endpoints)
+                    endpoint.RemovePrefix(parsed, listener);
+                prefixes.Remove(prefix);
+                if (prefixes.Count == 0)
+                    Registrations.Remove(listener);
             }
         }
     }
