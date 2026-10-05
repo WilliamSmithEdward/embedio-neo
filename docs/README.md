@@ -1,4 +1,4 @@
-# Documentation
+﻿# Documentation
 
 EmbedIO-Neo keeps the existing `EmbedIO` namespaces and offers a small modular
 HTTP/WebSocket server, integrated CLI, JsonServer, and testing helpers.
@@ -24,6 +24,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Listener stalls](guides/listener-stalls.md): two-server diagnostics, shutdown fixes, and regression scope.
 
 ## User reports
+
+- [Request logging](user-reports/request-logging.md): hide completion summaries while preserving other diagnostics.
 
 - [WebSocket cookies](user-reports/websocket-cookies.md): separate handshake cookie fields and legacy listener behavior.
 - [Progress events](user-reports/progress-events.md): a complete SSE progress server and browser client, plus the additive event writer.
