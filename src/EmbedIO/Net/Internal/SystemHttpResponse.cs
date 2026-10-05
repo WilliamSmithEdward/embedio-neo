@@ -114,6 +114,31 @@ namespace EmbedIO.Net.Internal
             _response.Close();
         }
 
+        private void GetExplicitScope(Cookie cookie, out bool explicitPath, out bool explicitDomain)
+        {
+            // Native SetCookie clones private implicit-scope flags through a public API.
+            // Inspect the clone's client format at version 1 without changing the caller's cookie.
+            var original = _response.Cookies;
+            Cookie copy;
+            try
+            {
+                _response.Cookies = new CookieCollection();
+                _response.SetCookie(cookie);
+                copy = _response.Cookies[cookie.Name]!;
+            }
+            finally
+            {
+                _response.Cookies = original;
+            }
+            copy.Version = Math.Max(1, copy.Version);
+            var text = copy.ToString();
+            var attributes = text.Substring(text.IndexOf("; ", StringComparison.Ordinal) + 2 + copy.Name.Length + 1 + copy.Value.Length);
+            explicitPath = attributes.StartsWith("; $Path=", StringComparison.Ordinal);
+            if (explicitPath)
+                attributes = attributes.Substring(8 + copy.Path.Length);
+            explicitDomain = attributes.StartsWith("; $Domain=", StringComparison.Ordinal);
+        }
+
         internal void PrepareHeaders()
         {
             if (_headersPrepared)
@@ -133,6 +158,7 @@ namespace EmbedIO.Net.Internal
             {
                 if (cookie.Name.Length == 0)
                     continue;
+                GetExplicitScope(cookie, out var explicitPath, out var explicitDomain);
                 var value = new StringBuilder().Append(cookie.Name).Append('=').Append(cookie.Value);
                 if (cookie.Comment.Length > 0)
                     value.Append("; Comment=").Append(cookie.Comment);
@@ -140,14 +166,14 @@ namespace EmbedIO.Net.Internal
                     value.Append("; CommentURL=\"").Append(cookie.CommentUri).Append('"');
                 if (cookie.Discard)
                     value.Append("; Discard");
-                if (cookie.Domain.Length > 0)
+                if (explicitDomain && cookie.Domain.Length > 0)
                     value.Append("; Domain=").Append(cookie.Domain);
                 if (cookie.Expires != DateTime.MinValue)
                 {
                     var seconds = Math.Max(0, (int)(cookie.Expires.ToUniversalTime() - DateTime.UtcNow).TotalSeconds);
                     value.Append("; Max-Age=").Append(seconds.ToString(CultureInfo.InvariantCulture));
                 }
-                if (cookie.Path.Length > 0)
+                if (explicitPath && cookie.Path.Length > 0)
                     value.Append("; Path=").Append(cookie.Path);
                 if (cookie.Port.Length > 0)
                     value.Append("; Port=").Append(cookie.Port);

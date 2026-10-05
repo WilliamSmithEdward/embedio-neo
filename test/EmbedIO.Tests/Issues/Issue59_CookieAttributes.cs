@@ -122,6 +122,8 @@ namespace EmbedIO.Tests.Issues
                 };
                 if (portCookie)
                     cookie.Port = "\"80\"";
+                else
+                    cookie.Port = string.Empty;
                 context.Response.SetCookie(cookie);
                 cookie.Value = "changed-after-set";
                 context.Response.Headers.Add("Set-Cookie", "manual=preserved; Path=/; HttpOnly");
@@ -196,6 +198,31 @@ namespace EmbedIO.Tests.Issues
                 using var response = await client.GetAsync(url);
                 Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("ok"));
                 Assert.That(HasAttribute(response.Headers.GetValues("Set-Cookie").Single(), "HttpOnly"), Is.True);
+            });
+        [TestCase(false)]
+        [TestCase(true)]
+        public Task NativeCookieScopeRetainsImplicitAndExplicitAttributes(bool explicitScope)
+            => UseServerAsync(HttpListenerMode.Microsoft, server => server.OnAny(async context =>
+            {
+                var cookie = new Cookie("scoped", "yes") { HttpOnly = true };
+                if (explicitScope)
+                {
+                    cookie.Domain = context.Request.Url.Host;
+                    cookie.Path = "/";
+                }
+                var jar = new CookieContainer();
+                jar.Add(context.Request.Url, cookie);
+                context.Response.Cookies.Add(jar.GetCookies(context.Request.Url)["scoped"]!);
+                await context.SendStringAsync("ok", "text/plain", Encoding.UTF8);
+            }), async (client, url) =>
+            {
+                using var response = await client.GetAsync(url);
+                var header = response.Headers.GetValues("Set-Cookie").Single();
+                Assert.That(HasAttribute(header, "HttpOnly"), Is.True);
+                Assert.That(header.Contains("; Domain=", StringComparison.OrdinalIgnoreCase), Is.EqualTo(explicitScope));
+                Assert.That(header.Contains("; Path=", StringComparison.OrdinalIgnoreCase), Is.EqualTo(explicitScope));
+                Assert.That(header, Does.Not.Contain("Version="));
+                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("ok"));
             });
         private static bool HasAttribute(string header, string attribute)
             => header.Split(';').Any(value => value.Trim().Equals(attribute, StringComparison.OrdinalIgnoreCase));

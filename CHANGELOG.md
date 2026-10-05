@@ -11,7 +11,7 @@
   listener defaults, target frameworks and dependencies are unchanged.
 - Preserve configured HttpOnly and Secure cookie attributes with the Microsoft
   listener (#59), including late cookie configuration, empty responses and
-  successful WebSocket upgrades. Add 20 real-listener regression cases.
+  successful WebSocket upgrades. Add 22 real-listener regression cases.
 
 - Ensure request-completion callbacks run after final response flush or close
   failures, including canceled streaming handlers (upstream #588). Document SSE
