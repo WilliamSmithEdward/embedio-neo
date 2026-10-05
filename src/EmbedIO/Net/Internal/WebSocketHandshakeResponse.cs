@@ -42,7 +42,16 @@ namespace EmbedIO.Net.Internal
 
             foreach (var key in Headers.AllKeys)
             {
-                _ = output.AppendFormat(CultureInfo.InvariantCulture, "{0}: {1}\r\n", key, Headers[key]);
+                if (string.Equals(key, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Set-Cookie is not a comma-separated list. Preserve each stored value intact.
+                    foreach (var value in Headers.GetValues(key) ?? Array.Empty<string>())
+                        _ = output.AppendFormat(CultureInfo.InvariantCulture, "{0}: {1}\r\n", key, value);
+                }
+                else
+                {
+                    _ = output.AppendFormat(CultureInfo.InvariantCulture, "{0}: {1}\r\n", key, Headers[key]);
+                }
             }
 
             _ = output.Append("\r\n");

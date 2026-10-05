@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: WebSocket cookies
+      href: user-reports/websocket-cookies.md
     - name: Progress events
       href: user-reports/progress-events.md
     - name: Streaming response closure

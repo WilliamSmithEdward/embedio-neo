@@ -25,6 +25,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [WebSocket cookies](user-reports/websocket-cookies.md): separate handshake cookie fields and legacy listener behavior.
 - [Progress events](user-reports/progress-events.md): a complete SSE progress server and browser client, plus the additive event writer.
 - [Streaming response closure](user-reports/streaming-response-close.md): SSE, completion callbacks, server cancellation and disconnect detection.
 
