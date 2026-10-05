@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [Server header](user-reports/server-header.md): customize HTTP responses and understand backend/upgrade limits.
+
 - [Request logging](user-reports/request-logging.md): hide completion summaries while preserving other diagnostics.
 
 - [WebSocket cookies](user-reports/websocket-cookies.md): separate handshake cookie fields and legacy listener behavior.
