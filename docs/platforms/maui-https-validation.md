@@ -91,15 +91,3 @@ MAUI app on a newer runtime does not reproduce it.
 
 For production certificate ownership, provisioning and client trust, see the
 [HTTPS guide](../guides/https.md).
-
-## Runtime socket limit
-
-The desktop suite exposed the macOS IPv6 pre-accept-reset failure tracked in
-[dotnet/runtime#121848](https://github.com/dotnet/runtime/issues/121848): the
-runtime can throw on its socket completion thread before EmbedIO receives the
-accepted connection. The incomplete/disconnected-client regression now verifies
-a fresh healthy connection while the incomplete connection is open, before
-resetting it. This tests accepted-client handling without claiming to repair the
-runtime's pre-accept failure. MAUI HTTPS passes do not establish immunity to that
-runtime/kernel condition; deployments using affected macOS IPv6 runtimes should
-track the upstream fix.
