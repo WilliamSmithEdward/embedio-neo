@@ -300,3 +300,5 @@ validation, acknowledgments, and planned work.
 For configurable cycle handling in JSON responses, see the [circular-reference guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/json-circular-references.md).
 
 For multiple static folders, see the [mount order and fallback guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/multiple-static-folders.md).
+
+For asynchronous outbound requests from controllers, see the [async response guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/async-outbound-requests.md).

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Added asynchronous outbound HTTP guidance and six real-listener integration
+  cases for upstream #598. The original empty-response diagnosis still requires
+  a complete reproduction; production behavior is unchanged.
+
 - Documented multiple static-folder mounts and explicit missing-file pass-through
   for upstream #599, with eight regression cases. Routing defaults are unchanged.
 
