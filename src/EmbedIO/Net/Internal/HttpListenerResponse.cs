@@ -196,7 +196,8 @@ namespace EmbedIO.Net.Internal
 
             if (closing)
             {
-                Headers[HttpHeaderNames.ContentLength] = "0";
+                if (_request.HttpVerb != HttpVerbs.Head)
+                    Headers[HttpHeaderNames.ContentLength] = "0";
                 _chunked = false;
             }
             else
@@ -235,7 +236,8 @@ namespace EmbedIO.Net.Internal
             //// HttpStatusCode.InternalServerError   500
             //// HttpStatusCode.ServiceUnavailable    503
             var reuses = _connection.Reuses;
-            var keepAlive = _statusCode switch {
+            var keepAlive = _statusCode switch
+            {
                 400 => false,
                 408 => false,
                 411 => false,

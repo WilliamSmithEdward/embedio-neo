@@ -155,7 +155,8 @@ namespace EmbedIO.WebSockets
                 return;
 
             var requestedProtocols = context.Request.Headers.GetValues(HttpHeaderNames.SecWebSocketProtocol)
-                                         ?.Select(s => s.Trim())
+                                         ?.SelectMany(s => s.SplitByComma(StringSplitOptions.RemoveEmptyEntries))
+                                         .Select(s => s.Trim())
                                          .Where(s => s.Length > 0)
                                          .ToArray()
                                   ?? Array.Empty<string>();
@@ -238,7 +239,8 @@ namespace EmbedIO.WebSockets
             {
                 _connectionWatchdog = new PeriodicTask(
                     TimeSpan.FromSeconds(30),
-                    ct => {
+                    ct =>
+                    {
                         PurgeDisconnectedContexts();
                         return Task.CompletedTask;
                     },
@@ -518,7 +520,8 @@ namespace EmbedIO.WebSockets
             // so it may call methods that require a lock on _contextsAccess.
             // Otherwise, calling e.g. Broadcast would result in a deadlock.
 #pragma warning disable CS4014 // Call is not awaited - it is intentionally forked.
-            _ = Task.Run(async () => {
+            _ = Task.Run(async () =>
+            {
                 try
                 {
                     await OnClientDisconnectedAsync(context).ConfigureAwait(false);

@@ -75,7 +75,7 @@ namespace EmbedIO
         /// whose result will be the deserialized data.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="deserializer"/> is <see langword="null"/>.</exception>
-        public static Task<TData> GetRequestDataAsync<TData>(this IHttpContext @this,RequestDeserializerCallback<TData> deserializer)
+        public static Task<TData> GetRequestDataAsync<TData>(this IHttpContext @this, RequestDeserializerCallback<TData> deserializer)
             => Validate.NotNull(nameof(deserializer), deserializer)(@this);
 
         /// <summary>
@@ -149,11 +149,11 @@ namespace EmbedIO
                 }
                 catch (Exception e)
                 {
-                    @this.Items[FormDataKey] = e;
+                    @this.Items[QueryDataKey] = e;
                     throw;
                 }
 
-                @this.Items[FormDataKey] = result;
+                @this.Items[QueryDataKey] = result;
                 return result;
             }
 
