@@ -35,7 +35,7 @@ No namespace, dependency, target framework or configuration change is required.
 
 ## Why are request cookies sent back?
 
-Echoing every request cookie is legacy behavior of the managed EmbedIO listener.
+Echoing incoming cookies is legacy behavior of the managed EmbedIO listener.
 It is not required by WebSocket: the handshake may contain cookies, but the
 protocol does not require reflecting incoming cookies into `Set-Cookie`.
 See [RFC 6455 section 4.2.2](https://www.rfc-editor.org/rfc/rfc6455.html#section-4.2.2).
@@ -43,27 +43,40 @@ The native Microsoft listener does not automatically echo request cookies;
 switching listener modes solely to change cookies can introduce other platform
 and hosting differences and is not required for this fix.
 
-The legacy managed handshake also carries newly created local session cookies.
-`LocalSessionManager` adds these to both the request and response cookie
-collections before the upgrade. Removing request-cookie echo without a reviewed
-replacement could therefore affect existing session behavior. This correction
-preserves that policy; any change to the default needs compatibility discussion
-and William's explicit approval.
+The managed handshake emits cookies configured with `context.Response.SetCookie`
+or `context.Response.Cookies.Add`, using the same attribute formatter as ordinary
+HTTP responses. Explicit response cookies take precedence over request-cookie
+echoes with the same name (case-insensitive); multiple explicitly configured
+cookies with that name and different scopes remain separate. Other incoming
+cookies retain the legacy echo behavior.
+
+`LocalSessionManager` adds its cookie to both collections before the upgrade.
+The response cookie is emitted once with its configured scope, expiry and
+HttpOnly policy. Removing the fallback request-cookie echo is a separate
+compatibility change requiring William's explicit approval.
 
 A request's `Cookie` header contains name/value pairs, not the original cookie's
 `HttpOnly`, `Secure`, `SameSite`, expiry or scope attributes. Echoing those pairs
 is not equivalent to recreating the original browser cookie with all its
-attributes. This fix does not redesign response-cookie selection or attribute
-handling, and does not claim that cookies explicitly configured on a response
-are handled identically by both listener backends. Establish security and
-cookie attributes in your normal HTTP authentication/session flow; do not
-use request reflection as an attribute-preservation mechanism.
+attributes. Configure those attributes on response cookies rather than relying
+on request reflection. Response-cookie omission in managed upgrades is corrected
+by [issue #64](https://github.com/WilliamSmithEdward/embedio-neo/issues/64); native
+HttpOnly/Secure serialization is corrected by
+[issue #59](https://github.com/WilliamSmithEdward/embedio-neo/issues/59).
+`System.Net.Cookie` does not expose a SameSite property. The backend echo difference
+remains intentional compatibility behavior; request reflection is not an
+attribute-preservation mechanism.
 
 Incoming cookies remain available to WebSocket handlers through
 `IWebSocketContext.Cookies`. WebView cookie-manager calls in the original report
 remain client-specific; this change requires no new client API.
 
 ## Validation and remaining limits
+
+Response-cookie regressions cover both listener modes, SetCookie and Cookies.Add,
+replacement, same-name request collisions, explicit scopes, expiry and security
+attributes, quoted commas, rejected upgrades, normal socket closure and a fresh
+HTTP health request.
 
 Real TCP upgrade tests inspect individual header lines for zero, one and multiple
 cookies, quoted commas, empty values, equals signs, session creation and

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Emit configured response cookies during managed WebSocket upgrades (#64),
+  preserving their HTTP attributes and separate header lines. Explicit response
+  cookies take precedence over legacy request-cookie echoes of the same name;
+  unrelated request cookies retain their existing behavior. Add 13 regression cases.
+
 - Preserve separate `Set-Cookie` fields in managed WebSocket upgrade responses
   instead of comma-folding multiple cookies (upstream #583). Legacy request-cookie
   echo and other handshake-header behavior are unchanged.

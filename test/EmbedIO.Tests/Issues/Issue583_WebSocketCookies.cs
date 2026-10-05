@@ -62,7 +62,15 @@ namespace EmbedIO.Tests.Issues
                     .Select(line => line.Substring(line.IndexOf(':') + 1).Trim()).ToArray();
                 var observed = await module.ObservedCookies.Task.WaitAsync(timeout.Token);
                 Assert.That(observed.Length, Is.EqualTo(expectedCount));
-                Assert.That(setCookies, Is.EquivalentTo(observed), "Repeated Set-Cookie values must never be comma-folded or split on commas.");
+                if (createSession)
+                {
+                    var session = setCookies.Single(h => h.StartsWith("__session=", StringComparison.Ordinal));
+                    Assert.That(session, Does.Contain("; HttpOnly"));
+                    Assert.That(session, Does.Contain("; Path=/"));
+                    Assert.That(setCookies.Select(h => Net.CookieList.Parse(h).Single().ToString()), Is.EquivalentTo(observed));
+                }
+                else
+                    Assert.That(setCookies, Is.EquivalentTo(observed), "Repeated Set-Cookie values must never be comma-folded or split on commas.");
                 // A masked normal-close frame, retaining an ordinary, accepted connection lifecycle.
                 await stream.WriteAsync(new byte[] { 0x88, 0x82, 0, 0, 0, 0, 0x03, 0xe8 }, timeout.Token);
                 var close = new byte[4];

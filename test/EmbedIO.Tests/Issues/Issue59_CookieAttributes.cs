@@ -148,6 +148,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(response.Headers.GetValues("Set-Cookie").Count(h => h.StartsWith("manual=", StringComparison.Ordinal)), Is.EqualTo(1));
             });
 
+        [TestCase(HttpListenerMode.EmbedIO)]
         [TestCase(HttpListenerMode.Microsoft)]
         public Task WebSocketHandshakeEmitsProtectedCookies(HttpListenerMode mode)
             => UseServerAsync(mode, server => server.WithModule(new CookieMiddleware())
