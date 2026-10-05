@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Added required native MAUI HTTPS fixtures for Windows, iOS, Mac Catalyst and
+  Android, with disposable CA provisioning, normal client/WebView trust checks,
+  external HTTPS verification and a reusable physical-device probe for feature #26.
+  Simulator/emulator results do not establish legacy Xamarin or physical-device support.
+
 - Mitigated macOS IPv6 accept-completion process crashes after immediate client
   resets (#38). A dedicated background accept worker catches invalid peer-address
   errors and continues accepting, while request/TLS I/O remains asynchronous.

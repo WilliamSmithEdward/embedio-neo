@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      update-https-locks:
+        description: Regenerate test-only MAUI HTTPS dependency locks for review
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -99,10 +104,16 @@ jobs:
     name: Android
     uses: ./.github/workflows/android-smoke.yml
 
+  maui-https:
+    name: MAUI HTTPS
+    uses: ./.github/workflows/maui-https.yml
+    with:
+      update-locks: ${{ inputs.update-https-locks == true }}
+
   ci-passed:
     name: CI passed
     if: always()
-    needs: [test, static-analysis, build, mac-catalyst, android]
+    needs: [test, static-analysis, build, mac-catalyst, android, maui-https]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

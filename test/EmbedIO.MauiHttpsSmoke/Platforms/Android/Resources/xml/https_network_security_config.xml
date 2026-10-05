@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false">
+    <trust-anchors><certificates src="system" /></trust-anchors>
+  </base-config>
+  <domain-config cleartextTrafficPermitted="false">
+    <domain>127.0.0.1</domain>
+    <trust-anchors><certificates src="@raw/https_test_root" /></trust-anchors>
+  </domain-config>
+</network-security-config>

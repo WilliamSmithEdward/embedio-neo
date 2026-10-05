@@ -45,13 +45,15 @@ Until CI results are recorded, configured coverage is not a verified support cla
 | Windows, Linux and macOS / .NET 10 | Real HTTPS responses, trusted leaf/hostname checks, default rejection of an untrusted certificate, keep-alive, malformed/stalled clients and shutdown in the regression suite. CI runs on Windows 2025, Ubuntu 24.04 and macOS 15. |
 | MAUI Android / .NET 10 | The Android 10/API 29 fixture imports a private-key PFX and verifies HTTPS using `SocketsHttpHandler`, alongside existing HTTP lifecycle coverage. Emulator execution is required. |
 | MAUI Mac Catalyst / .NET 10 | The sandboxed macOS 26 fixture adds an HTTPS client/listener test alongside the HTTP/WebView smoke. Signed app execution is required. |
-| MAUI Windows and iOS | Dedicated app-model HTTPS execution remains outstanding; desktop or Mac Catalyst results do not establish it. |
+| MAUI Windows and iOS | The four-platform native HTTPS fixture exercises the normal client, WebView and a separate strict HTTPS client. Actual execution results are recorded in feature #26; a build pass alone does not establish support. |
 | .NET Standard 2.0 / Xamarin / older Android | Target is retained. Scobie's Android 7.1.2/Xamarin.Forms environment is unverified. Modern MAUI results do not prove legacy TLS-provider support. |
 
-The generated self-signed certificates and exact-leaf trust pins are test-only.
-These tests check transport with a .NET HTTP client; HTTPS WebView navigation,
-device-browser trust provisioning and physical-device LAN access need separate
-validation. They do not require installing a test certificate in the OS trust store.
+See the [MAUI HTTPS validation guide](../platforms/maui-https-validation.md) for
+the four-platform fixture, disposable trust provisioning and physical-device probe.
+The original transport fixtures use test-only self-signed certificates and
+exact-leaf trust pins. The four-platform fixture additionally provisions a
+disposable test CA and verifies normal native-client and WebView trust. Physical
+device-browser trust and LAN access still require device execution.
 
 For MAUI Android, keep the server owned by the application rather than an
 Activity, retain the `INTERNET` manifest permission, and follow the

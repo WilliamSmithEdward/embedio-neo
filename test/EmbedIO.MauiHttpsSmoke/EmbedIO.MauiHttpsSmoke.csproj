@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <SmokePlatform Condition="'$(SmokePlatform)' == ''">windows</SmokePlatform>
+    <TargetFramework Condition="'$(SmokePlatform)' == 'windows'">net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework Condition="'$(SmokePlatform)' == 'ios'">net10.0-ios</TargetFramework>
+    <TargetFramework Condition="'$(SmokePlatform)' == 'maccatalyst'">net10.0-maccatalyst</TargetFramework>
+    <TargetFramework Condition="'$(SmokePlatform)' == 'android'">net10.0-android</TargetFramework>
+    <RuntimeIdentifier Condition="'$(SmokePlatform)' == 'windows'">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(SmokePlatform)' == 'ios'">iossimulator-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(SmokePlatform)' == 'maccatalyst'">maccatalyst-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(SmokePlatform)' == 'android'">android-x64</RuntimeIdentifier>
+    <OutputType>Exe</OutputType>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <NuGetLockFilePath>packages.$(SmokePlatform).lock.json</NuGetLockFilePath>
+    <ApplicationTitle>EmbedIO HTTPS tests</ApplicationTitle>
+    <ApplicationId>io.embedioneo.https</ApplicationId>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <SupportedOSPlatformVersion Condition="'$(SmokePlatform)' == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="'$(SmokePlatform)' == 'ios' or '$(SmokePlatform)' == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="'$(SmokePlatform)' == 'android'">23.0</SupportedOSPlatformVersion>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained Condition="'$(SmokePlatform)' == 'windows'">true</SelfContained>
+    <AndroidPackageFormats>apk</AndroidPackageFormats>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <EnableCodeSigning Condition="'$(SmokePlatform)' == 'maccatalyst'">true</EnableCodeSigning>
+    <CodesignKey Condition="'$(SmokePlatform)' == 'maccatalyst'">-</CodesignKey>
+    <CodesignRequireProvisioningProfile>false</CodesignRequireProvisioningProfile>
+    <CodesignEntitlements Condition="'$(SmokePlatform)' == 'maccatalyst'">Platforms/MacCatalyst/Entitlements.plist</CodesignEntitlements>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.110" />
+    <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
+    <Compile Include="../Shared/HttpsSmoke.cs" Link="PlatformTests/HttpsSmoke.cs" />
+    <MauiAsset Include="../../TestResults/maui-https/certificates/https-server.pfx" LogicalName="https-server.pfx" />
+    <AndroidResource Condition="'$(SmokePlatform)' == 'android'" Include="../../TestResults/maui-https/certificates/https-test-root.cer" LogicalName="raw/https_test_root.cer" />
+    <AndroidResource Condition="'$(SmokePlatform)' == 'android'" Include="Platforms/Android/Resources/xml/https_network_security_config.xml" LogicalName="xml/https_network_security_config.xml" />
+  </ItemGroup>
+</Project>

@@ -39,6 +39,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Platforms
 
+- [MAUI HTTPS validation](platforms/maui-https-validation.md): native client, WebView and external-client fixtures.
 - [MAUI Android](platforms/maui-android.md): background work, listener ownership, and restart diagnostics.
 - [MAUI Mac Catalyst](platforms/maui-mac-catalyst.md): listener startup and sandbox entitlements.
 
