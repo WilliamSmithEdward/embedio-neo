@@ -275,8 +275,7 @@ namespace EmbedIO
                 }
                 finally
                 {
-                    // Opt-in asynchronous cleanup must also run when flushing fails.
-                    // Leave the legacy close path unchanged for contexts without callbacks.
+                    // Request cleanup and context closure must run even when flushing fails.
                     try
                     {
                         await context.Response.OutputStream.FlushAsync(context.CancellationToken)
@@ -284,14 +283,21 @@ namespace EmbedIO
                     }
                     finally
                     {
-                        await HttpContextExtensions.CompleteRequestAsync(context).ConfigureAwait(false);
+                        try
+                        {
+                            await HttpContextExtensions.CompleteRequestAsync(context).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            // Completion callbacks must run even if flushing or cleanup fails.
+                            context.Close();
+                        }
                     }
 
                     var statusCode = context.Response.StatusCode;
                     var statusDescription = context.Response.StatusDescription;
                     var sendChunked = context.Response.SendChunked;
                     var contentLength = context.Response.ContentLength64;
-                    context.Close();
                     $"[{context.Id}] {context.Request.HttpMethod} {context.Request.Url.AbsolutePath}: \"{statusCode} {statusDescription}\" sent in {context.Age}ms ({(sendChunked ? "chunked" : contentLength.ToString(CultureInfo.InvariantCulture) + " bytes")})"
                         .Info(LogSource);
                 }
