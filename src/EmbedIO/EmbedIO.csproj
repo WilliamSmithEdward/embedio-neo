@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>EmbedIO-Neo, a compatibility-focused fork of the EmbedIO cross-platform, module-based, MIT-licensed web server.</Description>
+    <Description>Tiny. Modular. Cross-platform. A modern continuation of EmbedIO for .NET</Description>
     <AssemblyTitle>EmbedIO-Neo Web Server</AssemblyTitle>
     <Authors>William Smith; EmbedIO contributors</Authors>
     <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
@@ -15,7 +15,6 @@
     <PackageProjectUrl>https://github.com/WilliamSmithEdward/embedio-neo</PackageProjectUrl>
     <RepositoryUrl>https://github.com/WilliamSmithEdward/embedio-neo</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>webserver websocket webapi http</PackageTags>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release' And Exists('NugetSigning.pfx')">
