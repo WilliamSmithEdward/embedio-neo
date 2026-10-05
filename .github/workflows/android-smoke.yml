@@ -1,0 +1,44 @@
+name: Android smoke
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - test/EmbedIO.AndroidSmoke/**
+      - scripts/run_android_smoke.py
+      - .github/workflows/android-smoke.yml
+permissions:
+  contents: read
+jobs:
+  smoke:
+    name: MAUI Android 10 lifecycle smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.401
+      - name: Install the pinned MAUI Android workload
+        run: dotnet workload install maui-android --version 10.0.401
+      - name: Build the test-only Android app
+        run: |
+          mkdir -p TestResults/android
+          dotnet restore test/EmbedIO.AndroidSmoke/EmbedIO.AndroidSmoke.csproj
+          dotnet build test/EmbedIO.AndroidSmoke/EmbedIO.AndroidSmoke.csproj -c Debug --no-restore -p:RunAnalyzers=false
+      - name: Boot Android 10 and exercise the lifecycle
+        run: |
+          printf 'y\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-29;google_apis;x86_64'
+          printf 'no\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n embedio597 -k 'system-images;android-29;google_apis;x86_64' --force
+          sudo chown "$USER" /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -avd embedio597 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect > TestResults/android/emulator.log 2>&1 &
+          python3 scripts/run_android_smoke.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: android-smoke
+          path: |
+            TestResults/android/
+            test/EmbedIO.AndroidSmoke/packages.lock.json
+          if-no-files-found: error
