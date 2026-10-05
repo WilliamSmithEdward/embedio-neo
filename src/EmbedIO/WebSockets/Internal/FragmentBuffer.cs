@@ -1,29 +1,18 @@
 ﻿using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace EmbedIO.WebSockets.Internal
 {
     internal class FragmentBuffer : MemoryStream
     {
-        private readonly bool _fragmentsCompressed;
         private readonly Opcode _fragmentsOpcode;
 
-        public FragmentBuffer(Opcode frameOpcode, bool frameIsCompressed)
+        public FragmentBuffer(Opcode frameOpcode)
         {
             _fragmentsOpcode = frameOpcode;
-            _fragmentsCompressed = frameIsCompressed;
         }
 
-        public void AddPayload(MemoryStream data) => data.CopyTo(this, 1024);
+        public void AddPayload(byte[] data) => Write(data, 0, data.Length);
 
-        public async Task<MessageEventArgs> GetMessage(CompressionMethod compression)
-        {
-            var data = _fragmentsCompressed
-                ? await this.CompressAsync(compression, false, CancellationToken.None).ConfigureAwait(false)
-                : this;
-
-            return new MessageEventArgs(_fragmentsOpcode, data.ToArray());
-        }
+        public MessageEventArgs GetMessage() => new MessageEventArgs(_fragmentsOpcode, ToArray());
     }
 }

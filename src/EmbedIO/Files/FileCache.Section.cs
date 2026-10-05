@@ -76,16 +76,22 @@ namespace EmbedIO.Files
                 }
             }
 
-            internal void UpdateTotalSize(long delta)
+            internal byte[]? SetContent(FileCacheItem item, CompressionMethod compressionMethod, byte[]? content)
             {
                 lock (_syncRoot)
                 {
-                    _totalSize += delta;
+                    // Lock order is section, then item; compression runs outside these locks.
+                    item.SetContentCore(compressionMethod, content, out var delta);
+                    if (item.IsInCache)
+                        _totalSize += delta;
+                    return content;
                 }
             }
 
             private void ClearCore()
             {
+                foreach (var item in _items.Values)
+                    item.IsInCache = false;
                 _items.Clear();
                 _totalSize = 0;
                 _oldestKey = null;
@@ -95,12 +101,16 @@ namespace EmbedIO.Files
             // Adds an item as most recently used.
             private void AddItemCore(string path, FileCacheItem item)
             {
+                RemoveItemCore(path);
+                item.IsInCache = true;
                 item.PreviousKey = _newestKey;
                 item.NextKey = null;
                 item.LastUsedAt = TimeBase.ElapsedTicks;
 
                 if (_newestKey != null)
                     _items[_newestKey].NextKey = path;
+                else
+                    _oldestKey = path;
 
                 _newestKey = path;
 
@@ -129,6 +139,7 @@ namespace EmbedIO.Files
                 item.PreviousKey = null;
                 item.NextKey = null;
 
+                item.IsInCache = false;
                 _items.Remove(path);
                 _totalSize -= item.SizeInCache;
             }
@@ -141,20 +152,9 @@ namespace EmbedIO.Files
                 if (path == null)
                     return 0;
 
-                var item = _items[path];
-
-                if ((_oldestKey = item.NextKey) != null)
-                    _items[_oldestKey].PreviousKey = null;
-
-                if (_newestKey == path)
-                    _newestKey = null;
-
-                item.PreviousKey = null;
-                item.NextKey = null;
-
-                _items.Remove(path);
-                _totalSize -= item.SizeInCache;
-                return item.SizeInCache;
+                var size = _items[path].SizeInCache;
+                RemoveItemCore(path);
+                return size;
             }
 
             // Moves an item to most recently used.

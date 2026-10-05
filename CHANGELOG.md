@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Repair static-file cache eviction, replacement accounting and cleaner ownership.
+  Reduce HTTP, routing, diagnostics and WebSocket allocations; remove dormant
+  internal WebSocket compression paths while preserving compressed-frame rejection.
+  Add 50 regression cases and reproducible allocation budgets in desktop CI.
+  Public APIs, target frameworks, defaults and dependencies are unchanged.
+
 - Emit configured response cookies during managed WebSocket upgrades (#64),
   preserving their HTTP attributes and separate header lines. Explicit response
   cookies take precedence over legacy request-cookie echoes of the same name;

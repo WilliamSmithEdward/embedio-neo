@@ -21,6 +21,9 @@ namespace EmbedIO.Diagnostics
                 try { MessageWritten?.Invoke(message); }
                 finally { _notifying = false; }
             }
+            if (!Source.Switch.ShouldTrace(level))
+                return;
+
             // Keep observers' original text for security criteria, but prevent
             // request-derived CR/LF from creating forged trace records.
             Source.TraceEvent(level, 0, "[{0}] {1}",

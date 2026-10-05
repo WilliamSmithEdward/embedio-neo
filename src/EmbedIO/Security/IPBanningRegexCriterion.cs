@@ -127,7 +127,7 @@ namespace EmbedIO.Security
                 {
                     if (!regex.IsMatch(message)) continue;
 
-                    _failRegexMatches.GetOrAdd(address, new ConcurrentBag<long>()).Add(DateTime.Now.Ticks);
+                    _failRegexMatches.GetOrAdd(address, _ => new ConcurrentBag<long>()).Add(DateTime.Now.Ticks);
                     break;
                 }
                 catch (RegexMatchTimeoutException ex)
