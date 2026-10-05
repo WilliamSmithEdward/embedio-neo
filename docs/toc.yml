@@ -1,4 +1,4 @@
-﻿- name: Documentation
+- name: Documentation
   href: README.md
 - name: Getting started
   items:
@@ -28,6 +28,8 @@
   items:
     - name: Dual-stack localhost
       href: user-reports/dual-stack-localhost.md
+    - name: Performance and code audit
+      href: user-reports/performance-audit.md
     - name: Server header
       href: user-reports/server-header.md
     - name: Request logging

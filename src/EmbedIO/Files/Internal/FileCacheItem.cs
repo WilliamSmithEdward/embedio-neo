@@ -12,6 +12,7 @@ namespace EmbedIO.Files.Internal
         internal string? PreviousKey;
         internal string? NextKey;
         internal long LastUsedAt;
+        internal bool IsInCache; // Accessed only while the section lock is held.
 
         // Size of a pointer in bytes
         private static readonly long SizeOfPointer = Environment.Is64BitProcess ? 8 : 4;
@@ -119,8 +120,15 @@ namespace EmbedIO.Files.Internal
 
         public byte[]? SetContent(CompressionMethod compressionMethod, byte[]? content)
         {
-            // This is the bare minimum locking we need
-            // to ensure we don't mess sizes up.
+            if (_section.TryGetTarget(out var section))
+                return section.SetContent(this, compressionMethod, content);
+
+            SetContentCore(compressionMethod, content, out _);
+            return content;
+        }
+
+        internal void SetContentCore(CompressionMethod compressionMethod, byte[]? content, out long sizeDelta)
+        {
             byte[]? oldContent;
             lock (_syncRoot)
             {
@@ -139,14 +147,10 @@ namespace EmbedIO.Files.Internal
                         _uncompressedContent = content;
                         break;
                 }
+
+                sizeDelta = GetSizeOf(content) - GetSizeOf(oldContent);
+                SizeInCache += sizeDelta;
             }
-
-            var sizeDelta = GetSizeOf(content) - GetSizeOf(oldContent);
-            SizeInCache += sizeDelta;
-            if (_section.TryGetTarget(out var section))
-                section.UpdateTotalSize(sizeDelta);
-
-            return content;
         }
 
         // Round up to a multiple of 16

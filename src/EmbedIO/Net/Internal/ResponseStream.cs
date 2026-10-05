@@ -8,7 +8,7 @@ namespace EmbedIO.Net.Internal
     internal class ResponseStream : Stream
     {
         private static readonly byte[] CrLf = { 13, 10 };
-        private readonly object _headersSyncRoot = new ();
+        private readonly object _headersSyncRoot = new();
 
         private readonly Stream _stream;
         private readonly HttpListenerResponse _response;
@@ -73,7 +73,7 @@ namespace EmbedIO.Net.Internal
                 ms.Write(buffer, offset, newCount);
                 count -= newCount;
                 offset += newCount;
-                InternalWrite(ms.ToArray(), (int)start, (int)(ms.Length - start));
+                InternalWrite(ms.GetBuffer(), (int)start, (int)(ms.Length - start));
                 ms.SetLength(0);
                 ms.Capacity = 0; // 'dispose' the buffer in ms.
             }
@@ -154,7 +154,7 @@ namespace EmbedIO.Net.Internal
                             ms.Write(bytes, 0, bytes.Length);
                         }
 
-                        InternalWrite(ms.ToArray(), (int)start, (int)(ms.Length - start));
+                        InternalWrite(ms.GetBuffer(), (int)start, (int)(ms.Length - start));
                         _trailerSent = true;
                     }
                     else if (chunked && !_trailerSent)

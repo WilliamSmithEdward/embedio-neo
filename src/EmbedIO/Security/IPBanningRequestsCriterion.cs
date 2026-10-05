@@ -39,7 +39,7 @@ namespace EmbedIO.Security
         /// <inheritdoc />
         public Task<bool> ValidateIPAddress(IPAddress address)
         {
-            Requests.GetOrAdd(address, new ConcurrentBag<long>()).Add(DateTime.Now.Ticks);
+            Requests.GetOrAdd(address, _ => new ConcurrentBag<long>()).Add(DateTime.Now.Ticks);
 
             var lastSecond = DateTime.Now.AddSeconds(-1).Ticks;
             var lastMinute = DateTime.Now.AddMinutes(-1).Ticks;

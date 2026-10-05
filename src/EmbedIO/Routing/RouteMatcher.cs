@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
 using EmbedIO.Utilities;
@@ -147,20 +146,34 @@ namespace EmbedIO.Routing
             if (!match.Success)
                 return null;
 
+            var values = new string[match.Groups.Count - 1];
+            for (var i = 0; i < values.Length; i++)
+                values[i] = WebUtility.UrlDecode(match.Groups[i + 1].Value);
+
             return new RouteMatch(
                 path,
                 ParameterNames,
-                match.Groups.Cast<Group>().Skip(1).Select(g => WebUtility.UrlDecode(g.Value)).ToArray(),
+                values,
                 IsBaseRoute ? "/" + path.Substring(match.Groups[0].Length) : null);
         }
 
         private static Exception? TryParseInternal(string route, bool isBaseRoute, out RouteMatcher? result)
         {
+            if (route == null)
+            {
+                result = null;
+                return new ArgumentNullException(nameof(route));
+            }
+
             lock (SyncRoot)
             {
+                if (Cache.TryGetValue((isBaseRoute, route), out result))
+                    return null;
+
                 string? pattern = null;
                 var parameterNames = new List<string>();
-                var exception = Routing.Route.ParseInternal(route, isBaseRoute, (_, n, p) => {
+                var exception = Routing.Route.ParseInternal(route, isBaseRoute, (_, n, p) =>
+                {
                     parameterNames.AddRange(n);
                     pattern = p;
                 });

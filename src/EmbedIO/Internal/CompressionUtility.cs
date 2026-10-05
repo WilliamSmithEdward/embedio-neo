@@ -41,7 +41,7 @@ namespace EmbedIO.Internal
                         if (targetMethod == CompressionMethod.Deflate)
                         {
                             using var compressionStream = new DeflateStream(targetStream, CompressionMode.Compress, true);
-                            decompressionStream.CopyToAsync(compressionStream);
+                            decompressionStream.CopyTo(compressionStream);
                         }
                         else
                         {

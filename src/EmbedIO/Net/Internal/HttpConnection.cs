@@ -112,7 +112,7 @@ namespace EmbedIO.Net.Internal
         {
             if (_iStream == null)
             {
-                var buffer = _ms.ToArray();
+                var buffer = _ms.GetBuffer();
                 var length = (int)_ms.Length;
                 _ms = null;
 
@@ -271,7 +271,7 @@ namespace EmbedIO.Net.Internal
         // false -> need more input
         private bool ProcessInput(MemoryStream ms)
         {
-            var buffer = ms.ToArray();
+            var buffer = ms.GetBuffer();
             var len = (int)ms.Length;
             var used = 0;
 

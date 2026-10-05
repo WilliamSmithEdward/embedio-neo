@@ -308,7 +308,7 @@ namespace EmbedIO.Files
             {
                 info = MapUrlPath(path, context);
                 if (info != null)
-                    _ = _mappingCache.AddOrUpdate(path, info, (_, __) => info);
+                    _mappingCache[path] = info;
             }
 
             if (info == null)

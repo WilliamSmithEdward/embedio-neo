@@ -23,8 +23,8 @@ namespace EmbedIO.WebSockets.Internal
     {
         public const string SupportedVersion = "13";
 
-        private readonly object _stateSyncRoot = new ();
-        private readonly ConcurrentQueue<MessageEventArgs> _messageEventQueue = new ();
+        private readonly object _stateSyncRoot = new();
+        private readonly ConcurrentQueue<MessageEventArgs> _messageEventQueue = new();
         private readonly Action _closeConnection;
         private readonly TimeSpan _waitTime = TimeSpan.FromSeconds(1);
 
@@ -54,8 +54,6 @@ namespace EmbedIO.WebSockets.Internal
 
         /// <inheritdoc />
         public WebSocketState State => _readyState;
-
-        internal CompressionMethod Compression { get; } = CompressionMethod.None;
 
         internal bool EmitOnPing { get; set; }
 
@@ -172,7 +170,7 @@ namespace EmbedIO.WebSockets.Internal
                 throw new WebSocketException(CloseStatusCode.Normal, $"This operation isn\'t available in: {_readyState}");
             }
 
-            using var stream = new WebSocketStream(data, opcode, Compression);
+            using var stream = new WebSocketStream(data, opcode);
             foreach (var frame in stream.GetFrames())
             {
                 await Send(frame).ConfigureAwait(false);
@@ -382,46 +380,40 @@ namespace EmbedIO.WebSockets.Internal
 
         private Task ProcessCloseFrame(WebSocketFrame frame) => InternalCloseAsync(frame.PayloadData, !frame.PayloadData.HasReservedCode, false);
 
-        private async Task ProcessDataFrame(WebSocketFrame frame)
+        private Task ProcessDataFrame(WebSocketFrame frame)
         {
-            if (frame.IsCompressed)
-            {
-                using var ms = await frame.PayloadData.ApplicationData.CompressAsync(Compression, false, CancellationToken.None).ConfigureAwait(false);
-
-                _messageEventQueue.Enqueue(new MessageEventArgs(frame.Opcode, ms.ToArray()));
-            }
-            else
-            {
-                _messageEventQueue.Enqueue(new MessageEventArgs(frame));
-            }
+            _messageEventQueue.Enqueue(new MessageEventArgs(frame));
+            return Task.CompletedTask;
         }
 
-        private async Task ProcessFragmentFrame(WebSocketFrame frame)
+        private Task ProcessFragmentFrame(WebSocketFrame frame)
         {
             if (!InContinuation)
             {
                 // Must process first fragment.
                 if (frame.Opcode == Opcode.Cont)
                 {
-                    return;
+                    return Task.CompletedTask;
                 }
 
-                _fragmentsBuffer = new FragmentBuffer(frame.Opcode, frame.IsCompressed);
+                _fragmentsBuffer = new FragmentBuffer(frame.Opcode);
                 InContinuation = true;
             }
 
-            _fragmentsBuffer.AddPayload(frame.PayloadData.ApplicationData);
+            _fragmentsBuffer.AddPayload(frame.PayloadData.ToArray());
 
             if (frame.Fin == Fin.Final)
             {
                 using (_fragmentsBuffer)
                 {
-                    _messageEventQueue.Enqueue(await _fragmentsBuffer.GetMessage(Compression).ConfigureAwait(false));
+                    _messageEventQueue.Enqueue(_fragmentsBuffer.GetMessage());
                 }
 
                 _fragmentsBuffer = null;
                 InContinuation = false;
             }
+
+            return Task.CompletedTask;
         }
 
         private Task ProcessPingFrame(WebSocketFrame frame)
