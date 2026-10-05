@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Grouped documentation into guides, platforms, compatibility, and project
+  folders, with updated navigation and redirects for existing links.
+
 - Organized documentation with a central index and CLI/migration guides under
   docs; retained redirects for previous entry points and removed unused legacy
   branding and IDE settings.
@@ -46,9 +49,9 @@ and the `embedio-cli` command are retained. Neo's version sequence starts at
 ### Approved migration changes
 
 SWAN removal changes configuration, JSON options, logging and exception APIs.
-Rebuild downstream applications and follow [MIGRATION.md](docs/migration.md), including
+Rebuild downstream applications and follow [MIGRATION.md](docs/compatibility/migration.md), including
 validation of JSON client contracts. Archived EmbedIO 2.x CLI plugins must be
-rebuilt and adapted as described in [CLI.md](docs/cli.md#provenance-and-migration).
+rebuilt and adapted as described in [CLI.md](docs/guides/cli.md#provenance-and-migration).
 These migrations were approved before implementation; this release adds no
 further runtime behavior changes.
 

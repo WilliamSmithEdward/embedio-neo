@@ -6,20 +6,23 @@ Start with the [project README](../README.md) for installation and a working ser
 
 ## Usage guides
 
-- [Command-line server](cli.md): options, static serving, plugins, and CLI provenance.
-- [Multiple static folders](multiple-static-folders.md): mount order and explicit fallback.
-- [Asynchronous outbound requests](async-outbound-requests.md): controller return types,
+- [Command-line server](guides/cli.md): options, static serving, plugins, and CLI provenance.
+- [Multiple static folders](guides/multiple-static-folders.md): mount order and explicit fallback.
+- [Asynchronous outbound requests](guides/async-outbound-requests.md): controller return types,
   completed JSON results, and troubleshooting.
-- [Circular JSON references](json-circular-references.md): opt-in .NET serialization settings.
+- [Circular JSON references](guides/json-circular-references.md): opt-in .NET serialization settings.
 
-## Compatibility and platforms
+## Compatibility
 
-- [Migration](migration.md): approved SWAN/JSON changes and consumer migration.
-- [MAUI Mac Catalyst](maui-mac-catalyst.md): listener startup and sandbox entitlements.
+- [Migration](compatibility/migration.md): approved SWAN/JSON changes and consumer migration.
+
+## Platforms
+
+- [MAUI Mac Catalyst](platforms/maui-mac-catalyst.md): listener startup and sandbox entitlements.
 
 ## Project and contribution
 
-- [Neo baseline and direction](embed_io_neo.md): initial fork decisions and acknowledgments.
+- [Neo baseline and direction](project/embed_io_neo.md): initial fork decisions and acknowledgments.
 - [Changelog](../CHANGELOG.md): released and unreleased changes.
 - [Contributing](../CONTRIBUTING.md): build, test, and compatibility policy.
 - [Security](../SECURITY.md): reporting vulnerabilities.

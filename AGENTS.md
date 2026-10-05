@@ -14,7 +14,7 @@ High Level Guardrail(s) -->
 
 ## Documentation and generated files
 
-- Maintain the docs/README.md index when adding or reorganizing guides. Keep user guides under docs, preserve existing public entry-point and section links where practical, and include all guides in DocFX navigation/content.
+- Maintain the docs/README.md index when adding or reorganizing guides. Keep usage guides under docs/guides, platform guidance under docs/platforms, migration guidance under docs/compatibility, and baseline/project documents under docs/project. Preserve existing public entry-point and section links where practical, and include all guides in DocFX navigation/content.
 - Write local build/test logs under ignored TestResults; do not clutter the repository root. Archived pre-baseline logs are under TestResults/root-logs. Keep licenses, active build configuration, and repo instructions intact.
 
 ## Pull request completion
