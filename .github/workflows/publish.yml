@@ -42,6 +42,7 @@ jobs:
           echo "PackageVersion: $version"
           [ -n "$version" ] || { echo "no PackageVersion in the csproj"; exit 1; }
           if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
+            [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'release tags must use vX.Y.Z'; exit 1; }
             [ "$version" != 3.5.0 ] || { echo '3.5.0 is an unreleased development placeholder; select an approved release version first'; exit 1; }
             tagged="${GITHUB_REF_NAME#v}"
             if [ "$tagged" != "$version" ]; then

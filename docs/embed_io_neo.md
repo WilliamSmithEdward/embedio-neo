@@ -211,6 +211,12 @@ Scheduled fuzzing mutates a committed corpus for URL paths and query data; the
 first local seed passed 100,000 iterations. Listener and WebSocket frame fuzzing
 are not claimed by that harness.
 
+The onboarding security review also escaped CR/LF in trace output to prevent
+request data from forging log records. Diagnostic observers still receive the
+original message. The local suite now has 367 cases (365 passed, 2 platform skips).
+The archive provider's ZIP-slip report is documented as a false positive because
+it reads entries directly and never extracts them to filesystem paths.
+
 The aim is a maintained, coherent EmbedIO continuation: easier to build, test,
 understand, and extend, while treating existing users and the original authors'
 work with care.
