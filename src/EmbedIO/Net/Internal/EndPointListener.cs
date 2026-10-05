@@ -33,8 +33,16 @@ namespace EmbedIO.Net.Internal
                 _sock.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, false);
             }
 
-            _sock.Bind(_endpoint);
-            _sock.Listen(500);
+            try
+            {
+                _sock.Bind(_endpoint);
+                _sock.Listen(500);
+            }
+            catch
+            {
+                _sock.Dispose();
+                throw;
+            }
             _prefixes = new Dictionary<ListenerPrefix, HttpListener>();
             _unregistered = new Dictionary<HttpConnection, HttpConnection>();
             if (address.AddressFamily == AddressFamily.InterNetworkV6
@@ -97,7 +105,7 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        public void AddPrefix(ListenerPrefix prefix, HttpListener listener)
+        public bool AddPrefix(ListenerPrefix prefix, HttpListener listener)
         {
             List<ListenerPrefix>? current;
             List<ListenerPrefix> future;
@@ -115,7 +123,7 @@ namespace EmbedIO.Net.Internal
                 }
                 while (Interlocked.CompareExchange(ref _unhandled, future, current) != current);
 
-                return;
+                return true;
             }
 
             if (prefix.Host == "+")
@@ -128,7 +136,7 @@ namespace EmbedIO.Net.Internal
                     AddSpecial(future, prefix);
                 }
                 while (Interlocked.CompareExchange(ref _all, future, current) != current);
-                return;
+                return true;
             }
 
             Dictionary<ListenerPrefix, HttpListener> prefs, p2;
@@ -136,23 +144,25 @@ namespace EmbedIO.Net.Internal
             do
             {
                 prefs = _prefixes;
-                if (prefs.ContainsKey(prefix))
+                var existing = prefs.Keys.FirstOrDefault(p => SamePrefix(p, prefix));
+                if (existing != null)
                 {
-                    if (prefs[prefix] != listener)
+                    if (prefs[existing] != listener)
                     {
                         throw new HttpListenerException(400, $"There is another listener for {prefix}");
                     }
 
-                    return;
+                    return false;
                 }
 
                 p2 = prefs.ToDictionary(x => x.Key, x => x.Value);
                 p2[prefix] = listener;
             }
             while (Interlocked.CompareExchange(ref _prefixes, p2, prefs) != prefs);
+            return true;
         }
 
-        public void RemovePrefix(ListenerPrefix prefix)
+        public void RemovePrefix(ListenerPrefix prefix, HttpListener listener)
         {
             List<ListenerPrefix>? current;
             List<ListenerPrefix> future;
@@ -163,7 +173,7 @@ namespace EmbedIO.Net.Internal
                 {
                     current = _unhandled;
                     future = current?.ToList() ?? new List<ListenerPrefix>();
-                    if (!RemoveSpecial(future, prefix))
+                    if (!RemoveSpecial(future, prefix, listener))
                     {
                         break; // Prefix not found
                     }
@@ -180,7 +190,7 @@ namespace EmbedIO.Net.Internal
                 {
                     current = _all;
                     future = current?.ToList() ?? new List<ListenerPrefix>();
-                    if (!RemoveSpecial(future, prefix))
+                    if (!RemoveSpecial(future, prefix, listener))
                     {
                         break; // Prefix not found
                     }
@@ -196,7 +206,7 @@ namespace EmbedIO.Net.Internal
             do
             {
                 prefs = _prefixes;
-                var prefixKey = _prefixes.Keys.FirstOrDefault(p => p.Path == prefix.Path);
+                var prefixKey = prefs.Keys.FirstOrDefault(p => SamePrefix(p, prefix) && prefs[p] == listener);
 
                 if (prefixKey is null)
                 {
@@ -386,7 +396,7 @@ namespace EmbedIO.Net.Internal
             coll.Add(prefix);
         }
 
-        private static bool RemoveSpecial(IList<ListenerPrefix> coll, ListenerPrefix prefix)
+        private static bool RemoveSpecial(IList<ListenerPrefix> coll, ListenerPrefix prefix, HttpListener listener)
         {
             if (coll == null)
             {
@@ -396,7 +406,7 @@ namespace EmbedIO.Net.Internal
             var c = coll.Count;
             for (var i = 0; i < c; i++)
             {
-                if (coll[i].Path != prefix.Path)
+                if (coll[i].Path != prefix.Path || coll[i].Listener != listener)
                 {
                     continue;
                 }
@@ -407,6 +417,10 @@ namespace EmbedIO.Net.Internal
 
             return false;
         }
+
+        private static bool SamePrefix(ListenerPrefix first, ListenerPrefix second)
+            => first.Host == second.Host && first.Port == second.Port
+                && first.Path == second.Path && first.Secure == second.Secure;
 
         private HttpListener? SearchListener(Uri uri, out ListenerPrefix? prefix)
         {

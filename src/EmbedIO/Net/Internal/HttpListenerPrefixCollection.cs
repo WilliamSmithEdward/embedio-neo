@@ -19,12 +19,13 @@ namespace EmbedIO.Net.Internal
                 return;
             }
 
-            base.Add(uriPrefix);
-
             if (_listener.IsListening)
             {
                 EndPointManager.AddPrefix(uriPrefix, _listener);
             }
+
+            // A failed live registration must remain retryable.
+            base.Add(uriPrefix);
         }
     }
 }
