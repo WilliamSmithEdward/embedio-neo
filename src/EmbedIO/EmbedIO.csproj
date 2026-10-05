@@ -15,7 +15,6 @@
     <PackageProjectUrl>https://github.com/WilliamSmithEdward/embedio-neo</PackageProjectUrl>
     <RepositoryUrl>https://github.com/WilliamSmithEdward/embedio-neo</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>webserver websocket webapi http</PackageTags>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release' And Exists('NugetSigning.pfx')">
