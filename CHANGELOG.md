@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Added an opt-in SSE event writer that prepares headers, safely frames multiline
+  UTF-8 events and heartbeat comments, flushes each frame and observes cancellation.
+  Added a runnable progress server/browser guide for upstream #587. Existing APIs,
+  listener defaults, target frameworks and dependencies are unchanged.
 - Ensure request-completion callbacks run after final response flush or close
   failures, including canceled streaming handlers (upstream #588). Document SSE
   framing, server cancellation and transport-error handling without changing

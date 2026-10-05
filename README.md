@@ -96,6 +96,9 @@ PM> Install-Package EmbedIO-Neo
 
 ## Usage
 
+For live progress updates, see the [SSE progress demo](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/user-reports/progress-events.md),
+with a complete server and browser client and Neo's additive event writer.
+
 Working with EmbedIO is pretty simple, check the follow sections to start coding right away. You can find more useful recipes and implementation details in the [upstream Cookbook](https://github.com/unosquare/embedio/wiki/Cookbook).
 
 ### WebServer Setup
