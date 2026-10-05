@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- Documented opt-in .NET JSON cycle handling for upstream #600 and added eight
+  response-serialization regression cases. Existing default behavior is unchanged.
+
 ## [1.0.0] - 2026-10-04
 
 First independent Neo release, continuing Unosquare's EmbedIO, Extras JsonServer,

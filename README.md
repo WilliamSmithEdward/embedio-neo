@@ -294,3 +294,5 @@ Run `dotnet run --project src/EmbedIO.Cli -- --help` to get started.
 
 See [Neo baseline and direction](docs/embed_io_neo.md) for the initial changes,
 validation, acknowledgments, and planned work.
+
+For configurable cycle handling in JSON responses, see the [circular-reference guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/json-circular-references.md).
