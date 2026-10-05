@@ -1,5 +1,4 @@
-using System.Text.Json;
-using EmbedIO.Actions;
+﻿using EmbedIO.Actions;
 
 namespace EmbedIO.AndroidSmoke;
 
@@ -25,10 +24,17 @@ public sealed class SmokeHost
                 .WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new ActionModule("/state", HttpVerbs.Get, context => context.SendDataAsync(new
                 {
-                    pid = Environment.ProcessId, generation = _generation,
-                    created = Created, resumed = Resumed, stopped = Stopped, configured = Configured,
-                    observed = _observed, error = _error, listener = _server?.Listener.Name,
-                    runtime = Environment.Version.ToString(), os = Environment.OSVersion.ToString(),
+                    pid = Environment.ProcessId,
+                    generation = _generation,
+                    created = Created,
+                    resumed = Resumed,
+                    stopped = Stopped,
+                    configured = Configured,
+                    observed = _observed,
+                    error = _error,
+                    listener = _server?.Listener.Name,
+                    runtime = Environment.Version.ToString(),
+                    os = Environment.OSVersion.ToString(),
                 })))
                 .WithModule(new ActionModule("/work", HttpVerbs.Post, context =>
                 {

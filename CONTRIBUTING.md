@@ -45,6 +45,14 @@ least 395 executed/reported test cases to catch accidental discovery loss; updat
 that baseline deliberately when adding or removing tests. NUnit 5 async assertions
 must be awaited.
 
+CI also runs test-only MAUI Mac Catalyst and Android apps outside the ordinary
+solution and shipped packages. The Android fixture uses the pinned .NET 10 SDK,
+MAUI workload, locked packages, and an Android 10/API 29 emulator; the job is
+included in `CI passed`. Run it independently with
+`gh workflow run android-smoke.yml --ref <branch>` and inspect its `android-smoke`
+artifact. See [Android hosting guidance](docs/platforms/maui-android.md) for the
+tested lifecycle phases and limits. A desktop test pass is not Android evidence.
+
 For coverage, append these options to the test command:
 
 ```sh

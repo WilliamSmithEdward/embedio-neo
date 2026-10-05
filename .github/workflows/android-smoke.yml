@@ -1,11 +1,7 @@
 name: Android smoke
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - test/EmbedIO.AndroidSmoke/**
-      - scripts/run_android_smoke.py
-      - .github/workflows/android-smoke.yml
+  workflow_call:
 permissions:
   contents: read
 jobs:

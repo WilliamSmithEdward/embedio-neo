@@ -84,10 +84,14 @@ jobs:
     name: Mac Catalyst
     uses: ./.github/workflows/mac-catalyst.yml
 
+  android:
+    name: Android
+    uses: ./.github/workflows/android-smoke.yml
+
   ci-passed:
     name: CI passed
     if: always()
-    needs: [test, static-analysis, build, mac-catalyst]
+    needs: [test, static-analysis, build, mac-catalyst, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

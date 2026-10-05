@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Added MAUI Android lifecycle and supervised-background-work guidance for upstream
+  #597, four real-listener regressions, and a required Android 10 emulator smoke.
+  Production behavior is unchanged; the original application crash has no supplied
+  reproduction or stack trace.
+
 - Grouped documentation into guides, platforms, compatibility, and project
   folders, with updated navigation and redirects for existing links.
 

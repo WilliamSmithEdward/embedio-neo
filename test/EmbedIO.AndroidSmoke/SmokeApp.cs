@@ -1,4 +1,4 @@
-namespace EmbedIO.AndroidSmoke;
+﻿namespace EmbedIO.AndroidSmoke;
 
 public static class MauiProgram
 {
