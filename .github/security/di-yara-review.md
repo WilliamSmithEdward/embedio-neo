@@ -51,7 +51,11 @@ retained locally under ignored `TestResults/di-implementation/yara-evidence`.
 ## Acceptance boundary
 
 Accept this rule only for the two `EmbedIO.DependencyInjection.dll` paths in
-the 1.0.0 package. Other rules, other files, scan errors, missing scans and
+the 1.0.0 package and the two review files named in the acceptance list.
+The review Markdown and acceptance TOML repeat the inspected filename as
+evidence; the pinned scanner confirmed that these text references also match.
+A full local YARA scan found only these four expected paths across 500 files.
+Other rules, other files, scan errors, missing scans and
 accepted paths that cease matching remain failures. A new package version or
 changed rule requires review of the acceptance paths and evidence. Preserve
 full scanning of source files, packages and unpacked assemblies.
