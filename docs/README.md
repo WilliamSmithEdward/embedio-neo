@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [XML responses](user-reports/xml-responses.md): explicit serializers, MIME types and encoding.
+
 - [Dual-stack localhost](user-reports/dual-stack-localhost.md): loopback registration, routing and cleanup.
 
 - [Additional performance audit](user-reports/performance-audit-second-pass.md): negotiation, header parsing, WebSocket metadata and request-history improvements.

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Add MimeType.Xml and MimeType.TextXml constants and document opt-in controller XML responses using existing serializers; preserve default JSON behavior.
 - Reduce content-negotiation, header/token parsing, WebSocket metadata and frame-read
   allocations. Avoid rate-history snapshots and preserve request records during
   concurrent purges. Keep existing thresholds, shared history ownership, parser
