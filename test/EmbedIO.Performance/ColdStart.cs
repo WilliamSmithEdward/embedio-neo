@@ -25,7 +25,8 @@ internal static class ColdStart
                     {
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
-                        UseShellExecute = false
+                        UseShellExecute = false,
+                        CreateNoWindow = true
                     };
                     if (Path.GetFileNameWithoutExtension(Environment.ProcessPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
                         info.ArgumentList.Add(typeof(ColdStart).Assembly.Location);
