@@ -12,8 +12,8 @@ ADB = str(Path(os.environ['ANDROID_HOME']) / 'platform-tools/adb')
 PACKAGE = 'io.embedioneo.smoke597'
 ACTIVITY = PACKAGE + '/.MainActivity'
 
-def adb(*args):
-    return subprocess.check_output([ADB, *args], text=True, stderr=subprocess.STDOUT, timeout=30).strip()
+def adb(*args, timeout=30):
+    return subprocess.check_output([ADB, *args], text=True, stderr=subprocess.STDOUT, timeout=timeout).strip()
 
 def wait_for(operation, predicate, seconds=90):
     deadline = time.monotonic() + seconds
@@ -48,7 +48,8 @@ try:
     apks = list(Path('test/EmbedIO.AndroidSmoke/bin/Debug').rglob('*-Signed.apk'))
     if len(apks) != 1:
         raise RuntimeError(f'Expected one self-contained debug APK, found {apks}')
-    adb('install', '-r', str(apks[0]))
+    # A self-contained MAUI debug APK can take longer on a freshly booted emulator.
+    adb('install', '-r', str(apks[0]), timeout=180)
     adb('forward', 'tcp:59697', 'tcp:59697')
     launch()
     initial = wait_for(state, lambda value: value['generation'] == 1 and value['resumed'] > 0)
