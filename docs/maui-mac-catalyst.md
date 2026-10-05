@@ -72,3 +72,9 @@ and sandbox entitlements, and requires successful HTTP and WebView checks.
 Its result is captured as `mac-catalyst-smoke`; the CI gate requires this job.
 This is an automated test configuration, not App Store signing or the original
 Sonoma/M1 environment. A passing run must be verified before citing it as evidence.
+
+Verified evidence: [CI run 37256447885](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37256447885)
+passed the Mac Catalyst smoke job. Its uploaded result reports `passed: true`,
+OS `Unix 26.6.0`, and .NET runtime `10.0.12`; its signed entitlements include
+app sandbox and network client/server permissions. This confirms the automated
+MAUI HTTP/WebView fixture, not the reporter's original application.
