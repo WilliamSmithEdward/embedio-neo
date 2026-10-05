@@ -26,7 +26,7 @@ namespace EmbedIO.WebSockets.Internal
         internal MessageEventArgs(WebSocketFrame frame)
         {
             Opcode = frame.Opcode;
-            _rawData = frame.PayloadData.ApplicationData.ToArray();
+            _rawData = (byte[])frame.PayloadData.ToArray().Clone();
         }
 
         internal MessageEventArgs(Opcode opcode, byte[] rawData)

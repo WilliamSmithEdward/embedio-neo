@@ -1,4 +1,4 @@
-﻿- name: Documentation
+- name: Documentation
   href: README.md
 - name: Getting started
   items:
@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Performance and code audit
+      href: user-reports/performance-audit.md
     - name: Server header
       href: user-reports/server-header.md
     - name: Request logging

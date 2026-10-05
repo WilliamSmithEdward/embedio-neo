@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using EmbedIO.Net.Internal;
 using EmbedIO.Internal;
 
@@ -144,7 +143,6 @@ Extended Payload Length: {extPayloadLen}
 
         public byte[] ToArray()
         {
-            using var buff = new MemoryStream();
             var header = (int)Fin;
 
             header = (header << 1) + (int)Rsv1;
@@ -153,42 +151,27 @@ Extended Payload Length: {extPayloadLen}
             header = (header << 4) + (int)Opcode;
             header = (header << 1) + (int)Mask;
             header = (header << 7) + PayloadLength;
-            buff.Write(((ushort)header).ToByteArray(Endianness.Big), 0, 2);
-
-            if (PayloadLength > 125)
-            {
-                buff.Write(ExtendedPayloadLength, 0, PayloadLength == 126 ? 2 : 8);
-            }
-
-            if (Mask == Mask.On)
-            {
-                buff.Write(MaskingKey, 0, 4);
-            }
-
-            if (PayloadLength > 0)
-            {
-                var bytes = PayloadData.ToArray();
-                if (PayloadLength < 127)
-                {
-                    buff.Write(bytes, 0, bytes.Length);
-                }
-                else
-                {
-                    using var input = new MemoryStream(bytes);
-                    input.CopyTo(buff, 1024);
-                }
-            }
-
-            return buff.ToArray();
+            var bytes = PayloadLength > 0 ? PayloadData.ToArray() : Array.Empty<byte>();
+            var extendedLength = ExtendedPayloadLengthCount;
+            var maskLength = Mask == Mask.On ? 4 : 0;
+            var result = new byte[2 + extendedLength + maskLength + bytes.Length];
+            result[0] = (byte)(header >> 8);
+            result[1] = (byte)header;
+            if (extendedLength > 0)
+                Buffer.BlockCopy(ExtendedPayloadLength!, 0, result, 2, extendedLength);
+            if (maskLength > 0)
+                Buffer.BlockCopy(MaskingKey, 0, result, 2 + extendedLength, maskLength);
+            Buffer.BlockCopy(bytes, 0, result, 2 + extendedLength + maskLength, bytes.Length);
+            return result;
         }
 
         public override string ToString() => BitConverter.ToString(ToArray());
 
-        internal static WebSocketFrame CreateCloseFrame(PayloadData? payloadData) => new (Fin.Final, Opcode.Close, payloadData ?? new PayloadData());
+        internal static WebSocketFrame CreateCloseFrame(PayloadData? payloadData) => new(Fin.Final, Opcode.Close, payloadData ?? new PayloadData());
 
-        internal static WebSocketFrame CreatePingFrame() => new (Fin.Final, Opcode.Ping, new PayloadData());
+        internal static WebSocketFrame CreatePingFrame() => new(Fin.Final, Opcode.Ping, new PayloadData());
 
-        internal static WebSocketFrame CreatePingFrame(byte[] data) => new (Fin.Final, Opcode.Ping, new PayloadData(data));
+        internal static WebSocketFrame CreatePingFrame(byte[] data) => new(Fin.Final, Opcode.Ping, new PayloadData(data));
 
         internal void Validate(WebSocket webSocket)
         {
@@ -203,7 +186,7 @@ Extended Payload Length: {extPayloadLen}
                     "A data frame has been received while receiving continuation frames.");
             }
 
-            if (IsCompressed && webSocket.Compression == CompressionMethod.None)
+            if (IsCompressed)
             {
                 throw new WebSocketException(CloseStatusCode.ProtocolError,
                     "A compressed frame has been received without any agreement for it.");

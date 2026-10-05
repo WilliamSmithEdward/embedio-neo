@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading;
-using EmbedIO.Internal;
 
 namespace EmbedIO.WebSockets.Internal
 {
@@ -10,30 +8,23 @@ namespace EmbedIO.WebSockets.Internal
     {
         internal const int FragmentLength = 1016;
 
-        private readonly CompressionMethod _compression;
         private readonly Opcode _opcode;
 
-        public WebSocketStream(byte[] data, Opcode opcode, CompressionMethod compression)
+        public WebSocketStream(byte[] data, Opcode opcode)
             : base(data)
         {
-            _compression = compression;
             _opcode = opcode;
         }
 
         public IEnumerable<WebSocketFrame> GetFrames()
         {
-            var compressed = _compression != CompressionMethod.None;
-            var stream = compressed
-                ? this.CompressAsync(_compression, true, CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult()
-                : this;
-
-            var len = stream.Length;
+            var len = Length;
 
             /* Not fragmented */
 
             if (len == 0)
             {
-                yield return new WebSocketFrame(Fin.Final, _opcode, Array.Empty<byte>(), compressed);
+                yield return new WebSocketFrame(Fin.Final, _opcode, Array.Empty<byte>(), false);
                 yield break;
             }
 
@@ -46,8 +37,8 @@ namespace EmbedIO.WebSockets.Internal
             {
                 buff = new byte[rem];
 
-                if (stream.Read(buff, 0, rem) == rem)
-                    yield return new WebSocketFrame(Fin.Final, _opcode, buff, compressed);
+                if (Read(buff, 0, rem) == rem)
+                    yield return new WebSocketFrame(Fin.Final, _opcode, buff, false);
 
                 yield break;
             }
@@ -55,8 +46,8 @@ namespace EmbedIO.WebSockets.Internal
             buff = new byte[FragmentLength];
             if (quo == 1 && rem == 0)
             {
-                if (stream.Read(buff, 0, FragmentLength) == FragmentLength)
-                    yield return new WebSocketFrame(Fin.Final, _opcode, buff, compressed);
+                if (Read(buff, 0, FragmentLength) == FragmentLength)
+                    yield return new WebSocketFrame(Fin.Final, _opcode, buff, false);
 
                 yield break;
             }
@@ -64,18 +55,18 @@ namespace EmbedIO.WebSockets.Internal
             /* Send fragmented */
 
             // Begin
-            if (stream.Read(buff, 0, FragmentLength) != FragmentLength)
+            if (Read(buff, 0, FragmentLength) != FragmentLength)
                 yield break;
 
-            yield return new WebSocketFrame(Fin.More, _opcode, buff, compressed);
+            yield return new WebSocketFrame(Fin.More, _opcode, buff, false);
 
             var n = rem == 0 ? quo - 2 : quo - 1;
             for (var i = 0; i < n; i++)
             {
-                if (stream.Read(buff, 0, FragmentLength) != FragmentLength)
+                if (Read(buff, 0, FragmentLength) != FragmentLength)
                     yield break;
 
-                yield return new WebSocketFrame(Fin.More, Opcode.Cont, buff, compressed);
+                yield return new WebSocketFrame(Fin.More, Opcode.Cont, buff, false);
             }
 
             // End
@@ -84,8 +75,8 @@ namespace EmbedIO.WebSockets.Internal
             else
                 buff = new byte[rem];
 
-            if (stream.Read(buff, 0, rem) == rem)
-                yield return new WebSocketFrame(Fin.Final, Opcode.Cont, buff, compressed);
+            if (Read(buff, 0, rem) == rem)
+                yield return new WebSocketFrame(Fin.Final, Opcode.Cont, buff, false);
         }
     }
 }

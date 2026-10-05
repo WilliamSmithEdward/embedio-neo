@@ -297,7 +297,5 @@ namespace EmbedIO.Sessions
                 }
             }
         }
-
-        private string GetSessionId(IHttpContext context) => context.Request.Cookies.FirstOrDefault(IsSessionCookie)?.Value.Trim() ?? string.Empty;
     }
 }

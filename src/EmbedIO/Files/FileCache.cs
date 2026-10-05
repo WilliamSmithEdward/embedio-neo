@@ -33,7 +33,7 @@ namespace EmbedIO.Files
         private static FileCache? _defaultInstance;
 
         private readonly ConcurrentDictionary<string, Section> _sections = new ConcurrentDictionary<string, Section>(StringComparer.Ordinal);
-        private int _sectionCount; // Because ConcurrentDictionary<,>.Count is locking.
+        private int _sectionCount; // Protected by the _sections lock; avoids locking every dictionary bucket.
         private int _maxSizeKb = DefaultMaxSizeKb;
         private int _maxFileSizeKb = DefaultMaxFileSizeKb;
         private PeriodicTask? _cleaner;
@@ -90,23 +90,30 @@ namespace EmbedIO.Files
         // It would mean that something is very, very wrong.
         internal Section AddSection(string name)
         {
-            var section = new Section();
-            (_sections as IDictionary<string, Section>).Add(name, section);
+            lock (_sections)
+            {
+                var section = new Section();
+                (_sections as IDictionary<string, Section>).Add(name, section);
 
-            if (Interlocked.Increment(ref _sectionCount) == 1)
-                _cleaner = new PeriodicTask(TimeSpan.FromMinutes(1), CheckMaxSize);
+                if (++_sectionCount == 1)
+                    _cleaner = new PeriodicTask(TimeSpan.FromMinutes(1), CheckMaxSize);
 
-            return section;
+                return section;
+            }
         }
 
         internal void RemoveSection(string name)
         {
-            _sections.TryRemove(name, out _);
-
-            if (Interlocked.Decrement(ref _sectionCount) == 0)
+            lock (_sections)
             {
-                _cleaner?.Dispose();
-                _cleaner = null;
+                if (!_sections.TryRemove(name, out _))
+                    return;
+
+                if (--_sectionCount == 0)
+                {
+                    _cleaner?.Dispose();
+                    _cleaner = null;
+                }
             }
         }
 

@@ -13,8 +13,23 @@ namespace EmbedIO.Internal
         {
             if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
             if (bufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(bufferSize));
-            using var output = new MemoryStream();
             var buffer = new byte[Math.Min(count, bufferSize)];
+            if (count <= bufferSize)
+            {
+                var offset = 0;
+                while (offset < count)
+                {
+                    var read = await stream.ReadAsync(buffer, offset, count - offset).ConfigureAwait(false);
+                    if (read == 0) break;
+                    offset += read;
+                }
+
+                if (offset != count)
+                    Array.Resize(ref buffer, offset);
+                return buffer;
+            }
+
+            using var output = new MemoryStream();
             while (output.Length < count)
             {
                 var read = await stream.ReadAsync(buffer, 0, Math.Min(buffer.Length, count - (int)output.Length)).ConfigureAwait(false);

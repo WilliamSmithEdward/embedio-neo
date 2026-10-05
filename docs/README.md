@@ -1,4 +1,4 @@
-﻿# Documentation
+# Documentation
 
 EmbedIO-Neo keeps the existing `EmbedIO` namespaces and offers a small modular
 HTTP/WebSocket server, integrated CLI, JsonServer, and testing helpers.
@@ -25,6 +25,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [Performance and code audit](user-reports/performance-audit.md): measured allocation reductions, cache eviction fixes and compatibility checks.
 - [Server header](user-reports/server-header.md): customize HTTP responses and understand backend/upgrade limits.
 
 - [Request logging](user-reports/request-logging.md): hide completion summaries while preserving other diagnostics.
