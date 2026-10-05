@@ -2,7 +2,15 @@
 
 EmbedIO-Neo keeps the existing `EmbedIO` namespaces and offers a small modular
 HTTP/WebSocket server, integrated CLI, JsonServer, and testing helpers.
-Start with the [project README](../README.md) for installation and a working server.
+Start with [Your first JSON endpoint](guides/getting-started/README.md)
+for a complete app you can run, then choose files or controllers as needed.
+
+## Getting started
+
+- [Your first JSON endpoint](guides/getting-started/README.md): install, run, and get JSON.
+- [Serve HTML and files](guides/getting-started/files.md): serve a folder and combine it with an API.
+- [Use a controller](guides/getting-started/controllers.md): group endpoints with explicit routes.
+- [Routes, verbs, and parameters](guides/getting-started/requests.md): GET, POST, PUT, DELETE, query strings, and JSON bodies.
 
 ## Usage guides
 

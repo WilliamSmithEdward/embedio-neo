@@ -1,5 +1,15 @@
 - name: Documentation
   href: README.md
+- name: Getting started
+  items:
+    - name: Your first JSON endpoint
+      href: guides/getting-started/README.md
+    - name: Serve HTML and files
+      href: guides/getting-started/files.md
+    - name: Use a controller
+      href: guides/getting-started/controllers.md
+    - name: Routes, verbs, and parameters
+      href: guides/getting-started/requests.md
 - name: Usage guides
   items:
     - name: HTTPS
