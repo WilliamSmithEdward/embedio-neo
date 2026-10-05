@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=false
       - name: Run the regression suite with coverage
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 656 --coverlet
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 676 --coverlet
       - name: Stress immediate client resets on macOS
         if: runner.os == 'macOS'
         shell: bash
@@ -48,7 +48,7 @@ jobs:
               --report-trx --results-directory "TestResults/mac-reset-$iteration" \
               --timeout 2m --minimum-expected-tests 17
           done
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae676e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: test-results-${{ matrix.os }}
@@ -90,7 +90,7 @@ jobs:
         run: dotnet pack EmbedIO.sln -c Release --no-restore -o dist -p:RunAnalyzers=false
       - name: Check package contents and source notices
         run: python3 scripts/check_packages.py dist
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae676e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nupkg
           path: dist/*.nupkg

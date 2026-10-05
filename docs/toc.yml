@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Dual-stack localhost
+      href: user-reports/dual-stack-localhost.md
     - name: Server header
       href: user-reports/server-header.md
     - name: Request logging

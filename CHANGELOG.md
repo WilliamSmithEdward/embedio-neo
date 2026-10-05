@@ -1,6 +1,8 @@
-# Changelog
+﻿# Changelog
 
 ## [Unreleased]
+
+- Register managed localhost prefixes on both enabled loopback families, with rollback and ownership-safe endpoint cleanup. Keep failed live additions retryable and reject duplicate ownership or incompatible HTTP/HTTPS endpoint registrations.
 
 - Emit configured response cookies during managed WebSocket upgrades (#64),
   preserving their HTTP attributes and separate header lines. Explicit response
