@@ -104,7 +104,7 @@ the archived hand-written static server. Plugin loading uses the shared core
 assembly and supports current Web API controllers and WebSocket modules.
 
 The tool packs locally as `EmbedIO-Neo.Cli`, using the shared version. This is a
-prepared package identity, not an existing published release. See [CLI.md](../CLI.md)
+prepared package identity, not an existing published release. See [CLI.md](cli.md)
 for commands, plugin requirements, and local installation.
 
 Other Extras modules were assessed rather than imported wholesale. Bearer-token
@@ -139,8 +139,8 @@ and the CLI's .NET 10/current-API port. Consumers using SWAN-exposed APIs must
 adapt and rebuild. Archived EmbedIO 2.x CLI plugin binaries must be rebuilt and
 ported to current controllers, routes, and WebSocket modules.
 
-These changes are documented in [MIGRATION.md](../MIGRATION.md) and
-[CLI.md](../CLI.md#provenance-and-migration). They require an appropriate release
+These changes are documented in [MIGRATION.md](migration.md) and
+[CLI.md](cli.md#provenance-and-migration). They require an appropriate release
 version; retaining the old version in the working tree is not release approval.
 Removing the sample applications does not remove the library's legacy target.
 

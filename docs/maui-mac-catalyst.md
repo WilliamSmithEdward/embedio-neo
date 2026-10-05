@@ -7,7 +7,7 @@ MAUI WebView app on macOS Sonoma 14.5 / Apple M1 Pro. Its screenshot shows
 
 EmbedIO-Neo 1.0.0 already removed SWAN and uses `System.Diagnostics.TraceSource`
 for diagnostics. The core does not probe console dimensions. Rebuild the app
-against `EmbedIO-Neo` and follow [MIGRATION.md](../MIGRATION.md) for the approved
+against `EmbedIO-Neo` and follow [MIGRATION.md](migration.md) for the approved
 SWAN migration. The namespace remains `EmbedIO`; this is not a binary replacement
 for an app compiled against upstream. Avoid leaving the original EmbedIO package
 or its SWAN-based logging integration in the application. Custom trace listeners

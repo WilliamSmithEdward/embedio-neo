@@ -3,8 +3,13 @@
     {
       "src": [
         {
-          "files": [ "src/EmbedIO/**/*.cs" ],
-          "exclude": [ "**/bin/**", "**/obj/**" ]
+          "files": [
+            "src/EmbedIO/**/*.cs"
+          ],
+          "exclude": [
+            "**/bin/**",
+            "**/obj/**"
+          ]
         }
       ],
       "dest": "obj/api"
@@ -17,26 +22,45 @@
     ],
     "content": [
       {
-        "files": [ "**/*.yml" ],
+        "files": [
+          "**/*.yml"
+        ],
         "cwd": "obj/api",
         "dest": "api"
       },
       {
-        "files": [ "README.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "MIGRATION.md", "CLI.md", "docs/embed_io_neo.md" ]
+        "files": [
+          "README.md",
+          "CONTRIBUTING.md",
+          "CODE_OF_CONDUCT.md",
+          "SECURITY.md",
+          "CHANGELOG.md",
+          "CLI.md",
+          "MIGRATION.md",
+          "docs/**/*.md",
+          "docs/**/toc.yml"
+        ]
       },
       {
-        "files": [ "toc.yml" ]
+        "files": [
+          "toc.yml"
+        ]
       }
     ],
     "resource": [
       {
-        "files": [ "LICENSE", "licenses/**", "images/**" ]
+        "files": [
+          "LICENSE",
+          "licenses/**",
+          "images/**"
+        ]
       }
     ],
     "globalMetadata": {
       "_appTitle": "EmbedIO-Neo",
-      "_enableSearch": true, "_appLogoPath": "images/embedio_neo.png", "_appFaviconPath": "images/embedio_neo_icons.png",
-      "_docfxVersion": "2.45.0.0"
+      "_enableSearch": true,
+      "_appLogoPath": "images/embedio_neo.png",
+      "_appFaviconPath": "images/embedio_neo_icons.png"
     },
     "dest": "_site"
   }

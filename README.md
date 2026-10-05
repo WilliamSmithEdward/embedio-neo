@@ -132,7 +132,7 @@ catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
 
 The controller methods below are excerpts for a `WebApiController` subclass.
 Supply your application's `SaveData` method and request types, and register the
-controller through `WithWebApi` as shown in [CLI.md](CLI.md#plugins).
+controller through `WithWebApi` as shown in [CLI.md](docs/cli.md#plugins).
 ### Reading from a POST body as a dictionary (application/x-www-form-urlencoded)
 
 For reading a dictionary from an HTTP Request body inside a WebAPI method you can add an argument to your method with the attribute `FormData`.
@@ -286,13 +286,15 @@ See [Contributing](CONTRIBUTING.md#extras-integration) for provenance, persisten
 limits, and the disposition of the other archived Extras modules.
 
 Build with the .NET 10 SDK specified in `global.json`. Libraries retain
-.NET Standard 2.0 for existing consumers and also target .NET 10. Tests run on .NET 10. SWAN has been removed. The .NET 10 core has no external runtime packages; .NET Standard 2.0 uses Microsoft System.Text.Json. See the [migration guide](MIGRATION.md) for the approved API and JSON changes.
+.NET Standard 2.0 for existing consumers and also target .NET 10. Tests run on .NET 10. SWAN has been removed. The .NET 10 core has no external runtime packages; .NET Standard 2.0 uses Microsoft System.Text.Json. See the [migration guide](docs/migration.md) for the approved API and JSON changes.
 
 ## Command-line server
 
-The [integrated CLI](CLI.md) serves local folders and Web API/WebSocket plugins.
+The [integrated CLI](docs/cli.md) serves local folders and Web API/WebSocket plugins.
 It shares this repository's core library and versioning and requires .NET 10.
 Run `dotnet run --project src/EmbedIO.Cli -- --help` to get started.
+
+Browse the [documentation index](docs/README.md) for usage, platform, and migration guides.
 
 See [Neo baseline and direction](docs/embed_io_neo.md) for the initial changes,
 validation, acknowledgments, and planned work.
