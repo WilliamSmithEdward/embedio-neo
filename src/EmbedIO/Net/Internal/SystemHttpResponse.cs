@@ -53,6 +53,10 @@ namespace EmbedIO.Net.Internal
         // Reuse the acquired stream so final cleanup does not reacquire it from a disposed response.
         public Stream OutputStream => _outputStream ??= _response.OutputStream;
 
+        // A successful upgrade transfers the transport to the WebSocket.
+        // Final HTTP cleanup must not reacquire the disposed native response stream.
+        internal void MarkWebSocketAccepted() => _outputStream = Stream.Null;
+
         /// <inheritdoc />
         public ICookieCollection Cookies { get; }
 

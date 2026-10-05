@@ -127,6 +127,41 @@ namespace EmbedIO.Tests
                         await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "echo"), timeout.Token));
                     Assert.That(socket.HttpStatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
                 });
+        [TestCase(HttpListenerMode.EmbedIO)]
+        [TestCase(HttpListenerMode.Microsoft)]
+        public async Task WebSocketCompletionRunsCallbacksAndLeavesHttpListenerAvailable(HttpListenerMode mode)
+        {
+            var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await UseServerAsync(mode,
+                server => server.WithModule(new CompletionObserver(completed))
+                    .WithModule(new EchoSocket())
+                    .OnGet("/health", context => context.SendStringAsync("healthy", "text/plain", Encoding.UTF8)),
+                async url =>
+                {
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    using var socket = new ClientWebSocket();
+                    await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "echo"), timeout.Token);
+                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+                    await completed.Task.WaitAsync(timeout.Token);
+                    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                    Assert.That(await client.GetStringAsync(url + "health"), Is.EqualTo("healthy"));
+                });
+        }
+
+        private sealed class CompletionObserver : WebModuleBase
+        {
+            private readonly TaskCompletionSource _completed;
+
+            public CompletionObserver(TaskCompletionSource completed) : base("/echo") => _completed = completed;
+
+            public override bool IsFinalHandler => false;
+
+            protected override Task OnRequestAsync(IHttpContext context)
+            {
+                context.OnClose(_ => _completed.TrySetResult());
+                return Task.CompletedTask;
+            }
+        }
         private static async Task AssertEchoAsync(ClientWebSocket socket, WebSocketMessageType type, byte[] expected, CancellationToken token)
         {
             using var received = new MemoryStream();

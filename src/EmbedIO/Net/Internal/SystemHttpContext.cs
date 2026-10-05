@@ -93,6 +93,7 @@ namespace EmbedIO.Net.Internal
                 receiveBufferSize,
                 keepAliveInterval)
                 .ConfigureAwait(false);
+            ((SystemHttpResponse)Response).MarkWebSocketAccepted();
             return new WebSocketContext(this, context.SecWebSocketVersion, requestedProtocols, acceptedProtocol, new SystemWebSocket(context.WebSocket), cancellationToken);
         }
 
