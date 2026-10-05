@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <OutputType>Exe</OutputType>
@@ -8,7 +8,6 @@
     <Description>EmbedIO-Neo command-line development server.</Description>
     <Authors>William Smith; EmbedIO CLI contributors</Authors>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/WilliamSmithEdward/embedio-neo</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
@@ -16,6 +15,5 @@
     <InternalsVisibleTo Include="EmbedIO.Tests" />
     <None Include="../../LICENSE" Pack="true" PackagePath="" />
     <None Include="../../licenses/embedio-cli-LICENSE" Pack="true" PackagePath="licenses/" />
-    <None Include="../../CLI.md" Pack="true" PackagePath="README.md" />
   </ItemGroup>
 </Project>
