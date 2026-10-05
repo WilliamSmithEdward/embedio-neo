@@ -1,0 +1,162 @@
+# Routes, verbs, and parameters
+
+A request has a verb (such as GET), a path (such as `/api/items/42`), and
+optionally a query string or body. Use a controller to map these to C# methods.
+
+| Task | Verb | Where input usually goes |
+| --- | --- | --- |
+| Read an item | GET | Route parameter: `/api/items/42` |
+| Filter a list | GET | Query parameter: `/api/search?term=hello` |
+| Create an item | POST | JSON body |
+| Replace an item | PUT | Route parameter and JSON body |
+| Remove an item | DELETE | Route parameter |
+
+EmbedIO dispatches to your method; your method supplies the application behavior.
+The example below echoes inputs so you can learn the request handling without
+setting up a database. It does not save, replace, or delete stored items.
+
+## Run the example
+
+Use the project from [Your first JSON endpoint](README.md). Replace `Program.cs`
+with this complete program:
+
+```csharp
+using System;
+using System.Threading;
+using EmbedIO;
+using EmbedIO.Routing;
+using EmbedIO.WebApi;
+
+using var shutdown = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true;
+    shutdown.Cancel();
+};
+
+using var server = new WebServer("http://localhost:9696/")
+    .WithWebApi("/api", api => api.WithController<ItemsController>());
+
+Console.WriteLine("Open http://localhost:9696/api/items/42");
+Console.WriteLine("Press Ctrl+C to stop.");
+try
+{
+    await server.RunAsync(shutdown.Token);
+}
+catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+{
+}
+
+public sealed class ItemsController : WebApiController
+{
+    [Route(HttpVerbs.Get, "/items/{id}")]
+    public object GetItem(string id) => new { id = ParseId(id) };
+
+    [Route(HttpVerbs.Get, "/search")]
+    public object Search([QueryField(true)] string term) => new { term };
+
+    [Route(HttpVerbs.Post, "/items")]
+    public object PostItem([JsonData] ItemInput input)
+    {
+        ValidateInput(input);
+        return new { operation = "post", name = input.Name };
+    }
+
+    [Route(HttpVerbs.Put, "/items/{id}")]
+    public object PutItem(string id, [JsonData] ItemInput input)
+    {
+        ValidateInput(input);
+        return new { operation = "put", id = ParseId(id), name = input.Name };
+    }
+
+    [Route(HttpVerbs.Delete, "/items/{id}")]
+    public object DeleteItem(string id) => new { operation = "delete", id = ParseId(id) };
+
+    private static int ParseId(string id)
+    {
+        if (!int.TryParse(id, out var value))
+            throw HttpException.BadRequest("Id must be a whole number.");
+        return value;
+    }
+
+    private static void ValidateInput(ItemInput? input)
+    {
+        if (input == null || string.IsNullOrWhiteSpace(input.Name))
+            throw HttpException.BadRequest("Name is required.");
+    }
+}
+
+public sealed class ItemInput
+{
+    public string? Name { get; set; }
+}
+```
+
+Run `dotnet run`. Leave it running while you try the requests below.
+
+## Route and query parameters
+
+Open these addresses in your browser:
+
+| Address | JSON response |
+| --- | --- |
+| `http://localhost:9696/api/items/42` | `{"id":42}` |
+| `http://localhost:9696/api/search?term=hello` | `{"term":"hello"}` |
+
+`{id}` binds to the method parameter named `id`. Our `ParseId` helper converts
+it to an integer and returns 400 Bad Request for an invalid number.
+`[QueryField(true)]` reads the query field with the same name as the parameter
+and requires it to be present.
+The query is separate from the route: `/search?term=hello` matches `/search`.
+
+Here `term` is required. For an optional query field, use
+`[QueryField(false)] string term = ""` instead. Missing required query fields
+produce 400 Bad Request.
+
+## POST and PUT with JSON
+
+In the project folder, create `item.json` containing:
+
+```json
+{"Name":"Notebook"}
+```
+
+Open a second terminal in that folder. These commands use `curl`; on Windows,
+use `curl.exe` to avoid the older PowerShell alias.
+
+```sh
+curl -i -X POST http://localhost:9696/api/items -H "Content-Type: application/json" --data-binary "@item.json"
+curl -i -X PUT http://localhost:9696/api/items/42 -H "Content-Type: application/json" --data-binary "@item.json"
+```
+
+POST returns `{"operation":"post","name":"Notebook"}`.
+PUT returns `{"operation":"put","id":42,"name":"Notebook"}`.
+Both return 200 in this demonstration.
+
+`[JsonData]` reads the JSON body into `ItemInput`. Use public properties for the
+request data. Invalid JSON produces 400 Bad Request; our `ValidateInput` method
+also rejects a missing or blank name. Validation of application rules belongs
+in your code.
+
+The verb is part of the route. Opening `/api/items` in a browser sends GET,
+so it will not call the POST method.
+
+## DELETE
+
+```sh
+curl -i -X DELETE http://localhost:9696/api/items/42
+```
+
+The response is `{"operation":"delete","id":42}`. DELETE passes the same
+route parameter as GET and PUT; this example does not need a body.
+
+## Choose response status codes
+
+Returning an object produces a JSON response with status 200 unless you set
+another status. In a real create method, after successfully storing the item,
+set `HttpContext.Response.StatusCode = 201` before returning its representation.
+For a missing item, throw `HttpException.NotFound()`. For a response with no body,
+set status 204 and use a method that returns `void` or `Task`.
+
+Next: [Serve HTML and files](files.md) alongside this API, or
+[await an outbound HTTP request](../async-outbound-requests.md).
