@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add MimeType.Xml and MimeType.TextXml constants and document opt-in controller XML responses using existing serializers; preserve default JSON behavior.
+
 - Preserve pre-existing endpoint prefixes when a live alias registration fails; roll back only the prefixes actually added by that attempt.
 
 - Register managed localhost prefixes on both enabled loopback families, with rollback and ownership-safe endpoint cleanup. Keep failed live additions retryable and reject duplicate ownership or incompatible HTTP/HTTPS endpoint registrations.

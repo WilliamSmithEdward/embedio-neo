@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: XML responses
+      href: user-reports/xml-responses.md
     - name: Dual-stack localhost
       href: user-reports/dual-stack-localhost.md
     - name: Performance and code audit

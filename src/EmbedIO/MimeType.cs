@@ -30,6 +30,12 @@ namespace EmbedIO
         /// </summary>
         public const string Json = "application/json";
 
+        /// <summary>The MIME type for XML, i.e. <c>application/xml</c>.</summary>
+        public const string Xml = "application/xml";
+
+        /// <summary>The text MIME type for XML, i.e. <c>text/xml</c>.</summary>
+        public const string TextXml = "text/xml";
+
         /// <summary>
         /// The MIME type for URL-encoded HTML forms,
         /// i.e. <c>application/x-www-form-urlencoded</c>.
