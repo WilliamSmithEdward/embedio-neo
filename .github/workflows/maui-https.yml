@@ -1,0 +1,91 @@
+name: MAUI HTTPS
+on:
+  workflow_call:
+    inputs:
+      update-locks:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      update-locks:
+        description: Regenerate the test-only package locks for review
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  smoke:
+    name: MAUI HTTPS (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-2025
+            workload: maui-windows
+          - platform: ios
+            os: macos-26
+            workload: maui-ios
+          - platform: maccatalyst
+            os: macos-26
+            workload: maui-maccatalyst
+          - platform: android
+            os: ubuntu-24.04
+            workload: maui-android
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    env:
+      SMOKE_PLATFORM: ${{ matrix.platform }}
+      SMOKE_WORKLOAD: ${{ matrix.workload }}
+      UPDATE_LOCKS: ${{ inputs.update-locks }}
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.401
+      - name: Install the pinned workload
+        shell: pwsh
+        run: |
+          dotnet workload install $env:SMOKE_WORKLOAD --version 10.0.401
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Generate disposable test certificates and build the app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force TestResults/maui-https | Out-Null
+          dotnet restore test/EmbedIO.HttpsCertificates/EmbedIO.HttpsCertificates.csproj --locked-mode
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project test/EmbedIO.HttpsCertificates/EmbedIO.HttpsCertificates.csproj --no-restore -- TestResults/maui-https/certificates
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $restoreMode = if ($env:UPDATE_LOCKS -eq 'true') { '--force-evaluate' } else { '--locked-mode' }
+          dotnet restore test/EmbedIO.MauiHttpsSmoke/EmbedIO.MauiHttpsSmoke.csproj "-p:SmokePlatform=$env:SMOKE_PLATFORM" $restoreMode
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build test/EmbedIO.MauiHttpsSmoke/EmbedIO.MauiHttpsSmoke.csproj "-p:SmokePlatform=$env:SMOKE_PLATFORM" -c Debug --no-restore -p:RunAnalyzers=false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Boot Android 10
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/embedio-https-avd"
+          printf 'y\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-29;google_apis;x86_64'
+          mkdir -p "$ANDROID_AVD_HOME"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n embediohttps -k 'system-images;android-29;google_apis;x86_64' --device pixel_2 --path "$ANDROID_AVD_HOME/embediohttps.avd" --force
+          sudo chown "$USER" /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -avd embediohttps -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect > TestResults/maui-https/emulator.log 2>&1 &
+      - name: Execute native client, WebView and external HTTPS tests
+        shell: pwsh
+        run: |
+          $python = if ($IsWindows) { 'python' } else { 'python3' }
+          & $python scripts/run_maui_https_smoke.py $env:SMOKE_PLATFORM
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: maui-https-${{ matrix.platform }}
+          path: |
+            TestResults/maui-https/${{ matrix.platform }}/
+            TestResults/maui-https/emulator.log
+            test/EmbedIO.MauiHttpsSmoke/packages.${{ matrix.platform }}.lock.json
+          if-no-files-found: error
