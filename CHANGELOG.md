@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve pre-existing endpoint prefixes when a live alias registration fails; roll back only the prefixes actually added by that attempt.
+
 - Register managed localhost prefixes on both enabled loopback families, with rollback and ownership-safe endpoint cleanup. Keep failed live additions retryable and reject duplicate ownership or incompatible HTTP/HTTPS endpoint registrations.
 - Repair static-file cache eviction, replacement accounting and cleaner ownership.
   Reduce HTTP, routing, diagnostics and WebSocket allocations; remove dormant

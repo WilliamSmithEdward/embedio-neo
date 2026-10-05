@@ -105,7 +105,7 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        public void AddPrefix(ListenerPrefix prefix, HttpListener listener)
+        public bool AddPrefix(ListenerPrefix prefix, HttpListener listener)
         {
             List<ListenerPrefix>? current;
             List<ListenerPrefix> future;
@@ -123,7 +123,7 @@ namespace EmbedIO.Net.Internal
                 }
                 while (Interlocked.CompareExchange(ref _unhandled, future, current) != current);
 
-                return;
+                return true;
             }
 
             if (prefix.Host == "+")
@@ -136,7 +136,7 @@ namespace EmbedIO.Net.Internal
                     AddSpecial(future, prefix);
                 }
                 while (Interlocked.CompareExchange(ref _all, future, current) != current);
-                return;
+                return true;
             }
 
             Dictionary<ListenerPrefix, HttpListener> prefs, p2;
@@ -152,13 +152,14 @@ namespace EmbedIO.Net.Internal
                         throw new HttpListenerException(400, $"There is another listener for {prefix}");
                     }
 
-                    return;
+                    return false;
                 }
 
                 p2 = prefs.ToDictionary(x => x.Key, x => x.Value);
                 p2[prefix] = listener;
             }
             while (Interlocked.CompareExchange(ref _prefixes, p2, prefs) != prefs);
+            return true;
         }
 
         public void RemovePrefix(ListenerPrefix prefix, HttpListener listener)

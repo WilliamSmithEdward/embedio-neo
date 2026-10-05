@@ -1,4 +1,4 @@
-# Localhost on IPv4 and IPv6
+﻿# Localhost on IPv4 and IPv6
 
 [Upstream #576](https://github.com/unosquare/embedio/issues/576), reported by
 `KazWolfe`, describes empty replies when the managed listener is registered with
@@ -62,7 +62,9 @@ Registration is serialized to avoid competing socket factories for the same
 endpoint. Each successful prefix records its actual endpoints; stopping removes
 that registration without resolving DNS again or creating replacement sockets.
 If a later bind fails, earlier binds in that prefix registration are rolled back.
-Failed live prefix additions remain retryable.
+Failed live prefix additions remain retryable. Rollback removes only prefixes
+actually added by the attempt, preserving pre-existing registrations even when
+the rejected request is an alias owned by the same listener.
 
 Removal checks the full host, port, path, transport and owning listener, so two
 listeners sharing an endpoint do not remove each other's routes. Duplicate
@@ -74,10 +76,11 @@ do not expect a partially started dual-stack listener to remain active.
 ## Validation and limits
 
 Before the correction, two of four forced-address real HTTP cases failed on
-current source. All twenty final regressions cover both families, explicit IP
+current source. All twenty-three final regressions cover both families, explicit IP
 prefixes and ordering, TLS, unregistered-host rejection, shared-host isolation,
 partial-bind and multi-prefix rollback, registration conflicts, IPv4-only mode,
-stop/restart, concurrent registration and live-prefix retries.
+stop/restart, concurrent registration, live-prefix retries, and existing-route
+preservation after rejected wildcard aliases or partial localhost alias expansion.
 
 The tests control the TCP destination separately from the request hostname, so
 DNS ordering and client fallback cannot hide a broken family. IPv6-specific
