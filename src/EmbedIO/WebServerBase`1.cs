@@ -197,6 +197,7 @@ namespace EmbedIO
             if (Interlocked.Exchange(ref _runStarted, 1) != 0)
                 throw new InvalidOperationException("The web server has already been started.");
 
+            var startupCompleted = false;
             try
             {
                 State = WebServerState.Loading;
@@ -209,6 +210,7 @@ namespace EmbedIO
 
                 cancellationToken.ThrowIfCancellationRequested();
                 State = WebServerState.Listening;
+                startupCompleted = true;
                 await ProcessRequestsAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -219,8 +221,11 @@ namespace EmbedIO
             {
                 // Preparation may have bound a port before a module or callback failed.
                 // Release the listener without replacing the error the caller needs to diagnose.
-                try { OnFatalException(); }
-                catch (Exception cleanupError) { cleanupError.Log(LogSource, "Exception while stopping the failed server."); }
+                if (!startupCompleted)
+                {
+                    try { OnFatalException(); }
+                    catch (Exception cleanupError) { cleanupError.Log(LogSource, "Exception while stopping the failed server."); }
+                }
                 throw;
             }
             finally

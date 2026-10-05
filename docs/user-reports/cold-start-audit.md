@@ -25,7 +25,8 @@ a port. Previously `RunAsync()` changed state to Stopped without closing that
 listener, preventing a replacement server from taking the same endpoint until
 the failed instance was disposed. Failures now use the existing fatal-stop hook
 to release the listener. Cleanup errors are logged without replacing the original
-failure. Consumers still dispose the server and cancel their owned token in finally;
+failure. Processing-loop failures after readiness retain their existing cleanup
+ownership. Consumers still dispose the server and cancel their owned token in finally;
 this does not automatically dispose application-owned modules or session managers.
 
 Cancellation is checked before preparation, after preparation, before each module,
@@ -99,14 +100,14 @@ application controller/plugin registration costs.
 
 ## Validation
 
-Thirty new cases cover early completion/failure, cancellation at preparation and
+Thirty-one new cases cover early completion/failure, cancellation at preparation and
 module boundaries, concurrent/repeated starts, cleanup failure, readiness event
 lifetime, base-route matching/caching and the legacy mutable-list fallback.
 Six real-listener cases check pre-canceled starts and immediate port reuse after
 module/Listening-callback failure, keeping the failed server alive.
 
-The baseline passed 15 of 24 socket-free cases and failed nine startup regressions.
-All 143 targeted socket-free startup/routing/prior-performance cases passed after
+The baseline passed 16 of 25 socket-free cases and failed nine startup regressions.
+All 144 targeted socket-free startup/routing/prior-performance cases passed after
 the changes. Both library targets build; public/protected signatures match the
 baseline and hot/cold allocation budgets pass. Local real-listener tests are avoided
 because they trigger firewall prompts; full listener/native-platform validation

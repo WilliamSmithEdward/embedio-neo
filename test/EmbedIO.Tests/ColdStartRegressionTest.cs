@@ -39,6 +39,17 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public async Task ProcessingLoopFailureRetainsExistingCleanupOwnership()
+        {
+            var expected = new InvalidOperationException("after readiness");
+            using var server = new ProbeServer { ProcessError = expected };
+            Assert.That(await Assert.ThrowsAsync<InvalidOperationException>(() => server.RunAsync()), Is.SameAs(expected));
+            Assert.That(server.Processed, Is.EqualTo(1));
+            Assert.That(server.Released, Is.False);
+            Assert.That(server.State, Is.EqualTo(WebServerState.Stopped));
+        }
+
+        [Test]
         public async Task AlreadyCanceledRunDoesNotPrepareOrStartModules()
         {
             using var server = new ProbeServer();
@@ -176,6 +187,7 @@ namespace EmbedIO.Tests
             internal int Processed;
             internal bool Released;
             internal bool FailCleanup;
+            internal Exception? ProcessError;
             internal Action? OnPrepare;
             internal readonly TaskCompletionSource<bool> Finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -188,6 +200,7 @@ namespace EmbedIO.Tests
             protected override async Task ProcessRequestsAsync(CancellationToken token)
             {
                 Processed++;
+                if (ProcessError != null) throw ProcessError;
                 try { await Task.Delay(Timeout.Infinite, token); }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { }
             }
