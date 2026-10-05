@@ -12,6 +12,7 @@ namespace EmbedIO.Net.Internal
     public class SystemHttpResponse : IHttpResponse
     {
         private readonly System.Net.HttpListenerResponse _response;
+        private Stream? _outputStream;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SystemHttpResponse"/> class.
@@ -48,7 +49,9 @@ namespace EmbedIO.Net.Internal
         }
 
         /// <inheritdoc />
-        public Stream OutputStream => _response.OutputStream;
+        // Native Unix responses can become disposed when a write fails or their stream closes.
+        // Reuse the acquired stream so final cleanup does not reacquire it from a disposed response.
+        public Stream OutputStream => _outputStream ??= _response.OutputStream;
 
         /// <inheritdoc />
         public ICookieCollection Cookies { get; }
@@ -92,6 +95,6 @@ namespace EmbedIO.Net.Internal
         public void SetCookie(Cookie cookie) => _response.SetCookie(cookie);
 
         /// <inheritdoc />
-        public void Close() => _response.OutputStream?.Dispose();
+        public void Close() => _response.Close();
     }
 }

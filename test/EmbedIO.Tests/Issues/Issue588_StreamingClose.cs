@@ -16,6 +16,43 @@ namespace EmbedIO.Tests.Issues
 {
     public class Issue588_StreamingClose
     {
+        [TestCase(HttpListenerMode.EmbedIO)]
+        [TestCase(HttpListenerMode.Microsoft)]
+        public async Task RepeatedResponseClosePreservesCallbacksAndHealthyConnections(HttpListenerMode mode)
+        {
+            var count = 0;
+            var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var url = Resources.GetServerAddress();
+            using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(mode))
+                .WithAction("/", HttpVerbs.Get, async context =>
+                {
+                    context.OnClose(_ =>
+                    {
+                        if (Interlocked.Increment(ref count) == 3) completed.TrySetResult();
+                    });
+                    await context.SendStringAsync("sent", "text/plain", WebServer.Utf8NoBomEncoding);
+                    context.Response.Close();
+                    context.Response.Close();
+                });
+            using var stop = new CancellationTokenSource();
+            var running = server.RunAsync(stop.Token);
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            client.DefaultRequestHeaders.ConnectionClose = true;
+            try
+            {
+                for (var request = 0; request < 3; request++)
+                    Assert.That(await client.GetStringAsync(url), Is.EqualTo("sent"));
+                await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.That(count, Is.EqualTo(3));
+                Assert.That(server.State, Is.EqualTo(WebServerState.Listening));
+            }
+            finally
+            {
+                stop.Cancel();
+                await running.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+
         [Test]
         public async Task FlushFailureStillRunsAsyncCompletionAndCloseCallbacksInOrder()
         {

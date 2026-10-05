@@ -5,7 +5,9 @@
 - Ensure request-completion callbacks run after final response flush or close
   failures, including canceled streaming handlers (upstream #588). Document SSE
   framing, server cancellation and transport-error handling without changing
-  listener defaults or treating client disconnects as server cancellation.
+  listener defaults or treating client disconnects as server cancellation. Reuse
+  the native response stream and close idempotently so Unix response disposal
+  does not escalate into fatal listener cleanup.
 
 ## [1.0.1] - 2026-10-05
 

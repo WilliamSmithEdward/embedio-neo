@@ -132,12 +132,19 @@ even after a flush failure, and invokes close callbacks even if response closure
 fails. Callback ordering and exception isolation are preserved; public APIs,
 listener defaults and disconnect-token semantics are unchanged.
 
+The native response wrapper also retains its acquired output stream and delegates
+closure to the native response's idempotent `Close()` method. On Unix, reacquiring
+a stream after native response disposal could throw during final cleanup and stop
+the whole listener. A pinned .NET 10.0.12 / Ubuntu 24.04 container reproduced that
+failure; fresh connections and repeated response-close regressions verify the fix.
+
 Eight real-listener regressions exercise both listener modes: ordinary streaming
 completion, server cancellation, remote reset with strict writes, and remote
 reset with suppressed writes. They verify a real Web API route, an initial SSE
 event, the token lifetime, exactly one close callback after the handler exits,
 and healthy fresh connections after completion or reset.
-A ninth in-process regression checks asynchronous cleanup followed by close
+Two additional real-listener cases exercise repeated response closure and fresh
+connections. An in-process regression checks asynchronous cleanup followed by close
 callbacks after a flush failure, including isolation of a failing callback.
 The sample uses existing APIs available in 1.0.1; the cleanup correction is an
 unreleased change and must not be assumed present in that published package.
