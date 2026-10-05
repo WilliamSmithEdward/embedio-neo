@@ -1,16 +1,16 @@
-# Unreleased migration: removing SWAN
+# Migrating to EmbedIO-Neo 1.0.0
 
 William approved full SWAN removal on October 4, 2026. This is a source and
 binary breaking change. Rebuild downstream applications and libraries against
-this fork. The inherited package version is a development placeholder; these
-changes must not ship as a compatible 3.x update. Nothing has been published.
+this fork. Neo starts its independent version sequence at 1.0.0; this is not a
+compatible upstream 3.x update.
 
 ## API replacements
 
 Neo's approved NuGet identities are `EmbedIO-Neo`, `EmbedIO-Neo.JsonServer`,
 `EmbedIO-Neo.Testing`, and `EmbedIO-Neo.Cli`. Replace corresponding archived
 package references when adopting Neo. Assembly names, namespaces and the CLI
-command remain unchanged. No Neo package has been published yet.
+command remain unchanged. Neo packages start at version 1.0.0.
 
 | Previous dependency/API | Replacement |
 | --- | --- |

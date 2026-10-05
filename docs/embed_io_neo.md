@@ -220,3 +220,13 @@ it reads entries directly and never extracts them to filesystem paths.
 The aim is a maintained, coherent EmbedIO continuation: easier to build, test,
 understand, and extend, while treating existing users and the original authors'
 work with care.
+
+## First release: 1.0.0
+
+William approved publishing Neo 1.0.0 on October 4, 2026. This starts an
+independent release sequence; the inherited 3.5.0 placeholder was never released.
+The shared version now applies to all four packages. CHANGELOG.md records the
+initial feature set, approved SWAN and CLI plugin migrations, prior authors'
+contributions, validation, and known limits. Release publication goes through
+the protected PR checks, a fresh preview, and the v1.0.0 tag workflow with signed
+provenance and NuGet trusted publishing.
