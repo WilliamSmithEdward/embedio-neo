@@ -33,7 +33,8 @@ namespace EmbedIO.Tests
         public Task ReadsPreserveUpstreamPayloads(string path, string expected)
             => TestWebServer.UseAsync(
                 server => server.WithModule(new JsonServerModule(jsonPath: _path)),
-                async client => {
+                async client =>
+                {
                     var actual = await client.GetStringAsync(path);
                     Assert.That(JsonNode.DeepEquals(JsonNode.Parse(actual), JsonNode.Parse(expected)), Is.True);
                 });
@@ -42,7 +43,8 @@ namespace EmbedIO.Tests
         public Task WritesPreserveCrudBehaviorAndArePersistedBeforeResponding()
             => TestWebServer.UseAsync(
                 server => server.WithModule(new JsonServerModule(jsonPath: _path)),
-                async client => {
+                async client =>
+                {
                     using var post = await client.PostAsync("/api/posts", new StringContent("{\"id\":2,\"title\":\"added\"}"));
                     Assert.That(post.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                     using (var stored = JsonDocument.Parse(File.ReadAllText(_path)))
@@ -65,7 +67,8 @@ namespace EmbedIO.Tests
         public Task ErrorStatusIsStable(string path, HttpStatusCode expected)
             => TestWebServer.UseAsync(
                 server => server.WithModule(new JsonServerModule(jsonPath: _path)),
-                async client => {
+                async client =>
+                {
                     using var response = await client.GetAsync(path);
                     Assert.That(response.StatusCode, Is.EqualTo(expected));
                 });
@@ -74,8 +77,10 @@ namespace EmbedIO.Tests
         public Task ConcurrentWritesAreAllPersisted()
             => TestWebServer.UseAsync(
                 server => server.WithModule(new JsonServerModule(jsonPath: _path)),
-                async client => {
-                    await Task.WhenAll(Enumerable.Range(2, 20).Select(async id => {
+                async client =>
+                {
+                    await Task.WhenAll(Enumerable.Range(2, 20).Select(async id =>
+                    {
                         using var response = await client.PostAsync("/api/posts", new StringContent($"{{\"id\":{id}}}"));
                         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                     }));
@@ -87,10 +92,52 @@ namespace EmbedIO.Tests
         public Task PersistenceErrorsAreReported()
             => TestWebServer.UseAsync(
                 server => server.WithModule(new JsonServerModule(jsonPath: _path)),
-                async client => {
+                async client =>
+                {
                     using var lockedFile = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.None);
                     using var response = await client.PostAsync("/api/posts", new StringContent("{\"id\":2}"));
                     Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+                });
+
+        [TestCase("POST", "/api/posts")]
+        [TestCase("PUT", "/api/posts/1")]
+        public Task InvalidJsonDoesNotMutateMemoryOrDisk(string method, string path)
+            => TestWebServer.UseAsync(
+                server => server.WithModule(new JsonServerModule(jsonPath: _path)),
+                async client =>
+                {
+                    var original = File.ReadAllText(_path);
+                    using var request = new HttpRequestMessage(new HttpMethod(method), path)
+                    {
+                        Content = new StringContent("{\"title\":")
+                    };
+                    using var response = await client.SendAsync(request);
+                    Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+                    Assert.That(File.ReadAllText(_path), Is.EqualTo(original));
+                    var actual = await client.GetStringAsync("/api/");
+                    Assert.That(JsonNode.DeepEquals(JsonNode.Parse(actual), JsonNode.Parse(original)), Is.True);
+                });
+
+        [Test]
+        public Task PutMergesPropertiesAndPreservesIdentityInPersistedAndReloadedStore()
+            => TestWebServer.UseAsync(
+                server => server.WithModule(new JsonServerModule(jsonPath: _path)),
+                async client =>
+                {
+                    using var response = await client.PutAsync("/api/posts/1", new StringContent("{\"title\":\"changed\",\"extra\":true}"));
+                    Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                    using var stored = JsonDocument.Parse(File.ReadAllText(_path));
+                    var row = stored.RootElement.GetProperty("posts")[0];
+                    Assert.That(row.GetProperty("id").GetInt32(), Is.EqualTo(1));
+                    Assert.That(row.GetProperty("title").GetString(), Is.EqualTo("changed"));
+                    Assert.That(row.GetProperty("extra").GetBoolean(), Is.True);
+                    await TestWebServer.UseAsync(
+                        server => server.WithModule(new JsonServerModule(jsonPath: _path)),
+                        async reloaded =>
+                        {
+                            var actual = await reloaded.GetStringAsync("/api/posts/1");
+                            Assert.That(JsonNode.DeepEquals(JsonNode.Parse(actual), JsonNode.Parse(row.GetRawText())), Is.True);
+                        });
                 });
     }
 }

@@ -523,7 +523,14 @@ namespace EmbedIO.Files
 
             // If it's a HEAD request, we're done.
             if (!sendResponseBody)
+            {
+                if (compressionMethod == CompressionMethod.None || content != null)
+                    context.Response.ContentLength64 = responseContentLength;
+                else
+                    context.Response.SendChunked = true;
+
                 return;
+            }
 
             // If content must be sent AND cached, first read it and store it.
             // If the requested resource is a directory, we have already listed it by now,
@@ -550,7 +557,7 @@ namespace EmbedIO.Files
             if (content != null)
             {
                 context.Response.ContentLength64 = responseContentLength;
-                var offset = isPartial ? (int) partialStart : 0;
+                var offset = isPartial ? (int)partialStart : 0;
                 await context.Response.OutputStream.WriteAsync(content, offset, (int)responseContentLength, context.CancellationToken)
                     .ConfigureAwait(false);
 

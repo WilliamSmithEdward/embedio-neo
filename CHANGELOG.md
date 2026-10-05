@@ -8,6 +8,15 @@
   listener defaults or treating client disconnects as server cancellation. Reuse
   the native response stream and close idempotently so Unix response disposal
   does not escalate into fatal listener cleanup.
+- Fixed query-data parsing overwriting cached form data within a request (#57).
+- Fixed WebSocket negotiation when clients offer multiple subprotocols in one
+  header value (#58).
+- Fixed static-file HEAD response framing: known representation lengths are
+  preserved, and unknown compressed lengths are omitted (#60).
+- Fixed native Unix WebSocket completion reacquiring a disposed HTTP response
+  stream and shutting down the listener (#62).
+- Added 106 regression and boundary cases for listener adapters, WebSocket
+  messages, HTTP modules, request binding/bodies, sessions, files and utilities.
 
 ## [1.0.1] - 2026-10-05
 
