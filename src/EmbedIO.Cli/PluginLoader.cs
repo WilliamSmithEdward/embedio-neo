@@ -61,16 +61,24 @@ namespace EmbedIO.Cli
             _contexts.Clear();
         }
 
-        private sealed class PluginApiModule() : WebApiModule("/")
+        private sealed class PluginApiModule : WebApiModule
         {
+            public PluginApiModule() : base("/") { }
+
             protected override System.Threading.Tasks.Task OnPathNotFoundAsync(IHttpContext context)
                 => throw RequestHandler.PassThrough();
         }
 
-        private sealed class PluginContext(string path) : AssemblyLoadContext(isCollectible: true)
+        private sealed class PluginContext : AssemblyLoadContext
         {
-            private readonly AssemblyDependencyResolver _resolver = new(path);
-            private readonly string _directory = Path.GetDirectoryName(path)!;
+            private readonly AssemblyDependencyResolver _resolver;
+            private readonly string _directory;
+
+            public PluginContext(string path) : base(isCollectible: true)
+            {
+                _resolver = new AssemblyDependencyResolver(path);
+                _directory = Path.GetDirectoryName(path)!;
+            }
 
             protected override Assembly? Load(AssemblyName name)
             {

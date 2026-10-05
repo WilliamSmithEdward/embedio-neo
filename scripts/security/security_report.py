@@ -288,7 +288,7 @@ def report(outcome: Outcome, provenance: str) -> str:
     for finding in outcome.unexpected:
         total, unexpected = counts[finding.scan]
         counts[finding.scan] = (total, unexpected + 1)
-    lines = ["# AndromedaTM1Sharp security report", "", provenance, ""]
+    lines = ["# EmbedIO-Neo security report", "", provenance, ""]
     if outcome.passed:
         accepted = sum(len(found) for found in outcome.accepted.values())
         lines.append(f"**Passed.** Every finding is one of the {accepted} accepted below, each with its reason.")

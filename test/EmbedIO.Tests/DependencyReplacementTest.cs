@@ -16,6 +16,33 @@ namespace EmbedIO.Tests
     public class DependencyReplacementTest
     {
         [Test]
+        [NonParallelizable]
+        public void TraceMessagesCannotInjectAdditionalRecords()
+        {
+            var write = typeof(EmbedIO.Diagnostics.Log).GetMethod("Write", BindingFlags.Static | BindingFlags.NonPublic)!;
+            using var output = new StringWriter();
+            using var listener = new TextWriterTraceListener(output);
+            var source = EmbedIO.Diagnostics.Log.Source;
+            var previous = source.Switch.Level;
+            source.Listeners.Add(listener);
+            try
+            {
+                source.Switch.Level = SourceLevels.All;
+                write.Invoke(null, new object[] { TraceEventType.Warning, "source\r\nforged", "first\nsecond\rthird" });
+                source.Flush();
+                var text = output.ToString();
+                Assert.That(text, Does.Contain("source\\r\\nforged"));
+                Assert.That(text, Does.Contain("first\\nsecond\\rthird"));
+                Assert.That(text.TrimEnd('\r', '\n').Split('\n'), Has.Length.EqualTo(1));
+            }
+            finally
+            {
+                source.Listeners.Remove(listener);
+                source.Switch.Level = previous;
+            }
+        }
+
+        [Test]
         public void LogObserversRemainActiveWithTracingOffAndCannotRecursivelyNotify()
         {
             var log = typeof(EmbedIO.Diagnostics.Log);

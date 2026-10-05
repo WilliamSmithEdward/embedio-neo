@@ -21,7 +21,11 @@ namespace EmbedIO.Diagnostics
                 try { MessageWritten?.Invoke(message); }
                 finally { _notifying = false; }
             }
-            Source.TraceEvent(level, 0, "[{0}] {1}", source, message);
+            // Keep observers' original text for security criteria, but prevent
+            // request-derived CR/LF from creating forged trace records.
+            Source.TraceEvent(level, 0, "[{0}] {1}",
+                source.Replace("\r", "\\r").Replace("\n", "\\n"),
+                message.Replace("\r", "\\r").Replace("\n", "\\n"));
         }
     }
 

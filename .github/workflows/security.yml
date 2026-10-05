@@ -26,6 +26,10 @@ permissions:
 
 jobs:
   codeql:
+    # The accepted list covers the whole tree and checks for stale entries.
+    # Diff-only results cannot reliably validate it on pull requests.
+    env:
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: "false"
     name: CodeQL (${{ matrix.language }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30

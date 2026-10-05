@@ -73,7 +73,9 @@ A finding is fixed, or accepted with a written reason in
 rule, path and flagged source text; malware entries match tool, rule, path and
 SHA-256. An entry that no longer matches fails the report. zizmor keeps its
 exceptions in `.github/zizmor.yml` or inline beside the line they excuse, each
-with its reason. No scanner findings have been accepted at onboarding preparation.
+with its reason. The ZIP-slip report in `ZipFileProvider` is accepted because this
+provider reads entries directly from an archive and never extracts them to filesystem
+paths. The accepted entry documents the affected code and the review boundary.
 
 ## Pinning and updates
 

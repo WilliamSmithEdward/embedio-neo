@@ -8,3 +8,16 @@
 #
 # Add an entry only with a reason a reviewer can check. Fixing the code
 # is the better answer wherever there is one.
+
+[[finding]]
+tool = "CodeQL"
+rule = "cs/zipslip"
+reason = """
+ZipFileProvider never extracts entries or opens entry names as local filesystem
+paths. MappedResourceInfo.ForFile stores a provider-specific archive key, and
+OpenFile resolves that key only with ZipArchive.GetEntry(...).Open(). The flagged
+entry.Name is display metadata, not a filesystem destination. No archive entry
+can make this provider write outside the archive; this extraction warning is a
+false positive. Re-review if the provider gains filesystem extraction.
+"""
+where = [{ path = "src/EmbedIO/Files/ZipFileProvider.cs", line = "entry.Name," }]
