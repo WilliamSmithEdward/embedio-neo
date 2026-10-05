@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Preserve separate `Set-Cookie` fields in managed WebSocket upgrade responses
+  instead of comma-folding multiple cookies (upstream #583). Legacy request-cookie
+  echo and other handshake-header behavior are unchanged.
 - Added an opt-in SSE event writer that prepares headers, safely frames multiline
   UTF-8 events and heartbeat comments, flushes each frame and observes cancellation.
   Added a runnable progress server/browser guide for upstream #587. Existing APIs,
