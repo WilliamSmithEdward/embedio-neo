@@ -48,22 +48,10 @@ jobs:
           dotnet-version: 10.0.401
       - name: Install the pinned workload
         shell: pwsh
-        run: |
-          dotnet workload install $env:SMOKE_WORKLOAD --version 10.0.401
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        run: ./scripts/maui_https_ci.ps1 install
       - name: Generate disposable test certificates and build the app
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force TestResults/maui-https | Out-Null
-          dotnet restore test/EmbedIO.HttpsCertificates/EmbedIO.HttpsCertificates.csproj --locked-mode
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet run --project test/EmbedIO.HttpsCertificates/EmbedIO.HttpsCertificates.csproj --no-restore -- TestResults/maui-https/certificates
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $restoreMode = if ($env:UPDATE_LOCKS -eq 'true') { '--force-evaluate' } else { '--locked-mode' }
-          dotnet restore test/EmbedIO.MauiHttpsSmoke/EmbedIO.MauiHttpsSmoke.csproj "-p:SmokePlatform=$env:SMOKE_PLATFORM" $restoreMode
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet build test/EmbedIO.MauiHttpsSmoke/EmbedIO.MauiHttpsSmoke.csproj "-p:SmokePlatform=$env:SMOKE_PLATFORM" -c Debug --no-restore -p:RunAnalyzers=false
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        run: ./scripts/maui_https_ci.ps1 build
       - name: Boot Android 10
         if: matrix.platform == 'android'
         shell: bash
@@ -76,10 +64,7 @@ jobs:
           "$ANDROID_HOME/emulator/emulator" -avd embediohttps -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect > TestResults/maui-https/emulator.log 2>&1 &
       - name: Execute native client, WebView and external HTTPS tests
         shell: pwsh
-        run: |
-          $python = if ($IsWindows) { 'python' } else { 'python3' }
-          & $python scripts/run_maui_https_smoke.py $env:SMOKE_PLATFORM
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        run: ./scripts/maui_https_ci.ps1 run
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
