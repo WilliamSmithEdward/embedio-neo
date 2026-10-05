@@ -88,6 +88,7 @@ namespace EmbedIO.Net.Internal
             TimeSpan keepAliveInterval,
             CancellationToken cancellationToken)
         {
+            ((SystemHttpResponse)Response).PrepareHeaders();
             var context = await _context.AcceptWebSocketAsync(
                 acceptedProtocol.NullIfEmpty(), // Empty string would throw; use null to signify "no subprotocol" here.
                 receiveBufferSize,

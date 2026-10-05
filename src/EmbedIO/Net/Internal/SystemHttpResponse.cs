@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Globalization;
+using System.Linq;
 using System.Net;
 using System.Text;
 
@@ -13,6 +15,8 @@ namespace EmbedIO.Net.Internal
     {
         private readonly System.Net.HttpListenerResponse _response;
         private Stream? _outputStream;
+        private bool _headersPrepared;
+        private bool _webSocketAccepted;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SystemHttpResponse"/> class.
@@ -51,11 +55,15 @@ namespace EmbedIO.Net.Internal
         /// <inheritdoc />
         // Native Unix responses can become disposed when a write fails or their stream closes.
         // Reuse the acquired stream so final cleanup does not reacquire it from a disposed response.
-        public Stream OutputStream => _outputStream ??= _response.OutputStream;
+        public Stream OutputStream => _outputStream ??= new SystemResponseStream(_response.OutputStream, PrepareHeaders);
 
         // A successful upgrade transfers the transport to the WebSocket.
         // Final HTTP cleanup must not reacquire the disposed native response stream.
-        internal void MarkWebSocketAccepted() => _outputStream = Stream.Null;
+        internal void MarkWebSocketAccepted()
+        {
+            _webSocketAccepted = true;
+            _outputStream = Stream.Null;
+        }
 
         /// <inheritdoc />
         public ICookieCollection Cookies { get; }
@@ -99,6 +107,62 @@ namespace EmbedIO.Net.Internal
         public void SetCookie(Cookie cookie) => _response.SetCookie(cookie);
 
         /// <inheritdoc />
-        public void Close() => _response.Close();
+        public void Close()
+        {
+            if (!_webSocketAccepted)
+                PrepareHeaders();
+            _response.Close();
+        }
+
+        internal void PrepareHeaders()
+        {
+            if (_headersPrepared)
+                return;
+
+            // Leave ordinary native serialization intact when no protected cookie needs correction.
+            if (!Cookies.Any(cookie => cookie.HttpOnly || cookie.Secure))
+            {
+                _headersPrepared = true;
+                return;
+            }
+
+            // Keep native collection replacement/SetCookie validation until headers commit.
+            // Detach it afterwards so the runtime cannot overwrite the complete headers
+            // with its serializer, which omits HttpOnly and Secure.
+            foreach (var cookie in Cookies)
+            {
+                if (cookie.Name.Length == 0)
+                    continue;
+                var value = new StringBuilder().Append(cookie.Name).Append('=').Append(cookie.Value);
+                if (cookie.Comment.Length > 0)
+                    value.Append("; Comment=").Append(cookie.Comment);
+                if (cookie.CommentUri != null)
+                    value.Append("; CommentURL=\"").Append(cookie.CommentUri).Append('"');
+                if (cookie.Discard)
+                    value.Append("; Discard");
+                if (cookie.Domain.Length > 0)
+                    value.Append("; Domain=").Append(cookie.Domain);
+                if (cookie.Expires != DateTime.MinValue)
+                {
+                    var seconds = Math.Max(0, (int)(cookie.Expires.ToUniversalTime() - DateTime.UtcNow).TotalSeconds);
+                    value.Append("; Max-Age=").Append(seconds.ToString(CultureInfo.InvariantCulture));
+                }
+                if (cookie.Path.Length > 0)
+                    value.Append("; Path=").Append(cookie.Path);
+                if (cookie.Port.Length > 0)
+                    value.Append("; Port=").Append(cookie.Port);
+                if (cookie.Version > 0)
+                    value.Append("; Version=").Append(cookie.Version.ToString(CultureInfo.InvariantCulture));
+                if (cookie.Secure)
+                    value.Append("; Secure");
+                if (cookie.HttpOnly)
+                    value.Append("; HttpOnly");
+                var header = cookie.Port.Length > 0 || cookie.ToString().EndsWith("; $Port", StringComparison.Ordinal)
+                    ? "Set-Cookie2" : "Set-Cookie";
+                _response.Headers.Add(header, value.ToString());
+            }
+            _response.Cookies = new CookieCollection();
+            _headersPrepared = true;
+        }
     }
 }

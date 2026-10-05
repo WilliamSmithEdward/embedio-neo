@@ -60,8 +60,7 @@ namespace EmbedIO.Tests
                     Assert.That(await client.GetStringAsync(url), Is.EqualTo("1"));
                     var cookies = handler.CookieContainer.GetCookies(new Uri(url));
                     Assert.That(cookies[LocalSessionManager.DefaultCookieName], Is.Not.Null);
-                    if (mode == HttpListenerMode.EmbedIO)
-                        Assert.That(cookies[LocalSessionManager.DefaultCookieName]!.HttpOnly, Is.True);
+                    Assert.That(cookies[LocalSessionManager.DefaultCookieName]!.HttpOnly, Is.True);
                     Assert.That(await client.GetStringAsync(url), Is.EqualTo("2"));
                 });
 
