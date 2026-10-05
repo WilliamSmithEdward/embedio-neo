@@ -1,4 +1,5 @@
 """Run the test-only MAUI app on a booted emulator and retain lifecycle evidence."""
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -29,7 +30,7 @@ def wait_for(operation, predicate, seconds=90):
     raise RuntimeError(f'Timed out; last observation: {last}')
 
 def state():
-    with urllib.request.urlopen('http://127.0.0.1:59697/state', timeout=5) as response:
+    with urllib.request.urlopen('http://127.0.0.1:59698/host-state', timeout=5) as response:
         result = json.load(response)
     if result.get('error'):
         raise RuntimeError(result['error'])
@@ -51,9 +52,22 @@ try:
     # A self-contained MAUI debug APK can take longer on a freshly booted emulator.
     adb('install', '-r', str(apks[0]), timeout=180)
     adb('forward', 'tcp:59697', 'tcp:59697')
+    adb('forward', 'tcp:59698', 'tcp:59698')
     launch()
-    initial = wait_for(state, lambda value: value['generation'] == 1 and value['resumed'] > 0 and value['https'] == 'passed')
+    initial = wait_for(state, lambda value: value['generation'] == 1 and value['resumed'] > 0 and value['frontend_state'] == 'Listening' and value['backend_state'] == 'Listening' and value['https'] == 'passed')
     observations = {'initial': initial}
+    def pair(_):
+        with urllib.request.urlopen('http://127.0.0.1:59698/index.html', timeout=10) as response:
+            if response.read() != b'frontend':
+                raise RuntimeError('Unexpected static frontend content.')
+        with urllib.request.urlopen('http://127.0.0.1:59697/api', timeout=10) as response:
+            if json.load(response)['request'] < 1:
+                raise RuntimeError('Unexpected API response.')
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(pair, range(320)))
+    observations['two_server_load'] = state()
+    if observations['two_server_load']['requests'] != 320:
+        raise RuntimeError('The API did not process every request.')
     with urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:59697/work', data=b'', method='POST'), timeout=10) as response:
         if response.status != 200 or response.read() != b'accepted':
             raise RuntimeError('Background job did not return the expected immediate response.')
@@ -71,12 +85,21 @@ try:
     launch()
     observations['resumed'] = wait_for(state, lambda value: value['resumed'] > before['resumed'])
     for phase, value in observations.items():
-        if value['pid'] != initial['pid'] or value['generation'] != 1:
+        if value['pid'] != initial['pid'] or value['generation'] != 1 or value['frontend_state'] != 'Listening' or value['backend_state'] != 'Listening':
             raise RuntimeError(f'{phase}: the process or listener unexpectedly restarted: {value}')
+    pair(0)
     launch('restart')
-    observations['rebound'] = wait_for(state, lambda value: value['generation'] == 2)
+    observations['rebound'] = wait_for(state, lambda value: value['generation'] == 2 and value['frontend_state'] == 'Listening' and value['backend_state'] == 'Listening')
     if observations['rebound']['pid'] != initial['pid']:
         raise RuntimeError('Explicit listener restart changed the app process.')
+    pair(0)
+    launch('dispose-backend')
+    observations['backend_disposed'] = wait_for(state, lambda value: value['backend_state'] == 'Stopped' and value['backend_completed'] and value['frontend_state'] == 'Listening')
+    with urllib.request.urlopen('http://127.0.0.1:59698/index.html', timeout=10) as response:
+        if response.read() != b'frontend':
+            raise RuntimeError('Backend disposal interrupted the frontend.')
+    if observations['backend_disposed']['pid'] != initial['pid']:
+        raise RuntimeError('Backend disposal restarted the app process.')
     report = {'passed': True, 'android_api': adb('shell', 'getprop', 'ro.build.version.sdk'), 'observations': observations}
     (ROOT / 'result.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(json.dumps(report, indent=2))

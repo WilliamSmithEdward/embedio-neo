@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Fixed internal listener stop/dispose leaving pending accepts and missing Stopped
+  notifications; shutdown now drains stale queued contexts without spinning.
+  Added cancellation, queue concurrency, disconnect, and two-server regressions
+  plus Android two-listener load/lifecycle coverage for upstream #595. The original
+  device stall cause is not confirmed.
+
 - Moved managed-listener TLS authentication out of the socket accept callback
   and under the first-request timeout, with pending handshakes tracked for shutdown.
   Added six desktop HTTPS regression cases, Android and Mac Catalyst HTTPS smoke
