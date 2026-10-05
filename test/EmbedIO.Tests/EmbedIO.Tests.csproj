@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableNUnitRunner>true</EnableNUnitRunner>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
+    <PackageReference Include="coverlet.MTP" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" PrivateAssets="all" />
+    <PackageReference Include="NUnit3TestAdapter">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="NUnit" PrivateAssets="all" />
+    <PackageReference Include="NUnit.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\EmbedIO.Testing\EmbedIO.Testing.csproj" />
+    <ProjectReference Include="../../src/EmbedIO.Cli/EmbedIO.Cli.csproj" />
+    <ProjectReference Include="../EmbedIO.Cli.TestPlugin/EmbedIO.Cli.TestPlugin.csproj" />
+    <ProjectReference Include="..\..\src\EmbedIO.JsonServer\EmbedIO.JsonServer.csproj" />
+  </ItemGroup>
+
+  <Target Name="CopyCliPluginFixture" AfterTargets="Build">
+    <Copy SourceFiles="../EmbedIO.Cli.TestPlugin/bin/$(Configuration)/net10.0/EmbedIO.Cli.TestPlugin.dll;../../src/EmbedIO/bin/$(Configuration)/net10.0/EmbedIO.dll"
+          DestinationFolder="$(OutDir)CliPlugins" />
+  </Target>
+</Project>

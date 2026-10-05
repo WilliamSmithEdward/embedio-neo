@@ -1,0 +1,12 @@
+{
+  "platformOptions": {
+    "Coverlet": {
+      "include": "[EmbedIO]*,[EmbedIO.JsonServer]*,[EmbedIO.Cli]*",
+      "exclude": "[EmbedIO.Tests]*,[EmbedIO.Testing]*,[EmbedIO.Cli.TestPlugin]*",
+      "excludeByAttribute": "ExcludeFromCodeCoverage,ExcludeFromCodeCoverageAttribute,GeneratedCodeAttribute,CompilerGeneratedAttribute",
+      "format": "cobertura",
+      "includeTestAssembly": false,
+      "excludeAssembliesWithoutSources": "MissingAll"
+    }
+  }
+}

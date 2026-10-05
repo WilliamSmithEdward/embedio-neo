@@ -1,0 +1,12 @@
+- name: Overview
+  href: README.md
+- name: Contributing
+  href: CONTRIBUTING.md
+- name: API Documentation
+  href: api/
+- name: Migration
+  href: MIGRATION.md
+- name: Command-line server
+  href: CLI.md
+- name: Neo baseline and direction
+  href: docs/embed_io_neo.md

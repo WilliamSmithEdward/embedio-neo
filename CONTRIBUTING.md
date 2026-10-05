@@ -1,0 +1,161 @@
+# Contributing to EmbedIO-Neo
+
+EmbedIO-Neo is maintained by William Smith. Use the issues and pull requests at
+https://github.com/WilliamSmithEdward/embedio-neo for this fork.
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Compatibility policy
+
+Enhancements, simplifications, bug fixes, and measured performance improvements
+should preserve existing consumers' behavior. Keep public APIs, namespaces,
+assembly and package identities, supported target frameworks, configuration,
+and HTTP/WebSocket behavior compatible.
+
+Any breaking change requires discussion with William and his explicit approval
+before implementation. Document the approved change, its rationale, affected
+consumers, and migration steps in the release notes. A major version bump alone
+does not substitute for approval.
+
+## Development
+
+The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
+The tests target .NET 10.
+
+Install the .NET 10 SDK selected by `global.json` (10.0.400 or a later patch
+in the same feature band), then run:
+
+```sh
+dotnet restore EmbedIO.sln
+dotnet build EmbedIO.sln --configuration Release --no-restore
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 366
+```
+
+Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
+to verified commit SHAs when changing workflows. SDK, test-runtime, and CI
+modernization should be reviewed separately from library behavior changes.
+
+Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
+and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
+select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
+for a whole-run timeout (not the old per-test hang timeout). CI checks for at
+least 366 executed/reported test cases to catch accidental discovery loss; update
+that baseline deliberately when adding or removing tests. NUnit 5 async assertions
+must be awaited.
+
+For coverage, append these options to the test command:
+
+```sh
+--coverlet
+```
+
+Coverlet's MIT-licensed MTP integration replaces `coverlet.msbuild`. Reports are
+written under the results directory and uploaded with TRX reports in CI. Coverage
+is collected for the core, JsonServer, and CLI; test utilities are excluded. There is
+no coverage percentage gate until a meaningful baseline is agreed.
+The explicit filters in `test/EmbedIO.Tests/testconfig.json` avoid Coverlet's
+automatic exclusions, which otherwise exclude `EmbedIO.Cli` from this test suite.
+
+StyleCop and its suppression files are removed. Existing explicit CA/IDE rule
+severities were migrated from the ruleset to `.editorconfig`; SDK analyzers and
+`EnforceCodeStyleInBuild` provide build checks. UTF-8 BOM, indentation, trailing
+whitespace, namespace style, and `var` preferences remain configured. StyleCop's
+Hungarian-prefix, member-layout, and XML-comment wording checks are intentionally
+not reproduced. This is not a claim of identical analyzer coverage.
+
+Format only the files you change, for example:
+
+```sh
+dotnet format whitespace EmbedIO.sln --no-restore --include path/to/Changed.cs
+dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes --include path/to/Changed.cs
+```
+
+Avoid a repository-wide formatting rewrite alongside functional work; inherited
+formatting and analyzer warnings can be addressed in focused changes. All testing
+and analyzer packages remain development-only. Library targets are unchanged.
+
+## Pull requests
+
+- Keep changes focused and explain the problem and resulting behavior.
+- Add regression coverage for bug fixes and tests for new behavior.
+- Report the checks run and any limitations. Include reproducible before/after
+  measurements for performance claims.
+- Update usage documentation when relevant. William manages release versions;
+  routine pull requests should not bump them independently.
+- Preserve the MIT license, original copyright notices, and third-party notices.
+- Obtain William's review before merging. Any accepted breaking change must
+  include the approval reference and migration documentation described above.
+
+The inherited `EmbedIO` package ID and version are retained for compatibility.
+A fork-specific NuGet publishing identity and release process must be agreed
+before publishing. Do not treat the original package's releases as fork releases.
+
+
+
+## Dependency policy and remaining work
+
+Prefer built-in .NET APIs. A local implementation may replace a package when
+parity tests cover its supported behavior, errors, and edge cases. Keep build/test
+tools separate from shipped runtime dependencies. Do not replace dependencies
+by copying their public types into a different assembly and claiming binary
+compatibility.
+
+SWAN has been fully removed with William's explicit approval. Built-in .NET APIs and local helpers replace its services. The .NET 10 core has no runtime package dependencies; .NET Standard 2.0 requires Microsoft System.Text.Json and its support packages. See [MIGRATION.md](MIGRATION.md) for the approved breaking changes.
+
+The unused Nullable polyfill and legacy FxCop package have been removed. SDK
+analyzers and EditorConfig-based style checks replace StyleCop; inherited warnings are
+visible and should be resolved in focused changes. The console sample and its Tubular, Dynamic LINQ, and frontend dependencies have been removed. Its two grid-only tests were removed with it; core HTTP, routing, WebSocket, and JsonServer coverage remains. The legacy Xamarin sample has also been removed, including its platform projects and WebView dependencies. Both library target frameworks are retained.
+
+## Extras integration
+
+JsonServer was imported from `unosquare/embedio-extras` commit
+`62234731c1b261494d0acee7174cfee5dcac60cf`. Its MIT notice is preserved in
+`licenses/embedio-extras-LICENSE` and included in its package. The project keeps
+the `EmbedIO.JsonServer` assembly/namespace and references this repository's core.
+No new runtime package is required. Typed collection operations replace dynamic
+binding internally. Tests cover inherited read/CRUD behavior and error statuses,
+concurrent writes, and persistence errors.
+
+Request handling and `UpdateDataStore` serialize access within one module
+instance. Mutations finish writing before returning success; write errors are
+reported instead of disappearing in background tasks. This is a small local
+JSON store, not a transactional database: external mutation through `Data`,
+multiple processes, rollback after write failure, and crash-safe atomic writes
+are not supported by that synchronization.
+
+Other Extras modules were assessed but not imported:
+
+- BearerToken's default provider does not verify passwords and falls back to a
+  fixed signing key when passed a null key. A replacement needs an explicit auth
+  design, approved contract changes, and security tests. Do not hand-roll JWT
+  cryptography merely to remove a dependency.
+- Markdown needs a parser with tested CommonMark parity; .NET has no equivalent
+  built-in parser. The archived implementation also needs a path-containment review.
+- LiteLibWebApi depends on LiteLib/SQLite; a database adapter should stay optional.
+- The ASP.NET Core adapter targets old hosting APIs and needs a separate port to
+  the modern shared framework with contract tests.
+
+## Unreleased fork changes
+
+- Fork documentation, ownership metadata, support links, and sample branding now
+  point to WilliamSmithEdward/embedio-neo. Original license notices remain intact.
+- Libraries add a .NET 10 target while retaining .NET Standard 2.0; tests require .NET 10. CI actions are pinned to commit hashes.
+- GitHub Actions replaces the inherited AppVeyor build/publishing configuration.
+  No package publication or documentation deployment is configured.
+- Wildcard listener prefixes (`*` and `+`) are parsed separately from ordinary
+  URI hostnames so wildcard servers can start. Existing namespaces, package IDs,
+  and assembly names remain unchanged.
+- JsonServer is maintained in this solution, with the persistence corrections
+  described above. SWAN removal is an approved breaking change; consumers must rebuild and follow MIGRATION.md.
+
+Before release, select an appropriate major version and fork-specific NuGet IDs, run cross-platform CI, complete
+an API compatibility check against a recorded upstream binary, and address
+remaining analyzer warnings. No performance improvement is claimed without a
+benchmark.
+
+## CLI integration
+
+The CLI is maintained in `src/EmbedIO.Cli` in this solution, targeting .NET 10
+and referencing the local core without new runtime packages. Its command contract,
+upstream provenance, local packaging, and approved plugin migration are documented
+in [CLI.md](CLI.md). `test/EmbedIO.Cli.TestPlugin` is an unpackaged fixture used
+to test real assembly loading, controller routes, and WebSocket plugins.

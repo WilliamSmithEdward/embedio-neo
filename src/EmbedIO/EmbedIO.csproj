@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>EmbedIO-Neo, a compatibility-focused fork of the EmbedIO cross-platform, module-based, MIT-licensed web server.</Description>
+    <AssemblyTitle>EmbedIO-Neo Web Server</AssemblyTitle>
+    <Authors>William Smith; EmbedIO contributors</Authors>
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>EmbedIO</AssemblyName>
+    <PackageId>EmbedIO</PackageId>
+    <Product>EmbedIO-Neo</Product>
+    <Company>William Smith</Company>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageProjectUrl>https://github.com/WilliamSmithEdward/embedio-neo</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/WilliamSmithEdward/embedio-neo</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>webserver websocket webapi http</PackageTags>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And Exists('NugetSigning.pfx')">
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>NugetSigning.pfx</AssemblyOriginatorKeyFile>
+    <DelaySign>false</DelaySign>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Link="LICENSE" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+  </ItemGroup>
+
+</Project>
