@@ -10,6 +10,7 @@ def main(directory):
     if len(packages) != 4:
         raise ValueError(f"Expected four packages, found {len(packages)}")
     root = Path(__file__).resolve().parents[1]
+    expected_readme = (root / "README.md").read_bytes()
     expected_license = (root / "LICENSE").read_bytes()
     identities = set()
     for package in packages:
@@ -17,6 +18,8 @@ def main(directory):
             names = set(archive.namelist())
             if not {"README.md", "embedio_neo_icons.png"} <= names:
                 raise ValueError(f"Missing package README or icon: {package.name}")
+            if archive.read("README.md") != expected_readme:
+                raise ValueError(f"README differs from root source: {package.name}")
             if archive.read("LICENSE") != expected_license:
                 raise ValueError(f"License differs from source: {package.name}")
             for name in (b"Samuel Neff", b"Novell", b"Xamarin", b"sta.blockhead"):

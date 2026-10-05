@@ -5,10 +5,10 @@
 [![CI](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/ci.yml)
 [![Security](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml)
 [![Malware scan](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/WilliamSmithEdward/embedio-neo/badge)](https://scorecard.dev/viewer/?uri=github.com/WilliamSmithEdward/embedio-neo)
+[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/WilliamSmithEdward/embedio-neo?label=openssf%20score)](https://scorecard.dev/viewer/?uri=github.com/WilliamSmithEdward/embedio-neo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/LICENSE)
 
-![EmbedIO-Neo](images/embedio_neo.png)
+![EmbedIO-Neo](https://raw.githubusercontent.com/WilliamSmithEdward/embedio-neo/dcd0e9f3c27d0a618cf4aade10c7fea269db6d57/images/embedio_neo.png)
 
 A small, cross-platform, modular web server for .NET, maintained by William Smith.
 
@@ -296,3 +296,5 @@ Run `dotnet run --project src/EmbedIO.Cli -- --help` to get started.
 
 See [Neo baseline and direction](docs/embed_io_neo.md) for the initial changes,
 validation, acknowledgments, and planned work.
+
+For configurable cycle handling in JSON responses, see the [circular-reference guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/json-circular-references.md).

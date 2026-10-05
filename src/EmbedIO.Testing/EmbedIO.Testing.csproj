@@ -3,6 +3,7 @@
   <PropertyGroup>
     <AssemblyTitle>EmbedIO-Neo Web Server Testing</AssemblyTitle>
     <PackageId>EmbedIO-Neo.Testing</PackageId>
+    <Description>In-process HTTP testing helpers, mock file providers, and test resources for EmbedIO-Neo web servers.</Description>
     <Authors>William Smith; EmbedIO contributors</Authors>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl>https://github.com/WilliamSmithEdward/embedio-neo</RepositoryUrl>
