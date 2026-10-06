@@ -1,17 +1,23 @@
 ﻿using System;
-using System.Linq;
 
 namespace EmbedIO.Net.Internal
 {
     internal static class HeaderUtility
     {
         public static string? GetCharset(string? contentType)
-            => contentType?
-                .Split(';')
-                .Select(p => p.Trim())
-                .Where(part => part.StartsWith("charset", StringComparison.OrdinalIgnoreCase))
-                .Select(GetAttributeValue)
-                .FirstOrDefault();
+        {
+            if (contentType == null) return null;
+            var start = 0;
+            while (true)
+            {
+                var separator = contentType.IndexOf(';', start);
+                var part = contentType.Substring(start, (separator < 0 ? contentType.Length : separator) - start).Trim();
+                if (part.StartsWith("charset", StringComparison.OrdinalIgnoreCase))
+                    return GetAttributeValue(part);
+                if (separator < 0) return null;
+                start = separator + 1;
+            }
+        }
 
         public static string? GetAttributeValue(string nameAndValue)
         {

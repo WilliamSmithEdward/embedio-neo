@@ -23,6 +23,7 @@ internal static class ListenerHttp
         var requests = Integer(args, "--requests", verify ? 8 : 20);
         var rounds = Integer(args, "--rounds", verify ? 1 : 3);
         var payloadSize = Integer(args, "--payload-bytes", 1024);
+        var chunkSize = args.Contains("--chunk-bytes", StringComparer.Ordinal) ? Integer(args, "--chunk-bytes", 1024) : 0;
         var bodySize = args.Contains("--request-body-bytes", StringComparer.Ordinal)
             ? Integer(args, "--request-body-bytes", 65536) : 0;
         var consumptionIndex = Array.IndexOf(args, "--body-consumption");
@@ -79,8 +80,18 @@ internal static class ListenerHttp
                                 }
                             }
                             context.Response.KeepAlive = !churn;
-                            context.Response.ContentLength64 = payload.Length;
-                            await context.Response.OutputStream.WriteAsync(payload, context.CancellationToken).ConfigureAwait(false);
+                            if (chunkSize == 0)
+                            {
+                                context.Response.ContentLength64 = payload.Length;
+                                await context.Response.OutputStream.WriteAsync(payload, context.CancellationToken).ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                context.Response.SendChunked = true;
+                                for (var offset = 0; offset < payload.Length; offset += chunkSize)
+                                    await context.Response.OutputStream.WriteAsync(payload, offset,
+                                        Math.Min(chunkSize, payload.Length - offset), context.CancellationToken).ConfigureAwait(false);
+                            }
                         }));
                     using var stop = new CancellationTokenSource();
                     var running = server.RunAsync(stop.Token);
@@ -165,6 +176,7 @@ internal static class ListenerHttp
                             connectionPolicy = churn ? "close-per-request" : "keep-alive",
                             workers,
                             payloadBytes = payload.Length,
+                            responseChunkBytes = chunkSize,
                             requestBodyBytes = bodySize,
                             bodyConsumption = bodySize > 0 ? consumption : null,
                             retainConnections = retain,
