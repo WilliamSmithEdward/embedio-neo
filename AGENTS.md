@@ -158,3 +158,9 @@ These rules are the same in every WilliamSmithEdward repository.
 - **A scanner finding is fixed or accepted with a written reason** in the
   repository's accepted list. Never silence a scanner without one.
 <!-- repo-standards:end -->
+
+
+## Selected upstream #553
+
+- William authorized the next newest unhandled report after #554. Upstream #553, tracked as fork #109 on codex/upstream-553, concerns custom SWAN logging in Unity 2020 Mono/.NET Standard 2.0. The reporter confirmed Trace restored their original logging; subsequent TLS/auto-registration failure remains unconfirmed. Both comments are migrated with attribution; paginated issue/comment reactions are empty. Mention AgrYpn1a once at outcome, excluding former maintainer rdeago. Projects are intentionally unused; assign William, relevant labels/milestone and link development.
+- Use existing TraceSource/TraceListener APIs and application-owned bounded UI handoff, with a real published-package desktop example. Managed HTTPS takes a private-key certificate without automatic Windows HTTP.sys registration. Eight real diagnostics/HTTPS tests pass; the helper compiles for .NET Standard 2.0/C# 7.3 and the NuGet 1.0.2 example passed actual HTTP, event/filter/overflow and cancellation checks. Full-suite and cross-platform required gates must pass before merge. Do not claim exact Unity Mono/IL2CPP/WebGL or original certificate validation. No production API/default/target/dependency changes are proposed. No subsequent backlog issue or release is authorized.
