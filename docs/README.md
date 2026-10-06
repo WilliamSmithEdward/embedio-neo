@@ -67,6 +67,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [HEAD response metadata](user-reports/head-response-metadata.md): correct byte lengths, body suppression and safe GET/HEAD controller patterns.
 
+- [Unread request bodies](user-reports/unread-request-bodies.md): early POST responses, connection reuse and legacy HttpClient validation.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.

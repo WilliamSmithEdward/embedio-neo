@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Document and verify early responses with unread request bodies, including the legacy HttpClient sequence and fixed-length connection reuse, without changing production defaults (upstream #558).
+
 ## [1.0.2] - 2026-10-05
 
 Patch release with HTTP response framing, HEAD metadata, cookie, static-file and
