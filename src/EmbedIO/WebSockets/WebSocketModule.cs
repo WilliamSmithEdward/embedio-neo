@@ -200,10 +200,9 @@ namespace EmbedIO.WebSockets
             $"{BaseRoute} - WebSocket connection accepted - There are now {_contexts.Count} sockets connected."
                 .Debug(nameof(WebSocketModule));
 
-            await OnClientConnectedAsync(webSocketContext).ConfigureAwait(false);
-
             try
             {
+                await OnClientConnectedAsync(webSocketContext).ConfigureAwait(false);
                 if (webSocketContext.WebSocket is SystemWebSocket systemWebSocket)
                 {
                     await ProcessSystemContext(
@@ -513,7 +512,8 @@ namespace EmbedIO.WebSockets
 
         private void RemoveWebSocket(IWebSocketContext context)
         {
-            _ = _contexts.TryRemove(context.Id, out _);
+            if (!_contexts.TryRemove(context.Id, out _))
+                return;
             context.WebSocket?.Dispose();
 
             // OnClientDisconnectedAsync is better called in its own task,
@@ -560,18 +560,23 @@ namespace EmbedIO.WebSockets
         {
             ((Internal.WebSocket)context.WebSocket).OnMessage += async (s, e) =>
             {
-                if (e.Opcode == Opcode.Close)
+                try
                 {
-                    await context.WebSocket.CloseAsync(context.CancellationToken).ConfigureAwait(false);
+                    if (e.Opcode == Opcode.Close)
+                    {
+                        await context.WebSocket.CloseAsync(context.CancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await OnMessageReceivedAsync(
+                                context,
+                                e.RawData,
+                                new Internal.WebSocketReceiveResult(e.RawData.Length, e.Opcode))
+                            .ConfigureAwait(false);
+                    }
                 }
-                else
-                {
-                    await OnMessageReceivedAsync(
-                            context,
-                            e.RawData,
-                            new Internal.WebSocketReceiveResult(e.RawData.Length, e.Opcode))
-                        .ConfigureAwait(false);
-                }
+                catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested) { }
+                catch (Exception ex) { ex.Log(nameof(WebSocketModule)); }
             };
 
             while (context.WebSocket.State == WebSocketState.Open

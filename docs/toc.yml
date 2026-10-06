@@ -76,6 +76,9 @@
     - name: Unread request bodies
       href: user-reports/unread-request-bodies.md
 
+    - name: WebSocket startup messages
+      href: user-reports/websocket-startup-messages.md
+
 - name: Architecture
   items:
     - name: Dependency injection
