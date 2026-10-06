@@ -80,6 +80,8 @@
       href: user-reports/websocket-startup-messages.md
     - name: Windows native WebSocket shutdown
       href: user-reports/windows-native-websocket-shutdown.md
+    - name: UWP browser access
+      href: user-reports/uwp-browser-access.md
 
 - name: Architecture
   items:

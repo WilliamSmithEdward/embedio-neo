@@ -36,7 +36,7 @@ jobs:
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=false
       - name: Run the regression suite with coverage
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 1312 --coverlet
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 1320 --coverlet
       - name: Check hot-path and cold-start allocation budgets
         run: |
           dotnet restore test/EmbedIO.Performance/EmbedIO.Performance.csproj --locked-mode
@@ -130,10 +130,14 @@ jobs:
     with:
       update-locks: ${{ inputs.update-https-locks == true }}
 
+  appcontainer:
+    name: Windows AppContainer
+    uses: ./.github/workflows/appcontainer.yml
+
   ci-passed:
     name: CI passed
     if: always()
-    needs: [test, static-analysis, build, mac-catalyst, android, maui-https]
+    needs: [test, static-analysis, build, mac-catalyst, android, maui-https, appcontainer]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
