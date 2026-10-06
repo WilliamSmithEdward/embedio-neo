@@ -56,7 +56,8 @@ namespace EmbedIO.Tests.Issues
                     request.Headers.AcceptEncoding.ParseAdd(encoding);
                     using var response = await client.SendAsync(request);
                     response.EnsureSuccessStatusCode();
-                    Assert.That(response.Content.Headers.ContentEncoding, Is.EqualTo(new[] { encoding }));
+                    Assert.That(response.Content.Headers.ContentEncoding,
+                        Is.EqualTo(encoding == "identity" ? Array.Empty<string>() : new[] { encoding }));
                     var wire = await response.Content.ReadAsByteArrayAsync();
                     Assert.That(Decode(wire, encoding), Is.EqualTo(payload));
                     Assert.That(await client.GetStringAsync(url + "favicon.ico"), Is.EqualTo("small"));
