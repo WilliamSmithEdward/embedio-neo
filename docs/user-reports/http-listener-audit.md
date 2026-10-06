@@ -45,7 +45,7 @@ The queue benchmark exercises the real GetContextAsync method without opening
 sockets. Contexts are pre-created, then each batch measures queue insertion,
 semaphore signalling and accept draining. Seven timed rounds follow warmup;
 the table gives the median round on the same Windows x64 machine with .NET
-10.0.400. Allocation includes insertion and accept task/cancellation bookkeeping.
+SDK 10.0.400. Allocation includes insertion and accept task/cancellation bookkeeping.
 
 | Queued requests per batch | Before ns/request | After ns/request | Before B/request | After B/request |
 | --- | ---: | ---: | ---: | ---: |
@@ -68,13 +68,13 @@ request/response streams and Microsoft listener adapter. Current main already
 removes request/response buffer copies, serializes endpoint registration and
 removes prefixes by identity and owner; those improvements were retained.
 
-Two line-parser experiments were rejected: a complete-line fast path and a
+Two line-parser experiments were evaluated: a complete-line fast path and a
 simpler LF-return loop. Differential snapshots matched the original parser in
 7,098 cases (1,014 inputs at seven fragment sizes), including malformed headers,
 non-ASCII bytes and unusual CR/LF sequences. The fast path improved ordinary
 headers but reproducibly slowed a one-byte-fragmented large header by about 23%.
-The simpler loop also showed a large fragmented-header regression. The production
-parser remains unchanged; 44 compatibility cases preserve these semantics for
+The simpler loop had unchanged allocations and inconclusive timing benefits, so
+it was deferred. The production parser remains unchanged; 44 compatibility cases preserve these semantics for
 future investigations. Experimental sources and comparison logs remain under
 ignored TestResults/listener-audit/parser.
 
@@ -103,8 +103,11 @@ Five controlled request-body/ownership cases failed on the prior code; the stale
 endpoint replacement case independently failed before its fix. The first combined
 focused run passed all 28 queue, endpoint and resource cases. The Windows suite
 then passed with 903 successes and two existing platform skips (905 total),
-including 44 additional parser characterization cases. Final cross-platform
-CI, security and malware gates remain required before merge.
+including 44 additional parser characterization cases. After rebasing onto
+main with PR #84, the combined Windows suite passed with 945 successes and
+two existing skips (947 total). Both supported library targets built with
+analyzers; existing hot-path/cold-start and new queue allocation budgets passed.
+Final cross-platform CI, security and malware gates remain required before merge.
 
 Local commands, before/after benchmark output and TRX reports live under ignored
 TestResults/listener-audit (the endpoint baseline is under TestResults/endpoint-baseline).
