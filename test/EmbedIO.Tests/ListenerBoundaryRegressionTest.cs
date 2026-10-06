@@ -172,6 +172,7 @@ namespace EmbedIO.Tests
             try
             {
                 // No accept is armed until every peer is in the socket backlog.
+                // The BCL still chooses inline versus pending completion.
                 for (var i = 0; i < count; i++)
                 {
                     var peer = new TcpClient { NoDelay = true };

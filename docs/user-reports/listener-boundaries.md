@@ -21,10 +21,20 @@ closed. The existing dedicated blocking macOS IPv6 worker is unchanged.
 
 Two controlled tests queue 32 and 128 connected peers before arming any accept,
 verify every distinct request is dispatched, then send another request through the
-pending async accept. Four additional HTTP/HTTPS cases exercise 64-request bursts,
+pending async accept. The BCL chooses whether an accept completes inline; a queued
+backlog alone does not guarantee that branch (native Windows probes remained async). Four additional HTTP/HTTPS cases exercise 64-request bursts,
 optional immediate client resets, Stop and same-listener restart. Existing macOS
 reset and native-platform CI fixtures remain part of validation. This removes
 recursive accept growth; no throughput improvement is claimed.
+
+An isolated control-flow experiment instruments ProcessAcceptedSocket stack depth
+in copies of the baseline and candidate. Both copies force inline completions for
+queued sockets using Poll/Accept, then use normal AcceptAsync once the backlog is
+empty. With 32 and 128 queued peers, baseline maximum stack depth grows from 89 to
+281 frames; the candidate stays at 26 and 25. Every queued request is dispatched.
+These measurements validate the forced-inline branch, not native BCL completion
+frequency, HTTP throughput or an observed production stack overflow. Instrumentation
+and the forced-inline shim stay under ignored TestResults and are not shipped.
 
 ## Supported framing coverage
 
