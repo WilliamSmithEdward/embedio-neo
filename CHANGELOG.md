@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Open immutable ZIP archives with shared read-only access and release owned handles when archive validation fails. Add 13 regression cases covering multiple hosts/readers, read-only files, disposal and HTTP parity.
+
 - Use true asynchronous managed response writes with caller cancellation; preserve write-error policy. Repair premature chunk termination on empty writes and large-header body-prefix calculations. Add 42 regression cases for 1–6 MB files, compression/cache variants, action/JSON responses and backpressure.
 - Avoid compiling unused parameterless base-route regexes during configuration.
   Signal synchronous startup readiness without polling; stop failed listeners,
