@@ -57,8 +57,7 @@ namespace EmbedIO.Net.Internal
             {
                 var args = new SocketAsyncEventArgs { UserToken = this };
                 args.Completed += OnAccept;
-                Socket? dummy = null;
-                Accept(_sock, args, ref dummy);
+                Accept(_sock, args);
             }
         }
 
@@ -186,53 +185,45 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        private static void Accept(Socket socket, SocketAsyncEventArgs e, ref Socket? accepted)
+        private static void Accept(Socket socket, SocketAsyncEventArgs e, Socket? accepted = null)
         {
-            e.AcceptSocket = null;
-            bool acceptPending;
-
-            try
+            var endpoint = (EndPointListener)e.UserToken;
+            while (true)
             {
-                acceptPending = socket.AcceptAsync(e);
-            }
-            catch
-            {
+                e.AcceptSocket = null;
+                bool acceptPending;
                 try
                 {
-                    accepted?.Dispose();
+                    acceptPending = socket.AcceptAsync(e);
                 }
                 catch
                 {
-                    // ignored
+                    accepted?.Dispose();
+                    accepted = null;
+                    return;
                 }
 
-                accepted = null;
-                return;
-            }
+                // Rearm before handling the previous socket, including when the next
+                // accept completes inline. Drain inline completions without recursion.
+                if (accepted != null)
+                {
+                    endpoint.ProcessAcceptedSocket(accepted);
+                    accepted = null;
+                }
 
-            if (!acceptPending)
-            {
-                ProcessAccept(e);
+                if (acceptPending)
+                    return;
+
+                if (e.SocketError == SocketError.Success)
+                    accepted = e.AcceptSocket;
             }
         }
 
         private static void ProcessAccept(SocketAsyncEventArgs args)
         {
-            Socket? accepted = null;
-            if (args.SocketError == SocketError.Success)
-            {
-                accepted = args.AcceptSocket;
-            }
-
-            var epl = (EndPointListener)args.UserToken;
-
-            Accept(epl._sock, args, ref accepted);
-            if (accepted == null)
-            {
-                return;
-            }
-
-            epl.ProcessAcceptedSocket(accepted);
+            var accepted = args.SocketError == SocketError.Success ? args.AcceptSocket : null;
+            var endpoint = (EndPointListener)args.UserToken;
+            Accept(endpoint._sock, args, accepted);
         }
 
         private void AcceptOnWorker()

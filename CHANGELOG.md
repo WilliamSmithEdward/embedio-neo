@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Drain synchronous managed socket accepts iteratively; preserve rearming and the
+  macOS IPv6 worker. Add 42 framing, fragmentation, burst/reset and queued-accept
+  cases. Document confirmed header/framing gaps without changing parsing policy.
+
 - Release managed listener timers, transport wrappers and connection-owned buffers
   on terminal closure; preserve keep-alive and prevent reader restart during forced
   shutdown. Add 22 HTTP/HTTPS and WS/WSS lifetime cases and a dependency-free

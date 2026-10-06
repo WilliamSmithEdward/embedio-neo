@@ -81,6 +81,36 @@ namespace EmbedIO.Tests
             Assert.That(Encoding.ASCII.GetString(body.ToArray()), Is.EqualTo("abcdef"));
         }
 
+        [TestCase(1, 0)]
+        [TestCase(7, 0)]
+        [TestCase(8192, 0)]
+        [TestCase(1, 32000)]
+        [TestCase(7, 32000)]
+        [TestCase(8192, 32000)]
+        public void HeadersBelowExistingBufferLimitPreserveValuesAcrossFragments(int fragment, int valueLength)
+        {
+            var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
+            const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+            ConnectionType.GetField("_connectionSync", fields)!.SetValue(connection, new object());
+            ConnectionType.GetField("<Stream>k__BackingField", fields)!.SetValue(connection, Stream.Null);
+            ConnectionType.GetMethod("Init", fields)!.Invoke(connection, null);
+            using var buffered = (MemoryStream)ConnectionType.GetField("_ms", fields)!.GetValue(connection)!;
+            var value = new string('a', valueLength);
+            var bytes = Encoding.ASCII.GetBytes($"GET / HTTP/1.1\r\nHost: localhost\r\nX-Value: {value}\r\n\r\n");
+            var process = ConnectionType.GetMethod("ProcessInput", fields)!;
+            var complete = false;
+            for (var offset = 0; offset < bytes.Length && !complete; offset += fragment)
+            {
+                buffered.Write(bytes, offset, Math.Min(fragment, bytes.Length - offset));
+                Assert.That(buffered.Length, Is.LessThanOrEqualTo(32768));
+                complete = (bool)process.Invoke(connection, new object[] { buffered })!;
+            }
+            Assert.That(complete, Is.True);
+            Assert.That(ConnectionType.GetField("_errorMessage", fields)!.GetValue(connection), Is.Null);
+            var context = (IHttpContext)ConnectionType.GetField("_context", fields)!.GetValue(connection)!;
+            Assert.That(context.Request.Headers["X-Value"], Is.EqualTo(value));
+        }
+
         private static IEnumerable<TestCaseData> LineCases()
         {
             var cases = new[]
