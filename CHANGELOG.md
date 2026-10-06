@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Release managed listener timers, transport wrappers and connection-owned buffers
+  on terminal closure; preserve keep-alive and prevent reader restart during forced
+  shutdown. Add 22 HTTP/HTTPS and WS/WSS lifetime cases and a dependency-free
+  end-to-end benchmark with bounded cleanup verification in desktop CI.
+
 - Open immutable ZIP archives with shared read-only access and release owned handles when archive validation fails. Add 13 regression cases covering multiple hosts/readers, read-only files, disposal and HTTP parity.
 - Reduce managed listener queue snapshots and duplicated endpoint bookkeeping.
   Preserve replacement endpoint ownership during alias shutdown; isolate request

@@ -139,6 +139,7 @@ namespace EmbedIO.Tests
         private static object NewConnection(Stream source)
         {
             var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
+            ConnectionType.GetField("_connectionSync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(connection, new object());
             Field("<Stream>k__BackingField").SetValue(connection, source);
             Field("_timer").SetValue(connection, new Timer(_ => { }, null, Timeout.Infinite, Timeout.Infinite));
             Field("_sTimeout").SetValue(connection, 90000);
