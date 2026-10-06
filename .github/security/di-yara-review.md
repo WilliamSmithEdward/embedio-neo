@@ -51,7 +51,7 @@ retained locally under ignored `TestResults/di-implementation/yara-evidence`.
 ## Acceptance boundary
 
 Accept this rule only for the two `EmbedIO.DependencyInjection.dll` paths in
-the 1.0.1 package and the two review files named in the acceptance list.
+the 1.0.2 package and the two review files named in the acceptance list.
 The review Markdown and acceptance TOML repeat the inspected filename as
 evidence; the pinned scanner confirmed that these text references also match.
 A full local YARA scan found only these four expected paths across 500 files.
@@ -81,3 +81,26 @@ the exact rule/path acceptance boundary. Only the two package-version paths
 change; other rules, paths, errors and stale acceptances continue to fail.
 Raw scanner output and extracted metadata are retained under ignored
 `TestResults/release-1.0.1/TestResults/release-validation`.
+## 1.0.2 release revalidation
+
+The 1.0.2 local Release build was checked with YARA-X 1.20.0 and the full
+YARA Forge 20261004 rules. Both archives were verified against `yara.json`.
+The rule's filename pattern and `1 of them` condition were reread. The scanner
+ran with `--print-strings` in a network-disabled container with read-only mounts.
+
+| Target | Offset | Match | Assembly SHA-256 |
+| --- | --- | --- | --- |
+| net10.0 | `0x5356` | `Injection.pdb` | `de185d9492ee132ce630c73ccbcdfce05735701f2193f41e2273ac84cdf1ed12` |
+| netstandard2.0 | `0x5595` | `Injection.pdb` | `ede2de3f13697f74585cf5180da591f37f204bb082454ca4c3e860d01484832c` |
+
+PEReader confirmed that both matches belong to CodeView debug paths ending
+in the adapter's unchanged debug-symbol filename. No other rules or strings
+matched these assemblies. The hashes describe the local Windows packages at
+source commit `391526b`; CI builds have different paths and hashes and must
+pass the full required scans before merge and publication. Raw scanner output
+and metadata are retained under ignored
+`TestResults/release-1.0.2/TestResults/release-validation`.
+
+Update only the two exact assembly paths from version 1.0.1 to 1.0.2.
+The rule, target frameworks and evidence-file boundaries remain unchanged;
+other matches, missing scans, scanner errors and stale acceptances still fail.
