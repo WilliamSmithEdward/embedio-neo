@@ -28,3 +28,14 @@ include process launch or first HTTP response time. The delayed-start workload
 uses a socket-free server with an intentional 50 ms preparation delay.
 See [the cold-start audit](../../docs/user-reports/cold-start-audit.md) for baseline
 measurements, comparison controls and startup limits.
+
+## Listener queue checks
+
+```sh
+dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --listener-queue --verify-allocations
+```
+
+This socket-free workload measures insertion/signalling and the real accept queue at
+burst sizes 1, 16 and 256. Context creation is outside measurement. The 300 B/request
+ceiling guards against snapshots growing with the queued request count; timing is
+informational. See [the HTTP listener audit](../../docs/user-reports/http-listener-audit.md).

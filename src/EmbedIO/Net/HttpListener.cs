@@ -140,9 +140,9 @@ namespace EmbedIO.Net
                                     linked.Token.ThrowIfCancellationRequested();
                                 }
 
-                                foreach (var key in _ctxQueue.Keys)
+                                foreach (var entry in _ctxQueue)
                                 {
-                                    if (_ctxQueue.TryRemove(key, out var context)) return context;
+                                    if (_ctxQueue.TryRemove(entry.Key, out var context)) return context;
                                 }
                             }
                         }
@@ -195,23 +195,19 @@ namespace EmbedIO.Net
         {
             EndPointManager.RemoveListener(this);
 
-            var keys = _connections.Keys;
-            var connections = new HttpConnection[keys.Count];
-            keys.CopyTo(connections, 0);
+            var connections = _connections.ToArray();
             _connections.Clear();
-            var list = new List<HttpConnection>(connections);
-
-            for (var i = list.Count - 1; i >= 0; i--)
+            for (var i = connections.Length - 1; i >= 0; i--)
             {
-                list[i].Close(true);
+                connections[i].Key.Close(true);
             }
 
             while (!_ctxQueue.IsEmpty)
             {
-                foreach (var key in _ctxQueue.Keys.ToArray())
+                foreach (var entry in _ctxQueue)
                 {
                     // A previously closed connection cannot unbind its context again.
-                    if (_ctxQueue.TryRemove(key, out var context))
+                    if (_ctxQueue.TryRemove(entry.Key, out var context))
                     {
                         context.Connection.Close(true);
                     }
