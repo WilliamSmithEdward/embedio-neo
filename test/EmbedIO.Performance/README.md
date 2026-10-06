@@ -89,3 +89,14 @@ include the loopback client and server; timings are informational. Verification
 with `--verify-listener-http --request-body-bytes 65536` uses bounded workloads and
 checks terminal resource cleanup. Full consumption verifies HTTP/HTTPS with both
 connection policies (four workloads); partial/unread verifies keep-alive (two).
+
+## Chunk framing and charset extraction
+
+`--listener-wire` measures actual chunk-prefix formatting and charset extraction;
+`--verify-listener-wire` enforces allocation budgets and expected outputs. Timings
+are informational. Optional `--chunk-bytes 1024` on `--listener-http` enables
+chunked responses with that maximum write size; existing response defaults remain
+unchanged. Use `--payload-bytes 65536` for a 64 KB response, and
+`--verify-listener-http` for bounded HTTP/HTTPS/churn cleanup verification. Client
+response bytes are validated after decoding transfer framing; dedicated regression
+cases check the exact raw chunk framing separately.
