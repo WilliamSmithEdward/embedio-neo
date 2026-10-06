@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
@@ -303,32 +304,48 @@ namespace EmbedIO.Net.Internal
                 return true;
             }
 
+            Stream input;
+            try { input = InputStream; }
+            catch (ObjectDisposedException)
+            {
+                _inputStream = null;
+                return true;
+            }
+            catch { return false; }
+            if (input is RequestStream body && body.IsBodyConsumed)
+                return true;
+
             var length = 2048;
             if (ContentLength64 > 0)
             {
                 length = (int)Math.Min(ContentLength64, length);
             }
 
-            var bytes = new byte[length];
-
-            while (true)
+            var bytes = ArrayPool<byte>.Shared.Rent(length);
+            try
             {
-                try
+                while (true)
                 {
-                    if (InputStream.Read(bytes, 0, length) <= 0)
+                    try
                     {
+                        if (input.Read(bytes, 0, length) <= 0)
+                            return true;
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        _inputStream = null;
                         return true;
                     }
+                    catch
+                    {
+                        return false;
+                    }
                 }
-                catch (ObjectDisposedException)
-                {
-                    _inputStream = null;
-                    return true;
-                }
-                catch
-                {
-                    return false;
-                }
+            }
+            finally
+            {
+                // Request data must not survive in a buffer shared with another caller.
+                ArrayPool<byte>.Shared.Return(bytes, clearArray: true);
             }
         }
 
