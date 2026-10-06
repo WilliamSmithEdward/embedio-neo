@@ -70,6 +70,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Unread request bodies](user-reports/unread-request-bodies.md): early POST responses, connection reuse and legacy HttpClient validation.
 
 - [WebSocket startup messages](user-reports/websocket-startup-messages.md): send immediately after connection, initialization ordering and cleanup.
+- [Windows native WebSocket shutdown](user-reports/windows-native-websocket-shutdown.md): concurrent close, cancellation and the released .NET 11 recheck.
 
 ## Architecture
 

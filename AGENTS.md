@@ -1,3 +1,11 @@
+## Windows native WebSocket shutdown follow-up
+
+- Issue #105 / PR #106 carry this Windows-only correction. The revised focused set passed all 55 Windows cases, including 27 new regressions. Initial Linux/macOS CI identified fixture assumptions about an already completed BCL close and canceling a separate pending receive; retain unchanged Unix production semantics and explicit Unix fixture cleanup. Synchronous invalid-reason validation remains compatible. Required gates and final full-source validation still apply.
+
+- William authorized fixing the captured Windows native shutdown deadlock and requested a new issue/PR. Fork #105 tracks it on codex/windows-native-websocket-shutdown in the existing isolated worktree; preserve concurrent root changes. Avoid native WebSocketBase.CloseAsync using public CloseOutputAsync plus coordinated single-reader/full-handshake completion. Preserve APIs/defaults/targets/dependencies and test cancellation, callback-originated close, concurrent close, resets, disposal and healthy subsequent connections. No private runtime shim is authorized or needed for this candidate.
+- William explicitly requested a recheck once .NET 11 is released. Verify that the released Windows runtime contains dotnet/runtime #132314 and passes the same simultaneous-close stress and compatibility cases before considering removal; no automatic switch based merely on major version or prerelease availability. Do not publish a release without authorization.
+- Prior PR #104 merged as 4483425 after all required gates passed; #103 closed for the managed startup fix. Main CI 37508751595 subsequently failed in the unrelated iOS HTTPS WebView timeout after native client/certificate checks passed. The unchanged failed-job rerun passed on attempt 2. Preserve the initial failure and retry provenance.
+
 ## Current upstream #556 work
 
 - William approved the next newest unhandled issue: upstream #556, migrated as fork #103. Reporter nd1012 and commenter WindBlowAssCold described first ClientWebSocket messages disappearing unless a delay/readiness exchange was used. All issue/comment reaction pages are empty. Both participants are non-maintainer public reporters; notify both once a substantive outcome is ready. Preserve the reporter's protocol interpretation as a hypothesis; RFC 6455 allows either endpoint to send application data when OPEN.

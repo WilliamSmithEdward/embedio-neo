@@ -207,7 +207,7 @@ namespace EmbedIO.WebSockets
                 {
                     await ProcessSystemContext(
                             webSocketContext,
-                            systemWebSocket.UnderlyingWebSocket,
+                            systemWebSocket,
                             context.CancellationToken).ConfigureAwait(false);
                 }
                 else
@@ -587,7 +587,7 @@ namespace EmbedIO.WebSockets
             }
         }
 
-        private async Task ProcessSystemContext(IWebSocketContext context, System.Net.WebSockets.WebSocket webSocket, CancellationToken cancellationToken)
+        private async Task ProcessSystemContext(IWebSocketContext context, SystemWebSocket webSocket, CancellationToken cancellationToken)
         {
             // define a receive buffer
             var receiveBuffer = new byte[ReceiveBufferSize];
@@ -596,7 +596,7 @@ namespace EmbedIO.WebSockets
             var receivedMessage = new List<byte>(receiveBuffer.Length * 2);
 
             // poll the WebSocket connections for reception
-            while (webSocket.State == WebSocketState.Open)
+            while (webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseSent)
             {
                 // retrieve the result (blocking)
                 var receiveResult = new SystemWebSocketReceiveResult(
@@ -607,7 +607,7 @@ namespace EmbedIO.WebSockets
                 {
                     // close the connection if requested by the client
                     await webSocket
-                        .CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, cancellationToken)
+                        .CloseAsync(CloseStatusCode.Normal, string.Empty, cancellationToken)
                         .ConfigureAwait(false);
                     return;
                 }
@@ -623,7 +623,7 @@ namespace EmbedIO.WebSockets
                 {
                     // close the connection if message exceeds max length
                     await webSocket.CloseAsync(
-                        WebSocketCloseStatus.MessageTooBig,
+                        CloseStatusCode.TooBig,
                         $"Message too big. Maximum is {_maxMessageSize} bytes.",
                         cancellationToken).ConfigureAwait(false);
 
