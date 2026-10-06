@@ -81,16 +81,19 @@ namespace EmbedIO.WebSockets.Internal
         }
 
         private Task CloseAsync(WebSocketCloseStatus code, string comment, CancellationToken cancellationToken)
-            => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                ? CloseWindowsAsync(code, comment, cancellationToken)
-                : UnderlyingWebSocket.CloseAsync(code, comment, cancellationToken);
-
-        private async Task CloseWindowsAsync(WebSocketCloseStatus code, string comment, CancellationToken cancellationToken)
         {
-            // Native CloseAsync validates the reason even when the connection is terminal.
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return UnderlyingWebSocket.CloseAsync(code, comment, cancellationToken);
+
+            // Preserve native synchronous reason validation, including terminal sockets.
             if (Encoding.UTF8.GetByteCount(comment) > 123)
                 throw new ArgumentException("The close description exceeds 123 UTF-8 bytes.", "statusDescription");
 
+            return CloseWindowsAsync(code, comment, cancellationToken);
+        }
+
+        private async Task CloseWindowsAsync(WebSocketCloseStatus code, string comment, CancellationToken cancellationToken)
+        {
             if (State == WebSocketState.Closed || State == WebSocketState.Aborted)
                 return;
 

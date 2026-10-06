@@ -144,6 +144,16 @@ namespace EmbedIO.Tests.Issues
             Assert.That(native.MaximumReaders, Is.EqualTo(1));
         }
 
+        [Test]
+        public void InvalidCloseReasonThrowsSynchronously()
+        {
+            if (!OperatingSystem.IsWindows()) Assert.Ignore("Windows native workaround");
+            using var native = new ControlledSocket();
+            using var socket = Wrap(native);
+            Assert.That(() => socket.CloseAsync(CloseStatusCode.Normal, new string('é', 62)), Throws.InstanceOf<ArgumentException>());
+            Assert.That(native.AbortCount, Is.Zero);
+        }
+
         [TestCase(false)]
         [TestCase(true)]
         public async Task InvalidCloseReasonIsRejectedBeforeAborting(bool terminal)
@@ -180,6 +190,14 @@ namespace EmbedIO.Tests.Issues
                 cancellation.Cancel();
                 try { await close.WaitAsync(timeout.Token); }
                 catch (OperationCanceledException) { }
+                if (mode == HttpListenerMode.Microsoft)
+                {
+                    if (OperatingSystem.IsWindows())
+                        Assert.That(context.WebSocket.State, Is.EqualTo(WebSocketState.Aborted));
+                    else
+                        // Unix's unchanged canceled close does not promise to abort its separate receive.
+                        context.WebSocket.Dispose();
+                }
                 await module.Disconnected.Task.WaitAsync(timeout.Token);
                 Assert.That(module.ActiveCount, Is.Zero);
                 module.Reset();
@@ -232,7 +250,14 @@ namespace EmbedIO.Tests.Issues
                     {
                         var clientClose = client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "peer", timeout.Token);
                         Thread.SpinWait(random.Next(200_000));
-                        var serverClose = Task.Run(() => context.WebSocket.CloseAsync(timeout.Token));
+                        var serverClose = Task.Run(async () =>
+                        {
+                            try { await context.WebSocket.CloseAsync(timeout.Token); }
+                            catch (System.Net.WebSockets.WebSocketException) when (mode == HttpListenerMode.Microsoft && !OperatingSystem.IsWindows() && context.WebSocket.State == WebSocketState.Closed)
+                            {
+                                // Unix's unchanged BCL close can lose the race to a completed peer close.
+                            }
+                        });
                         var reply = await client.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                         Assert.That(reply.MessageType, Is.EqualTo(WebSocketMessageType.Close));
                         await Task.WhenAll(clientClose, serverClose).WaitAsync(timeout.Token);
