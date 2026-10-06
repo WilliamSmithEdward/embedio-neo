@@ -15,15 +15,24 @@ namespace EmbedIO.Routing
         private static readonly object SyncRoot = new object();
         private static readonly Dictionary<(bool, string), RouteMatcher> Cache = new Dictionary<(bool, string), RouteMatcher>();
 
-        private readonly Regex _regex;
+        private readonly Regex? _regex;
+        private readonly Lazy<Regex>? _unusedBaseRegex;
 
         private RouteMatcher(bool isBaseRoute, string route, string pattern, IReadOnlyList<string> parameterNames)
         {
             IsBaseRoute = isBaseRoute;
             Route = route;
             ParameterNames = parameterNames;
-            _regex = new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
+            // Parameterless base routes use path matching below, so they need no compiled regex.
+            // Retain the fallback for callers that mutate the legacy concrete parameter-name list.
+            if (isBaseRoute && parameterNames.Count == 0)
+                _unusedBaseRegex = CreateBaseRegexFallback(pattern);
+            else
+                _regex = new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
         }
+
+        private static Lazy<Regex> CreateBaseRegexFallback(string pattern)
+            => new Lazy<Regex>(() => new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant));
 
         /// <summary>
         /// Gets a value indicating whether the <see cref="Route"/> property
@@ -142,7 +151,7 @@ namespace EmbedIO.Routing
                     return RouteMatch.UnsafeFromBasePath(Route, path);
             }
 
-            var match = _regex.Match(path);
+            var match = (_regex ?? _unusedBaseRegex!.Value).Match(path);
             if (!match.Success)
                 return null;
 

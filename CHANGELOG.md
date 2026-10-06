@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 - Use true asynchronous managed response writes with caller cancellation; preserve write-error policy. Repair premature chunk termination on empty writes and large-header body-prefix calculations. Add 40 regression cases for 1–6 MB files, compression/cache variants, action/JSON responses and backpressure.
+- Avoid compiling unused parameterless base-route regexes during configuration.
+  Signal synchronous startup readiness without polling; stop failed listeners,
+  honor startup cancellation and enforce the documented single RunAsync call.
+  Add 31 cold-start and port-reuse regression cases and fresh-process allocation budgets.
 
 - Add MimeType.Xml and MimeType.TextXml constants and document opt-in controller XML responses using existing serializers; preserve default JSON behavior.
 - Reduce content-negotiation, header/token parsing, WebSocket metadata and frame-read
