@@ -118,7 +118,11 @@ namespace EmbedIO.Net.Internal
         public void Close()
         {
             if (!_webSocketAccepted)
+            {
+                if (_isHeadResponse)
+                    _ = OutputStream;
                 PrepareHeaders();
+            }
             _response.Close();
         }
 

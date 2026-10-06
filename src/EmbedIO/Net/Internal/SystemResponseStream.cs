@@ -20,6 +20,8 @@ namespace EmbedIO.Net.Internal
             _stream = stream;
             _prepareHeaders = prepareHeaders;
             _suppressBody = suppressBody;
+            if (_suppressBody)
+                UnixHeadResponseCompatibility.SuppressClosingChunk(_stream);
         }
 
         public override bool CanRead => _stream.CanRead;
