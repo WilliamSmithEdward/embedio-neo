@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Avoid the Windows native HttpListener WebSocket full-close lock inversion by coordinating close-frame output and a single receiver through public .NET APIs. Preserve completed handshakes, close status/reason and cancellation; recheck against released .NET 11 before considering removal (#105).
+
 - Retain WebSocket messages received before connection initialization completes, synchronize managed dispatch wake-ups, clean up failed initialization and emit one disconnection notification. Guard asynchronous managed callback errors without changing callback APIs or defaults (upstream #556).
 
 - Document and verify early responses with unread request bodies, including the legacy HttpClient sequence and fixed-length connection reuse, without changing production defaults (upstream #558).

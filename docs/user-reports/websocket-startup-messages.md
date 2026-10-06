@@ -97,7 +97,7 @@ The change preserves existing asynchronous callback behavior. On the managed lis
 
 ### Windows native shutdown limitation
 
-Concurrent client/server shutdown with Windows' native HttpListener WebSockets also stalled during validation. Captured stacks showed CloseOutputAsyncCore/TakeLocks, ReceiveAsyncCore/Abort and keep-alive threads blocked in WebSocketBase, matching [dotnet/runtime #115559](https://github.com/dotnet/runtime/issues/115559). This is separate from the managed early-message dispatch bug. The startup fixtures retain immediate sends and their initialization barriers, but consume all acknowledgments and complete the native close handshake before stopping the server. That test sequencing does not fix production simultaneous shutdown. Use the managed listener when this native-runtime limitation affects an application; do not infer availability of a runtime correction merely from a merged upstream PR.
+Concurrent client/server shutdown with Windows' native HttpListener WebSockets also stalled during validation, matching [dotnet/runtime #115559](https://github.com/dotnet/runtime/issues/115559). A separate unreleased correction now avoids that native full-close path using public .NET APIs while retaining a complete closing handshake. See [Windows native WebSocket shutdown](windows-native-websocket-shutdown.md) for scope, validation and the .NET 11 recheck. NuGet 1.0.2 does not include that correction.
 
 ## Validation
 
