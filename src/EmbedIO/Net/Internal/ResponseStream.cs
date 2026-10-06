@@ -59,6 +59,8 @@ namespace EmbedIO.Net.Internal
             ValidateWrite(buffer, offset, count);
             if (cancellationToken.IsCancellationRequested)
                 return Task.FromCanceled(cancellationToken);
+            if (_response.IsHeadResponse)
+                return Task.CompletedTask;
 
             return WriteAsyncCore(buffer, offset, count, cancellationToken);
         }
@@ -117,6 +119,8 @@ namespace EmbedIO.Net.Internal
         public override void Write(byte[] buffer, int offset, int count)
         {
             ValidateWrite(buffer, offset, count);
+            if (_response.IsHeadResponse)
+                return;
 
             byte[] bytes;
             var ms = GetHeaders(false);

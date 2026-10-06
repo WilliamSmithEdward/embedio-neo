@@ -17,6 +17,7 @@ namespace EmbedIO.Net.Internal
         private Stream? _outputStream;
         private bool _headersPrepared;
         private bool _webSocketAccepted;
+        private readonly bool _isHeadResponse;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SystemHttpResponse"/> class.
@@ -25,6 +26,7 @@ namespace EmbedIO.Net.Internal
         public SystemHttpResponse(System.Net.HttpListenerContext context)
         {
             _response = context.Response;
+            _isHeadResponse = string.Equals(context.Request.HttpMethod, "HEAD", StringComparison.OrdinalIgnoreCase);
             Cookies = new SystemCookieCollection(_response.Cookies);
         }
 
@@ -41,8 +43,14 @@ namespace EmbedIO.Net.Internal
         /// <inheritdoc />
         public long ContentLength64
         {
-            get => _response.ContentLength64;
-            set => _response.ContentLength64 = value;
+            get => _isHeadResponse && long.TryParse(Headers[HttpHeaderNames.ContentLength], NumberStyles.None, CultureInfo.InvariantCulture, out var length) && length >= 0
+                ? length : _response.ContentLength64;
+            set
+            {
+                _response.ContentLength64 = value;
+                if (_isHeadResponse)
+                    Headers[HttpHeaderNames.ContentLength] = value.ToString(CultureInfo.InvariantCulture);
+            }
         }
 
         /// <inheritdoc />
@@ -55,7 +63,7 @@ namespace EmbedIO.Net.Internal
         /// <inheritdoc />
         // Native Unix responses can become disposed when a write fails or their stream closes.
         // Reuse the acquired stream so final cleanup does not reacquire it from a disposed response.
-        public Stream OutputStream => _outputStream ??= new SystemResponseStream(_response.OutputStream, PrepareHeaders);
+        public Stream OutputStream => _outputStream ??= new SystemResponseStream(_response.OutputStream, PrepareHeaders, _isHeadResponse);
 
         // A successful upgrade transfers the transport to the WebSocket.
         // Final HTTP cleanup must not reacquire the disposed native response stream.
@@ -110,7 +118,11 @@ namespace EmbedIO.Net.Internal
         public void Close()
         {
             if (!_webSocketAccepted)
+            {
+                if (_isHeadResponse)
+                    _ = OutputStream;
                 PrepareHeaders();
+            }
             _response.Close();
         }
 
@@ -143,6 +155,11 @@ namespace EmbedIO.Net.Internal
         {
             if (_headersPrepared)
                 return;
+
+            // Direct header assignments do not update the native framing field.
+            // HEAD has no body, but its advertised length needs one consistent value.
+            if (_isHeadResponse && long.TryParse(Headers[HttpHeaderNames.ContentLength], NumberStyles.None, CultureInfo.InvariantCulture, out var length) && length >= 0)
+                _response.ContentLength64 = length;
 
             // Leave ordinary native serialization intact when no protected cookie needs correction.
             if (!Cookies.Any(cookie => cookie.HttpOnly || cookie.Secure))
