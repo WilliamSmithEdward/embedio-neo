@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Medium-sized response stalls
+      href: user-reports/medium-response-stalls.md
     - name: Cold-start audit
       href: user-reports/cold-start-audit.md
     - name: XML responses
