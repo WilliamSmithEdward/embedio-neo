@@ -55,6 +55,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Read-only ZIP archives](user-reports/read-only-zip.md): shared-reader hosting, handle ownership and a published-package workaround.
 
+- [Concurrent controller responses](user-reports/concurrent-controller-responses.md): response ownership, binary output, request-aware cleanup and keep-alive isolation.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
