@@ -6,6 +6,7 @@ using EmbedIO.Diagnostics;
 using EmbedIO.Files;
 using System.Runtime.Versioning;
 using EmbedIO.Routing;
+using EmbedIO.Sessions;
 using EmbedIO.WebApi;
 
 namespace EmbedIO.AppContainerSmoke;
@@ -106,7 +107,7 @@ internal static class Program
         var first = JsonSerializer.Deserialize<JsonElement>(await client.GetStringAsync("api/probe"));
         var second = JsonSerializer.Deserialize<JsonElement>(await client.GetStringAsync("api/probe"));
         Require(first.GetProperty("session").GetString() == second.GetProperty("session").GetString(), "Session continuity failed");
-        Require(first.GetProperty("localAddress").GetString() == "127.0.0.1", "Unexpected actual request endpoint");
+        Require(IPAddress.Parse(first.GetProperty("localAddress").GetString()!).MapToIPv4().Equals(IPAddress.Loopback), "Unexpected actual request endpoint");
         Require(!string.IsNullOrEmpty(first.GetProperty("session").GetString()), "Missing session");
     }
 
@@ -170,5 +171,9 @@ internal static class Program
 public sealed class ProbeController : WebApiController
 {
     [Route(HttpVerbs.Get, "/probe")]
-    public object Probe() => new { session = HttpContext.Session.Id, localAddress = HttpContext.Request.LocalEndPoint.Address.ToString() };
+    public object Probe()
+    {
+        HttpContext.Session["visits"] = HttpContext.Session.GetValue<int>("visits") + 1;
+        return new { session = HttpContext.Session.Id, localAddress = HttpContext.Request.LocalEndPoint.Address.ToString() };
+    }
 }

@@ -89,8 +89,15 @@ internal sealed class ContainerProfile : IDisposable
             {
                 Check(GetTokenInformation(token, 29, buffer, 4, out _));
                 if (Marshal.ReadInt32(buffer) != 1) throw new InvalidOperationException("Child is not an AppContainer");
-                Check(GetTokenInformation(token, 31, buffer, (uint)IntPtr.Size, out _));
-                return new SecurityIdentifier(Marshal.ReadIntPtr(buffer)).Value;
+                _ = GetTokenInformation(token, 31, IntPtr.Zero, 0, out var needed);
+                if (needed == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+                var information = Marshal.AllocHGlobal(checked((int)needed));
+                try
+                {
+                    Check(GetTokenInformation(token, 31, information, needed, out _));
+                    return new SecurityIdentifier(Marshal.ReadIntPtr(information)).Value;
+                }
+                finally { Marshal.FreeHGlobal(information); }
             }
             finally { Marshal.FreeHGlobal(buffer); }
         }
