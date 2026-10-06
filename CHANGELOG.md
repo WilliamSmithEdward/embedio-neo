@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-05
+
+Patch release with HTTP response framing, HEAD metadata, cookie, static-file and
+listener lifetime fixes, plus the merged opt-in SSE and response-preparation APIs.
+The five package identities, target frameworks and runtime dependencies are retained.
+
 - Suppress HEAD response bodies and chunk bytes on both listeners while preserving stream validation and asynchronous completion. Synchronize native HEAD length metadata and last property/header assignment; preserve normal GET and connection-close behavior (upstream #564).
 
 - Reduce chunk-prefix and charset-extraction allocations while preserving exact
