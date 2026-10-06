@@ -52,9 +52,13 @@ namespace EmbedIO.Net
 
         internal static void RemoveEndPoint(EndPointListener epl, IPEndPoint ep)
         {
-            if (IPToEndpoints.TryGetValue(ep.Address, out var p))
+            lock (RegistrationLock)
             {
-                if (p.TryRemove(ep.Port, out _) && p.Count == 0)
+                // Canonical aliases can retain an endpoint after an earlier alias
+                // released it. Removal must not erase a replacement at the same port.
+                if (IPToEndpoints.TryGetValue(ep.Address, out var p)
+                    && p.TryGetValue(ep.Port, out var current) && ReferenceEquals(current, epl)
+                    && p.TryRemove(ep.Port, out _) && p.Count == 0)
                 {
                     _ = IPToEndpoints.TryRemove(ep.Address, out _);
                 }

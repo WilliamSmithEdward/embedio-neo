@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 - Open immutable ZIP archives with shared read-only access and release owned handles when archive validation fails. Add 13 regression cases covering multiple hosts/readers, read-only files, disposal and HTTP parity.
+- Reduce managed listener queue snapshots and duplicated endpoint bookkeeping.
+  Preserve replacement endpoint ownership during alias shutdown; isolate request
+  bodies to Content-Length and keep connection disposal from disposing its listener.
+  Preserve APIs, defaults and supported request/routing behavior; add measured queue
+  allocation budgets and focused compatibility coverage.
 
 - Use true asynchronous managed response writes with caller cancellation; preserve write-error policy. Repair premature chunk termination on empty writes and large-header body-prefix calculations. Add 42 regression cases for 1–6 MB files, compression/cache variants, action/JSON responses and backpressure.
 - Avoid compiling unused parameterless base-route regexes during configuration.

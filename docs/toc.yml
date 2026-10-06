@@ -28,6 +28,8 @@
   items:
     - name: Read-only ZIP archives
       href: user-reports/read-only-zip.md
+    - name: HTTP listener audit
+      href: user-reports/http-listener-audit.md
     - name: Medium-sized response stalls
       href: user-reports/medium-response-stalls.md
     - name: Cold-start audit

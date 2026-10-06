@@ -12,7 +12,7 @@ namespace EmbedIO.Net.Internal
 {
     internal sealed class EndPointListener : IDisposable
     {
-        private readonly Dictionary<HttpConnection, HttpConnection> _unregistered;
+        private readonly HashSet<HttpConnection> _unregistered;
         private readonly IPEndPoint _endpoint;
         private readonly Socket _sock;
         private readonly Task? _acceptWorker;
@@ -44,7 +44,7 @@ namespace EmbedIO.Net.Internal
                 throw;
             }
             _prefixes = new Dictionary<ListenerPrefix, HttpListener>();
-            _unregistered = new Dictionary<HttpConnection, HttpConnection>();
+            _unregistered = new HashSet<HttpConnection>();
             if (address.AddressFamily == AddressFamily.InterNetworkV6
                 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
@@ -95,7 +95,7 @@ namespace EmbedIO.Net.Internal
             lock (_unregistered)
             {
                 // Clone the list because RemoveConnection can be called from Close
-                connections = new List<HttpConnection>(_unregistered.Keys);
+                connections = new List<HttpConnection>(_unregistered);
                 _unregistered.Clear();
             }
 
@@ -107,35 +107,15 @@ namespace EmbedIO.Net.Internal
 
         public bool AddPrefix(ListenerPrefix prefix, HttpListener listener)
         {
-            List<ListenerPrefix>? current;
-            List<ListenerPrefix> future;
-
             if (prefix.Host == "*")
             {
-                do
-                {
-                    current = _unhandled;
-
-                    // TODO: Should we clone the items?
-                    future = current?.ToList() ?? new List<ListenerPrefix>();
-                    prefix.Listener = listener;
-                    AddSpecial(future, prefix);
-                }
-                while (Interlocked.CompareExchange(ref _unhandled, future, current) != current);
-
+                AddSpecial(ref _unhandled, prefix, listener);
                 return true;
             }
 
             if (prefix.Host == "+")
             {
-                do
-                {
-                    current = _all;
-                    future = current?.ToList() ?? new List<ListenerPrefix>();
-                    prefix.Listener = listener;
-                    AddSpecial(future, prefix);
-                }
-                while (Interlocked.CompareExchange(ref _all, future, current) != current);
+                AddSpecial(ref _all, prefix, listener);
                 return true;
             }
 
@@ -155,7 +135,7 @@ namespace EmbedIO.Net.Internal
                     return false;
                 }
 
-                p2 = prefs.ToDictionary(x => x.Key, x => x.Value);
+                p2 = new Dictionary<ListenerPrefix, HttpListener>(prefs);
                 p2[prefix] = listener;
             }
             while (Interlocked.CompareExchange(ref _prefixes, p2, prefs) != prefs);
@@ -164,39 +144,16 @@ namespace EmbedIO.Net.Internal
 
         public void RemovePrefix(ListenerPrefix prefix, HttpListener listener)
         {
-            List<ListenerPrefix>? current;
-            List<ListenerPrefix> future;
-
             if (prefix.Host == "*")
             {
-                do
-                {
-                    current = _unhandled;
-                    future = current?.ToList() ?? new List<ListenerPrefix>();
-                    if (!RemoveSpecial(future, prefix, listener))
-                    {
-                        break; // Prefix not found
-                    }
-                }
-                while (Interlocked.CompareExchange(ref _unhandled, future, current) != current);
-
+                RemoveSpecial(ref _unhandled, prefix, listener);
                 CheckIfRemove();
                 return;
             }
 
             if (prefix.Host == "+")
             {
-                do
-                {
-                    current = _all;
-                    future = current?.ToList() ?? new List<ListenerPrefix>();
-                    if (!RemoveSpecial(future, prefix, listener))
-                    {
-                        break; // Prefix not found
-                    }
-                }
-                while (Interlocked.CompareExchange(ref _all, future, current) != current);
-
+                RemoveSpecial(ref _all, prefix, listener);
                 CheckIfRemove();
                 return;
             }
@@ -213,7 +170,7 @@ namespace EmbedIO.Net.Internal
                     break;
                 }
 
-                p2 = prefs.ToDictionary(x => x.Key, x => x.Value);
+                p2 = new Dictionary<ListenerPrefix, HttpListener>(prefs);
                 _ = p2.Remove(prefixKey);
             }
             while (Interlocked.CompareExchange(ref _prefixes, p2, prefs) != prefs);
@@ -342,7 +299,7 @@ namespace EmbedIO.Net.Internal
             {
                 if (Volatile.Read(ref _disposed) == 0)
                 {
-                    _unregistered[conn] = conn;
+                    _ = _unregistered.Add(conn);
                     registered = true;
                 }
             }
@@ -381,41 +338,36 @@ namespace EmbedIO.Net.Internal
             return bestMatch;
         }
 
-        private static void AddSpecial(ICollection<ListenerPrefix> coll, ListenerPrefix prefix)
+        private static void AddSpecial(ref List<ListenerPrefix>? prefixes, ListenerPrefix prefix, HttpListener listener)
         {
-            if (coll == null)
+            prefix.Listener = listener;
+            List<ListenerPrefix>? current;
+            List<ListenerPrefix> future;
+            do
             {
-                return;
+                current = prefixes;
+                future = current == null ? new List<ListenerPrefix>() : new List<ListenerPrefix>(current);
+                if (future.Any(p => p.Path == prefix.Path))
+                    throw new HttpListenerException(400, "Prefix already in use.");
+                future.Add(prefix);
             }
-
-            if (coll.Any(p => p.Path == prefix.Path))
-            {
-                throw new HttpListenerException(400, "Prefix already in use.");
-            }
-
-            coll.Add(prefix);
+            while (Interlocked.CompareExchange(ref prefixes, future, current) != current);
         }
 
-        private static bool RemoveSpecial(IList<ListenerPrefix> coll, ListenerPrefix prefix, HttpListener listener)
+        private static void RemoveSpecial(ref List<ListenerPrefix>? prefixes, ListenerPrefix prefix, HttpListener listener)
         {
-            if (coll == null)
+            List<ListenerPrefix>? current;
+            List<ListenerPrefix> future;
+            do
             {
-                return false;
+                current = prefixes;
+                var index = current?.FindIndex(p => p.Path == prefix.Path && p.Listener == listener) ?? -1;
+                if (index < 0)
+                    return;
+                future = new List<ListenerPrefix>(current!);
+                future.RemoveAt(index);
             }
-
-            var c = coll.Count;
-            for (var i = 0; i < c; i++)
-            {
-                if (coll[i].Path != prefix.Path || coll[i].Listener != listener)
-                {
-                    continue;
-                }
-
-                coll.RemoveAt(i);
-                return true;
-            }
-
-            return false;
+            while (Interlocked.CompareExchange(ref prefixes, future, current) != current);
         }
 
         private static bool SamePrefix(ListenerPrefix first, ListenerPrefix second)
