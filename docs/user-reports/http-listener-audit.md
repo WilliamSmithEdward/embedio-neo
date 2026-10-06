@@ -68,10 +68,15 @@ request/response streams and Microsoft listener adapter. Current main already
 removes request/response buffer copies, serializes endpoint registration and
 removes prefixes by identity and owner; those improvements were retained.
 
-A line-parser fast-path experiment is evaluated separately against the current
-parser before acceptance. Complete, fragmented, non-ASCII and unusual CR/LF
-inputs are characterized, including the existing one-byte-to-one-character
-mapping. Production parser behavior must remain unchanged.
+Two line-parser experiments were rejected: a complete-line fast path and a
+simpler LF-return loop. Differential snapshots matched the original parser in
+7,098 cases (1,014 inputs at seven fragment sizes), including malformed headers,
+non-ASCII bytes and unusual CR/LF sequences. The fast path improved ordinary
+headers but reproducibly slowed a one-byte-fragmented large header by about 23%.
+The simpler loop also showed a large fragmented-header regression. The production
+parser remains unchanged; 44 compatibility cases preserve these semantics for
+future investigations. Experimental sources and comparison logs remain under
+ignored TestResults/listener-audit/parser.
 
 The following opportunities need separate evidence before implementation:
 
@@ -89,8 +94,8 @@ The following opportunities need separate evidence before implementation:
 - An IPv6 socket-option failure occurs outside the constructor's bind/listen
   cleanup block. That failure has not been reproduced in the tested environments.
 
-The response-stream asynchronous-write work is handled separately in PR #84;
-this audit does not duplicate its changes.
+The response-stream asynchronous-write work merged separately in PR #84 as
+`d877539`. This branch includes that main state without duplicating its changes.
 
 ## Validation
 
