@@ -7,4 +7,5 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" /></ItemGroup>
+  <ItemGroup><Compile Include="../Shared/HttpsSmoke.cs" Link="HttpsSmoke.cs" /></ItemGroup>
 </Project>

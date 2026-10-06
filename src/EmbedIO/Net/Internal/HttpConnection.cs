@@ -16,6 +16,9 @@ namespace EmbedIO.Net.Internal
         private const int BufferSize = 8192;
 
         private readonly Timer _timer;
+        private readonly object _connectionSync = new();
+        private int _forceClosing;
+        private int _resourcesDisposed;
         private readonly EndPointListener _epl;
         private Socket? _sock;
         private MemoryStream? _ms;
@@ -65,29 +68,21 @@ namespace EmbedIO.Net.Internal
 
         public void Dispose()
         {
-            Close(true);
-
-            _timer.Dispose();
-            _sock?.Dispose();
-            _ms?.Dispose();
-            _iStream?.Dispose();
-            _oStream?.Dispose();
-            Stream?.Dispose();
+            try { Close(true); }
+            finally { DisposeTransportResources(); }
         }
-
         public async Task BeginReadRequest()
         {
-            _buffer ??= new byte[BufferSize];
-
+            byte[] buffer;
             try
             {
-                if (Reuses == 1)
+                lock (_connectionSync)
                 {
-                    _sTimeout = 15000;
+                    if (_resourcesDisposed != 0) return;
+                    buffer = _buffer ??= new byte[BufferSize];
+                    if (Reuses == 1) _sTimeout = 15000;
+                    _ = _timer.Change(_sTimeout, Timeout.Infinite);
                 }
-
-                _ = _timer.Change(_sTimeout, Timeout.Infinite);
-
                 // Authenticate outside the socket accept callback. The request timer also
                 // bounds a client that connects without completing its TLS handshake.
                 if (Stream is SslStream sslStream && !sslStream.IsAuthenticated)
@@ -96,14 +91,13 @@ namespace EmbedIO.Net.Internal
                         false, SslProtocols.None, false).ConfigureAwait(false);
                 }
 
-                var data = await Stream.ReadAsync(_buffer, 0, BufferSize).ConfigureAwait(false);
+                var data = await Stream.ReadAsync(buffer, 0, BufferSize).ConfigureAwait(false);
                 await OnReadInternal(data).ConfigureAwait(false);
             }
             catch
             {
-                _ = _timer.Change(Timeout.Infinite, Timeout.Infinite);
+                StopRequestTimer();
                 CloseSocket();
-                Unbind();
             }
         }
 
@@ -129,50 +123,42 @@ namespace EmbedIO.Net.Internal
 
         internal void Close(bool forceClose = false)
         {
+            if (forceClose) Volatile.Write(ref _forceClosing, 1);
             if (_sock != null)
             {
+                // Dispose may call Response.Close recursively. A forced close is
+                // recorded first so that callback cannot restart the request reader.
                 _oStream?.Dispose();
                 _oStream = null;
             }
+            if (_sock == null) return;
 
-            if (_sock == null)
+            if (Volatile.Read(ref _forceClosing) == 0 && _context.Request.KeepAlive
+                && _context.Response.Headers["connection"] != "close"
+                && _context.HttpListenerRequest.FlushInput())
             {
-                return;
-            }
-
-            forceClose = forceClose
-                      || !_context.Request.KeepAlive
-                      || _context.Response.Headers["connection"] == "close";
-
-            if (!forceClose)
-            {
-                if (_context.HttpListenerRequest.FlushInput())
+                var restart = false;
+                lock (_connectionSync)
                 {
-                    Reuses++;
-                    Unbind();
-                    Init();
+                    if (_sock != null && _resourcesDisposed == 0 && _forceClosing == 0)
+                    {
+                        Reuses++;
+                        Unbind();
+                        Init();
+                        restart = true;
+                    }
+                }
+                // RegisterContext acquires the listener lock; do not enter the
+                // request reader while holding a connection lock.
+                if (restart)
+                {
                     _ = BeginReadRequest();
                     return;
                 }
             }
 
-            using (var s = _sock)
-            {
-                _sock = null;
-                try
-                {
-                    s?.Shutdown(SocketShutdown.Both);
-                }
-                catch
-                {
-                    // ignored
-                }
-            }
-
-            Unbind();
-            RemoveConnection();
+            CloseTransport(true);
         }
-
         private void Init()
         {
             _contextBound = false;
@@ -189,12 +175,11 @@ namespace EmbedIO.Net.Internal
         private void OnTimeout(object unused)
         {
             CloseSocket();
-            Unbind();
         }
 
         private async Task OnReadInternal(int offset)
         {
-            _ = _timer.Change(Timeout.Infinite, Timeout.Infinite);
+            StopRequestTimer();
 
             // Continue reading until full header is received.
             // Especially important for multipart requests when the second part of the header arrives after a tiny delay
@@ -213,14 +198,12 @@ namespace EmbedIO.Net.Internal
                 catch
                 {
                     CloseSocket();
-                    Unbind();
                     return;
                 }
 
                 if (offset == 0)
                 {
                     CloseSocket();
-                    Unbind();
                     return;
                 }
 
@@ -390,23 +373,66 @@ namespace EmbedIO.Net.Internal
             _contextBound = false;
         }
 
-        private void CloseSocket()
+        private void CloseSocket() => CloseTransport(false);
+
+        private void CloseTransport(bool shutdown)
         {
-            if (_sock == null)
+            Socket? socket;
+            lock (_connectionSync)
             {
-                return;
+                socket = _sock;
+                _sock = null;
             }
+            if (socket == null) return;
 
             try
             {
-                _sock.Dispose();
+                if (shutdown)
+                {
+                    try { socket.Shutdown(SocketShutdown.Both); }
+                    catch { /* A disconnected socket has nothing left to shut down. */ }
+                }
             }
             finally
             {
-                _sock = null;
+                socket.Dispose();
+                try
+                {
+                    Unbind();
+                    RemoveConnection();
+                }
+                finally { DisposeTransportResources(); }
             }
+        }
 
-            RemoveConnection();
+        private void DisposeTransportResources()
+        {
+            MemoryStream? buffered;
+            RequestStream? input;
+            lock (_connectionSync)
+            {
+                if (_resourcesDisposed != 0) return;
+                _resourcesDisposed = 1;
+                buffered = _ms;
+                input = _iStream;
+                _ms = null;
+                _iStream = null;
+                _buffer = null;
+                _currentLine = null;
+            }
+            _timer.Dispose();
+            buffered?.Dispose();
+            input?.Dispose();
+            Stream.Dispose();
+        }
+
+        private void StopRequestTimer()
+        {
+            try { _ = _timer.Change(Timeout.Infinite, Timeout.Infinite); }
+            catch (ObjectDisposedException) when (Volatile.Read(ref _resourcesDisposed) != 0)
+            {
+                // Terminal cleanup can race a reader completing or failing.
+            }
         }
     }
 }

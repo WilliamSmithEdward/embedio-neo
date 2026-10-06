@@ -19,6 +19,7 @@ namespace EmbedIO.Tests
         {
             // Exercise the real line parser without creating sockets or changing listener timing.
             var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
+            ConnectionType.GetField("_connectionSync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(connection, new object());
             var lines = new List<string>();
             for (var start = 0; start < bytes.Length; start += fragmentSize)
             {
@@ -47,6 +48,7 @@ namespace EmbedIO.Tests
         public void CompleteAndFragmentedHeadersPreserveBodyBoundary(int fragmentSize)
         {
             var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
+            ConnectionType.GetField("_connectionSync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(connection, new object());
             var fieldFlags = BindingFlags.Instance | BindingFlags.NonPublic;
             var transportField = ConnectionType.GetField("<Stream>k__BackingField", fieldFlags)!;
             transportField.SetValue(connection, Stream.Null);

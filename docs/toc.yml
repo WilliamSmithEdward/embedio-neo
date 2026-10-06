@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Listener connection lifetimes
+      href: user-reports/listener-connection-lifetimes.md
     - name: Read-only ZIP archives
       href: user-reports/read-only-zip.md
     - name: HTTP listener audit

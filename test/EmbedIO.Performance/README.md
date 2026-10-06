@@ -39,3 +39,18 @@ This socket-free workload measures insertion/signalling and the real accept queu
 burst sizes 1, 16 and 256. Context creation is outside measurement. The 300 B/request
 ceiling guards against snapshots growing with the queued request count; timing is
 informational. See [the HTTP listener audit](../../docs/user-reports/http-listener-audit.md).
+
+## HTTP/HTTPS transport checks
+
+```sh
+dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --listener-http
+dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --verify-listener-http
+```
+
+The loopback client and server share a process. JSON includes throughput, latency
+percentiles, process allocations, GC counts and memory. Add --retain-connections
+for retained-reference cleanup diagnostics; --requests, --rounds, --concurrency
+and --payload-bytes select workloads. Timing is informational. Heavy repeated
+churn can exhaust Windows socket/TIME_WAIT capacity; failures abort without retries.
+See [the lifetime report](../../docs/user-reports/listener-connection-lifetimes.md)
+for methodology, baseline measurements and compatibility coverage.

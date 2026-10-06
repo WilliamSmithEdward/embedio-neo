@@ -222,6 +222,7 @@ namespace EmbedIO.Tests
         private static object NewConnection(Stream transport)
         {
             var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
+            ConnectionType.GetField("_connectionSync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(connection, new object());
             Field("<Stream>k__BackingField").SetValue(connection, transport);
             ConnectionType.GetMethod("Init", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(connection, null);
             return connection;
