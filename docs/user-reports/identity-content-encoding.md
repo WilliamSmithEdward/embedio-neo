@@ -28,7 +28,11 @@ using EmbedIO;
 
 var directory = Path.GetFullPath(args.Length == 0 ? "media" : args[0]);
 if (!File.Exists(Path.Combine(directory, "video.mp4")))
-    throw new FileNotFoundException("Copy video.mp4 into the media directory supplied as the first argument.");
+{
+    Console.Error.WriteLine($"Copy video.mp4 into {directory}.");
+    Environment.ExitCode = 1;
+    return;
+}
 
 using var server = new WebServer(o => o
     .WithUrlPrefix("http://127.0.0.1:8877/")
