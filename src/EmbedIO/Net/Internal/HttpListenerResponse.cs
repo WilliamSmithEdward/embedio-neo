@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using EmbedIO.Utilities;
@@ -172,8 +173,12 @@ namespace EmbedIO.Net.Internal
         {
             if (_contentType != null)
             {
-                var contentTypeValue = _contentType.IndexOf("charset=", StringComparison.Ordinal) == -1
-                    ? $"{_contentType}; charset={WebServer.DefaultEncoding.WebName}"
+                var encoding = ContentEncoding;
+                var hasCharset = _contentType.IndexOf(';') >= 0
+                    && MediaTypeHeaderValue.TryParse(_contentType, out var parsedType)
+                    && parsedType.CharSet != null;
+                var contentTypeValue = encoding != null && !hasCharset
+                    ? $"{_contentType}; charset={encoding.WebName}"
                     : _contentType;
 
                 Headers.Add(HttpHeaderNames.ContentType, contentTypeValue);

@@ -33,6 +33,7 @@ namespace EmbedIO.Files
         private FileRequestHandlerCallback _onMappingFailed = FileRequestHandler.ThrowNotFound;
         private FileRequestHandlerCallback _onDirectoryNotListable = FileRequestHandler.ThrowUnauthorized;
         private FileRequestHandlerCallback _onMethodNotAllowed = FileRequestHandler.ThrowMethodNotAllowed;
+        private Action<IHttpContext, MappedResourceInfo>? _onPrepareResponse;
 
         private FileCache.Section? _cacheSection;
 
@@ -219,6 +220,27 @@ namespace EmbedIO.Files
             {
                 EnsureConfigurationNotLocked();
                 _onMethodNotAllowed = Validate.NotNull(nameof(value), value);
+            }
+        }
+
+        /// <summary>
+        /// <para>Gets or sets an optional callback invoked after response metadata is prepared,
+        /// before headers or file bytes are sent. The default is <see langword="null"/>.</para>
+        /// <para>The callback receives the context and actual mapped resource, including default
+        /// documents. It runs once per successful GET or HEAD response, including cached content,
+        /// directory listings, partial responses and conditional not-modified responses.</para>
+        /// <para>Use this callback to customize headers, for example to select a charset.
+        /// Changing charset metadata does not transcode the file. Do not write a response body
+        /// or change status, content length, range or compression metadata in this callback.</para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The module's configuration is locked.</exception>
+        public Action<IHttpContext, MappedResourceInfo>? OnPrepareResponse
+        {
+            get => _onPrepareResponse;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _onPrepareResponse = value;
             }
         }
 
@@ -468,6 +490,7 @@ namespace EmbedIO.Files
             {
                 context.Response.StatusCode = (int)HttpStatusCode.NotModified;
                 PreparePositiveResponse(context.Response, info, contentType, entityTag, setCompressionInResponse);
+                _onPrepareResponse?.Invoke(context, info);
                 return;
             }
 
@@ -521,6 +544,10 @@ namespace EmbedIO.Files
                 PreparePositiveResponse(context.Response, info, contentType, entityTag, setCompressionInResponse);
             }
 
+            // Invoke before choosing transport framing: a callback failure can still use
+            // the ordinary exception response without retaining a file's content length.
+            _onPrepareResponse?.Invoke(context, info);
+
             // If it's a HEAD request, we're done.
             if (!sendResponseBody)
             {
@@ -547,7 +574,10 @@ namespace EmbedIO.Files
                     }
 
                     content = memoryStream.ToArray();
-                    responseContentLength = content.Length;
+                    // Caching reads the entire file; a range response still sends only
+                    // the selected slice. Compression and ranges are mutually exclusive.
+                    if (!isPartial)
+                        responseContentLength = content.Length;
                 }
 
                 _ = cacheItem.SetContent(compressionMethod, content);

@@ -57,6 +57,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Concurrent controller responses](user-reports/concurrent-controller-responses.md): response ownership, binary output, request-aware cleanup and keep-alive isolation.
 
+- [Static-file charset](user-reports/static-file-charset.md): opt-in response metadata, text/binary encoding and listener differences.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
