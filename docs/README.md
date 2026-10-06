@@ -43,6 +43,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Request URL scheme and HTTPS](user-reports/request-url-scheme.md): transport security and URL reconstruction fixes.
 
+- [Medium-sized response stalls](user-reports/medium-response-stalls.md): async transport writes, framing regressions and diagnostics.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.

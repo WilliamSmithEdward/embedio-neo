@@ -2,6 +2,8 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace EmbedIO.Net.Internal
 {
@@ -48,28 +50,74 @@ namespace EmbedIO.Net.Internal
         }
 
         /// <inheritdoc />
+        public override Task FlushAsync(CancellationToken cancellationToken)
+            => cancellationToken.IsCancellationRequested ? Task.FromCanceled(cancellationToken) : Task.CompletedTask;
+
+        /// <inheritdoc />
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            ValidateWrite(buffer, offset, count);
+            if (cancellationToken.IsCancellationRequested)
+                return Task.FromCanceled(cancellationToken);
+
+            return WriteAsyncCore(buffer, offset, count, cancellationToken);
+        }
+
+        private async Task WriteAsyncCore(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            using var headers = GetHeaders(false);
+            var chunked = _response.SendChunked;
+            var hasBody = count > 0;
+            if (headers != null)
+            {
+                var start = headers.Position;
+                headers.Position = headers.Length;
+                if (chunked && hasBody)
+                {
+                    var size = GetChunkSizeBytes(count, false);
+                    headers.Write(size, 0, size.Length);
+                }
+
+                var prefixCount = Math.Min(count, Math.Max(0, 16384 - (int)(headers.Length - start)));
+                headers.Write(buffer, offset, prefixCount);
+                await InternalWriteAsync(headers.GetBuffer(), (int)start, (int)(headers.Length - start), cancellationToken)
+                    .ConfigureAwait(false);
+                offset += prefixCount;
+                count -= prefixCount;
+            }
+            else if (chunked && hasBody)
+            {
+                var size = GetChunkSizeBytes(count, false);
+                await InternalWriteAsync(size, 0, size.Length, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (count > 0)
+                await InternalWriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+            if (chunked && hasBody)
+                await InternalWriteAsync(CrLf, 0, CrLf.Length, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
         public override void Write(byte[] buffer, int offset, int count)
         {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(ResponseStream));
-            }
+            ValidateWrite(buffer, offset, count);
 
             byte[] bytes;
             var ms = GetHeaders(false);
             var chunked = _response.SendChunked;
+            var hasBody = count > 0;
 
             if (ms != null)
             {
                 var start = ms.Position; // After the possible preamble for the encoding
                 ms.Position = ms.Length;
-                if (chunked)
+                if (chunked && hasBody)
                 {
                     bytes = GetChunkSizeBytes(count, false);
                     ms.Write(bytes, 0, bytes.Length);
                 }
 
-                var newCount = Math.Min(count, 16384 - (int)ms.Position + (int)start);
+                var newCount = Math.Min(count, Math.Max(0, 16384 - (int)ms.Position + (int)start));
                 ms.Write(buffer, offset, newCount);
                 count -= newCount;
                 offset += newCount;
@@ -77,7 +125,7 @@ namespace EmbedIO.Net.Internal
                 ms.SetLength(0);
                 ms.Capacity = 0; // 'dispose' the buffer in ms.
             }
-            else if (chunked)
+            else if (chunked && hasBody)
             {
                 bytes = GetChunkSizeBytes(count, false);
                 InternalWrite(bytes, 0, bytes.Length);
@@ -88,7 +136,7 @@ namespace EmbedIO.Net.Internal
                 InternalWrite(buffer, offset, count);
             }
 
-            if (chunked)
+            if (chunked && hasBody)
             {
                 InternalWrite(CrLf, 0, 2);
             }
@@ -120,6 +168,36 @@ namespace EmbedIO.Net.Internal
             {
                 _stream.Write(buffer, offset, count);
             }
+        }
+
+        private async Task InternalWriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await _stream.WriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch when (_ignoreErrors)
+            {
+                // Preserve IgnoreWriteExceptions, but never suppress caller cancellation.
+            }
+        }
+
+        private void ValidateWrite(byte[] buffer, int offset, int count)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(ResponseStream));
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+            if (offset < 0)
+                throw new ArgumentOutOfRangeException(nameof(offset));
+            if (count < 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
+            if (offset > buffer.Length - count)
+                throw new ArgumentException("The offset and count exceed the buffer length.");
         }
 
         protected override void Dispose(bool disposing)

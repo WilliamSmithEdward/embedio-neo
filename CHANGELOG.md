@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Use true asynchronous managed response writes with caller cancellation; preserve write-error policy. Repair premature chunk termination on empty writes and large-header body-prefix calculations. Add 40 regression cases for 1–6 MB files, compression/cache variants, action/JSON responses and backpressure.
+
 - Add MimeType.Xml and MimeType.TextXml constants and document opt-in controller XML responses using existing serializers; preserve default JSON behavior.
 - Reduce content-negotiation, header/token parsing, WebSocket metadata and frame-read
   allocations. Avoid rate-history snapshots and preserve request records during
