@@ -73,7 +73,6 @@ namespace EmbedIO.Net.Internal
             _iStream?.Dispose();
             _oStream?.Dispose();
             Stream?.Dispose();
-            _lastListener?.Dispose();
         }
 
         public async Task BeginReadRequest()

@@ -44,15 +44,20 @@ namespace EmbedIO.Net.Internal
             // Call FillFromBuffer to check for buffer boundaries even when remaining_body is 0
             var nread = FillFromBuffer(buffer, offset, count);
 
-            if (nread == -1)
+            if (nread == -1 || count == 0)
             {
-                // No more bytes available (Content-Length)
+                // No bytes requested or Content-Length reached.
                 return 0;
             }
 
             if (nread > 0)
             {
                 return nread;
+            }
+
+            if (_remainingBody > 0)
+            {
+                count = (int)Math.Min(count, _remainingBody);
             }
 
             nread = _stream.Read(buffer, offset, count);
@@ -116,7 +121,7 @@ namespace EmbedIO.Net.Internal
             var size = Math.Min(_length, count);
             if (_remainingBody > 0)
             {
-                size = (int) Math.Min(size, _remainingBody);
+                size = (int)Math.Min(size, _remainingBody);
             }
 
             if (_offset > _buffer.Length - size)

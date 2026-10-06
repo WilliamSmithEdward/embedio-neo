@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: HTTP listener audit
+      href: user-reports/http-listener-audit.md
     - name: Medium-sized response stalls
       href: user-reports/medium-response-stalls.md
     - name: Cold-start audit
