@@ -65,7 +65,10 @@ curl.exe --noproxy "*" --max-time 5 http://127.0.0.1:8585/api/probe
 
 Use the app's real API route instead of `/api/probe` if different. A wildcard
 prefix accepts these hostnames; for an explicit hostname prefix, use its matching
-URL. Stop the inbound tool with Ctrl+C when the diagnostic session ends.
+URL. Stop the inbound tool with Ctrl+C when the diagnostic session ends. If access
+still fails, inspect the app's ordinary firewall rules for the specific executable
+or package, TCP port and intended addresses; the isolation allowance does not
+replace those rules.
 Microsoft's [IPC guidance](https://learn.microsoft.com/en-us/windows/apps/develop/communication/interprocess-communication#loopback)
 requires this tool to remain running and limits this approach to sideload/debug
 scenarios with local administrative access. It is not an automatic production
@@ -180,9 +183,14 @@ The test-only [AppContainer fixture](../../test/EmbedIO.AppContainerSmoke) and
 process's restricted token and package SID, blocked incoming loopback before and
 after an outbound allowance, real HTML/API/session responses under an inbound
 session, restoration after that session ends, and scoped profile/ACL/exemption
-cleanup. Its operations are guarded for disposable GitHub runners. It is outside
-the solution and shipped packages. A configured job is not passing evidence until
-its result artifact succeeds.
+cleanup. The fixture separately permits TCP loopback only for its unique app SID
+and port; this prevents ordinary firewall policy from confounding the isolation
+comparison, and that rule is removed afterward. Its operations are guarded for disposable GitHub runners. It is outside
+the solution and shipped packages. The [verified Windows run](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37524587734)
+passed on Windows NT 10.0.26100 and .NET 10.0.12: the child token/SID matched,
+both initial blocked phases passed, the inbound session permitted HTML/API/session
+responses, and ending it restored isolation. Future changed-source runs must pass
+the same checks; a configured job alone is not passing evidence.
 
 The modern fixture is a .NET 10.0.12 Win32 process in a real AppContainer, not a
 Xamarin/UWP/.NET Native application or a WebView. Full-trust MAUI Windows passes

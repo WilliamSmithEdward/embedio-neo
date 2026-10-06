@@ -32,6 +32,7 @@ internal static class Program
         string? failure = null;
         using var profile = new ContainerProfile();
         Process? child = null, inbound = null;
+        Task<string>? inboundOutput = null, inboundError = null;
         var outboundAdded = false;
         var firewallAdded = false;
         try
@@ -52,12 +53,13 @@ internal static class Program
             await RequireBlockedAsync();
             checks["outbound_exemption_does_not_allow_inbound"] = true;
             inbound = StartTool("CheckNetIsolation.exe", "LoopbackExempt", "-is", "-p=" + profile.Sid);
+            inboundOutput = inbound.StandardOutput.ReadToEndAsync();
+            inboundError = inbound.StandardError.ReadToEndAsync();
             await WaitReachableAsync(inbound);
             await VerifyHttpAsync();
             checks["inbound_session_html_api_sessions"] = true;
             Stop(inbound);
             await inbound.WaitForExitAsync();
-            File.WriteAllText(Path.Combine(results, "inbound-session.txt"), await inbound.StandardOutput.ReadToEndAsync() + await inbound.StandardError.ReadToEndAsync());
             await RequireBlockedAsync();
             checks["ending_inbound_session_restores_isolation"] = true;
             passed = true;
@@ -69,7 +71,11 @@ internal static class Program
             Stop(child);
             if (child != null) { await child.WaitForExitAsync(); child.Dispose(); }
             if (inbound != null)
-                File.WriteAllText(Path.Combine(results, "inbound-session.txt"), await inbound.StandardOutput.ReadToEndAsync() + await inbound.StandardError.ReadToEndAsync());
+            {
+                await inbound.WaitForExitAsync();
+                File.WriteAllText(Path.Combine(results, "inbound-session.txt"),
+                    await inboundOutput! + await inboundError!);
+            }
             if (firewallAdded)
                 await RunToolAsync("WindowsPowerShell/v1.0/powershell.exe", "-NoProfile", "-NonInteractive", "-Command", $"Remove-NetFirewallRule -Name '{profile.Name}' -ErrorAction SilentlyContinue");
             if (outboundAdded) await RunToolAsync("CheckNetIsolation.exe", "LoopbackExempt", "-d", "-p=" + profile.Sid);

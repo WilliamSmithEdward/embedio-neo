@@ -19,18 +19,18 @@ internal sealed class ContainerProfile : IDisposable
 
     public ContainerProfile()
     {
-        Marshal.ThrowExceptionForHR(CreateAppContainerProfile(Name, Name, "Disposable EmbedIO network isolation fixture", IntPtr.Zero, 0, out _sid));
+        Marshal.ThrowExceptionForHR(NativeMethods.CreateAppContainerProfile(Name, Name, "Disposable EmbedIO network isolation fixture", IntPtr.Zero, 0, out _sid));
         Sid = new SecurityIdentifier(_sid).Value;
         try
         {
-            Marshal.ThrowExceptionForHR(GetAppContainerFolderPath(Sid, out var folder));
+            Marshal.ThrowExceptionForHR(NativeMethods.GetAppContainerFolderPath(Sid, out var folder));
             try { Folder = Marshal.PtrToStringUni(folder) ?? throw new InvalidOperationException("Missing profile path"); }
             finally { Marshal.FreeCoTaskMem(folder); }
         }
         catch
         {
-            _ = DeleteAppContainerProfile(Name);
-            FreeSid(_sid);
+            _ = NativeMethods.DeleteAppContainerProfile(Name);
+            NativeMethods.FreeSid(_sid);
             throw;
         }
     }
@@ -57,21 +57,21 @@ internal sealed class ContainerProfile : IDisposable
             security = Marshal.AllocHGlobal(Marshal.SizeOf<SecurityCapabilities>());
             Marshal.StructureToPtr(new SecurityCapabilities { Sid = _sid, Capabilities = capabilities, Count = (uint)capabilitySids.Count }, security, false);
             nuint size = 0;
-            _ = InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+            _ = NativeMethods.InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
             if (size == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
             attributes = Marshal.AllocHGlobal(checked((int)size));
-            Check(InitializeProcThreadAttributeList(attributes, 1, 0, ref size));
+            Check(NativeMethods.InitializeProcThreadAttributeList(attributes, 1, 0, ref size));
             initialized = true;
-            Check(UpdateProcThreadAttribute(attributes, 0, (IntPtr)0x20009, security, (nuint)Marshal.SizeOf<SecurityCapabilities>(), IntPtr.Zero, IntPtr.Zero));
+            Check(NativeMethods.UpdateProcThreadAttribute(attributes, 0, (IntPtr)0x20009, security, (nuint)Marshal.SizeOf<SecurityCapabilities>(), IntPtr.Zero, IntPtr.Zero));
             var startup = new StartupInfoEx { Startup = new StartupInfo { Size = (uint)Marshal.SizeOf<StartupInfoEx>(), Flags = 1, ShowWindow = 0 }, Attributes = attributes };
             var command = new StringBuilder($"\"{executable}\" serve {port} \"{Folder}\" \"{Sid}\"");
-            Check(CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x00080000 | 0x08000000, IntPtr.Zero, Path.GetDirectoryName(executable)!, ref startup, out var child));
+            Check(NativeMethods.CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x00080000 | 0x08000000, IntPtr.Zero, Path.GetDirectoryName(executable)!, ref startup, out var child));
             try { return Process.GetProcessById((int)child.Id); }
-            finally { CloseHandle(child.Thread); CloseHandle(child.Process); }
+            finally { NativeMethods.CloseHandle(child.Thread); NativeMethods.CloseHandle(child.Process); }
         }
         finally
         {
-            if (initialized) DeleteProcThreadAttributeList(attributes);
+            if (initialized) NativeMethods.DeleteProcThreadAttributeList(attributes);
             if (attributes != IntPtr.Zero) Marshal.FreeHGlobal(attributes);
             if (capabilities != IntPtr.Zero) Marshal.FreeHGlobal(capabilities);
             if (security != IntPtr.Zero) Marshal.FreeHGlobal(security);
@@ -81,35 +81,35 @@ internal sealed class ContainerProfile : IDisposable
 
     public static string CurrentContainerSid()
     {
-        Check(OpenProcessToken((IntPtr)(-1), 8, out var token));
+        Check(NativeMethods.OpenProcessToken((IntPtr)(-1), 8, out var token));
         try
         {
             var buffer = Marshal.AllocHGlobal(IntPtr.Size);
             try
             {
-                Check(GetTokenInformation(token, 29, buffer, 4, out _));
+                Check(NativeMethods.GetTokenInformation(token, 29, buffer, 4, out _));
                 if (Marshal.ReadInt32(buffer) != 1) throw new InvalidOperationException("Child is not an AppContainer");
-                _ = GetTokenInformation(token, 31, IntPtr.Zero, 0, out var needed);
+                _ = NativeMethods.GetTokenInformation(token, 31, IntPtr.Zero, 0, out var needed);
                 if (needed == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
                 var information = Marshal.AllocHGlobal(checked((int)needed));
                 try
                 {
-                    Check(GetTokenInformation(token, 31, information, needed, out _));
+                    Check(NativeMethods.GetTokenInformation(token, 31, information, needed, out _));
                     return new SecurityIdentifier(Marshal.ReadIntPtr(information)).Value;
                 }
                 finally { Marshal.FreeHGlobal(information); }
             }
             finally { Marshal.FreeHGlobal(buffer); }
         }
-        finally { CloseHandle(token); }
+        finally { NativeMethods.CloseHandle(token); }
     }
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        try { Marshal.ThrowExceptionForHR(DeleteAppContainerProfile(Name)); }
-        finally { FreeSid(_sid); }
+        try { Marshal.ThrowExceptionForHR(NativeMethods.DeleteAppContainerProfile(Name)); }
+        finally { NativeMethods.FreeSid(_sid); }
     }
 
     private static void Check(bool success) { if (!success) throw new Win32Exception(Marshal.GetLastWin32Error()); }
@@ -126,15 +126,18 @@ internal sealed class ContainerProfile : IDisposable
     }
     [StructLayout(LayoutKind.Sequential)] private struct StartupInfoEx { public StartupInfo Startup; public IntPtr Attributes; }
     [StructLayout(LayoutKind.Sequential)] private struct ProcessInformation { public IntPtr Process, Thread; public uint Id, ThreadId; }
-    [DllImport("userenv.dll", CharSet = CharSet.Unicode)] private static extern int CreateAppContainerProfile(string name, string display, string description, IntPtr capabilities, uint count, out IntPtr sid);
-    [DllImport("userenv.dll", CharSet = CharSet.Unicode)] private static extern int GetAppContainerFolderPath(string sid, out IntPtr path);
-    [DllImport("userenv.dll", CharSet = CharSet.Unicode)] private static extern int DeleteAppContainerProfile(string name);
-    [DllImport("advapi32.dll")] private static extern IntPtr FreeSid(IntPtr sid);
-    [DllImport("advapi32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
-    [DllImport("advapi32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetTokenInformation(IntPtr token, int informationClass, IntPtr information, uint length, out uint needed);
-    [DllImport("kernel32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool InitializeProcThreadAttributeList(IntPtr attributes, uint count, uint flags, ref nuint size);
-    [DllImport("kernel32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool UpdateProcThreadAttribute(IntPtr attributes, uint flags, IntPtr attribute, IntPtr value, nuint size, IntPtr previous, IntPtr needed);
-    [DllImport("kernel32.dll")] private static extern void DeleteProcThreadAttributeList(IntPtr attributes);
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool CreateProcess(string application, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, bool inherit, uint flags, IntPtr environment, string directory, ref StartupInfoEx startup, out ProcessInformation process);
-    [DllImport("kernel32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseHandle(IntPtr handle);
+    private static class NativeMethods
+    {
+        [DllImport("userenv.dll", CharSet = CharSet.Unicode)] internal static extern int CreateAppContainerProfile(string name, string display, string description, IntPtr capabilities, uint count, out IntPtr sid);
+        [DllImport("userenv.dll", CharSet = CharSet.Unicode)] internal static extern int GetAppContainerFolderPath(string sid, out IntPtr path);
+        [DllImport("userenv.dll", CharSet = CharSet.Unicode)] internal static extern int DeleteAppContainerProfile(string name);
+        [DllImport("advapi32.dll")] internal static extern IntPtr FreeSid(IntPtr sid);
+        [DllImport("advapi32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] internal static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+        [DllImport("advapi32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] internal static extern bool GetTokenInformation(IntPtr token, int informationClass, IntPtr information, uint length, out uint needed);
+        [DllImport("kernel32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] internal static extern bool InitializeProcThreadAttributeList(IntPtr attributes, uint count, uint flags, ref nuint size);
+        [DllImport("kernel32.dll", SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] internal static extern bool UpdateProcThreadAttribute(IntPtr attributes, uint flags, IntPtr attribute, IntPtr value, nuint size, IntPtr previous, IntPtr needed);
+        [DllImport("kernel32.dll")] internal static extern void DeleteProcThreadAttributeList(IntPtr attributes);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)][return: MarshalAs(UnmanagedType.Bool)] internal static extern bool CreateProcess(string application, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity, bool inherit, uint flags, IntPtr environment, string directory, ref StartupInfoEx startup, out ProcessInformation process);
+        [DllImport("kernel32.dll")][return: MarshalAs(UnmanagedType.Bool)] internal static extern bool CloseHandle(IntPtr handle);
+    }
 }
