@@ -1,7 +1,6 @@
 ﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -276,7 +275,23 @@ namespace EmbedIO.Net.Internal
             _response.Close();
         }
 
-        private static byte[] GetChunkSizeBytes(int size, bool final) => WebServer.DefaultEncoding.GetBytes($"{size:x}\r\n{(final ? "\r\n" : string.Empty)}");
+        private static byte[] GetChunkSizeBytes(int size, bool final)
+        {
+            var value = unchecked((uint)size);
+            var digits = 1;
+            for (var remaining = value >> 4; remaining != 0; remaining >>= 4) digits++;
+            var bytes = new byte[digits + (final ? 4 : 2)];
+            for (var index = digits - 1; index >= 0; index--)
+            {
+                var digit = (int)(value & 15);
+                bytes[index] = (byte)(digit < 10 ? '0' + digit : 'a' + digit - 10);
+                value >>= 4;
+            }
+            bytes[digits] = 13;
+            bytes[digits + 1] = 10;
+            if (final) { bytes[digits + 2] = 13; bytes[digits + 3] = 10; }
+            return bytes;
+        }
 
         private MemoryStream? GetHeaders(bool closing)
         {

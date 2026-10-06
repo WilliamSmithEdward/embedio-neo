@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Reduce chunk-prefix and charset-extraction allocations while preserving exact
+  wire bytes and legacy attribute selection/errors. Add 42 compatibility cases,
+  allocation budgets and chunked HTTP/HTTPS response verification.
+
 - Omit `Content-Encoding: identity` when response negotiation selects no transformation, clearing stale coding metadata while retaining `Vary: Accept-Encoding`, compressed headers and existing negotiation results (upstream #566). Add real-listener media, range, cache and text/JSON regressions.
 
 - Honor configured managed-response encodings and explicit charset parameters. Add the opt-in `FileModule.OnPrepareResponse` callback for per-resource headers before transmission, including cached, conditional and range responses (upstream #567). Preserve unconfigured defaults and file bytes.

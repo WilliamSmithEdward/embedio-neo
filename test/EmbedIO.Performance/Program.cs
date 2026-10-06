@@ -5,7 +5,7 @@ using EmbedIO;
 using EmbedIO.Routing;
 using EmbedIO.Utilities;
 
-if (ColdStart.Run(args) || ListenerQueue.Run(args) || ListenerHttp.Run(args) || ListenerAllocations.Run(args)) return;
+if (ColdStart.Run(args) || ListenerQueue.Run(args) || ListenerHttp.Run(args) || ListenerAllocations.Run(args) || ListenerWire.Run(args)) return;
 
 var verifyAllocations = args.Contains("--verify-allocations", StringComparer.Ordinal);
 Console.WriteLine($"{RuntimeInformation.FrameworkDescription}; {RuntimeInformation.OSDescription}; {RuntimeInformation.ProcessArchitecture}");
