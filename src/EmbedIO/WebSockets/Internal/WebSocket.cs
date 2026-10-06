@@ -24,6 +24,7 @@ namespace EmbedIO.WebSockets.Internal
         public const string SupportedVersion = "13";
 
         private readonly object _stateSyncRoot = new();
+        private readonly object _messageSyncRoot = new();
         private readonly ConcurrentQueue<MessageEventArgs> _messageEventQueue = new();
         private readonly Action _closeConnection;
         private readonly TimeSpan _waitTime = TimeSpan.FromSeconds(1);
@@ -31,7 +32,8 @@ namespace EmbedIO.WebSockets.Internal
         private volatile WebSocketState _readyState;
         private AutoResetEvent? _exitReceiving;
         private FragmentBuffer? _fragmentsBuffer;
-        private volatile bool _inMessage;
+        private bool _inMessage;
+        private EventHandler<MessageEventArgs>? _onMessage;
         private AutoResetEvent? _receivePong;
         private Stream? _stream;
 
@@ -50,7 +52,17 @@ namespace EmbedIO.WebSockets.Internal
         /// <summary>
         /// Occurs when the <see cref="WebSocket"/> receives a message.
         /// </summary>
-        public event EventHandler<MessageEventArgs>? OnMessage;
+        public event EventHandler<MessageEventArgs>? OnMessage
+        {
+            add
+            {
+                lock (_messageSyncRoot) _onMessage += value;
+                // Frames can arrive before the module finishes connection initialization.
+                // Registering the consumer must also wake a previously idle queue.
+                _ = Task.Run(Message);
+            }
+            remove { lock (_messageSyncRoot) _onMessage -= value; }
+        }
 
         /// <inheritdoc />
         public WebSocketState State => _readyState;
@@ -331,52 +343,35 @@ namespace EmbedIO.WebSockets.Internal
 
         private void Message()
         {
-            if (_inMessage || _messageEventQueue.IsEmpty || _readyState != WebSocketState.Open)
+            lock (_messageSyncRoot)
             {
-                return;
+                if (_inMessage || _onMessage == null || _readyState != WebSocketState.Open)
+                    return;
+                _inMessage = true;
             }
 
-            _inMessage = true;
-
-            if (_messageEventQueue.TryDequeue(out var e))
+            while (true)
             {
-                Messages(e);
+                EventHandler<MessageEventArgs> handler;
+                MessageEventArgs message;
+                lock (_messageSyncRoot)
+                {
+                    if (_onMessage == null || _readyState != WebSocketState.Open
+                        || !_messageEventQueue.TryDequeue(out message))
+                    {
+                        // Publish the idle state atomically with the empty-queue check.
+                        // An enqueue or subscription can then start the next consumer.
+                        _inMessage = false;
+                        return;
+                    }
+                    handler = _onMessage;
+                }
+                try { handler(this, message); }
+                catch (Exception ex) { ex.Log(nameof(WebSocket)); }
             }
         }
 
-        private void Messages(MessageEventArgs e)
-        {
-            try
-            {
-                OnMessage?.Invoke(this, e);
-            }
-            catch (Exception ex)
-            {
-                ex.Log(nameof(WebSocket));
-            }
-
-            if (!_messageEventQueue.TryDequeue(out e) || _readyState != WebSocketState.Open)
-            {
-                _inMessage = false;
-                return;
-            }
-
-            _ = Task.Run(() => Messages(e));
-        }
-
-        private void Open()
-        {
-            _inMessage = true;
-            StartReceiving();
-
-            if (!_messageEventQueue.TryDequeue(out var e) || _readyState != WebSocketState.Open)
-            {
-                _inMessage = false;
-                return;
-            }
-
-            Messages(e);
-        }
+        private void Open() => StartReceiving();
 
         private Task ProcessCloseFrame(WebSocketFrame frame) => InternalCloseAsync(frame.PayloadData, !frame.PayloadData.HasReservedCode, false);
 
@@ -468,6 +463,7 @@ namespace EmbedIO.WebSockets.Internal
         {
             _closeConnection();
             _stream = null;
+            while (_messageEventQueue.TryDequeue(out _)) { }
 
             if (_fragmentsBuffer != null)
             {

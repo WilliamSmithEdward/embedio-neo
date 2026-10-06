@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Retain WebSocket messages received before connection initialization completes, synchronize managed dispatch wake-ups, clean up failed initialization and emit one disconnection notification. Guard asynchronous managed callback errors without changing callback APIs or defaults (upstream #556).
+
 - Document and verify early responses with unread request bodies, including the legacy HttpClient sequence and fixed-length connection reuse, without changing production defaults (upstream #558).
 
 ## [1.0.2] - 2026-10-05
