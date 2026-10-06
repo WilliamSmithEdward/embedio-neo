@@ -12,11 +12,14 @@ namespace EmbedIO.Net.Internal
     {
         private readonly Stream _stream;
         private readonly Action _prepareHeaders;
+        private readonly bool _suppressBody;
+        private bool _disposed;
 
-        public SystemResponseStream(Stream stream, Action prepareHeaders)
+        public SystemResponseStream(Stream stream, Action prepareHeaders, bool suppressBody = false)
         {
             _stream = stream;
             _prepareHeaders = prepareHeaders;
+            _suppressBody = suppressBody;
         }
 
         public override bool CanRead => _stream.CanRead;
@@ -31,6 +34,8 @@ namespace EmbedIO.Net.Internal
         public override void Write(byte[] buffer, int offset, int count)
         {
             ValidateWrite(buffer, offset, count);
+            if (_suppressBody)
+                return;
             // Unix ignores synchronous empty writes without computing response headers.
             if (count != 0 || RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 _prepareHeaders();
@@ -42,6 +47,8 @@ namespace EmbedIO.Net.Internal
             ValidateWrite(buffer, offset, count);
             if (cancellationToken.IsCancellationRequested)
                 return Task.FromCanceled(cancellationToken);
+            if (_suppressBody)
+                return Task.CompletedTask;
             _prepareHeaders();
             return _stream.WriteAsync(buffer, offset, count, cancellationToken);
         }
@@ -49,21 +56,32 @@ namespace EmbedIO.Net.Internal
         public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state)
         {
             ValidateWrite(buffer, offset, count);
+            if (_suppressBody)
+                return base.BeginWrite(buffer, offset, count, callback, state);
             _prepareHeaders();
             return _stream.BeginWrite(buffer, offset, count, callback, state);
         }
 
-        public override void EndWrite(IAsyncResult asyncResult) => _stream.EndWrite(asyncResult);
+        public override void EndWrite(IAsyncResult asyncResult)
+        {
+            if (_suppressBody) base.EndWrite(asyncResult);
+            else _stream.EndWrite(asyncResult);
+        }
 
         public override void Flush()
         {
-            _stream.Flush();
+            if (!_suppressBody) _stream.Flush();
         }
 
-        public override Task FlushAsync(CancellationToken cancellationToken) => _stream.FlushAsync(cancellationToken);
+        public override Task FlushAsync(CancellationToken cancellationToken)
+            => _suppressBody
+                ? cancellationToken.IsCancellationRequested ? Task.FromCanceled(cancellationToken) : Task.CompletedTask
+                : _stream.FlushAsync(cancellationToken);
 
-        private static void ValidateWrite(byte[] buffer, int offset, int count)
+        private void ValidateWrite(byte[] buffer, int offset, int count)
         {
+            if (_disposed || (_suppressBody && !_stream.CanWrite))
+                throw new ObjectDisposedException(nameof(SystemResponseStream));
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
             if (offset < 0)
@@ -79,6 +97,7 @@ namespace EmbedIO.Net.Internal
             {
                 _prepareHeaders();
                 _stream.Dispose();
+                _disposed = true;
             }
             base.Dispose(disposing);
         }

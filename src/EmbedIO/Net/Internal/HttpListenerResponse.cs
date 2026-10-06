@@ -142,6 +142,8 @@ namespace EmbedIO.Net.Internal
 
         internal bool HeadersSent { get; set; }
 
+        internal bool IsHeadResponse => _request.HttpVerb == HttpVerbs.Head;
+
         void IDisposable.Dispose() => Close(true);
 
         public void Close() => Close(false);
