@@ -73,6 +73,9 @@
     - name: Request URL scheme and HTTPS
       href: user-reports/request-url-scheme.md
 
+    - name: Unread request bodies
+      href: user-reports/unread-request-bodies.md
+
 - name: Architecture
   items:
     - name: Dependency injection
