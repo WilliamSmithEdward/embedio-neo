@@ -11,6 +11,7 @@ namespace EmbedIO.Net.Internal
     {
         private static readonly byte[] CrLf = { 13, 10 };
         private readonly object _headersSyncRoot = new();
+        private readonly SemaphoreSlim _asyncWriteLock = new(1, 1);
 
         private readonly Stream _stream;
         private readonly HttpListenerResponse _response;
@@ -64,6 +65,22 @@ namespace EmbedIO.Net.Internal
         }
 
         private async Task WriteAsyncCore(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            // Stream's inherited async fallback serialized writes. Preserve that ordering
+            // without retaining a worker thread while waiting for transport backpressure.
+            await _asyncWriteLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                ValidateWrite(buffer, offset, count);
+                await WriteAsyncLocked(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _asyncWriteLock.Release();
+            }
+        }
+
+        private async Task WriteAsyncLocked(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             using var headers = GetHeaders(false);
             var chunked = _response.SendChunked;

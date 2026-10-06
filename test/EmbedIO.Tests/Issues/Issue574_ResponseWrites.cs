@@ -46,6 +46,34 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(false)]
         [TestCase(true)]
+        public async Task OverlappingAsyncWritesStayOrderedAndQueuedCancellationSendsNoBytes(bool ignoreErrors)
+        {
+            using var fixture = await Fixture.Create(true, ignoreErrors);
+            fixture.Transport.BlockWrites = true;
+            var first = fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("AAA"), 0, 3);
+            var second = fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("BBB"), 0, 3);
+            using var cancel = new CancellationTokenSource();
+            var canceled = fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("CCC"), 0, 3, cancel.Token);
+            try
+            {
+                Assert.That(fixture.Transport.AsyncWrites, Is.EqualTo(1), "The base Stream fallback previously serialized async writes; keep that ordering.");
+                cancel.Cancel();
+                await Assert.CatchAsync<OperationCanceledException>(async () => await canceled);
+            }
+            finally
+            {
+                cancel.Cancel();
+                fixture.Transport.ReleaseWrites.TrySetResult();
+                await Task.WhenAll(first, second);
+                fixture.Transport.BlockWrites = false;
+            }
+            fixture.Stream.Dispose();
+            var wire = Encoding.ASCII.GetString(fixture.Transport.ToArray());
+            Assert.That(wire, Does.EndWith("\r\n\r\n3\r\nAAA\r\n3\r\nBBB\r\n0\r\n\r\n"));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
         public async Task AsyncTransportErrorsRespectIgnoreWriteExceptions(bool ignoreErrors)
         {
             using var fixture = await Fixture.Create(false, ignoreErrors);
@@ -157,6 +185,7 @@ namespace EmbedIO.Tests.Issues
             public void Dispose()
             {
                 Transport.BlockWrites = false;
+                Transport.ReleaseWrites.TrySetResult();
                 Stream.Dispose();
                 _client.Dispose();
                 _listener.Dispose();
@@ -171,6 +200,7 @@ namespace EmbedIO.Tests.Issues
             public bool BlockWrites { get; set; }
             public Exception? Error { get; set; }
             public TaskCompletionSource AsyncEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskCompletionSource ReleaseWrites { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public override void Write(byte[] buffer, int offset, int count)
             {
                 SynchronousWrites++;
@@ -183,7 +213,7 @@ namespace EmbedIO.Tests.Issues
             {
                 AsyncWrites++;
                 AsyncEntered.TrySetResult();
-                if (BlockWrites) await Task.Delay(Timeout.Infinite, cancellationToken);
+                if (BlockWrites) await ReleaseWrites.Task.WaitAsync(cancellationToken);
                 if (Error != null) throw Error;
                 cancellationToken.ThrowIfCancellationRequested();
                 base.Write(buffer, offset, count);
