@@ -32,6 +32,8 @@
       href: user-reports/static-file-charset.md
     - name: Concurrent controller responses
       href: user-reports/concurrent-controller-responses.md
+    - name: Listener body and header allocations
+      href: user-reports/listener-body-performance.md
     - name: HTTP listener boundaries
       href: user-reports/listener-boundaries.md
     - name: Listener connection lifetimes

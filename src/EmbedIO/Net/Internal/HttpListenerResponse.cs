@@ -347,8 +347,9 @@ namespace EmbedIO.Net.Internal
                 .Append(StatusDescription)
                 .Append("\r\n");
 
-            foreach (var key in Headers.AllKeys.Where(x => x != "Set-Cookie"))
+            foreach (var key in Headers.AllKeys)
             {
+                if (key == "Set-Cookie") continue;
                 _ = sb
                     .Append(key)
                     .Append(": ")
@@ -377,11 +378,15 @@ namespace EmbedIO.Net.Internal
 
         private MemoryStream WriteHeaders()
         {
-            var stream = new MemoryStream();
-            var data = WebServer.DefaultEncoding.GetBytes(GetHeaderData());
-            var preamble = WebServer.DefaultEncoding.GetPreamble();
-            stream.Write(preamble, 0, preamble.Length);
-            stream.Write(data, 0, data.Length);
+            var encoding = WebServer.DefaultEncoding;
+            var text = GetHeaderData();
+            var preamble = encoding.GetPreamble();
+            var size = preamble.Length + encoding.GetByteCount(text);
+            var stream = new MemoryStream(size);
+            stream.SetLength(size);
+            var buffer = stream.GetBuffer();
+            Buffer.BlockCopy(preamble, 0, buffer, 0, preamble.Length);
+            encoding.GetBytes(text, 0, text.Length, buffer, preamble.Length);
 
             _outputStream ??= _connection.GetResponseStream();
 
