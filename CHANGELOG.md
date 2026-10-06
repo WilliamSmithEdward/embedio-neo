@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Document custom trace destinations, bounded UI handoff and managed private-key HTTPS diagnostics for the Unity report, with real diagnostics/TLS regression coverage and unchanged production behavior (upstream #553).
+
 - Document inbound versus outbound UWP/AppContainer loopback access, real HTML/API/session diagnostics and a scoped Windows isolation CI probe without changing production defaults (upstream #554).
 
 - Avoid the Windows native HttpListener WebSocket full-close lock inversion by coordinating close-frame output and a single receiver through public .NET APIs. Preserve completed handshakes, close status/reason and cancellation; recheck against released .NET 11 before considering removal (#105).
@@ -49,7 +51,7 @@ The five package identities, target frameworks and runtime dependencies are reta
   Preserve APIs, defaults and supported request/routing behavior; add measured queue
   allocation budgets and focused compatibility coverage.
 
-- Use true asynchronous managed response writes with caller cancellation; preserve write-error policy. Repair premature chunk termination on empty writes and large-header body-prefix calculations. Add 42 regression cases for 1–6 MB files, compression/cache variants, action/JSON responses and backpressure.
+- Use true asynchronous managed response writes with caller cancellation; preserve write-error policy. Repair premature chunk termination on empty writes and large-header body-prefix calculations. Add 42 regression cases for 1â€“6 MB files, compression/cache variants, action/JSON responses and backpressure.
 - Avoid compiling unused parameterless base-route regexes during configuration.
   Signal synchronous startup readiness without polling; stop failed listeners,
   honor startup cancellation and enforce the documented single RunAsync call.

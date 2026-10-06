@@ -82,6 +82,8 @@
       href: user-reports/windows-native-websocket-shutdown.md
     - name: UWP browser access
       href: user-reports/uwp-browser-access.md
+    - name: Unity custom diagnostics
+      href: user-reports/unity-custom-diagnostics.md
 
 - name: Architecture
   items:
