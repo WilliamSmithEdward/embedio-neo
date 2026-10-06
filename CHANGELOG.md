@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Evaluate the fluent argument-validator proposal, document built-in .NET guards and legacy-compatible checks, and protect existing validation contracts without adding an API or dependency (upstream #551).
+
 - Document custom trace destinations, bounded UI handoff and managed private-key HTTPS diagnostics for the Unity report, with real diagnostics/TLS regression coverage and unchanged production behavior (upstream #553).
 
 - Document inbound versus outbound UWP/AppContainer loopback access, real HTML/API/session diagnostics and a scoped Windows isolation CI probe without changing production defaults (upstream #554).
