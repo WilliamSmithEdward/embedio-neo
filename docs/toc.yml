@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Static-file charset
+      href: user-reports/static-file-charset.md
     - name: Concurrent controller responses
       href: user-reports/concurrent-controller-responses.md
     - name: HTTP listener boundaries

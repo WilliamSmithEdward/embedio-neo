@@ -1,3 +1,8 @@
+## Current upstream #567 work
+
+- William selected the next newest unhandled report, upstream #567, tracked as fork #92. Preserve defaults; William explicitly approved the additive, null-by-default FileModule.OnPrepareResponse callback. The managed listener ignored null/non-UTF-8 ContentEncoding and misidentified charset parameters; the initial 16-case fixture failed 10 cases on unchanged source. The correction honors actual encoding and uses .NET MIME parsing for explicit parameters, with a fast path for parameterless media types.
+- Forty-three new real-listener cases cover parameter parsing, text writers, unchanged defaults, existing subclassing, actual mapped files/default documents, folders/immutable ZIPs, cache hits, GET/HEAD/304/206, gzip/deflate, directory listings, error-response exclusion and callback failure isolation. The documented HEAD/range sequence exposed a cold-cache slice-length defect: all four new zero/nonzero-offset cases failed on both listeners before the focused correction. Callback execution precedes transport framing so its failure can use normal exception handling. Callback results are deliberately per-request, not cached; file metadata/bytes retain existing caches. Native listener defaults remain unchanged. No file transcoding, MIME whitelist/default change, new external dependency or target-framework change is introduced. docs/user-reports/static-file-charset.md is indexed and included in DocFX. The correction and new callback are unreleased, unavailable in NuGet 1.0.1. Required cross-platform and security gates apply before merge; close #92 after confirmed resolution. No further upstream issue is authorized.
+
 Operating Model(s) -->
 
 1.) F:\GitHub\RIDM_Recursive_Invariant_Discovery_Model\RIDM.MD

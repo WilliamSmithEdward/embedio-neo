@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Honor configured managed-response encodings and explicit charset parameters. Add the opt-in `FileModule.OnPrepareResponse` callback for per-resource headers before transmission, including cached, conditional and range responses (upstream #567). Preserve unconfigured defaults and file bytes.
+- Preserve the selected range length when a static-file request populates a cold content cache; cached full-file bytes no longer overwrite the partial response length.
+
 - Make managed response close/dispose atomic and idempotent so stale disposal cannot close a newer keep-alive request. Add 15 response-ownership/concurrency cases and document JSON/binary response ownership and existing controller lifetime options.
 
 - Drain synchronous managed socket accepts iteratively; preserve rearming and the
