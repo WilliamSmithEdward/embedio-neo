@@ -49,6 +49,9 @@ namespace EmbedIO
         /// <remarks>
         /// <para>If this method returns <see langword="true"/>, the <paramref name="prepareResponse"/> callback
         /// will set appropriate response headers to reflect the results of content negotiation.</para>
+        /// <para>For <see cref="CompressionMethod.None"/>, the callback removes the
+        /// <c>Content-Encoding</c> field: the <c>identity</c> token belongs in request negotiation,
+        /// not in response coding metadata. The <c>Vary: Accept-Encoding</c> header is retained.</para>
         /// <para>If this method returns <see langword="false"/>, the <paramref name="prepareResponse"/> callback
         /// will throw a <see cref="HttpNotAcceptableException"/> to send a <c>406 Not Acceptable</c> response
         /// with the <c>Vary</c> header set to <c>Accept-Encoding</c>,
@@ -71,9 +74,13 @@ namespace EmbedIO
                 return false;
             }
 
-            prepareResponse = r => {
+            prepareResponse = r =>
+            {
                 r.Headers.Add(HttpHeaderNames.Vary, HttpHeaderNames.AcceptEncoding);
-                r.Headers.Set(HttpHeaderNames.ContentEncoding, compressionMethodName);
+                if (compressionMethodName == CompressionMethodNames.None)
+                    r.Headers.Remove(HttpHeaderNames.ContentEncoding);
+                else
+                    r.Headers.Set(HttpHeaderNames.ContentEncoding, compressionMethodName);
             };
             return true;
         }

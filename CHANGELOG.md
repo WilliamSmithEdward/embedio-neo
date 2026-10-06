@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Omit `Content-Encoding: identity` when response negotiation selects no transformation, clearing stale coding metadata while retaining `Vary: Accept-Encoding`, compressed headers and existing negotiation results (upstream #566). Add real-listener media, range, cache and text/JSON regressions.
+
 - Honor configured managed-response encodings and explicit charset parameters. Add the opt-in `FileModule.OnPrepareResponse` callback for per-resource headers before transmission, including cached, conditional and range responses (upstream #567). Preserve unconfigured defaults and file bytes.
 - Preserve the selected range length when a static-file request populates a cold content cache; cached full-file bytes no longer overwrite the partial response length.
 

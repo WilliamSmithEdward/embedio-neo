@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Uncompressed Content-Encoding
+      href: user-reports/identity-content-encoding.md
     - name: Static-file charset
       href: user-reports/static-file-charset.md
     - name: Concurrent controller responses

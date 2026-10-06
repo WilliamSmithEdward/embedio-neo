@@ -61,6 +61,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Static-file charset](user-reports/static-file-charset.md): opt-in response metadata, text/binary encoding and listener differences.
 
+- [Uncompressed Content-Encoding](user-reports/identity-content-encoding.md): omit identity metadata while preserving media bytes, ranges and compression.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
