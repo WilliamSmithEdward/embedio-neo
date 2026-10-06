@@ -71,6 +71,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [WebSocket startup messages](user-reports/websocket-startup-messages.md): send immediately after connection, initialization ordering and cleanup.
 - [Windows native WebSocket shutdown](user-reports/windows-native-websocket-shutdown.md): concurrent close, cancellation and the released .NET 11 recheck.
+- [UWP browser access](user-reports/uwp-browser-access.md): inbound/outbound isolation, scoped diagnostics and HTML/API/session verification.
 
 ## Architecture
 

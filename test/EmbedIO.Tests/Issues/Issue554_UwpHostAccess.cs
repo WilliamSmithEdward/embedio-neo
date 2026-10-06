@@ -47,6 +47,12 @@ namespace EmbedIO.Tests.Issues
             {
                 using var first = Client(url);
                 using var second = Client(url);
+                if (host == "localhost")
+                {
+                    // Force IPv4 transport without changing the hostname matched by the prefix.
+                    first.DefaultRequestHeaders.Host = $"localhost:{port}";
+                    second.DefaultRequestHeaders.Host = $"localhost:{port}";
+                }
                 Assert.That(await first.GetStringAsync("/"), Does.Contain("external-browser-554"));
                 Assert.That(await second.GetStringAsync("/"), Does.Contain("external-browser-554"));
                 Assert.That(await first.GetStringAsync("/asset.txt"), Is.EqualTo("asset-554"));

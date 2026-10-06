@@ -33,11 +33,15 @@ internal static class Program
         using var profile = new ContainerProfile();
         Process? child = null, inbound = null;
         var outboundAdded = false;
+        var firewallAdded = false;
         try
         {
             var executable = Path.Combine(AppContext.BaseDirectory, "EmbedIO.AppContainerSmoke.exe");
             await RunToolAsync("icacls.exe", AppContext.BaseDirectory, "/grant", "*" + profile.Sid + ":(OI)(CI)(RX)", "/T", "/Q");
             Environment.SetEnvironmentVariable("DOTNET_EnableDiagnostics", "0");
+            firewallAdded = true;
+            await RunToolAsync("WindowsPowerShell/v1.0/powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                $"New-NetFirewallRule -Name '{profile.Name}' -DisplayName '{profile.Name}' -Direction Inbound -Action Allow -Protocol TCP -LocalPort {Port} -LocalAddress 127.0.0.1 -RemoteAddress 127.0.0.1 -Profile Any -Package '{profile.Sid}' | Out-Null");
             child = profile.Launch(executable, Port);
             await WaitReadyAsync(profile.Folder, child);
             checks["restricted_child"] = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(Path.Combine(profile.Folder, "ready.json")));
@@ -64,11 +68,15 @@ internal static class Program
             Stop(inbound);
             Stop(child);
             if (child != null) { await child.WaitForExitAsync(); child.Dispose(); }
-            inbound?.Dispose();
+            if (inbound != null)
+                File.WriteAllText(Path.Combine(results, "inbound-session.txt"), await inbound.StandardOutput.ReadToEndAsync() + await inbound.StandardError.ReadToEndAsync());
+            if (firewallAdded)
+                await RunToolAsync("WindowsPowerShell/v1.0/powershell.exe", "-NoProfile", "-NonInteractive", "-Command", $"Remove-NetFirewallRule -Name '{profile.Name}' -ErrorAction SilentlyContinue");
             if (outboundAdded) await RunToolAsync("CheckNetIsolation.exe", "LoopbackExempt", "-d", "-p=" + profile.Sid);
             foreach (var name in new[] { "listener.log", "ready.json", "failure.txt" })
                 if (File.Exists(Path.Combine(profile.Folder, name))) File.Copy(Path.Combine(profile.Folder, name), Path.Combine(results, name), true);
             await RunToolAsync("icacls.exe", AppContext.BaseDirectory, "/remove:g", "*" + profile.Sid, "/T", "/Q");
+            inbound?.Dispose();
             var report = new { passed, failure, checks, profile = profile.Name, sid = profile.Sid, os = Environment.OSVersion.ToString(), runtime = Environment.Version.ToString(), port = Port, appModel = "Win32 .NET 10 process in real AppContainer; not Xamarin/UWP or a WebView" };
             File.WriteAllText(Path.Combine(results, "result.json"), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         }
