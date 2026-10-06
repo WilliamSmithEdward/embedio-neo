@@ -130,10 +130,14 @@ jobs:
     with:
       update-locks: ${{ inputs.update-https-locks == true }}
 
+  appcontainer:
+    name: Windows AppContainer
+    uses: ./.github/workflows/appcontainer.yml
+
   ci-passed:
     name: CI passed
     if: always()
-    needs: [test, static-analysis, build, mac-catalyst, android, maui-https]
+    needs: [test, static-analysis, build, mac-catalyst, android, maui-https, appcontainer]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
