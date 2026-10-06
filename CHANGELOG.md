@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Make managed response close/dispose atomic and idempotent so stale disposal cannot close a newer keep-alive request. Add 15 response-ownership/concurrency cases and document JSON/binary response ownership and existing controller lifetime options.
+
 - Drain synchronous managed socket accepts iteratively; preserve rearming and the
   macOS IPv6 worker. Add 42 framing, fragmentation, burst/reset and queued-accept
   cases. Document confirmed header/framing gaps without changing parsing policy.

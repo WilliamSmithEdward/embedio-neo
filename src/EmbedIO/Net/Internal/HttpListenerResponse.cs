@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Threading;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
@@ -17,7 +18,7 @@ namespace EmbedIO.Net.Internal
         private readonly HttpConnection _connection;
         private readonly HttpListenerRequest _request;
         private readonly string _id;
-        private bool _disposed;
+        private int _disposed;
         private string _contentType = MimeType.Html; // Same default value as Microsoft's implementation
         private CookieList? _cookies;
         private bool _keepAlive;
@@ -142,13 +143,7 @@ namespace EmbedIO.Net.Internal
 
         void IDisposable.Dispose() => Close(true);
 
-        public void Close()
-        {
-            if (!_disposed)
-            {
-                Close(false);
-            }
-        }
+        public void Close() => Close(false);
 
         /// <inheritdoc />
         public void SetCookie(Cookie cookie)
@@ -328,7 +323,10 @@ namespace EmbedIO.Net.Internal
 
         private void Close(bool force)
         {
-            _disposed = true;
+            // A completed response may outlive its TCP connection's current request.
+            // Its repeated close/dispose must never close that newer request.
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
 
             _connection.Close(force);
         }
@@ -391,7 +389,7 @@ namespace EmbedIO.Net.Internal
 
         private void EnsureCanChangeHeaders()
         {
-            if (_disposed)
+            if (Volatile.Read(ref _disposed) != 0)
             {
                 throw new ObjectDisposedException(_id);
             }

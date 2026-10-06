@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Concurrent controller responses
+      href: user-reports/concurrent-controller-responses.md
     - name: HTTP listener boundaries
       href: user-reports/listener-boundaries.md
     - name: Listener connection lifetimes
