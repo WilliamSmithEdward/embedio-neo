@@ -23,32 +23,60 @@ internal static class ListenerHttp
         var requests = Integer(args, "--requests", verify ? 8 : 20);
         var rounds = Integer(args, "--rounds", verify ? 1 : 3);
         var payloadSize = Integer(args, "--payload-bytes", 1024);
+        var bodySize = args.Contains("--request-body-bytes", StringComparer.Ordinal)
+            ? Integer(args, "--request-body-bytes", 65536) : 0;
+        var consumptionIndex = Array.IndexOf(args, "--body-consumption");
+        var consumption = consumptionIndex < 0 ? "full"
+            : consumptionIndex + 1 < args.Length ? args[consumptionIndex + 1] : string.Empty;
+        if (consumption is not ("full" or "partial" or "none") || (consumptionIndex >= 0 && bodySize == 0))
+            throw new ArgumentException("--body-consumption needs full, partial or none together with --request-body-bytes.");
         var concurrency = args.Contains("--concurrency", StringComparer.Ordinal)
             ? new[] { Integer(args, "--concurrency", 1) } : verify ? new[] { 4 } : new[] { 1, 16 };
+        var policyIndex = Array.IndexOf(args, "--connection-policy");
+        var policy = policyIndex < 0 ? bodySize > 0 && consumption != "full" ? "keep-alive" : "both" : policyIndex + 1 < args.Length ? args[policyIndex + 1] : string.Empty;
+        if (policy is not ("both" or "keep-alive" or "close"))
+            throw new ArgumentException("--connection-policy needs both, keep-alive or close.");
+        if (bodySize > 0 && consumption != "full" && (policy != "keep-alive" || 8L + (long)requests * rounds >= 100))
+            throw new ArgumentException("Partial/unread POST workloads need keep-alive and fewer than 100 requests per worker including eight warmups; the existing forced-close lifetime can reset a request body still being sent.");
+        var churnModes = policy == "keep-alive" ? new[] { false } : policy == "close" ? new[] { true } : new[] { false, true };
         var retain = verify || args.Contains("--retain-connections", StringComparer.Ordinal);
         EmbedIO.Diagnostics.Log.Source.Switch.Level = SourceLevels.Off;
         var results = new List<object>();
         foreach (var secure in new[] { false, true })
         {
             using var certificate = secure ? HttpsSmoke.CreateCertificate() : null;
-            foreach (var churn in new[] { false, true })
+            foreach (var churn in churnModes)
                 foreach (var workers in concurrency)
                 {
                     var url = HttpsSmoke.GetUrl();
                     if (!secure) url = url.Replace("https://", "http://", StringComparison.Ordinal);
                     var payload = Enumerable.Repeat((byte)'x', payloadSize).ToArray();
+                    var requestPayload = Enumerable.Repeat((byte)'b', bodySize).ToArray();
                     var connections = new ConcurrentDictionary<object, byte>();
                     var ports = new ConcurrentDictionary<int, byte>();
                     PropertyInfo? connectionProperty = null;
                     using var server = new WebServer(options => options.WithUrlPrefix(url)
                         .WithMode(HttpListenerMode.EmbedIO).WithCertificate(certificate))
-                        .WithModule(new ActionModule("/", HttpVerbs.Get, async context =>
+                        .WithModule(new ActionModule("/", bodySize > 0 ? HttpVerbs.Post : HttpVerbs.Get, async context =>
                         {
                             ports.TryAdd(context.Request.RemoteEndPoint.Port, 0);
                             if (retain)
                             {
                                 connectionProperty ??= context.GetType().GetProperty("Connection", BindingFlags.Instance | BindingFlags.NonPublic)!;
                                 connections.TryAdd(connectionProperty.GetValue(context)!, 0);
+                            }
+                            if (bodySize > 0)
+                            {
+                                var toRead = consumption == "full" ? bodySize : consumption == "partial" ? bodySize / 2 : 0;
+                                var buffer = new byte[Math.Min(Math.Max(toRead, 1), 8192)];
+                                while (toRead > 0)
+                                {
+                                    var read = await context.Request.InputStream.ReadAsync(buffer, 0,
+                                        Math.Min(buffer.Length, toRead), context.CancellationToken).ConfigureAwait(false);
+                                    if (read == 0 || buffer.AsSpan(0, read).ContainsAnyExcept((byte)'b'))
+                                        throw new InvalidOperationException("Request payload mismatch.");
+                                    toRead -= read;
+                                }
                             }
                             context.Response.KeepAlive = !churn;
                             context.Response.ContentLength64 = payload.Length;
@@ -65,7 +93,8 @@ internal static class ListenerHttp
                     {
                         async Task Request()
                         {
-                            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                            using var request = new HttpRequestMessage(bodySize > 0 ? HttpMethod.Post : HttpMethod.Get, url);
+                            if (bodySize > 0) request.Content = new ByteArrayContent(requestPayload);
                             request.Headers.ConnectionClose = churn;
                             using var response = await client.SendAsync(request, stop.Token).ConfigureAwait(false);
                             response.EnsureSuccessStatusCode();
@@ -136,6 +165,8 @@ internal static class ListenerHttp
                             connectionPolicy = churn ? "close-per-request" : "keep-alive",
                             workers,
                             payloadBytes = payload.Length,
+                            requestBodyBytes = bodySize,
+                            bodyConsumption = bodySize > 0 ? consumption : null,
                             retainConnections = retain,
                             distinctMeasuredPeerPorts = ports.Count,
                             retainedConnections = connections.Count,

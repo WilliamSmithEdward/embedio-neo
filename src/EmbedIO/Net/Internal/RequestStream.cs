@@ -21,6 +21,8 @@ namespace EmbedIO.Net.Internal
             _remainingBody = contentLength;
         }
 
+        internal bool IsBodyConsumed => _remainingBody == 0;
+
         public override bool CanRead => true;
 
         public override bool CanSeek => false;
