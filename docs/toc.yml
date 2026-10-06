@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: HEAD response metadata
+      href: user-reports/head-response-metadata.md
     - name: Uncompressed Content-Encoding
       href: user-reports/identity-content-encoding.md
     - name: Static-file charset

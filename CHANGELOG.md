@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Suppress HEAD response bodies and chunk bytes on both listeners while preserving stream validation and asynchronous completion. Synchronize native HEAD length metadata and last property/header assignment; preserve normal GET and connection-close behavior (upstream #564).
+
 - Reduce chunk-prefix and charset-extraction allocations while preserving exact
   wire bytes and legacy attribute selection/errors. Add 42 compatibility cases,
   allocation budgets and chunked HTTP/HTTPS response verification.

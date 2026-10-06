@@ -171,26 +171,26 @@ namespace EmbedIO.Tests.Issues
                 {
                     try
                     {
-                    var stream = context.Response.OutputStream;
-                    Assert.Throws<ArgumentNullException>(() => stream.Write(null!, 0, 0));
-                    Assert.Throws<ArgumentOutOfRangeException>(() => stream.Write(new byte[1], -1, 1));
-                    Assert.Throws<ArgumentException>(() => stream.Write(new byte[1], 0, 2));
-                    Assert.Throws<NotSupportedException>(() => stream.SetLength(123));
-                    using var canceled = new CancellationTokenSource(); canceled.Cancel();
-                    await Assert.CatchAsync<OperationCanceledException>(async () => await stream.WriteAsync(new byte[1], 0, 1, canceled.Token));
-                    await Assert.CatchAsync<OperationCanceledException>(async () => await stream.FlushAsync(canceled.Token));
-                    var state = new object();
-                    var callback = new TaskCompletionSource<IAsyncResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    var result = stream.BeginWrite(new byte[] { 42 }, 0, 1, r => callback.TrySetResult(r), state);
-                    stream.EndWrite(result);
-                    Assert.That(await callback.Task.WaitAsync(TimeSpan.FromSeconds(5)), Is.SameAs(result));
-                    Assert.That(result.AsyncState, Is.SameAs(state));
-                    stream.WriteByte(42);
-                    await stream.WriteAsync(new byte[] { 42 }.AsMemory(), context.CancellationToken);
-                    stream.Flush(); await stream.FlushAsync(context.CancellationToken);
-                    context.Response.ContentLength64 = 123;
-                    stream.Dispose();
-                    Assert.Throws<ObjectDisposedException>(() => stream.Write(new byte[1], 0, 1));
+                        var stream = context.Response.OutputStream;
+                        Assert.Throws<ArgumentNullException>(() => stream.Write(null!, 0, 0));
+                        Assert.Throws<ArgumentOutOfRangeException>(() => stream.Write(new byte[1], -1, 1));
+                        Assert.Throws<ArgumentException>(() => stream.Write(new byte[1], 0, 2));
+                        Assert.Throws<NotSupportedException>(() => stream.SetLength(123));
+                        using var canceled = new CancellationTokenSource(); canceled.Cancel();
+                        await Assert.CatchAsync<OperationCanceledException>(async () => await stream.WriteAsync(new byte[1], 0, 1, canceled.Token));
+                        await Assert.CatchAsync<OperationCanceledException>(async () => await stream.FlushAsync(canceled.Token));
+                        var state = new object();
+                        var callback = new TaskCompletionSource<IAsyncResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        var result = stream.BeginWrite(new byte[] { 42 }, 0, 1, r => callback.TrySetResult(r), state);
+                        stream.EndWrite(result);
+                        Assert.That(await callback.Task.WaitAsync(TimeSpan.FromSeconds(5)), Is.SameAs(result));
+                        Assert.That(result.AsyncState, Is.SameAs(state));
+                        stream.WriteByte(42);
+                        await stream.WriteAsync(new byte[] { 42 }.AsMemory(), context.CancellationToken);
+                        stream.Flush(); await stream.FlushAsync(context.CancellationToken);
+                        context.Response.ContentLength64 = 123;
+                        stream.Dispose();
+                        Assert.Throws<ObjectDisposedException>(() => stream.Write(new byte[1], 0, 1));
                         validated.TrySetResult(true);
                     }
                     catch (Exception exception) { validated.TrySetException(exception); throw; }
