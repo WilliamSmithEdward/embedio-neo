@@ -58,7 +58,7 @@ curl -H "Accept-Encoding: identity" -D TestResults/VideoDemo/full.headers -o Tes
 curl -H "Range: bytes=0-15" -D TestResults/VideoDemo/range.headers -o TestResults/VideoDemo/range.bin http://127.0.0.1:8877/video.mp4
 ```
 
-For a nonempty video larger than 16 bytes, HEAD returns `200`, `Content-Type: video/mp4`, the full file length and no body. The full GET returns `200` and exactly the original bytes. The range request returns `206`, `Content-Range: bytes 0-15/<file length>` and exactly 16 bytes. None includes Content-Encoding. The `/` module base route includes child paths; it is the supplied directory that determines which files are served. Relative directory arguments are resolved against the process working directory at startup. Ctrl+C cancels the listener and lets `RunAsync` finish.
+For a nonempty video larger than 16 bytes, HEAD returns `200`, the `video/mp4` media type, the full file length and no body. Existing Content-Type charset metadata is unchanged; changing it is covered in the linked charset guide. The full GET returns `200` and exactly the original bytes. The range request returns `206`, `Content-Range: bytes 0-15/<file length>` and exactly 16 bytes. None includes Content-Encoding. The `/` module base route includes child paths; it is the supplied directory that determines which files are served. Relative directory arguments are resolved against the process working directory at startup. Ctrl+C cancels the listener and lets `RunAsync` finish.
 
 ## Compression, caches and client limits
 
