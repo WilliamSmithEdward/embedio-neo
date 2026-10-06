@@ -84,6 +84,8 @@
       href: user-reports/uwp-browser-access.md
     - name: Unity custom diagnostics
       href: user-reports/unity-custom-diagnostics.md
+    - name: Argument validation
+      href: user-reports/argument-validation.md
 
 - name: Architecture
   items:
