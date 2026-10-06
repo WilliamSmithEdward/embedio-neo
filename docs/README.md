@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [HTTP listener boundaries](user-reports/listener-boundaries.md): iterative accepts, framing coverage and confirmed parsing-policy gaps.
+
 - [Listener connection lifetimes](user-reports/listener-connection-lifetimes.md): terminal cleanup, retained resources and end-to-end HTTP/HTTPS benchmarks.
 
 - [HTTP listener audit](user-reports/http-listener-audit.md): compatible queue/endpoint simplifications, body isolation and measured queue allocations.

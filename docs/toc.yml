@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: HTTP listener boundaries
+      href: user-reports/listener-boundaries.md
     - name: Listener connection lifetimes
       href: user-reports/listener-connection-lifetimes.md
     - name: Read-only ZIP archives
