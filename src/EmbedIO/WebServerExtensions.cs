@@ -20,11 +20,34 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException">The web server has already been started.</exception>
         public static void Start(this IWebServer @this, CancellationToken cancellationToken = default)
         {
-#pragma warning disable CS4014 // The call is not awaited - it is expected to run in parallel.
-            Task.Run(() => @this.RunAsync(cancellationToken));
-#pragma warning restore CS4014
-            while (@this.State < WebServerState.Listening)
-                Task.Delay(1, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
+            // Listen before dispatching RunAsync so synchronous readiness cannot be missed.
+            var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnStateChanged(object sender, WebServerStateChangedEventArgs e)
+            {
+                if (e.NewState >= WebServerState.Listening)
+                    ready.TrySetResult(true);
+            }
+
+            @this.StateChanged += OnStateChanged;
+            try
+            {
+                var running = Task.Run(() => @this.RunAsync(cancellationToken));
+                _ = running.ContinueWith(task =>
+                {
+                    // Start has historically returned on startup failure. RunAsync carries the error.
+                    _ = task.Exception;
+                    ready.TrySetResult(true);
+                }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                using (cancellationToken.Register(() => ready.TrySetCanceled(cancellationToken)))
+                {
+                    if (@this.State < WebServerState.Listening)
+                        ready.Task.ConfigureAwait(false).GetAwaiter().GetResult();
+                }
+            }
+            finally
+            {
+                @this.StateChanged -= OnStateChanged;
+            }
         }
     }
 }

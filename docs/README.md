@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [Cold-start audit](user-reports/cold-start-audit.md): fresh-process measurements, startup failure cleanup and remaining startup dependencies.
+
 - [XML responses](user-reports/xml-responses.md): explicit serializers, MIME types and encoding.
 
 - [Dual-stack localhost](user-reports/dual-stack-localhost.md): loopback registration, routing and cleanup.

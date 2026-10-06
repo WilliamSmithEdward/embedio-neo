@@ -5,6 +5,8 @@ using EmbedIO;
 using EmbedIO.Routing;
 using EmbedIO.Utilities;
 
+if (ColdStart.Run(args)) return;
+
 var verifyAllocations = args.Contains("--verify-allocations", StringComparer.Ordinal);
 Console.WriteLine($"{RuntimeInformation.FrameworkDescription}; {RuntimeInformation.OSDescription}; {RuntimeInformation.ProcessArchitecture}");
 var route = RouteMatcher.Parse("/items/{id}/{name?}", false);

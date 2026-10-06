@@ -29,6 +29,7 @@ namespace EmbedIO
         private HttpExceptionHandlerCallback _onHttpException = HttpExceptionHandler.Default;
 
         private WebServerState _state = WebServerState.Created;
+        private int _runStarted;
 
         private ISessionManager? _sessionManager;
 
@@ -192,20 +193,40 @@ namespace EmbedIO
         /// <exception cref="OperationCanceledException">Cancellation was requested.</exception>
         public async Task RunAsync(CancellationToken cancellationToken = default)
         {
+            // A second invocation must not reprepare or change the state of an active server.
+            if (Interlocked.Exchange(ref _runStarted, 1) != 0)
+                throw new InvalidOperationException("The web server has already been started.");
+
+            var startupCompleted = false;
             try
             {
                 State = WebServerState.Loading;
+                cancellationToken.ThrowIfCancellationRequested();
                 Prepare(cancellationToken);
 
+                cancellationToken.ThrowIfCancellationRequested();
                 _sessionManager?.Start(cancellationToken);
                 _modules.StartAll(cancellationToken);
 
+                cancellationToken.ThrowIfCancellationRequested();
                 State = WebServerState.Listening;
+                startupCompleted = true;
                 await ProcessRequestsAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 "Operation canceled.".Debug(LogSource);
+            }
+            catch (Exception)
+            {
+                // Preparation may have bound a port before a module or callback failed.
+                // Release the listener without replacing the error the caller needs to diagnose.
+                if (!startupCompleted)
+                {
+                    try { OnFatalException(); }
+                    catch (Exception cleanupError) { cleanupError.Log(LogSource, "Exception while stopping the failed server."); }
+                }
+                throw;
             }
             finally
             {

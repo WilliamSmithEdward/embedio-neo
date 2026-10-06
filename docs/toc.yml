@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Cold-start audit
+      href: user-reports/cold-start-audit.md
     - name: XML responses
       href: user-reports/xml-responses.md
     - name: Dual-stack localhost
