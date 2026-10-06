@@ -21,18 +21,10 @@ jobs:
           dotnet-version: 10.0.401
       - name: Build the pinned test-only host
         shell: pwsh
-        run: |
-          dotnet restore test/EmbedIO.AppContainerSmoke/EmbedIO.AppContainerSmoke.csproj --locked-mode
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet publish test/EmbedIO.AppContainerSmoke/EmbedIO.AppContainerSmoke.csproj -c Release --no-restore -o "$env:RUNNER_TEMP/embedio-appcontainer-host"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        run: ./scripts/run_appcontainer_smoke.ps1 build
       - name: Verify blocked and allowed inbound loopback
         shell: pwsh
-        run: |
-          & "$env:RUNNER_TEMP/embedio-appcontainer-host/EmbedIO.AppContainerSmoke.exe" "$env:GITHUB_WORKSPACE/TestResults/appcontainer"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $report = Get-Content -Raw TestResults/appcontainer/result.json | ConvertFrom-Json
-          if (-not $report.passed) { throw 'AppContainer network-isolation smoke failed' }
+        run: ./scripts/run_appcontainer_smoke.ps1 run
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
