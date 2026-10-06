@@ -19,10 +19,21 @@ namespace EmbedIO.Files
         /// <summary>
         /// Initializes a new instance of the <see cref="ZipFileProvider"/> class.
         /// </summary>
-        /// <param name="zipFilePath">The zip file path.</param>
+        /// <param name="zipFilePath">The path of the immutable ZIP archive, opened read-only with shared read access.</param>
         public ZipFileProvider(string zipFilePath)
-            : this(new FileStream(Validate.LocalPath(nameof(zipFilePath), zipFilePath, true), FileMode.Open))
         {
+            var stream = new FileStream(Validate.LocalPath(nameof(zipFilePath), zipFilePath, true),
+                FileMode.Open, FileAccess.Read, FileShare.Read);
+            try
+            {
+                _zipArchive = new ZipArchive(stream, ZipArchiveMode.Read);
+            }
+            catch
+            {
+                // This constructor owns the handle even if archive validation fails.
+                stream.Dispose();
+                throw;
+            }
         }
 
         /// <summary>

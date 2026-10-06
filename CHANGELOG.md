@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Open immutable ZIP archives with shared read-only access and release owned handles when archive validation fails. Add 13 regression cases covering multiple hosts/readers, read-only files, disposal and HTTP parity.
 - Reduce managed listener queue snapshots and duplicated endpoint bookkeeping.
   Preserve replacement endpoint ownership during alias shutdown; isolate request
   bodies to Content-Length and keep connection disposal from disposing its listener.
