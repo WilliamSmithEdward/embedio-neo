@@ -101,6 +101,9 @@
     - name: Authorization by route and verb
       href: user-reports/route-authorization.md
 
+    - name: Android emulator port forwarding
+      href: user-reports/android-emulator-port-forwarding.md
+
 - name: Architecture
   items:
     - name: Dependency injection

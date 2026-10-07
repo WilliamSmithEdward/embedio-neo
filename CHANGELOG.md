@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Document host-to-Android-emulator forwarding and extend API 29 CI with distinct host/device ports, remove/recreate checks and owned mapping cleanup; retain production APIs and defaults (upstream #536).
+
 - Document and verify anonymous reads/protected writes in one controller using existing pre-handler hooks, separate authentication/permission checks and untouched JSON binding. Provide explicit demo-token and production-provider boundaries without adding authorization attributes or changing defaults/dependencies (upstream #538).
 
 - Document and verify serving application-owned OpenAPI documents and optional local Swagger UI through existing APIs, including published 1.0.2 binding/validation/asset checks and browser GET/POST execution. Automatic generation is not implemented; production APIs and dependencies remain unchanged (upstream #539).
