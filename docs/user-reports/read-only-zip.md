@@ -6,7 +6,7 @@
 
 The path-based `ZipFileProvider` constructor now explicitly uses `FileMode.Open`, `FileAccess.Read` and `FileShare.Read`. Multiple provider instances and external read-only tools can share an archive. If ZIP validation fails after opening the file, the constructor disposes its owned handle before rethrowing the original exception; a rejected archive no longer requires garbage collection before it can be reopened.
 
-This correction is unreleased and is not in NuGet 1.0.1. Public APIs, target frameworks and dependencies are unchanged. The provider remains immutable, and its stream overload keeps the existing `leaveOpen` ownership contract. Archive access/sharing enforcement ultimately follows the host OS and .NET runtime; read-only attributes do not restrict privileged Unix processes in the same way as ordinary users.
+This correction is included starting with EmbedIO-Neo 1.0.2. Public APIs, target frameworks and dependencies are unchanged. The provider remains immutable, and its stream overload keeps the existing `leaveOpen` ownership contract. Archive access/sharing enforcement ultimately follows the host OS and .NET runtime; read-only attributes do not restrict privileged Unix processes in the same way as ordinary users.
 
 When building the corrected source, the usual registration works. This is a partial registration snippet for an existing server:
 

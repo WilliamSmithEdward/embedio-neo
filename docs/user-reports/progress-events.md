@@ -29,8 +29,8 @@ for (var completed = 1; completed <= 10; completed++)
 await events.WriteAsync("done", eventName: "complete");
 ```
 
-This is an **unreleased API**, not present in NuGet 1.0.1. Build the current
-repository and reference `src/EmbedIO/EmbedIO.csproj` to try it before release.
+This API is included starting with EmbedIO-Neo 1.0.2. Use that package version
+or later, or reference `src/EmbedIO/EmbedIO.csproj` from a source checkout.
 The complete published-package example below is equivalent using existing APIs.
 
 Call `OpenEventStream()` once before writing the response. Await writes in order;
@@ -217,7 +217,7 @@ The server's cancellation token is not a browser-disconnect token. A failed
 write can end the stream when strict write errors are enabled, but detection
 is not instantaneous. See [streaming response closure](streaming-response-close.md)
 for resource ownership, `OnClose`, cancellation, heartbeat and disconnect limits,
-including the unreleased cleanup correction. This demo uses APIs already in
+including the cleanup correction delivered in 1.0.2. This demo uses APIs already in
 1.0.1; it does not require that correction for normal completion.
 
 The original application's complete setup and browser code were not provided.

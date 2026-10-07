@@ -71,9 +71,8 @@ the element in `new XDocument(element)`. Use `"text/xml"` when required by the
 legacy API contract. `ResponseSerializer.None(true)` buffers the result instead.
 
 `MimeType.Xml` (`application/xml`) and `MimeType.TextXml` (`text/xml`) are new
-constants in current source, **not published 1.0.1**. The literals above work
-with that published package; after the constants are released you can use them
-without changing response behavior. No extra XML package is required.
+constants included starting with EmbedIO-Neo 1.0.2. The literals above also work
+with 1.0.1; using the constants does not change response behavior. No extra XML package is required.
 
 ## Mixed JSON and XML APIs
 

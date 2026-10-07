@@ -9,8 +9,8 @@ is a separate opt-in setting; these callbacks do not rewrite URLs.
 
 ## Run a file server with your own MIME policy
 
-These APIs are available from source and **are not in a published NuGet version
-yet**. From this repository with its selected SDK installed:
+These APIs are included starting with EmbedIO-Neo 1.0.3. Use that package version
+or later, or a source reference as shown below. From this repository with its selected SDK installed:
 
 ```sh
 dotnet new console --framework net10.0 --output TestResults/customization-demo --no-restore
@@ -135,8 +135,7 @@ Regression coverage uses real managed and Microsoft listeners for local/provider
 server/built-in precedence, unknown defaults, content-encoding negotiation,
 cache isolation, provider ownership/configuration, callback ordering, untouched
 request data, early responses, rejection, failure recovery and cancellation.
-Defaults, target frameworks and production dependencies are retained. New APIs
-will require a release before ordinary NuGet consumers can use them.
+Defaults, target frameworks and production dependencies are retained. NuGet consumers need EmbedIO-Neo 1.0.3 or later for these APIs.
 
 Thanks to captainjono for explaining the configuration gaps, and to Unosquare and
 the original EmbedIO maintainers for the extensible module and MIME-provider

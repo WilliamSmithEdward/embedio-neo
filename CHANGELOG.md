@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-10-07
+
+Patch release with native Basic-authentication and WebSocket lifecycle fixes,
+plus the approved opt-in routing, MIME policy, pre-request and WebSocket-message
+APIs. Existing defaults, package identities, legacy targets and production
+dependencies are retained. See the user-report guides for each API and runtime
+limitation. No breaking change is introduced.
+
 - Add optional application-owned FileModule.MimeTypeProvider and awaited non-final PreRequestModule callbacks. Preserve local MIME overrides, fallback/compression negotiation, cache ownership, existing request data and defaults (upstream #521 follow-up).
 
 - Add per-WebApiModule CaseInsensitiveRoutes for invariant-culture controller-route literals, preserving sensitive defaults/mounts and request data. Isolate matchers, reject conflicting case-equivalent declarations and deduplicate same-handler aliases (upstream #521).

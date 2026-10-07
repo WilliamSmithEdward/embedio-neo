@@ -6,7 +6,7 @@ The correction retains early messages in the existing transport queue and wakes 
 
 Connection initialization still precedes application-message callbacks. Initialization failures and cancellation now pass through the existing context cleanup block, and a context's disconnection notification is emitted once. Asynchronous managed-message callback exceptions are caught at the event boundary and logged. Existing callback APIs, listener modes, defaults and dependencies are unchanged.
 
-These corrections are **unreleased** and unavailable in NuGet 1.0.2. Use a source checkout containing the fix for the example below.
+These corrections are included starting with EmbedIO-Neo 1.0.3. The example below uses a source checkout; a package reference to 1.0.3 or later also includes them.
 
 ## Complete echo server
 
@@ -97,7 +97,7 @@ The change preserves existing asynchronous callback behavior. On the managed lis
 
 ### Windows native shutdown limitation
 
-Concurrent client/server shutdown with Windows' native HttpListener WebSockets also stalled during validation, matching [dotnet/runtime #115559](https://github.com/dotnet/runtime/issues/115559). A separate unreleased correction now avoids that native full-close path using public .NET APIs while retaining a complete closing handshake. See [Windows native WebSocket shutdown](windows-native-websocket-shutdown.md) for scope, validation and the .NET 11 recheck. NuGet 1.0.2 does not include that correction.
+Concurrent client/server shutdown with Windows' native HttpListener WebSockets also stalled during validation, matching [dotnet/runtime #115559](https://github.com/dotnet/runtime/issues/115559). A separate correction included starting with EmbedIO-Neo 1.0.3 avoids that native full-close path using public .NET APIs while retaining a complete closing handshake. See [Windows native WebSocket shutdown](windows-native-websocket-shutdown.md) for scope, validation and the .NET 11 recheck. NuGet 1.0.2 does not include that correction.
 
 ## Validation
 
