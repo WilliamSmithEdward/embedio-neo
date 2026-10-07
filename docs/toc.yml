@@ -115,6 +115,9 @@
     - name: MIME policy and pre-request processing
       href: user-reports/mime-policy-and-pre-request.md
 
+    - name: WebSocket overlap and close
+      href: user-reports/websocket-overlap-and-close.md
+
     - name: Binary controller responses
       href: user-reports/binary-controller-responses.md
 

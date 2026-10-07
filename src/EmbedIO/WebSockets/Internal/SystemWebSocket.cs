@@ -13,6 +13,7 @@ namespace EmbedIO.WebSockets.Internal
         private int _activeOperations;
         private bool _disposed;
         private bool _gatesDisposed;
+        private int _closeRequested;
         private readonly SemaphoreSlim _receiveGate = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _closeGate = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _sendGate = new SemaphoreSlim(1, 1);
@@ -31,6 +32,8 @@ namespace EmbedIO.WebSockets.Internal
 
         public WebSocketState State => UnderlyingWebSocket.State;
 
+        internal bool IsCloseRequested => Volatile.Read(ref _closeRequested) != 0;
+
         public void Dispose()
         {
             Dispose(true);
@@ -47,8 +50,10 @@ namespace EmbedIO.WebSockets.Internal
             var entered = false;
             try
             {
+                ThrowIfCloseRequested();
                 await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
                 entered = true;
+                ThrowIfCloseRequested();
                 await UnderlyingWebSocket.SendAsync(buffer,
                     isText ? WebSocketMessageType.Text : WebSocketMessageType.Binary,
                     true, cancellationToken).ConfigureAwait(false);
@@ -98,25 +103,46 @@ namespace EmbedIO.WebSockets.Internal
 
         private Task CloseAsync(WebSocketCloseStatus code, string comment, CancellationToken cancellationToken)
         {
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                return UnderlyingWebSocket.CloseAsync(code, comment, cancellationToken);
-
             // Preserve native synchronous reason validation, including terminal sockets.
             if (Encoding.UTF8.GetByteCount(comment) > 123)
                 throw new ArgumentException("The close description exceeds 123 UTF-8 bytes.", "statusDescription");
 
-            return CloseWindowsAsync(code, comment, cancellationToken);
+            var firstRequest = Interlocked.Exchange(ref _closeRequested, 1) == 0;
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Keep synchronous native validation; observe asynchronous close failure separately.
+                Task closing;
+                try { closing = UnderlyingWebSocket.CloseAsync(code, comment, cancellationToken); }
+                catch { if (firstRequest) UnderlyingWebSocket.Abort(); throw; }
+                return CompleteUnixCloseAsync(closing, firstRequest);
+            }
+
+            return CloseWindowsAsync(code, comment, cancellationToken, firstRequest);
         }
 
-        private async Task CloseWindowsAsync(WebSocketCloseStatus code, string comment, CancellationToken cancellationToken)
+        private void ThrowIfCloseRequested()
+        {
+            if (IsCloseRequested)
+                throw new System.Net.WebSockets.WebSocketException(WebSocketError.InvalidState);
+        }
+
+        private async Task CompleteUnixCloseAsync(Task closing, bool firstRequest)
+        {
+            try { await closing.ConfigureAwait(false); }
+            catch { if (firstRequest) UnderlyingWebSocket.Abort(); throw; }
+        }
+
+        private async Task CloseWindowsAsync(WebSocketCloseStatus code, string comment, CancellationToken cancellationToken, bool firstRequest)
         {
             if (State == WebSocketState.Closed || State == WebSocketState.Aborted)
                 return;
 
             BeginOperation();
+            var entered = false;
             try
             {
                 await _closeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                entered = true;
                 try
                 {
                     if (State == WebSocketState.Closed || State == WebSocketState.Aborted)
@@ -153,15 +179,16 @@ namespace EmbedIO.WebSockets.Internal
                         _receiveGate.Release();
                     }
                 }
-                catch
-                {
-                    UnderlyingWebSocket.Abort();
-                    throw;
-                }
                 finally
                 {
                     _closeGate.Release();
                 }
+            }
+            catch
+            {
+                // Cancelling a secondary waiter must not abort the close already in progress.
+                if (entered || firstRequest) UnderlyingWebSocket.Abort();
+                throw;
             }
             finally
             {
