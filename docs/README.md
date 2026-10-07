@@ -84,6 +84,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Independent IP banning modules](user-reports/ip-banning-isolation.md): scoped controls, route-wide compatibility and lifecycle validation.
 - [OpenAPI and Swagger UI](user-reports/openapi-and-swagger-ui.md): application-owned API documents, a runnable example and optional local UI assets.
+- [Authorization by route and verb](user-reports/route-authorization.md): anonymous reads, protected writes and authorization before body binding.
 
 ## Architecture
 

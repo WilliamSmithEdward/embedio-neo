@@ -98,6 +98,8 @@
       href: user-reports/ip-banning-isolation.md
     - name: OpenAPI and Swagger UI
       href: user-reports/openapi-and-swagger-ui.md
+    - name: Authorization by route and verb
+      href: user-reports/route-authorization.md
 
 - name: Architecture
   items:
