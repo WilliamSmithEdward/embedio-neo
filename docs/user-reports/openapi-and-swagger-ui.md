@@ -223,7 +223,7 @@ runtime dependency of EmbedIO-Neo**. Its Apache-2.0 license and bundled notices
 must accompany copied assets. The following PowerShell commands download the
 verified **5.33.1** release at its exact Git commit into your example project:
 
-```powershell
+```ps1
 New-Item -ItemType Directory -Force swagger | Out-Null
 $swaggerCommit = 'cac3d136b5e37bfbe3288c8591f6f4fcf9870599'
 $swaggerRoot = "https://raw.githubusercontent.com/swagger-api/swagger-ui/$swaggerCommit"
