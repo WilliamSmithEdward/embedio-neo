@@ -88,6 +88,8 @@
       href: user-reports/argument-validation.md
     - name: Utility package extraction
       href: user-reports/utility-package-extraction.md
+    - name: Modern .NET and legacy compatibility
+      href: user-reports/modern-dotnet-legacy-compatibility.md
 
 - name: Architecture
   items:

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Document the modern SDK/legacy library target policy, published-package asset selection and consumer validation without removing legacy compatibility (upstream #549).
+
 - Evaluate standalone utility packaging, document the current public/dependency inventory and utilities-only reuse, and retain existing assembly/package identities without production changes (upstream #550).
 
 - Evaluate the fluent argument-validator proposal, document built-in .NET guards and legacy-compatible checks, and protect existing validation contracts without adding an API or dependency (upstream #551).
