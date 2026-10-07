@@ -132,6 +132,9 @@
     - name: Chunked response streaming
       href: user-reports/chunked-response-streaming.md
 
+    - name: JSON migration compatibility
+      href: user-reports/json-migration-compatibility.md
+
 - name: Architecture
   items:
     - name: Dependency injection

@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace EmbedIO.Serialization
 {
@@ -16,12 +18,18 @@ namespace EmbedIO.Serialization
         /// <returns>Mutable serializer options.</returns>
         public static JsonSerializerOptions CreateOptions(bool writeIndented = false)
         {
-            var options = new JsonSerializerOptions {
+            var resolver = new DefaultJsonTypeInfoResolver();
+            resolver.Modifiers.Add(IncludeLegacySetters);
+            var options = new JsonSerializerOptions
+            {
                 PropertyNameCaseInsensitive = true,
                 IncludeFields = true,
-                NumberHandling = JsonNumberHandling.AllowReadingFromString,
+                NumberHandling = JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.AllowNamedFloatingPointLiterals,
+                AllowTrailingCommas = true,
                 WriteIndented = writeIndented,
+                TypeInfoResolver = resolver,
             };
+            options.Converters.Add(new CompatibleJsonConverterFactory());
             options.Converters.Add(new UntypedValueConverter());
             options.Converters.Add(new PrimitiveStringConverter());
             return options;
@@ -40,11 +48,47 @@ namespace EmbedIO.Serialization
 
         /// <summary>Deserializes a JSON value with the default or supplied options.</summary>
         public static T Deserialize<T>(string json, JsonSerializerOptions? options = null)
-            => JsonSerializer.Deserialize<T>(json, options ?? DefaultOptions)!;
+        {
+            options ??= DefaultOptions;
+            if (UsesCompatibleInput(options))
+            {
+                if (string.IsNullOrWhiteSpace(json)) return default!;
+                json = CompatibleJsonInput.Normalize(json, options.ReadCommentHandling);
+            }
+            return JsonSerializer.Deserialize<T>(json, options)!;
+        }
 
         /// <summary>Deserializes a JSON value to the specified type.</summary>
         public static object? Deserialize(string json, Type type, JsonSerializerOptions? options = null)
-            => JsonSerializer.Deserialize(json, type, options ?? DefaultOptions);
+        {
+            if (type == null) throw new ArgumentNullException(nameof(type));
+            options ??= DefaultOptions;
+            if (UsesCompatibleInput(options))
+            {
+                if (string.IsNullOrWhiteSpace(json)) return type.IsValueType ? Array.CreateInstance(type, 1).GetValue(0) : null;
+                json = CompatibleJsonInput.Normalize(json, options.ReadCommentHandling);
+            }
+            return JsonSerializer.Deserialize(json, type, options);
+        }
+
+        private static void IncludeLegacySetters(JsonTypeInfo typeInfo)
+        {
+            foreach (var property in typeInfo.Properties)
+            {
+                if (property.Set != null || !(property.AttributeProvider is PropertyInfo member)
+                    || member.GetMethod?.IsPublic != true || member.SetMethod == null || member.SetMethod.IsPublic) continue;
+                var ignored = member.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition;
+                if (ignored == JsonIgnoreCondition.Always || ignored == JsonIgnoreCondition.WhenReading) continue;
+                property.Set = member.SetValue;
+            }
+        }
+
+        private static bool UsesCompatibleInput(JsonSerializerOptions options)
+        {
+            foreach (var converter in options.Converters)
+                if (converter is CompatibleJsonConverterFactory) return true;
+            return false;
+        }
 
         private sealed class UntypedValueConverter : JsonConverter<object>
         {

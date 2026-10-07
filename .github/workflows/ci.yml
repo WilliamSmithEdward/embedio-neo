@@ -36,7 +36,18 @@ jobs:
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=false
       - name: Run the regression suite with coverage
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 1567 --coverlet
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 1656 --coverlet
+      - name: Verify JSON migration compatibility
+        run: |
+          dotnet restore test/JsonMigrationProbe/JsonMigrationProbe.csproj --locked-mode
+          dotnet run --project test/JsonMigrationProbe/JsonMigrationProbe.csproj -c Release -f net10.0 --no-restore > TestResults/json-migration-net10.log
+      - name: Verify JSON compatibility on .NET Framework
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build test/JsonMigrationProbe/JsonMigrationProbe.csproj -c Release -f net472 --no-restore
+          test/JsonMigrationProbe/bin/Release/net472/JsonMigrationProbe.exe > TestResults/json-migration-net472.log
       - name: Verify Basic authentication on .NET Framework
         if: runner.os == 'Windows'
         shell: bash
