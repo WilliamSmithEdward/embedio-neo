@@ -17,15 +17,17 @@ namespace EmbedIO.Routing
 
         private readonly Regex? _regex;
         private readonly Lazy<Regex>? _unusedBaseRegex;
+        private readonly bool _caseInsensitive;
 
-        private RouteMatcher(bool isBaseRoute, string route, string pattern, IReadOnlyList<string> parameterNames)
+        private RouteMatcher(bool isBaseRoute, string route, string pattern, IReadOnlyList<string> parameterNames, bool caseInsensitive = false)
         {
             IsBaseRoute = isBaseRoute;
             Route = route;
             ParameterNames = parameterNames;
+            _caseInsensitive = caseInsensitive;
             // Parameterless base routes use path matching below, so they need no compiled regex.
             // Retain the fallback for callers that mutate the legacy concrete parameter-name list.
-            if (isBaseRoute && parameterNames.Count == 0)
+            if (isBaseRoute && parameterNames.Count == 0 && !caseInsensitive)
                 _unusedBaseRegex = CreateBaseRegexFallback(pattern);
             else
                 _regex = new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -33,6 +35,21 @@ namespace EmbedIO.Routing
 
         private static Lazy<Regex> CreateBaseRegexFallback(string pattern)
             => new Lazy<Regex>(() => new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant));
+
+        // Module-local copies never modify the public parser's case-sensitive cache.
+        internal RouteMatcher WithCaseInsensitiveLiterals()
+        {
+            RouteMatcher? result = null;
+            var error = Routing.Route.ParseInternal(Route, IsBaseRoute, (_, names, pattern) =>
+                result = new RouteMatcher(IsBaseRoute, Route, pattern, new List<string>(names), true), true);
+            if (error != null)
+                throw error;
+            return result!;
+        }
+
+        internal bool HasCaseEquivalentTemplate(RouteMatcher other)
+            => IsBaseRoute == other.IsBaseRoute
+            && Regex.IsMatch(Route, "\\A" + Regex.Escape(other.Route) + "\\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         /// <summary>
         /// Gets a value indicating whether the <see cref="Route"/> property
@@ -108,7 +125,7 @@ namespace EmbedIO.Routing
         /// </summary>
         /// <returns>A hash code for this instance, suitable for use in hashing algorithms
         /// and data structures like a hash table.</returns>
-        public override int GetHashCode() => (Route, IsBaseRoute).GetHashCode();
+        public override int GetHashCode() => _caseInsensitive ? (Route, IsBaseRoute, true).GetHashCode() : (Route, IsBaseRoute).GetHashCode();
 
         /// <summary>
         /// Determines whether the specified <see cref="object"/> is equal to this instance.
@@ -127,7 +144,8 @@ namespace EmbedIO.Routing
         public bool Equals(RouteMatcher? other)
             => other != null
             && other.Route == Route
-            && other.IsBaseRoute == IsBaseRoute;
+            && other.IsBaseRoute == IsBaseRoute
+            && other._caseInsensitive == _caseInsensitive;
 
         /// <summary>
         /// Matches the specified URL path against <see cref="Route"/>
@@ -142,7 +160,7 @@ namespace EmbedIO.Routing
                 return null;
 
             // Optimize for parameterless base routes
-            if (IsBaseRoute)
+            if (IsBaseRoute && !_caseInsensitive)
             {
                 if (Route.Length == 1)
                     return RouteMatch.UnsafeFromRoot(path);

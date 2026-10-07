@@ -71,7 +71,8 @@ namespace EmbedIO.Routing
 
         // Check the validity of a route by parsing it without storing the results.
         // Returns: ArgumentNullException, ArgumentException, null if OK
-        internal static Exception? ValidateInternal(string argumentName, string value, bool isBaseRoute) => ParseInternal(value, isBaseRoute, null) switch {
+        internal static Exception? ValidateInternal(string argumentName, string value, bool isBaseRoute) => ParseInternal(value, isBaseRoute, null) switch
+        {
             ArgumentNullException _ => new ArgumentNullException(argumentName),
             FormatException formatException => new ArgumentException(formatException.Message, argumentName),
             Exception exception => exception,
@@ -81,7 +82,7 @@ namespace EmbedIO.Routing
         // Validate and parse a route, constructing a Regex pattern.
         // setResult will be called at the end with the isBaseRoute flag, parameter names and the constructed pattern.
         // Returns: ArgumentNullException, FormatException, null if OK
-        internal static Exception? ParseInternal(string route, bool isBaseRoute, Action<bool, IEnumerable<string>, string>? setResult)
+        internal static Exception? ParseInternal(string route, bool isBaseRoute, Action<bool, IEnumerable<string>, string>? setResult, bool ignoreCase = false)
         {
             if (route == null)
                 return new ArgumentNullException(nameof(route));
@@ -94,7 +95,7 @@ namespace EmbedIO.Routing
 
             /*
              * Regex options set at start of pattern:
-             * IgnoreCase              : no
+             * IgnoreCase              : only for explicitly opted-in controller routes
              * Multiline               : no
              * Singleline              : yes
              * ExplicitCapture         : yes
@@ -102,7 +103,7 @@ namespace EmbedIO.Routing
              * See https://docs.microsoft.com/en-us/dotnet/standard/base-types/regular-expression-options
              * See https://docs.microsoft.com/en-us/dotnet/standard/base-types/grouping-constructs-in-regular-expressions#group_options
              */
-            const string InitialRegexOptions = "(?sn-imx)";
+            var initialRegexOptions = ignoreCase ? "(?sin-mx)" : "(?sn-imx)";
 
             // If setResult is null we don't need the StringBuilder.
             var sb = setResult == null ? null : new StringBuilder("^");
@@ -272,7 +273,7 @@ namespace EmbedIO.Routing
             }
 
             // Pass the results to the callback if needed.
-            setResult?.Invoke(isBaseRoute, parameterNames, InitialRegexOptions + sb);
+            setResult?.Invoke(isBaseRoute, parameterNames, initialRegexOptions + sb);
 
             // Everything's fine, thus no exception.
             return null;

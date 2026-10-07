@@ -27,6 +27,30 @@ namespace EmbedIO.WebApi
         private static readonly MethodInfo SerializeResultAsyncMethod = typeof(WebApiModuleBase).GetMethod(nameof(SerializeResultAsync), BindingFlags.Instance | BindingFlags.NonPublic);
 
         private readonly HashSet<Type> _controllerTypes = new HashSet<Type>();
+        private List<(HttpVerbs Verb, RouteMatcher Matcher, MethodInfo Method, Type ControllerType)>? _caseInsensitiveDeclarations;
+        private bool _caseInsensitiveRoutes;
+
+        /// <summary>
+        /// Gets or sets whether literal controller-route text is matched without case,
+        /// using the invariant culture. The default is <see langword="false"/>.
+        /// </summary>
+        /// <remarks>
+        /// Set before registering controllers. Module mount prefixes, captured values,
+        /// request URLs, query data and other modules retain their existing behavior.
+        /// Case-equivalent declarations for overlapping verbs must identify the same handler.
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">Configuration is locked, or the value is changed after controller registration.</exception>
+        public bool CaseInsensitiveRoutes
+        {
+            get => _caseInsensitiveRoutes;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                if (value != _caseInsensitiveRoutes && _controllerTypes.Count != 0)
+                    throw new InvalidOperationException("Set CaseInsensitiveRoutes before registering controllers.");
+                _caseInsensitiveRoutes = value;
+            }
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebApiModuleBase" /> class,
@@ -303,7 +327,8 @@ namespace EmbedIO.WebApi
         {
             var result = task.ConfigureAwait(false).GetAwaiter().GetResult();
 
-            return result switch {
+            return result switch
+            {
                 null when typeof(T).IsValueType && Nullable.GetUnderlyingType(typeof(T)) == null => throw new InvalidCastException($"Cannot cast null to {typeof(T).FullName} for parameter \"{parameterName}\"."),
                 null => default,
                 T castResult => castResult,
@@ -374,7 +399,8 @@ namespace EmbedIO.WebApi
 
                 // First, check for generic request data interfaces in attributes
                 var requestDataInterfaces = parameter.GetCustomAttributes<Attribute>()
-                        .Aggregate(new List<(Attribute Attr, Type Intf)>(), (list, attr) => {
+                        .Aggregate(new List<(Attribute Attr, Type Intf)>(), (list, attr) =>
+                        {
                             list.AddRange(attr.GetType().GetInterfaces()
                                 .Where(x => x.IsConstructedGenericType
                                          && x.GetGenericTypeDefinition() == typeof(IRequestDataAttribute<,>))
@@ -417,7 +443,8 @@ namespace EmbedIO.WebApi
 
                 // Check for non-generic request data interfaces in attributes
                 requestDataInterfaces = parameter.GetCustomAttributes<Attribute>()
-                        .Aggregate(new List<(Attribute Attr, Type Intf)>(), (list, attr) => {
+                        .Aggregate(new List<(Attribute Attr, Type Intf)>(), (list, attr) =>
+                        {
                             list.AddRange(attr.GetType().GetInterfaces()
                                 .Where(x => x.IsConstructedGenericType
                                          && x.GetGenericTypeDefinition() == typeof(IRequestDataAttribute<>))
@@ -488,7 +515,7 @@ namespace EmbedIO.WebApi
             }
 
             // Create the controller and initialize its properties
-            bodyContents.Add(Expression.Assign(controller,factoryExpression));
+            bodyContents.Add(Expression.Assign(controller, factoryExpression));
             bodyContents.Add(Expression.Call(controller, HttpContextSetter, contextInLambda));
             bodyContents.Add(Expression.Call(controller, RouteSetter, routeInLambda));
 
@@ -535,7 +562,8 @@ namespace EmbedIO.WebApi
                         callMethod),
                     instance, contextInLambda, routeInLambda).Compile();
 
-                return async (context, route) => {
+                return async (context, route) =>
+                {
                     var created = contextFactory(context);
                     if (created == null)
                         throw new InvalidOperationException($"The factory for {controllerType.FullName} returned null.");
@@ -631,6 +659,8 @@ namespace EmbedIO.WebApi
             Func<IHttpContext, WebApiController, Task>? release = null)
         {
             var handlerCount = 0;
+            var caseInsensitive = _caseInsensitiveRoutes;
+            var pending = caseInsensitive ? new List<(HttpVerbs Verb, RouteMatcher Matcher, MethodInfo Method, RouteHandlerCallback Handler)>() : null;
             var methods = controllerType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
                 .Where(m => !m.ContainsGenericParameters);
 
@@ -644,13 +674,41 @@ namespace EmbedIO.WebApi
 
                 foreach (var attribute in attributes)
                 {
-                    AddHandler(attribute.Verb, attribute.Matcher, CompileHandler(factoryExpression, method, attribute.Matcher, contextFactory, release));
+                    if (caseInsensitive)
+                    {
+                        var matcher = attribute.Matcher.WithCaseInsensitiveLiterals();
+                        _caseInsensitiveDeclarations ??= new List<(HttpVerbs, RouteMatcher, MethodInfo, Type)>();
+                        var declarations = _caseInsensitiveDeclarations.Concat(pending!.Select(p => (p.Verb, p.Matcher, p.Method, ControllerType: controllerType)));
+                        var overlapping = declarations.Where(d => (d.Verb == attribute.Verb || d.Verb == HttpVerbs.Any || attribute.Verb == HttpVerbs.Any)
+                            && matcher.HasCaseEquivalentTemplate(d.Matcher)).ToArray();
+                        if (overlapping.Any(d => d.Method != method || d.ControllerType != controllerType))
+                            throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' has conflicting handlers for overlapping HTTP verbs.");
+                        // Existing case-only aliases on one method need no duplicate handler.
+                        if (overlapping.Any(d => !d.Matcher.ParameterNames.SequenceEqual(matcher.ParameterNames)))
+                            throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' must retain the same parameter names.");
+                        if (overlapping.Any(d => d.Verb == attribute.Verb && d.Method == method))
+                            continue;
+                        pending.Add((attribute.Verb, matcher, method, CompileHandler(factoryExpression, method, matcher, contextFactory, release)));
+                    }
+                    else
+                    {
+                        AddHandler(attribute.Verb, attribute.Matcher, CompileHandler(factoryExpression, method, attribute.Matcher, contextFactory, release));
+                    }
                     handlerCount++;
                 }
             }
 
             if (handlerCount < 1)
                 return false;
+
+            if (pending != null)
+            {
+                foreach (var entry in pending)
+                {
+                    AddHandler(entry.Verb, entry.Matcher, entry.Handler);
+                    _caseInsensitiveDeclarations!.Add((entry.Verb, entry.Matcher, entry.Method, controllerType));
+                }
+            }
 
             _controllerTypes.Add(controllerType);
             return true;

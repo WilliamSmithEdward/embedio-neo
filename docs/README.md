@@ -90,6 +90,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Basic authentication on the Microsoft listener](user-reports/basic-authentication-native-listener.md): legacy restricted-header fix and real authentication validation.
 
+- [Controller route case matching](user-reports/controller-route-case.md): per-module opt-in literals, preserved data/defaults and configuration/authorization boundaries.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.

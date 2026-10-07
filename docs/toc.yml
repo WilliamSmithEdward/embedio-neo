@@ -107,6 +107,9 @@
     - name: Basic authentication on the Microsoft listener
       href: user-reports/basic-authentication-native-listener.md
 
+    - name: Controller route case matching
+      href: user-reports/controller-route-case.md
+
 - name: Architecture
   items:
     - name: Dependency injection
