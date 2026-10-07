@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [Binary controller responses](user-reports/binary-controller-responses.md): passthrough serialization, media metadata and a complete image endpoint.
+
 - [Selective upstream backport audit](user-reports/upstream-backport-audit.md): patch decisions, WebSocket send concurrency and prefix validation.
 
 - [Common hosting concepts](user-reports/common-hosting-concepts.md): task-focused entry points, lifetime ownership and preserved extension contracts.
