@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Read managed response keep-alive defaults from the parsed request instead of caching them during context construction. Honor connection-close requests and HTTP/1.0 close-delimited responses, preserve explicit application overrides and response-helper ownership, and document one-writer chunked streaming (upstream #510).
+
 ## [1.0.3] - 2026-10-07
 
 Patch release with native Basic-authentication and WebSocket lifecycle fixes,

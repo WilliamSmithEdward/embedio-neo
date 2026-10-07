@@ -22,7 +22,7 @@ namespace EmbedIO.Net.Internal
         private int _disposed;
         private string _contentType = MimeType.Html; // Same default value as Microsoft's implementation
         private CookieList? _cookies;
-        private bool _keepAlive;
+        private bool? _keepAlive;
         private ResponseStream? _outputStream;
         private int _statusCode = 200;
         private bool _chunked;
@@ -32,7 +32,6 @@ namespace EmbedIO.Net.Internal
             _request = context.HttpListenerRequest;
             _connection = context.Connection;
             _id = context.Id;
-            _keepAlive = context.Request.KeepAlive;
         }
 
         /// <inheritdoc />
@@ -82,7 +81,9 @@ namespace EmbedIO.Net.Internal
         /// <inheritdoc />
         public bool KeepAlive
         {
-            get => _keepAlive;
+            // The context is constructed before request parsing. Reading the default
+            // here avoids caching a premature request policy; an explicit override wins.
+            get => _keepAlive ?? _request.KeepAlive;
 
             set
             {
@@ -247,7 +248,7 @@ namespace EmbedIO.Net.Internal
                 414 => false,
                 500 => false,
                 503 => false,
-                _ => _keepAlive && reuses < 100
+                _ => KeepAlive && reuses < 100
             };
 
             _keepAlive = keepAlive;
