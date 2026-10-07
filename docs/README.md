@@ -86,6 +86,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [OpenAPI and Swagger UI](user-reports/openapi-and-swagger-ui.md): application-owned API documents, a runnable example and optional local UI assets.
 - [Authorization by route and verb](user-reports/route-authorization.md): anonymous reads, protected writes and authorization before body binding.
 
+- [Android emulator port forwarding](user-reports/android-emulator-port-forwarding.md): host/device ports, selected-serial commands and real emulator validation.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
