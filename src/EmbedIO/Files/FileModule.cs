@@ -34,6 +34,7 @@ namespace EmbedIO.Files
         private FileRequestHandlerCallback _onDirectoryNotListable = FileRequestHandler.ThrowUnauthorized;
         private FileRequestHandlerCallback _onMethodNotAllowed = FileRequestHandler.ThrowMethodNotAllowed;
         private Action<IHttpContext, MappedResourceInfo>? _onPrepareResponse;
+        private IMimeTypeProvider? _mimeTypeProvider;
 
         private FileCache.Section? _cacheSection;
 
@@ -70,6 +71,32 @@ namespace EmbedIO.Files
         /// to actual files and directories served by this module.
         /// </summary>
         public IFileProvider Provider { get; }
+
+        /// <summary>
+        /// Gets or sets an optional application-owned MIME type and compression provider.
+        /// The default is <see langword="null"/>.
+        /// </summary>
+        /// <remarks>
+        /// Explicit module overrides take precedence. Unanswered lookups retain the server
+        /// and built-in fallbacks. Configure before startup; the provider must be thread-safe
+        /// and stable while mappings/content are cached. It is not disposed by this module.
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        /// <exception cref="ArgumentException">The provider creates a cycle between FileModule instances.</exception>
+        public IMimeTypeProvider? MimeTypeProvider
+        {
+            get => _mimeTypeProvider;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                for (var module = value as FileModule; module != null; module = module._mimeTypeProvider as FileModule)
+                {
+                    if (ReferenceEquals(module, this))
+                        throw new ArgumentException("MIME provider delegation cannot form a FileModule cycle.", nameof(value));
+                }
+                _mimeTypeProvider = value;
+            }
+        }
 
         /// <summary>
         /// Gets or sets the <see cref="FileCache"/> used by this module to store hashes and,
@@ -252,10 +279,14 @@ namespace EmbedIO.Files
         }
 
         string IMimeTypeProvider.GetMimeType(string extension)
-            => _mimeTypeCustomizer.GetMimeType(extension);
+            => _mimeTypeCustomizer.GetMimeType(extension) ?? _mimeTypeProvider?.GetMimeType(extension)!;
 
         bool IMimeTypeProvider.TryDetermineCompression(string mimeType, out bool preferCompression)
-            => _mimeTypeCustomizer.TryDetermineCompression(mimeType, out preferCompression);
+        {
+            if (_mimeTypeCustomizer.TryDetermineCompression(mimeType, out preferCompression))
+                return true;
+            return _mimeTypeProvider != null && _mimeTypeProvider.TryDetermineCompression(mimeType, out preferCompression);
+        }
 
         /// <inheritdoc />
         public void AddCustomMimeType(string extension, string mimeType)
