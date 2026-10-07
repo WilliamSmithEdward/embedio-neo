@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Concurrent ZIP resources
+      href: user-reports/zip-provider-concurrency.md
     - name: JSON and plaintext benchmark endpoints
       href: user-reports/techempower-benchmarks.md
     - name: Former Xamarin sample

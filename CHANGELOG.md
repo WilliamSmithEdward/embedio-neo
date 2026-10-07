@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Serialize shared ZIP archive lookup/open and entry reads without whole-entry buffering. Preserve stream ownership/capabilities and cancellation, and wake pending archive operations during disposal (upstream #491).
+
 - Preserve managed-listener bytes for pipelined requests, including successors after drained Content-Length bodies. Add isolated JSON/plaintext benchmark endpoints and protocol regressions (upstream #495).
 
 - Restore reasonable upstream EmbedIO JSON behavior transparently: preserve raw string controls, accept trailing commas and lossless legacy number forms, bind quoted booleans/enum names/culture-valid dates/public properties with private setters, return legacy defaults for empty input, and serialize non-finite floating values as named strings. Keep explicit custom options, accurate Unicode/UTC handling and rejection of failed conversions/trailing garbage. See [JSON compatibility](docs/user-reports/json-migration-compatibility.md) for boundaries after SWAN removal; no production dependency or API/target change.

@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [Concurrent ZIP resources](user-reports/zip-provider-concurrency.md): bounded shared-archive streaming, ownership and cancellation.
+
 - [TechEmpower workloads](user-reports/techempower-benchmarks.md): isolated JSON/plaintext host, managed pipelining and measurement limits.
 
 - [Former Xamarin sample](user-reports/xamarin-sample-location.md): pinned historical source and maintained desktop/MAUI examples.
