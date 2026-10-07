@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [Former Xamarin sample](user-reports/xamarin-sample-location.md): pinned historical source and maintained desktop/MAUI examples.
+
 - [WebSocket overlap and close](user-reports/websocket-overlap-and-close.md): original stress workload, close admission and caller-owned cancellation.
 
 - [Binary controller responses](user-reports/binary-controller-responses.md): passthrough serialization, media metadata and a complete image endpoint.
