@@ -74,12 +74,14 @@ namespace EmbedIO.Net.Internal
         public async Task BeginReadRequest()
         {
             byte[] buffer;
+            bool bufferedInput;
             try
             {
                 lock (_connectionSync)
                 {
                     if (_resourcesDisposed != 0) return;
                     buffer = _buffer ??= new byte[BufferSize];
+                    bufferedInput = _ms != null && _ms.Length > 0;
                     if (Reuses == 1) _sTimeout = 15000;
                     _ = _timer.Change(_sTimeout, Timeout.Infinite);
                 }
@@ -91,8 +93,8 @@ namespace EmbedIO.Net.Internal
                         false, SslProtocols.None, false).ConfigureAwait(false);
                 }
 
-                var data = await Stream.ReadAsync(buffer, 0, BufferSize).ConfigureAwait(false);
-                await OnReadInternal(data).ConfigureAwait(false);
+                var data = bufferedInput ? 0 : await Stream.ReadAsync(buffer, 0, BufferSize).ConfigureAwait(false);
+                await OnReadInternal(data, bufferedInput).ConfigureAwait(false);
             }
             catch
             {
@@ -142,9 +144,14 @@ namespace EmbedIO.Net.Internal
                 {
                     if (_sock != null && _resourcesDisposed == 0 && _forceClosing == 0)
                     {
+                        var pending = _iStream != null ? _iStream.BufferedRemainder
+                            : _ms != null ? new ArraySegment<byte>(_ms.GetBuffer(), _position, (int)_ms.Length - _position)
+                            : default;
+                        var previousBuffer = _ms;
                         Reuses++;
                         Unbind();
-                        Init();
+                        InitWithPendingInput(pending);
+                        previousBuffer?.Dispose();
                         restart = true;
                     }
                 }
@@ -159,13 +166,16 @@ namespace EmbedIO.Net.Internal
 
             CloseTransport(true);
         }
-        private void Init()
+        private void Init() => InitWithPendingInput(default);
+
+        private void InitWithPendingInput(ArraySegment<byte> pending)
         {
             _contextBound = false;
             _iStream = null;
             _oStream = null;
             Prefix = null;
             _ms = new MemoryStream();
+            if (pending.Count > 0) _ms.Write(pending.Array!, pending.Offset, pending.Count);
             _position = 0;
             _inputState = InputState.RequestLine;
             _lineState = LineState.None;
@@ -177,7 +187,7 @@ namespace EmbedIO.Net.Internal
             CloseSocket();
         }
 
-        private async Task OnReadInternal(int offset)
+        private async Task OnReadInternal(int offset, bool bufferedInput = false)
         {
             StopRequestTimer();
 
@@ -188,7 +198,7 @@ namespace EmbedIO.Net.Internal
             {
                 try
                 {
-                    await _ms.WriteAsync(_buffer, 0, offset).ConfigureAwait(false);
+                    if (offset > 0) await _ms.WriteAsync(_buffer, 0, offset).ConfigureAwait(false);
                     if (_ms.Length > 32768)
                     {
                         Close(true);
@@ -201,12 +211,13 @@ namespace EmbedIO.Net.Internal
                     return;
                 }
 
-                if (offset == 0)
+                if (offset == 0 && !bufferedInput)
                 {
                     CloseSocket();
                     return;
                 }
 
+                bufferedInput = false;
                 if (ProcessInput(_ms))
                 {
                     if (_errorMessage is null)

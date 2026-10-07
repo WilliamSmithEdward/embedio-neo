@@ -23,6 +23,10 @@ namespace EmbedIO.Net.Internal
 
         internal bool IsBodyConsumed => _remainingBody == 0;
 
+        // Only bytes beyond the completed body belong to the next request.
+        internal ArraySegment<byte> BufferedRemainder
+            => IsBodyConsumed ? new ArraySegment<byte>(_buffer, _offset, _length) : default;
+
         public override bool CanRead => true;
 
         public override bool CanSeek => false;

@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: JSON and plaintext benchmark endpoints
+      href: user-reports/techempower-benchmarks.md
     - name: Former Xamarin sample
       href: user-reports/xamarin-sample-location.md
     - name: HEAD response metadata

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve managed-listener bytes for pipelined requests, including successors after drained Content-Length bodies. Add isolated JSON/plaintext benchmark endpoints and protocol regressions (upstream #495).
+
 - Stop native queued/new WebSocket data and application callbacks after a valid close request, preserve invalid-parameter and secondary-close cancellation behavior, and observe caller cancellation during the managed acknowledgement wait. Keep the public state enum, listener defaults and existing shutdown policies unchanged (upstream #502).
 
 - Serialize managed WebSocket messages/control-frame writes and native data/Windows close-output sends, honor send cancellation with safe partial-write cleanup, and validate IPv6/default-port prefixes and colon-bearing paths correctly after a selective upstream #534 audit. Preserve public APIs, listener defaults, targets and dependencies.

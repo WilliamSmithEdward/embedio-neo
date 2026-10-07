@@ -8,4 +8,5 @@
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" /></ItemGroup>
   <ItemGroup><Compile Include="../Shared/HttpsSmoke.cs" Link="HttpsSmoke.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../Shared/BenchmarkEndpoints.cs" Link="PlatformTests/BenchmarkEndpoints.cs" /></ItemGroup>
 </Project>
