@@ -36,7 +36,17 @@ jobs:
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=false
       - name: Run the regression suite with coverage
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 1413 --coverlet
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 1417 --coverlet
+      - name: Verify Basic authentication on .NET Framework
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          dotnet restore test/EmbedIO.LegacyAuthenticationSmoke/EmbedIO.LegacyAuthenticationSmoke.csproj --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw 'Legacy restore failed' }
+          dotnet build test/EmbedIO.LegacyAuthenticationSmoke/EmbedIO.LegacyAuthenticationSmoke.csproj -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'Legacy build failed' }
+          & test/EmbedIO.LegacyAuthenticationSmoke/bin/Release/net472/EmbedIO.LegacyAuthenticationSmoke.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Legacy authentication failed' }
       - name: Check hot-path and cold-start allocation budgets
         run: |
           dotnet restore test/EmbedIO.Performance/EmbedIO.Performance.csproj --locked-mode

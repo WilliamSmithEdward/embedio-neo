@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Set Basic authentication challenges through the native response API so Microsoft listeners on .NET Framework do not return 500 for valid credentials. Retain challenge/replacement and credential behavior; add real modern/legacy listener regressions (upstream #524).
+
 - Document host-to-Android-emulator forwarding and extend API 29 CI with distinct host/device ports, remove/recreate checks and owned mapping cleanup; retain production APIs and defaults (upstream #536).
 
 - Document and verify anonymous reads/protected writes in one controller using existing pre-handler hooks, separate authentication/permission checks and untouched JSON binding. Provide explicit demo-token and production-provider boundaries without adding authorization attributes or changing defaults/dependencies (upstream #538).

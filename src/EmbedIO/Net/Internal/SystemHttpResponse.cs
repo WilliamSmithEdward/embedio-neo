@@ -33,6 +33,9 @@ namespace EmbedIO.Net.Internal
         /// <inheritdoc />
         public WebHeaderCollection Headers => _response.Headers;
 
+        internal void SetAuthenticationChallenge(string value)
+            => _response.AddHeader(HttpHeaderNames.WWWAuthenticate, value);
+
         /// <inheritdoc />
         public int StatusCode
         {
