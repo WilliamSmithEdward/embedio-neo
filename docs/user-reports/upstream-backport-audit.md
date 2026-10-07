@@ -34,7 +34,7 @@ issue. In particular, the historical charset change is not an arbitrary raw-head
 API, and the code-page change is not evidence of a localized Windows certificate
 fix. Existing APIs, defaults, targets, dependencies and license notices remain.
 
-## Managed WebSocket sends
+## WebSocket sends
 
 Concurrent sends previously wrote fragments from separate data messages without
 a whole-message gate. A new text/binary message could start before the previous
@@ -52,7 +52,16 @@ finish, not while they still need to release them.
 
 Applications still own lifetime/cancellation policy for a peer that stops reading.
 This correction does not introduce a write timeout, guarantee scheduling order
-between independently started tasks, or change native listener implementation.
+between independently started tasks, or change listener defaults.
+
+The Windows CI stress case also exposed overlapping native sends closing the
+connection. The native adapter now serializes data sends before calling the
+runtime and counts queued senders in its existing deferred-disposal lifecycle.
+Windows close output shares that send gate, released before waiting for the
+receive handshake; its existing shutdown workaround and Unix close path are
+retained. Native transport error/cancellation semantics remain owned by the
+runtime. Controlled native cases cover queued cancellation, failure recovery,
+synchronous null validation, deferred disposal and close/send overlap.
 
 ## Prefix validation
 
@@ -70,7 +79,7 @@ failed before their respective corrections and pass afterward. The controlled
 transport invokes the real managed WebSocket constructor and send methods; it
 makes overlapping writes, cancellation and cleanup timing observable.
 
-Twenty-eight focused cases cover whole-message ordering, queued/pre/active and
+Thirty-four focused cases cover whole-message ordering, queued/pre/active and
 between-fragment cancellation, transport failure, ping/pong/close serialization,
 cancelled close, disposal and gate cleanup, prefix parsing, and real connections
 under both listener modes. Real clients receive 24 concurrent messages
