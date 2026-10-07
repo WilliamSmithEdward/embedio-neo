@@ -1,6 +1,6 @@
 # Windows native WebSocket shutdown
 
-This correction is unreleased and is not included in NuGet 1.0.2. It affects
+This correction is included starting with EmbedIO-Neo 1.0.3. It affects
 `HttpListenerMode.Microsoft` on Windows. The default `HttpListenerMode.EmbedIO`
 uses a different WebSocket implementation.
 

@@ -2,7 +2,7 @@
 
 [Upstream #567](https://github.com/unosquare/embedio/issues/567), reported by asesidaa, asked for control over `charset` in static-file `Content-Type` headers. EmbedIO-Neo now offers an optional `FileModule.OnPrepareResponse` callback that receives the actual mapped resource before its response is sent. The managed listener also honors `Response.ContentEncoding`: null suppresses automatic charset, and a non-null encoding supplies its own name instead of always advertising UTF-8.
 
-These changes are **unreleased** and are not available in NuGet 1.0.1. The callback defaults to null. Unconfigured file responses retain their previous behavior, including the managed listener's default UTF-8 charset. Public interfaces, target frameworks and dependency requirements are unchanged; the callback is an additive property on `FileModule`.
+These changes are included starting with EmbedIO-Neo 1.0.2. The callback defaults to null. Unconfigured file responses retain their previous behavior, including the managed listener's default UTF-8 charset. Public interfaces, target frameworks and dependency requirements are unchanged; the callback is an additive property on `FileModule`.
 
 ## Serve UTF-8 text and binary files
 

@@ -29,7 +29,7 @@ contain a comma, and an `Expires` attribute can contain one too.
 explains why folding `Set-Cookie` fields is unsafe.
 Other handshake headers retain their existing serialization.
 
-The correction is an unreleased change, **not part of published NuGet 1.0.1**.
+The correction is included starting with EmbedIO-Neo 1.0.2.
 Build the current repository to test it before the next owner-authorized release.
 No namespace, dependency, target framework or configuration change is required.
 

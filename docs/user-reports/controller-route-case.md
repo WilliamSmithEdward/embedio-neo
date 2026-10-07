@@ -15,9 +15,8 @@ tracked separately in [the customization issue](https://github.com/WilliamSmithE
 
 ## Enable the option before controller registration
 
-The new setting is available in the source change; it is **not in an existing
-NuGet release yet**. Until an authorized release includes it, build against this
-repository's source. With the repository checked out and its selected .NET SDK
+The new setting is included starting with EmbedIO-Neo 1.0.3. Use a package
+reference to that version or later, or build against this repository's source. With the repository checked out and its selected .NET SDK
 installed, run from the repository root:
 
 ```sh

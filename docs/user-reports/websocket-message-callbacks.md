@@ -8,8 +8,8 @@ contracts. Neo preserves those contracts and adds an opt-in alternative instead.
 
 ## Availability
 
-`EmbedIO.WebSockets.WebSocketMessageModule` is a new source API. It is not in
-published EmbedIO-Neo 1.0.2. Until a release includes it, use a checkout containing
+`EmbedIO.WebSockets.WebSocketMessageModule` is included starting with
+EmbedIO-Neo 1.0.3. Use that package version or later, or a checkout containing
 this change and a project reference. No package/assembly/namespace identity,
 dependency or target-framework change is required. Existing subclasses of
 `WebSocketModule` continue to use their original callbacks.

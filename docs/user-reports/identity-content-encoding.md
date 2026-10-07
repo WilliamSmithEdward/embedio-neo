@@ -6,7 +6,7 @@
 
 The shared `IHttpRequest.TryNegotiateContentEncoding` response-preparation callback now removes Content-Encoding when negotiation selects `CompressionMethod.None`. This includes an absent or empty Accept-Encoding header and explicit identity requests. It clears stale coding metadata instead of replacing it with identity. `Vary: Accept-Encoding` remains, as do gzip/deflate selection, their response headers, file bytes, range handling, compression-specific ETags and rejection of unacceptable encodings.
 
-This is an **unreleased** source correction, unavailable in NuGet 1.0.1. Public APIs, target frameworks, dependencies and compression preferences are unchanged. The intentional wire-header correction also applies to text/JSON and other responses using the shared helper. Applications inspecting an uncompressed response should accept an absent Content-Encoding field rather than depend on the legacy identity value. `Response.ContentEncoding` describes a text charset; it is separate from the Content-Encoding HTTP field used for compression. See [static-file charset](static-file-charset.md).
+This correction is included starting with EmbedIO-Neo 1.0.2. Public APIs, target frameworks, dependencies and compression preferences are unchanged. The intentional wire-header correction also applies to text/JSON and other responses using the shared helper. Applications inspecting an uncompressed response should accept an absent Content-Encoding field rather than depend on the legacy identity value. `Response.ContentEncoding` describes a text charset; it is separate from the Content-Encoding HTTP field used for compression. See [static-file charset](static-file-charset.md).
 
 ## Serve a video from the corrected checkout
 

@@ -10,7 +10,7 @@ Controlled transport tests fail on the previous implementation and verify no syn
 
 Two adjacent framing defects are also corrected for synchronous and asynchronous writes: empty writes no longer emit a zero-sized chunk that prematurely terminates the body, and headers larger than the initial 16 KB coalescing budget no longer produce a negative body-copy count. Ordinary fixed-length/chunked framing and end-of-response trailers are preserved.
 
-This correction is unreleased. It is not present in NuGet version 1.0.1. Public APIs, supported target frameworks, listener selection, compression and caching defaults, and dependencies are unchanged. Synchronous `Write`/`Dispose`, buffered response disposal and compression finalization can still perform synchronous work; this change does not make every response operation asynchronous. The Microsoft listener already delegates async writes to .NET and is not replaced by this correction.
+This correction is included starting with EmbedIO-Neo 1.0.2. Public APIs, supported target frameworks, listener selection, compression and caching defaults, and dependencies are unchanged. Synchronous `Write`/`Dispose`, buffered response disposal and compression finalization can still perform synchronous work; this change does not make every response operation asynchronous. The Microsoft listener already delegates async writes to .NET and is not replaced by this correction.
 
 ## Validation and limits
 

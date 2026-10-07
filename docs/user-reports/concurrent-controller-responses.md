@@ -6,7 +6,7 @@
 
 Current managed-listener source reproduced a related defect: disposing an already completed response could close a newer request on the same reused TCP connection. Response close/dispose now atomically runs only once. This protects the newer request and preserves first-close behavior, public APIs, defaults, supported frameworks and dependencies. No garbage-collection setting or thread-pool adjustment is needed for this correction.
 
-This correction is unreleased and is not in NuGet 1.0.1. The usage patterns below already work with 1.0.1. Regression tests distinguish a stale response from the next context by actual TCP port reuse and exercise repeated/concurrent disposal while the next request is awaiting work.
+This correction is included starting with EmbedIO-Neo 1.0.2. The usage patterns below already work with 1.0.1. Regression tests distinguish a stale response from the next context by actual TCP port reuse and exercise repeated/concurrent disposal while the next request is awaiting work.
 
 ## Choose one response owner
 

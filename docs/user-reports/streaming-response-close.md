@@ -147,7 +147,7 @@ Two additional real-listener cases exercise repeated response closure and fresh
 connections. An in-process regression checks asynchronous cleanup followed by close
 callbacks after a flush failure, including isolation of a failing callback.
 The sample uses existing APIs available in 1.0.1; the cleanup correction is an
-unreleased change and must not be assumed present in that published package.
+correction included starting with EmbedIO-Neo 1.0.2 and is absent from 1.0.1.
 The original application's listener mode and complete reproduction were not
 supplied, so this does not establish the cause of its reported missing write
 exception. Supply a minimal server, runtime/OS, listener mode and client close

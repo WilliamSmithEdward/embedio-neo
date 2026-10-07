@@ -1,4 +1,4 @@
-﻿# Localhost on IPv4 and IPv6
+# Localhost on IPv4 and IPv6
 
 [Upstream #576](https://github.com/unosquare/embedio/issues/576), reported by
 `KazWolfe`, describes empty replies when the managed listener is registered with
@@ -22,7 +22,7 @@ Other hostname resolution, literal IP and wildcard binding rules are unchanged.
 `EndPointManager.UseIpv6 = false` selects IPv4 only for localhost; configure this
 process-wide setting before starting listeners rather than changing it live.
 
-The fix is **unreleased and not included in published NuGet 1.0.1**. To try it,
+The fix is included starting with EmbedIO-Neo 1.0.2. To try it,
 build the repository and reference `src/EmbedIO/EmbedIO.csproj` from a .NET 10
 console application. A complete program using the corrected source is:
 

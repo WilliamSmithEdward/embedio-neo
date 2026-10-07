@@ -20,8 +20,8 @@ The new instance controls are `TryBanClient`, `TryUnbanClient` and `BannedIPs`.
 optional `isExplicit` flag. `BannedIPs` returns a list snapshot using the existing
 mutable `BanInfo` type. Controls throw `ObjectDisposedException` after disposal.
 
-These additions are on main and are **not in published EmbedIO-Neo 1.0.2**.
-Until a release includes them, use a checkout/project reference. In a separate
+These additions are included starting with EmbedIO-Neo 1.0.3. Use that package
+version or later, or a checkout/project reference as shown below. In a separate
 console project outside the checkout, replace `/path/to/embedio-neo` below with
 your actual checkout directory:
 
