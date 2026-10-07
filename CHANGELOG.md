@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Restore reasonable upstream EmbedIO JSON behavior transparently: preserve raw string controls, accept trailing commas and lossless legacy number forms, bind quoted booleans/enum names/culture-valid dates/public properties with private setters, return legacy defaults for empty input, and serialize non-finite floating values as named strings. Keep explicit custom options, accurate Unicode/UTC handling and rejection of failed conversions/trailing garbage. See [JSON compatibility](docs/user-reports/json-migration-compatibility.md) for boundaries after SWAN removal; no production dependency or API/target change.
+
 - Serialize managed WebSocket messages/control-frame writes and native data/Windows close-output sends, honor send cancellation with safe partial-write cleanup, and validate IPv6/default-port prefixes and colon-bearing paths correctly after a selective upstream #534 audit. Preserve public APIs, listener defaults, targets and dependencies.
 
 - Read managed response keep-alive defaults from the parsed request instead of caching them during context construction. Honor connection-close requests and HTTP/1.0 close-delimited responses, preserve explicit application overrides and response-helper ownership, and document one-writer chunked streaming (upstream #510).

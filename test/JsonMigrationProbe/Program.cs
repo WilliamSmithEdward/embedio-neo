@@ -17,6 +17,8 @@ namespace JsonMigrationProbe
     // Characterizes both parsers; differences are findings, not test failures.
     internal static class Program
     {
+        private static readonly JsonSerializerOptions ReportOptions = new JsonSerializerOptions { IncludeFields = true };
+
         private static async Task Main()
         {
             CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
@@ -76,6 +78,11 @@ namespace JsonMigrationProbe
             Compare<object>("unpaired escaped surrogate", "{\"Value\":\"\\uD800\"}");
             Compare<BoolData>("quoted boolean", "{\"Value\":\"true\"}");
             Compare<BoolData>("numeric boolean", "{\"Value\":1}");
+            Compare<MemberData>("fields setters and read-only members", "{\"Field\":3,\"Count\":4,\"PrivateCount\":5,\"ReadOnly\":6,\"Numbers\":[1,2]}");
+            Compare<ConstructorData>("parameterized constructor", "{\"Value\":4}");
+            Compare<Dictionary<string, int>>("dictionary values", "{\"one\":\"1\",\"two\":2}");
+            Compare<int[]>("typed array", "[1,\"2\",3]");
+            Compare<DateData>("invalid date", "{\"Value\":\"invalid\"}");
             Compare<object>("quoted date untyped", "{\"Value\":\"2026-10-07T12:30:00Z\"}");
 
             foreach (var (name, value) in new (string, object?)[] {
@@ -103,6 +110,8 @@ namespace JsonMigrationProbe
                 }
             }
 
+            VerifyDefaults();
+
             foreach (var (name, body) in new[] {
                 ("raw CRLF", "{\"Text\":\"first\r\nsecond\"}"),
                 ("escaped CRLF", "{\"Text\":\"first\\r\\nsecond\"}"),
@@ -116,7 +125,7 @@ namespace JsonMigrationProbe
                 {
                     using var content = new StringContent(body, Encoding.UTF8, "application/json");
                     using var response = await server.Client.PostAsync(path, content);
-                    var expectedStatus = name == "raw CRLF" ? 400 : 200;
+                    const int expectedStatus = 200;
                     if ((int)response.StatusCode != expectedStatus)
                         throw new InvalidOperationException($"Unexpected HTTP status for {name} at {path}.");
                     var responseBody = await response.Content.ReadAsStringAsync();
@@ -127,15 +136,54 @@ namespace JsonMigrationProbe
             }
         }
 
+        private static void VerifyDefaults()
+        {
+            var assertions = 0;
+            var value = Json.Deserialize<CompatibilityData>("{\"Text\":\"first\r\nsecond\",\"Flag\":\"true\",\"Choice\":\"Second\",\"Count\":+001,\"PrivateCount\":7,\"Date\":\"10/07/2026\",}");
+            Check(value.Text == "first\r\nsecond", "raw CRLF");
+            Check(value.Flag, "quoted boolean");
+            Check(value.Choice == Choice.Second, "enum name");
+            Check(value.Count == 1, "legacy number");
+            Check(value.PrivateCount == 7, "private setter");
+            Check(value.Date == new DateTime(2026, 10, 7), "legacy date");
+            Check(Json.Deserialize<TextData>(" \r\n") == null, "empty reference");
+            Check(Json.Deserialize<int>("") == 0, "empty value");
+            var members = Json.Deserialize<MemberData>("{\"Field\":3,\"PrivateCount\":5,\"ReadOnly\":6}");
+            Check(members.Field == 3 && members.PrivateCount == 5 && members.ReadOnly == 9, "member binding");
+            var options = Json.CreateOptions();
+            options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+            Check(Json.Serialize(new EnumData { Value = Choice.Second }, options).Contains("Second"), "custom converter precedence");
+            Check(double.IsNaN(Json.Deserialize<double[]>(Json.Serialize(new[] { double.NaN }))[0]), "named float");
+            var nested = (Dictionary<string, object>)Json.Deserialize("{\"a\nb\":{\"Text\":\"x\ty\"}}")!;
+            Check(((Dictionary<string, object>)nested["a\nb"])["Text"].Equals("x\ty"), "nested controls");
+            Reject("{\"Text\":\"a\nb\"}", new JsonSerializerOptions());
+            Reject("{\"Count\":\"invalid\"}");
+            Reject("{\"Text\":\"a\\qb\"}");
+            Reject("{}garbage");
+            Console.WriteLine($"Verification assertions: {assertions}");
+
+            void Check(bool condition, string name)
+            {
+                if (!condition) throw new InvalidOperationException("Compatibility verification failed: " + name);
+                assertions++;
+            }
+            void Reject(string body, JsonSerializerOptions? settings = null)
+            {
+                try { Json.Deserialize<CompatibilityData>(body, settings); }
+                catch (JsonException) { assertions++; return; }
+                throw new InvalidOperationException("Invalid JSON was accepted: " + body);
+            }
+        }
+
         private static void Compare<T>(string name, string body)
         {
-            foreach (var parser in new[] { "SWAN 3.1.0", "Neo defaults", "Neo relaxed options" })
+            foreach (var parser in new[] { "SWAN 3.1.0", "Neo defaults", "Explicit strict options" })
             {
                 try
                 {
                     object? value = parser == "SWAN 3.1.0" ? Swan.Formatters.Json.Deserialize<T>(body)
-                        : Json.Deserialize<T>(body, parser == "Neo relaxed options" ? RelaxedOptions() : null);
-                    Console.WriteLine(JsonSerializer.Serialize(new { name, parser, accepted = true, type = value?.GetType().FullName, value, stringUnits = StringUnits(value) }));
+                        : Json.Deserialize<T>(body, parser == "Explicit strict options" ? new JsonSerializerOptions() : null);
+                    Console.WriteLine(JsonSerializer.Serialize(new { name, parser, accepted = true, type = value?.GetType().FullName, value, stringUnits = StringUnits(value) }, ReportOptions));
                 }
                 catch (Exception ex)
                 {
@@ -154,15 +202,31 @@ namespace JsonMigrationProbe
             return null;
         }
 
-        private static JsonSerializerOptions RelaxedOptions()
-        {
-            var options = Json.CreateOptions();
-            options.AllowTrailingCommas = true;
-            options.ReadCommentHandling = JsonCommentHandling.Skip;
-            return options;
-        }
+
     }
 
+    public sealed class CompatibilityData
+    {
+        public string? Text { get; set; }
+        public bool Flag { get; set; }
+        public Choice Choice { get; set; }
+        public int Count { get; set; }
+        public int PrivateCount { get; private set; }
+        public DateTime Date { get; set; }
+    }
+    public sealed class MemberData
+    {
+        public int Field;
+        public int Count { get; set; } = 7;
+        public int PrivateCount { get; private set; } = 8;
+        public int ReadOnly => 9;
+        public List<int> Numbers { get; } = new List<int> { 9 };
+    }
+    public sealed class ConstructorData
+    {
+        public ConstructorData(int value) { Value = value; }
+        public int Value { get; }
+    }
     public sealed class TextData { public string? Text { get; set; } }
     public sealed class BoolData { public bool Value { get; set; } }
     public sealed class NumberData { public int Value { get; set; } }

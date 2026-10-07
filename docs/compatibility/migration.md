@@ -32,7 +32,18 @@ Default HTTP serialization now uses System.Text.Json. EmbedIO's defaults enable
 public fields, case-insensitive property matching, and reading quoted numbers.
 Untyped objects become dictionaries, arrays become lists, and numbers become
 `decimal`, preserving the shapes used by JsonServer. Numeric and boolean JSON
-values can still be read into string properties. Invalid request JSON returns 400.
+values can still be read into string properties. Default Neo deserialization also
+preserves reasonable legacy EmbedIO acceptance: raw controls inside strings,
+trailing commas, lossless leading-plus/zero/decimal-point number forms, quoted
+booleans, named enums, culture-valid dates and public properties with private
+setters. Empty/whitespace input returns the target's default value. Non-finite
+floating-point values use named JSON strings. These defaults require no opt-in
+and apply to `[JsonData]`, `GetRequestDataAsync<T>` and JsonServer through
+`EmbedIO.Serialization.Json`. Unrelated malformed input and failed value
+conversions still return 400 in request binding. See the maintained
+[JSON compatibility guide](../user-reports/json-migration-compatibility.md) for
+verified behavior and deliberate exceptions; arbitrary SWAN tolerance and silent
+conversion failures are not reproduced.
 
 Use `Json.CreateOptions()` to retain these defaults when customizing:
 
@@ -47,7 +58,14 @@ var serialize = ResponseSerializer.Json(options);
 var deserialize = RequestDeserializer.Json<MyRequest>(options);
 ```
 
-Explicitly supplied options replace the defaults. Replace SWAN JSON attributes
+Explicitly supplied options replace the defaults. A fresh
+`new JsonSerializerOptions()` retains strict System.Text.Json parsing; options
+created by `Json.CreateOptions()` retain Neo's compatibility behavior even when
+copied with the .NET options copy constructor. Directly calling the .NET parser
+with those options does not normalize raw string controls or legacy number
+syntax; that normalization belongs to Neo's `Json.Deserialize` entry points.
+Application converters added to `Json.CreateOptions()` take precedence over
+its boolean, enum and date defaults. Replace SWAN JSON attributes
 with System.Text.Json attributes such as `JsonPropertyName` and `JsonIgnore`.
 Use converters for application-specific enum, date, and number representations.
 Escaping, whitespace, date formatting, constructor selection, unsupported types,
