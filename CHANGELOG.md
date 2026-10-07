@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add per-WebApiModule CaseInsensitiveRoutes for invariant-culture controller-route literals, preserving sensitive defaults/mounts and request data. Isolate matchers, reject conflicting case-equivalent declarations and deduplicate same-handler aliases (upstream #521).
+
 - Set Basic authentication challenges through the native response API so Microsoft listeners on .NET Framework do not return 500 for valid credentials. Retain challenge/replacement and credential behavior; add real modern/legacy listener regressions (upstream #524).
 
 - Document host-to-Android-emulator forwarding and extend API 29 CI with distinct host/device ports, remove/recreate checks and owned mapping cleanup; retain production APIs and defaults (upstream #536).
