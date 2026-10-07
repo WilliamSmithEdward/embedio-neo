@@ -56,8 +56,8 @@ uses pipelining for plaintext and per-request serialization for JSON.
 
 Both listeners pass sequential keep-alive. Before this fix, the two initial
 16-request pipeline cases failed in managed mode with a reset after its existing
-15-second subsequent-request timeout. Native mode passed the same cases. The
-managed listener had already read bytes for later requests, then discarded them
+15-second subsequent-request timeout. Windows native mode passed the same cases.
+Native Unix has a separate runtime limitation described below. The managed listener had already read bytes for later requests, then discarded them
 when resetting after the first response.
 
 The listener now preserves bytes beyond the completed request body and parses
@@ -71,12 +71,49 @@ not the exact cause of the original reporter's 2020 difficulty.
 The 26 real TCP/HTTP(S) cases cover both listeners: sequential reuse, 16-request
 plaintext/mixed pipelines, ordered complete bodies and headers, no gzip,
 explicit close and fresh connections, 32 concurrent clients, unknown child
-routes, full/partial/unread Content-Length bodies split successor headers, batches spanning the receive buffer and managed HTTPS.
+routes, full/partial/unread Content-Length bodies, split successor headers, batches
+spanning the receive buffer and managed HTTPS.
 Run them with:
 
 ```sh
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~Issue495_" --report-trx --results-directory TestResults/benchmark-endpoints --timeout 2m --minimum-expected-tests 26
 ```
+
+## Native Unix runtime limitation
+
+Linux and macOS CI on .NET 10.0.12 found six native `System.Net.HttpListener`
+pipeline/body-boundary failures. A standalone reproduction without EmbedIO on
+Ubuntu 24.04.5 also answered the first of two pipelined requests and reset the
+connection. The [runtime parser](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.HttpListener/src/System/Net/Managed/HttpConnection.cs)
+resets request state without preserving buffered successor bytes. Ordinary
+sequential keep-alive still passes; it is not equivalent to pipelining.
+
+The managed listener's corrected pipeline cases pass on both platforms. Select
+`HttpListenerMode.EmbedIO` explicitly for Unix workloads requiring pipelining;
+this is the benchmark host's default mode. [Tracking issue #158](https://github.com/WilliamSmithEdward/embedio-neo/issues/158)
+records the investigation and the owner-approved decision to document this runtime
+limitation and recommend the existing managed mode.
+No parser shim or automatic mode/default switch is implemented. Do not interpret
+Windows native results as Unix native validation.
+
+The six affected native Unix test cases are explicitly reported as platform
+skips in ordinary CI. All managed cases remain required on every desktop
+platform, and all native Windows cases remain required. The failed .NET 10.0.12
+runs and standalone reproduction establish the limitation; skips do not claim a
+native runtime fix. Sequential native Unix keep-alive, framing, concurrent clients
+and close/reconnect checks still execute normally.
+
+The original failing tests are retained as opt-in runtime probes. On Linux or
+macOS, run them against a runtime being evaluated with:
+
+```sh
+EMBEDIO_TEST_NATIVE_UNIX_PIPELINING=1 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~Issue495_" --report-trx --results-directory TestResults/native-unix-pipeline-probe --timeout 2m --minimum-expected-tests 26
+```
+
+Expect the six native cases to fail on the verified .NET 10.0.12 runtime. A future
+passing probe warrants a reviewed update to the documented support and test
+guard; detecting a new version alone does not establish correctness. This test
+variable does not change library behavior or listener selection.
 
 ## Measure a stated workload
 
