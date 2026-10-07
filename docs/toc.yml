@@ -113,6 +113,9 @@
     - name: MIME policy and pre-request processing
       href: user-reports/mime-policy-and-pre-request.md
 
+    - name: Selective upstream backport audit
+      href: user-reports/upstream-backport-audit.md
+
     - name: Common hosting concepts
       href: user-reports/common-hosting-concepts.md
 

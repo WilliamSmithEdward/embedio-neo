@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Serialize managed WebSocket messages/control-frame writes and native data/Windows close-output sends, honor send cancellation with safe partial-write cleanup, and validate IPv6/default-port prefixes and colon-bearing paths correctly after a selective upstream #534 audit. Preserve public APIs, listener defaults, targets and dependencies.
+
 - Read managed response keep-alive defaults from the parsed request instead of caching them during context construction. Honor connection-close requests and HTTP/1.0 close-delimited responses, preserve explicit application overrides and response-helper ownership, and document one-writer chunked streaming (upstream #510).
 
 ## [1.0.3] - 2026-10-07

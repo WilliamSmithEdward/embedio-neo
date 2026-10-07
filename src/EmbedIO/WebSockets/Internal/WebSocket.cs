@@ -28,6 +28,11 @@ namespace EmbedIO.WebSockets.Internal
         private readonly ConcurrentQueue<MessageEventArgs> _messageEventQueue = new();
         private readonly Action _closeConnection;
         private readonly TimeSpan _waitTime = TimeSpan.FromSeconds(1);
+        private readonly SemaphoreSlim _messageSendGate = new(1, 1);
+        private readonly SemaphoreSlim _frameWriteGate = new(1, 1);
+        private int _sendOperations;
+        private int _resourcesReleased;
+        private bool _sendGatesDisposed;
 
         private volatile WebSocketState _readyState;
         private AutoResetEvent? _exitReceiving;
@@ -173,9 +178,7 @@ namespace EmbedIO.WebSockets.Internal
         /// A task that represents the asynchronous of send
         /// binary data using websocket.
         /// </returns>
-#pragma warning disable CA1801 // Unused parameter
         public async Task SendAsync(byte[] data, Opcode opcode, CancellationToken cancellationToken = default)
-#pragma warning restore CA1801
         {
             if (_readyState != WebSocketState.Open)
             {
@@ -183,9 +186,32 @@ namespace EmbedIO.WebSockets.Internal
             }
 
             using var stream = new WebSocketStream(data, opcode);
-            foreach (var frame in stream.GetFrames())
+            if (!BeginSendOperation())
+                throw new WebSocketException(CloseStatusCode.Normal, "The connection has been closed.");
+            var entered = false;
+            var started = false;
+            try
             {
-                await Send(frame).ConfigureAwait(false);
+                await _messageSendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                entered = true;
+                foreach (var frame in stream.GetFrames())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!await WriteFrameBytesAsync(frame.ToArray(), cancellationToken).ConfigureAwait(false))
+                        return;
+                    started = true;
+                }
+            }
+            catch
+            {
+                // A partially sent fragmented message cannot be followed by another data message.
+                if (started) AbortSend();
+                throw;
+            }
+            finally
+            {
+                if (entered) _messageSendGate.Release();
+                EndSendOperation();
             }
         }
 
@@ -252,7 +278,8 @@ namespace EmbedIO.WebSockets.Internal
                 return false;
             }
 
-            await _stream.WriteAsync(frameAsBytes, 0, frameAsBytes.Length).ConfigureAwait(false);
+            if (!await WriteFrameBytesAsync(frameAsBytes, CancellationToken.None).ConfigureAwait(false))
+                return false;
 
             return _receivePong != null && _receivePong.WaitOne(timeout);
         }
@@ -306,14 +333,15 @@ namespace EmbedIO.WebSockets.Internal
             "Begin closing the connection.".Trace(nameof(InternalCloseAsync));
 
             var bytes = send ? WebSocketFrame.CreateCloseFrame(payloadData).ToArray() : null;
-            await CloseHandshakeAsync(bytes, receive, cancellationToken).ConfigureAwait(false);
-            ReleaseResources();
-
-            "End closing the connection.".Trace(nameof(InternalCloseAsync));
-
-            lock (_stateSyncRoot)
+            try
             {
-                _readyState = WebSocketState.Closed;
+                await CloseHandshakeAsync(bytes, receive, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                lock (_stateSyncRoot) _readyState = WebSocketState.Closed;
+                ReleaseResources();
+                "End closing the connection.".Trace(nameof(InternalCloseAsync));
             }
         }
 
@@ -326,7 +354,7 @@ namespace EmbedIO.WebSockets.Internal
 
             if (sent)
             {
-                await _stream.WriteAsync(frameAsBytes, 0, frameAsBytes.Length, cancellationToken).ConfigureAwait(false);
+                sent = await WriteFrameBytesAsync(frameAsBytes!, cancellationToken, allowClosing: true).ConfigureAwait(false);
             }
 
             if (receive && sent)
@@ -461,6 +489,9 @@ namespace EmbedIO.WebSockets.Internal
 
         private void ReleaseResources()
         {
+            if (Interlocked.Exchange(ref _resourcesReleased, 1) != 0)
+                return;
+            DisposeSendGatesIfIdle();
             _closeConnection();
             _stream = null;
             while (_messageEventQueue.TryDequeue(out _)) { }
@@ -488,18 +519,78 @@ namespace EmbedIO.WebSockets.Internal
         }
 
         private Task Send(WebSocketFrame frame)
+            => WriteFrameBytesAsync(frame.ToArray(), CancellationToken.None);
+
+        private bool BeginSendOperation()
         {
             lock (_stateSyncRoot)
             {
-                if (_readyState != WebSocketState.Open)
-                {
-                    "The sending has been interrupted.".Error(nameof(Send));
-                    return Task.Delay(0);
-                }
+                if (_resourcesReleased != 0)
+                    return false;
+                _sendOperations++;
+                return true;
             }
+        }
 
-            var frameAsBytes = frame.ToArray();
-            return _stream.WriteAsync(frameAsBytes, 0, frameAsBytes.Length);
+        private void EndSendOperation()
+        {
+            lock (_stateSyncRoot) _sendOperations--;
+            DisposeSendGatesIfIdle();
+        }
+
+        private void DisposeSendGatesIfIdle()
+        {
+            lock (_stateSyncRoot)
+            {
+                if (_resourcesReleased == 0 || _sendOperations != 0 || _sendGatesDisposed)
+                    return;
+                _sendGatesDisposed = true;
+                _messageSendGate.Dispose();
+                _frameWriteGate.Dispose();
+            }
+        }
+
+        private void AbortSend()
+        {
+            lock (_stateSyncRoot) _readyState = WebSocketState.Closed;
+            ReleaseResources();
+        }
+
+        private async Task<bool> WriteFrameBytesAsync(byte[] bytes, CancellationToken cancellationToken, bool allowClosing = false)
+        {
+            if (!BeginSendOperation())
+                return false;
+            var entered = false;
+            var writing = false;
+            try
+            {
+                await _frameWriteGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                entered = true;
+                Stream? transport;
+                lock (_stateSyncRoot)
+                {
+                    if (_resourcesReleased != 0 || (_readyState != WebSocketState.Open &&
+                        !(allowClosing && (_readyState == WebSocketState.CloseSent || _readyState == WebSocketState.CloseReceived))))
+                        return false;
+                    transport = _stream;
+                }
+                if (transport == null) return false;
+                cancellationToken.ThrowIfCancellationRequested();
+                writing = true;
+                await transport.WriteAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+            catch
+            {
+                // A failed transport write can have emitted only part of a frame; do not reuse it.
+                if (writing) AbortSend();
+                throw;
+            }
+            finally
+            {
+                if (entered) _frameWriteGate.Release();
+                EndSendOperation();
+            }
         }
 
         private void StartReceiving()

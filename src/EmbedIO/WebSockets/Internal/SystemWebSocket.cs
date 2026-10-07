@@ -15,6 +15,7 @@ namespace EmbedIO.WebSockets.Internal
         private bool _gatesDisposed;
         private readonly SemaphoreSlim _receiveGate = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _closeGate = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _sendGate = new SemaphoreSlim(1, 1);
 
         public SystemWebSocket(System.Net.WebSockets.WebSocket webSocket)
         {
@@ -38,11 +39,26 @@ namespace EmbedIO.WebSockets.Internal
 
         /// <inheritdoc />
         public Task SendAsync(byte[] buffer, bool isText, CancellationToken cancellationToken = default)
-            => UnderlyingWebSocket.SendAsync(
-                new ArraySegment<byte>(buffer),
-                isText ? WebSocketMessageType.Text : WebSocketMessageType.Binary,
-                true,
-                cancellationToken);
+            => SendCoreAsync(new ArraySegment<byte>(buffer), isText, cancellationToken);
+
+        private async Task SendCoreAsync(ArraySegment<byte> buffer, bool isText, CancellationToken cancellationToken)
+        {
+            BeginOperation();
+            var entered = false;
+            try
+            {
+                await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                entered = true;
+                await UnderlyingWebSocket.SendAsync(buffer,
+                    isText ? WebSocketMessageType.Text : WebSocketMessageType.Binary,
+                    true, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (entered) _sendGate.Release();
+                EndOperation();
+            }
+        }
 
         /// <inheritdoc />
         public Task CloseAsync(CancellationToken cancellationToken = default) =>
@@ -109,7 +125,15 @@ namespace EmbedIO.WebSockets.Internal
                     // Avoid WebSocketBase.CloseAsync's inverted locks (dotnet/runtime #115559).
                     // Recheck against released .NET 11 before considering removal of this path.
                     if (State != WebSocketState.CloseSent)
-                        await UnderlyingWebSocket.CloseOutputAsync(code, comment, cancellationToken).ConfigureAwait(false);
+                    {
+                        await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                        try
+                        {
+                            if (State != WebSocketState.Closed && State != WebSocketState.Aborted && State != WebSocketState.CloseSent)
+                                await UnderlyingWebSocket.CloseOutputAsync(code, comment, cancellationToken).ConfigureAwait(false);
+                        }
+                        finally { _sendGate.Release(); }
+                    }
 
                     // An existing module receive can finish the handshake. Otherwise this
                     // caller takes over, including when invoked inside a module callback.
@@ -195,6 +219,7 @@ namespace EmbedIO.WebSockets.Internal
             _gatesDisposed = true;
             _receiveGate.Dispose();
             _closeGate.Dispose();
+            _sendGate.Dispose();
 
         }
 

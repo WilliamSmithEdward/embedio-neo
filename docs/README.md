@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [Selective upstream backport audit](user-reports/upstream-backport-audit.md): patch decisions, WebSocket send concurrency and prefix validation.
+
 - [Common hosting concepts](user-reports/common-hosting-concepts.md): task-focused entry points, lifetime ownership and preserved extension contracts.
 
 - [WebSocket message callbacks](user-reports/websocket-message-callbacks.md): opt-in text/binary callbacks, strict UTF-8, ordering and transport limits.
