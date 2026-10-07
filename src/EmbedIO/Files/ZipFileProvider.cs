@@ -15,6 +15,8 @@ namespace EmbedIO.Files
     public class ZipFileProvider : IDisposable, IFileProvider
     {
         private readonly ZipArchive _zipArchive;
+        private readonly ZipArchiveReadGate _readGate = new();
+        private int _disposed;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ZipFileProvider"/> class.
@@ -85,21 +87,35 @@ namespace EmbedIO.Files
 
             urlPath = Uri.UnescapeDataString(urlPath);
 
-            var entry = _zipArchive.GetEntry(urlPath.Substring(1));
-            if (entry == null)
-                return null;
+            string fullName;
+            string name;
+            DateTime lastWriteTime;
+            long length;
+            using (var scope = _readGate.EnterArchive())
+            {
+                var entry = _zipArchive.GetEntry(urlPath.Substring(1));
+                if (entry == null) return null;
+                fullName = entry.FullName;
+                name = entry.Name;
+                lastWriteTime = entry.LastWriteTime.DateTime;
+                length = entry.Length;
+            }
 
-            return MappedResourceInfo.ForFile(
-                entry.FullName,
-                entry.Name,
-                entry.LastWriteTime.DateTime,
-                entry.Length,
-                mimeTypeProvider.GetMimeType(Path.GetExtension(entry.Name)));
+            // Application MIME callbacks run outside archive synchronization.
+            return MappedResourceInfo.ForFile(fullName, name, lastWriteTime, length,
+                mimeTypeProvider.GetMimeType(Path.GetExtension(name)));
         }
 
         /// <inheritdoc />
         public Stream OpenFile(string path)
-            => _zipArchive.GetEntry(path)?.Open() ?? throw new FileNotFoundException($"\"{path}\" cannot be found in Zip archive.");
+        {
+            if (path == null) throw new ArgumentNullException("entryName");
+            using var scope = _readGate.EnterArchive();
+            var stream = _zipArchive.GetEntry(path)?.Open()
+                ?? throw new FileNotFoundException($"\"{path}\" cannot be found in Zip archive.");
+            try { return new ZipArchiveReadStream(stream, _readGate); }
+            catch { stream.Dispose(); throw; }
+        }
 
         /// <inheritdoc />
         public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider)
@@ -112,10 +128,14 @@ namespace EmbedIO.Files
         /// <see langword="false"/> to release only unmanaged resources.</param>
         protected virtual void Dispose(bool disposing)
         {
-            if (!disposing)
+            if (!disposing || Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
 
-            _zipArchive.Dispose();
+            // Read-mode archive disposal closes its backing streams without changing cursors.
+            // Do not wait for an active read: closing an owned stream may unblock it.
+            // Stream/operation references defer disposal of the synchronization gate.
+            try { _readGate.StopArchiveOperations(); _zipArchive.Dispose(); }
+            finally { _readGate.Dispose(); }
         }
     }
 }
