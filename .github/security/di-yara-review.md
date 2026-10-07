@@ -104,3 +104,28 @@ and metadata are retained under ignored
 Update only the two exact assembly paths from version 1.0.1 to 1.0.2.
 The rule, target frameworks and evidence-file boundaries remain unchanged;
 other matches, missing scans, scanner errors and stale acceptances still fail.
+
+## 1.0.3 release revalidation
+
+The release PR malware run [37588460548](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37588460548)
+reported the same symbol-filename matches under the new 1.0.3 package paths,
+and rejected the stale 1.0.2 entries. The exact scanned CI packages were
+downloaded; both pinned archives and the scanner/bundle extracted bytes were
+verified against the committed pins. The complete rule was reread, and the
+full pinned scanner ran with `--print-strings` against both assemblies.
+
+| Target | Offset | Match | Assembly SHA-256 |
+| --- | --- | --- | --- |
+| net10.0 | `0x5350` | `Injection.pdb` | `1bcd31636104026299bef3b9cb0c087bce1b58efb8d9fa734f72d2e6eb4b277a` |
+| netstandard2.0 | `0x558f` | `Injection.pdb` | `5b4f5ab548206f5cf71eed5279eb03b66874a4cf86c6ac86aebde977946db2b2` |
+
+PEReader confirmed that both offsets are inside the unchanged compiler CodeView
+paths listed above. No other strings or rules matched these assemblies;
+ClamAV reported zero findings. This evidence describes PR merge source
+`32be19ead336e5fd13b0b092d9efd98f175f49db`. Later CI commits can change hashes;
+full required scans still apply before merging and publishing.
+
+Only the two exact package-version paths change from 1.0.2 to 1.0.3. The
+rule, target frameworks and evidence-file scope are unchanged. Other findings,
+errors and stale entries still fail. Raw packages, pin checks, scanner output
+and PE metadata are retained under ignored `TestResults/release-1.0.3`.
