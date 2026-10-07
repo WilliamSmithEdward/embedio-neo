@@ -2,6 +2,7 @@
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Net.Internal;
 
 namespace EmbedIO.Authentication
 {
@@ -56,7 +57,12 @@ namespace EmbedIO.Authentication
                 }
             }
 
-            context.Response.Headers.Set(HttpHeaderNames.WWWAuthenticate, _wwwAuthenticateHeaderValue);
+            // Framework HttpListener responses restrict this header through Headers.Set.
+            // The public native response method retains replacement and validation semantics.
+            if (context.Response is SystemHttpResponse nativeResponse)
+                nativeResponse.SetAuthenticationChallenge(_wwwAuthenticateHeaderValue);
+            else
+                context.Response.Headers.Set(HttpHeaderNames.WWWAuthenticate, _wwwAuthenticateHeaderValue);
 
             if (!await IsAuthenticatedAsync().ConfigureAwait(false))
                 throw HttpException.Unauthorized();

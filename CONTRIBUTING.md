@@ -34,7 +34,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 1413
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 3m --minimum-expected-tests 1417
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -48,7 +48,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 1413 executed/reported test cases to catch accidental discovery loss; update
+least 1417 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. NUnit 5 async assertions
 must be awaited.
 
@@ -182,3 +182,8 @@ and referencing the local core without new runtime packages. Its command contrac
 upstream provenance, local packaging, and approved plugin migration are documented
 in [CLI.md](docs/guides/cli.md). `test/EmbedIO.Cli.TestPlugin` is an unpackaged fixture used
 to test real assembly loading, controller routes, and WebSocket plugins.
+
+The Windows CI test job also runs the test-only net472 Basic authentication
+fixture against the netstandard2.0 core on its installed .NET Framework. It is
+outside the ordinary solution and shipped packages; its pinned reference-assembly
+package is development-only. See [the report guide](docs/user-reports/basic-authentication-native-listener.md).

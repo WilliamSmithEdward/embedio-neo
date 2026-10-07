@@ -88,6 +88,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Android emulator port forwarding](user-reports/android-emulator-port-forwarding.md): host/device ports, selected-serial commands and real emulator validation.
 
+- [Basic authentication on the Microsoft listener](user-reports/basic-authentication-native-listener.md): legacy restricted-header fix and real authentication validation.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
