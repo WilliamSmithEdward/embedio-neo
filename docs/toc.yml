@@ -96,6 +96,8 @@
       href: user-reports/websocket-message-callbacks.md
     - name: Independent IP banning modules
       href: user-reports/ip-banning-isolation.md
+    - name: OpenAPI and Swagger UI
+      href: user-reports/openapi-and-swagger-ui.md
 
 - name: Architecture
   items:
