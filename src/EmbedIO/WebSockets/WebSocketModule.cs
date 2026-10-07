@@ -612,6 +612,13 @@ namespace EmbedIO.WebSockets
                     return;
                 }
 
+                // Keep receiving the closing handshake, but no longer dispatch application data.
+                if (webSocket.IsCloseRequested)
+                {
+                    receivedMessage.Clear();
+                    continue;
+                }
+
                 var frameBytes = new byte[receiveResult.Count];
                 Array.Copy(receiveBuffer, frameBytes, frameBytes.Length);
                 await OnFrameReceivedAsync(context, frameBytes, receiveResult).ConfigureAwait(false);
@@ -634,8 +641,9 @@ namespace EmbedIO.WebSockets
                 // if we're at the end of the message, process the message
                 if (!receiveResult.EndOfMessage) continue;
 
-                await OnMessageReceivedAsync(context, receivedMessage.ToArray(), receiveResult)
-                    .ConfigureAwait(false);
+                if (!webSocket.IsCloseRequested)
+                    await OnMessageReceivedAsync(context, receivedMessage.ToArray(), receiveResult)
+                        .ConfigureAwait(false);
                 receivedMessage.Clear();
             }
         }
