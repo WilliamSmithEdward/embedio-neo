@@ -32,4 +32,5 @@
     <Copy SourceFiles="../EmbedIO.Cli.TestPlugin/bin/$(Configuration)/net10.0/EmbedIO.Cli.TestPlugin.dll;../../src/EmbedIO/bin/$(Configuration)/net10.0/EmbedIO.dll"
           DestinationFolder="$(OutDir)CliPlugins" />
   </Target>
+  <ItemGroup><Compile Include="../Shared/BenchmarkEndpoints.cs" Link="PlatformTests/BenchmarkEndpoints.cs" /></ItemGroup>
 </Project>

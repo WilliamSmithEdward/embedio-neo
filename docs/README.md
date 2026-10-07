@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [TechEmpower workloads](user-reports/techempower-benchmarks.md): isolated JSON/plaintext host, managed pipelining and measurement limits.
+
 - [Former Xamarin sample](user-reports/xamarin-sample-location.md): pinned historical source and maintained desktop/MAUI examples.
 
 - [WebSocket overlap and close](user-reports/websocket-overlap-and-close.md): original stress workload, close admission and caller-owned cancellation.
