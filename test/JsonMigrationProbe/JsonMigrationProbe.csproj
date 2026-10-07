@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net10.0;net472</TargetFrameworks>
+    <!-- .NET Framework adds this restore RID implicitly on Windows; declare it for identical cross-platform locks. -->
+    <RuntimeIdentifiers>win-x86</RuntimeIdentifiers>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.Net.Http" Condition="'$(TargetFramework)' == 'net472'" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net472'" />
+    <PackageReference Include="Unosquare.Swan.Lite" Version="3.1.0" PrivateAssets="all" />
+    <ProjectReference Include="../../src/EmbedIO.Testing/EmbedIO.Testing.csproj" />
+  </ItemGroup>
+</Project>

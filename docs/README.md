@@ -104,6 +104,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [MIME policy and pre-request processing](user-reports/mime-policy-and-pre-request.md): injectable module policy and awaited callbacks with preserved defaults.
 - [Chunked response streaming](user-reports/chunked-response-streaming.md): one writer, parsed protocol/keep-alive policy and verified wire framing.
 
+- [JSON migration compatibility](user-reports/json-migration-compatibility.md): transparent legacy acceptance and documented boundaries.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.

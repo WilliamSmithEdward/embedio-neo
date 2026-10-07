@@ -60,7 +60,7 @@ namespace EmbedIO.Tests.Issues
             using var fixture = new Fixture(mode, scenario);
             using var client = await fixture.Connect();
             using var output = new StringWriter();
-            using var trace = new TextWriterTraceListener(output);
+            using var trace = new TextWriterTraceListener(TextWriter.Synchronized(output));
             EmbedIO.Diagnostics.Log.Source.Listeners.Add(trace);
             var data = scenario == "invalid" ? new byte[] { 0xc0, 0xaf }
                 : Encoding.UTF8.GetBytes(scenario == "oversize" ? "12345" : scenario == "failure" ? "fail" : scenario == "away" ? "away" : "binary");
@@ -80,7 +80,9 @@ namespace EmbedIO.Tests.Issues
                 {
                     Assert.That(fixture.Module.Messages, Is.Empty, "The native runtime rejects invalid text before application dispatch.");
                     await fixture.Module.Disconnected.Task.WaitAsync(fixture.Timeout.Token);
-                    TestContext.WriteLine("Native invalid UTF-8 diagnostics: " + output);
+                    string diagnostics;
+                    lock (output) diagnostics = output.ToString();
+                    TestContext.WriteLine("Native invalid UTF-8 diagnostics: " + diagnostics);
                 }
             }
             finally { EmbedIO.Diagnostics.Log.Source.Listeners.Remove(trace); }
