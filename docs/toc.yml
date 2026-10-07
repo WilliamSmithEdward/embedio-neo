@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: JSON migration compatibility
+      href: user-reports/json-migration-compatibility.md
     - name: HEAD response metadata
       href: user-reports/head-response-metadata.md
     - name: Uncompressed Content-Encoding
