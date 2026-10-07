@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Former Xamarin sample
+      href: user-reports/xamarin-sample-location.md
     - name: HEAD response metadata
       href: user-reports/head-response-metadata.md
     - name: Uncompressed Content-Encoding
