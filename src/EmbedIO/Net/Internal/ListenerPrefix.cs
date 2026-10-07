@@ -52,33 +52,26 @@ namespace EmbedIO.Net.Internal
                 throw new ArgumentException("No host specified.");
             }
 
-            var colon = uri.Substring(startHost).IndexOf(':') > 0 ? uri.LastIndexOf(':') : -1;
+            var root = uri.IndexOf('/', startHost, length - startHost);
+            if (root == -1)
+                throw new ArgumentException("No path specified.");
+
+            // A port separator belongs to the authority, outside IPv6 brackets.
+            // Colons in the address or path must not be interpreted as a port.
+            var colon = uri.LastIndexOf(':', root - 1, root - startHost);
+            if (colon <= uri.LastIndexOf(']', root - 1, root - startHost))
+                colon = -1;
 
             if (startHost == colon)
             {
                 throw new ArgumentException("No host specified.");
             }
 
-            int root;
             if (colon > 0)
             {
-                root = uri.IndexOf('/', colon, length - colon);
-                if (root == -1)
-                {
-                    throw new ArgumentException("No path specified.");
-                }
-
                 if (!int.TryParse(uri.Substring(colon + 1, root - colon - 1), out var p) || p <= 0 || p >= 65536)
                 {
                     throw new ArgumentException("Invalid port.");
-                }
-            }
-            else
-            {
-                root = uri.IndexOf('/', startHost, length - startHost);
-                if (root == -1)
-                {
-                    throw new ArgumentException("No path specified.");
                 }
             }
 
