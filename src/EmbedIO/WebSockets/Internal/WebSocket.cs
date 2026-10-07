@@ -357,9 +357,18 @@ namespace EmbedIO.WebSockets.Internal
                 sent = await WriteFrameBytesAsync(frameAsBytes!, cancellationToken, allowClosing: true).ConfigureAwait(false);
             }
 
-            if (receive && sent)
+            var exitReceiving = _exitReceiving;
+            if (receive && sent && exitReceiving != null)
             {
-                _ = _exitReceiving?.WaitOne(_waitTime);
+                if (cancellationToken.CanBeCanceled)
+                {
+                    _ = WaitHandle.WaitAny(new WaitHandle[] { exitReceiving, cancellationToken.WaitHandle }, _waitTime);
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+                else
+                {
+                    _ = exitReceiving.WaitOne(_waitTime);
+                }
             }
         }
 
