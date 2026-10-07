@@ -58,16 +58,17 @@ def launch(action=None):
 
 ROOT.mkdir(parents=True, exist_ok=True)
 try:
-    devices = [line.split()[0] for line in adb('devices').splitlines()[1:]
-               if len(line.split()) >= 2 and line.split()[1] == 'device' and line.startswith('emulator-')]
+    def online_emulators():
+        return [line.split()[0] for line in adb('devices').splitlines()[1:]
+                if len(line.split()) >= 2 and line.split()[1] == 'device' and line.startswith('emulator-')]
     SERIAL = os.environ.get('ANDROID_SERIAL')
     if SERIAL:
-        if SERIAL not in devices:
-            raise RuntimeError(f'Selected emulator is not online: {SERIAL}')
-    elif len(devices) == 1:
-        SERIAL = devices[0]
+        wait_for(online_emulators, lambda devices: SERIAL in devices, 180)
     else:
-        raise RuntimeError(f'Select one online emulator with ANDROID_SERIAL: {devices}')
+        devices = wait_for(online_emulators, bool, 180)
+        if len(devices) != 1:
+            raise RuntimeError(f'Select one online emulator with ANDROID_SERIAL: {devices}')
+        SERIAL = devices[0]
     wait_for(lambda: adb('shell', 'getprop', 'sys.boot_completed'), lambda value: value == '1', 180)
     adb('shell', 'input', 'keyevent', '82')
     apks = list(Path('test/EmbedIO.AndroidSmoke/bin/Debug').rglob('*-Signed.apk'))
