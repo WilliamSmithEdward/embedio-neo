@@ -201,9 +201,10 @@ namespace EmbedIO.WebSockets.Internal
         private WebSocketCloseStatus MapCloseStatus(CloseStatusCode code) => code switch
         {
             CloseStatusCode.Normal => WebSocketCloseStatus.NormalClosure,
+            CloseStatusCode.Away => WebSocketCloseStatus.EndpointUnavailable,
             CloseStatusCode.ProtocolError => WebSocketCloseStatus.ProtocolError,
             CloseStatusCode.InvalidData => WebSocketCloseStatus.InvalidPayloadData,
-            CloseStatusCode.UnsupportedData => WebSocketCloseStatus.InvalidPayloadData,
+            CloseStatusCode.UnsupportedData => WebSocketCloseStatus.InvalidMessageType,
             CloseStatusCode.PolicyViolation => WebSocketCloseStatus.PolicyViolation,
             CloseStatusCode.TooBig => WebSocketCloseStatus.MessageTooBig,
             CloseStatusCode.MandatoryExtension => WebSocketCloseStatus.MandatoryExtension,

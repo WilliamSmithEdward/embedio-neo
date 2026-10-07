@@ -28,14 +28,15 @@ namespace EmbedIO.Tests.TestObjects
 </body>
 </html>";
 
-        private static int _counter = 9699;
+        // Start above the well-known Windows media/management HTTP.sys service ports.
+        private static int _counter = 10999;
 
         public static string GetServerAddress()
         {
             const string serverAddress = "http://localhost:{0}/";
 
-            Interlocked.Increment(ref _counter);
-            return string.Format(serverAddress, _counter);
+            var port = Interlocked.Increment(ref _counter);
+            return string.Format(serverAddress, port);
         }
     }
 }
