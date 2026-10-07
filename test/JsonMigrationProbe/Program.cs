@@ -139,12 +139,13 @@ namespace JsonMigrationProbe
         private static void VerifyDefaults()
         {
             var assertions = 0;
-            var value = Json.Deserialize<CompatibilityData>("{\"Text\":\"first\r\nsecond\",\"Flag\":\"true\",\"Choice\":\"Second\",\"Count\":+001,\"PrivateCount\":7,\"Date\":\"10/07/2026\",}");
+            var value = Json.Deserialize<CompatibilityData>("{\"Text\":\"first\r\nsecond\",\"Flag\":\"true\",\"Choice\":\"Second\",\"Count\":+001,\"PrivateCount\":7,\"IgnoreReads\":10,\"IgnoreWrites\":11,\"Date\":\"10/07/2026\",}");
             Check(value.Text == "first\r\nsecond", "raw CRLF");
             Check(value.Flag, "quoted boolean");
             Check(value.Choice == Choice.Second, "enum name");
             Check(value.Count == 1, "legacy number");
-            Check(value.PrivateCount == 7, "private setter");
+            Check(value.PrivateCount == 7 && value.IgnoreReads == 9 && value.IgnoreWrites == 11
+                && !Json.Serialize(value).Contains("IgnoreWrites"), "private setter and directional ignores");
             Check(value.Date == new DateTime(2026, 10, 7), "legacy date");
             Check(Json.Deserialize<TextData>(" \r\n") == null, "empty reference");
             Check(Json.Deserialize<int>("") == 0, "empty value");
@@ -212,6 +213,10 @@ namespace JsonMigrationProbe
         public Choice Choice { get; set; }
         public int Count { get; set; }
         public int PrivateCount { get; private set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenReading)]
+        public int IgnoreReads { get; private set; } = 9;
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWriting)]
+        public int IgnoreWrites { get; private set; }
         public DateTime Date { get; set; }
     }
     public sealed class MemberData

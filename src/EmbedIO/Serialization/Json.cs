@@ -75,8 +75,10 @@ namespace EmbedIO.Serialization
         {
             foreach (var property in typeInfo.Properties)
             {
-                if (property.Set != null || property.Get == null || !(property.AttributeProvider is PropertyInfo member)
-                    || member.GetMethod?.IsPublic != true || member.SetMethod == null) continue;
+                if (property.Set != null || !(property.AttributeProvider is PropertyInfo member)
+                    || member.GetMethod?.IsPublic != true || member.SetMethod == null || member.SetMethod.IsPublic) continue;
+                var ignored = member.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition;
+                if (ignored == JsonIgnoreCondition.Always || ignored == JsonIgnoreCondition.WhenReading) continue;
                 property.Set = member.SetValue;
             }
         }

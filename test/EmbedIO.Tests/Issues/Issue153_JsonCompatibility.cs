@@ -183,10 +183,15 @@ namespace EmbedIO.Tests.Issues
         [Test]
         public void LegacyPrivateSettersBindWithoutOverridingIgnoredOrReadOnlyMembers()
         {
-            var data = Json.Deserialize<MemberData>("{\"Count\":4,\"Ignored\":5,\"ReadOnly\":6}");
+            var data = Json.Deserialize<MemberData>("{\"Count\":4,\"Ignored\":5,\"ReadOnly\":6,\"IgnoreReads\":10,\"IgnoreWrites\":11}");
             Assert.That(data.Count, Is.EqualTo(4));
             Assert.That(data.Ignored, Is.EqualTo(7));
             Assert.That(data.ReadOnly, Is.EqualTo(8));
+            Assert.That(data.IgnoreReads, Is.EqualTo(9));
+            Assert.That(data.IgnoreWrites, Is.EqualTo(11));
+            using var document = JsonDocument.Parse(Json.Serialize(data));
+            Assert.That(document.RootElement.GetProperty("IgnoreReads").GetInt32(), Is.EqualTo(9));
+            Assert.That(document.RootElement.TryGetProperty("IgnoreWrites", out _), Is.False);
             var strict = Json.Deserialize<MemberData>("{\"Count\":4}", new JsonSerializerOptions());
             Assert.That(strict.Count, Is.EqualTo(3));
         }
@@ -268,6 +273,8 @@ namespace EmbedIO.Tests.Issues
             public int Count { get; private set; } = 3;
             [JsonIgnore] public int Ignored { get; private set; } = 7;
             public int ReadOnly => 8;
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenReading)] public int IgnoreReads { get; private set; } = 9;
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWriting)] public int IgnoreWrites { get; private set; }
         }
         public sealed class DateValues { public DateTime Date { get; set; } public DateTimeOffset Offset { get; set; } }
         public sealed class EchoController : WebApiController
