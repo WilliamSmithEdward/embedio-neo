@@ -90,6 +90,8 @@
       href: user-reports/utility-package-extraction.md
     - name: Modern .NET and legacy compatibility
       href: user-reports/modern-dotnet-legacy-compatibility.md
+    - name: Logging provider integration
+      href: user-reports/logging-provider-integration.md
 
 - name: Architecture
   items:

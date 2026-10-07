@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Verify existing SWAN removal and document an application-owned bridge to ILogger providers, with explicit filtering, exception-text and ownership limits and unchanged production dependencies (upstream #548).
+
 - Document the modern SDK/legacy library target policy, published-package asset selection and consumer validation without removing legacy compatibility (upstream #549).
 
 - Evaluate standalone utility packaging, document the current public/dependency inventory and utilities-only reuse, and retain existing assembly/package identities without production changes (upstream #550).
