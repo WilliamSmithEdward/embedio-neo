@@ -15,6 +15,9 @@ verified support answer for Neo, not a claim that the original Unity TLS failure
 has been reproduced or repaired. See the [migration guide](../compatibility/migration.md)
 for the already approved SWAN API changes.
 
+For applications already using Microsoft's logging providers, see the
+[ILogger bridge](logging-provider-integration.md) instead of the UI queue below.
+
 ## Capture whole events and hand them to the UI
 
 Server diagnostics may arrive on background threads. A custom listener should

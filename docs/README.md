@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [Logging provider integration](user-reports/logging-provider-integration.md): an application-owned ILogger bridge, mapping, filtering and lifetime ownership after SWAN removal.
+
 - [Modern .NET and legacy compatibility](user-reports/modern-dotnet-legacy-compatibility.md): current targets, NuGet asset selection and SDK versus runtime requirements.
 
 - [Listener chunk framing and charset allocations](user-reports/listener-wire-performance.md): exact wire/extraction parity, measured allocations and rejected routing candidate.
