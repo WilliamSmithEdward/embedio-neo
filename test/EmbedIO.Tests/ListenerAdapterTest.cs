@@ -181,6 +181,7 @@ namespace EmbedIO.Tests
         {
             var url = Resources.GetServerAddress();
             using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(mode));
+            TestContext.WriteLine($"Listener adapter endpoint: {url}");
             configure(server);
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);

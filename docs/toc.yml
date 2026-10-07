@@ -92,6 +92,8 @@
       href: user-reports/modern-dotnet-legacy-compatibility.md
     - name: Logging provider integration
       href: user-reports/logging-provider-integration.md
+    - name: WebSocket message callbacks
+      href: user-reports/websocket-message-callbacks.md
 
 - name: Architecture
   items:

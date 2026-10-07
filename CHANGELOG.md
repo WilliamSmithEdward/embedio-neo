@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add opt-in WebSocketMessageModule with separate complete text/binary callbacks, strict UTF-8, per-connection ordering and documented rejection/error handling. Preserve legacy subclasses/frame callbacks and correct native close mappings for unsupported data (1003) and going away (1001). Correct a concurrent test-address allocation race exposed during validation (upstream #547).
+
 - Verify existing SWAN removal and document an application-owned bridge to ILogger providers, with explicit filtering, exception-text and ownership limits and unchanged production dependencies (upstream #548).
 
 - Document the modern SDK/legacy library target policy, published-package asset selection and consumer validation without removing legacy compatibility (upstream #549).
