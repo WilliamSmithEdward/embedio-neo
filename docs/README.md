@@ -82,6 +82,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Argument validation](user-reports/argument-validation.md): built-in guards, legacy contracts and the fluent-validator proposal decision.
 - [Utility package extraction](user-reports/utility-package-extraction.md): utility inventory, reuse, assembly identities and the standalone-package decision.
 
+- [Independent IP banning modules](user-reports/ip-banning-isolation.md): scoped controls, route-wide compatibility and lifecycle validation.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
