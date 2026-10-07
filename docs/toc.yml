@@ -26,8 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
-    - name: JSON migration compatibility
-      href: user-reports/json-migration-compatibility.md
+    - name: Former Xamarin sample
+      href: user-reports/xamarin-sample-location.md
     - name: HEAD response metadata
       href: user-reports/head-response-metadata.md
     - name: Uncompressed Content-Encoding
@@ -129,6 +129,9 @@
 
     - name: Chunked response streaming
       href: user-reports/chunked-response-streaming.md
+
+    - name: JSON migration compatibility
+      href: user-reports/json-migration-compatibility.md
 
 - name: Architecture
   items:

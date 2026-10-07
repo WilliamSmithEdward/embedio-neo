@@ -25,7 +25,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
-- [JSON migration compatibility](user-reports/json-migration-compatibility.md): raw line breaks and additional SWAN/System.Text.Json differences.
+- [Former Xamarin sample](user-reports/xamarin-sample-location.md): pinned historical source and maintained desktop/MAUI examples.
 
 - [WebSocket overlap and close](user-reports/websocket-overlap-and-close.md): original stress workload, close admission and caller-owned cancellation.
 
@@ -103,6 +103,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Controller route case matching](user-reports/controller-route-case.md): per-module opt-in literals, preserved data/defaults and configuration/authorization boundaries.
 - [MIME policy and pre-request processing](user-reports/mime-policy-and-pre-request.md): injectable module policy and awaited callbacks with preserved defaults.
 - [Chunked response streaming](user-reports/chunked-response-streaming.md): one writer, parsed protocol/keep-alive policy and verified wire framing.
+
+- [JSON migration compatibility](user-reports/json-migration-compatibility.md): transparent legacy acceptance and documented boundaries.
 
 ## Architecture
 
