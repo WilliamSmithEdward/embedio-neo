@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,8 +19,6 @@ namespace EmbedIO.Security
         /// </summary>
         public const int DefaultBanMinutes = 30;
 
-        private const string NoConfigurationFound = "No configuration was found for the base route provided.";
-
         private bool _disposed;
 
         /// <summary>
@@ -33,9 +32,9 @@ namespace EmbedIO.Security
                                int banMinutes = DefaultBanMinutes)
             : base(baseRoute)
         {
-            Configuration = IPBanningExecutor.RetrieveInstance(baseRoute, banMinutes);
-
+            Configuration = new IPBanningConfiguration(banMinutes);
             AddToWhitelist(whitelist);
+            IPBanningExecutor.Register(baseRoute, Configuration);
         }
 
         /// <summary>
@@ -59,6 +58,39 @@ namespace EmbedIO.Security
 
         internal IPBanningConfiguration Configuration { get; }
 
+        /// <summary>Gets a snapshot of this module's banned IP addresses.</summary>
+        public IEnumerable<BanInfo> BannedIPs => IPBanningExecutor.WithInstance(Configuration, instance => instance.BlackList);
+
+        /// <summary>Bans a client in this module only.</summary>
+        /// <param name="address">The client address.</param>
+        /// <param name="banMinutes">The ban duration in minutes.</param>
+        /// <param name="isExplicit">Whether this is an explicit ban.</param>
+        /// <returns>Whether the ban was recorded.</returns>
+        public bool TryBanClient(IPAddress address, int banMinutes, bool isExplicit = true) =>
+            TryBanClient(address, DateTime.Now.AddMinutes(banMinutes), isExplicit);
+
+        /// <summary>Bans a client in this module only.</summary>
+        /// <param name="address">The client address.</param>
+        /// <param name="banDuration">The ban duration.</param>
+        /// <param name="isExplicit">Whether this is an explicit ban.</param>
+        /// <returns>Whether the ban was recorded.</returns>
+        public bool TryBanClient(IPAddress address, TimeSpan banDuration, bool isExplicit = true) =>
+            TryBanClient(address, DateTime.Now.Add(banDuration), isExplicit);
+
+        /// <summary>Bans a client in this module only.</summary>
+        /// <param name="address">The client address.</param>
+        /// <param name="banUntil">The expiration time.</param>
+        /// <param name="isExplicit">Whether this is an explicit ban.</param>
+        /// <returns>Whether the ban was recorded.</returns>
+        public bool TryBanClient(IPAddress address, DateTime banUntil, bool isExplicit = true) =>
+            IPBanningExecutor.WithInstance(Configuration, instance => instance.TryBanIP(address, isExplicit, banUntil));
+
+        /// <summary>Unbans a client and clears its criterion data in this module only.</summary>
+        /// <param name="address">The client address.</param>
+        /// <returns>Whether a ban was removed.</returns>
+        public bool TryUnbanClient(IPAddress address) =>
+            IPBanningExecutor.WithInstance(Configuration, instance => instance.TryRemoveBlackList(address));
+
         /// <summary>
         /// Registers the criterion.
         /// </summary>
@@ -74,7 +106,8 @@ namespace EmbedIO.Security
         }
 
         /// <summary>
-        /// Gets the list of current banned IPs.
+        /// Gets the union of banned IPs from all live modules registered under the route.
+        /// For duplicate addresses, the entry with the latest expiration is returned.
         /// </summary>
         /// <param name="baseRoute">The base route.</param>
         /// <returns>
@@ -82,12 +115,11 @@ namespace EmbedIO.Security
         /// </returns>
         /// <exception cref="ArgumentException">baseRoute</exception>
         public static IEnumerable<BanInfo> GetBannedIPs(string baseRoute = "/") =>
-            IPBanningExecutor.TryGetInstance(baseRoute, out var instance)
-            ? instance.BlackList
-            : throw new ArgumentException(NoConfigurationFound, nameof(baseRoute));
+            IPBanningExecutor.WithInstances(baseRoute, instance => instance.BlackList).SelectMany(list => list)
+                .GroupBy(info => info.IPAddress).Select(group => group.OrderByDescending(info => info.ExpiresAt).First()).ToList();
 
         /// <summary>
-        /// Tries to ban an IP explicitly.
+        /// Tries to ban an IP in all live modules registered under the route.
         /// </summary>
         /// <param name="address">The IP address to ban.</param>
         /// <param name="banMinutes">Minutes that the IP will remain banned.</param>
@@ -100,7 +132,7 @@ namespace EmbedIO.Security
             TryBanIP(address, DateTime.Now.AddMinutes(banMinutes), baseRoute, isExplicit);
 
         /// <summary>
-        /// Tries to ban an IP explicitly.
+        /// Tries to ban an IP in all live modules registered under the route.
         /// </summary>
         /// <param name="address">The IP address to ban.</param>
         /// <param name="banDuration">A <see cref="TimeSpan" /> specifying the duration that the IP will remain banned.</param>
@@ -113,7 +145,7 @@ namespace EmbedIO.Security
             TryBanIP(address, DateTime.Now.Add(banDuration), baseRoute, isExplicit);
 
         /// <summary>
-        /// Tries to ban an IP explicitly.
+        /// Tries to ban an IP in all live modules registered under the route.
         /// </summary>
         /// <param name="address">The IP address to ban.</param>
         /// <param name="banUntil">A <see cref="DateTime" /> specifying the expiration time of the ban.</param>
@@ -125,14 +157,11 @@ namespace EmbedIO.Security
         /// <exception cref="ArgumentException">baseRoute</exception>
         public static bool TryBanIP(IPAddress address, DateTime banUntil, string baseRoute = "/", bool isExplicit = true)
         {
-            if (!IPBanningExecutor.TryGetInstance(baseRoute, out var instance))
-                throw new ArgumentException(NoConfigurationFound, nameof(baseRoute));
-
-            return instance.TryBanIP(address, isExplicit, banUntil);
+            return IPBanningExecutor.WithInstances(baseRoute, instance => instance.TryBanIP(address, isExplicit, banUntil)).Any(result => result);
         }
 
         /// <summary>
-        /// Tries to unban an IP explicitly.
+        /// Tries to unban an IP in all live modules registered under the route.
         /// </summary>
         /// <param name="address">The IP address.</param>
         /// <param name="baseRoute">The base route.</param>
@@ -141,9 +170,7 @@ namespace EmbedIO.Security
         /// </returns>
         /// <exception cref="ArgumentException">baseRoute</exception>
         public static bool TryUnbanIP(IPAddress address, string baseRoute = "/") =>
-            IPBanningExecutor.TryGetInstance(baseRoute, out var instance)
-            ? instance.TryRemoveBlackList(address)
-            : throw new ArgumentException(NoConfigurationFound, nameof(baseRoute));
+            IPBanningExecutor.WithInstances(baseRoute, instance => instance.TryRemoveBlackList(address)).Any(result => result);
 
         internal void AddToWhitelist(IEnumerable<string>? whitelist) =>
             Configuration.AddToWhitelistAsync(whitelist).GetAwaiter().GetResult();
@@ -172,8 +199,7 @@ namespace EmbedIO.Security
             if (_disposed) return;
             if (disposing)
             {
-                IPBanningExecutor.TryRemoveInstance(BaseRoute);
-                Configuration.Dispose();
+                IPBanningExecutor.Remove(Configuration);
             }
 
             _disposed = true;

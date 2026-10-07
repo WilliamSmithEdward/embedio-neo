@@ -94,6 +94,8 @@
       href: user-reports/logging-provider-integration.md
     - name: WebSocket message callbacks
       href: user-reports/websocket-message-callbacks.md
+    - name: Independent IP banning modules
+      href: user-reports/ip-banning-isolation.md
 
 - name: Architecture
   items:

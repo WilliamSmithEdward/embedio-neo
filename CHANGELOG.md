@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Isolate IP-banning configuration, criteria, duration, bans and disposal by module instance. Add scoped TryBanClient/TryUnbanClient/BannedIPs controls while preserving route-wide static methods; keep surviving modules registered for purging and avoid retaining abandoned modules (upstream #545).
+
 - Add opt-in WebSocketMessageModule with separate complete text/binary callbacks, strict UTF-8, per-connection ordering and documented rejection/error handling. Preserve legacy subclasses/frame callbacks and correct native close mappings for unsupported data (1003) and going away (1001). Correct a concurrent test-address allocation race exposed during validation (upstream #547).
 
 - Verify existing SWAN removal and document an application-owned bridge to ILogger providers, with explicit filtering, exception-text and ownership limits and unchanged production dependencies (upstream #548).
