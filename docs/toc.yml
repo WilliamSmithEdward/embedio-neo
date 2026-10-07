@@ -86,6 +86,8 @@
       href: user-reports/unity-custom-diagnostics.md
     - name: Argument validation
       href: user-reports/argument-validation.md
+    - name: Utility package extraction
+      href: user-reports/utility-package-extraction.md
 
 - name: Architecture
   items:
