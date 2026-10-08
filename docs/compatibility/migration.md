@@ -832,3 +832,11 @@ Host field presence and syntax validation still apply. The existing transport
 scheme/local-port URL behavior is unchanged in this increment; full absolute-URI
 scheme/port handling remains under audit. Unregistered target hosts retain the
 existing prefix-routing rejection behavior.
+
+### HTTP/1 absolute-target userinfo (unreleased)
+
+The managed listener rejects a userinfo component in an absolute request target,
+including an empty component marked by `@`, with an empty 400 response followed
+by connection closure. Put authentication information in the appropriate HTTP
+authentication mechanism, not the request URI. At-signs in valid path/query
+components and their percent-encoded equivalents remain accepted.

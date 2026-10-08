@@ -23,6 +23,13 @@ namespace EmbedIO.Tests
         [TestCase("GET", "/good%25", true)]
         [TestCase("GET", "/path%23fragment", true)]
         [TestCase("GET", "/path?x=%23fragment", true)]
+        [TestCase("GET", "http://name@127.0.0.1/", false)]
+        [TestCase("GET", "https://name@127.0.0.1/", false)]
+        [TestCase("GET", "http://name:value@127.0.0.1/", false)]
+        [TestCase("GET", "http://@127.0.0.1/", false)]
+        [TestCase("GET", "http://name%40name@127.0.0.1/", false)]
+        [TestCase("GET", "http://127.0.0.1/path@name?other=@value", true)]
+        [TestCase("GET", "http://127.0.0.1/path%40name", true)]
         public Task TargetSyntaxIsValidatedBeforeDispatch(string method, string target, bool valid)
             => CheckRequest(method, target, "127.0.0.1", valid);
 

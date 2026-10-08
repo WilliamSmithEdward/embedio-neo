@@ -227,7 +227,14 @@ namespace EmbedIO.Net.Internal
                 {
                     targetPathStart = schemeEnd + 3;
                     while (targetPathStart < RawTarget.Length && RawTarget[targetPathStart] != '/' && RawTarget[targetPathStart] != '?')
+                    {
+                        if (RawTarget[targetPathStart] == '@')
+                        {
+                            _connection.SetError("Userinfo is not allowed in a request target.");
+                            return;
+                        }
                         targetPathStart++;
+                    }
                 }
             }
             if (!HttpRequestFraming.IsValidPathAndQuery(RawTarget, targetPathStart))

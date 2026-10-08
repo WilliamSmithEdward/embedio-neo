@@ -2135,3 +2135,21 @@ Initial three-platform failures in run 37843224071 are retained under
 comparisons with zero errors (`absolute-host-parity.log`), including the unchanged
 comparator contract and negative checks. Unix parity and all exact-head CI checks
 remain required.
+
+### HTTP/1 absolute-target userinfo rejection
+
+Five raw TCP cases reproduced accepted userinfo in absolute targets, including
+HTTP/HTTPS scheme text, a colon-bearing component, empty userinfo and an escaped
+at-sign within userinfo (`userinfo-before.log`). The authority scan now rejects
+the raw delimiter before URI parsing, so empty userinfo cannot disappear during
+normalization. Two valid path/query at-sign cases remain accepted. All 105 focused
+cases passed locally (`userinfo-focused.log`).
+
+This follows [RFC 9110 section 4.2.4](https://www.rfc-editor.org/rfc/rfc9110.html#section-4.2.4)
+and the approved strict malformed-input policy. Seven new cases raise discovery
+to 3,109. All 105 focused cases also passed on pinned Linux and against the
+actual .NET Standard asset on both hosts under .NET 10. The full Windows suite
+passed: 3,109 total, 3,104 passed and five expected skips (`userinfo-full.log`).
+Both-target build, formatting, source guards and changed-file pinned YARA scans
+passed. Exact-head CI remains required. Scheme/port semantics and remaining
+target-form handling remain open.
