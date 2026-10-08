@@ -27,6 +27,35 @@ It does not currently advertise Alt-Svc or configure DNS HTTPS records. Clients
 must explicitly select HTTP/3, or discovery must be arranged by the application.
 Any network permission must allow the intended UDP endpoint.
 
+## Combined TCP and QUIC hosting
+
+The unreleased `HttpListenerMode.EmbedIOCombined` mode serves HTTP/1.1 and
+HTTP/2 over TCP and HTTP/3 over UDP from one `WebServer`, using the same HTTPS
+prefixes, certificate and application modules. In the server example below,
+replace `WithMode(HttpListenerMode.EmbedIOHttp3)` with
+`WithMode(HttpListenerMode.EmbedIOCombined)` to use it.
+
+Both transports are required: startup fails if either binding fails, and rolls
+back the bindings owned by that attempt. There is no silent TCP-only fallback.
+The .NET Standard asset and hosts without native QUIC reject this mode. Only
+HTTPS prefixes are accepted. Allow the intended TCP and UDP endpoints in the
+host's network policy. The certificate and client trust requirements above apply.
+
+Each transport has one accept pump feeding a shared queue of at most 256
+contexts. A pump can hold one additional context while waiting for queue space;
+this does not replace each protocol's connection, stream or input limits.
+Canceling one `GetContextAsync` consumer does not cancel the transport pumps.
+Stop and disposal abort both transports and wait for the pumps to finish;
+after Stop, the listener can be restarted with a fresh session. A transport
+accept failure shuts down both transports.
+
+`DrainAsync` is not supported by this combined mode yet; it throws
+`NotSupportedException`. TCP graceful drain must be implemented before combined
+draining can be advertised. Alt-Svc discovery, shared-dispatch performance
+validation and the default-engine transition also remain unfinished. This mode
+still uses the current TCP implementation and does not by itself complete the
+replacement of the Mono-derived listener.
+
 ## Server
 
 This complete .NET 10 program expects a PFX path and optional password in the

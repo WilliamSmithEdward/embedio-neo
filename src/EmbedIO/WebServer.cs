@@ -187,12 +187,12 @@ namespace EmbedIO
         /// <inheritdoc />
         protected override void OnFatalException() => Listener?.Dispose();
 
-        private static IHttpListener CreateHttp3Listener(X509Certificate2? certificate)
+        private static IHttpListener CreateHttp3Listener(X509Certificate2? certificate, bool combined = false)
         {
 #if NET10_0_OR_GREATER
             if ((OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
                 && System.Net.Quic.QuicListener.IsSupported)
-                return new Net.Internal.Http3.Http3Listener(certificate);
+                return combined ? new CombinedHttpListener(certificate) : new Net.Internal.Http3.Http3Listener(certificate);
 #endif
             throw new PlatformNotSupportedException("HTTP/3 requires the .NET 10 asset and native QUIC support.");
         }
@@ -202,6 +202,7 @@ namespace EmbedIO
             IHttpListener DoCreate() => Options.Mode switch
             {
                 HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(Options.Certificate),
+                HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(Options.Certificate, true),
                 HttpListenerMode.Microsoft => System.Net.HttpListener.IsSupported
                     ? new SystemHttpListener(new System.Net.HttpListener()) as IHttpListener
                     : new Net.HttpListener(Options.Certificate),

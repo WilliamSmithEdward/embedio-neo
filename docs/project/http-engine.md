@@ -77,8 +77,8 @@ The owner confirmed on 2026-10-08 that the completed replacement must become the
 default and the old Mono-derived managed implementation must be deprecated.
 This is a final delivery requirement, not a claim that the transition is complete.
 The current `WebServerOptions.Mode` defaults to `HttpListenerMode.EmbedIO`, which
-constructs `Net.HttpListener`; HTTP/3 currently requires the separate
-`EmbedIOHttp3` mode. Retaining that enum default alone does not prove replacement
+constructs `Net.HttpListener`; HTTP/3 currently requires an explicit
+`EmbedIOHttp3` or `EmbedIOCombined` mode. Retaining that enum default alone does not prove replacement
 of the underlying implementation.
 
 Preserve existing public names and enum values where they remain valid entry
@@ -1773,7 +1773,7 @@ measured these medians over nine samples per cell on local Windows/.NET 10:
 | 8 MiB / 1 | 386.43 | 439.85 | 44.92 | 42.48 |
 | 8 MiB / 8 | 428.19 | 458.76 | 49.32 | 47.85 |
 
-Managed allocation rose by roughly 5 KiB per 1 MiB response and 30–37 KiB per
+Managed allocation rose by roughly 5 KiB per 1 MiB response and 30â€“37 KiB per
 8 MiB response, under 0.3% of combined client/server allocation in those cases.
 Small-response results varied: sequential 128-byte throughput fell from 0.92 to
 0.73 MiB/s in the selected run, while concurrency eight rose from 4.78 to 5.41.
@@ -2210,3 +2210,44 @@ Default selection and legacy deprecation remain incomplete. Combining the
 existing transports alone would not establish the promised replacement of the
 Mono-derived HTTP/1 implementation. Protocol discovery, optional QUIC policy,
 platform behavior and measured shared-dispatch overhead also remain open.
+
+
+### Combined listener implementation (2026-10-08)
+
+`HttpListenerMode.EmbedIOCombined` now hosts the existing TCP engine and QUIC
+engine behind one `WebServer` on the same HTTPS prefixes. Both bindings are
+required, with transactional startup and fresh transport instances on restart.
+The mode requires the .NET 10 asset, native QUIC and a private-key certificate.
+It does not silently downgrade when QUIC is unavailable. Existing enum values
+and default selection remain unchanged.
+
+One accept pump per transport writes into a bounded 256-context channel. A pump
+may retain one further context while waiting for channel capacity. Consumer
+cancellation leaves both pumps running; stop cancels them, aborts both transport
+owners, waits for the pumps and discards canceled queued contexts. It does not
+close undispatched responses as successful empty replies. Unexpected recoverable
+accept failure initiates shutdown of both transports. Further deterministic
+failure-injection, full-queue saturation, competing-prefix ownership and
+concurrent lifecycle stress remain required for this integration.
+
+Eleven new cases passed on Windows and the pinned Linux SDK/MsQuic container:
+all three negotiated protocol versions through one server, 288 concurrent mixed
+requests without missing responses, canceled-consumer recovery on TCP and QUIC,
+pending-accept stop/disposal, restart, occupied TCP/UDP startup rollback, and
+aborting undispatched HTTP/1.1, HTTP/2 and HTTP/3 responses. The first Linux
+rollback run used IP-literal HTTPS URLs and timed out after restart; changing the
+fixture to `localhost` addresses the already documented client limitation, not a
+new transport fix. That failed log is retained as `combined-linux-ip-literal.log`.
+The final focused logs are `combined-focused.log` and `combined-linux.log` under
+`TestResults/http-engine`.
+
+Both target assets build without warnings, changed-source formatting and the
+source guards pass, and the pinned YARA scan reports no matches for the new
+listener and fixture. Combined mode currently rejects graceful drain because
+TCP drain is unfinished. Discovery, measured dispatch overhead, default
+replacement and legacy deprecation remain open; this combined host still uses
+the existing TCP implementation. The HTTP/3 guide documents these restrictions.
+
+The final full Windows suite passed 3,125 tests with five expected skips
+(3,130 total, zero failures) in `combined-full.log`. The CI discovery floor
+is 3,130. macOS and final-head CI validation remain pending.

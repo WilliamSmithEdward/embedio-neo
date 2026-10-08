@@ -23,5 +23,12 @@
         /// This mode listens on UDP; it does not accept HTTP/1 or HTTP/2 TCP connections.
         /// </summary>
         EmbedIOHttp3,
+
+        /// <summary>
+        /// Host HTTP/1.1 and HTTP/2 over TCP alongside HTTP/3 over QUIC on the
+        /// same HTTPS prefixes. Requires the .NET 10 asset, native QUIC support
+        /// and a certificate with its private key. Graceful drain is not yet supported.
+        /// </summary>
+        EmbedIOCombined,
     }
 }
