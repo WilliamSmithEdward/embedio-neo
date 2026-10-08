@@ -802,3 +802,13 @@ HTTP/2 and HTTP/3 now also accept empty authority ports for ordinary requests an
 extended CONNECT, treating them as the scheme default when comparing Host and
 authority. Classic CONNECT still requires an explicit nonempty port. The original
 authority text remains available through the request headers.
+
+### HTTP/2 and HTTP/3 path/query syntax (unreleased)
+
+The shared request parser now rejects incomplete/non-hex percent escapes and
+characters outside the URI path/query grammar before application dispatch. Encode
+literal brackets, braces, quotes, backticks, carets and vertical bars using their
+percent-encoded forms. Valid escapes and URI delimiters remain unchanged, including
+leading `//` paths and slash/question-mark characters within queries. HTTP/2
+rejection resets the malformed stream with PROTOCOL_ERROR; other streams remain
+usable. This increment does not finish the HTTP/1 absolute-target grammar audit.

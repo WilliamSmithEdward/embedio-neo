@@ -74,8 +74,7 @@ namespace EmbedIO.Net.Internal.Http2
                     throw Invalid(block.StreamId, "Missing or invalid scheme/path.");
                 if (result.Path[0] != '/' && !(result.Method == "OPTIONS" && result.Path == "*"))
                     throw Invalid(block.StreamId, "Invalid request path.");
-                foreach (var ch in result.Path)
-                    if (ch <= 32 || ch >= 127 || ch == '#' || ch == '\\') throw Invalid(block.StreamId, "Invalid request target character.");
+                if (!HttpRequestFraming.IsValidPathAndQuery(result.Path)) throw Invalid(block.StreamId, "Invalid request target syntax.");
                 if ((seen & 4) == 0) result.Authority = host ?? "";
                 if (result.Authority.Length != 0 || string.Equals(result.Scheme, "http", StringComparison.OrdinalIgnoreCase) || string.Equals(result.Scheme, "https", StringComparison.OrdinalIgnoreCase) || connect)
                     ValidateAuthority(result.Authority, result.Scheme, block.StreamId, false);

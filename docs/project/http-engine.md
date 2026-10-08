@@ -2049,3 +2049,30 @@ upstream artifacts are retained locally under `ci-8e9f870-*`. Neither is claimed
 fixed by the authority change; unchanged job reruns were requested. Exact-head
 checks remain mandatory. GitHub rejected both rerun requests while the parent
 run was still active; no retry success is claimed.
+
+### Multiplexed path/query grammar
+
+Twelve raw HTTP/2 cases exercise malformed percent escapes and excluded URI
+characters, preserved encoded percent, the permitted punctuation set and leading
+`//`. Nine malformed cases dispatched before correction; the revised fixture
+reports unexpected application DATA directly (`path-grammar-before-data.log`),
+with the earlier timeout-based failures retained (`path-grammar-before.log`).
+The shared HTTP/2/3 parser now validates RFC 3986 path/query characters and percent
+escapes. Each wire case verifies stream-local rejection, dispatch count and a
+healthy subsequent stream. The scan allocates no per-character strings.
+
+All 153 selected parser and integration cases passed on Windows and pinned Linux
+with QUIC required on Linux. The actual .NET Standard asset passed 112 applicable
+cases on each host under .NET 10. A candidate restore initially preserved an older
+source timestamp, allowing incremental build to reuse baseline binaries; the
+failed focused run and interrupted full run are retained. After invalidating that
+timestamp, the rebuilt candidate passed (`path-grammar-focused-final.log`,
+`path-grammar-linux.log`, `path-grammar-legacy*.log`). The rebuilt full Windows
+suite passed: 3,073 total, 3,068 passed and five expected skips
+(`path-grammar-full-final.log`). Both-target build, formatting, source guards
+and changed-file pinned YARA scans passed. Exact-head CI remains required.
+This is new HTTP/2 wire coverage;
+HTTP/3 uses the same parser but new malformed-path QUIC wire cases remain pending.
+HTTP/1 origin/absolute-target grammar reconciliation also remains pending.
+
+Path grammar reference: [RFC 3986 sections 3.3 and 3.4](https://www.rfc-editor.org/rfc/rfc3986.html#section-3.3).

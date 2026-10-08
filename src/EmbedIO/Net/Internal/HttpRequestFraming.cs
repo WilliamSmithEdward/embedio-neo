@@ -10,6 +10,22 @@ namespace EmbedIO.Net.Internal
                 || c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_'
                 || c == '`' || c == '|' || c == '~';
 
+        internal static bool IsValidPathAndQuery(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                if (c == '%')
+                {
+                    if (i + 2 >= value.Length || !Uri.IsHexDigit(value[i + 1]) || !Uri.IsHexDigit(value[i + 2])) return false;
+                    i += 2;
+                }
+                else if (!(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9')
+                    && EmbedIO.Internal.StringOperations.IndexOfOrdinal("-._~!$&'()*+,;=:@/?", c) < 0) return false;
+            }
+            return true;
+        }
+
         internal static bool IsValidHost(string value)
         {
             foreach (var c in value)

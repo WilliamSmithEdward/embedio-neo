@@ -226,6 +226,45 @@ namespace EmbedIO.Tests
             finally { stop.Cancel(); listener.Stop(); }
         }
 
+        [TestCase("/bad%", false)]
+        [TestCase("/bad%2", false)]
+        [TestCase("/bad%GG", false)]
+        [TestCase("/x[0]", false)]
+        [TestCase("/x?y={z}", false)]
+        [TestCase("/x|y", false)]
+        [TestCase("/x^y", false)]
+        [TestCase("/x`y", false)]
+        [TestCase("/\"x\"", false)]
+        [TestCase("/good%25", true)]
+        [TestCase("/a:b@c!$&'()*+,;=~-._/next?x=/?:@%2F", true)]
+        [TestCase("//", true)]
+        public async Task PathGrammarErrorsResetOnlyTheMalformedStream(string path, bool valid)
+        {
+            var calls = 0;
+            await WithRawServer(Array.Empty<byte>(), async (stream, token) =>
+            {
+                var pathBytes = Encoding.ASCII.GetBytes(path);
+                var block = new byte[] { 0x82, 0x86, 0x04, (byte)pathBytes.Length }
+                    .Concat(pathBytes).Concat(new byte[] { 0x01, 9 }).Concat(Encoding.ASCII.GetBytes("localhost")).ToArray();
+                await SendWire(stream, 1, 5, 1, block, token);
+                if (valid) Assert.That((await Until(stream, 0, 1, token)).Payload.Length, Is.EqualTo(3));
+                else
+                {
+                    (byte Type, byte Flags, int Id, byte[] Payload) frame;
+                    do
+                    {
+                        frame = await ReceiveWire(stream, token);
+                        Assert.That(frame.Type, Is.Not.EqualTo(0), "Malformed path reached application DATA.");
+                        Assert.That(frame.Type, Is.Not.EqualTo(7), "Path rejection must not close the connection.");
+                    } while (frame.Type != 3 || frame.Id != 1);
+                    Assert.That(frame.Payload, Is.EqualTo(new byte[] { 0, 0, 0, 1 }));
+                }
+                await SendWire(stream, 1, 5, 3, RequestBlock(), token);
+                Assert.That((await Until(stream, 0, 3, token)).Payload.Length, Is.EqualTo(3));
+                Assert.That(Volatile.Read(ref calls), Is.EqualTo(valid ? 2 : 1));
+            }, app: exchange => { Interlocked.Increment(ref calls); return RawEcho(exchange); });
+        }
+
         [Test]
         public async Task ZeroStreamWindowDoesNotBlockPingAndUpdateResumesData()
         {
