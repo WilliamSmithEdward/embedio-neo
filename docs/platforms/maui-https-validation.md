@@ -136,3 +136,10 @@ simulator log query before cleanup. Diagnostic capture cannot turn a failed trus
 or rendering assertion into a pass. The existing trust checks, navigation/DOM
 budgets and host request timeouts remain unchanged. This instrumentation gathers
 evidence for issue #185; it does not by itself repair an intermittent failure.
+
+Simulator report lookup, shutdown and deletion are independent cleanup attempts.
+A missing app container (for example, because boot failed before installation)
+cannot skip device cleanup; deletion is attempted even when shutdown fails.
+`cleanup-errors.json` retains any cleanup failures. Cleanup errors fail an
+otherwise successful job while preserving the original exception if validation
+already failed.

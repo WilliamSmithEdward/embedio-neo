@@ -173,10 +173,26 @@ finally:
             container = Path(invoke('xcrun', 'simctl', 'get_app_container', simulator, PACKAGE, 'data'))
             for report in container.rglob('https-result.json'):
                 (ROOT / 'app-result.json').write_bytes(report.read_bytes())
-            invoke('xcrun', 'simctl', 'shutdown', simulator)
-            invoke('xcrun', 'simctl', 'delete', simulator)
         except (OSError, subprocess.SubprocessError):
+            # The app may not have been installed if simulator boot failed.
             pass
+        finally:
+            cleanup_errors = []
+            for operation in ['shutdown', 'delete']:
+                try:
+                    invoke('xcrun', 'simctl', operation, simulator)
+                except (OSError, subprocess.SubprocessError) as error:
+                    cleanup_errors.append(str(error))
+            if cleanup_errors:
+                (ROOT / 'cleanup-errors.json').write_text(json.dumps(cleanup_errors, indent=2), encoding='utf-8')
+                if not failed:
+                    # Successful trust checks cannot hide failed device cleanup.
+                    error = RuntimeError('Simulator cleanup failed: ' + '; '.join(cleanup_errors))
+                    final['passed'] = False
+                    final['phase'] = 'cleanup-failed'
+                    final['error'] = str(error)
+                    (ROOT / 'result.json').write_text(json.dumps(final, indent=2), encoding='utf-8')
+                    raise error
     if process is not None and process.poll() is None:
         try:
             process.wait(timeout=15)
