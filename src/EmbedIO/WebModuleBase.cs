@@ -92,11 +92,12 @@ namespace EmbedIO
         }
 
         /// <inheritdoc />
-        public RouteMatch? MatchUrlPath(string urlPath) => _routeMatcher.Match(urlPath);
+        public RouteMatch? MatchUrlPath(string requestPath) => _routeMatcher.Match(requestPath);
 
         /// <inheritdoc />
         public async Task HandleRequestAsync(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             var contextImpl = context.GetImplementation();
             var mimeTypeProvider = this as IMimeTypeProvider;
             if (mimeTypeProvider != null)
@@ -123,7 +124,7 @@ namespace EmbedIO
                 await HttpExceptionHandler.Handle(LogSource, context, exception, _onHttpException)
                     .ConfigureAwait(false);
             }
-            catch (Exception exception)
+            catch (Exception exception) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
             {
                 await ExceptionHandler.Handle(LogSource, context, exception, _onUnhandledException, _onHttpException)
                     .ConfigureAwait(false);

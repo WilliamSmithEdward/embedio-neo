@@ -216,7 +216,7 @@ namespace EmbedIO.Tests.Issues
             public async Task ObserveCompletion()
             {
                 try { await _running.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
-                catch (Exception) when (_running.IsFaulted) { }
+                catch (Exception error) when (_running.IsFaulted && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { }
             }
 
             public async ValueTask DisposeAsync()

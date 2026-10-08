@@ -16,9 +16,7 @@ namespace EmbedIO.Net
     /// <para>This class is meant to be used internally by EmbedIO; you don't need to
     /// use this class directly.</para>
     /// </summary>
-#pragma warning disable CA1710 // Rename class to end in 'Collection' - it ends in 'List', i.e. 'Indexed Collection'.
     public sealed class CookieList : List<Cookie>, ICookieCollection
-#pragma warning restore CA1710
     {
         /// <inheritdoc />
         public bool IsSynchronized => false;
@@ -62,7 +60,7 @@ namespace EmbedIO.Net
 
                 if (pair.StartsWith("version", StringComparison.OrdinalIgnoreCase) && cookie != null)
                 {
-                    cookie.Version = int.Parse(GetValue(pair, true), CultureInfo.InvariantCulture);
+                    cookie.Version = int.Parse(GetValue(pair, true) ?? throw new ArgumentNullException("s"), CultureInfo.InvariantCulture);
                 }
                 else if (pair.StartsWith("expires", StringComparison.OrdinalIgnoreCase) && cookie != null)
                 {
@@ -78,7 +76,7 @@ namespace EmbedIO.Net
                 }
                 else if (pair.StartsWith("max-age", StringComparison.OrdinalIgnoreCase) && cookie != null)
                 {
-                    var max = int.Parse(GetValue(pair, true), CultureInfo.InvariantCulture);
+                    var max = int.Parse(GetValue(pair, true) ?? throw new ArgumentNullException("s"), CultureInfo.InvariantCulture);
 
                     cookie.Expires = DateTime.Now.AddSeconds(max);
                 }
@@ -171,12 +169,12 @@ namespace EmbedIO.Net
                     "The elements in this collection cannot be cast automatically to the type of the destination array.");
             }
 
-            ((IList) this).CopyTo(array, index);
+            ((IList)this).CopyTo(array, index);
         }
 
         private static string? GetValue(string nameAndValue, bool unquote = false)
         {
-            var idx = nameAndValue.IndexOf('=');
+            var idx = nameAndValue.IndexOf("=", System.StringComparison.Ordinal);
 
             if (idx < 0 || idx == nameAndValue.Length - 1)
                 return null;
@@ -202,7 +200,7 @@ namespace EmbedIO.Net
             string name;
             var val = string.Empty;
 
-            var pos = pair.IndexOf('=');
+            var pos = pair.IndexOf("=", System.StringComparison.Ordinal);
             if (pos == -1)
             {
                 name = pair;

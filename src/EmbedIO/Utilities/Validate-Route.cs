@@ -21,8 +21,9 @@ namespace EmbedIO.Utilities
         /// <para><paramref name="value"/> does not comply with route syntax.</para>
         /// </exception>
         /// <seealso cref="Routing.Route.IsValid"/>
-        public static string Route(string argumentName, string value, bool isBaseRoute)
+        public static string Route(string argumentName, string? value, bool isBaseRoute)
         {
+            value = NotNull(argumentName, value);
             var exception = Routing.Route.ValidateInternal(argumentName, value, isBaseRoute);
             if (exception != null)
                 throw exception;

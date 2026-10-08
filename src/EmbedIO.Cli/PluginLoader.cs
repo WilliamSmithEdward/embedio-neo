@@ -77,7 +77,7 @@ namespace EmbedIO.Cli
             public PluginContext(string path) : base(isCollectible: true)
             {
                 _resolver = new AssemblyDependencyResolver(path);
-                _directory = Path.GetDirectoryName(path)!;
+                _directory = Path.GetDirectoryName(path) ?? throw new ArgumentException("The plugin path has no directory.", nameof(path));
             }
 
             protected override Assembly? Load(AssemblyName name)

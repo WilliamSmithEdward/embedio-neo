@@ -153,9 +153,11 @@ namespace EmbedIO.Net
                     AddressList = Dns.GetHostAddresses(host),
                 };
 
-                return hostEntry.AddressList[0];
+                return hostEntry.AddressList.Length == 0
+                    ? UseIpv6 ? IPAddress.IPv6Any : IPAddress.Any
+                    : hostEntry.AddressList[0];
             }
-            catch
+            catch (Exception error) when (error is SocketException or ArgumentException)
             {
                 return UseIpv6 ? IPAddress.IPv6Any : IPAddress.Any;
             }

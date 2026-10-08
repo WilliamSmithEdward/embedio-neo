@@ -52,13 +52,13 @@ namespace EmbedIO.Tests.Issues
             await TestWebServer.UseAsync(server => server.WithAction("/", HttpVerbs.Get, async context =>
             {
                 var events = context.OpenEventStream();
-                Assert.Throws<ArgumentNullException>(() => events.WriteAsync(null!));
-                Assert.Throws<ArgumentNullException>(() => events.WriteCommentAsync(null!));
+                Assert.Throws<ArgumentNullException>(() => events.WriteAsync(null));
+                Assert.Throws<ArgumentNullException>(() => events.WriteCommentAsync(null));
                 await events.WriteCommentAsync("alive\r\ndata: still a comment");
                 await events.WriteAsync("done", "complete", "10");
             }), async client => Assert.That(await client.GetStringAsync("/"),
                 Is.EqualTo(": alive\n: data: still a comment\n\nevent: complete\nid: 10\ndata: done\n\n")));
-            Assert.Throws<ArgumentNullException>(() => HttpContextExtensions.OpenEventStream(null!));
+            Assert.Throws<ArgumentNullException>(() => HttpContextExtensions.OpenEventStream(null));
         }
 
         [Test]
@@ -134,9 +134,11 @@ namespace EmbedIO.Tests.Issues
             public Dictionary<string, object?> Values { get; } = new();
             protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
             {
-                var name = targetMethod!.Name;
+                if (targetMethod is null) throw new System.NullReferenceException();
+                if (args is null) throw new System.NullReferenceException();
+                var name = targetMethod.Name;
                 if (name.StartsWith("get_", StringComparison.Ordinal)) return Values[name.Substring(4)];
-                if (name.StartsWith("set_", StringComparison.Ordinal)) { Values[name.Substring(4)] = args![0]; return null; }
+                if (name.StartsWith("set_", StringComparison.Ordinal)) { Values[name.Substring(4)] = args[0]; return null; }
                 throw new NotSupportedException(name);
             }
         }

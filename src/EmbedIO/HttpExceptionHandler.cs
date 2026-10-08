@@ -34,9 +34,7 @@ namespace EmbedIO
         /// <param name="context">An <see cref="IHttpContext" /> interface representing the context of the request.</param>
         /// <param name="httpException">The HTTP exception.</param>
         /// <returns>A <see cref="Task" /> representing the ongoing operation.</returns>
-#pragma warning disable CA1801 // Unused parameter
         public static Task EmptyResponse(IHttpContext context, IHttpException httpException)
-#pragma warning restore CA1801
             => Task.CompletedTask;
 
         /// <summary>
@@ -48,7 +46,10 @@ namespace EmbedIO
         /// <param name="httpException">The HTTP exception.</param>
         /// <returns>A <see cref="Task" /> representing the ongoing operation.</returns>
         public static Task PlainTextResponse(IHttpContext context, IHttpException httpException)
-            => context.SendStringAsync(httpException.Message ?? string.Empty, MimeType.PlainText, WebServer.DefaultEncoding);
+        {
+            if (httpException is null) throw new System.NullReferenceException();
+            return context.SendStringAsync(httpException.Message ?? string.Empty, MimeType.PlainText, WebServer.DefaultEncoding);
+        }
 
         /// <summary>
         /// <para>Sends a response with a HTML payload
@@ -61,9 +62,12 @@ namespace EmbedIO
         /// <param name="httpException">The HTTP exception.</param>
         /// <returns>A <see cref="Task" /> representing the ongoing operation.</returns>
         public static Task HtmlResponse(IHttpContext context, IHttpException httpException)
-            => context.SendStandardHtmlAsync(
+        {
+            if (httpException is null) throw new System.NullReferenceException();
+            return context.SendStandardHtmlAsync(
                 httpException.StatusCode,
-                text => {
+                text =>
+                {
                     text.Write(
                         "<p><strong>Exception type:</strong> {0}<p><strong>Message:</strong> {1}",
                         HttpUtility.HtmlEncode(httpException.GetType().FullName ?? "<unknown>"),
@@ -83,6 +87,7 @@ namespace EmbedIO
                             HttpUtility.HtmlEncode(httpException.StackTrace));
                     }
                 });
+        }
 
         /// <summary>
         /// <para>Gets a <see cref="HttpExceptionHandlerCallback" /> that will serialize a HTTP exception's
@@ -144,7 +149,7 @@ namespace EmbedIO
             {
                 throw;
             }
-            catch (Exception exception2)
+            catch (Exception exception2) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception2))
             {
                 exception2.Log(logSource, $"[{context.Id}] Unhandled exception while handling HTTP exception {httpException.StatusCode}");
             }

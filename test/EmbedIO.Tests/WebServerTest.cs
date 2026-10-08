@@ -131,7 +131,7 @@ namespace EmbedIO.Tests
                     try
                     {
                         var encodeValue =
-                            ctx.Request.ContentType.Split(';')
+                            (ctx.Request.ContentType ?? throw new InvalidOperationException("The request must include a content type.")).Split(';')
                                 .FirstOrDefault(x =>
                                     x.Trim().StartsWith("charset", StringComparison.OrdinalIgnoreCase))
                                 ?
@@ -141,7 +141,7 @@ namespace EmbedIO.Tests
                                 .Trim();
                         encoding = Encoding.GetEncoding(encodeValue ?? throw new InvalidOperationException());
                     }
-                    catch
+                    catch (Exception error) when (error is ArgumentException or InvalidOperationException)
                     {
                         Assert.Inconclusive("Invalid encoding in system");
                     }
@@ -178,7 +178,7 @@ namespace EmbedIO.Tests
 
             internal class EncodeCheck
             {
-                public string Encoding { get; set; }
+                public string Encoding { get; set; } = string.Empty;
 
                 public bool IsValid { get; set; }
             }

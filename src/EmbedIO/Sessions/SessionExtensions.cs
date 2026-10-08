@@ -21,17 +21,16 @@ namespace EmbedIO.Sessions
         /// otherwise, <see langword="false"/>.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
-        public static bool TryGetValue<T>(this ISession @this, string key, out T value)
+        public static bool TryGetValue<T>(this ISession @this, string key, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out T value)
         {
+            if (@this is null) throw new System.NullReferenceException();
             if (@this.TryGetValue(key, out var foundValue) && foundValue is T typedValue)
             {
                 value = typedValue;
                 return true;
             }
 
-#pragma warning disable CS8653 // "default" can be null - We are returning false, so value is undefined
             value = default;
-#pragma warning restore CS8653
             return false;
         }
 
@@ -42,8 +41,11 @@ namespace EmbedIO.Sessions
         /// <returns>The value associated with the specified key,
         /// if the key is found and the associated value is of type <typeparamref name="T"/>;
         /// otherwise, the default value for <typeparamref name="T"/>.</returns>
-        public static T GetValue<T>(this ISession @this, string key)
-            => @this.TryGetValue(key, out var value) && value is T typedValue ? typedValue : default;
+        public static T? GetValue<T>(this ISession @this, string key)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            return @this.TryGetValue(key, out var value) && value is T typedValue ? typedValue : default;
+        }
 
         /// <summary>Gets the value associated with the specified key.</summary>
         /// <typeparam name="T">The desired type of the value.</typeparam>
@@ -55,6 +57,9 @@ namespace EmbedIO.Sessions
         /// if the key is found and the associated value is of type <typeparamref name="T"/>;
         /// otherwise, <paramref name="defaultValue"/>.</returns>
         public static T GetOrDefault<T>(this ISession @this, string key, T defaultValue)
-            => @this.TryGetValue(key, out var value) && value is T typedValue ? typedValue : defaultValue;
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            return @this.TryGetValue(key, out var value) && value is T typedValue ? typedValue : defaultValue;
+        }
     }
 }

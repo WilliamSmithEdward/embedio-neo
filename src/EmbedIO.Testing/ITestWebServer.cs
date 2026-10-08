@@ -10,6 +10,6 @@
         /// <summary>
         /// Gets the base URL simulated by the server.
         /// </summary>
-        string BaseUrl { get; }
+        System.Uri BaseUrl { get; }
     }
 }

@@ -7,7 +7,7 @@ namespace EmbedIO.Internal
 {
     internal sealed class PeriodicTask : IDisposable
     {
-        private readonly CancellationTokenSource _stop;
+        private readonly Action _cancel;
         private readonly object _sync = new object();
         private bool _disposed;
 
@@ -15,8 +15,9 @@ namespace EmbedIO.Internal
         {
             if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval));
             if (action == null) throw new ArgumentNullException(nameof(action));
-            _stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            Completion = Task.Run(() => RunAsync(interval, action, _stop.Token));
+            var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _cancel = stop.Cancel;
+            Completion = Task.Run(() => RunAsync(interval, action, stop));
         }
 
         internal Task Completion { get; }
@@ -27,12 +28,13 @@ namespace EmbedIO.Internal
             {
                 if (_disposed) return;
                 _disposed = true;
-                _stop.Cancel();
+                _cancel();
             }
         }
 
-        private async Task RunAsync(TimeSpan interval, Func<CancellationToken, Task> action, CancellationToken token)
+        private async Task RunAsync(TimeSpan interval, Func<CancellationToken, Task> action, CancellationTokenSource stop)
         {
+            var token = stop.Token;
             try
             {
                 while (true)
@@ -40,7 +42,7 @@ namespace EmbedIO.Internal
                     await Task.Delay(interval, token).ConfigureAwait(false);
                     try { await action(token).ConfigureAwait(false); }
                     catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
-                    catch (Exception exception) { exception.Log(nameof(PeriodicTask)); }
+                    catch (Exception exception) when (ExceptionPolicy.IsRecoverable(exception)) { exception.Log(nameof(PeriodicTask)); }
                 }
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { }
@@ -49,7 +51,7 @@ namespace EmbedIO.Internal
                 lock (_sync)
                 {
                     _disposed = true;
-                    _stop.Dispose();
+                    stop.Dispose();
                 }
             }
         }

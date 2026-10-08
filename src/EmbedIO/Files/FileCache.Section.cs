@@ -38,7 +38,7 @@ namespace EmbedIO.Files
                 }
             }
 
-            public bool TryGet(string path, out FileCacheItem item)
+            public bool TryGet(string path, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out FileCacheItem? item)
             {
                 lock (_syncRoot)
                 {
@@ -177,7 +177,7 @@ namespace EmbedIO.Files
                 item.PreviousKey = _newestKey;
                 item.NextKey = null;
 
-                _items[_newestKey!].NextKey = path;
+                if (_newestKey is { } newestKey) _items[newestKey].NextKey = path;
                 _newestKey = path;
             }
         }

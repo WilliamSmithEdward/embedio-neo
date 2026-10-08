@@ -11,7 +11,7 @@ namespace EmbedIO.Internal
 
         private bool? _defaultPreferCompression;
 
-        public string GetMimeType(string extension)
+        public string? GetMimeType(string extension)
         {
             _customMimeTypes.TryGetValue(Validate.NotNull(nameof(extension), extension), out var result);
             return result;

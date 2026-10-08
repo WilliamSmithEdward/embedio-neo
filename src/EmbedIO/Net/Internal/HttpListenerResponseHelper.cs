@@ -2,7 +2,8 @@
 {
     internal static class HttpListenerResponseHelper
     {
-        internal static string GetStatusDescription(int code) => code switch {
+        internal static string GetStatusDescription(int code) => code switch
+        {
             100 => "Continue",
             101 => "Switching Protocols",
             102 => "Processing",

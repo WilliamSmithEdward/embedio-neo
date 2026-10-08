@@ -84,7 +84,8 @@ namespace EmbedIO.Tests
                 Assert.AreEqual("2", dict["two"]);
                 Assert.AreEqual(string.Empty, dict["none"]);
                 Assert.AreEqual(string.Empty, dict["equal"]);
-                Assert.Throws<KeyNotFoundException>(() => {
+                Assert.Throws<KeyNotFoundException>(() =>
+                {
                     var three = dict["three"];
                 });
 
@@ -149,7 +150,7 @@ namespace EmbedIO.Tests
                 Assert.IsNotNull(result);
                 var data = await result.Content.ReadAsStringAsync();
                 var obj = Json.Deserialize<Dictionary<string, string>>(data);
-                Assert.AreEqual(2, obj.Keys.Count);
+                Assert.AreEqual(2, (obj ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Keys.Count);
 
                 Assert.AreEqual(content.First().Key, obj.First().Key);
                 Assert.AreEqual(content.First().Value, obj.First().Value);
@@ -158,8 +159,8 @@ namespace EmbedIO.Tests
 
         internal class FormDataSample
         {
-            public string Test { get; set; }
-            public List<string> Id { get; set; }
+            public string Test { get; set; } = string.Empty;
+            public List<string> Id { get; set; } = new List<string>();
         }
 
         public class GetJsonData : WebApiModuleTest
@@ -180,7 +181,7 @@ namespace EmbedIO.Tests
 
                 Assert.AreEqual(
                     PeopleRepository.Database.Count,
-                    remoteList.Count,
+                    (remoteList ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Count,
                     "Remote list count equals local list");
             }
 

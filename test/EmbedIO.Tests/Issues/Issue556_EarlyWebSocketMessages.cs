@@ -24,10 +24,10 @@ namespace EmbedIO.Tests.Issues
             var socket = CreateSocket();
             Enqueue(socket, 1);
             Enqueue(socket, 2);
-            socket.GetType().GetMethod("Message", PrivateInstance)!.Invoke(socket, null);
+            ((socket).GetType().GetMethod("Message", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, null);
             using var observer = new Observer();
             Subscribe(socket, observer);
-            socket.GetType().GetMethod("Message", PrivateInstance)!.Invoke(socket, null);
+            ((socket).GetType().GetMethod("Message", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, null);
             await observer.Completed.Task.WaitAsync(TimeSpan.FromSeconds(3));
             Assert.That(observer.Values.ToArray(), Is.EqualTo(new byte[] { 1, 2 }));
         }
@@ -35,35 +35,35 @@ namespace EmbedIO.Tests.Issues
         private static object CreateSocket()
         {
             var assembly = typeof(WebServer).Assembly;
-            var type = assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true)!;
-            var eventType = assembly.GetType("EmbedIO.WebSockets.Internal.MessageEventArgs", true)!;
-            var socket = RuntimeHelpers.GetUninitializedObject(type);
+            var type = assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true);
+            var eventType = assembly.GetType("EmbedIO.WebSockets.Internal.MessageEventArgs", true);
+            var socket = RuntimeHelpers.GetUninitializedObject((type ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
             GC.SuppressFinalize(socket);
-            type.GetField("_readyState", PrivateInstance)!.SetValue(socket, WebSocketState.Open);
-            type.GetField("_stateSyncRoot", PrivateInstance)!.SetValue(socket, new object());
+            ((type).GetField("_readyState", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket, WebSocketState.Open);
+            ((type).GetField("_stateSyncRoot", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket, new object());
             type.GetField("_messageSyncRoot", PrivateInstance)?.SetValue(socket, new object());
-            var queue = Activator.CreateInstance(typeof(ConcurrentQueue<>).MakeGenericType(eventType))!;
-            type.GetField("_messageEventQueue", PrivateInstance)!.SetValue(socket, queue);
+            var queue = Activator.CreateInstance(typeof(ConcurrentQueue<>).MakeGenericType((eventType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))));
+            ((type).GetField("_messageEventQueue", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket, queue);
             return socket;
         }
 
         private static void Enqueue(object socket, byte value)
         {
             var assembly = typeof(WebServer).Assembly;
-            var frame = Activator.CreateInstance(assembly.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true)!, PrivateInstance, null,
-                new object[] { Enum.Parse(assembly.GetType("EmbedIO.WebSockets.Internal.Fin", true)!, "Final"), Opcode.Binary, new byte[] { value }, false }, null)!;
-            var message = Activator.CreateInstance(assembly.GetType("EmbedIO.WebSockets.Internal.MessageEventArgs", true)!, PrivateInstance, null, new[] { frame }, null)!;
-            var queue = socket.GetType().GetField("_messageEventQueue", PrivateInstance)!.GetValue(socket)!;
-            queue.GetType().GetMethod("Enqueue")!.Invoke(queue, new[] { message });
+            var frame = Activator.CreateInstance((assembly.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), PrivateInstance, null,
+                new object[] { Enum.Parse((assembly.GetType("EmbedIO.WebSockets.Internal.Fin", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), "Final"), Opcode.Binary, new byte[] { value }, false }, null);
+            var message = Activator.CreateInstance((assembly.GetType("EmbedIO.WebSockets.Internal.MessageEventArgs", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), PrivateInstance, null, new[] { frame }, null);
+            var queue = ((socket).GetType().GetField("_messageEventQueue", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket);
+            ((queue ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetMethod("Enqueue") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(queue, new[] { message });
         }
 
         private static void Subscribe(object socket, Observer observer)
         {
-            var eventType = typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.MessageEventArgs", true)!;
-            var messageEvent = socket.GetType().GetEvent("OnMessage")!;
+            var eventType = typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.MessageEventArgs", true);
+            var messageEvent = socket.GetType().GetEvent("OnMessage");
             var sender = Expression.Parameter(typeof(object));
-            var args = Expression.Parameter(eventType);
-            var handler = Expression.Lambda(messageEvent.EventHandlerType!, Expression.Call(Expression.Constant(observer), typeof(Observer).GetMethod(nameof(Observer.Handle))!, sender, Expression.Convert(args, typeof(object))), sender, args).Compile();
+            var args = Expression.Parameter((eventType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
+            var handler = Expression.Lambda(((messageEvent ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).EventHandlerType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), Expression.Call(Expression.Constant(observer), (typeof(Observer).GetMethod(nameof(Observer.Handle)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), sender, Expression.Convert(args, typeof(object))), sender, args).Compile();
             messageEvent.AddEventHandler(socket, handler);
         }
 
@@ -78,7 +78,8 @@ namespace EmbedIO.Tests.Issues
             public TaskCompletionSource<bool> Completed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public void Handle(object? sender, object args)
             {
-                Values.Enqueue(((byte[])args.GetType().GetProperty("RawData")!.GetValue(args)!)[0]);
+                if (args is null) throw new System.NullReferenceException();
+                Values.Enqueue(((byte[])((((args).GetType().GetProperty("RawData") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(args)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")))[0]);
                 if (Values.Count == 1)
                 {
                     First.TrySetResult(true);
@@ -101,7 +102,7 @@ namespace EmbedIO.Tests.Issues
             var producers = Enumerable.Range(1, 63).Select(i => Task.Run(() =>
             {
                 Enqueue(socket, (byte)i);
-                socket.GetType().GetMethod("Message", PrivateInstance)!.Invoke(socket, null);
+                ((socket).GetType().GetMethod("Message", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, null);
             })).ToArray();
             observer.Release();
             await Task.WhenAll(producers).WaitAsync(TimeSpan.FromSeconds(3));
@@ -133,7 +134,7 @@ namespace EmbedIO.Tests.Issues
             try
             {
                 using var client = new ClientWebSocket();
-                await client.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                await client.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                 await module.Connected.Task.WaitAsync(timeout.Token);
                 for (var i = 0; i < 8; i++)
                 {
@@ -182,9 +183,9 @@ namespace EmbedIO.Tests.Issues
                 if (context.WebSocket.GetType().Name == "WebSocket")
                 {
                     await BeginPing.Task.WaitAsync(context.CancellationToken);
-                    var frameType = typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true)!;
-                    var ping = (byte[])frameType.GetField("EmptyPingBytes", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
-                    var pending = (Task<bool>)context.WebSocket.GetType().GetMethod("PingAsync", PrivateInstance)!.Invoke(context.WebSocket, new object[] { ping, TimeSpan.FromSeconds(3) })!;
+                    var frameType = typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true);
+                    var ping = (byte[])((((frameType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetField("EmptyPingBytes", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                    var pending = (Task<bool>)((((context).WebSocket.GetType().GetMethod("PingAsync", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(context.WebSocket, new object[] { ping, TimeSpan.FromSeconds(3) })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
                     Assert.That(await pending, Is.True);
                     PingCompleted.TrySetResult(true);
                 }
@@ -221,7 +222,7 @@ namespace EmbedIO.Tests.Issues
             {
                 using var client = new ClientWebSocket();
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await client.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                await client.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                 module.Release.TrySetResult(true);
                 await module.Disconnected.Task.WaitAsync(TimeSpan.FromSeconds(3));
                 Assert.That(module.ActiveCount, Is.Zero);
@@ -271,7 +272,7 @@ namespace EmbedIO.Tests.Issues
             try
             {
                 using var client = new ClientWebSocket();
-                await client.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                await client.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                 await module.Connected.Task.WaitAsync(timeout.Token);
                 if (shutdown)
                 {
@@ -306,7 +307,7 @@ namespace EmbedIO.Tests.Issues
             {
                 using var first = new ClientWebSocket();
                 using var second = new ClientWebSocket();
-                var endpoint = new Uri(url.Replace("http", "ws") + "socket");
+                var endpoint = new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket");
                 await Task.WhenAll(Exercise(first, "first"), Exercise(second, "second"));
                 await first.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, timeout.Token);
                 await module.FirstDisconnected.Task.WaitAsync(timeout.Token);
@@ -341,7 +342,7 @@ namespace EmbedIO.Tests.Issues
             try
             {
                 using var client = new ClientWebSocket();
-                await client.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                await client.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                 await SendText(client, "fault", timeout.Token);
                 await module.FaultAttempted.Task.WaitAsync(timeout.Token);
                 await SendText(client, "healthy", timeout.Token);

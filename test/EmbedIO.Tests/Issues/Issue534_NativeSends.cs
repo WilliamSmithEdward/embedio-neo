@@ -39,7 +39,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(adapter.State, Is.EqualTo(WebSocketState.Closed));
             }
             adapter.Dispose();
-            Assert.That(adapter.GetType().GetField("_gatesDisposed", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(adapter), Is.True);
+            Assert.That(((adapter).GetType().GetField("_gatesDisposed", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(adapter), Is.True);
         }
 
         [Test]
@@ -89,7 +89,7 @@ namespace EmbedIO.Tests.Issues
             adapter.Dispose();
             await Assert.ThatAsync(async () => await first, Throws.TypeOf<ObjectDisposedException>());
             await Assert.ThatAsync(async () => await second, Throws.TypeOf<ObjectDisposedException>());
-            Assert.That(adapter.GetType().GetField("_gatesDisposed", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(adapter), Is.True);
+            Assert.That(((adapter).GetType().GetField("_gatesDisposed", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(adapter), Is.True);
             Assert.That(native.MaximumSenders, Is.EqualTo(1));
         }
 
@@ -99,7 +99,7 @@ namespace EmbedIO.Tests.Issues
             using var native = new ControlledSocket { FailWrite = true };
             native.Release.TrySetResult(true);
             using var adapter = Wrap(native);
-            Assert.Throws<ArgumentNullException>(() => adapter.SendAsync(null!, true));
+            Assert.Throws<ArgumentNullException>(() => TestObjects.InvalidInput.Invoke((Func<byte[], bool, CancellationToken, Task>)adapter.SendAsync, null, true, CancellationToken.None));
             await Assert.ThatAsync(async () => await adapter.SendAsync(new byte[] { 1 }, false), Throws.TypeOf<IOException>());
             native.FailWrite = false;
             await adapter.SendAsync(new byte[] { 2 }, true);
@@ -107,7 +107,7 @@ namespace EmbedIO.Tests.Issues
         }
 
         private static IWebSocket Wrap(System.Net.WebSockets.WebSocket socket)
-            => (IWebSocket)Activator.CreateInstance(typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.SystemWebSocket", true)!, socket)!;
+            => (IWebSocket)(Activator.CreateInstance((typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.SystemWebSocket", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), socket) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         private sealed class ControlledSocket : System.Net.WebSockets.WebSocket
         {
@@ -149,7 +149,7 @@ namespace EmbedIO.Tests.Issues
                 try
                 {
                     Assert.That(end, Is.True);
-                    Messages.Enqueue((type, buffer.Array![buffer.Offset]));
+                    Messages.Enqueue((type, (buffer.Array ?? throw new NUnit.Framework.AssertionException("Expected a send buffer."))[buffer.Offset]));
                     Started.TrySetResult(true);
                     await Release.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
                     if (State != WebSocketState.Open) throw new ObjectDisposedException(nameof(ControlledSocket));

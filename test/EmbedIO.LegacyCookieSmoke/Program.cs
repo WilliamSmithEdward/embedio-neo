@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -18,8 +18,14 @@ public static class Program
     {
         RunAsync().GetAwaiter().GetResult();
         Directory.CreateDirectory("TestResults");
-        var report = new { passed = true, assertions = _checks, target = "net472", clr = Environment.Version.ToString(),
-            frameworkRelease = Microsoft.Win32.Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full", "Release", null) };
+        var report = new
+        {
+            passed = true,
+            assertions = _checks,
+            target = "net472",
+            clr = Environment.Version.ToString(),
+            frameworkRelease = Microsoft.Win32.Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full", "Release", null)
+        };
         var json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText("TestResults/legacy-cookie-validation.json", json, new UTF8Encoding(false));
         Console.WriteLine(json);
@@ -62,14 +68,14 @@ public static class Program
                 try
                 {
                     foreach (var policy in new[] { "default", "Lax", "Strict", "None" })
-                    using (var response = await client.GetAsync(url + policy))
-                    {
-                        Check(await response.Content.ReadAsStringAsync() == "ok", "HTTP response");
-                        var header = response.Headers.GetValues("Set-Cookie").Single();
-                        Check(header.Contains("; HttpOnly"), "HttpOnly");
-                        Check(policy == "default" ? !header.Contains("SameSite") : header.Contains("; SameSite=" + policy), "SameSite");
-                        Check(header.Contains("; Secure") == (policy == "None"), "Secure");
-                    }
+                        using (var response = await client.GetAsync(url + policy))
+                        {
+                            Check(await response.Content.ReadAsStringAsync() == "ok", "HTTP response");
+                            var header = response.Headers.GetValues("Set-Cookie").Single();
+                            Check(header.Contains("; HttpOnly"), "HttpOnly");
+                            Check(policy == "default" ? !header.Contains("SameSite") : header.Contains("; SameSite=" + policy), "SameSite");
+                            Check(header.Contains("; Secure") == (policy == "None"), "Secure");
+                        }
                     using (var response = await client.GetAsync(url + "raw"))
                     {
                         var headers = response.Headers.GetValues("Set-Cookie").ToArray();

@@ -85,11 +85,11 @@ namespace EmbedIO.WebSockets.Internal
 
         public Mask Mask { get; internal set; }
 
-        public byte[] MaskingKey { get; internal set; }
+        public byte[] MaskingKey { get; internal set; } = Array.Empty<byte>();
 
         public Opcode Opcode { get; internal set; }
 
-        public PayloadData PayloadData { get; internal set; }
+        public PayloadData PayloadData { get; internal set; } = new PayloadData();
 
         public byte PayloadLength { get; internal set; }
 
@@ -166,7 +166,7 @@ Extended Payload Length: {extPayloadLen}
             result[0] = (byte)(header >> 8);
             result[1] = (byte)header;
             if (extendedLength > 0)
-                Buffer.BlockCopy(ExtendedPayloadLength!, 0, result, 2, extendedLength);
+                Buffer.BlockCopy(ExtendedPayloadLength ?? throw new InvalidOperationException("The frame has no extended payload length."), 0, result, 2, extendedLength);
             if (maskLength > 0)
                 Buffer.BlockCopy(MaskingKey, 0, result, 2 + extendedLength, maskLength);
             Buffer.BlockCopy(bytes, 0, result, 2 + extendedLength + maskLength, bytes.Length);

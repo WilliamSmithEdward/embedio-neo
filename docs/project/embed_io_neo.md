@@ -127,7 +127,8 @@ ASP.NET Core adapter needs a modern port. Their status is documented in
   development dependencies, not shipped production dependencies.
 - Replaced StyleCop with SDK analyzers and EditorConfig-based checks. Explicit
   inherited CA/IDE severities were migrated; StyleCop-only checks are not claimed
-  to have exact replacements. Existing warnings remain visible.
+  to have exact replacements. At that baseline, inherited warnings remained visible;
+  the subsequent warning cleanup enables warnings as errors and rejects suppressions.
 - Configured pinned GitHub Actions for Windows, Linux, and macOS builds, tests,
   coverage, and result artifacts. CI checks a minimum test count to detect lost
   discovery. Cross-platform workflow execution awaits publication of the repo.
@@ -166,7 +167,9 @@ Removing the sample applications does not remove the library's legacy target.
 - Earlier validation also ran the library suite with .NET Standard assemblies on
   .NET 10. This does not substitute for tests on older runtimes.
 
-Build warnings are not yet eliminated. .NET 8 runtime testing and legacy runtime
+Build warnings had not yet been eliminated at this historical baseline. See the
+[warning cleanup migration](../compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved)
+for subsequent changes. .NET 8 runtime testing and legacy runtime
 coverage remain follow-up work. The pre-push source-notice review confirmed the
 known inherited components and restored their notices; its pinned references and
 historical-provenance limits are recorded in [licenses/README.md](../../licenses/README.md).
@@ -183,7 +186,7 @@ historical-provenance limits are recorded in [licenses/README.md](../../licenses
    measurements for performance claims and regression tests for behavior changes.
 4. Expand the unified feature set selectively. Authentication, parsers, persistence,
    and hosting adapters need explicit designs and tests, not mechanical imports.
-5. Reduce inherited warnings and verify networking edge cases in focused changes.
+5. Keep builds free of warnings and suppressions, and verify networking edge cases in focused changes.
    Complete cross-platform CI and package/API review before release, and maintain
    source attribution as implementations change.
 6. Discuss and document future breaking changes before implementation. William

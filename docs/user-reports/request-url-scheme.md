@@ -11,7 +11,10 @@ The adjacent regression investigation also corrected lowercasing of absolute
 request targets and truncation of bracketed IPv6 Host values without a port.
 Uppercase URI schemes remain accepted. The listener continues using its existing
 host selection and local endpoint port; this change does not introduce a new
-proxy authority or port policy. `RawUrl` retains the received request target.
+proxy authority or port policy. `RawTarget` retains the received request target.
+Released packages through 1.0.3 expose this string as `RawUrl`; the unreleased
+[API cleanup](../compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved)
+renames it while preserving the raw text.
 
 ## Validation
 

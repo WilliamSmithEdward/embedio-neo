@@ -10,12 +10,10 @@ using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Files
 {
-#pragma warning disable CA1001 // Type owns disposable field '_cleaner' but is not disposable - _cleaner has its own dispose semantics.
     /// <summary>
     /// A cache where one or more instances of <see cref="FileModule"/> can store hashes and file contents.
     /// </summary>
-    public sealed partial class FileCache
-#pragma warning restore CA1001
+    public sealed partial class FileCache : IDisposable
     {
         /// <summary>
         /// The default value for the <see cref="MaxSizeKb"/> property.
@@ -37,6 +35,21 @@ namespace EmbedIO.Files
         private int _maxSizeKb = DefaultMaxSizeKb;
         private int _maxFileSizeKb = DefaultMaxFileSizeKb;
         private PeriodicTask? _cleaner;
+        private bool _disposed;
+
+        /// <summary>Stops background cleanup and releases cached data.</summary>
+        public void Dispose()
+        {
+            lock (_sections)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _cleaner?.Dispose();
+                _cleaner = null;
+                _sections.Clear();
+                _sectionCount = 0;
+            }
+        }
 
         /// <summary>
         /// Gets the default <see cref="FileCache"/> instance used by <see cref="FileModule"/>.
@@ -92,6 +105,7 @@ namespace EmbedIO.Files
         {
             lock (_sections)
             {
+                if (_disposed) throw new ObjectDisposedException(nameof(FileCache));
                 var section = new Section();
                 (_sections as IDictionary<string, Section>).Add(name, section);
 

@@ -67,6 +67,7 @@ namespace EmbedIO
             out CompressionMethod compressionMethod,
             out Action<IHttpResponse> prepareResponse)
         {
+            if (@this is null) throw new System.NullReferenceException();
             var acceptedEncodings = new QValueList(true, @this.Headers.GetValues(HttpHeaderNames.AcceptEncoding));
             if (!acceptedEncodings.TryNegotiateContentEncoding(preferCompression, out compressionMethod, out var compressionMethodName))
             {
@@ -112,6 +113,7 @@ namespace EmbedIO
         /// </remarks>
         public static bool CheckIfNoneMatch(this IHttpRequest @this, string entityTag, out bool headerExists)
         {
+            if (@this is null) throw new System.NullReferenceException();
             var values = @this.Headers.GetValues(HttpHeaderNames.IfNoneMatch);
             if (values == null)
             {
@@ -146,6 +148,7 @@ namespace EmbedIO
         /// <see langword="false"/> otherwise.</returns>
         public static bool CheckIfModifiedSince(this IHttpRequest @this, DateTime lastModifiedUtc, out bool headerExists)
         {
+            if (@this is null) throw new System.NullReferenceException();
             var value = @this.Headers.Get(HttpHeaderNames.IfModifiedSince);
             if (value == null)
             {
@@ -218,6 +221,7 @@ namespace EmbedIO
         /// </remarks>
         public static bool IsRangeRequest(this IHttpRequest @this, long contentLength, string entityTag, DateTime lastModifiedUtc, out long start, out long upperBound)
         {
+            if (@this is null) throw new System.NullReferenceException();
             start = 0;
             upperBound = contentLength - 1;
 

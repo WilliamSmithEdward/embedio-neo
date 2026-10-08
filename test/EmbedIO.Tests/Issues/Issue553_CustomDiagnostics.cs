@@ -27,7 +27,7 @@ namespace EmbedIO.Tests.Issues
         public async Task SourceThresholdControlsRealStartupRequestAndErrorEvents(SourceLevels level, bool information, bool errors)
         {
             using var capture = new Capture(level);
-            var url = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+            var url = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new ActionModule("/", HttpVerbs.Get, _ => throw new InvalidOperationException("diagnostic-553-error")));
             using var stop = new CancellationTokenSource();
@@ -44,9 +44,9 @@ namespace EmbedIO.Tests.Issues
                 await running.WaitAsync(TimeSpan.FromSeconds(10));
                 server.Dispose();
             }
-            Assert.That(capture.Events.Any(e => e.Type == TraceEventType.Information && e.Text.Contains("Started HTTP Listener")), Is.EqualTo(information));
-            Assert.That(capture.Events.Any(e => e.Type == TraceEventType.Information && e.Text.Contains("Listener closed.")), Is.EqualTo(information));
-            Assert.That(capture.Events.Any(e => e.Type == TraceEventType.Error && e.Text.Contains("diagnostic-553-error")), Is.EqualTo(errors));
+            Assert.That(capture.Events.Any(e => e.Type == TraceEventType.Information && (e.Text.IndexOf("Started HTTP Listener", System.StringComparison.Ordinal) >= 0)), Is.EqualTo(information));
+            Assert.That(capture.Events.Any(e => e.Type == TraceEventType.Information && (e.Text.IndexOf("Listener closed.", System.StringComparison.Ordinal) >= 0)), Is.EqualTo(information));
+            Assert.That(capture.Events.Any(e => e.Type == TraceEventType.Error && (e.Text.IndexOf("diagnostic-553-error", System.StringComparison.Ordinal) >= 0)), Is.EqualTo(errors));
             if (level == SourceLevels.Off) Assert.That(capture.Events, Is.Empty);
         }
 
@@ -68,7 +68,7 @@ namespace EmbedIO.Tests.Issues
                 {
                     using var client = HttpsSmoke.CreateClient(certificate);
                     Assert.That(await client.GetStringAsync(url), Is.EqualTo("encrypted"));
-                    Assert.That(capture.Events.Any(e => e.Text.Contains("Started HTTP Listener")), Is.True);
+                    Assert.That(capture.Events.Any(e => (e.Text.IndexOf("Started HTTP Listener", System.StringComparison.Ordinal) >= 0)), Is.True);
                     Assert.That(filtered.Events, Is.Empty);
                     Log.Source.Listeners.Remove(filtered);
                     var count = filtered.Events.Count;
@@ -89,7 +89,7 @@ namespace EmbedIO.Tests.Issues
         public async Task ConcurrentRequestEventsRemainWholeAndCanBeConsumedOnAnotherThread()
         {
             using var capture = new Capture(SourceLevels.Information);
-            var url = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+            var url = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new ActionModule("/", HttpVerbs.Get, c => c.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding)));
             using var stop = new CancellationTokenSource();
@@ -108,8 +108,8 @@ namespace EmbedIO.Tests.Issues
             }
             var records = await Task.Run(() => capture.Events.ToArray());
             for (var i = 0; i < 12; i++)
-                Assert.That(records.Count(e => e.Text.Contains(" GET /request-" + i + ": \"200 OK\" sent in ")), Is.EqualTo(1));
-            Assert.That(records.Count(e => e.Text.Contains(" GET /request-")), Is.EqualTo(12));
+                Assert.That(records.Count(e => (e.Text.IndexOf(" GET /request-" + i + ": \"200 OK\" sent in ", System.StringComparison.Ordinal) >= 0)), Is.EqualTo(1));
+            Assert.That(records.Count(e => (e.Text.IndexOf(" GET /request-", System.StringComparison.Ordinal) >= 0)), Is.EqualTo(12));
         }
 
         [Test]
@@ -151,8 +151,8 @@ namespace EmbedIO.Tests.Issues
                 await running.WaitAsync(TimeSpan.FromSeconds(10));
                 server.Dispose();
             }
-            Assert.That(capture.Events.Any(e => e.Text.Contains("Started HTTP Listener")), Is.True);
-            Assert.That(capture.Events.Any(e => e.Text.Contains("Listener closed.")), Is.True);
+            Assert.That(capture.Events.Any(e => (e.Text.IndexOf("Started HTTP Listener", System.StringComparison.Ordinal) >= 0)), Is.True);
+            Assert.That(capture.Events.Any(e => (e.Text.IndexOf("Listener closed.", System.StringComparison.Ordinal) >= 0)), Is.True);
         }
 
         private sealed class Capture : IDisposable
@@ -182,7 +182,7 @@ namespace EmbedIO.Tests.Issues
             public override void TraceEvent(TraceEventCache? cache, string source, TraceEventType type, int id, string? format, params object?[]? args)
             {
                 if (Filter != null && !Filter.ShouldTrace(cache, source, type, id, format, args, null, null)) return;
-                Events.Enqueue((type, args == null ? format ?? string.Empty : string.Format(CultureInfo.InvariantCulture, format!, args)));
+                Events.Enqueue((type, args == null ? format ?? string.Empty : string.Format(CultureInfo.InvariantCulture, (format ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), args)));
             }
         }
     }

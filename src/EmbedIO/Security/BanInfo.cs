@@ -10,7 +10,7 @@ namespace EmbedIO.Security
         /// <summary>
         /// Gets or sets the banned IP address.
         /// </summary>
-        public IPAddress IPAddress { get; set; }
+        public IPAddress IPAddress { get; set; } = IPAddress.None;
 
         /// <summary>
         /// Gets or sets the expiration time of the ban.

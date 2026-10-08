@@ -3,7 +3,7 @@
 namespace EmbedIO.AndroidSmoke;
 
 // Test-only application-owned host. It is not attached to an Activity/Window lifetime.
-public sealed class SmokeHost
+public sealed class SmokeHost : IAsyncDisposable
 {
     public static readonly SmokeHost Instance = new();
     public static int Created, Resumed, Stopped, Configured;
@@ -15,11 +15,13 @@ public sealed class SmokeHost
     private int _generation, _observed;
     private string? _error;
     private string _https = "pending";
-    private readonly SemaphoreSlim _restart = new(1, 1);
+    private readonly EmbedIO.Internal.AsyncWriteGate _restart = new();
+    private int _disposed;
     private readonly List<Task> _workers = new();
 
     public void Start()
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         try
         {
             _stop = new CancellationTokenSource();
@@ -51,7 +53,7 @@ public sealed class SmokeHost
             _ = ObserveServerAsync(_running);
             if (_generation == 1) _ = ObserveHttpsAsync();
         }
-        catch (Exception error)
+        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
         {
             _error = error.ToString();
             Console.Error.WriteLine(_error);
@@ -85,14 +87,14 @@ public sealed class SmokeHost
             await PlatformTests.HttpsSmoke.RunAsync();
             _https = "passed";
         }
-        catch (Exception error) { _error = error.ToString(); Console.Error.WriteLine(_error); }
+        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { _error = error.ToString(); Console.Error.WriteLine(_error); }
     }
 
     private async Task ObserveServerAsync(Task running)
     {
         try { await running; }
         catch (System.Net.HttpListenerException) when (_stoppingBackend) { }
-        catch (Exception error) { _error = error.ToString(); Console.Error.WriteLine(_error); }
+        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { _error = error.ToString(); Console.Error.WriteLine(_error); }
     }
 
     private async Task ObserveWorkerAsync(CancellationToken token)
@@ -108,32 +110,49 @@ public sealed class SmokeHost
 
     public async Task RestartObservedAsync()
     {
-        await _restart.WaitAsync();
+        using var scope = await _restart.EnterAsync(CancellationToken.None);
         try
         {
-            _stop!.Cancel();
-            await Task.WhenAll(_running!, _frontRunning!).WaitAsync(TimeSpan.FromSeconds(10));
+            var stop = _stop ?? throw new InvalidOperationException("The host has not started.");
+            stop.Cancel();
+            await Task.WhenAll(_running ?? Task.CompletedTask, _frontRunning ?? Task.CompletedTask).WaitAsync(TimeSpan.FromSeconds(10));
             Task[] workers;
             lock (_workers) { workers = _workers.ToArray(); _workers.Clear(); }
             await Task.WhenAll(workers).WaitAsync(TimeSpan.FromSeconds(10));
-            _server!.Dispose();
-            _frontend!.Dispose();
-            _stop.Dispose();
+            _server?.Dispose();
+            _frontend?.Dispose();
+            stop.Dispose();
             Start();
         }
-        catch (Exception error) { _error = error.ToString(); Console.Error.WriteLine(_error); }
-        finally { _restart.Release(); }
+        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { _error = error.ToString(); Console.Error.WriteLine(_error); }
     }
     public async Task StopBackendObservedAsync()
     {
         _stoppingBackend = true;
         try
         {
-            _server!.Dispose();
-            try { await _running!.WaitAsync(TimeSpan.FromSeconds(10)); }
+            (_server ?? throw new InvalidOperationException("The host has not started.")).Dispose();
+            try { await (_running ?? Task.CompletedTask).WaitAsync(TimeSpan.FromSeconds(10)); }
             catch (System.Net.HttpListenerException error) when (error.NativeErrorCode == 995) { }
         }
-        catch (Exception error) { _error = error.ToString(); Console.Error.WriteLine(_error); }
+        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { _error = error.ToString(); Console.Error.WriteLine(_error); }
     }
 
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        try
+        {
+            using var scope = await _restart.EnterAsync(CancellationToken.None);
+            _stop?.Cancel();
+            try { await Task.WhenAll(_running ?? Task.CompletedTask, _frontRunning ?? Task.CompletedTask).WaitAsync(TimeSpan.FromSeconds(10)); }
+            finally
+            {
+                _server?.Dispose();
+                _frontend?.Dispose();
+                _stop?.Dispose();
+            }
+        }
+        finally { _restart.Dispose(); }
+    }
 }

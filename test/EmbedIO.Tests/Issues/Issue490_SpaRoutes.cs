@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -32,11 +32,11 @@ namespace EmbedIO.Tests.Issues
                     Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                     Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("<h1>SPA</h1>"));
                     Assert.That(response.Headers.Location, Is.Null);
-                    Assert.That(response.RequestMessage!.RequestUri!.PathAndQuery, Is.EqualTo(path));
-                    Assert.That(response.Content.Headers.ContentType!.MediaType, Is.EqualTo("text/html"));
+                    Assert.That(((((response).RequestMessage) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).RequestUri ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).PathAndQuery, Is.EqualTo(path));
+                    Assert.That(((response).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo("text/html"));
                     Assert.That(response.Headers.ETag, Is.Not.Null);
                     Assert.That(response.Content.Headers.LastModified, Is.Not.Null);
-                    Assert.That(response.Headers.CacheControl!.MustRevalidate, Is.True);
+                    Assert.That(((response).Headers.CacheControl ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MustRevalidate, Is.True);
                 }
             });
 
@@ -72,7 +72,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(head.Content.Headers.ContentLength, Is.EqualTo(get.Content.Headers.ContentLength));
                 Assert.That(head.Headers.ETag, Is.EqualTo(get.Headers.ETag));
                 using var conditional = new HttpRequestMessage(HttpMethod.Get, "/dashboard");
-                conditional.Headers.IfNoneMatch.Add(get.Headers.ETag!);
+                conditional.Headers.IfNoneMatch.Add((get.Headers.ETag ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
                 using var unchanged = await client.SendAsync(conditional);
                 Assert.That(unchanged.StatusCode, Is.EqualTo(HttpStatusCode.NotModified));
                 Assert.That(await unchanged.Content.ReadAsByteArrayAsync(), Is.Empty);

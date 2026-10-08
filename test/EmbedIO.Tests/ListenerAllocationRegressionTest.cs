@@ -17,7 +17,7 @@ namespace EmbedIO.Tests
     public class ListenerAllocationRegressionTest
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static readonly Type ConnectionType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true)!;
+        private static readonly Type ConnectionType = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         [TestCase(0, 0)]
         [TestCase(0, 1)]
@@ -36,8 +36,8 @@ namespace EmbedIO.Tests
             var connection = NewConnection(source);
             var context = Context(connection);
             context.Request.Headers["Content-Length"] = "8192";
-            var bufferedStream = (MemoryStream)Field("_ms").GetValue(connection)!;
-            bufferedStream.Write(body, 0, buffered);
+            var bufferedStream = (MemoryStream)(Field("_ms").GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            (bufferedStream).Write(body, 0, buffered);
             var input = context.Request.InputStream;
             var destination = new byte[consumed];
             input.ReadExactly(destination);
@@ -61,7 +61,7 @@ namespace EmbedIO.Tests
             var connection = NewConnection(source);
             var context = Context(connection);
             context.Request.Headers["Content-Length"] = "4096";
-            if (failure == "getter-disposed") ((MemoryStream)Field("_ms").GetValue(connection)!).Dispose();
+            if (failure == "getter-disposed") ((MemoryStream)(Field("_ms").GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).Dispose();
             Assert.That(Flush(context), Is.EqualTo(expected));
             foreach (var bytes in source.Buffers) Assert.That(bytes, Is.All.Zero);
         }
@@ -82,8 +82,8 @@ namespace EmbedIO.Tests
             context.Response.Headers["X-Text"] = value;
             context.Response.Headers["X-Last"] = "tail";
             var expected = Encoding.UTF8.GetBytes($"HTTP/1.1 201 Created\r\nX-Text: {value}\r\nX-Last: tail\r\n\r\n");
-            using var wire = (MemoryStream)context.Response.GetType().GetMethod("WriteHeaders", PrivateInstance)!.Invoke(context.Response, null)!;
-            Assert.That(wire.Position, Is.EqualTo(0), "Default encoding has no preamble.");
+            using var wire = (MemoryStream)((((context).Response.GetType().GetMethod("WriteHeaders", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(context.Response, null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            Assert.That((wire).Position, Is.EqualTo(0), "Default encoding has no preamble.");
             Assert.That(wire.ToArray(), Is.EqualTo(expected));
             var body = Enumerable.Repeat((byte)'z', bodyLength).ToArray();
             wire.Position = wire.Length;
@@ -105,7 +105,7 @@ namespace EmbedIO.Tests
             using var server = new WebServer(options =>
             {
                 options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO);
-                if (secure) options.WithCertificate(certificate!);
+                if (secure) options.WithCertificate(certificate);
             })
                 .WithModule(new ActionModule("/", HttpVerbs.Post, async context =>
                 {
@@ -113,11 +113,11 @@ namespace EmbedIO.Tests
                     var bytes = new byte[count];
                     await context.Request.InputStream.ReadExactlyAsync(bytes, context.CancellationToken);
                     Assert.That(bytes, Is.All.EqualTo((byte)'b'));
-                    await context.SendStringAsync(context.Request.RawUrl, "text/plain", Encoding.UTF8);
+                    await context.SendStringAsync(context.Request.RawTarget, "text/plain", Encoding.UTF8);
                 }));
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
-            using var client = secure ? HttpsSmoke.CreateClient(certificate!) : new HttpClient();
+            using var client = secure ? HttpsSmoke.CreateClient((certificate ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))) : new HttpClient();
             try
             {
                 for (var i = 0; i < 8; i++)
@@ -131,15 +131,15 @@ namespace EmbedIO.Tests
         }
 
         private static bool Flush(IHttpContext context)
-            => (bool)context.Request.GetType().GetMethod("FlushInput", PrivateInstance)!.Invoke(context.Request, null)!;
-        private static IHttpContext Context(object connection) => (IHttpContext)Field("_context").GetValue(connection)!;
-        private static FieldInfo Field(string name) => ConnectionType.GetField(name, PrivateInstance)!;
+            => (bool)((((context).Request.GetType().GetMethod("FlushInput", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(context.Request, null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static IHttpContext Context(object connection) => (IHttpContext)(Field("_context").GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static FieldInfo Field(string name) => (ConnectionType.GetField(name, PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         private static object NewConnection(Stream source)
         {
             var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
             Field("_connectionSync").SetValue(connection, new object());
             Field("<Stream>k__BackingField").SetValue(connection, source);
-            ConnectionType.GetMethod("Init", PrivateInstance)!.Invoke(connection, null);
+            ((ConnectionType).GetMethod("Init", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
             return connection;
         }
 

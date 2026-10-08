@@ -10,6 +10,10 @@ namespace EmbedIO
     /// </summary>
     public static class WebServerOptionsExtensions
     {
+        /// <inheritdoc cref="WithUrlPrefix(WebServerOptions,string)"/>
+        public static WebServerOptions WithUrlPrefix(this WebServerOptions @this, Uri urlPrefix)
+            => WithUrlPrefix(@this, Validate.NotNull(nameof(urlPrefix), urlPrefix).OriginalString);
+
         /// <summary>
         /// Adds a URL prefix.
         /// </summary>
@@ -26,6 +30,7 @@ namespace EmbedIO
         /// </exception>
         public static WebServerOptions WithUrlPrefix(this WebServerOptions @this, string urlPrefix)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.AddUrlPrefix(urlPrefix);
             return @this;
         }
@@ -47,6 +52,7 @@ namespace EmbedIO
         /// </exception>
         public static WebServerOptions WithUrlPrefixes(this WebServerOptions @this, IEnumerable<string> urlPrefixes)
         {
+            if (@this is null) throw new System.NullReferenceException();
             foreach (var urlPrefix in Validate.NotNull(nameof(urlPrefixes), urlPrefixes))
                 @this.AddUrlPrefix(urlPrefix);
 
@@ -82,6 +88,7 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
         public static WebServerOptions WithMode(this WebServerOptions @this, HttpListenerMode value)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Mode = value;
             return @this;
         }
@@ -96,6 +103,7 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
         public static WebServerOptions WithEmbedIOHttpListener(this WebServerOptions @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Mode = HttpListenerMode.EmbedIO;
             return @this;
         }
@@ -110,6 +118,7 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
         public static WebServerOptions WithMicrosoftHttpListener(this WebServerOptions @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Mode = HttpListenerMode.Microsoft;
             return @this;
         }
@@ -123,8 +132,9 @@ namespace EmbedIO
         /// set to <paramref name="value"/>.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
-        public static WebServerOptions WithCertificate(this WebServerOptions @this, X509Certificate2 value)
+        public static WebServerOptions WithCertificate(this WebServerOptions @this, X509Certificate2? value)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Certificate = value;
             return @this;
         }
@@ -140,6 +150,7 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
         public static WebServerOptions WithCertificateThumbprint(this WebServerOptions @this, string value)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.CertificateThumbprint = value;
             return @this;
         }
@@ -157,6 +168,7 @@ namespace EmbedIO
         /// and the underlying operating system is not Windows.</exception>
         public static WebServerOptions WithAutoLoadCertificate(this WebServerOptions @this, bool value)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.AutoLoadCertificate = value;
             return @this;
         }
@@ -172,6 +184,7 @@ namespace EmbedIO
         /// <exception cref="PlatformNotSupportedException">The underlying operating system is not Windows.</exception>
         public static WebServerOptions WithAutoLoadCertificate(this WebServerOptions @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.AutoLoadCertificate = true;
             return @this;
         }
@@ -186,6 +199,7 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
         public static WebServerOptions WithoutAutoLoadCertificate(this WebServerOptions @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.AutoLoadCertificate = false;
             return @this;
         }
@@ -205,6 +219,7 @@ namespace EmbedIO
         /// and the underlying operating system is not Windows.</exception>
         public static WebServerOptions WithAutoRegisterCertificate(this WebServerOptions @this, bool value)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.AutoRegisterCertificate = value;
             return @this;
         }
@@ -221,6 +236,7 @@ namespace EmbedIO
         /// <exception cref="PlatformNotSupportedException">The underlying operating system is not Windows.</exception>
         public static WebServerOptions WithAutoRegisterCertificate(this WebServerOptions @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.AutoRegisterCertificate = true;
             return @this;
         }
@@ -235,6 +251,7 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
         public static WebServerOptions WithoutAutoRegisterCertificate(this WebServerOptions @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.AutoRegisterCertificate = false;
             return @this;
         }
@@ -251,6 +268,7 @@ namespace EmbedIO
         /// <seealso cref="StoreName"/>
         public static WebServerOptions WithStoreName(this WebServerOptions @this, StoreName value)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.StoreName = value;
             return @this;
         }
@@ -267,6 +285,7 @@ namespace EmbedIO
         /// <seealso cref="StoreLocation"/>
         public static WebServerOptions WithStoreLocation(this WebServerOptions @this, StoreLocation value)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.StoreLocation = value;
             return @this;
         }
@@ -286,6 +305,7 @@ namespace EmbedIO
         /// <seealso cref="StoreLocation"/>
         public static WebServerOptions WithStore(this WebServerOptions @this, StoreName name, StoreLocation location)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.StoreName = name;
             @this.StoreLocation = location;
             return @this;

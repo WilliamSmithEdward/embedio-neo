@@ -50,14 +50,14 @@ namespace EmbedIO.Tests.Issues
                 using var head = await Send(client, url + "video.mp4", HttpMethod.Head, accept);
                 head.EnsureSuccessStatusCode();
                 AssertUncompressed(head);
-                Assert.That(head.Content.Headers.ContentType!.MediaType, Is.EqualTo("video/mp4"));
+                Assert.That(((head).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo("video/mp4"));
                 Assert.That(head.Content.Headers.ContentLength, Is.EqualTo(payload.Length));
                 Assert.That(await head.Content.ReadAsByteArrayAsync(), Is.Empty);
 
                 using var range = await Send(client, url + "video.mp4", HttpMethod.Get, accept, r => r.Headers.Range = new RangeHeaderValue(4, 19));
                 Assert.That(range.StatusCode, Is.EqualTo(HttpStatusCode.PartialContent));
                 AssertUncompressed(range);
-                Assert.That(range.Content.Headers.ContentRange!.ToString(), Is.EqualTo("bytes 4-19/128"));
+                Assert.That(((range).Content.Headers.ContentRange ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).ToString(), Is.EqualTo("bytes 4-19/128"));
                 Assert.That(await range.Content.ReadAsByteArrayAsync(), Is.EqualTo(payload[4..20]));
                 for (var repeat = 0; repeat < 2; repeat++)
                 {
@@ -66,7 +66,7 @@ namespace EmbedIO.Tests.Issues
                     AssertUncompressed(full);
                     Assert.That(await full.Content.ReadAsByteArrayAsync(), Is.EqualTo(payload));
                 }
-                using var conditional = await Send(client, url + "video.mp4", HttpMethod.Get, accept, r => r.Headers.IfNoneMatch.Add(head.Headers.ETag!));
+                using var conditional = await Send(client, url + "video.mp4", HttpMethod.Get, accept, r => r.Headers.IfNoneMatch.Add((head.Headers.ETag ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))));
                 Assert.That(conditional.StatusCode, Is.EqualTo(HttpStatusCode.NotModified));
                 AssertUncompressed(conditional);
                 Assert.That(await conditional.Content.ReadAsByteArrayAsync(), Is.Empty);
@@ -154,10 +154,10 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(head.Content.Headers.ContentEncoding, Is.EqualTo(new[] { encoding }));
                 Assert.That(head.Headers.ETag, Is.EqualTo(compressed.Headers.ETag));
                 Assert.That(await head.Content.ReadAsByteArrayAsync(), Is.Empty);
-                using var conditional = await Send(client, url + "video.mp4", HttpMethod.Get, accept, r => r.Headers.IfNoneMatch.Add(compressed.Headers.ETag!));
+                using var conditional = await Send(client, url + "video.mp4", HttpMethod.Get, accept, r => r.Headers.IfNoneMatch.Add((compressed.Headers.ETag ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))));
                 Assert.That(conditional.StatusCode, Is.EqualTo(HttpStatusCode.NotModified));
                 Assert.That(conditional.Content.Headers.ContentEncoding, Is.EqualTo(new[] { encoding }));
-                using var identity = await Send(client, url + "video.mp4", HttpMethod.Get, "identity", r => r.Headers.IfNoneMatch.Add(compressed.Headers.ETag!));
+                using var identity = await Send(client, url + "video.mp4", HttpMethod.Get, "identity", r => r.Headers.IfNoneMatch.Add((compressed.Headers.ETag ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))));
                 Assert.That(identity.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                 AssertUncompressed(identity);
                 Assert.That(identity.Headers.ETag, Is.Not.EqualTo(compressed.Headers.ETag));

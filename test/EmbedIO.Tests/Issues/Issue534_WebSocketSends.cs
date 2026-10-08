@@ -33,13 +33,13 @@ namespace EmbedIO.Tests.Issues
             {
                 await Assert.ThatAsync(async () => await closing, Throws.InstanceOf<OperationCanceledException>());
                 Assert.That(socket.State, Is.EqualTo(WebSocketState.Closed));
-                Assert.That(socket.GetType().GetField("_sendGatesDisposed", Private)!.GetValue(socket), Is.False);
+                Assert.That(((socket).GetType().GetField("_sendGatesDisposed", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket), Is.False);
             }
             finally { transport.Release.TrySetResult(true); }
             await Task.WhenAll(data, queued).WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(transport.FrameHeaders.ToArray(), Is.EqualTo(new byte[] { 2 }));
             Assert.That(transport.CloseCount, Is.EqualTo(1));
-            Assert.That(socket.GetType().GetField("_sendGatesDisposed", Private)!.GetValue(socket), Is.True);
+            Assert.That(((socket).GetType().GetField("_sendGatesDisposed", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket), Is.True);
         }
 
         [Test]
@@ -60,7 +60,7 @@ namespace EmbedIO.Tests.Issues
             Assert.That(transport.FrameHeaders.ToArray(), Is.EqualTo(new byte[] { 2, 136 }));
             Assert.That(transport.MaximumConcurrentWrites, Is.EqualTo(1));
             Assert.That(transport.CloseCount, Is.EqualTo(1));
-            Assert.That(socket.GetType().GetField("_sendGatesDisposed", Private)!.GetValue(socket), Is.True);
+            Assert.That(((socket).GetType().GetField("_sendGatesDisposed", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket), Is.True);
         }
 
         [Test]
@@ -116,20 +116,20 @@ namespace EmbedIO.Tests.Issues
             var type = socket.GetType();
             Task control;
             if (kind == "close") control = socket.CloseAsync();
-            else if (kind == "ping") control = (Task)type.GetMethod("PingAsync", Private, null,
-                new[] { typeof(byte[]), typeof(TimeSpan) }, null)!.Invoke(socket, new object[] { new byte[] { 137, 0 }, TimeSpan.Zero })!;
+            else if (kind == "ping") control = (Task)((((type).GetMethod("PingAsync", Private, null,
+                new[] { typeof(byte[]), typeof(TimeSpan) }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, new object[] { new byte[] { 137, 0 }, TimeSpan.Zero })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             else
             {
                 var assembly = type.Assembly;
-                var frame = Activator.CreateInstance(assembly.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true)!,
+                var frame = Activator.CreateInstance((assembly.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
                     Private | BindingFlags.Public, null,
-                    new[] { Enum.Parse(assembly.GetType("EmbedIO.WebSockets.Opcode", true)!, "Pong"),
-                        Activator.CreateInstance(assembly.GetType("EmbedIO.WebSockets.Internal.PayloadData", true)!,
-                            Private | BindingFlags.Public, null, new object[] { Array.Empty<byte>() }, null)! }, null)!;
-                control = (Task)type.GetMethod("Send", Private)!.Invoke(socket, new[] { frame })!;
+                    new[] { Enum.Parse((assembly.GetType("EmbedIO.WebSockets.Opcode", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), "Pong"),
+                        Activator.CreateInstance((assembly.GetType("EmbedIO.WebSockets.Internal.PayloadData", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
+                            Private | BindingFlags.Public, null, new object[] { Array.Empty<byte>() }, null) }, null);
+                control = (Task)((((type).GetMethod("Send", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, new[] { frame })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
             transport.Release.TrySetResult(true);
-            await Task.WhenAll(data, control).WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.WhenAll(data, (control)).WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(transport.MaximumConcurrentWrites, Is.EqualTo(1));
             var headers = transport.FrameHeaders.ToArray();
             Assert.That(headers.Count(h => (h & 15) == (kind == "pong" ? 10 : kind == "ping" ? 9 : 8)), Is.EqualTo(1));
@@ -155,7 +155,7 @@ namespace EmbedIO.Tests.Issues
             Assert.That(socket.State, Is.EqualTo(WebSocketState.Closed));
             Assert.That(transport.CloseCount, Is.EqualTo(1));
             Assert.That(transport.FrameHeaders.Count, Is.EqualTo(1));
-            Assert.That(socket.GetType().GetField("_sendGatesDisposed", Private)!.GetValue(socket), Is.True);
+            Assert.That(((socket).GetType().GetField("_sendGatesDisposed", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket), Is.True);
             socket.Dispose();
             Assert.That(transport.CloseCount, Is.EqualTo(1));
         }
@@ -191,7 +191,7 @@ namespace EmbedIO.Tests.Issues
                         data.Write(buffer, 0, result.Count);
                     } while (!result.EndOfMessage);
                     var message = Encoding.UTF8.GetString(data.ToArray());
-                    var index = int.Parse(message.Substring(0, message.IndexOf(':')));
+                    var index = int.Parse(message.Substring(0, message.IndexOf((':').ToString(), System.StringComparison.Ordinal)));
                     Assert.That(result.MessageType, Is.EqualTo(index % 2 == 0 ? WebSocketMessageType.Text : WebSocketMessageType.Binary));
                     Assert.That(messages.Add(message), Is.True);
                 }
@@ -260,16 +260,16 @@ namespace EmbedIO.Tests.Issues
         private static IWebSocket CreateSocket(Stream stream)
         {
             var assembly = typeof(WebServer).Assembly;
-            var connectionType = assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true)!;
-            var connection = RuntimeHelpers.GetUninitializedObject(connectionType);
+            var connectionType = assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true);
+            var connection = RuntimeHelpers.GetUninitializedObject((connectionType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
             GC.SuppressFinalize(connection);
-            connectionType.GetField("<Stream>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(connection, stream);
-            var socketType = assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true)!;
-            var socket = (IWebSocket)Activator.CreateInstance(socketType, BindingFlags.Instance | BindingFlags.NonPublic,
-                null, new[] { connection }, null)!;
-            socketType.GetField("_closeConnection", Private)!.SetValue(socket,
-                new Action(() => Interlocked.Increment(ref ((ControlledStream)stream).CloseCount)));
-            return socket;
+            ((connectionType).GetField("<Stream>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, stream);
+            var socketType = assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true);
+            var socket = (IWebSocket)(Activator.CreateInstance((socketType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new[] { connection }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            ((socketType).GetField("_closeConnection", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket,
+                new Action(() => ((ControlledStream)stream).RecordClose()));
+            return (socket);
         }
 
         private sealed class SendModule : WebSocketModule
@@ -296,7 +296,9 @@ namespace EmbedIO.Tests.Issues
             private int _writes;
             private int _active;
             private int _maximum;
-            public int CloseCount;
+            private int _closeCount;
+            public int CloseCount => Volatile.Read(ref _closeCount);
+            public void RecordClose() => Interlocked.Increment(ref _closeCount);
             public bool FailWrite { get; set; }
             public Action? AfterFirstWrite { get; set; }
             public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

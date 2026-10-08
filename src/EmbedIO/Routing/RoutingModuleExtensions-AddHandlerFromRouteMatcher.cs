@@ -23,6 +23,7 @@ namespace EmbedIO.Routing
         /// <seealso cref="RoutingModule.Add(HttpVerbs,RouteMatcher,RouteHandlerCallback)"/>
         public static RoutingModule Handle(this RoutingModule @this, HttpVerbs verb, RouteMatcher matcher, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(verb, matcher, handler);
             return @this;
         }
@@ -46,6 +47,7 @@ namespace EmbedIO.Routing
         /// <seealso cref="RoutingModule.Add(HttpVerbs,RouteMatcher,SyncRouteHandlerCallback)"/>
         public static RoutingModule Handle(this RoutingModule @this, HttpVerbs verb, RouteMatcher matcher, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(verb, matcher, handler);
             return @this;
         }
@@ -65,6 +67,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnAny(this RoutingModule @this, RouteMatcher matcher, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Any, matcher, handler);
             return @this;
         }
@@ -84,6 +87,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnAny(this RoutingModule @this, RouteMatcher matcher, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Any, matcher, handler);
             return @this;
         }
@@ -103,6 +107,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnDelete(this RoutingModule @this, RouteMatcher matcher, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Delete, matcher, handler);
             return @this;
         }
@@ -122,6 +127,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnDelete(this RoutingModule @this, RouteMatcher matcher, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Delete, matcher, handler);
             return @this;
         }
@@ -141,6 +147,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnGet(this RoutingModule @this, RouteMatcher matcher, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Get, matcher, handler);
             return @this;
         }
@@ -160,6 +167,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnGet(this RoutingModule @this, RouteMatcher matcher, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Get, matcher, handler);
             return @this;
         }
@@ -179,6 +187,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnHead(this RoutingModule @this, RouteMatcher matcher, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Head, matcher, handler);
             return @this;
         }
@@ -198,6 +207,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnHead(this RoutingModule @this, RouteMatcher matcher, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Head, matcher, handler);
             return @this;
         }
@@ -217,6 +227,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnOptions(this RoutingModule @this, RouteMatcher matcher, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Options, matcher, handler);
             return @this;
         }
@@ -236,6 +247,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnOptions(this RoutingModule @this, RouteMatcher matcher, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Options, matcher, handler);
             return @this;
         }
@@ -255,6 +267,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnPatch(this RoutingModule @this, RouteMatcher matcher, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Patch, matcher, handler);
             return @this;
         }
@@ -274,6 +287,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnPatch(this RoutingModule @this, RouteMatcher matcher, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Patch, matcher, handler);
             return @this;
         }
@@ -293,6 +307,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnPost(this RoutingModule @this, RouteMatcher matcher, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Post, matcher, handler);
             return @this;
         }
@@ -312,6 +327,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnPost(this RoutingModule @this, RouteMatcher matcher, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Post, matcher, handler);
             return @this;
         }
@@ -331,6 +347,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnPut(this RoutingModule @this, RouteMatcher matcher, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Put, matcher, handler);
             return @this;
         }
@@ -350,6 +367,7 @@ namespace EmbedIO.Routing
         /// </exception>
         public static RoutingModule OnPut(this RoutingModule @this, RouteMatcher matcher, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Put, matcher, handler);
             return @this;
         }

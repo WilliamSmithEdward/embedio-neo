@@ -8,6 +8,10 @@ names, nullable checks, predicates, comparisons and derived path outputs.
 
 ## Decision for Neo
 
+The published-package examples below target 1.0.2. In the unreleased warning cleanup,
+`Validate.UrlPath` is named `Validate.RoutePath`; see the
+[migration notes](../compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved).
+
 Preserve `EmbedIO.Utilities.Validate` and both library target frameworks. For new
 .NET 10 application code, use built-in throw helpers and simple explicit checks
 where they express the intended contract. Keep EmbedIO's domain validators for

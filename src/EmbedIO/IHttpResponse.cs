@@ -28,6 +28,7 @@ namespace EmbedIO
         /// <summary>
         /// Gets or sets the type of the content.
         /// </summary>
+        [System.Diagnostics.CodeAnalysis.MaybeNull]
         string ContentType { get; set; }
 
         /// <summary>
@@ -53,6 +54,7 @@ namespace EmbedIO
         /// <summary>
         /// Gets or sets a text description of the HTTP status code.
         /// </summary>
+        [System.Diagnostics.CodeAnalysis.MaybeNull]
         string StatusDescription { get; set; }
 
         /// <summary>

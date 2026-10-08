@@ -71,11 +71,11 @@ namespace EmbedIO.Tests.Issues
             var context = DispatchProxy.Create<IWebSocketContext, ContextProxy>();
             ((ContextProxy)(object)context).Socket = socket;
             var module = new ProbeModule();
-            var receiving = (Task)typeof(WebSocketModule).GetMethod("ProcessSystemContext", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(module, new object[] { context, socket, CancellationToken.None })!;
+            var receiving = (Task)((((typeof(WebSocketModule)).GetMethod("ProcessSystemContext", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
+                .Invoke(module, new object[] { context, socket, CancellationToken.None })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             await native.DataReceived.Task.WaitAsync(TimeSpan.FromSeconds(5));
             native.ReleaseSend.TrySetResult(true);
-            await Task.WhenAll(active, closing, receiving).WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.WhenAll(active, closing, (receiving)).WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(module.Frames, Is.Zero);
             Assert.That(module.Messages, Is.Zero);
         }
@@ -94,13 +94,16 @@ namespace EmbedIO.Tests.Issues
         }
 
         private static IWebSocket Wrap(System.Net.WebSockets.WebSocket socket)
-            => (IWebSocket)Activator.CreateInstance(typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.SystemWebSocket", true)!, socket)!;
+            => (IWebSocket)(Activator.CreateInstance((typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.SystemWebSocket", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), socket) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         public class ContextProxy : DispatchProxy
         {
-            public IWebSocket Socket { get; set; } = null!;
+            public IWebSocket? Socket { get; set; }
             protected override object? Invoke(MethodInfo? method, object?[]? args)
-                => method!.Name == "get_WebSocket" ? Socket : null;
+            {
+                if (method is null) throw new System.NullReferenceException();
+                return method.Name == "get_WebSocket" ? Socket : null;
+            }
         }
 
         private sealed class ProbeModule : WebSocketModule
@@ -152,7 +155,7 @@ namespace EmbedIO.Tests.Issues
             {
                 if (Interlocked.Increment(ref _receives) == 1 && State == WebSocketState.Open)
                 {
-                    buffer.Array![buffer.Offset] = 112;
+                    (buffer.Array ?? throw new NUnit.Framework.AssertionException("Expected a receive buffer."))[buffer.Offset] = 112;
                     DataReceived.TrySetResult(true);
                     return new WebSocketReceiveResult(1, WebSocketMessageType.Text, true);
                 }

@@ -81,8 +81,9 @@ namespace EmbedIO.Files
 
         internal readonly struct Scope : IDisposable
         {
-            private readonly ZipArchiveReadGate _gate;
-            internal Scope(ZipArchiveReadGate gate) => _gate = gate;
+            private readonly EmbedIO.Internal.BorrowedResource<ZipArchiveReadGate> _gateReference;
+            private ZipArchiveReadGate _gate => _gateReference.Value;
+            internal Scope(ZipArchiveReadGate gate) => _gateReference = new EmbedIO.Internal.BorrowedResource<ZipArchiveReadGate>(gate);
             public void Dispose() { _gate._semaphore.Release(); _gate.Release(); }
         }
     }
@@ -90,16 +91,15 @@ namespace EmbedIO.Files
     internal sealed class ZipArchiveReadStream : Stream
     {
         private readonly Stream _inner;
-#pragma warning disable CA2213 // Borrowed gate: the provider owns it; this stream releases only its retained reference.
-        private readonly ZipArchiveReadGate _gate;
-#pragma warning restore CA2213
+        private readonly EmbedIO.Internal.BorrowedResource<ZipArchiveReadGate> _gateReference;
+        private ZipArchiveReadGate _gate => _gateReference.Value;
         private int _disposed;
         private int _closed;
 
         internal ZipArchiveReadStream(Stream inner, ZipArchiveReadGate gate)
         {
             _inner = inner;
-            _gate = gate;
+            _gateReference = new EmbedIO.Internal.BorrowedResource<ZipArchiveReadGate>(gate);
             gate.Retain();
         }
 
@@ -137,7 +137,8 @@ namespace EmbedIO.Files
             {
                 // Let the actual runtime retain its argument types and validation order.
                 using var scope = _gate.Enter();
-                return _inner.ReadAsync(buffer!, offset, count, cancellationToken);
+                if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+                return _inner.ReadAsync(buffer, offset, count, cancellationToken);
             }
             return ReadCoreAsync(buffer, offset, count, cancellationToken);
         }

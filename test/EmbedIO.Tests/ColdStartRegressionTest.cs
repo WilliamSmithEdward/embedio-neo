@@ -145,10 +145,10 @@ namespace EmbedIO.Tests
                 await Task.Run(() => server.Start(stop.Token)).WaitAsync(TimeSpan.FromSeconds(2));
                 Assert.That(server.State, Is.EqualTo(WebServerState.Listening));
 
-                var handlers = (Delegate?)typeof(WebServerBase<TestWebServerOptions>)
-                    .GetField("StateChanged", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                var handlers = (Delegate?)((typeof(WebServerBase<TestWebServerOptions>))
+                    .GetField("StateChanged", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
                     .GetValue(server);
-                Assert.That(handlers!.GetInvocationList(), Has.Length.EqualTo(2));
+                Assert.That((handlers ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetInvocationList(), Has.Length.EqualTo(2));
             }
             finally { stop.Cancel(); await observedStop.Task.WaitAsync(TimeSpan.FromSeconds(2)); }
             Assert.That(states, Is.EqualTo(new[] { WebServerState.Loading, WebServerState.Listening, WebServerState.Stopped }));

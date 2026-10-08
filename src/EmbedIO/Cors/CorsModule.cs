@@ -49,12 +49,12 @@ namespace EmbedIO.Cors
             _methods = methods ?? throw new ArgumentNullException(nameof(methods));
 
             _validOrigins =
-                origins.ToLowerInvariant()
+                origins.ToUpperInvariant()
                     .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x.Trim())
                     .ToArray();
             _validMethods =
-                methods.ToLowerInvariant()
+                methods.ToUpperInvariant()
                     .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x.Trim())
                     .ToArray();
@@ -66,6 +66,7 @@ namespace EmbedIO.Cors
         /// <inheritdoc />
         protected override Task OnRequestAsync(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             var isOptions = context.Request.HttpVerb == HttpVerbs.Options;
 
             // If we allow all we don't need to filter
@@ -90,9 +91,9 @@ namespace EmbedIO.Cors
             if (_origins == All)
                 return Task.CompletedTask;
 
-            if (_validOrigins.Contains(currentOrigin))
+            if (_validOrigins.Contains(currentOrigin?.ToUpperInvariant()))
             {
-                context.Response.Headers.Set(HttpHeaderNames.AccessControlAllowOrigin,  currentOrigin);
+                context.Response.Headers.Set(HttpHeaderNames.AccessControlAllowOrigin, currentOrigin);
 
                 if (isOptions)
                 {
@@ -117,7 +118,7 @@ namespace EmbedIO.Cors
             if (string.IsNullOrWhiteSpace(requestMethodHeader))
                 return;
 
-            var currentMethods = requestMethodHeader.ToLowerInvariant()
+            var currentMethods = requestMethodHeader.ToUpperInvariant()
                 .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim());
 

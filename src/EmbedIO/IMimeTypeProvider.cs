@@ -14,7 +14,7 @@ namespace EmbedIO
         /// <returns>The MIME type corresponding to <paramref name="extension"/>, if one is found;
         /// otherwise, <see langword="null"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="extension"/>is <see langword="null"/>.</exception>
-        string GetMimeType(string extension);
+        string? GetMimeType(string extension);
 
         /// <summary>
         /// Attempts to determine whether compression should be preferred

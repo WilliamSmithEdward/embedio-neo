@@ -24,7 +24,7 @@ namespace EmbedIO.Tests.Utilities
                 expected = System.Array.Empty<IPAddress>();
             }
 
-            CollectionAssert.AreEquivalent(expected, await IPParser.ParseAsync(Address));
+            Assert.That(await IPParser.ParseAsync(Address), Is.EquivalentTo(expected));
         }
         [TestCase(null, false)]
         [TestCase("", false)]
@@ -67,7 +67,7 @@ namespace EmbedIO.Tests.Utilities
         [TestCase("192.168.1-2.52-1")]
         [TestCase("192.168.2-1.52-1")]
         public async Task IpParseEmpty_ReturnsCorrectValue(string? address)
-            => CollectionAssert.IsEmpty(await IPParser.ParseAsync(address));
+            => Assert.That(await IPParser.ParseAsync(address), Is.Empty);
 
         [TestCase("")]
         [TestCase("192")]
@@ -77,7 +77,7 @@ namespace EmbedIO.Tests.Utilities
         [TestCase("192.168-169.1-2.52-53")]
         [TestCase("192-193.168-169.1-2.52-53")]
         public async Task IpParseNotEmpty_ReturnsCorrectValue(string? address)
-            => CollectionAssert.IsNotEmpty(await IPParser.ParseAsync(address));
+            => Assert.That(await IPParser.ParseAsync(address), Is.Not.Empty);
 
         [TestCase("192", 1)]
         [TestCase("192.168", 1)]

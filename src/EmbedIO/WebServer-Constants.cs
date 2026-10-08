@@ -44,6 +44,6 @@ namespace EmbedIO
         /// <para>An <see cref="Uri"/> which cannot be equal to any HTTP / HTTP URI.</para>
         /// <para>Used as the default value for non-nullable properties of type <see cref="Uri"/>.</para>
         /// </summary>
-        public static readonly Uri NullUri = new ("null:");
+        public static readonly Uri NullUri = new("null:");
     }
 }

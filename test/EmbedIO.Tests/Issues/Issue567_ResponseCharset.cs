@@ -45,8 +45,8 @@ namespace EmbedIO.Tests.Issues
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
                 using var response = await client.GetAsync(url);
                 response.EnsureSuccessStatusCode();
-                var type = response.Content.Headers.ContentType!;
-                Assert.That(type.CharSet, Is.EqualTo(expectedCharset));
+                var type = response.Content.Headers.ContentType;
+                Assert.That((type ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet, Is.EqualTo(expectedCharset));
                 Assert.That(type.Parameters.Count, Is.EqualTo(MediaTypeHeaderValue.Parse(contentType).Parameters.Count +
                     (expectedCharset != null && MediaTypeHeaderValue.Parse(contentType).CharSet == null ? 1 : 0)));
                 Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.EqualTo(bytes), "Header encoding must not transcode raw bytes.");
@@ -77,7 +77,7 @@ namespace EmbedIO.Tests.Issues
                 using var response = await client.GetAsync(url);
                 response.EnsureSuccessStatusCode();
                 Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.EqualTo(encoding.GetBytes("café")));
-                Assert.That(response.Content.Headers.ContentType!.CharSet,
+                Assert.That(((response).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet,
                     Is.EqualTo(mode == HttpListenerMode.EmbedIO ? "iso-8859-1" : null));
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
@@ -110,7 +110,7 @@ namespace EmbedIO.Tests.Issues
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
                 using var response = await client.GetAsync(url + "data.bin");
                 response.EnsureSuccessStatusCode();
-                Assert.That(response.Content.Headers.ContentType!.CharSet,
+                Assert.That(((response).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet,
                     Is.EqualTo(mode == HttpListenerMode.EmbedIO ? "utf-8" : null));
                 Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.EqualTo(new byte[] { 0, 255 }));
             }
@@ -159,16 +159,16 @@ namespace EmbedIO.Tests.Issues
                 {
                     using var response = await client.GetAsync(url);
                     response.EnsureSuccessStatusCode();
-                    Assert.That(response.Content.Headers.ContentType!.CharSet, Is.EqualTo("utf-8"));
+                    Assert.That(((response).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet, Is.EqualTo("utf-8"));
                     Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain("hello.txt"));
                 }
                 using var head = await client.SendAsync(new HttpRequestMessage(HttpMethod.Head, url));
-                Assert.That(head.Content.Headers.ContentType!.CharSet, Is.EqualTo("utf-8"));
+                Assert.That(((head).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet, Is.EqualTo("utf-8"));
                 using var conditional = new HttpRequestMessage(HttpMethod.Get, url);
-                conditional.Headers.IfNoneMatch.Add(head.Headers.ETag!);
+                conditional.Headers.IfNoneMatch.Add((head.Headers.ETag ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
                 using var notModified = await client.SendAsync(conditional);
                 Assert.That(notModified.StatusCode, Is.EqualTo(HttpStatusCode.NotModified));
-                Assert.That(notModified.Content.Headers.ContentType!.CharSet, Is.EqualTo("utf-8"));
+                Assert.That(((notModified).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet, Is.EqualTo("utf-8"));
                 Assert.That(count, Is.EqualTo(4));
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); server.Dispose(); Directory.Delete(directory, true); }
@@ -294,25 +294,25 @@ namespace EmbedIO.Tests.Issues
                     {
                         using var get = await client.GetAsync(url + path);
                         get.EnsureSuccessStatusCode();
-                        Assert.That(get.Content.Headers.ContentType!.CharSet, Is.EqualTo(charset));
+                        Assert.That(((get).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet, Is.EqualTo(charset));
                         Assert.That(await get.Content.ReadAsByteArrayAsync(), Is.EqualTo(expected));
                         if (callback) Assert.That(get.Headers.GetValues("X-Mapped-File"), Is.EqualTo(new[] { path.Length == 0 ? "index.txt" : "image.bin" }));
                     }
                     using var head = await client.SendAsync(new HttpRequestMessage(HttpMethod.Head, url + path));
                     Assert.That(head.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-                    Assert.That(head.Content.Headers.ContentType!.CharSet, Is.EqualTo(charset));
+                    Assert.That(((head).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet, Is.EqualTo(charset));
                     Assert.That(head.Content.Headers.ContentLength, Is.EqualTo(expected.Length));
                     Assert.That(await head.Content.ReadAsByteArrayAsync(), Is.Empty);
                     using var conditional = new HttpRequestMessage(HttpMethod.Get, url + path);
-                    conditional.Headers.IfNoneMatch.Add(head.Headers.ETag!);
+                    conditional.Headers.IfNoneMatch.Add((head.Headers.ETag ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
                     using var notModified = await client.SendAsync(conditional);
                     Assert.That(notModified.StatusCode, Is.EqualTo(HttpStatusCode.NotModified));
-                    Assert.That(notModified.Content.Headers.ContentType!.CharSet, Is.EqualTo(charset));
+                    Assert.That(((notModified).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet, Is.EqualTo(charset));
                     using var request = new HttpRequestMessage(HttpMethod.Get, url + path);
                     request.Headers.Range = new RangeHeaderValue(0, 1);
                     using var partial = await client.SendAsync(request);
                     Assert.That(partial.StatusCode, Is.EqualTo(HttpStatusCode.PartialContent));
-                    Assert.That(partial.Content.Headers.ContentType!.CharSet, Is.EqualTo(charset));
+                    Assert.That(((partial).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet, Is.EqualTo(charset));
                     Assert.That(await partial.Content.ReadAsByteArrayAsync(), Is.EqualTo(expected[..2]));
                     foreach (var compression in new[] { "gzip", "deflate" })
                     {
@@ -320,7 +320,7 @@ namespace EmbedIO.Tests.Issues
                         compressedRequest.Headers.AcceptEncoding.ParseAdd(compression);
                         using var compressed = await client.SendAsync(compressedRequest);
                         compressed.EnsureSuccessStatusCode();
-                        Assert.That(compressed.Content.Headers.ContentType!.CharSet, Is.EqualTo(charset));
+                        Assert.That(((compressed).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet, Is.EqualTo(charset));
                         Assert.That(compressed.Content.Headers.ContentEncoding, Is.EqualTo(new[] { compression }));
                         using var input = new MemoryStream(await compressed.Content.ReadAsByteArrayAsync());
                         using Stream decoder = compression == "gzip" ? new GZipStream(input, CompressionMode.Decompress) : new DeflateStream(input, CompressionMode.Decompress);

@@ -9,19 +9,8 @@ namespace EmbedIO.Cli
 {
     internal static class Program
     {
-        private const string Help = """
-            EmbedIO-Neo CLI — local development web server
-            Usage: embedio-cli [options]
-              -p, --path PATH    Serve PATH (default: ./wwwroot if present, otherwise ./)
-              -o, --port PORT    HTTP port (default: 9696; watch mode also uses PORT+1)
-              -a, --api PATH     Load controllers/WebSocket modules from a DLL or directory
-                  --no-watch     Disable file watching and live-reload script injection
-                  --no-browser   Do not open the browser
-              -h, --help         Show this help
-                  --version      Show the version
-            With --api alone, static serving is disabled. Otherwise, DLLs in the current
-            directory are scanned. Load only trusted plugins. Press Ctrl+C to stop.
-            """;
+        private static readonly System.Resources.ResourceManager HelpResources = new("EmbedIO.Cli.Help", typeof(Program).Assembly);
+        private static string Help => HelpResources.GetString("Help", System.Globalization.CultureInfo.InvariantCulture) ?? throw new InvalidOperationException("The CLI help resource is missing.");
 
         private static async Task<int> Main(string[] args)
         {
@@ -43,17 +32,18 @@ namespace EmbedIO.Cli
             {
                 await using var host = CliHost.Create(options, Directory.GetCurrentDirectory());
                 if (!Console.IsInputRedirected) keyboard = StopOnKeyAsync(stop);
-                await host.RunAsync(stop.Token, () => {
+                await host.RunAsync(stop.Token, () =>
+                {
                     Console.WriteLine($"Serving {host.Url} — press Ctrl+C or any key to stop.");
                     if (!options.NoBrowser)
                     {
                         try { Process.Start(new ProcessStartInfo(host.Url) { UseShellExecute = true })?.Dispose(); }
-                        catch (Exception error) { Console.Error.WriteLine($"Cannot open browser: {error.Message}"); }
+                        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { Console.Error.WriteLine($"Cannot open browser: {error.Message}"); }
                     }
                 });
                 return 0;
             }
-            catch (Exception error) { Console.Error.WriteLine($"embedio-cli: {error.Message}"); return 1; }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { Console.Error.WriteLine($"embedio-cli: {error.Message}"); return 1; }
             finally
             {
                 Console.CancelKeyPress -= cancel;

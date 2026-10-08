@@ -13,7 +13,11 @@ namespace EmbedIO
         private static readonly ResponseSerializerCallback BufferingBaseSerializer = GetBaseSerializer(true);
 
         /// <summary>Serializes a response using EmbedIO's .NET JSON defaults.</summary>
-        public static Task Json(IHttpContext context, object? data) => WriteJsonAsync(context, data, false, null);
+        public static Task Json(IHttpContext context, object? data)
+        {
+            if (context is null) throw new System.NullReferenceException();
+            return WriteJsonAsync(context, data, false, null);
+        }
 
         /// <summary>Creates a JSON serializer with custom .NET options.</summary>
         public static ResponseSerializerCallback Json(JsonSerializerOptions options) => Json(false, options);
@@ -43,7 +47,8 @@ namespace EmbedIO
             => bufferResponse ? BufferingBaseSerializer : ChunkedEncodingBaseSerializer;
 
         private static ResponseSerializerCallback GetBaseSerializer(bool bufferResponse)
-            => async (context, data) => {
+            => async (context, data) =>
+            {
                 if (data is null)
                 {
                     return;
@@ -51,7 +56,7 @@ namespace EmbedIO
 
                 var isBinaryResponse = data is byte[];
 
-                if (!context.TryDetermineCompression(context.Response.ContentType, out var preferCompression))
+                if (!context.TryDetermineCompression(context.Response.ContentType ?? MimeType.Default, out var preferCompression))
                 {
                     preferCompression = true;
                 }

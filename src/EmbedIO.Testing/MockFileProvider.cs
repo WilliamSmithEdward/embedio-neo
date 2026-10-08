@@ -74,7 +74,7 @@ namespace EmbedIO.Testing
         }
 
         /// <inheritdoc />
-        public event Action<string> ResourceChanged;
+        public event Action<string>? ResourceChanged;
 
         /// <inheritdoc />
         public bool IsImmutable => false;
@@ -85,15 +85,16 @@ namespace EmbedIO.Testing
         }
 
         /// <inheritdoc />
-        public MappedResourceInfo? MapUrlPath(string urlPath, IMimeTypeProvider mimeTypeProvider)
+        public MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider)
         {
-            if (string.IsNullOrEmpty(urlPath))
+            if (mimeTypeProvider is null) throw new System.NullReferenceException();
+            if (string.IsNullOrEmpty(requestPath))
                 return null;
 
-            if (!urlPath.StartsWith("/"))
+            if (!requestPath.StartsWith("/"))
                 return null;
 
-            var path = urlPath.Substring(1);
+            var path = requestPath.Substring(1);
             var (name, entry) = FindEntry(path);
             return GetResourceInfo(path, name, entry, mimeTypeProvider);
         }
@@ -110,7 +111,7 @@ namespace EmbedIO.Testing
         {
             var (name, entry) = FindEntry(path);
             return entry is MockDirectory directory
-                ? directory.Select(pair => GetResourceInfo(AppendNameToPath(path, name), name, entry, mimeTypeProvider))
+                ? directory.Select(pair => GetResourceInfo(AppendNameToPath(path, pair.Key), pair.Key, pair.Value, mimeTypeProvider)).OfType<MappedResourceInfo>()
                 : Enumerable.Empty<MappedResourceInfo>();
         }
 
@@ -189,7 +190,8 @@ namespace EmbedIO.Testing
             return default;
         }
 
-        private MappedResourceInfo? GetResourceInfo(string path, string name, MockDirectoryEntry entry, IMimeTypeProvider mimeTypeProvider) => entry switch {
+        private MappedResourceInfo? GetResourceInfo(string path, string name, MockDirectoryEntry entry, IMimeTypeProvider mimeTypeProvider) => entry switch
+        {
             MockFile file => MappedResourceInfo.ForFile(path, name, file.LastModifiedUtc, file.Data.Length, mimeTypeProvider.GetMimeType(Path.GetExtension(name))),
             MockDirectory _ => MappedResourceInfo.ForDirectory(string.Empty, name, _root.LastModifiedUtc),
             _ => null

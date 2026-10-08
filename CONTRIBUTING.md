@@ -34,7 +34,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 1996
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 2008
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -48,7 +48,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 1996 executed/reported test cases to catch accidental discovery loss; update
+least 2008 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The five-minute suite
 budget allows the full coverage-enabled Windows run to finish; the discovery
 minimum remains enforced. NUnit 5 async assertions
@@ -89,9 +89,17 @@ dotnet format whitespace EmbedIO.sln --no-restore --include path/to/Changed.cs
 dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes --include path/to/Changed.cs
 ```
 
-Avoid a repository-wide formatting rewrite alongside functional work; inherited
-formatting and analyzer warnings can be addressed in focused changes. All testing
-and analyzer packages remain development-only. Library targets are unchanged.
+Ordinary fixes should format only changed files; repository-wide formatting belongs
+to an explicit cleanup task. All testing and analyzer packages remain development-only.
+Library targets are unchanged.
+
+Builds treat compiler and analyzer warnings as errors. CI also verifies formatting
+and runs `python scripts/check_analyzer_suppressions.py`, which rejects diagnostic
+pragmas, suppression attributes, disabled rule severities, nullable-disable directives,
+warning exemptions and analyzer-off build settings. Fix the diagnostic rather than
+adding an exemption. SDK analyzers and NUnit.Analyzers provide the lint checks;
+no additional runtime dependency is needed. Owner-approved API changes for this
+cleanup are documented in [the migration guide](docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved).
 
 ## Pull requests
 
@@ -123,8 +131,8 @@ compatibility.
 SWAN has been fully removed with William's explicit approval. Built-in .NET APIs and local helpers replace its services. The .NET 10 core has no runtime package dependencies; .NET Standard 2.0 requires Microsoft System.Text.Json and its support packages. See [MIGRATION.md](docs/compatibility/migration.md) for the approved breaking changes.
 
 The unused Nullable polyfill and legacy FxCop package have been removed. SDK
-analyzers and EditorConfig-based style checks replace StyleCop; inherited warnings are
-visible and should be resolved in focused changes. The console sample and its Tubular, Dynamic LINQ, and frontend dependencies have been removed. Its two grid-only tests were removed with it; core HTTP, routing, WebSocket, and JsonServer coverage remains. The legacy Xamarin sample has also been removed, including its platform projects and WebView dependencies. Both library target frameworks are retained.
+analyzers and EditorConfig-based style checks replace StyleCop. Builds treat warnings
+as errors, and CI rejects diagnostic suppressions. The console sample and its Tubular, Dynamic LINQ, and frontend dependencies have been removed. Its two grid-only tests were removed with it; core HTTP, routing, WebSocket, and JsonServer coverage remains. The legacy Xamarin sample has also been removed, including its platform projects and WebView dependencies. Both library target frameworks are retained.
 
 ## Extras integration
 
@@ -173,8 +181,8 @@ Other Extras modules were assessed but not imported:
 Before each release, obtain approval for its version, run cross-platform CI and
 the publishing dry run, and review API changes against the previous Neo release.
 The initial release includes the approved migrations in MIGRATION.md; a full
-binary compatibility audit against upstream is not claimed. Remaining analyzer
-warnings and older-runtime validation are follow-up work. No performance
+binary compatibility audit against upstream is not claimed. Older-runtime
+validation remains follow-up work. No performance
 improvement is claimed without a benchmark.
 
 ## CLI integration

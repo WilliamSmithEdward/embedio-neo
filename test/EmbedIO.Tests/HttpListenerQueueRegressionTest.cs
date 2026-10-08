@@ -12,7 +12,7 @@ namespace EmbedIO.Tests
     public class HttpListenerQueueRegressionTest
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static readonly Type ContextType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpListenerContext", true)!;
+        private static readonly Type ContextType = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpListenerContext", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         [TestCase(1)]
         [TestCase(16)]
@@ -46,7 +46,7 @@ namespace EmbedIO.Tests
             {
                 var stale = Context("disconnected");
                 Register(listener, stale);
-                typeof(Net.HttpListener).GetMethod("UnregisterContext", PrivateInstance)!.Invoke(listener, new object[] { stale });
+                ((typeof(Net.HttpListener)).GetMethod("UnregisterContext", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(listener, new object[] { stale });
                 var accept = listener.GetContextAsync(timeout.Token);
                 Assert.That(accept.IsCompleted, Is.False);
                 var live = Context("live");
@@ -60,14 +60,14 @@ namespace EmbedIO.Tests
         private static IHttpContextImpl Context(string id)
         {
             var context = RuntimeHelpers.GetUninitializedObject(ContextType);
-            ContextType.GetField("<Id>k__BackingField", PrivateInstance)!.SetValue(context, id);
+            ((ContextType).GetField("<Id>k__BackingField", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(context, id);
             return (IHttpContextImpl)context;
         }
 
         private static IDictionary Queue(Net.HttpListener listener)
-            => (IDictionary)typeof(Net.HttpListener).GetField("_ctxQueue", PrivateInstance)!.GetValue(listener)!;
+            => (IDictionary)((((typeof(Net.HttpListener)).GetField("_ctxQueue", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(listener)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         private static void Register(Net.HttpListener listener, IHttpContextImpl context)
-            => typeof(Net.HttpListener).GetMethod("RegisterContext", PrivateInstance)!.Invoke(listener, new object[] { context });
+            => ((typeof(Net.HttpListener)).GetMethod("RegisterContext", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(listener, new object[] { context });
     }
 }

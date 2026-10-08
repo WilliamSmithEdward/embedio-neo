@@ -61,8 +61,8 @@ namespace EmbedIO.Tests.Issues
                 var other = JsonSerializer.Deserialize<JsonElement>(await second.GetStringAsync("/api/probe"));
                 Assert.That(a.GetProperty("session").GetString(), Is.EqualTo(b.GetProperty("session").GetString()));
                 Assert.That(other.GetProperty("session").GetString(), Is.Not.EqualTo(a.GetProperty("session").GetString()));
-                Assert.That(IPAddress.Parse(a.GetProperty("localAddress").GetString()!).MapToIPv4(), Is.EqualTo(IPAddress.Loopback));
-                Assert.That(IPAddress.Parse(a.GetProperty("remoteAddress").GetString()!).MapToIPv4(), Is.EqualTo(IPAddress.Loopback));
+                Assert.That(IPAddress.Parse((a.GetProperty("localAddress").GetString() ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).MapToIPv4(), Is.EqualTo(IPAddress.Loopback));
+                Assert.That(IPAddress.Parse((a.GetProperty("remoteAddress").GetString() ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).MapToIPv4(), Is.EqualTo(IPAddress.Loopback));
                 using var absent = await first.GetAsync("/missing.txt");
                 Assert.That(absent.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
                 Assert.That(states.ToArray(), Does.Contain(WebServerState.Listening));

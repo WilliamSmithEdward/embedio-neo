@@ -14,7 +14,7 @@ namespace EmbedIO
         /// Configure IgnoreWriteExceptions before listener startup to receive transport failures.
         /// </remarks>
         /// <exception cref="ArgumentNullException">The context is null.</exception>
-        public static ServerSentEventWriter OpenEventStream(this IHttpContext @this)
+        public static ServerSentEventWriter OpenEventStream(this IHttpContext? @this)
         {
             if (@this == null) throw new ArgumentNullException(nameof(@this));
             var response = @this.Response;

@@ -118,7 +118,7 @@ namespace EmbedIO.Tests
         public Task OnOptions_ResponseOK()
         {
             void Configure(IWebServer server) => server
-                .OnOptions(ctx=> ctx.SendStringAsync(Ok, MimeType.PlainText, WebServer.DefaultEncoding));
+                .OnOptions(ctx => ctx.SendStringAsync(Ok, MimeType.PlainText, WebServer.DefaultEncoding));
 
             async Task Use(HttpClient client)
             {

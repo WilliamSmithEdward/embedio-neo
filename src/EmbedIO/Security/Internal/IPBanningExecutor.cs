@@ -76,7 +76,7 @@ namespace EmbedIO.Security.Internal
             foreach (var entry in entries)
             {
                 try { entry.TryInvoke(configuration => { configuration.Purge(); return true; }, out _); }
-                catch (Exception error) { error.Log(nameof(IPBanningExecutor)); }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { error.Log(nameof(IPBanningExecutor)); }
             }
         }
 
@@ -93,7 +93,7 @@ namespace EmbedIO.Security.Internal
             internal string BaseRoute { get; }
             internal WeakReference<IPBanningConfiguration> Configuration { get; }
 
-            internal bool TryInvoke<T>(Func<IPBanningConfiguration, T> action, out T result)
+            internal bool TryInvoke<T>(Func<IPBanningConfiguration, T> action, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out T result)
             {
                 lock (_sync)
                 {
@@ -102,7 +102,7 @@ namespace EmbedIO.Security.Internal
                         result = action(configuration);
                         return true;
                     }
-                    result = default!;
+                    result = default;
                     return false;
                 }
             }

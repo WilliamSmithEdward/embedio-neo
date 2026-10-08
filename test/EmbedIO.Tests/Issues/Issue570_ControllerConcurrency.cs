@@ -45,7 +45,7 @@ namespace EmbedIO.Tests.Issues
                     Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                     if (shape.StartsWith("raw-", StringComparison.Ordinal))
                     {
-                        Assert.That(response.Content.Headers.ContentType!.MediaType, Is.EqualTo(MimeType.Default));
+                        Assert.That(((response).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo(MimeType.Default));
                         Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.EqualTo(Encoding.UTF8.GetBytes("binary:" + id)));
                     }
                     else
@@ -142,9 +142,15 @@ namespace EmbedIO.Tests.Issues
         public sealed class ConcurrentController(Batch probe) : WebApiController
         {
             [Route(HttpVerbs.Post, "/returned")]
-            public async Task<Payload> Returned([JsonData] Payload input) { await probe.Wait(HttpContext, input.Id); return input; }
+            public async Task<Payload> Returned([JsonData] Payload input)
+            {
+                if (input is null) throw new System.NullReferenceException(); await probe.Wait(HttpContext, input.Id); return input;
+            }
             [Route(HttpVerbs.Post, "/manual")]
-            public async Task Manual([JsonData] Payload input) { await probe.Wait(HttpContext, input.Id); await HttpContext.SendDataAsync(input); }
+            public async Task Manual([JsonData] Payload input)
+            {
+                if (input is null) throw new System.NullReferenceException(); await probe.Wait(HttpContext, input.Id); await HttpContext.SendDataAsync(input);
+            }
             [Route(HttpVerbs.Get, "/raw-returned/{id}")]
             public async Task<byte[]> RawReturned(int id) { await probe.Wait(HttpContext, id); Response.ContentType = MimeType.Default; return Encoding.UTF8.GetBytes("binary:" + id); }
             [Route(HttpVerbs.Get, "/raw-manual/{id}")]

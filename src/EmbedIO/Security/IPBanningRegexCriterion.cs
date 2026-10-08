@@ -42,6 +42,7 @@ namespace EmbedIO.Security
         /// <param name="secondsMatchingPeriod">The seconds matching period.</param>
         public IPBanningRegexCriterion(IPBanningModule parent, IEnumerable<string> rules, int maxMatchCount = DefaultMaxMatchCount, int secondsMatchingPeriod = DefaultSecondsMatchingPeriod)
         {
+            if (rules is null) throw new System.NullReferenceException();
             _secondsMatchingPeriod = secondsMatchingPeriod;
             _maxMatchCount = maxMatchCount;
             _parent = parent;
@@ -98,6 +99,8 @@ namespace EmbedIO.Security
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>Releases resources owned by the criterion.</summary>
+        /// <param name="disposing">Whether managed resources should be released.</param>
         protected virtual void Dispose(bool disposing)
         {
             if (_disposed)
@@ -149,7 +152,7 @@ namespace EmbedIO.Security
             {
                 _failRegex.TryAdd(pattern, new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(500)));
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
                 ex.Log(nameof(IPBanningModule), $"Invalid regex - '{pattern}'.");
             }

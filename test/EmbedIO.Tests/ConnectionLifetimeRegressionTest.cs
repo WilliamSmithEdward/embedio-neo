@@ -41,16 +41,16 @@ namespace EmbedIO.Tests
             listener.AddPrefix(url);
             listener.Start();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            using var client = secure ? HttpsSmoke.CreateClient(certificate!) : new HttpClient();
+            using var client = secure ? HttpsSmoke.CreateClient((certificate ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))) : new HttpClient();
             object? connection = null;
             try
             {
                 var accept = listener.GetContextAsync(timeout.Token);
                 var received = client.GetAsync(url, timeout.Token);
                 var context = await accept;
-                connection = context.GetType().GetProperty("Connection", PrivateInstance)!.GetValue(context)!;
-                var stream = (Stream)connection.GetType().GetProperty("Stream")!.GetValue(connection)!;
-                var timer = (Timer)connection.GetType().GetField("_timer", PrivateInstance)!.GetValue(connection)!;
+                connection = ((context).GetType().GetProperty("Connection", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(context);
+                var stream = (Stream)((((connection ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetProperty("Stream") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                var timer = (Timer)((((connection).GetType().GetField("_timer", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
                 context.Response.StatusCode = 204;
                 context.Response.ContentLength64 = 0;
                 context.Response.KeepAlive = operation != "response";
@@ -58,7 +58,7 @@ namespace EmbedIO.Tests
                 switch (operation)
                 {
                     case "response": context.Close(); break;
-                    case "force": connection.GetType().GetMethod("ForceClose", PrivateInstance)!.Invoke(connection, null); break;
+                    case "force": ((connection).GetType().GetMethod("ForceClose", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null); break;
                     case "stop": listener.Stop(); break;
                     case "dispose": listener.Dispose(); break;
                     case "peer": context.Close(); client.Dispose(); break;
@@ -75,16 +75,16 @@ namespace EmbedIO.Tests
                     catch (HttpRequestException) { }
                 }
                 var deadline = DateTime.UtcNow.AddSeconds(2);
-                while (stream.CanRead && DateTime.UtcNow < deadline) await Task.Delay(10);
+                while ((stream).CanRead && DateTime.UtcNow < deadline) await Task.Delay(10);
                 Assert.Multiple(() =>
                 {
                     Assert.That(stream.CanRead, Is.False, "Retaining a completed context must not retain an open transport wrapper.");
-                    Assert.That(TimerDisposed(timer), Is.True, "Terminal close must dispose its request timer.");
-                    Assert.That(connection.GetType().GetField("_buffer", PrivateInstance)!.GetValue(connection), Is.Null);
+                    Assert.That(TimerDisposed((timer)), Is.True, "Terminal close must dispose its request timer.");
+                    Assert.That(((connection).GetType().GetField("_buffer", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection), Is.Null);
                     Assert.That(context.Request.HttpMethod, Is.EqualTo("GET"));
-                    Assert.That(context.Request.RawUrl, Is.EqualTo("/"));
+                    Assert.That(context.Request.RawTarget, Is.EqualTo("/"));
                     if (operation == "force" || operation == "stop" || operation == "dispose")
-                        Assert.That(connection.GetType().GetProperty("Reuses")!.GetValue(connection), Is.EqualTo(0));
+                        Assert.That(((connection).GetType().GetProperty("Reuses") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection), Is.EqualTo(0));
                     Assert.That(listener.IsListening, Is.EqualTo(operation != "stop" && operation != "dispose"));
                 });
             }
@@ -106,7 +106,7 @@ namespace EmbedIO.Tests
             using var server = new WebServer(options =>
             {
                 options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO);
-                if (secure) options.WithCertificate(certificate!);
+                if (secure) options.WithCertificate(certificate);
             }).WithModule(new ActionModule("/", HttpVerbs.Any, async context =>
             {
                 connections.TryAdd(Connection(context), 0);
@@ -115,7 +115,7 @@ namespace EmbedIO.Tests
             }));
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
-            using var client = secure ? HttpsSmoke.CreateClient(certificate!) : new HttpClient();
+            using var client = secure ? HttpsSmoke.CreateClient((certificate ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))) : new HttpClient();
             try
             {
                 for (var index = 0; index < 40; index++)
@@ -148,18 +148,18 @@ namespace EmbedIO.Tests
             using var server = new WebServer(options =>
             {
                 options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO);
-                if (secure) options.WithCertificate(certificate!);
+                if (secure) options.WithCertificate(certificate);
             }).WithModule(module);
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             using var client = new ClientWebSocket();
-            using var pinned = secure ? HttpsSmoke.CreateClient(certificate!) : null;
+            using var pinned = secure ? HttpsSmoke.CreateClient((certificate ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))) : null;
             try
             {
                 var uri = new Uri(url.Replace("https://", "wss://", StringComparison.Ordinal)
                     .Replace("http://", "ws://", StringComparison.Ordinal) + "echo");
-                if (secure) await client.ConnectAsync(uri, pinned!, timeout.Token);
+                if (secure) await client.ConnectAsync(uri, pinned, timeout.Token);
                 else await client.ConnectAsync(uri, timeout.Token);
                 var connection = await module.Connection.Task.WaitAsync(timeout.Token);
                 var bytes = Encoding.ASCII.GetBytes("echo");
@@ -203,7 +203,7 @@ namespace EmbedIO.Tests
                 listener.AddPrefix(url);
                 listener.Start();
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                using var client = secure ? HttpsSmoke.CreateClient(certificate!) : new HttpClient();
+                using var client = secure ? HttpsSmoke.CreateClient((certificate ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))) : new HttpClient();
                 var accepted = listener.GetContextAsync(timeout.Token);
                 var received = client.GetAsync(url, timeout.Token);
                 var context = await accepted;
@@ -233,10 +233,10 @@ namespace EmbedIO.Tests
             listener.Start();
             using var client = new TcpClient();
             await client.ConnectAsync(IPAddress.Loopback, new Uri(url).Port);
-            var registrations = (IDictionary)typeof(Net.EndPointManager).GetField("Registrations", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
-            var prefixes = (IDictionary)registrations[listener]!;
-            var endpoint = ((IEnumerable)prefixes[url]!).Cast<object>().Single();
-            var pending = (IEnumerable)endpoint.GetType().GetField("_unregistered", PrivateInstance)!.GetValue(endpoint)!;
+            var registrations = (IDictionary)((((typeof(Net.EndPointManager)).GetField("Registrations", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            var prefixes = (IDictionary)((registrations)[listener] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            var endpoint = ((IEnumerable)((prefixes)[url] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).Cast<object>().Single();
+            var pending = (IEnumerable)((((endpoint).GetType().GetField("_unregistered", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(endpoint)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             object? connection = null;
             var deadline = DateTime.UtcNow.AddSeconds(2);
             while (connection == null && DateTime.UtcNow < deadline)
@@ -248,26 +248,26 @@ namespace EmbedIO.Tests
             if (shutdown) listener.Stop();
             else client.Dispose();
             deadline = DateTime.UtcNow.AddSeconds(2);
-            while (connection!.GetType().GetField("_buffer", PrivateInstance)!.GetValue(connection) != null
+            while (((connection ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetField("_buffer", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection) != null
                 && DateTime.UtcNow < deadline) await Task.Delay(10);
-            Assert.That(TimerDisposed(RequestTimer(connection!)), Is.True);
-            Assert.That(Transport(connection!).CanRead, Is.False);
+            Assert.That(TimerDisposed(RequestTimer(connection)), Is.True);
+            Assert.That(Transport(connection).CanRead, Is.False);
             Assert.That(listener.IsListening, Is.EqualTo(!shutdown));
         }
         private static object Connection(IHttpContext context)
-            => context.GetType().GetProperty("Connection", PrivateInstance)!.GetValue(context)!;
+            => ((((context).GetType().GetProperty("Connection", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(context)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         private static Stream Transport(object connection)
-            => (Stream)connection.GetType().GetProperty("Stream")!.GetValue(connection)!;
+            => (Stream)((((connection).GetType().GetProperty("Stream") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         private static Timer RequestTimer(object connection)
-            => (Timer)connection.GetType().GetField("_timer", PrivateInstance)!.GetValue(connection)!;
+            => (Timer)((((connection).GetType().GetField("_timer", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         private sealed class LifetimeSocket() : WebSocketModule("/echo", false)
         {
             internal TaskCompletionSource<object> Connection { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             protected override Task OnClientConnectedAsync(IWebSocketContext context)
             {
-                var close = (Action)context.WebSocket.GetType().GetField("_closeConnection", PrivateInstance)!.GetValue(context.WebSocket)!;
-                Connection.TrySetResult(close.Target!);
+                var close = (Action)((((context).WebSocket.GetType().GetField("_closeConnection", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(context.WebSocket)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                Connection.TrySetResult(((close).Target ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
                 return Task.CompletedTask;
             }
             protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)

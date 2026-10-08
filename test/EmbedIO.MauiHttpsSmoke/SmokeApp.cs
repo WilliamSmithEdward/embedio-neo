@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -33,9 +33,14 @@ public sealed class SmokeApp : Application
 
     private object Report() => new
     {
-        passed = _phase == "passed", phase = _phase, checks = _checks, error = _error,
-        os = Environment.OSVersion.ToString(), runtime = Environment.Version.ToString(),
-        platform = DeviceInfo.Platform.ToString(), pid = Environment.ProcessId,
+        passed = _phase == "passed",
+        phase = _phase,
+        checks = _checks,
+        error = _error,
+        os = Environment.OSVersion.ToString(),
+        runtime = Environment.Version.ToString(),
+        platform = DeviceInfo.Platform.ToString(),
+        pid = Environment.ProcessId,
     };
 
     private void WriteReport()
@@ -137,7 +142,7 @@ public sealed class SmokeApp : Application
             WriteReport();
             Environment.Exit(0);
         }
-        catch (Exception error)
+        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
         {
             _error = error.ToString();
             _phase = "failed";

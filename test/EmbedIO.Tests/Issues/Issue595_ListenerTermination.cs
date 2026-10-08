@@ -42,7 +42,7 @@ namespace EmbedIO.Tests.Issues
             {
                 stopping.Cancel();
                 try { await running.WaitAsync(TimeSpan.FromSeconds(2)); }
-                catch (Exception) when (running.IsFaulted) { /* Termination can fault the accept task. */ }
+                catch (Exception error) when (running.IsFaulted && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { /* Termination can fault the accept task. */ }
             }
         }
 
@@ -64,9 +64,9 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(listener.IsListening, Is.False);
                 if (dispose)
                 {
-                    var semaphore = (SemaphoreSlim)typeof(Net.HttpListener)
-                        .GetField("_ctxQueueSem", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(listener)!;
-                    Assert.Throws<ObjectDisposedException>(() => semaphore.Wait(0));
+                    var semaphore = (SemaphoreSlim)((((typeof(Net.HttpListener))
+                        .GetField("_ctxQueueSem", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(listener)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                    Assert.Throws<ObjectDisposedException>(() => (semaphore).Wait(0));
                 }
             }
             finally { cleanup.Cancel(); }
@@ -84,7 +84,7 @@ namespace EmbedIO.Tests.Issues
             canceled.Cancel();
             var error = await Observe(accept).WaitAsync(TimeSpan.FromSeconds(2));
             Assert.That(error, Is.InstanceOf<OperationCanceledException>());
-            Assert.That(((OperationCanceledException)error!).CancellationToken, Is.EqualTo(canceled.Token));
+            Assert.That(((OperationCanceledException)error).CancellationToken, Is.EqualTo(canceled.Token));
             Assert.That(listener.IsListening, Is.True);
             await ServeOne(listener, url);
         }
@@ -145,7 +145,7 @@ namespace EmbedIO.Tests.Issues
                     Assert.That(await client.GetStringAsync(url + path), Is.EqualTo("/" + path));
                 }));
                 }
-                catch { TestContext.WriteLine($"batch={batch}, consumers=" + string.Join(";", consumers.Select(task => task.Status + ":" + task.Exception))); throw; }
+                catch { TestContext.Out.WriteLine($"batch={batch}, consumers=" + string.Join(";", consumers.Select(task => task.Status + ":" + task.Exception))); throw; }
                 await Task.WhenAll(consumers).WaitAsync(TimeSpan.FromSeconds(10));
             }
         }
@@ -171,7 +171,7 @@ namespace EmbedIO.Tests.Issues
         private static async Task<Exception?> Observe(Task task)
         {
             try { await task; return null; }
-            catch (Exception error) { return error; }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { return error; }
         }
 
         [TestCase(false)]
@@ -189,12 +189,12 @@ namespace EmbedIO.Tests.Issues
             await socket.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"GET / HTTP/1.1\r\nHost: {address.Authority}\r\n\r\n"));
             var context = await accept;
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var connection = context.GetType().GetProperty("Connection", flags)!.GetValue(context)!;
+            var connection = ((context).GetType().GetProperty("Connection", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(context);
             // Model timeout/disconnection between unbinding and late queue registration.
-            connection.GetType().GetMethod("CloseSocket", flags)!.Invoke(connection, null);
-            connection.GetType().GetMethod("Unbind", flags)!.Invoke(connection, null);
-            typeof(Net.HttpListener).GetMethod("RegisterContext", flags)!.Invoke(listener, new object[] { context });
-            var queue = (System.Collections.IDictionary)typeof(Net.HttpListener).GetField("_ctxQueue", flags)!.GetValue(listener)!;
+            ((connection ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetMethod("CloseSocket", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
+            ((connection).GetType().GetMethod("Unbind", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
+            ((typeof(Net.HttpListener)).GetMethod("RegisterContext", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(listener, new object[] { context });
+            var queue = (System.Collections.IDictionary)((((typeof(Net.HttpListener)).GetField("_ctxQueue", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(listener)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var disposing = Task.Run(() =>
             {
                 if (dispose) listener.Dispose();
@@ -203,12 +203,12 @@ namespace EmbedIO.Tests.Issues
             try
             {
                 await disposing.WaitAsync(TimeSpan.FromSeconds(2));
-                Assert.That(queue.Count, Is.Zero);
+                Assert.That((queue).Count, Is.Zero);
             }
             finally
             {
                 // Ensure a failing old implementation cannot spin forever in the test process.
-                queue.Clear();
+                (queue).Clear();
                 await disposing.WaitAsync(TimeSpan.FromSeconds(5));
             }
 

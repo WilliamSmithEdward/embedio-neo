@@ -7,6 +7,76 @@
   },
   "apiChanges": [
     {
+      "type": "EmbedIO.Actions.RedirectModule",
+      "entries": [
+        "Method: System.String get_RedirectUrl() | "
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
+      "type": "EmbedIO.Files.FileSystemProvider",
+      "entries": [
+        "Method: EmbedIO.Files.MappedResourceInfo MapUrlPath(System.String, EmbedIO.IMimeTypeProvider) | urlPath:optional=False:default=<none>;mimeTypeProvider:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
+      "type": "EmbedIO.Files.IDirectoryLister",
+      "entries": [
+        "Method: System.Threading.Tasks.Task ListDirectoryAsync(EmbedIO.Files.MappedResourceInfo, System.String, System.Collections.Generic.IEnumerable`1[EmbedIO.Files.MappedResourceInfo], System.IO.Stream, System.Threading.CancellationToken) | info:optional=False:default=<none>;absoluteUrlPath:optional=False:default=<none>;entries:optional=False:default=<none>;stream:optional=False:default=<none>;cancellationToken:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
+      "type": "EmbedIO.Files.IFileProvider",
+      "entries": [
+        "Method: EmbedIO.Files.MappedResourceInfo MapUrlPath(System.String, EmbedIO.IMimeTypeProvider) | urlPath:optional=False:default=<none>;mimeTypeProvider:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
+      "type": "EmbedIO.Files.ResourceFileProvider",
+      "entries": [
+        "Method: EmbedIO.Files.MappedResourceInfo MapUrlPath(System.String, EmbedIO.IMimeTypeProvider) | urlPath:optional=False:default=<none>;mimeTypeProvider:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
+      "type": "EmbedIO.Files.ZipFileProvider",
+      "entries": [
+        "Method: EmbedIO.Files.MappedResourceInfo MapUrlPath(System.String, EmbedIO.IMimeTypeProvider) | urlPath:optional=False:default=<none>;mimeTypeProvider:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
+      "type": "EmbedIO.IHttpListener",
+      "entries": [
+        "Method: Void AddPrefix(System.String) | urlPrefix:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
+      "type": "EmbedIO.IHttpRequest",
+      "entries": [
+        "Method: System.String get_RawUrl() | "
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
+      "type": "EmbedIO.IWebModule",
+      "entries": [
+        "Method: EmbedIO.Routing.RouteMatch MatchUrlPath(System.String) | urlPath:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
+      "type": "EmbedIO.Net.Internal.SystemHttpRequest",
+      "entries": [
+        "Method: System.String get_RawUrl() | "
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
       "type": "EmbedIO.RequestDeserializer",
       "entries": [
         "Method: EmbedIO.RequestDeserializerCallback`1[TData] Json[TData](Swan.Formatters.JsonSerializerCase) | jsonSerializerCase:optional=False:default=<none>"
@@ -22,6 +92,14 @@
         "Method: EmbedIO.ResponseSerializerCallback Json(Swan.Formatters.SerializerOptions) | serializerOptions:optional=False:default=<none>"
       ],
       "reason": "Explicitly approved source/binary SWAN removal; rebuild consumers and migrate configuration base type or JSON options. docs/compatibility/migration.md."
+    },
+    {
+      "type": "EmbedIO.Routing.RouteMatch",
+      "entries": [
+        "Method: EmbedIO.Routing.RouteMatch UnsafeFromBasePath(System.String, System.String) | baseUrlPath:optional=False:default=<none>;urlPath:optional=False:default=<none>",
+        "Method: EmbedIO.Routing.RouteMatch UnsafeFromRoot(System.String) | urlPath:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
     },
     {
       "type": "EmbedIO.Routing.RouteResolverBase`1",
@@ -52,11 +130,36 @@
       "reason": "Explicitly approved source/binary SWAN removal; rebuild consumers and migrate configuration base type or JSON options. docs/compatibility/migration.md."
     },
     {
+      "type": "EmbedIO.Utilities.UrlPath",
+      "entries": [
+        "Method: Boolean HasPrefix(System.String, System.String) | urlPath:optional=False:default=<none>;baseUrlPath:optional=False:default=<none>",
+        "Method: Boolean IsValid(System.String) | urlPath:optional=False:default=<none>",
+        "Method: Boolean UnsafeHasPrefix(System.String, System.String) | urlPath:optional=False:default=<none>;baseUrlPath:optional=False:default=<none>",
+        "Method: System.Collections.Generic.IEnumerable`1[System.String] Split(System.String) | urlPath:optional=False:default=<none>",
+        "Method: System.Collections.Generic.IEnumerable`1[System.String] UnsafeSplit(System.String) | urlPath:optional=False:default=<none>",
+        "Method: System.String Normalize(System.String, Boolean) | urlPath:optional=False:default=<none>;isBasePath:optional=False:default=<none>",
+        "Method: System.String StripPrefix(System.String, System.String) | urlPath:optional=False:default=<none>;baseUrlPath:optional=False:default=<none>",
+        "Method: System.String UnsafeNormalize(System.String, Boolean) | urlPath:optional=False:default=<none>;isBasePath:optional=False:default=<none>",
+        "Method: System.String UnsafeStripPrefix(System.String, System.String) | urlPath:optional=False:default=<none>;baseUrlPath:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
+      "type": "EmbedIO.Utilities.Validate",
+      "entries": [
+        "Method: System.String Url(System.String, System.String, System.Uri, Boolean) | argumentName:optional=False:default=<none>;value:optional=False:default=<none>;baseUri:optional=False:default=<none>;enforceHttp:optional=True:default=False",
+        "Method: System.String Url(System.String, System.String, System.UriKind, Boolean) | argumentName:optional=False:default=<none>;value:optional=False:default=<none>;uriKind:optional=True:default=RelativeOrAbsolute;enforceHttp:optional=True:default=False",
+        "Method: System.String UrlPath(System.String, System.String, Boolean) | argumentName:optional=False:default=<none>;value:optional=False:default=<none>;isBasePath:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+    },
+    {
       "type": "EmbedIO.WebModuleBase",
       "entries": [
+        "Method: EmbedIO.Routing.RouteMatch MatchUrlPath(System.String) | urlPath:optional=False:default=<none>",
         "base: Swan.Configuration.ConfiguredObject"
       ],
-      "reason": "Explicitly approved source/binary SWAN removal; rebuild consumers and migrate configuration base type or JSON options. docs/compatibility/migration.md."
+      "reason": "Explicitly approved source/binary SWAN removal; rebuild consumers and migrate configuration base type or JSON options. docs/compatibility/migration.md. Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
     },
     {
       "type": "EmbedIO.WebServerBase`1",
@@ -71,6 +174,13 @@
         "base: Swan.Configuration.ConfiguredObject"
       ],
       "reason": "Explicitly approved source/binary SWAN removal; rebuild consumers and migrate configuration base type or JSON options. docs/compatibility/migration.md."
+    },
+    {
+      "type": "EmbedIO.WebSockets.WebSocketModule",
+      "entries": [
+        "Constructor: Void .ctor(System.String, Boolean) | urlPath:optional=False:default=<none>;enableConnectionWatchdog:optional=False:default=<none>"
+      ],
+      "reason": "Owner-approved warning cleanup: URI result APIs, RawTarget/RoutePath migration and route parameter names; positional signatures retained where possible. See docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
     }
   ],
   "profiles": {

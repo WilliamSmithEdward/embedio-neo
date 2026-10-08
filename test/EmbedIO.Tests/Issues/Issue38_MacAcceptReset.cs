@@ -78,10 +78,10 @@ namespace EmbedIO.Tests.Issues
             listener.Start();
             // Observe the internal worker so shutdown cannot pass while leaking a thread.
             var manager = typeof(Net.EndPointManager);
-            var endpoints = (IDictionary)manager.GetField("IPToEndpoints", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
-            var ports = (IDictionary)endpoints[ipv6 ? IPAddress.IPv6Loopback : IPAddress.Loopback]!;
-            var endpoint = ports[new Uri(url).Port]!;
-            var worker = (Task?)endpoint.GetType().GetField("_acceptWorker", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(endpoint);
+            var endpoints = (IDictionary)((((manager).GetField("IPToEndpoints", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            var ports = (IDictionary)((endpoints)[ipv6 ? IPAddress.IPv6Loopback : IPAddress.Loopback] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            var endpoint = (ports)[new Uri(url).Port];
+            var worker = (Task?)((endpoint ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetField("_acceptWorker", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(endpoint);
             Assert.That(worker != null, Is.EqualTo(ipv6 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)));
             if (dispose)
                 listener.Dispose();

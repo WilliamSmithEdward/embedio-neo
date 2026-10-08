@@ -25,7 +25,12 @@ namespace EmbedIO.Files
         private readonly MimeTypeCustomizer _mimeTypeCustomizer = new MimeTypeCustomizer();
         private readonly ConcurrentDictionary<string, MappedResourceInfo>? _mappingCache;
 
-        private FileCache _cache = FileCache.Default;
+        private BorrowedResource<FileCache> _cacheReference = new(FileCache.Default);
+        private FileCache _cache
+        {
+            get => _cacheReference.Value;
+            set => _cacheReference = new BorrowedResource<FileCache>(value);
+        }
         private bool _contentCaching = true;
         private string? _defaultDocument = DefaultDocumentName;
         private string? _defaultExtension;
@@ -162,11 +167,11 @@ namespace EmbedIO.Files
             {
                 EnsureConfigurationNotLocked();
 
-                if (string.IsNullOrEmpty(value))
+                if (value == null || value.Length == 0)
                 {
                     _defaultExtension = null;
                 }
-                else if (value![0] != '.')
+                else if (value[0] != '.')
                 {
                     throw new ArgumentException("Default extension does not start with a period.", nameof(value));
                 }
@@ -278,10 +283,12 @@ namespace EmbedIO.Files
             GC.SuppressFinalize(this);
         }
 
-        string IMimeTypeProvider.GetMimeType(string extension)
-            => _mimeTypeCustomizer.GetMimeType(extension) ?? _mimeTypeProvider?.GetMimeType(extension)!;
+        /// <inheritdoc />
+        public string? GetMimeType(string extension)
+            => _mimeTypeCustomizer.GetMimeType(extension) ?? _mimeTypeProvider?.GetMimeType(extension);
 
-        bool IMimeTypeProvider.TryDetermineCompression(string mimeType, out bool preferCompression)
+        /// <inheritdoc />
+        public bool TryDetermineCompression(string mimeType, out bool preferCompression)
         {
             if (_mimeTypeCustomizer.TryDetermineCompression(mimeType, out preferCompression))
                 return true;
@@ -346,6 +353,7 @@ namespace EmbedIO.Files
         /// <inheritdoc />
         protected override async Task OnRequestAsync(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             MappedResourceInfo? info;
 
             var path = context.RequestedPath;
@@ -424,11 +432,11 @@ namespace EmbedIO.Files
         // handling DefaultDocument and DefaultExtension.
         // Returns null if not found.
         // Directories mus be returned regardless of directory listing being enabled.
-        private MappedResourceInfo? MapUrlPath(string urlPath, IMimeTypeProvider mimeTypeProvider)
+        private MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider)
         {
-            var result = Provider.MapUrlPath(urlPath, mimeTypeProvider);
+            var result = Provider.MapUrlPath(requestPath, mimeTypeProvider);
 
-            // If urlPath maps to a file, no further searching is needed.
+            // If requestPath maps to a file, no further searching is needed.
             if (result?.IsFile ?? false)
                 return result;
 
@@ -437,7 +445,7 @@ namespace EmbedIO.Files
             // The default document, if found, must be a file, not a directory.
             if (DefaultDocument != null)
             {
-                var defaultDocumentPath = urlPath + (urlPath.Length > 1 ? "/" : string.Empty) + DefaultDocument;
+                var defaultDocumentPath = requestPath + (requestPath.Length > 1 ? "/" : string.Empty) + DefaultDocument;
                 var defaultDocumentResult = Provider.MapUrlPath(defaultDocumentPath, mimeTypeProvider);
                 if (defaultDocumentResult?.IsFile ?? false)
                     return defaultDocumentResult;
@@ -446,9 +454,9 @@ namespace EmbedIO.Files
             // Try to apply default extension (but not if the URL path is "/",
             // i.e. the only normalized, non-base URL path that ends in a slash).
             // When the default extension is applied, the result must be a file.
-            if (DefaultExtension != null && urlPath.Length > 1)
+            if (DefaultExtension != null && requestPath.Length > 1)
             {
-                var defaultExtensionResult = Provider.MapUrlPath(urlPath + DefaultExtension, mimeTypeProvider);
+                var defaultExtensionResult = Provider.MapUrlPath(requestPath + DefaultExtension, mimeTypeProvider);
                 if (defaultExtensionResult?.IsFile ?? false)
                     return defaultExtensionResult;
             }
@@ -458,13 +466,14 @@ namespace EmbedIO.Files
 
         private async Task HandleResource(IHttpContext context, MappedResourceInfo info, bool sendResponseBody)
         {
+            var section = _cacheSection ?? throw new InvalidOperationException("The file cache section has not been initialized.");
             // Try to extract resource information from cache.
             var cachingThreshold = 1024L * Cache.MaxFileSizeKb;
-            if (!_cacheSection!.TryGet(info.Path, out var cacheItem))
+            if (!section.TryGet(info.Path, out var cacheItem))
             {
                 // Resource information not yet cached
-                cacheItem = new FileCacheItem(_cacheSection, info.LastModifiedUtc, info.Length);
-                _cacheSection.Add(info.Path, cacheItem);
+                cacheItem = new FileCacheItem(section, info.LastModifiedUtc, info.Length);
+                section.Add(info.Path, cacheItem);
             }
             else if (!Provider.IsImmutable)
             {
@@ -599,7 +608,7 @@ namespace EmbedIO.Files
                 {
                     using (var compressor = new CompressionStream(memoryStream, compressionMethod))
                     {
-                        using var source = Provider.OpenFile(info.Path);
+                        using var source = Provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path);
                         await source.CopyToAsync(compressor, WebServer.StreamCopyBufferSize, context.CancellationToken)
                             .ConfigureAwait(false);
                     }
@@ -626,7 +635,7 @@ namespace EmbedIO.Files
             }
 
             // Read and transfer content without caching.
-            using (var source = Provider.OpenFile(info.Path))
+            using (var source = Provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path))
             {
                 context.Response.SendChunked = true;
 
@@ -690,7 +699,7 @@ namespace EmbedIO.Files
             using var memoryStream = new MemoryStream();
             using var stream = new CompressionStream(memoryStream, compressionMethod);
 
-            await DirectoryLister!.ListDirectoryAsync(
+            await (DirectoryLister ?? throw new InvalidOperationException("No directory lister is configured.")).ListDirectoryAsync(
                 info,
                 context.Request.Url.AbsolutePath,
                 Provider.GetDirectoryEntries(info.Path, context),

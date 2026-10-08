@@ -136,7 +136,7 @@ namespace EmbedIO.Tests.Issues
                     .WithMode(HttpListenerMode.EmbedIO).WithCertificate(Certificate))
                     .WithModule(new ActionModule("/", HttpVerbs.Get, async context =>
                     {
-                        var data = Encoding.UTF8.GetBytes($"{context.Request.Url.AbsoluteUri}\n{context.Request.IsSecureConnection}\n{context.Request.RawUrl}\n{context.Request.QueryString["Token"]}");
+                        var data = Encoding.UTF8.GetBytes($"{context.Request.Url.AbsoluteUri}\n{context.Request.IsSecureConnection}\n{context.Request.RawTarget}\n{context.Request.QueryString["Token"]}");
                         context.Response.ContentType = "text/plain";
                         context.Response.ContentLength64 = data.Length;
                         await context.Response.OutputStream.WriteAsync(data).ConfigureAwait(false);

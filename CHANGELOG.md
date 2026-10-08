@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Remove compiler/analyzer suppressions and null-forgiving operators, correct nullable
+  contracts and resource ownership, and enforce warnings as errors in ordinary and
+  platform builds. CI checks formatting and rejects new suppressions. The owner-approved
+  API migration uses `RawTarget`, `Validate.RoutePath`, and URI-valued URL APIs while
+  retaining compatible string inputs where possible; see the
+  [migration guide](docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved).
+  Recovery boundaries propagate process/resource corruption exceptions rather than
+  treating them as ordinary request failures.
+
 - Add the owner-approved WithBasicAuthentication fluent helper with explicit scope, configure-before-registration and optional realm, preserving existing authentication behavior and manual registration (upstream #439).
 
 - Document existing streaming write-error controls, with reverse-proxy disconnect, compression and buffering compatibility coverage (upstream #457).

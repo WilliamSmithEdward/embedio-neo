@@ -27,6 +27,7 @@ namespace EmbedIO.Net.Internal
         /// <param name="context">The context.</param>
         public SystemHttpResponse(System.Net.HttpListenerContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             _response = context.Response;
             _isHeadResponse = string.Equals(context.Request.HttpMethod, "HEAD", StringComparison.OrdinalIgnoreCase);
             Cookies = new SystemCookieCollection(_response.Cookies);
@@ -59,7 +60,7 @@ namespace EmbedIO.Net.Internal
         }
 
         /// <inheritdoc />
-        public string ContentType
+        public string? ContentType
         {
             get => _response.ContentType;
             set => _response.ContentType = value;
@@ -141,7 +142,7 @@ namespace EmbedIO.Net.Internal
             {
                 _response.Cookies = new CookieCollection();
                 _response.SetCookie(cookie);
-                copy = _response.Cookies[cookie.Name]!;
+                copy = _response.Cookies[cookie.Name] ?? throw new InvalidOperationException("The cookie clone was not created.");
             }
             finally
             {
