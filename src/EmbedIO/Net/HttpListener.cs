@@ -28,6 +28,7 @@ namespace EmbedIO.Net
         private int _pendingAccepts;
         private Task? _drainTask;
         private HashSet<HttpConnection>? _drainConnections;
+        private HashSet<HttpConnection>? _drainAdmissionConnections;
         private volatile bool _gracefulStop;
 
         /// <summary>
@@ -96,9 +97,10 @@ namespace EmbedIO.Net
                 if (_drainTask == null)
                 {
                     if (!IsListening) return Task.CompletedTask;
-                    var connections = EndPointManager.BeginExclusiveDrain(this);
+                    var connections = EndPointManager.BeginDrain(this, out var exclusiveEndpoints);
                     connections.UnionWith(_connections.Keys);
                     _drainConnections = connections;
+                    _drainAdmissionConnections = new HashSet<HttpConnection>(connections.Where(connection => exclusiveEndpoints.Contains(connection.Endpoint)));
                     _gracefulStop = true;
                     var deadline = new CancellationTokenSource(timeout);
                     _drainTask = Task.Run(() => DrainConnectionsAsync(connections, deadline));
@@ -129,7 +131,7 @@ namespace EmbedIO.Net
             try
             {
                 // Do not hold the listener lock while entering protocol dispatch.
-                await Task.WhenAll(connections.Select(connection => connection.DrainAsync())).ConfigureAwait(false);
+                await Task.WhenAll(connections.Select(connection => connection.DrainForListenerAsync(this))).ConfigureAwait(false);
             }
             finally
             {
@@ -142,6 +144,7 @@ namespace EmbedIO.Net
                         Close();
                     }
                     _drainConnections = null;
+                    _drainAdmissionConnections = null;
                 }
             }
         }
@@ -256,7 +259,7 @@ namespace EmbedIO.Net
             {
                 if (_disposed || !IsListening)
                     throw new HttpListenerException(995, "The listener stopped accepting requests.");
-                if (_drainConnections != null && (context is not HttpListenerContext http1 || !_drainConnections.Contains(http1.Connection)))
+                if (_drainConnections != null && (context is not HttpListenerContext http1 || _drainAdmissionConnections?.Contains(http1.Connection) != true))
                     throw new HttpListenerException(995, "The listener is draining.");
                 if (!_ctxQueue.TryAdd(context.Id, context))
                     throw new InvalidOperationException("Unable to register context");
@@ -269,7 +272,7 @@ namespace EmbedIO.Net
             lock (_lifecycleSync)
             {
                 if (_disposed || !IsListening) throw new HttpListenerException(995, "The listener stopped accepting requests.");
-                if (_drainConnections != null && !_drainConnections.Contains(connection))
+                if (_drainConnections != null && _drainAdmissionConnections?.Contains(connection) != true)
                     throw new HttpListenerException(995, "The listener is draining.");
                 _connections[connection] = connection;
                 if (!_ctxQueue.TryAdd(context.Id, context)) throw new InvalidOperationException("Unable to register context.");

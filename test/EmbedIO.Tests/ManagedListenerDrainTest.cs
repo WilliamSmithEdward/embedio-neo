@@ -257,24 +257,25 @@ namespace EmbedIO.Tests
         }
 
         [Test]
-        public async Task SharedEndpointDrainRejectsBeforeChangingAdmission()
+        public async Task IdleSharedEndpointDrainPreservesSiblingAndAllowsRestart()
         {
             var prefix = Resources.GetServerAddress();
             using var first = new WebServer(HttpListenerMode.EmbedIO, prefix);
             using var sibling = new WebServer(HttpListenerMode.EmbedIO, prefix + "sibling/");
             first.Listener.Start(); sibling.Listener.Start();
-            Assert.That(() => first.DrainAsync(TimeSpan.FromSeconds(1)), Throws.InstanceOf<NotSupportedException>());
+            await first.DrainAsync(TimeSpan.FromSeconds(1)).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.That(first.Listener.IsListening, Is.False);
+            Assert.That(sibling.Listener.IsListening, Is.True);
             using var client = Client(false);
-            foreach (var server in new[] { first, sibling })
-            {
-                var request = client.GetAsync(server == first ? prefix : prefix + "sibling/");
-                var context = await server.Listener.GetContextAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
-                context.Response.ContentLength64 = 0;
-                await context.Response.OutputStream.FlushAsync();
-                context.Close();
-                using var response = await request;
-                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-            }
+            var request = client.GetAsync(prefix + "sibling/");
+            var context = await sibling.Listener.GetContextAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            context.Response.ContentLength64 = 0;
+            await context.Response.OutputStream.FlushAsync();
+            context.Close();
+            using var response = await request;
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            first.Listener.Start();
+            Assert.That(first.Listener.IsListening, Is.True);
         }
 
         [Test]

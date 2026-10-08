@@ -2692,3 +2692,140 @@ completed with success or intentional skips and an overall passing CI aggregate;
 coverage and POST compatibility checks pass on that head, but those passes do
 not establish the root cause of prior intermittent failures. New shared-owner
 source still needs its own exact-head CI, and the full engine remains incomplete.
+
+### Owner-scoped drain primitives and HTTP/1 ownership transfer
+
+The connection can now snapshot one HTTP/2 listener's accepted context completion
+without connection-wide GOAWAY. Four new real-client cases cover normal finish,
+Stop, Dispose and peer reset while a sibling response remains pending; subsequent
+sibling requests retain the same physical connection. These primitives require
+the caller to stop owner admission before the snapshot. Public shared drain is
+still disabled until that lifecycle barrier and mixed-endpoint coordination are
+integrated. Snapshotting alone does not establish a public graceful-drain cutoff.
+
+Two deterministic HTTP/1 cases also reproduce a stale listener snapshot closing
+or draining a connection after its keep-alive ownership transferred to a sibling
+(`shared-http1-stale-before.log`, two failures). Ownership transfer now uses the
+same connection lock as scoped Stop/drain decisions. A stale owner does nothing;
+a current owner marks closing/draining before a subsequent transfer can occur.
+Exclusive endpoint shutdown retains whole-transport behavior. All ten shared-owner
+cases pass after correction (`shared-owner-primitives-focused.log`), with both
+library assets building. Full/broader validation remains pending; the discovery
+floor is 3,201. The initial failed evidence remains unchanged.
+
+The expanded owner/drain/protocol selection passes 198 Windows cases and 129
+pinned Linux TCP cases (`shared-owner-primitives-broad.log`,
+`shared-owner-primitives-linux.log`). Changed-file formatting, both source-policy
+guards and diff whitespace checks pass. Full coverage validation is pending.
+
+### Public shared TCP drain integration candidate
+
+The preceding owner-primitives coverage run passes 3,201 cases: 3,196 successes,
+five expected skips, zero failures, 4m13s (`shared-owner-primitives-coverage.log`).
+Ten added public-drain cases then fail with the old unsupported path and pass after
+integration (`public-shared-drain-before.log`, `public-shared-drain-after.log`).
+They exercise HTTP/1 and HTTP/2 completion, deadline, cancellation, Stop and Dispose
+with active sibling responses, reject late owner requests and preserve the shared
+HTTP/2 connection for sibling follow-up traffic.
+
+Endpoint registration freezes the exclusively owned endpoint set for each drain.
+Only those endpoints stop socket admission; shared endpoints remain available to
+siblings. The listener's lifecycle lock excludes new shared-owner registrations
+before snapshotting its accepted contexts. Previously accepted exclusive-connection
+work retains its existing drain semantics. Awaiting shared HTTP/2 contexts avoids
+connection-wide GOAWAY; HTTP/1 ownership decisions use the atomic handoff guard.
+The previous unsupported-path tests now verify idle shared TCP/combined drain and
+sibling availability. Discovery floor is 3,211. Mixed endpoint, queued-context,
+combined active-traffic and cancellation race validation remain required.
+
+Pushed head b86a174 has failed Windows/macOS CI in run 37858579174. Windows reports
+`CombinedDrainCanAbortAllProtocols("dispose")` after 30 seconds with pending-accept
+error 995, then whole-suite timeout (2,838 of 3,195 cases). Its cleanup exception
+may mask the original failure; no cause is yet proven. macOS reports
+`GracefulListenerDrainPreservesAcceptedResponse(false)` failing QUIC startup with
+AddressAlreadyInUse; all 3,195 cases were reported. Logs are retained as
+`shared-owner-ci-windows.log` and `shared-owner-ci-macos.log`, with Windows TRX
+under `shared-owner-ci-windows`. These failures remain open and are not bypassed.
+
+The macOS AddressAlreadyInUse stack is specifically the replacement listener's
+Start after the original drain/run tasks completed (Http3ListenerDrainTest line
+52), not initial fixture port selection. Investigate native QUIC resource lifetime
+and drain completion; do not mask it with a new port or a startup retry.
+
+The public shared-drain candidate passes 208 focused protocol/lifecycle cases on
+Windows and pinned Linux with QUIC required and two logical processors
+(`public-shared-drain-broad.log`, `public-shared-drain-linux.log`). Formatting,
+both source-policy guards and diff whitespace checks pass. Full candidate coverage,
+actual .NET Standard validation and the outstanding CI diagnoses remain pending.
+
+The shared-drain candidate completed full Windows coverage with 3,211 reported
+cases: 3,206 passed and five existing platform/permission skips, zero failures,
+4m13s (`public-shared-drain-coverage.log`). This run preceded the test-only
+combined-abort diagnostic change. That change records the failure phase, each
+protocol task and admission state, and preserves the original exception when
+cleanup also fails. The updated solution builds without warnings, formatting
+passes, and all seven combined-abort/QUIC drain-and-rebind cases pass locally
+(`shared-drain-diagnostics-build.log`, `shared-drain-diagnostics-format.log`,
+`shared-drain-diagnostics-focused.log`). Neither prior CI failure is claimed
+reproduced or repaired by these results; exact-head cross-platform checks remain
+required.
+
+The current candidate also passes the compatibility audit: 207 cases and 414
+upstream/Neo comparisons, zero errors (`public-shared-drain-parity.log` and
+`public-shared-drain-parity/`). Both source policy guards pass. These checks do
+not establish complete HTTP standards conformance or whole-engine fuzz coverage.
+
+Mixed endpoint drain coverage now exercises one owner with both an exclusive
+TCP endpoint and a shared endpoint. Ten additional cases cover HTTP/1.1 and
+HTTP/2 under completion, deadline, caller cancellation, Stop and Dispose. Both
+owner responses must terminate appropriately while the sibling response and
+subsequent traffic remain healthy; HTTP/2 sibling traffic retains its physical
+connection. All 20 shared/mixed cases pass on Windows, and the broader 218-case
+Linux QUIC-enabled set passes (`mixed-owner-drain-focused.log`,
+`mixed-owner-drain-linux.log`). The discovery floor is now 3,221. These additions
+postdate the 3,211-case full coverage run and require a new full run.
+
+The current production candidate passes all four existing hot-path, listener
+queue, cold-start and listener allocation budget sets
+(`public-shared-drain-allocations.log`). These budgets are not a comparative
+end-to-end HTTP/2 or HTTP/3 performance result. The actual netstandard2.0 library
+passes 149 focused cases under the Linux .NET 10 host
+(`mixed-owner-drain-netstandard-linux.log`); this is target-assembly validation,
+not an older-runtime compatibility claim.
+
+The same actual netstandard2.0 assembly passes all 149 focused cases under the
+Windows .NET 10 host (`mixed-owner-drain-netstandard-windows.log`). The expanded
+full coverage run is pending; do not treat the earlier 3,211-case run as coverage
+of the ten newly added mixed-endpoint cases.
+
+The expanded mixed-endpoint full Windows coverage run passed all 3,221 reported
+cases (3,216 successes, five existing skips), in 4m31s
+(`mixed-owner-drain-coverage.log`). Subsequent review found a distinct cleanup
+race: dispatch removed a reset HTTP/2 response from owner tracking before
+CloseAsync and OnClose callbacks finished. A new deterministic case pauses the
+close callback, then starts public listener drain; it failed on premature drain
+completion (`shared-owner-cleanup-before.log`). Ownership removal and context
+unregistration now occur in cleanup's finally after CloseAsync/AbortAsync, so a
+concurrent shared-owner drain can still await that context's completion. The
+regression also verifies sibling traffic remains on the original connection.
+
+All 31 shared-owner cases pass on Windows and the broader 219-case set passes
+on Linux with QUIC required and two logical processors
+(`shared-owner-cleanup-after.log`, `shared-owner-cleanup-linux.log`). The build,
+formatting and both source policy guards pass. Discovery is now 3,222 cases;
+the full coverage result above predates this production correction, so final
+full-source validation remains required. This reproduced cleanup race is not
+claimed to explain either earlier Windows/macOS CI failure. Arbitrarily blocking
+application callbacks still require explicit bounded-shutdown policy evaluation.
+
+Final cleanup-corrected Windows coverage passes 3,222 reported cases: 3,217
+successes and five existing skips, zero failures, in 4m28s
+(`shared-owner-cleanup-coverage.log`). The final source compatibility audit
+passes 207 cases / 414 comparisons with zero errors
+(`shared-owner-cleanup-parity.log`). The actual netstandard2.0 library passes
+the final 31 shared-owner cases on both Windows and Linux .NET 10 hosts
+(`shared-owner-cleanup-netstandard-windows.log`,
+`shared-owner-cleanup-netstandard-linux.log`). Final changed cleanup sources
+have no matches under the pinned YARA rules (`shared-owner-cleanup-yara.log`).
+Cross-platform exact-head CI remains required, and the earlier Windows combined
+Dispose and macOS QUIC same-port rebind failures remain under investigation.

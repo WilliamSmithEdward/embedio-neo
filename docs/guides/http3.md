@@ -49,12 +49,12 @@ Stop and disposal abort both transports and wait for the pumps to finish;
 after Stop, the listener can be restarted with a fresh session. A transport
 accept failure shuts down both transports.
 
-`DrainAsync` coordinates TCP and QUIC with one deadline when the TCP endpoints
-are exclusively owned. Both accept pumps remain active while accepted responses
+`DrainAsync` coordinates TCP and QUIC with one deadline, including shared TCP
+endpoints. Both accept pumps remain active while accepted responses
 finish; completion of one transport does not abort the other. Deadline expiry or
 cancellation stops queue admission and aborts the remaining responses, including
-requests waiting in the bounded queue. Shared TCP endpoints reject drain before
-either transport changes admission. Alt-Svc discovery, shared-dispatch performance
+requests waiting in the bounded queue. Shared TCP endpoints keep accepting for
+sibling listeners while refusing new requests for the draining listener. Alt-Svc discovery, shared-dispatch performance
 validation and the default-engine transition remain unfinished. This mode still
 uses the current TCP implementation and does not by itself complete replacement
 of the Mono-derived listener.
@@ -147,19 +147,22 @@ Canceling `RunAsync`, calling `Listener.Stop`, or disposing the server still sto
 immediately and can interrupt a drain. Applications must honor their context
 cancellation token; arbitrary application code cannot be forcibly terminated.
 
-The operation supports the modern HTTP/3 listener and managed TCP listeners
-whose endpoints are exclusively owned. TCP drain closes new connection admission,
-preserves accepted HTTP/1.1 responses and HTTP/2 streams, and uses GOAWAY for
-HTTP/2. Combined mode coordinates these TCP semantics with QUIC and a common
-deadline. Shared TCP endpoints currently throw `NotSupportedException` before
-changing admission. Microsoft mode remains
-unsupported. Adding prefixes or restarting a TCP listener during its drain is
+The operation supports the modern HTTP/3 listener and managed TCP listeners.
+Exclusively owned TCP endpoints close connection admission and use HTTP/2 GOAWAY.
+Shared endpoints retain sibling admission and reject new requests for the draining
+listener at its registration boundary. Accepted HTTP/1.1 responses and HTTP/2
+streams can finish; shared HTTP/2 drain waits only for that owner's contexts and
+does not send connection-wide GOAWAY. Combined mode coordinates these TCP semantics
+with QUIC and a common deadline. Microsoft mode remains unsupported. Adding prefixes or restarting a TCP listener during its drain is
 rejected; await completion before restarting.
 
-TCP drain guarantees transport cleanup, not termination of arbitrary callbacks.
-HTTP/2 contexts receive connection cancellation. Existing HTTP/1.1 context
+Exclusive TCP drain closes owned transports; shared HTTP/2 drain retains sibling
+transports and completes or aborts only the draining owner's contexts. Neither
+operation can terminate arbitrary callbacks. HTTP/2 contexts receive cancellation
+when their owner is aborted. Existing HTTP/1.1 context
 cancellation follows the run token, so an application waiting independently must
-still arrange its own cancellation. Shared endpoint coordination and broader TLS,
+still arrange its own cancellation. Mixed shared/exclusive endpoint regressions
+cover accepted responses and completion/abort paths on HTTP/1.1 and HTTP/2. TLS,
 body and slow-peer validation remain under development.
 
 The timeout must be positive and within the timer range
@@ -168,7 +171,7 @@ has already stopped has no connections to drain. Dispose the server after its
 run task completes to release module/session resources.
 
 Priorities/datagrams, dynamic response QPACK,
-discovery and shared-endpoint graceful drain remain under development. No throughput
+discovery and broader shared-endpoint validation remain under development. No throughput
 or latency improvement is claimed by these interoperability tests.
 
 ## WebSockets over HTTP/3

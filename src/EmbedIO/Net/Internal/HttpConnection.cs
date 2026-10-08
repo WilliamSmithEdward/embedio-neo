@@ -22,7 +22,7 @@ namespace EmbedIO.Net.Internal
         private int _headerBytes;
         private bool _http2;
         private EmbedIO.Internal.BorrowedResource<CancellationTokenSource>? _http2Stop;
-        private Dictionary<HttpListener, HashSet<Http2Exchange>>? _http2Listeners;
+        private Dictionary<HttpListener, Dictionary<Http2Exchange, MultiplexedContext>>? _http2Listeners;
         private int _responseFinishing;
         private volatile bool _draining;
         private bool _closeFinished;
@@ -35,6 +35,7 @@ namespace EmbedIO.Net.Internal
         private int _forceClosing;
         private int _resourcesDisposed;
         private readonly EndPointListener _epl;
+        internal EndPointListener Endpoint => _epl;
         private Socket? _sock;
         private MemoryStream? _ms;
         private byte[]? _buffer;
@@ -183,13 +184,17 @@ namespace EmbedIO.Net.Internal
             finally { _oStream?.Dispose(); _oStream = null; }
         }
 
-        internal Task DrainAsync()
+        internal Task DrainAsync() => DrainCoreAsync(null);
+
+        private Task DrainCoreAsync(HttpListener? owner)
         {
             Http2Dispatcher? dispatcher;
             Task completion;
             bool close;
             lock (_connectionSync)
             {
+                if (owner != null && !_epl.AdmissionStopped && !_http2 && _lastListener != owner)
+                    return Task.CompletedTask;
                 if (_closeFinished) return _closeError == null ? Task.CompletedTask : Task.FromException(_closeError);
                 _closedSignal ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 completion = _closedSignal.Task;
@@ -377,17 +382,16 @@ namespace EmbedIO.Net.Internal
                     }
 
                     var listener = _context.Listener ?? throw new InvalidOperationException("The request has not been bound to a listener.");
-                    if (_lastListener != listener)
-                    {
-                        RemoveConnection();
-                        listener.AddConnection(this);
-                        _lastListener = listener;
-                    }
-
                     lock (_connectionSync)
                     {
-                        if (_sock == null || _resourcesDisposed != 0 || _draining)
+                        if (_sock == null || _resourcesDisposed != 0 || _draining || _forceClosing != 0)
                             throw new IOException("Connection stopped before request admission.");
+                        if (_lastListener != listener)
+                        {
+                            RemoveConnection();
+                            listener.AddConnection(this);
+                            _lastListener = listener;
+                        }
                         _contextBound = true;
                     }
                     listener.RegisterContext(_context);

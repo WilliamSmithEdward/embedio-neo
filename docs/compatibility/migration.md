@@ -858,11 +858,11 @@ and closing an old canceled HTTP/1.1 context does not close a successor request
 on its reused connection. Do not rely on cancellation producing an HTTP status;
 finish an intended response before canceling its context.
 
-`WebServer.DrainAsync` supports combined TCP/QUIC hosting when TCP endpoints are
-exclusively owned. It lets accepted responses finish within the shared deadline;
+`WebServer.DrainAsync` supports combined TCP/QUIC hosting, including shared TCP
+endpoints. It lets accepted responses finish within the shared deadline;
 expiry or cancellation aborts unfinished and queued work. Immediate Stop and
-server disposal remain abort operations. Shared TCP endpoint drain remains
-unsupported and rejects before changing admission. See the
+server disposal remain abort operations. Shared TCP endpoint drain refuses new
+requests for the draining owner while retaining sibling admission and traffic. See the
 [HTTP/3 and combined-host guide](../guides/http3.md) for lifecycle
 limits and cancellation behavior.
 
@@ -875,5 +875,13 @@ application cancellation callbacks are logged and do not interrupt cleanup.
 When TCP endpoint prefixes are shared, stopping or disposing one managed listener
 now cancels only its HTTP/2 exchanges. Active sibling streams and later sibling
 requests retain the same connection. Stopping the last endpoint owner still
-closes its connections. Shared endpoint graceful drain remains unsupported until
-owner-specific admission and completion coordination is implemented.
+closes its connections. Shared endpoint graceful drain waits for the selected
+owner's accepted contexts without connection-wide HTTP/2 GOAWAY.
+
+A stale managed HTTP/1 shutdown snapshot no longer closes a keep-alive connection
+that has already transferred to a sibling listener. Connection ownership transfer
+and scoped shutdown decisions now share a synchronization boundary.
+
+A reset HTTP/2 context remains part of its owner's drain set until response
+cleanup and close callbacks finish. A concurrent drain no longer reports
+completion merely because request dispatch has started cleanup.

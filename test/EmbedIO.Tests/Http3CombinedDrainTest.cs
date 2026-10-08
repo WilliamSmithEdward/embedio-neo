@@ -106,28 +106,50 @@ namespace EmbedIO.Tests
             var running = server.RunAsync(stop.Token);
             var requests = clients.Select(client => client.GetStringAsync(prefix)).ToArray();
             var http1 = Http1AbortProbe.AssertClosedWithoutResponseAsync(prefix, certificate);
+            var phase = "await admission";
+            Exception? failure = null;
             try
             {
                 await Task.WhenAll(entered.Select(signal => signal.Task)).WaitAsync(stop.Token);
+                phase = "start drain";
                 var drain = server.DrainAsync(reason == "deadline" ? TimeSpan.FromMilliseconds(100) : TimeSpan.FromSeconds(15), cancelDrain.Token);
+                phase = "trigger " + reason;
                 if (reason == "drain-cancel") cancelDrain.Cancel();
                 if (reason == "run-cancel") stop.Cancel();
                 if (reason == "listener-stop") server.Listener.Stop();
                 if (reason == "dispose") server.Dispose();
+                phase = "await drain";
                 if (reason == "drain-cancel")
                     await Assert.ThatAsync(async () => await drain.WaitAsync(TimeSpan.FromSeconds(5)), Throws.InstanceOf<OperationCanceledException>());
                 else await drain.WaitAsync(TimeSpan.FromSeconds(5));
+                phase = "await server";
                 await running.WaitAsync(TimeSpan.FromSeconds(5));
+                phase = "await clients";
                 await http1.WaitAsync(TimeSpan.FromSeconds(5));
                 foreach (var request in requests)
                     await Assert.ThatAsync(async () => await request, Throws.InstanceOf<HttpRequestException>());
                 Assert.That(server.Listener.IsListening, Is.False);
             }
+            catch (Exception error)
+            {
+                failure = error;
+                TestContext.Error.WriteLine($"Combined drain failed: reason={reason}, phase={phase}, server={server.State}, run={running.Status}, HTTP/1={http1.Status}, HTTP/2={requests[0].Status}, HTTP/3={requests[1].Status}, admitted={string.Join(",", entered.Select(signal => signal.Task.IsCompleted))}. {error}");
+                throw;
+            }
             finally
             {
-                release.TrySetResult(); stop.Cancel();
-                foreach (var client in clients) client.Dispose();
-                await running.WaitAsync(TimeSpan.FromSeconds(5));
+                try
+                {
+                    release.TrySetResult(); stop.Cancel();
+                    foreach (var client in clients) client.Dispose();
+                    await running.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (Exception error) when (failure != null)
+                {
+                    // Preserve the original assertion or transport failure instead of
+                    // replacing it with a secondary listener-stop cleanup exception.
+                    TestContext.Error.WriteLine($"Combined drain cleanup also failed: {error}");
+                }
             }
         }
 
@@ -177,7 +199,7 @@ namespace EmbedIO.Tests
         }
 
         [Test]
-        public async Task CombinedDrainRejectsSharedTcpBeforeChangingEitherTransport()
+        public async Task CombinedIdleDrainPreservesSharedTcpSibling()
         {
             using var certificate = Certificate();
             var prefix = CombinedPrefix();
@@ -185,12 +207,14 @@ namespace EmbedIO.Tests
             using var sibling = new Net.HttpListener(certificate);
             server.Listener.Start();
             sibling.AddPrefix(prefix + "sibling/"); sibling.Start();
-            Assert.That(() => server.DrainAsync(TimeSpan.FromSeconds(1)), Throws.InstanceOf<NotSupportedException>());
-            foreach (var version in new[] { HttpVersion.Version11, HttpVersion.Version20, HttpVersion.Version30 })
+            await server.DrainAsync(TimeSpan.FromSeconds(5)).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.That(server.Listener.IsListening, Is.False);
+            Assert.That(sibling.IsListening, Is.True);
+            foreach (var version in new[] { HttpVersion.Version11, HttpVersion.Version20 })
             {
                 using var client = Client(certificate); client.DefaultRequestVersion = version;
-                var request = client.GetAsync(prefix);
-                var context = await server.Listener.GetContextAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+                var request = client.GetAsync(prefix + "sibling/");
+                var context = await sibling.GetContextAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
                 context.Response.ContentLength64 = 0;
                 await context.Response.OutputStream.FlushAsync();
                 context.Close();

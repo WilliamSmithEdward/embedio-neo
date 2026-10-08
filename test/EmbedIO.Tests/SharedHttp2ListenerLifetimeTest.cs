@@ -8,7 +8,7 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    public class SharedHttp2ListenerLifetimeTest
+    public partial class SharedHttp2ListenerLifetimeTest
     {
         private static async Task ObserveStoppedListenerAsync(Task running)
         {

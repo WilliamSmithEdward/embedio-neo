@@ -79,21 +79,23 @@ namespace EmbedIO.Net
             }
         }
 
-        internal static HashSet<HttpConnection> BeginExclusiveDrain(HttpListener listener)
+        internal static HashSet<HttpConnection> BeginDrain(HttpListener listener, out HashSet<EndPointListener> exclusiveEndpoints)
         {
             lock (RegistrationLock)
             {
                 var connections = new HashSet<HttpConnection>();
+                exclusiveEndpoints = new HashSet<EndPointListener>();
                 if (!Registrations.TryGetValue(listener, out var prefixes)) return connections;
                 var endpoints = new HashSet<EndPointListener>();
                 foreach (var registered in prefixes.Values)
                     foreach (var endpoint in registered)
                     {
-                        if (!endpoint.IsExclusiveTo(listener))
-                            throw new NotSupportedException("Graceful TCP drain currently requires exclusive endpoint ownership.");
-                        endpoints.Add(endpoint);
+                        if (endpoint.IsExclusiveTo(listener)) endpoints.Add(endpoint);
                     }
-                // Validate all endpoints before changing any admission state.
+                // Shared endpoints retain transport admission for their other owners.
+                // Freeze exclusivity for this drain; later route removals cannot
+                // enlarge the draining listener's accepted connection set.
+                exclusiveEndpoints.UnionWith(endpoints);
                 foreach (var endpoint in endpoints)
                     connections.UnionWith(endpoint.StopAcceptingForDrain());
                 return connections;
