@@ -288,3 +288,25 @@ Forty-six semantic cases and eight body cases bring focused HTTP/2 tests to 201,
 passing with both library assemblies on .NET 10.0.11. Both targets build. The body
 stream still needs connection frame dispatch and application-context integration;
 HTTP/2 remains unadvertised. Full final-source/remote validation remains required.
+
+The internal connection dispatcher now joins request admission, body delivery,
+stream resets, batched receive-credit updates and concurrent application callbacks.
+Response headers are compressed in serialized wire order, including SETTINGS table
+changes; DATA writes reserve both stream and connection credit. Output failures
+terminate dispatch so an ambiguous write cannot leave HPACK state in use.
+
+Eight real TCP interoperability cases pass against the independent .NET HttpClient
+HTTP/2 implementation with exact version selection: empty and 1/65,535/65,536/262,144
+byte echoes, 24 concurrent uploads/responses on one accepted connection, cancellation
+of a blocked stream followed by healthy requests, and large response header blocks.
+The initial run had one fixture teardown failure (client disposal raced server read,
+Windows socket error 10053); canceling/joining the server before client disposal
+corrected the fixture. Original failure evidence is retained. All 209 focused cases
+pass with both assemblies on .NET 10.0.11; both targets build. The previous request
+checkpoint passed the full Windows suite: 2,230 successes/five skips, 2,235 total.
+
+This internal service is still separate from the public EmbedIO listener. Next work
+includes raw-wire error/reset/flow-control conformance, full response semantics,
+the IHttpContext adapter, protocol negotiation and platform validation. The new
+exchange helper is not a completed public response implementation. Performance
+has not yet been measured end-to-end for HTTP/2, and no HTTP/2 capability is advertised.

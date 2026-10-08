@@ -15,6 +15,7 @@ namespace EmbedIO.Net.Internal.Http2
         private readonly HpackEncoder _encoder = new();
         private readonly Http2HeaderBlocks _headers = new();
         private int _pendingSettings = 1;
+        private readonly SemaphoreSlim _headerOutput = new(1, 1);
         public Http2PeerSettings Peer { get; } = new();
         internal Http2SendFlowControl SendFlow { get; } = new();
         internal Http2ReceiveFlowControl ReceiveFlow { get; } = new();
@@ -22,6 +23,7 @@ namespace EmbedIO.Net.Internal.Http2
         public bool PeerSentGoAway { get; private set; }
         public int PeerLastStreamId { get; private set; }
         public uint PeerErrorCode { get; private set; }
+        internal Action<Exception>? OutputFailed { get; set; }
         internal Action<int> AdjustStreamWindows { get; set; } = _ => { };
 
         private Http2Connection(Stream stream) { _transport = new Http2FrameTransport(stream); }
@@ -82,13 +84,18 @@ namespace EmbedIO.Net.Internal.Http2
                     }
                     else
                     {
-                        Peer.Apply(frame.Payload, delta =>
+                        await _headerOutput.WaitAsync(token).ConfigureAwait(false);
+                        try
                         {
-                            SendFlow.AdjustInitialWindow(delta);
-                            AdjustStreamWindows(delta);
-                        },
-                            size => _encoder.SetMaximumTableSize((int)Math.Min(size, 4096u)));
-                        await SendAsync(new[] { new Http2Frame(4, 1, 0, Array.Empty<byte>()) }, token).ConfigureAwait(false);
+                            Peer.Apply(frame.Payload, delta =>
+                            {
+                                SendFlow.AdjustInitialWindow(delta);
+                                AdjustStreamWindows(delta);
+                            },
+                                size => _encoder.SetMaximumTableSize((int)Math.Min(size, 4096u)));
+                            await SendAsync(new[] { new Http2Frame(4, 1, 0, Array.Empty<byte>()) }, token).ConfigureAwait(false);
+                        }
+                        finally { _headerOutput.Release(); }
                     }
                     return true;
                 case 6:
@@ -104,6 +111,31 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
+        internal async Task SendHeadersAsync(int streamId, HpackField[] fields, bool endStream, CancellationToken token)
+        {
+            await _headerOutput.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                long size = 0;
+                foreach (var field in fields) size += field.Size;
+                if (size > Peer.MaximumHeaderListSize) throw new IOException("Response headers exceed peer limit.");
+                var encoded = _encoder.Encode(fields);
+                // Use the universally supported size even while peer settings change.
+                var frames = new Http2Frame[Math.Max(1, (encoded.Length + 16383) / 16384)];
+                for (var i = 0; i < frames.Length; i++)
+                {
+                    var count = Math.Min(16384, encoded.Length - i * 16384);
+                    var fragment = new byte[count];
+                    Buffer.BlockCopy(encoded, i * 16384, fragment, 0, count);
+                    var flags = (byte)((i == frames.Length - 1 ? 4 : 0) | (i == 0 && endStream ? 1 : 0));
+                    frames[i] = new Http2Frame(i == 0 ? (byte)1 : (byte)9, flags, streamId, fragment);
+                }
+                try { await SendAsync(frames, token).ConfigureAwait(false); }
+                catch (Exception error) { OutputFailed?.Invoke(error); throw; }
+            }
+            finally { _headerOutput.Release(); }
+        }
+
         // The owner cancels and joins connection I/O before disposing this state.
         // The underlying stream remains caller-owned.
         public void Dispose()
@@ -112,9 +144,13 @@ namespace EmbedIO.Net.Internal.Http2
             _headers.Dispose();
             ReceiveFlow.Abort();
             Streams.Abort();
+            _headerOutput.Dispose();
         }
 
-        internal Task SendAsync(Http2Frame[] frames, CancellationToken token)
-            => _transport.WriteAsync(frames, Peer.MaximumFrameSize, token);
+        internal async Task SendAsync(Http2Frame[] frames, CancellationToken token)
+        {
+            try { await _transport.WriteAsync(frames, Peer.MaximumFrameSize, token).ConfigureAwait(false); }
+            catch (Exception error) { OutputFailed?.Invoke(error); throw; }
+        }
     }
 }

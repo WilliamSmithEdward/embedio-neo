@@ -379,3 +379,17 @@ These rules are the same in every WilliamSmithEdward repository.
   Discovery floor2235. Next connect body stream, receive/send credit and registry
   in frame dispatcher; then IHttpContext adapter/negotiation and independent client.
   No HTTP2 endpoint yet. Goal remains active; remote final checks not current.
+
+- Internal HTTP2 service checkpoint: Http2Dispatcher/Http2Exchange connect request
+  state/body/flow with concurrent callbacks and response encoding/writes. Eight
+  independent .NETHttpClient VersionExact2 realTCP cases pass:0/1/65535/65536/262144
+  echo,24 multiplexed requests,blocked-stream cancellation+healthy follow-up,large
+  response header continuation. All209 focused cases modern+actualstd pass;both
+  targets build. First test had socket10053 fixture teardown race; cancel/joinserver
+  beforeclientdispose fixedfixture,originalevidenceretained. Priorfull e03511a passed
+  2230success/fiveskips2235total. Currentdiscoveryfloor2243. Header encoding/settings
+  serialize undergate; DATAreserve stream+conn; batched creditpump; body/resetcleanup.
+  No publiclistener HTTP2 yet. Next rawwire adversarialcases (malformedCL/reset,
+  zero-windowPINGprogress/invalidWINDOW),complete response semantics, IHttpContext
+  adapter+TLSALPN/prior-knowledge negotiation. Internalexchange is notcompletepublic
+  responseAPI; goalactive HTTP3/extensions/performance/fullremotevalidationpending.
