@@ -8,7 +8,8 @@
   ambiguous requests previously tolerated are rejected; see the
   [migration notes](docs/compatibility/migration.md#managed-http-framing-unreleased)
   and [protocol roadmap](docs/project/http-engine.md). The development branch now
-  includes HTTP/2, HPACK and RFC 8441 WebSockets; HTTP/3 remains planned.
+  includes HTTP/2, HPACK and RFC 8441 WebSockets, plus internal HTTP/3/QPACK/QUIC
+  connection dispatch; public HTTP/3 listener integration remains in development.
   See the roadmap for target restrictions and outstanding conformance work.
 
 - Reject malformed managed WebSocket frame metadata before consuming payloads,

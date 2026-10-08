@@ -46,7 +46,7 @@ this development goal unless separately authorized.
 | HTTP semantics | RFC 9110; methods, status, authority, informational responses, headers and trailers | Existing application layer; full conformance audit pending |
 | HTTP/1.1 | RFC 9112; incremental parsing, fixed/chunked bodies, pipelines, persistence, bounded input and errors | First implementation under test |
 | HTTP/2 | RFC 9113; TLS/ALPN, prior knowledge, HPACK (RFC 7541), multiplexed streams, flow control, SETTINGS, GOAWAY and reset | Implemented incrementally; listener integration under validation |
-| HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Wire/control primitives and QPACK field codecs implemented; QUIC listener and connection coordination pending |
+| HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Internal QUIC connection dispatch passes initial HTTP-client/wire tests; public listener integration and lifecycle completion pending |
 | WebSockets | Existing RFC 6455 plus extended CONNECT over HTTP/2 (RFC 8441) and HTTP/3 (RFC 9220) | HTTP/1.1 existing; HTTP/2 initial integration tested locally; HTTP/3 planned |
 | Extensions | Priorities (RFC 9218), HTTP datagrams/capsules (RFC 9297), discovery/Alt-Svc, current registered extensions and errata | Inventory and applicability review pending |
 | Security/resource control | Framing ambiguity, input limits, slow readers/writers, cancellation, compression expansion and multiplexed-stream abuse | First framing work under test; broad abuse tests pending |
@@ -718,3 +718,51 @@ capability probe reports QuicListener.IsSupported and QuicConnection.IsSupported
 as true on this host; that is capability evidence, not a connection test. The
 discovery minimum is 2,690. The 2,657-case full run above predates this increment;
 fresh exact-head cross-platform checks remain required.
+
+
+### Initial HTTP/3 QUIC connection dispatch
+
+The .NET 10 asset now has an internal accepted-QUIC-connection driver. It opens
+server control and decoder streams, advertises bounded incoming QPACK resources,
+processes peer control/encoder/decoder streams independently, and dispatches
+requests while blocked field sections await encoder progress. One feedback writer
+preserves instruction order. Request body reads consume their own QUIC stream
+directly; there is no eagerly filled application body queue. Response writes are
+serialized per stream and use the stateless QPACK encoder. Incoming trailers and
+outgoing response metadata reuse the existing field validators, with HTTP/3
+stream error translation. Error handling resets a malformed request before stream
+disposal; framing or critical-stream failures close the connection. Worker
+tracking includes asynchronous stream disposal.
+
+Nine new loopback tests use TLS and real QUIC on Windows/.NET 10.0.12. The .NET
+HTTP client requests version 3 exactly and verifies empty, concurrent 100,003-byte,
+concurrent 1 MiB, and HEAD exchanges. Raw peers verify missing-method and
+Content-Length errors preserve a healthy subsequent request, and forbidden frames,
+closed control streams and duplicate control streams produce the expected
+connection codes. Test certificates are scoped to each fixture and checked by
+exact certificate hash; a PKCS#12 load is required by the tested Windows TLS
+path. No firewall or system trust changes were needed. Hosts lacking QUIC and the
+netstandard asset report explicit skips for these transport tests; codec/framing
+coverage remains applicable to both assets.
+
+This is an internal transport increment, not a public HTTP/3 WebServer option or
+a performance result. Public negotiation/discovery, configurable resource limits,
+full field-semantics audit, blocked-request reset handling, bounded application
+shutdown, graceful GOAWAY/drain, dynamic response compression, priority scheduling,
+extended CONNECT/WebSockets and datagrams remain required development work. The
+current driver waits for application callbacks on shutdown; callbacks must honor
+cancellation, and a noncooperative callback can still delay shutdown. The raw
+transport types exist only in the modern target and carry platform annotations.
+The nine-case wire evidence is under TestResults/http-engine/http3-quic-wire3;
+the new discovery floor is 2,699. All checks on the preceding 0f9a2fb commit passed;
+those checks do not validate this new increment.
+
+The full Windows run passed 2,694 tests with five expected platform skips (2,699
+total). Both core assets compile; the complete formatting check and suppression
+guards pass. The pinned full YARA rules report no matches in the four new transport
+source/test files. A solution build attempted while the full tests were running
+hit the test process's CLI-plugin file lock; the sequential recheck passed with
+zero warnings/errors after the process exited. Evidence retains both logs. The
+final modern-asset HTTP/3 set passes all 217 cases; the actual netstandard asset
+passes 208 framing/codec cases and explicitly skips the nine QUIC cases. The
+modern test-host assembly is restored and hash-verified afterward.
