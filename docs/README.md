@@ -122,6 +122,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [SameSite cookies](user-reports/samesite-cookies.md): opt-in response/session policy and preserved raw cookie fields.
 
+- [Endpoint configuration](user-reports/endpoint-configuration.md): explicit binding, prefix paths, shared ports and certificate ownership.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
