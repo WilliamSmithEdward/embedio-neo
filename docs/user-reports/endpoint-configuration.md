@@ -61,7 +61,7 @@ change that inherited normalization.
 | Choice | Managed EmbedIO listener | Microsoft listener |
 | --- | --- | --- |
 | `127.0.0.1` | IPv4 loopback socket and matching host | Windows HTTP.sys IP-based routing; Unix runtime behavior differs |
-| `[::1]` | IPv6 loopback socket; bracket the literal in the URL | Native/runtime IPv6 prefix; requires IPv6 support |
+| `[::1]` | IPv6 loopback socket; bracket the literal in the URL | Windows supports the literal; .NET 10.0.12 Unix native startup rejects it (see below) |
 | `localhost` | Both loopback families when IPv6 is enabled and available; host matching remains `localhost` | Hostname routing; on Windows this is not a socket-interface isolation guarantee |
 | Explicit local interface IP | Binds that address, while preserving host matching | Windows HTTP.sys address/host routing; see the native configuration documentation |
 | `*` or `+` | Broad socket binding and wildcard host routing | Native wildcard routing policies, which differ from managed precedence |
@@ -73,6 +73,18 @@ an arbitrary or misspelled DNS name as an isolation mechanism. Prefer explicit
 IP literals for a predictable managed binding. The global `EndPointManager.UseIpv6`
 option affects wildcard binding and localhost IPv6 registration; it is not a
 per-server switch. This work preserves those existing policies.
+
+The .NET 10.0.12 Microsoft listener on Linux/macOS rejects bracketed IPv6
+prefixes at startup with `HttpListenerException` error 400, reporting an invalid
+port. Its [Unix endpoint parser](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.HttpListener/src/System/Net/Managed/HttpEndPointManager.cs)
+treats the first colon inside the address as the port separator. This was
+observed in both CI runners, independently of Neo's managed parser. Use
+`HttpListenerMode.EmbedIO` for an explicit IPv6 literal on those platforms.
+Neo does not silently change modes or translate the literal to a hostname that
+could bind a different address/family. The compatibility test verifies the
+native rejection and the managed successful response; it does not claim that
+native runtime bug is repaired. A runtime update changing this behavior should
+trigger a reviewed test/documentation update.
 
 Windows HTTP.sys owns listening and URL routing for the Microsoft mode. Its
 hostname prefixes, URL reservations, IP listen configuration and firewall policy
@@ -134,7 +146,8 @@ not a newly changed default.
 The compatibility tests exercise real HTTP with both listener modes: unchanged
 module paths under a listener prefix, child routes, unmatched prefixes and
 subsequent healthy requests, longest-prefix selection and nested-listener
-shutdown, multiple independent ports, wildcard Host acceptance and explicit IPv6.
+shutdown, multiple independent ports, wildcard Host acceptance, explicit managed/Windows-native IPv6, and the verified
+Unix native IPv6 startup rejection.
 Local unelevated Windows cannot register native wildcard prefixes without a URL
 reservation: only that exact permission failure is locally not applicable. CI
 must execute these cases and does not allow that local skip. No local HTTP.sys
