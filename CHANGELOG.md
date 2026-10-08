@@ -11,6 +11,8 @@
   Recovery boundaries propagate process/resource corruption exceptions rather than
   treating them as ordinary request failures.
 
+- Add the owner-approved opt-in ClientBanningModule with context criteria, ordinal client keys, permanent IPv4/IPv6 CIDR policies, live temporary/permanent controls and optional atomic file-backed permanent-ban persistence. Existing IP-banning APIs/defaults/targets/dependencies remain unchanged (upstream #438).
+
 - Add the owner-approved WithBasicAuthentication fluent helper with explicit scope, configure-before-registration and optional realm, preserving existing authentication behavior and manual registration (upstream #439).
 
 - Document existing streaming write-error controls, with reverse-proxy disconnect, compression and buffering compatibility coverage (upstream #457).
