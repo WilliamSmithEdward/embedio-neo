@@ -1,5 +1,31 @@
 - name: Documentation
   href: README.md
+- name: Parity audit
+  items:
+    - name: Baseline, findings, and reproduction
+      href: parity-audit/README.md
+    - name: Public API
+      href: parity-audit/public-api.md
+    - name: Utilities
+      href: parity-audit/utilities.md
+    - name: Routing
+      href: parity-audit/routing.md
+    - name: Request binding
+      href: parity-audit/request-binding.md
+    - name: Serialization
+      href: parity-audit/serialization.md
+    - name: Static files
+      href: parity-audit/static-files.md
+    - name: Authentication and CORS
+      href: parity-audit/authentication-cors.md
+    - name: Sessions
+      href: parity-audit/sessions.md
+    - name: WebSockets
+      href: parity-audit/websockets.md
+    - name: Listener lifecycle
+      href: parity-audit/lifecycle.md
+    - name: HTTPS
+      href: parity-audit/https.md
 - name: Getting started
   items:
     - name: Your first JSON endpoint
