@@ -19,17 +19,17 @@ binary compatible. Findings are kept in one file per major functional area.
 | [Authentication and CORS](authentication-cors.md) | Tested challenges, credentials and origin/preflight behavior agree |
 | [Sessions](sessions.md) | Cookie persistence and independent-client isolation agree |
 | [WebSockets](websockets.md) | Ready-then-send text/binary and fragmented messages agree |
-| [Lifecycle](lifecycle.md) | Caller cancellation completes with Stopped; Stop/Dispose parity is not claimed |
+| [Lifecycle](lifecycle.md) | Windows/managed cancellation matches; old Unix native response cleanup fails while Neo stays live |
 | [HTTPS](https.md) | Managed certificate-pinned access and negative trust/hostname checks agree |
 
 ## Baseline and evidence
 
-The initial local run on October 7, 2026 used Windows 10.0.26300 and .NET
+The local Windows validation on October 7, 2026 used Windows 10.0.26300 and .NET
 10.0.11 against Neo source `c58dbae1c77089ac0b2ec2a03c806714be2294ac` plus this
 test/documentation change. All 207 cases completed for each of the three builds:
 414 upstream-to-Neo comparisons, with no unexplained difference. Both Neo assets
-had identical tested outcomes and inventoried API surfaces. Six negative checks
-prove the comparator rejects injected status/body/message/API/discovery changes
+had identical tested outcomes and inventoried API surfaces. Seven negative checks
+prove the comparator rejects injected status/body/JSON-type/message/API/discovery changes
 and a removed reviewed-difference entry. These are fixture counts, not additional
 NUnit test counts or a quantified probability of correctness.
 
@@ -39,6 +39,18 @@ the existing approved typed-route correction and characterized serializer/input
 migration boundaries. The other 95 cases match without those differences.
 The contract stores exact old/new values and reasons; new or stale differences fail.
 
+The Unix profile has 143 cases and 286 comparisons: 72 utility cases, the full
+managed HTTP/WebSocket workload, managed HTTPS, API inventory and an explicit
+native response-lifetime probe. A pinned Linux .NET 10.0.12 container passed this
+profile with no unexplained difference. It records 80 reviewed field differences,
+including 56 identity-encoding omissions and four fields characterizing an
+existing native listener correction. The full upstream native workload cannot
+complete on the tested modern Unix runtime: after its first DTO response,
+upstream faults the accept loop with `ObjectDisposedException` and its cancellation
+callback throws `AggregateException`. Neo serves a second DTO and cancels cleanly.
+This failure is preserved and asserted as a baseline finding, rather than silently
+counted as a passing native workload. See [Lifecycle](lifecycle.md).
+
 The upstream assembly SHA-256 is
 `652807CC55278507A00080698872D0A03EF2A38076D91F5D4333C57C9E223EBC`.
 The pinned NuGet lock files also record package content hashes. Raw per-implementation
@@ -47,6 +59,14 @@ are written under ignored `TestResults/parity-audit`. The summary records the
 Git commit and working-tree state. Required desktop CI runs the audit and uploads
 that directory with its other test results; cross-platform success must be verified
 from those actual artifacts.
+
+Initial Linux/macOS PR jobs aborted in the upstream native workload. Linux logs
+and the minimal probe reproduce disposal of the native response stream, which
+Neo already caches. The corrected fixture separates the constrained Unix profile
+from Windows's full native comparison; neither production code nor a test timeout
+was changed to obtain parity. Initial failures are retained under ignored
+`TestResults/ci-initial-linux` and `TestResults/ci-initial-macos`. The revised
+macOS profile must pass CI; completion is recorded in the PR results and artifacts.
 
 ## Run and interpretation
 

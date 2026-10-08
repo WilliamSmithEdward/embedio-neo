@@ -34,7 +34,8 @@ def differences(old, new, path=""):
         for key in sorted(old):
             result.extend(differences(old[key], new[key], path + "/" + key))
         return result
-    return [] if old == new else [{"path": path, "upstream": old, "neo": new}]
+    equal = old == new and isinstance(old, bool) == isinstance(new, bool)
+    return [] if equal else [{"path": path, "upstream": old, "neo": new}]
 
 
 def validate_outcomes(report, upstream):
@@ -67,6 +68,8 @@ def validate_outcomes(report, upstream):
             if value != "Stopped":
                 errors.append(f"{name}: listener did not stop")
     for mode in ("EmbedIO", "Microsoft"):
+        if f"http/{mode}/dto" not in cases:
+            continue
         for phase, expected in (("first", "1"), ("second", "2")):
             body = cases[f"http/{mode}/session-{phase}"]["body"]
             if base64.b64decode(body).decode("utf-8-sig") != expected:
@@ -79,6 +82,15 @@ def validate_outcomes(report, upstream):
                            ("hostname-rejected", True), ("healthy-after-rejections", "encrypted")):
         if cases[f"https/{name}"] != expected:
             errors.append(f"https/{name}: incorrect TLS outcome")
+    if "native/unix-response-lifetime" in cases:
+        expected = {"status": 200, "body": {"Id": 42, "Name": "ordinary", "Amount": 12.5},
+                    "runError": "System.ObjectDisposedException" if upstream else None,
+                    "cancelError": "System.AggregateException" if upstream else None,
+                    "secondStatus": None if upstream else 200,
+                    "secondBody": None if upstream else {"Id": 42, "Name": "ordinary", "Amount": 12.5},
+                    "state": "Stopped"}
+        if cases["native/unix-response-lifetime"] != expected:
+            errors.append("Unix native listener did not exhibit the exact characterized response-lifetime outcome")
     return errors
 
 
@@ -123,6 +135,7 @@ def verify_guards(reports, contract):
     mutations = (
         lambda sample: sample["Neo"]["cases"]["http/EmbedIO/dto"].update(status=500),
         lambda sample: sample["Neo"]["cases"]["http/EmbedIO/dto"].update(body={"Id": 0}),
+        lambda sample: sample["Neo"]["cases"]["utility/valid/3"].update(value=1),
         lambda sample: sample["Neo"]["cases"].pop("utility/valid/0"),
         lambda sample: sample["Neo"]["api"].pop("EmbedIO.WebServer"),
         lambda sample: sample["NeoStandard"]["cases"]["websocket/EmbedIO/True/False"].update(payload="AA=="),
@@ -168,7 +181,14 @@ def main():
     if not reports["Upstream"]["assembly"].startswith("EmbedIO, Version=3.5.2.0,"):
         raise RuntimeError("Incorrect upstream assembly was tested")
     contract = read(FIXTURE / "reviewed-differences.json")
+    profile = reports["Upstream"]["profile"]
+    if any(report["profile"] != profile for report in reports.values()):
+        raise RuntimeError("Inconsistent comparison profiles")
+    if reports["Upstream"]["assemblySha256"] != contract["baseline"]["assemblySha256"]:
+        raise RuntimeError("Upstream assembly bytes do not match the pinned baseline")
+    contract = {**contract, **contract["profiles"][profile]}
     summary = compare(reports, contract)
+    summary["profile"] = profile
     summary["comparatorNegativeChecks"] = verify_guards(reports, contract)
     summary["sourceCommit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     summary["workingTree"] = subprocess.check_output(["git", "status", "--short"], cwd=ROOT, text=True)

@@ -1,9 +1,13 @@
 # WebSocket parity
 
-Eight message cases per implementation cover text/binary and whole/fragmented
+Eight Windows message cases per implementation cover text/binary and whole/fragmented
 messages on both listeners. Unicode text and binary bytes 0, 1, 127, 128 and 255
 round-trip with the correct message type. Each output is checked against the
 sent bytes in addition to comparing implementations.
+
+The Unix profile compares the four managed message cases. It does not claim a
+full old native WebSocket comparison, because the upstream native DTO workload
+already terminates its listener; see [Lifecycle](lifecycle.md).
 
 The client first receives an application-owned `ready` greeting. This deliberately
 avoids upstream's separately confirmed early-message-loss behavior; it does not

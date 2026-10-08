@@ -36,8 +36,10 @@ internal static class Program
         CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
         Utilities();
-        foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
-            await Http(mode);
+        var windows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        await Http(HttpListenerMode.EmbedIO);
+        if (windows) await Http(HttpListenerMode.Microsoft);
+        else await NativeProbe();
         await Https();
 
         var assembly = typeof(WebServer).Assembly;
@@ -49,6 +51,7 @@ internal static class Program
                 .OfType<System.Runtime.Versioning.TargetFrameworkAttribute>().Single().FrameworkName,
             runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
             os = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+            profile = windows ? "windows" : "unix",
             cases = Cases,
             api = Api(assembly),
         };
@@ -87,6 +90,42 @@ internal static class Program
     {
         try { Cases.Add(name, new { value = action() }); }
         catch (ArgumentException ex) { Cases.Add(name, new { error = ex.GetType().FullName, parameter = ex.ParamName }); }
+    }
+
+    private static async Task NativeProbe()
+    {
+        using var reservation = new TcpListener(IPAddress.Loopback, 0);
+        reservation.Start();
+        var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
+        reservation.Stop();
+        using var lifetime = new CancellationTokenSource();
+        using var server = new WebServer(o => o.WithUrlPrefix($"http://127.0.0.1:{port}/").WithMode(HttpListenerMode.Microsoft))
+            .WithWebApi("/api", m => m.WithController<ConsumerController>());
+        var running = server.RunAsync(lifetime.Token);
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        using var response = await client.GetAsync($"http://127.0.0.1:{port}/api/dto");
+        var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsByteArrayAsync());
+        string? runError = null;
+        string? cancelError = null;
+        int? secondStatus = null;
+        JsonElement? secondBody = null;
+        try
+        {
+            await running.WaitAsync(TimeSpan.FromSeconds(1));
+            runError = "UnexpectedCompletion";
+        }
+        catch (TimeoutException) { } // A live accept loop is expected to stay pending.
+        catch (Exception ex) { runError = ex.GetType().FullName; Console.Error.WriteLine($"Native baseline observation: {ex}"); }
+        if (runError == null)
+        {
+            using var next = await client.GetAsync($"http://127.0.0.1:{port}/api/dto");
+            secondStatus = (int)next.StatusCode;
+            secondBody = JsonSerializer.Deserialize<JsonElement>(await next.Content.ReadAsByteArrayAsync());
+        }
+        try { lifetime.Cancel(); }
+        catch (Exception ex) { cancelError = ex.GetType().FullName; Console.Error.WriteLine($"Native cancellation observation: {ex}"); }
+        if (!running.IsCompleted) await running.WaitAsync(TimeSpan.FromSeconds(10));
+        Cases.Add("native/unix-response-lifetime", new { status = (int)response.StatusCode, body, runError, cancelError, secondStatus, secondBody, state = server.State.ToString() });
     }
 
     private static async Task Https()
@@ -314,6 +353,11 @@ internal static class Program
                 foreach (var fragmented in new[] { false, true })
                     await WebSocket(prefix, label, binary, fragmented);
             await Request("healthy-after-errors", HttpMethod.Get, "api/number/3");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Original {mode} fixture failure before cleanup: {ex}");
+            throw;
         }
         finally
         {
