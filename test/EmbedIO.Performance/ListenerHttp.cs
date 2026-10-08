@@ -100,6 +100,7 @@ internal static class ListenerHttp
                     client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
                     client.Timeout = TimeSpan.FromSeconds(20);
                     var rows = new List<object>();
+                    var phase = "warmup";
                     try
                     {
                         async Task Request()
@@ -123,6 +124,7 @@ internal static class ListenerHttp
                         var retainedBefore = GC.GetTotalMemory(false);
                         for (var round = 0; round < rounds; round++)
                         {
+                            phase = $"measurement round {round}";
                             var samples = new double[workers * requests];
                             var gcBefore = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
                             var allocatedBefore = GC.GetTotalAllocatedBytes(true);
@@ -152,6 +154,7 @@ internal static class ListenerHttp
                                 collections = Enumerable.Range(0, 3).Select(index => GC.CollectionCount(index) - gcBefore[index]).ToArray()
                             });
                         }
+                        phase = "shutdown verification";
                         stop.Cancel();
                         await running.WaitAsync(TimeSpan.FromSeconds(10));
                         client.Dispose();
@@ -192,6 +195,14 @@ internal static class ListenerHttp
                         });
                         if (verify && (openStreams != 0 || activeTimers != 0))
                             throw new InvalidOperationException($"Shutdown retained {openStreams} transport wrappers and {activeTimers} timers.");
+                    }
+                    catch (Exception error)
+                    {
+                        throw new InvalidOperationException(
+                            $"HTTP workload failed: url={url}, phase={phase}, closePerRequest={churn}, workers={workers}, "
+                            + $"requestBodyBytes={bodySize}, bodyConsumption={consumption}, responseBytes={payloadSize}, "
+                            + $"responseChunkBytes={chunkSize}, observedPeerPorts={ports.Count}, retainedConnections={connections.Count}, "
+                            + $"serverState={server.State}, serverTask={running.Status}.", error);
                     }
                     finally
                     {

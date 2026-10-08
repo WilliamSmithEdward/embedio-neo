@@ -2555,3 +2555,96 @@ listener-queue, cold-start and listener allocation gates pass; these budgets do
 not establish a throughput or latency improvement. The discovery floor is 3,186.
 The earlier failed full run, both direct baseline runs and the initial fixture
 failure remain in the evidence. New exact-head CI is still required.
+
+### Linked context cancellation ordering
+
+A deterministic regression closes a multiplexed context from a later registered
+parent cancellation callback, before the linked source callback executes. Four
+cases (transport/server cancellation, with/without a throwing application
+callback) fail before the correction; the normal-completion control passes.
+Cleanup previously disposed the link and could leave an application token
+uncanceled indefinitely. Close now propagates an already-requested parent
+cancellation before response finalization and again before close callbacks and
+link disposal. Recoverable application callback errors are logged so cleanup
+continues. Normal completion remains uncanceled; no per-close CTS is allocated.
+
+All five regressions pass after correction. The broader drain/HTTP2/HTTP3 set
+passes 180 cases on Windows and on pinned Linux with QUIC required and two logical
+processors (`context-cancel-focused.log`, `context-cancel-linux.log`). Both library
+assets build and changed-source whitespace verification passes. The full Windows suite passes 3,186 cases with five expected skips and zero
+failures (3,191 total) in 4m47s (`context-cancel-full.log`). The discovery floor
+is now 3,191.
+
+This ordering defect is proven independently; it is not yet proven to explain
+Windows CI's earlier HTTP/3 client-reset timeout. Pushed head `61f7d0d` also has a
+separate Windows compatibility job failure (run 37855429075, job 113578329764):
+the HTTP/1 benchmark with a fully consumed 65,536-byte POST body timed out during
+warmup at its existing 20-second request deadline. Its log is retained as
+`context-cancel-ci-compat-windows.log`. No timeout or gate was relaxed; investigation
+and exact-head validation remain outstanding.
+
+The same pushed head's Windows desktop job 113578329715 subsequently terminated
+at the whole-suite deadline and reported only 3,146 of the required 3,186 cases
+(exit 7). This is a separate incomplete-suite failure, with no individual failed
+case in the log; retain `context-cancel-ci-test-windows.log` and investigate the
+unfinished cases. Linux and macOS desktop jobs passed on that head. No discovery
+floor or suite deadline was lowered to accept the incomplete Windows run.
+
+Downloaded Windows/Linux TRX artifacts confirm 40 case names present in the
+Linux result but absent from Windows (`ci-61f7-windows-unreported.txt`), including
+the exhaustive WebSocket UTF-8 cases and later server/ZIP fixtures. Windows
+reported no individual failures. Its longest reported case was the repeated BCL
+message-close acknowledgement test (32.3 seconds); two in-flight close tests took
+15 seconds each. This distinguishes missing coverage from a passing full suite,
+but does not yet establish whether budget growth or a stalled case caused exit.
+
+The cross-platform timing comparison specifically shows approximately four extra
+seconds for Windows HTTP/1 drain-abort fixtures, while their HTTP/2 counterparts
+are not among the largest deltas. These HTTP/1 tests await an HttpClient GET
+failure after admission closes, so automatic retry/connect behavior must be
+separated from server shutdown timing before attributing the delay to the engine.
+Changed-source pinned YARA scans and both source-policy guards pass locally.
+
+The exact fully consumed POST benchmark passes 15 fresh local Windows processes
+with two logical processors (`post-body-repeat-1.log` through `-15.log`). This
+does not reproduce or clear the CI timeout. Benchmark failures now identify their
+protocol URL, warmup/measurement/shutdown phase, workload parameters, observed
+connections and server state without adding counters to the measured hot path.
+
+A temporary timing probe in the drain fixture isolates the Windows delay:
+immediate abort reaches server Stopped in 1-3ms, while awaiting the HttpClient
+GET error adds about 4.07 seconds. The deadline case reaches Stopped in 152ms
+and reports the client error at 4.23 seconds. Its ten-case diagnostic TRX is
+retained under `drain-profile`; the temporary instrumentation was removed.
+The five TCP and five combined-host HTTP/1 abort cases now use one raw TCP/TLS
+connection with pinned certificate verification and assert closure/reset before
+any response byte. HTTP/2 and HTTP/3 still use independent HttpClient requests.
+All fifteen protocol cases pass in 1.54 seconds (`drain-wire.log`); this is a
+fixture timing improvement, not a claimed engine throughput improvement.
+
+A Linux run incorrectly shared binaries with an active Windows Coverlet run.
+Its 180 tests passed but process exit failed (134) because injected coverage
+tracking referenced a Windows temporary mutex path. `context-cancel-final-linux.log`
+is retained as failed validation; a clean, uninstrumented rerun is required.
+Do not run another host against a coverage run's instrumented output directory.
+
+Final checkpoint validation: the complete coverage-enabled Windows suite reports
+3,191 cases (3,186 passed, five expected skips, zero failures) in 4m11s, within the
+unchanged five-minute limit (`context-cancel-coverage.log`, TRX and Cobertura in
+`context-cancel-coverage`). Coverlet restored the library: its SHA-256 matches the
+separately built performance output. Clean Linux QUIC-required validation passes
+all 180 selected cases and exits zero (`context-cancel-final-linux-clean.log`).
+The actual .NET Standard asset passes all 111 applicable cases on Windows and
+Linux .NET 10 hosts (`context-cancel-legacy.log`, `context-cancel-legacy-linux.log`).
+The compatibility comparator passes 207 cases / 414 comparisons with zero errors.
+Rebuilt hot, queue, cold and listener allocation gates pass, as does the POST body
+workload with the new diagnostics. Formatting, both source guards and six changed
+C# files' pinned YARA scans pass. These are correctness/budget checks, not a claim
+of end-to-end engine performance improvement.
+
+Previous head 61f7d0d's CI completed with the two Windows failures above and an
+Android lifecycle setup failure: the emulator download could not be unpacked
+(`ZipFile unknown archive`), before the application ran. Its log is retained as
+`context-cancel-ci-android.log`. Every other non-skipped job in that CI run passed.
+New-head platform checks remain required; the separate POST timeout and earlier
+HTTP/3 client-reset timeout are not claimed resolved by passing local runs.

@@ -26,6 +26,7 @@ namespace EmbedIO.Net.Internal
         private readonly TaskCompletionSource<bool> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private CancellationTokenSource? _linked;
         private CancellationToken _cancellation;
+        private CancellationToken _serverCancellation;
         private bool _closed;
         private int _webSocketAccepted;
         internal MultiplexedContext(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
@@ -47,6 +48,7 @@ namespace EmbedIO.Net.Internal
                     // throwing into the server-wide accept loop or allocating a link.
                     if (_closed) { _cancellation = new CancellationToken(true); return; }
                     _linked?.Dispose();
+                    _serverCancellation = value;
                     _linked = CancellationTokenSource.CreateLinkedTokenSource(value, _exchange.CancellationToken);
                     _cancellation = _linked.Token;
                 }
@@ -97,14 +99,31 @@ namespace EmbedIO.Net.Internal
         private async Task CloseCoreAsync(CancellationToken token)
         {
             Exception? failure = null;
-            try { await ((MultiplexedResponse)Response).CloseAsync(token).ConfigureAwait(false); }
+            try
+            {
+                PropagateCancellation();
+                await ((MultiplexedResponse)Response).CloseAsync(token).ConfigureAwait(false);
+            }
             catch (Exception error) { failure = error; throw; }
             finally
             {
+                PropagateCancellation();
                 foreach (var callback in _callbacks)
                     try { callback(this); } catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback."); }
                 _linked?.Dispose();
                 if (failure == null) _completion.TrySetResult(true); else _completion.TrySetException(failure);
+            }
+        }
+        private void PropagateCancellation()
+        {
+            // Parent callbacks run in reverse registration order. Closing from a later
+            // callback must not dispose the link before it conveys cancellation to
+            // application code, including tokens captured before this context closed.
+            if (_linked == null || (!_serverCancellation.IsCancellationRequested && !_exchange.CancellationToken.IsCancellationRequested)) return;
+            try { _linked.Cancel(); }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+            {
+                error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context cancellation callback.");
             }
         }
         public async Task<IWebSocketContext> AcceptWebSocketAsync(IEnumerable<string> requestedProtocols, string acceptedProtocol, int receiveBufferSize, TimeSpan keepAliveInterval, CancellationToken cancellationToken)

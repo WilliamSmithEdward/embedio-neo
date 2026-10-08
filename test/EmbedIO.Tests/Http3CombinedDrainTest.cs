@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using EmbedIO.Actions;
+using EmbedIO.Tests.TestObjects;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests
@@ -96,7 +97,7 @@ namespace EmbedIO.Tests
                     entered[context.Request.ProtocolVersion.Major - 1].TrySetResult();
                     await release.Task.WaitAsync(context.CancellationToken);
                 });
-            var clients = Enumerable.Range(1, 3).Select(version =>
+            var clients = Enumerable.Range(2, 2).Select(version =>
             {
                 var client = Client(certificate);
                 client.DefaultRequestVersion = version == 1 ? HttpVersion.Version11 : new Version(version, 0);
@@ -104,6 +105,7 @@ namespace EmbedIO.Tests
             }).ToArray();
             var running = server.RunAsync(stop.Token);
             var requests = clients.Select(client => client.GetStringAsync(prefix)).ToArray();
+            var http1 = Http1AbortProbe.AssertClosedWithoutResponseAsync(prefix, certificate);
             try
             {
                 await Task.WhenAll(entered.Select(signal => signal.Task)).WaitAsync(stop.Token);
@@ -116,6 +118,7 @@ namespace EmbedIO.Tests
                     await Assert.ThatAsync(async () => await drain.WaitAsync(TimeSpan.FromSeconds(5)), Throws.InstanceOf<OperationCanceledException>());
                 else await drain.WaitAsync(TimeSpan.FromSeconds(5));
                 await running.WaitAsync(TimeSpan.FromSeconds(5));
+                await http1.WaitAsync(TimeSpan.FromSeconds(5));
                 foreach (var request in requests)
                     await Assert.ThatAsync(async () => await request, Throws.InstanceOf<HttpRequestException>());
                 Assert.That(server.Listener.IsListening, Is.False);

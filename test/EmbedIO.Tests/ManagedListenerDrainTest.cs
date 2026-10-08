@@ -93,7 +93,8 @@ namespace EmbedIO.Tests
                 }));
             var running = server.RunAsync(stop.Token);
             using var client = Client(http2);
-            var response = client.GetStringAsync(prefix);
+            var response = http2 ? client.GetStringAsync(prefix) : null;
+            var http1 = http2 ? Task.CompletedTask : Http1AbortProbe.AssertClosedWithoutResponseAsync(prefix);
             try
             {
                 await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -106,7 +107,9 @@ namespace EmbedIO.Tests
                     await Assert.ThatAsync(async () => await drain.WaitAsync(TimeSpan.FromSeconds(5)), Throws.InstanceOf<OperationCanceledException>());
                 else await drain.WaitAsync(TimeSpan.FromSeconds(5));
                 await running.WaitAsync(TimeSpan.FromSeconds(5));
-                await Assert.ThatAsync(async () => await response, Throws.InstanceOf<HttpRequestException>());
+                if (response != null)
+                    await Assert.ThatAsync(async () => await response, Throws.InstanceOf<HttpRequestException>());
+                else await http1.WaitAsync(TimeSpan.FromSeconds(5));
                 if (http2) await exited.Task.WaitAsync(TimeSpan.FromSeconds(5));
                 Assert.That(server.Listener.IsListening, Is.False);
             }

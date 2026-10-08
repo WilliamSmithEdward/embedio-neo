@@ -865,3 +865,9 @@ server disposal remain abort operations. Shared TCP endpoint drain remains
 unsupported and rejects before changing admission. See the
 [HTTP/3 and combined-host guide](../guides/http3.md) for lifecycle
 limits and cancellation behavior.
+
+HTTP/2 and HTTP/3 context cleanup also preserves cancellation already requested
+by the server or transport when cleanup runs before the linked cancellation
+callback. Captured application tokens and close callbacks observe cancellation;
+normal successful close does not cancel them. Recoverable exceptions from
+application cancellation callbacks are logged and do not interrupt cleanup.
