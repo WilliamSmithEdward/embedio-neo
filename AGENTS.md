@@ -291,3 +291,12 @@ These rules are the same in every WilliamSmithEdward repository.
   planning. Keep it open across increments. Initial sustained-load attempts were
   invalid due to client socket exhaustion; preserve their logs. The corrected
   client verifies EOF after every explicit final close; no OS limits were changed.
+
+- Draft PR182 now tracks the first increment; issue181 remains open and no closing
+  references are intended. Commit561dfb4 corrected the load-discovered overlarge
+  receive buffer. Eight valid samples show ordinary allocations10841to9063B and
+  pipeline16 allocations10931to8495B approximately; throughput mixed, no broad
+  speedup claim. docs/project/http-engine.md records all samples and limitations.
+- Main9a20aa4 authentication helper was integrated as49df971, preserving both
+  changes and raising the combined discovery floor to2034. Exact combined-source
+  tests and PR checks remain pending; draft/unmerged, no public contributor reply.

@@ -1,4 +1,4 @@
-# Modern HTTP engine program
+﻿# Modern HTTP engine program
 
 The owner authorized a replacement managed transport on 2026-10-08, with extreme
 performance as a core requirement, incremental delivery, and HTTP support through
@@ -88,6 +88,52 @@ invalid chunk bodies cannot release a connection for another request.
 
 Public submission, a release, and the contributor reply remain separate from this
 development program. No HTTP Arena acceptance or competitive ranking is claimed.
+
+## First-increment measurements (2026-10-08)
+
+Baseline core: `2e8e98c`; candidate core: `561dfb4`. The same benchmark runner
+exercised both assemblies in independent processes on Windows 10.0.26300,
+.NET 10.0.11, AMD Ryzen 7 9800X3D (8 cores/16 logical processors). Server affinity
+was logical CPUs 0-3 and client affinity 4-7. Each sample had five seconds of
+warmup, 15 seconds of measurement, 16 concurrent connections and 80 plaintext GETs
+per connection. Payloads and terminal EOF were validated; all eight samples
+completed without errors. This developer machine was not an isolated benchmark
+host; external background activity and closed-loop sampling limit conclusions.
+
+| Pipeline | Round | Core | Requests/s | Server B/request | CPU microseconds/request | Sampled p99 ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1 | before | 180,283 | 10,841 | 20.74 | 0.2662 |
+| 1 | 1 | after | 179,875 | 9,063 | 20.93 | 0.2446 |
+| 1 | 2 | before | 183,395 | 10,841 | 20.73 | 0.2314 |
+| 1 | 2 | after | 169,562 | 9,063 | 21.12 | 0.3185 |
+| 16 | 1 | before | 224,232 | 10,932 | 16.96 | 2.4056 |
+| 16 | 1 | after | 229,321 | 8,494 | 16.96 | 2.4846 |
+| 16 | 2 | before | 227,056 | 10,931 | 17.00 | 2.3493 |
+| 16 | 2 | after | 224,527 | 8,495 | 16.87 | 2.5102 |
+
+Allocation reductions repeat across both pairs: approximately 16% for ordinary
+requests and 22% for pipeline16. Ordinary throughput includes a slower candidate
+run; pipelined throughput is mixed. These measurements do not establish a general
+throughput improvement or attainment of the program's extreme-performance goal.
+Latency samples start at batch send and exclude connection establishment. CPU
+figures cover the server process only; detailed GC counts remain in raw output.
+
+Earlier attempts failed from client socket exhaustion and are excluded. The
+client was corrected to await server EOF after the explicit final close. A valid
+intermediate run then exposed excess 8 KB request-buffer allocation; sizing
+promoted storage to actual input produced the results above. No OS network limit
+was changed and no failed workload was retried inside a measured sample.
+
+The separate parser microbenchmark reduced pipeline64 allocation from
+10,868.88 to 3,368 B/request. Header serialization allocation for 1 KB and 16 KB
+values fell from 7,904/98,584 to 1,168/16,528 bytes. Those narrower results exclude
+sockets and application work. The initial direct-header serializer had a CPU
+regression; a bounded stack buffer improved it, with some workload tradeoffs
+remaining. See the [benchmark procedure](../../test/EmbedIO.Performance/README.md#separate-process-engine-comparison).
+
+Raw local experiments are retained under ignored `TestResults/http-engine`;
+`separate-process-sized` contains the eight samples above, including assembly
+hashes. These are development results, not HTTP Arena submissions.
 
 ## References
 
