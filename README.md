@@ -8,6 +8,10 @@
 [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/WilliamSmithEdward/embedio-neo?label=openssf%20score)](https://scorecard.dev/viewer/?uri=github.com/WilliamSmithEdward/embedio-neo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/LICENSE)
 
+![HTTP/1.1: supported](https://img.shields.io/badge/HTTP%2F1.1-supported-brightgreen)
+![HTTP/2: not supported](https://img.shields.io/badge/HTTP%2F2-not%20supported-lightgrey)
+![HTTP/3: not supported](https://img.shields.io/badge/HTTP%2F3-not%20supported-lightgrey)
+
 ![EmbedIO-Neo](https://raw.githubusercontent.com/WilliamSmithEdward/embedio-neo/dcd0e9f3c27d0a618cf4aade10c7fea269db6d57/images/embedio_neo.png)
 
 A small, cross-platform, modular web server for .NET, maintained by William Smith.
