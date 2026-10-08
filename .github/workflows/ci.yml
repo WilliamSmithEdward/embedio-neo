@@ -36,7 +36,7 @@ jobs:
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=false
       - name: Run the regression suite with coverage
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 1789 --coverlet
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 1832 --coverlet
       - name: Verify ZIP concurrency with a constrained worker pool
         env:
           DOTNET_PROCESSOR_COUNT: 2
@@ -68,6 +68,14 @@ jobs:
           dotnet restore test/EmbedIO.LegacyRouteValidationSmoke/EmbedIO.LegacyRouteValidationSmoke.csproj --locked-mode
           dotnet build test/EmbedIO.LegacyRouteValidationSmoke/EmbedIO.LegacyRouteValidationSmoke.csproj -c Release --no-restore
           test/EmbedIO.LegacyRouteValidationSmoke/bin/Release/net472/EmbedIO.LegacyRouteValidationSmoke.exe
+      - name: Verify SameSite cookies on .NET Framework
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore test/EmbedIO.LegacyCookieSmoke/EmbedIO.LegacyCookieSmoke.csproj --locked-mode
+          dotnet build test/EmbedIO.LegacyCookieSmoke/EmbedIO.LegacyCookieSmoke.csproj -c Release --no-restore
+          test/EmbedIO.LegacyCookieSmoke/bin/Release/net472/EmbedIO.LegacyCookieSmoke.exe
       - name: Check hot-path and cold-start allocation budgets
         run: |
           dotnet restore test/EmbedIO.Performance/EmbedIO.Performance.csproj --locked-mode

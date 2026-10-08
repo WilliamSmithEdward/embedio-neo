@@ -15,6 +15,7 @@ namespace EmbedIO.Net.Internal
         {
             ProtocolVersion = HttpVersion.Version11;
             Headers = context.Response.Headers;
+            var rawCookies = Headers.GetValues(HttpHeaderNames.SetCookie) ?? Array.Empty<string>();
             Headers.Clear(); // Use only headers mentioned in RFC6455 - scrap all the rest.
             StatusCode = HandshakeStatusCode;
             Reason = HttpListenerResponseHelper.GetStatusDescription(HandshakeStatusCode);
@@ -30,8 +31,15 @@ namespace EmbedIO.Net.Internal
                     continue;
                 configuredNames.Add(cookie.Name);
                 value.Clear();
-                HttpListenerResponse.AppendCookieHeaderValue(value, cookie);
+                HttpListenerResponse.AppendCookieHeaderValue(value, cookie, context.Response);
                 Headers.Add(HttpHeaderNames.SetCookie, value.ToString());
+            }
+
+            foreach (var raw in rawCookies)
+            {
+                Headers.Add(HttpHeaderNames.SetCookie, raw);
+                var equals = raw.IndexOf('=');
+                if (equals > 0) configuredNames.Add(raw.Substring(0, equals).Trim());
             }
 
             // Retain legacy request-cookie echo unless an explicit response cookie replaces it.

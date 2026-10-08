@@ -1,3 +1,4 @@
+using EmbedIO.Internal;
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Linq;
@@ -175,11 +176,39 @@ namespace EmbedIO.Sessions
             }
         }
 
+        /// <summary>Gets or sets the session cookie's Secure flag. The default is false.</summary>
+        /// <exception cref="InvalidOperationException">The manager has already started.</exception>
+        public bool CookieSecure
+        {
+            get => _cookieSecure;
+            set { EnsureConfigurationNotLocked(); _cookieSecure = value; }
+        }
+
+        /// <summary>Gets or sets the session cookie's SameSite policy. Null (the default) omits it.</summary>
+        /// <remarks>None requires CookieSecure. Configure both properties before starting.</remarks>
+        /// <exception cref="InvalidOperationException">The manager has already started.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The policy is not defined.</exception>
+        public CookieSameSiteMode? CookieSameSite
+        {
+            get => _cookieSameSite;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                if (value.HasValue) CookieSameSiteStore.ValidateMode(value.Value, nameof(value));
+                _cookieSameSite = value;
+            }
+        }
+
+        private bool _cookieSecure;
+        private CookieSameSiteMode? _cookieSameSite;
+
         private bool ConfigurationLocked { get; set; }
 
         /// <inheritdoc />
         public void Start(CancellationToken cancellationToken)
         {
+            if (CookieSameSite == CookieSameSiteMode.None && !CookieSecure)
+                throw new InvalidOperationException("SameSite=None session cookies require CookieSecure.");
             ConfigurationLocked = true;
 
             Task.Run(async () =>
@@ -220,7 +249,7 @@ namespace EmbedIO.Sessions
             }
 
             context.Request.Cookies.Add(BuildSessionCookie(id));
-            context.Response.Cookies.Add(BuildSessionCookie(id));
+            AddResponseCookie(context.Response, id);
             return session;
         }
 
@@ -234,7 +263,7 @@ namespace EmbedIO.Sessions
             }
 
             context.Request.Cookies.Add(BuildSessionCookie(string.Empty));
-            context.Response.Cookies.Add(BuildSessionCookie(string.Empty));
+            AddResponseCookie(context.Response, string.Empty);
         }
 
         /// <inheritdoc />
@@ -263,11 +292,19 @@ namespace EmbedIO.Sessions
             => cookie.Name.Equals(CookieName, StringComparison.OrdinalIgnoreCase)
              && !cookie.Expired;
 
+        private void AddResponseCookie(IHttpResponse response, string? id)
+        {
+            var cookie = BuildSessionCookie(id);
+            response.Cookies.Add(cookie);
+            if (CookieSameSite.HasValue) CookieSameSiteStore.Attach(response, cookie, CookieSameSite.Value);
+        }
+
         private Cookie BuildSessionCookie(string? id)
         {
             var cookie = new Cookie(CookieName, id, CookiePath)
             {
                 HttpOnly = CookieHttpOnly,
+                Secure = CookieSecure,
             };
 
             if (CookieDuration > TimeSpan.Zero)
