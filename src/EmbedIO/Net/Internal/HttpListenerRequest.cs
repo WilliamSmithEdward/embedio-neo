@@ -174,7 +174,8 @@ namespace EmbedIO.Net.Internal
                     return;
                 }
             for (var i = first + 1; i < second; i++)
-                if (req[i] <= 32 || req[i] == 127)
+                if (req[i] <= 32 || req[i] == 127 || req[i] == '#' || req[i] == '\\'
+                    || (req[i] == '%' && (i + 2 >= second || !Uri.IsHexDigit(req[i + 1]) || !Uri.IsHexDigit(req[i + 2]))))
                 {
                     _connection.SetError("Invalid request target.");
                     return;
@@ -218,7 +219,12 @@ namespace EmbedIO.Net.Internal
             }
 
             var rawUri = UriUtility.StringToAbsoluteUri(RawTarget);
-            var path = rawUri?.PathAndQuery ?? RawTarget;
+            if (RawTarget == "*" && HttpVerb != HttpVerbs.Options)
+            {
+                _connection.SetError("Asterisk-form requires OPTIONS.");
+                return;
+            }
+            var path = RawTarget == "*" ? "/" : rawUri?.PathAndQuery ?? RawTarget;
 
             if (string.IsNullOrEmpty(host))
             {

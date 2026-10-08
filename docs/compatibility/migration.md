@@ -773,3 +773,16 @@ response, pipelined successor requests are not dispatched, and the existing
 request deadline remains active through the write. A disconnected peer or expired
 deadline can still prevent response delivery. Prefix-routing rejection remains
 unchanged. This does not add CONNECT tunneling or accept authority-form targets.
+
+## HTTP/1 request-target syntax (unreleased)
+
+The managed listener accepts `OPTIONS *` for a root listener and retains `*` in
+`Request.RawTarget`; `Request.Url` uses the local root URI for dispatch. An OPTIONS
+handler can distinguish this server-wide request from `OPTIONS /` using RawTarget.
+This does not automatically aggregate capabilities or generate an Allow header.
+
+Literal fragments, backslashes, and incomplete/non-hex percent escapes in request
+targets now produce 400 before dispatch, rather than being silently normalized by
+URI parsing. Correctly escaped `%23` and `%25` remain accepted. Encode literal
+reserved characters in client paths or query values. Existing transport scheme,
+local port and valid path/query case behavior remain covered by regression tests.

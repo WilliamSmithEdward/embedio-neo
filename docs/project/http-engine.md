@@ -1978,3 +1978,24 @@ with QUIC required (`h3-errata-focused.log`, `h3-errata-linux.log`). Three new
 real-wire cases raise discovery to 3,029. This increment changes tests and audit
 documentation, not production behavior. The preceding production increment's full
 Windows suite passed with 3,026 cases; new exact-head full CI remains required.
+
+### HTTP/1 request-target syntax increment
+
+Four initial raw-wire cases exposed rejected OPTIONS asterisk-form and accepted
+literal fragments/backslashes. A second set reproduced three silently repaired
+percent escapes. The parser now preserves RawTarget `*` while using the root URI
+for valid OPTIONS dispatch, and rejects these malformed target characters before
+URI normalization. Valid encoded hash/percent characters remain supported. All 67
+focused target/URL-compatibility/HTTP1 cases passed on Windows. Twelve new cases
+raise discovery to 3,041. Evidence: local `h1-target-before.log`,
+`h1-target-percent-before.log` and `h1-target-final-focused.log`.
+
+This does not finish request-target conformance. Absolute-form authority precedence,
+authority-form CONNECT, server-wide OPTIONS policy across prefix registrations,
+and the complete target grammar still require work. Existing transport/local-port
+URL behavior is retained in this increment. All 67 focused cases also passed on
+pinned Linux and against the actual .NET Standard library asset on Windows and
+Linux (.NET 10 hosts). The full Windows suite passed: 3,041 total, 3,036 passed,
+five expected skips, zero failures (`h1-target-full.log`). Both-target build,
+formatting, source guards and the pinned YARA scan passed. Exact-head CI, including
+macOS and mobile hosts, remains required.
