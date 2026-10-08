@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   workflow_call:
 env:
-  NUGET_PACKAGES: ${{ runner.temp }}/nuget-packages
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
   DisableImplicitNuGetFallbackFolder: true
 
 permissions:
