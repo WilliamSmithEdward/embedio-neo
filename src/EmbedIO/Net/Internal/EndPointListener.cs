@@ -88,15 +88,21 @@ namespace EmbedIO.Net.Internal
 
         public void UnbindContext(HttpListenerContext context) => context.Listener?.UnregisterContext(context);
 
-        // Called under the endpoint manager's registration lock. Retain routes and
-        // accepted transports, but never stop a socket needed by another listener.
+        // Called under the endpoint manager's registration lock.
+        internal bool IsExclusiveTo(HttpListener owner)
+            => !_prefixes.Values.Any(listener => listener != owner)
+                && (_unhandled == null || !_unhandled.Any(prefix => prefix.Listener != owner))
+                && (_all == null || !_all.Any(prefix => prefix.Listener != owner));
+
         internal void StopAcceptingIfExclusive(HttpListener owner)
         {
-            if (_prefixes.Values.Any(listener => listener != owner)
-                || (_unhandled != null && _unhandled.Any(prefix => prefix.Listener != owner))
-                || (_all != null && _all.Any(prefix => prefix.Listener != owner)))
-                return;
+            if (IsExclusiveTo(owner)) StopAccepting();
+        }
+
+        internal HttpConnection[] StopAcceptingForDrain()
+        {
             StopAccepting();
+            lock (_unregistered) return _unregistered.ToArray();
         }
 
         private void StopAccepting()

@@ -125,7 +125,7 @@ namespace EmbedIO
         /// <param name="timeout">The maximum drain interval before remaining connections are aborted.</param>
         /// <param name="cancellationToken">Cancellation aborts remaining connections immediately.</param>
         /// <returns>A task completing when listener transport cleanup finishes.</returns>
-        /// <remarks>Currently supported by the HTTP/3 listener. RunAsync cancellation and disposal remain immediate.
+        /// <remarks>Supported by HTTP/3 and exclusively owned managed TCP endpoints. RunAsync cancellation and disposal remain immediate.
         /// Concurrent calls share the first drain deadline. Await this operation outside request callbacks.</remarks>
         /// <exception cref="ArgumentOutOfRangeException">The timeout is nonpositive or exceeds the timer range.</exception>
         /// <exception cref="NotSupportedException">The selected listener does not support graceful drain.</exception>

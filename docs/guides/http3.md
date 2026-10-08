@@ -50,8 +50,8 @@ after Stop, the listener can be restarted with a fresh session. A transport
 accept failure shuts down both transports.
 
 `DrainAsync` is not supported by this combined mode yet; it throws
-`NotSupportedException`. TCP graceful drain must be implemented before combined
-draining can be advertised. Alt-Svc discovery, shared-dispatch performance
+`NotSupportedException`. Combined mode still needs coordinated admission and
+one drain deadline across TCP and QUIC. Alt-Svc discovery, shared-dispatch performance
 validation and the default-engine transition also remain unfinished. This mode
 still uses the current TCP implementation and does not by itself complete the
 replacement of the Mono-derived listener.
@@ -144,9 +144,21 @@ Canceling `RunAsync`, calling `Listener.Stop`, or disposing the server still sto
 immediately and can interrupt a drain. Applications must honor their context
 cancellation token; arbitrary application code cannot be forcibly terminated.
 
-The new operation is currently supported only by the modern HTTP/3 listener.
-Other listener modes throw `NotSupportedException`; they do not silently claim
-a graceful shutdown. The timeout must be positive and within the timer range
+The operation supports the modern HTTP/3 listener and managed TCP listeners
+whose endpoints are exclusively owned. TCP drain closes new connection admission,
+preserves accepted HTTP/1.1 responses and HTTP/2 streams, and uses GOAWAY for
+HTTP/2. Shared TCP endpoints and combined mode currently throw
+`NotSupportedException` before changing admission. Microsoft mode remains
+unsupported. Adding prefixes or restarting a TCP listener during its drain is
+rejected; await completion before restarting.
+
+TCP drain guarantees transport cleanup, not termination of arbitrary callbacks.
+HTTP/2 contexts receive connection cancellation. Existing HTTP/1.1 context
+cancellation follows the run token, so an application waiting independently must
+still arrange its own cancellation. Shared endpoint coordination and broader TLS,
+body and slow-peer validation remain under development.
+
+The timeout must be positive and within the timer range
 (at most 4,294,967,294 milliseconds). An HTTP/3 listener that has not started or
 has already stopped has no connections to drain. Dispose the server after its
 run task completes to release module/session resources.

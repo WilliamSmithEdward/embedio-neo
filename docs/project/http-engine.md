@@ -2445,3 +2445,53 @@ The full Windows suite passed 3,145 tests with five expected skips (3,150 total,
 zero failures). The rebuilt cold-start allocation gate also passed. The CI
 discovery floor is now 3,150. Final-head CI and macOS admission-path validation
 remain required; these local results do not establish completed host draining.
+
+
+### Managed TCP listener drain for exclusively owned endpoints
+
+`WebServer.DrainAsync` now supports managed TCP listeners when every endpoint is
+exclusively owned. Endpoint ownership is checked under registration synchronization
+before admission changes; shared endpoints are rejected without stopping either
+listener. Accepted connections are captured from both listener ownership and the
+endpoint's pre-routing registry, preserving HTTP/2 streams whose application
+routing has not yet completed. HTTP/1.1 closes after its accepted response;
+HTTP/2 sends GOAWAY and completes accepted streams. Incomplete startup handshakes
+are closed. Pending context consumers remain active until transport drain ends.
+
+Concurrent calls share the first deadline, which starts at the drain request.
+Deadline expiry, cancellation, explicit Stop and disposal abort remaining
+transports. Cancellation callbacks are tied to the captured drain generation so
+an old call cannot stop a restarted listener. New prefixes and restart are rejected
+while drain is in progress. Once cleanup completes, RunAsync ends and the endpoint
+can be reused. This remains transport cleanup, not forcible termination of user
+callbacks: HTTP/2 propagates stream cancellation, while HTTP/1.1's existing context
+token follows RunAsync cancellation.
+
+Nineteen new cases cover HTTP/1.1 and HTTP/2 accepted/queued responses, concurrent
+deadlines, five abort paths, incomplete HTTP/2 SETTINGS startup, restart,
+pre-cancellation and shared-endpoint rejection without admission side effects.
+The old managed-unsupported expectation is removed; Microsoft remains unsupported.
+The 101-case focused set passes on Windows and pinned Linux with two logical
+processors, including the actual .NET Standard asset on both .NET 10 hosts.
+Both assets build without warnings; formatting, source guards and changed-source
+pinned YARA checks pass. Evidence is under `TestResults/http-engine/tcp-listener-drain-*`.
+
+Shared TCP endpoint drain and combined TCP/QUIC drain remain incomplete. TLS,
+unread request bodies, slow response consumers and acceptance/cleanup races need
+broader integration coverage. Default-engine replacement, WebSocket hardening,
+standards closure and comparative performance work remain open; this checkpoint
+does not change the engine default or release readiness.
+
+All checks on the preceding endpoint-admission commit
+`9a01f369878ecf039ac029d6d8b745b8d2b1d989` completed successfully, with only the
+intentional routine-auto-merge/runtime-probe skips. This includes all desktop,
+MAUI, AppContainer, compatibility, allocation, security and malware gates.
+The exact-head check snapshot is retained as `endpoint-admission-ci-final.json`.
+This does not establish that the separate earlier native runtime crash was fixed;
+new listener-drain source still requires its own CI.
+
+Final local listener-drain validation passed 3,163 tests with five expected skips
+(3,168 total, zero failures). The rebuilt hot-path, listener-queue, cold-start and
+listener allocation gates also passed. The CI discovery floor is 3,168. These
+allocation budgets do not establish end-to-end performance; exact-head CI remains
+required before this increment can be treated as cross-platform validated.

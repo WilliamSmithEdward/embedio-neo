@@ -16,7 +16,7 @@ namespace EmbedIO.Net
     /// Based on MONO HttpListener class.
     /// </summary>
     /// <seealso cref="IDisposable" />
-    public sealed class HttpListener : IHttpListener
+    public sealed class HttpListener : IHttpListener, IGracefulHttpListener
     {
         private readonly SemaphoreSlim _ctxQueueSem = new(0);
         private readonly object _lifecycleSync = new();
@@ -26,6 +26,9 @@ namespace EmbedIO.Net
         private readonly HttpListenerPrefixCollection _prefixes;
         private bool _disposed;
         private int _pendingAccepts;
+        private Task? _drainTask;
+        private HashSet<HttpConnection>? _drainConnections;
+        private volatile bool _gracefulStop;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HttpListener" /> class.
@@ -66,7 +69,11 @@ namespace EmbedIO.Net
             lock (_lifecycleSync)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(HttpListener));
+                if (_drainTask != null && !_drainTask.IsCompleted)
+                    throw new InvalidOperationException("The listener is still draining.");
                 if (IsListening) return;
+                _drainTask = null;
+                _gracefulStop = false;
                 if (_acceptStop.IsCancellationRequested)
                 {
                     _acceptStop.Dispose();
@@ -75,6 +82,67 @@ namespace EmbedIO.Net
 
                 EndPointManager.AddListener(this);
                 IsListening = true;
+            }
+        }
+
+        Task IGracefulHttpListener.DrainAsync(TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Task drain;
+            HashSet<HttpConnection>? owned;
+            lock (_lifecycleSync)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(HttpListener));
+                if (_drainTask == null)
+                {
+                    if (!IsListening) return Task.CompletedTask;
+                    var connections = EndPointManager.BeginExclusiveDrain(this);
+                    connections.UnionWith(_connections.Keys);
+                    _drainConnections = connections;
+                    _gracefulStop = true;
+                    var deadline = new CancellationTokenSource(timeout);
+                    _drainTask = Task.Run(() => DrainConnectionsAsync(connections, deadline));
+                }
+                drain = _drainTask;
+                owned = _drainConnections;
+            }
+            return AwaitDrainAsync(drain, owned, cancellationToken);
+        }
+
+        private async Task AwaitDrainAsync(Task drain, HashSet<HttpConnection>? owned, CancellationToken cancellationToken)
+        {
+            using var registration = cancellationToken.Register(() => AbortDrain(owned));
+            await drain.ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        private void AbortDrain(HashSet<HttpConnection>? owned)
+        {
+            lock (_lifecycleSync)
+                if (owned != null && ReferenceEquals(_drainConnections, owned)) Stop();
+        }
+
+        private async Task DrainConnectionsAsync(HashSet<HttpConnection> connections, CancellationTokenSource deadline)
+        {
+            using var deadlineLifetime = deadline;
+            using var registration = deadline.Token.Register(() => AbortDrain(connections));
+            try
+            {
+                // Do not hold the listener lock while entering protocol dispatch.
+                await Task.WhenAll(connections.Select(connection => connection.DrainAsync())).ConfigureAwait(false);
+            }
+            finally
+            {
+                lock (_lifecycleSync)
+                {
+                    IsListening = false;
+                    if (!_disposed)
+                    {
+                        _acceptStop.Cancel();
+                        Close();
+                    }
+                    _drainConnections = null;
+                }
             }
         }
 
@@ -91,7 +159,15 @@ namespace EmbedIO.Net
         }
 
         /// <inheritdoc />
-        public void AddPrefix(string urlPrefix) => _prefixes.Add(urlPrefix);
+        public void AddPrefix(string urlPrefix)
+        {
+            lock (_lifecycleSync)
+            {
+                if (_drainTask != null && !_drainTask.IsCompleted)
+                    throw new InvalidOperationException("Cannot add a prefix while the listener is draining.");
+                _prefixes.Add(urlPrefix);
+            }
+        }
 
         /// <inheritdoc />
         public void Dispose()
@@ -153,6 +229,7 @@ namespace EmbedIO.Net
                     }
                     catch (OperationCanceledException)
                     {
+                        if (_gracefulStop) throw new ListenerDrainedException();
                         throw new HttpListenerException(995, "The listener stopped accepting requests.");
                     }
                 }
@@ -179,6 +256,8 @@ namespace EmbedIO.Net
             {
                 if (_disposed || !IsListening)
                     throw new HttpListenerException(995, "The listener stopped accepting requests.");
+                if (_drainConnections != null && (context is not HttpListenerContext http1 || !_drainConnections.Contains(http1.Connection)))
+                    throw new HttpListenerException(995, "The listener is draining.");
                 if (!_ctxQueue.TryAdd(context.Id, context))
                     throw new InvalidOperationException("Unable to register context");
                 _ = _ctxQueueSem.Release();
@@ -190,6 +269,8 @@ namespace EmbedIO.Net
             lock (_lifecycleSync)
             {
                 if (_disposed || !IsListening) throw new HttpListenerException(995, "The listener stopped accepting requests.");
+                if (_drainConnections != null && !_drainConnections.Contains(connection))
+                    throw new HttpListenerException(995, "The listener is draining.");
                 _connections[connection] = connection;
                 if (!_ctxQueue.TryAdd(context.Id, context)) throw new InvalidOperationException("Unable to register context.");
                 _ = _ctxQueueSem.Release();

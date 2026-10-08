@@ -79,6 +79,27 @@ namespace EmbedIO.Net
             }
         }
 
+        internal static HashSet<HttpConnection> BeginExclusiveDrain(HttpListener listener)
+        {
+            lock (RegistrationLock)
+            {
+                var connections = new HashSet<HttpConnection>();
+                if (!Registrations.TryGetValue(listener, out var prefixes)) return connections;
+                var endpoints = new HashSet<EndPointListener>();
+                foreach (var registered in prefixes.Values)
+                    foreach (var endpoint in registered)
+                    {
+                        if (!endpoint.IsExclusiveTo(listener))
+                            throw new NotSupportedException("Graceful TCP drain currently requires exclusive endpoint ownership.");
+                        endpoints.Add(endpoint);
+                    }
+                // Validate all endpoints before changing any admission state.
+                foreach (var endpoint in endpoints)
+                    connections.UnionWith(endpoint.StopAcceptingForDrain());
+                return connections;
+            }
+        }
+
         internal static void RemoveListener(HttpListener listener)
         {
             foreach (var prefix in listener.Prefixes)

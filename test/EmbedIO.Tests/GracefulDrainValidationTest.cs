@@ -15,7 +15,6 @@ namespace EmbedIO.Tests
             Assert.That(() => server.DrainAsync(TimeSpan.FromMilliseconds(milliseconds)), Throws.InstanceOf<ArgumentOutOfRangeException>());
             Assert.That(server.Listener.IsListening, Is.False);
         }
-        [TestCase(HttpListenerMode.EmbedIO)]
         [TestCase(HttpListenerMode.Microsoft)]
         public void UnsupportedListenersDoNotPretendToDrain(HttpListenerMode mode)
         {
