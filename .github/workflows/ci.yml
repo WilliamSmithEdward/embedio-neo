@@ -11,6 +11,10 @@ on:
         description: Regenerate test-only MAUI HTTPS dependency locks for review
         type: boolean
         default: false
+      runtime-close-probe:
+        description: Run the independent .NET 10.0.12 close diagnostic on all three desktop platforms
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -63,6 +67,37 @@ jobs:
         with:
           name: test-results-${{ matrix.os }}
           path: TestResults/
+          if-no-files-found: error
+
+  runtime-close-probe:
+    name: Runtime close probe (${{ matrix.os }})
+    if: inputs.runtime-close-probe == true
+    env:
+      DOTNET_PROCESSOR_COUNT: 2
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.401
+      - name: Restore the independent runtime probe
+        run: dotnet restore test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj --locked-mode
+      - name: Build with the SDK analyzers
+        run: dotnet build test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj -c Release --no-restore -p:RunAnalyzers=true
+      - name: Exercise sequential client calls across the TCP EOF deadline
+        run: dotnet test/EmbedIO.RuntimeCloseProbe/bin/Release/net10.0/EmbedIO.RuntimeCloseProbe.dll 1024 16 TestResults/runtime-close-probe/result.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: runtime-close-probe-${{ matrix.os }}
+          path: TestResults/runtime-close-probe/
           if-no-files-found: error
 
   compatibility:
@@ -220,15 +255,21 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [test, compatibility, static-analysis, build, mac-catalyst, android, maui-https, appcontainer]
+    needs: [test, runtime-close-probe, compatibility, static-analysis, build, mac-catalyst, android, maui-https, appcontainer]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Check every CI job passed
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          RESULTS: ${{ toJSON(needs) }}
+          RUNTIME_PROBE_REQUESTED: ${{ inputs.runtime-close-probe == true }}
         run: |
-          echo "Results: $RESULTS"
-          for result in $RESULTS; do
-            [ "$result" = success ] || exit 1
-          done
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          requested = os.environ['RUNTIME_PROBE_REQUESTED'] == 'true'
+          for name, job in results.items():
+              expected = 'skipped' if name == 'runtime-close-probe' and not requested else 'success'
+              assert job['result'] == expected, f"{name}: {job['result']}; required {expected}"
+          print('All required CI jobs passed.')
+          PY
