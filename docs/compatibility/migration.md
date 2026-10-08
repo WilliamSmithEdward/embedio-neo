@@ -111,10 +111,10 @@ example, the audited serializers represent the same string differently:
 
 | Serializer | JSON string |
 | --- | --- |
-| Upstream SWAN defaults | `"café <>&"` |
+| Upstream SWAN defaults | `"cafÃ© <>&"` |
 | Neo defaults | `"caf\u00E9 \u003C\u003E\u0026"` |
 
-After JSON parsing, both values are `café <>&`. Neo also uses compact spacing
+After JSON parsing, both values are `cafÃ© <>&`. Neo also uses compact spacing
 where the audited SWAN output included spaces. Member ordering can differ;
 JSON object member order is not the same contract as JSON array element order.
 These textual differences do not imply changed string values or reordered list
@@ -292,7 +292,7 @@ shared CLR object identity by default. Distinct objects with equal values are
 also serialized as separate values.
 
 An actual cycle is different. For example, an object whose `Next` points back
-to itself, or an entity graph such as `Customer → Orders → Customer`, cannot be
+to itself, or an entity graph such as `Customer â†’ Orders â†’ Customer`, cannot be
 represented by endlessly expanding values. Upstream emitted a `$circref` marker
 in the audited self-cycle case. Neo defaults throw `JsonException`; the audited
 default HTTP response path returns 500. The server still serves subsequent valid
@@ -687,3 +687,34 @@ continue accepting arbitrary bytes. Applications previously sending non-UTF-8
 bytes as text must encode UTF-8 or use binary messages. These checks apply to the
 managed engine over HTTP/1.1, HTTP/2 and HTTP/3; native-backend behavior, public
 APIs, callback scheduling and message-size defaults are unchanged.
+
+### Managed HTTP/1 WebSocket opening handshake (unreleased)
+
+The managed HTTP/1 listener now requires GET over HTTP/1.1, the websocket Upgrade
+and Connection Upgrade tokens, one base64 nonce representing 16 bytes, and one
+WebSocket version 13 field before switching protocols. Invalid requests receive
+HTTP 400 instead of an upgrade or an internal-server error. An unsupported or
+missing version advertises `Sec-WebSocket-Version: 13`. Repeated nonce/version
+fields are retained and rejected rather than silently taking the last value.
+
+Repeated list-valued Upgrade and Sec-WebSocket-Protocol fields now retain all
+values in order. This allows a supported subprotocol from the first field to be
+selected when a later field lists another one. Ordinary case-insensitive protocol
+tokens and field OWS remain accepted. Native handshakes and HTTP/2/HTTP/3 extended
+CONNECT do not use this HTTP/1 nonce exchange. See
+[RFC 6455 section 4.2](https://www.rfc-editor.org/rfc/rfc6455.html#section-4.2).
+
+### Native Unix WebSocket response cleanup
+
+On the tested .NET 10 Unix HttpListener runtime, a completed WebSocket upgrade
+leaves HTTP response headers marked unsent internally. Stopping the listener can
+write a second HTTP response into the upgraded stream; concurrent cancellation
+can make that write throw from an already disposed NetworkStream and interrupt
+listener cleanup. The native adapter now marks the successful handshake as sent
+before delivering the WebSocket to application callbacks.
+
+This mitigation uses a guarded internal boolean runtime property. It does not
+change Windows behavior or IgnoreWriteExceptions. Unrecognized runtime shapes
+retain their native behavior; use the managed listener to avoid this runtime
+compatibility shim. It does not establish a general guarantee for cancellation
+while a native upgrade itself is still in progress.

@@ -273,6 +273,7 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO)]
         [TestCase(HttpListenerMode.Microsoft)]
+        [Repeat(32)]
         public async Task CancellationReleasesTheActiveCallbackAndServer(HttpListenerMode mode)
         {
             using var fixture = new Fixture(mode, "gate");

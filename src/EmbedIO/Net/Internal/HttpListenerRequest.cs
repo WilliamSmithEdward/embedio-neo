@@ -293,7 +293,17 @@ namespace EmbedIO.Net.Internal
                 _connection.SetError("Duplicate framing header.");
                 return;
             }
-            else if (previous != null && name.Equals("Connection", StringComparison.OrdinalIgnoreCase))
+            else if (previous != null && (name.Equals(HttpHeaderNames.SecWebSocketKey, StringComparison.OrdinalIgnoreCase)
+                || name.Equals(HttpHeaderNames.SecWebSocketVersion, StringComparison.OrdinalIgnoreCase)))
+            {
+                // Preserve repeated singleton fields so handshake validation rejects
+                // them instead of silently accepting the last supplied value.
+                Headers.Add(name, val);
+                return;
+            }
+            else if (previous != null && (name.Equals("Connection", StringComparison.OrdinalIgnoreCase)
+                || name.Equals(HttpHeaderNames.Upgrade, StringComparison.OrdinalIgnoreCase)
+                || name.Equals(HttpHeaderNames.SecWebSocketProtocol, StringComparison.OrdinalIgnoreCase)))
                 val = previous + ", " + val;
             Headers.Set(name, val);
 

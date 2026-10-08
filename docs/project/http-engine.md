@@ -1159,3 +1159,70 @@ The final refined Windows suite passed 2,778 cases with five expected skips
 (2,783 total, zero failures). Linux focused tests, both-target builds, actual
 netstandard tests, formatting/analyzer guards and the final YARA scan also pass.
 Fresh exact-head CI remains required; #190 and the full engine goal remain open.
+
+### Managed HTTP/1 opening handshake validation (#190)
+
+Twenty-three of 30 real-wire cases failed before this increment. The managed
+accept path upgraded malformed nonces, wrong method/version or missing upgrade
+tokens, while missing/unsupported WebSocket versions returned 500. Repeated
+nonce/version fields silently replaced earlier values. A separate valid repeated
+subprotocol case lost the client's first supported choice.
+
+The accept path now validates request metadata and the 24-character base64 shape
+representing a 16-byte nonce without decoding an extra byte array. Invalid
+handshakes throw HTTP 400 before constructing the upgrade response or connecting
+the application; version errors also advertise 13. HTTP parsing retains repeated
+singleton fields for rejection at the handshake boundary, and combines list-valued
+Upgrade/subprotocol fields in order. No per-request duplicate flag is added.
+
+An initial parser-level duplicate rejection closed the connection without an HTTP
+response; moving validation to the handshake boundary fixes that wire result.
+The HTTP/1.0 rejection fixture was corrected to expect its legitimate HTTP/1.0
+response version. Both attempts are retained. All 30 final handshake cases pass;
+the preceding 87-case handshake/H2/H3/cookie selection also passes. Each handshake
+case verifies subsequent healthy HTTP and BCL WebSocket traffic. Migration notes
+record the stricter malformed-request behavior. Evidence is under
+TestResults/http-engine/ws-handshake-*. Discovery floor: 2,813. Full-source,
+cross-platform and target checks remain required; this is not complete handshake
+or extension conformance.
+
+### Native Unix upgrade cleanup regression
+
+The d97f60b CI run 37803210662 failed on macOS 15 ARM64: cancellation of the
+native listener threw ObjectDisposedException from HttpResponseStream.InternalWrite
+through HttpListener.Stop, followed by a pending-server timeout. Its unchanged
+attempt 2 passed; this does not resolve the observed defect.
+
+The .NET 10.0.12 Unix runtime leaves its internal SentHeaders property false after
+WriteWebSocketHandshakeHeadersAsync. Response cleanup therefore attempts another
+HTTP response on the upgraded transport. A deterministic Linux wire regression
+confirmed a second HTTP/1.1 101 response on shutdown while application connection
+initialization was held pending. This is a separate controlled reproduction of
+the unwanted write, not a claim to deterministically reproduce the macOS race.
+
+The candidate records the completed native handshake through that runtime's
+internal boolean property immediately after successful AcceptWebSocketAsync,
+before exposing the socket to application callbacks. Windows is unchanged.
+The property shape is checked; unrecognized runtime shapes retain their existing
+native behavior, so this mitigation is not promised for all runtimes. No errors
+are swallowed and IgnoreWriteExceptions remains unchanged. This uses a narrow
+private-runtime compatibility shim; HttpListenerMode.EmbedIO does not require it.
+Cancellation overlapping an upgrade still needs explicit stress coverage; this
+change is not a general native-listener shutdown guarantee.
+
+The Linux wire regression failed before the candidate and passed afterward;
+all 44 selected native-shutdown/message-callback cases passed on Linux. The
+original cancellation regression now repeats 32 times per listener mode.
+Final source, Windows/macOS, netstandard and scanner checks remain required.
+Evidence: TestResults/http-engine/native-stop-*. Discovery floor: 2,814.
+
+The preceding handshake increment passed the full Windows suite (2,808 passed,
+five expected skips), 154 Linux focused cases and 127 actual netstandard-asset
+cases before this native cleanup candidate was added.
+
+The first Windows fixture run exposed HTTP.sys's abortive ConnectionReset on
+listener stop. The wire test now accepts only that specific Windows transport
+termination while still asserting that all bytes preceding it are empty; Unix
+EOF behavior remains checked. The initial logs are retained. Linux repeated
+cancellation and all 44 selected cases pass. Both-target builds and analyzer
+guards pass; the pinned YARA scan of all seven changed C# files has no matches.

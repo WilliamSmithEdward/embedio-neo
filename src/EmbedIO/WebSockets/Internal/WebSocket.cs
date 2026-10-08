@@ -232,6 +232,20 @@ namespace EmbedIO.WebSockets.Internal
             GC.SuppressFinalize(this);
         }
 
+        private static bool IsHandshakeKey(string? value)
+        {
+            // Exactly 16 decoded bytes require 22 alphabet characters and two
+            // padding characters. OWS has already been removed by HTTP parsing.
+            if (value == null || value.Length != 24 || value[22] != '=' || value[23] != '=') return false;
+            for (var i = 0; i < 22; ++i)
+            {
+                var c = value[i];
+                if (!(c >= 'A' && c <= 'Z') && !(c >= 'a' && c <= 'z')
+                    && !(c >= '0' && c <= '9') && c != '+' && c != '/') return false;
+            }
+            return true;
+        }
+
         internal static async Task<WebSocket> AcceptAsync(HttpListenerContext httpContext, string acceptedProtocol)
         {
             static string CreateResponseKey(string clientKey)
@@ -243,25 +257,21 @@ namespace EmbedIO.WebSockets.Internal
                 return Convert.ToBase64String(sha1.ComputeHash(Encoding.UTF8.GetBytes(buff.ToString())));
             }
 
+            if (!httpContext.Request.IsWebSocketRequest)
+                throw new HttpException(System.Net.HttpStatusCode.BadRequest, "A WebSocket upgrade requires HTTP/1.1 GET, Upgrade and Connection tokens.");
             var requestHeaders = httpContext.Request.Headers;
-
             var webSocketKey = requestHeaders[HttpHeaderNames.SecWebSocketKey];
-
-            if (string.IsNullOrEmpty(webSocketKey))
+            if (!IsHandshakeKey(webSocketKey))
+                throw new HttpException(System.Net.HttpStatusCode.BadRequest, "Sec-WebSocket-Key must encode a 16-byte nonce.");
+            if (requestHeaders[HttpHeaderNames.SecWebSocketVersion] != SupportedVersion)
             {
-                throw new WebSocketException(CloseStatusCode.ProtocolError, $"Includes no {HttpHeaderNames.SecWebSocketKey} header, or it has an invalid value.");
-            }
-
-            var webSocketVersion = requestHeaders[HttpHeaderNames.SecWebSocketVersion];
-
-            if (webSocketVersion == null || webSocketVersion != SupportedVersion)
-            {
-                throw new WebSocketException(CloseStatusCode.ProtocolError, $"Includes no {HttpHeaderNames.SecWebSocketVersion} header, or it has an invalid value.");
+                httpContext.Response.Headers[HttpHeaderNames.SecWebSocketVersion] = SupportedVersion;
+                throw new HttpException(System.Net.HttpStatusCode.BadRequest, "Unsupported WebSocket version.");
             }
 
             var handshakeResponse = new WebSocketHandshakeResponse(httpContext);
 
-            handshakeResponse.Headers[HttpHeaderNames.SecWebSocketAccept] = CreateResponseKey(webSocketKey);
+            handshakeResponse.Headers[HttpHeaderNames.SecWebSocketAccept] = CreateResponseKey(webSocketKey ?? throw new InvalidOperationException("Missing validated WebSocket key."));
 
             if (acceptedProtocol.Length > 0)
             {
