@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Buffers;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,9 +11,8 @@ namespace EmbedIO.WebSockets.Internal
         private static readonly UTF8Encoding StrictUtf8 = new(false, true);
         private readonly bool _unmask;
         private readonly Stream? _stream;
-        private Decoder? _textDecoder;
+        private Utf8MessageValidator _textValidator;
         private bool _textMessage;
-        private bool _decodingText;
 
         public WebSocketFrameStream(Stream? stream, bool unmask = false)
         {
@@ -47,56 +45,14 @@ namespace EmbedIO.WebSockets.Internal
 
         private void ValidateTextPayload(WebSocketFrame frame)
         {
-            // Control and binary bytes never advance the text decoder. Keep a
-            // decoder only for partial sequences and reuse it between messages.
-            if (frame.Opcode == Opcode.Text) { _textMessage = true; _decodingText = false; }
+            // Control and binary bytes never advance the text validator.
+            if (frame.Opcode == Opcode.Text) { _textMessage = true; _textValidator = default; }
             else if (frame.Opcode == Opcode.Binary) { _textMessage = false; return; }
             else if (frame.Opcode != Opcode.Cont || !_textMessage) return;
             var final = frame.Fin == Fin.Final;
-            var payload = frame.PayloadData.ToArray();
-#if NET10_0_OR_GREATER
-            // A complete valid chunk has no state to carry to the next frame.
-            // Partial and malformed sequences take the strict decoder path.
-            if (!_decodingText && System.Text.Unicode.Utf8.IsValid(payload))
-            {
-                if (final) _textMessage = false;
-                return;
-            }
-#endif
-            try
-            {
-                if (!_decodingText && final)
-                {
-                    _ = StrictUtf8.GetCharCount(payload);
-                    _textMessage = false;
-                    return;
-                }
-                if (!_decodingText)
-                {
-                    _textDecoder ??= StrictUtf8.GetDecoder();
-                    _textDecoder.Reset();
-                    _decodingText = true;
-                }
-                var decoder = _textDecoder ?? throw new InvalidOperationException("Missing text decoder state.");
-                var characters = ArrayPool<char>.Shared.Rent(256);
-                try
-                {
-                    var offset = 0;
-                    bool completed;
-                    do
-                    {
-                        decoder.Convert(payload, offset, payload.Length - offset,
-                            characters, 0, characters.Length, final, out var consumed, out _, out completed);
-                        offset += consumed;
-                    } while (!completed);
-                }
-                finally { ArrayPool<char>.Shared.Return(characters, clearArray: true); }
-                if (final) { _decodingText = false; _textMessage = false; }
-            }
-            catch (DecoderFallbackException error)
-            {
-                throw new WebSocketException(CloseStatusCode.InvalidData, "Text message is not valid UTF-8.", error);
-            }
+            if (!_textValidator.Validate(frame.PayloadData.ToArray(), final))
+                throw new WebSocketException(CloseStatusCode.InvalidData, "Text message is not valid UTF-8.");
+            if (final) _textMessage = false;
         }
 
         private static bool IsOpcodeData(byte opcode) => opcode == 0x1 || opcode == 0x2;

@@ -144,9 +144,11 @@ broader workload comparisons remain separate validation work.
 
 `--websocket-read` measures masked frame parsing, unmasking and incoming text
 validation from a MemoryStream. It checks every payload byte and full wire
-consumption. Workloads use 16, 1,024 and 65,536-byte UTF-8 payloads, one or sixteen
+consumption. Workloads use 16, 1,024, 65,536 and 65,538-byte UTF-8 payloads, one or sixteen
 frames, and both text and binary opcodes. A reader is reused across messages;
-the 16-byte/16-frame text workload splits multibyte code points across frames.
+the 16-byte and 65,538-byte sixteen-frame text workloads split multibyte code
+points across frames. Each sample uses 5,000 messages and records generation 0/1/2 collection counts
+to make GC-related timing variation visible.
 Five samples follow warmup. JSON identifies the core assembly hash, runtime,
 OS, architecture, nanoseconds/message and allocated bytes/message.
 

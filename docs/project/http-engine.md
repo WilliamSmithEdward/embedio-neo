@@ -1226,3 +1226,103 @@ termination while still asserting that all bytes preceding it are empty; Unix
 EOF behavior remains checked. The initial logs are retained. Linux repeated
 cancellation and all 44 selected cases pass. Both-target builds and analyzer
 guards pass; the pinned YARA scan of all seven changed C# files has no matches.
+
+### Fragmented UTF-8 validation cost and upgrade cancellation follow-up
+
+All checks on ef04f66 passed, including CI 37806790138, Security 37806789636,
+Malware 37806789642 and Fuzz 37806789641. This includes the original macOS
+cancellation regression and the Unix duplicate-handshake wire regression. The
+combined local Windows suite passed 2,809 cases with five expected skips.
+
+A new stress fixture performs 32 listener lifetimes per backend, racing four
+partially sent upgrade requests with stop and rebinding the same endpoint.
+Some rounds await one completed application connection, while others race the
+final request bytes immediately or after a scheduling yield. Every client task
+and the server accept loop must finish; client-side resets are permitted only
+for specified socket termination errors, while timeout cancellation still fails.
+This supplements the deterministic wire test; it does not prove every schedule.
+
+Incoming text validation now keeps a small byte-range state following
+[RFC 3629 section 4](https://datatracker.ietf.org/doc/html/rfc3629#section-4),
+without a retained Decoder or per-fragment rented/cleared character buffer.
+Complete spans retain runtime validation; a split leading scalar and potentially
+incomplete trailing scalar use the byte state. Binary/control messages do not
+advance that state, and new text messages reset it. Invalid input still closes
+with 1007 before application dispatch.
+
+Four independent-oracle tests cover all 1,112,064 Unicode scalars fragmented byte
+by byte, every one/two-byte sequence at each split, every single-byte mutation
+of boundary scalar encodings (also surrounded by substantial ASCII spans), and
+20,000 seeded longer valid/random inputs. Strict UTF8Encoding.Decoder.Convert
+is the malformed/prefix oracle; Rune supplies valid scalar encodings. Existing
+real TCP and HTTP/2/HTTP/3 WebSocket tests remain required.
+
+The first scalar-only candidate improved tiny fragmented text but regressed
+large netstandard text substantially (65,536-byte single frames rose from
+36.9 to 71.0 us in that experiment). It was not retained. Complete-span runtime
+validation and bounded partial-scalar handling corrected the regression. Earlier
+ws-utf8-stream-*, ws-utf8-final-* and ws-utf8-verified-* experiments remain
+available. The 500-iteration large-message samples produced a conflicting
+65,538-byte single-text result (44.9 to 61.9 us for the modern asset), so the
+benchmark now records GC counts and uses 5,000 iterations for every sample.
+The longer comparison shows 53.9 to 53.4 us for that row. Both sides have
+3,123 generation-2 collections across its 75,000 measured messages; this
+workload is GC-sensitive, but that does not prove the cause of the earlier
+variation. No earlier sample is discarded from the evidence directory.
+
+The authoritative comparison below is ws-utf8-long-*: final core builds,
+byte-identical runner A3546DD59EBA351A113B06B64FF61C94C20239DF4077A67626C18C2F0E89DA46,
+three alternating processes per target/version and five measured samples each.
+Baseline core source is ef04f66. The target directive was expressed as the
+explicit NETSTANDARD2_0 condition after the regex guard misread a negated
+preprocessor condition as nullable suppression; no checker was weakened.
+
+Environment: AMD Ryzen 7 9800X3D (8 cores/16 logical), Windows 10.0.26300,
+.NET 10.0.12, x64, DOTNET_TieredCompilation=0. Both assets run on that runtime;
+this is not a measurement on a legacy runtime. No concurrent test/benchmark was
+intentionally launched; CPU affinity/frequency and desktop background activity
+were not isolated. Every row is the median of 15 samples. The maximum absolute
+median allocation difference is 0.0816 B/message; no allocation improvement is
+claimed. This measures in-memory parsing/unmasking and validation with identical
+reflection/content checks, not end-to-end performance.
+
+| Payload bytes | Frames | Type | .NET 10 before / after (us) | netstandard before / after (us) |
+| --- | --- | --- | --- | --- |
+| 16 | 1 | binary | 0.332 / 0.319 | 0.339 / 0.311 |
+| 16 | 1 | text | 0.355 / 0.328 | 0.339 / 0.328 |
+| 16 | 16 | binary | 3.104 / 3.001 | 3.137 / 3.027 |
+| 16 | 16 | text | 4.223 / 3.166 | 4.179 / 3.042 |
+| 1,024 | 1 | binary | 0.685 / 0.671 | 0.686 / 0.668 |
+| 1,024 | 1 | text | 0.785 / 0.786 | 0.797 / 0.792 |
+| 1,024 | 16 | binary | 3.620 / 3.517 | 3.500 / 3.520 |
+| 1,024 | 16 | text | 3.885 / 3.828 | 4.388 / 3.847 |
+| 65,536 | 1 | binary | 30.290 / 30.283 | 30.359 / 30.148 |
+| 65,536 | 1 | text | 36.573 / 36.890 | 36.575 / 36.134 |
+| 65,536 | 16 | binary | 32.284 / 32.427 | 31.519 / 31.486 |
+| 65,536 | 16 | text | 38.128 / 38.657 | 47.481 / 38.787 |
+| 65,538 | 1 | binary | 54.504 / 54.235 | 54.392 / 53.453 |
+| 65,538 | 1 | text | 53.911 / 53.431 | 53.596 / 54.009 |
+| 65,538 | 16 | binary | 32.713 / 32.467 | 32.586 / 32.725 |
+| 65,538 | 16 | text | 46.213 / 39.239 | 49.607 / 39.698 |
+
+Core hashes:
+
+- modern before: CE32BF9D5D48A24396555FF7477E9A78C5083CC11F5F7012A061990BCC72C860
+- modern after: 0345A257DE8BC2B267C71B9CC59AD4D701B54B180E1C9735C8F09B31FD07914B
+- legacy before: 0FC20306BB313C126F2E837C29E73F92A5A0D4D4D5F6A1990654786C3D3177A9
+- legacy after: CE903BDB5D45D60AC4AD0ADFEEE199BB3F53077F39940399AFF0C6A1923A0597
+
+Small changes in the control rows are not claimed as improvements. The full
+network, application, tail-latency and retained-memory objectives remain open.
+Discovery floor: 2,820. The final Windows suite passes 2,815 cases with five
+expected skips (2,820 total). The modern Linux selection passes 111 cases and
+the actual netstandard asset passes 76 cases on both Windows and Linux. Both
+library targets and the benchmark build with zero warnings/errors; formatting,
+analyzer guards, the allocation budget and the five-file pinned YARA scan pass.
+Fresh exact-head CI remains required. The full engine goal and #190 remain open.
+
+The large-frame benchmark also exposes the shared reader's geometric
+MemoryStream growth beyond a requested non-power-of-two length, followed by a
+final copy. Bounding each growth step by the advertised length while allocating
+only as bytes arrive is a concrete next performance experiment; it is not yet
+implemented or claimed measured here.

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -23,6 +24,81 @@ namespace EmbedIO.Tests
             {
                 Entered.TrySetResult(true);
                 await Release.Task;
+            }
+        }
+
+        [TestCase(HttpListenerMode.Microsoft)]
+        [TestCase(HttpListenerMode.EmbedIO)]
+        public async Task CancellationDuringUpgradeReleasesAcceptAndAllConnectedTransports(HttpListenerMode mode)
+        {
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            for (var round = 0; round < 32; round++)
+            {
+                var module = new PendingInitialization();
+                using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(mode)).WithModule(module);
+                using var stop = new CancellationTokenSource();
+                var running = server.RunAsync(stop.Token);
+                var clients = new TcpClient[4];
+                var exchanges = new List<Task>(4);
+                var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                try
+                {
+                    for (var index = 0; index < clients.Length; index++)
+                    {
+                        var client = new TcpClient();
+                        clients[index] = client;
+                        await client.ConnectAsync(IPAddress.Loopback, new Uri(url).Port, timeout.Token);
+                        var stream = client.GetStream();
+                        var prefix = $"GET /ws HTTP/1.1\r\nHost: {new Uri(url).Authority}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n";
+                        await stream.WriteAsync(Encoding.ASCII.GetBytes(prefix), timeout.Token);
+                        exchanges.Add(FinishUpgrade(stream, release.Task, timeout.Token));
+                    }
+                    release.TrySetResult(true);
+                    if ((round & 3) == 1) await module.Entered.Task.WaitAsync(timeout.Token);
+                    else if ((round & 1) == 0) await Task.Yield();
+                    stop.Cancel();
+                    await running.WaitAsync(timeout.Token);
+                    await Task.WhenAll(exchanges).WaitAsync(timeout.Token);
+                    Assert.That(server.Listener.IsListening, Is.False, $"Round {round}");
+                }
+                catch (Exception error)
+                {
+                    TestContext.Error.WriteLine($"Upgrade cancellation before cleanup: mode={mode}, round={round}, server={running.Status}, clients={exchanges.Count}. {error}");
+                    throw;
+                }
+                finally
+                {
+                    release.TrySetResult(true);
+                    module.Release.TrySetResult(true);
+                    stop.Cancel();
+                    try { await Task.WhenAll(exchanges).WaitAsync(timeout.Token); }
+                    finally { foreach (var client in clients) client?.Dispose(); }
+                    await running.WaitAsync(timeout.Token);
+                }
+            }
+        }
+
+        private static async Task FinishUpgrade(NetworkStream stream, Task release, CancellationToken timeout)
+        {
+            await release;
+            try
+            {
+                await stream.WriteAsync(new byte[] { 13, 10 }, timeout);
+                var buffer = new byte[1024];
+                var received = 0;
+                int count;
+                while ((count = await stream.ReadAsync(buffer, timeout)) != 0)
+                {
+                    received += count;
+                    Assert.That(received, Is.LessThan(32768));
+                }
+            }
+            catch (IOException error) when (error.InnerException is SocketException socketError
+                && socketError.SocketErrorCode is SocketError.ConnectionReset or SocketError.ConnectionAborted or SocketError.Shutdown)
+            {
+                // A listener stop may abort either a partial HTTP request or an
+                // upgraded transport. Deadline cancellation must still fail the test.
             }
         }
 

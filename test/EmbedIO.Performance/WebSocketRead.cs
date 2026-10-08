@@ -23,7 +23,7 @@ internal static class WebSocketRead
         var payload = frameType.GetProperty("PayloadData", flags) ?? throw new InvalidOperationException("Missing payload property.");
         var bytesMethod = payloadType.GetMethod("ToArray", flags) ?? throw new InvalidOperationException("Missing payload bytes.");
         var rows = new List<object>();
-        foreach (var size in new[] { 16, 1024, 65536 })
+        foreach (var size in new[] { 16, 1024, 65536, 65538 })
             foreach (var fragments in new[] { 1, 16 })
                 foreach (var text in new[] { false, true })
                 {
@@ -50,17 +50,20 @@ internal static class WebSocketRead
                         }
                         if (offset != expected.Length || wire.Position != wire.Length) throw new InvalidDataException("Incomplete message consumption.");
                     }
-                    var iterations = size == 65536 ? 500 : 5000;
+                    const int iterations = 5000;
                     for (var index = 0; index < 1000; ++index) Parse();
                     var samples = new List<object>();
                     for (var round = 0; round < 5; ++round)
                     {
+                        var gen0 = GC.CollectionCount(0);
+                        var gen1 = GC.CollectionCount(1);
+                        var gen2 = GC.CollectionCount(2);
                         var startBytes = GC.GetAllocatedBytesForCurrentThread();
                         var start = Stopwatch.GetTimestamp();
                         for (var index = 0; index < iterations; ++index) Parse();
                         var elapsed = Stopwatch.GetElapsedTime(start);
                         var allocated = GC.GetAllocatedBytesForCurrentThread() - startBytes;
-                        samples.Add(new { round, nanosecondsPerMessage = elapsed.TotalNanoseconds / iterations, bytesPerMessage = allocated / (double)iterations });
+                        samples.Add(new { round, nanosecondsPerMessage = elapsed.TotalNanoseconds / iterations, bytesPerMessage = allocated / (double)iterations, gen0 = GC.CollectionCount(0) - gen0, gen1 = GC.CollectionCount(1) - gen1, gen2 = GC.CollectionCount(2) - gen2 });
                     }
                     rows.Add(new { size, fragments, text, iterations, samples });
                 }
