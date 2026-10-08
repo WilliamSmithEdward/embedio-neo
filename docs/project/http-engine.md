@@ -687,3 +687,34 @@ Windows suite passed 2,652 cases with five expected skips (2,657 total). Evidenc
 is under TestResults/http-engine/main-6961-*. Both sides' changelog entries and
 interop CI steps are retained; the discovery minimum includes main's eight added
 regressions. These runs precede the next request-stream reader increment.
+
+
+### HTTP/3 request-stream framing and error scope
+
+The request-stream reader now enforces initial HEADERS, streamed DATA and optional
+trailing HEADERS without queuing body payloads. It pauses advancement until the
+connection confirms that each encoded field section has been decoded and validated,
+including QPACK blocking. It rejects DATA before headers, known frames after
+trailers, control/HTTP2-reserved frames on request streams, and misplaced RFC 9218
+priority updates. Unknown frames remain skippable before, between and after message
+frames with bounded scratch storage. Empty DATA frames do not end the request.
+
+Frame-placement/truncation errors retain connection scope. Missing initial headers,
+Content-Length mismatches and explicit body-budget failures carry a separate
+stream error with the full 62-bit request-stream identifier. Metadata is bounded
+before allocation; cumulative DATA budgets are checked before reading oversized
+payloads. The successful CONNECT transition permits opaque DATA and half-close
+while forbidding later known non-DATA frames; the sender can commit that transition
+while the independent reader awaits input. Cancellation after I/O starts poisons
+that reader, while a pre-canceled call consumes nothing. The transport remains owned
+by the connection. This class does not itself validate HTTP fields or expose an
+HTTP/3 listener; connection/QPACK dispatch and QUIC integration remain required.
+
+All 208 HTTP/3 tests, including 33 additional request-stream cases, pass against both
+target assemblies. The current local host reports .NET 10.0.12; runtime details are
+saved in TestResults/http-engine/http3-request-dotnet-info.log. Solution builds,
+complete whitespace verification and both suppression guards pass. A separate
+capability probe reports QuicListener.IsSupported and QuicConnection.IsSupported
+as true on this host; that is capability evidence, not a connection test. The
+discovery minimum is 2,690. The 2,657-case full run above predates this increment;
+fresh exact-head cross-platform checks remain required.
