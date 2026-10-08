@@ -16,6 +16,8 @@ namespace EmbedIO.Net.Internal
     internal sealed partial class HttpConnection : IDisposable
     {
         private const int BufferSize = 8192;
+        private static readonly byte[] BadRequestResponse = Encoding.ASCII.GetBytes(
+            "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         private static readonly Encoding HeaderEncoding = Encoding.GetEncoding(28591);
         private int _headerBytes;
         private bool _http2;
@@ -305,13 +307,25 @@ namespace EmbedIO.Net.Internal
                 bufferedInput = false;
                 if (ProcessInput(input))
                 {
-                    StopRequestTimer();
                     if (_errorMessage is null)
                     {
                         _context.HttpListenerRequest.FinishInitialization();
                     }
 
-                    if (_errorMessage != null || !_epl.BindContext(_context))
+                    if (_errorMessage != null)
+                    {
+                        // Keep the existing request deadline active through this bounded write.
+                        // Never reflect untrusted parser diagnostics or restart this connection.
+                        try
+                        {
+                            await Stream.WriteAsync(BadRequestResponse, 0, BadRequestResponse.Length).ConfigureAwait(false);
+                        }
+                        finally { Close(true); }
+                        return;
+                    }
+
+                    StopRequestTimer();
+                    if (!_epl.BindContext(_context))
                     {
                         Close(true);
                         return;

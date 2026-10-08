@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
+using System.Net.Security;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -124,20 +125,28 @@ namespace EmbedIO.Tests
             Assert.That(Encoding.ASCII.GetString(replies.ToArray()).Split("HTTP/1.1 204", StringSplitOptions.None).Length, Is.EqualTo(3));
         }
 
-        [TestCase("example.test:443")]
-        [TestCase("127.0.0.1:443")]
-        [TestCase("[::1]:443")]
-        public async Task UnsupportedConnectClosesBeforeOptimisticSuccessor(string authority)
+        [TestCase("example.test:443", false)]
+        [TestCase("example.test:443", true)]
+        [TestCase("127.0.0.1:443", false)]
+        [TestCase("127.0.0.1:443", true)]
+        [TestCase("[::1]:443", false)]
+        [TestCase("[::1]:443", true)]
+        public async Task UnsupportedConnectClosesBeforeOptimisticSuccessor(string authority, bool secure)
         {
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            using var listener = new Net.HttpListener();
-            var url = HttpsSmoke.GetUrl().Replace("https://", "http://", StringComparison.Ordinal);
+            using var certificate = HttpsSmoke.CreateCertificate();
+            using var listener = new Net.HttpListener(secure ? certificate : null);
+            var url = HttpsSmoke.GetUrl();
+            if (!secure) url = url.Replace("https://", "http://", StringComparison.Ordinal);
             listener.AddPrefix(url);
             listener.Start();
             var accept = listener.GetContextAsync(stop.Token);
             using var client = new TcpClient { NoDelay = true };
             await client.ConnectAsync("127.0.0.1", new Uri(url).Port, stop.Token);
-            var stream = client.GetStream();
+            using var tls = secure ? new SslStream(client.GetStream(), false,
+                (_, peer, _, _) => peer?.GetCertHashString() == certificate.GetCertHashString()) : null;
+            if (tls != null) await tls.AuthenticateAsClientAsync("localhost");
+            Stream stream = tls ?? (Stream)client.GetStream();
             var wire = "CONNECT " + authority + " HTTP/1.1\r\nHost: " + authority
                 + "\r\n\r\nGET /must-not-dispatch HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
             await stream.WriteAsync(Encoding.ASCII.GetBytes(wire), stop.Token);
@@ -146,13 +155,17 @@ namespace EmbedIO.Tests
             var response = Encoding.ASCII.GetString(replies.ToArray());
             Assert.Multiple(() =>
             {
-                Assert.That(response, Is.Empty, "Current unsupported authority-form parsing closes without a response.");
+                Assert.That(response, Is.EqualTo("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
                 Assert.That(accept.IsCompleted, Is.False, "Rejected CONNECT and optimistic bytes must not dispatch.");
             });
 
             using var healthy = new TcpClient();
             await healthy.ConnectAsync("127.0.0.1", new Uri(url).Port, stop.Token);
-            await healthy.GetStream().WriteAsync(Encoding.ASCII.GetBytes(
+            using var healthyTls = secure ? new SslStream(healthy.GetStream(), false,
+                (_, peer, _, _) => peer?.GetCertHashString() == certificate.GetCertHashString()) : null;
+            if (healthyTls != null) await healthyTls.AuthenticateAsClientAsync("localhost");
+            Stream healthyStream = healthyTls ?? (Stream)healthy.GetStream();
+            await healthyStream.WriteAsync(Encoding.ASCII.GetBytes(
                 "GET /healthy HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"), stop.Token);
             var context = await accept;
             Assert.That(context.Request.RawTarget, Is.EqualTo("/healthy"));
@@ -161,7 +174,7 @@ namespace EmbedIO.Tests
             context.Response.OutputStream.Write(Array.Empty<byte>(), 0, 0);
             context.Close();
             using var healthyReply = new MemoryStream();
-            await healthy.GetStream().CopyToAsync(healthyReply, stop.Token);
+            await healthyStream.CopyToAsync(healthyReply, stop.Token);
             Assert.That(Encoding.ASCII.GetString(healthyReply.ToArray()), Does.StartWith("HTTP/1.1 204 "));
         }
 
@@ -186,9 +199,11 @@ namespace EmbedIO.Tests
             using var client = new TcpClient();
             await client.ConnectAsync("127.0.0.1", new Uri(url).Port, stop.Token);
             var stream = client.GetStream();
-            await stream.WriteAsync(Encoding.ASCII.GetBytes("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\n" + headers + "\r\n"), stop.Token);
-            try { Assert.That(await stream.ReadAsync(new byte[1], stop.Token), Is.Zero); }
-            catch (IOException) { /* Reset is also an unambiguous terminal rejection. */ }
+            await stream.WriteAsync(Encoding.ASCII.GetBytes("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\n" + headers + "\r\nGET /must-not-dispatch HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"), stop.Token);
+            using var rejected = new MemoryStream();
+            await stream.CopyToAsync(rejected, stop.Token);
+            Assert.That(Encoding.ASCII.GetString(rejected.ToArray()),
+                Is.EqualTo("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
             Assert.That(accept.IsCompleted, Is.False);
             listener.Stop();
             await Assert.ThatAsync(async () => await accept, Throws.InstanceOf<System.Net.HttpListenerException>());

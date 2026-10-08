@@ -1928,3 +1928,35 @@ cases on Windows and Linux .NET 10 hosts. Both-target build, formatting, reposit
 source guards and changed-file pinned YARA scans passed. Exact-head CI remains
 required. QUERY result preconditions/ranges must be evaluated against the selected
 query result, not by treating the method as a static-file GET.
+
+### Bounded HTTP/1 parser rejection responses
+
+The managed parser now sends a fixed 400 response with zero content and explicit
+connection closure on parsing/initialization failure. The request timer stays
+active through the asynchronous write, and a finally block forces closure even
+when writing fails. No parser diagnostics are reflected. Successful dispatch and
+prefix-routing rejection retain their paths. The earlier CONNECT audit's silent
+close is superseded by this response; CONNECT tunneling remains unimplemented.
+
+Thirteen strengthened raw-wire cases failed before implementation. All 44 focused
+HTTP/1 engine cases now pass on Windows, including three new certificate-pinned
+TLS CONNECT rejection cases and healthy fresh connections. Ambiguous framing
+cases also include an optimistic successor that must not dispatch. Evidence is
+local `h1-rejection-before.log` and `h1-rejection-tls.log`. Final full and
+cross-platform validation completed. The first full run found two existing
+negative-length fixtures that required silent EOF; both now verify the complete
+400 response and closure. The repeated full Windows suite passed: 3,026 total,
+3,021 successes and five expected skips (`h1-rejection-full-final.log`). All 46
+focused cases passed on Windows; the 44 engine cases and two updated boundary
+cases also passed on Linux and with the actual .NET Standard asset on both hosts
+under .NET 10. Build, formatting, source guards and pinned changed-file YARA scans
+passed. Exact-head repository checks remain required.
+
+The RFC Editor errata feed was captured during this increment under local
+`standards-2026-10-08/errata.json`, with URL, timestamp and SHA-256 recorded in
+`errata-source.json`. The inventoried RFC selection contains 146 records: 44
+verified, 35 held for document update, 29 reported and 38 rejected. These categories
+must not be conflated. Mapping the verified corrections to code/tests remains
+open, including HTTP/3 path grammar (7014), GOAWAY error scope (7780), QPACK dynamic
+index counting (8410) and Structured Field display strings (8869). TLS-provider
+requirements and obsoleted specifications require separate applicability review.

@@ -92,8 +92,10 @@ namespace EmbedIO.Tests
             using var fixture = new RawListener(secure);
             await fixture.Connect();
             await fixture.Write("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: -1\r\n\r\n", 7);
-            var bytes = new byte[1];
-            Assert.That(await fixture.Stream.ReadAsync(bytes.AsMemory(), fixture.Token), Is.Zero);
+            using var rejected = new MemoryStream();
+            await fixture.Stream.CopyToAsync(rejected, fixture.Token);
+            Assert.That(Encoding.ASCII.GetString(rejected.ToArray()),
+                Is.EqualTo("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
             await fixture.AssertHealthy();
         }
 

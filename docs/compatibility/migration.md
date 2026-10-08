@@ -763,3 +763,13 @@ fail with 400 through the standard HTTP exception handler before application
 modules run. Applications must still reject unsupported media types or content
 inconsistent with their declared type. Complete QUERY support remains under
 development; do not advertise full support based on the enum alone.
+
+## HTTP/1 parser rejection responses (unreleased)
+
+The managed listener now attempts a fixed, empty HTTP 400 response for request
+line, header or framing initialization errors before closing the connection.
+Previously these paths closed silently. Invalid input is not reflected in the
+response, pipelined successor requests are not dispatched, and the existing
+request deadline remains active through the write. A disconnected peer or expired
+deadline can still prevent response delivery. Prefix-routing rejection remains
+unchanged. This does not add CONNECT tunneling or accept authority-form targets.
