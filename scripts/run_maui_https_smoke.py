@@ -1,5 +1,6 @@
 """Execute the MAUI HTTPS app using normal platform/browser trust on disposable CI hosts."""
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -26,10 +27,55 @@ process = None
 simulator = None
 trust_installed = False
 process_log = None
+timings = []
+failed = False
+
+
+def persist_timings():
+    (ROOT / "timings.json").write_text(json.dumps(timings, indent=2), encoding="utf-8")
+
+
+@contextmanager
+def timed(name):
+    entry = {"phase": name, "started_unix": time.time(), "status": "running"}
+    timings.append(entry)
+    persist_timings()
+    started = time.monotonic()
+    print(f"Starting {name}", flush=True)
+    try:
+        yield entry
+        entry["status"] = "passed"
+    except Exception as error:
+        entry["status"] = "failed"
+        entry["error"] = str(error)
+        raise
+    finally:
+        entry["seconds"] = round(time.monotonic() - started, 3)
+        persist_timings()
+        print(f"Finished {name}: {entry['status']} in {entry['seconds']}s", flush=True)
+
+
+def probe_progress(event):
+    (ROOT / "last-probe-state.json").write_text(json.dumps(event, indent=2), encoding="utf-8")
+    with (ROOT / "probe-events.jsonl").open("a", encoding="utf-8") as output:
+        output.write(json.dumps(dict(event, timestamp=time.time())) + "\n")
 
 
 def invoke(*arguments, timeout=120):
-    return subprocess.check_output(arguments, text=True, stderr=subprocess.STDOUT, timeout=timeout).strip()
+    name = " ".join(arguments[:3])
+    with timed(name) as entry:
+        try:
+            output = subprocess.check_output(arguments, text=True, encoding='utf-8', errors='replace',
+                                             stderr=subprocess.STDOUT, timeout=timeout)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            output = error.output or ''
+            if isinstance(output, bytes):
+                output = output.decode('utf-8', errors='replace')
+            (ROOT / f'command-{len(timings)}.log').write_text(output[-131072:], encoding='utf-8')
+            raise
+        (ROOT / f'command-{len(timings)}.log').write_text(output[-131072:], encoding='utf-8')
+        entry['arguments'] = list(arguments)
+        return output.strip()
 
 
 def unique(pattern):
@@ -46,7 +92,7 @@ try:
                + "' -CertStoreLocation Cert:\\LocalMachine\\Root -ErrorAction Stop | Out-Null")
         trust_installed = True
         app = unique('net10.0-windows10.0.19041.0/win-x64/EmbedIO.MauiHttpsSmoke.exe')
-        process_log = (ROOT / 'app.log').open('w')
+        process_log = (ROOT / 'app.log').open('w', encoding='utf-8')
         environment = dict(os.environ, EMBEDIO_HTTPS_RESULTS=str(ROOT.resolve()))
         process = subprocess.Popen([str(app)], stdout=process_log, stderr=subprocess.STDOUT,
                                    env=environment, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -89,7 +135,8 @@ try:
         invoke(adb, 'forward', f'tcp:{PORT}', f'tcp:{PORT}')
         invoke(adb, 'shell', 'am', 'start', '-n', PACKAGE + '/.MainActivity')
 
-    final = validate(BASE, CERTS / 'https-test-root.pem')
+    with timed('HTTPS app and host validation'):
+        final = validate(BASE, CERTS / 'https-test-root.pem', progress=probe_progress)
     final['ca_sha1'] = CA_SHA1
     final['app'] = str(app)
     if args.platform == 'ios':
@@ -97,10 +144,11 @@ try:
         final['ios_runtime'] = 'iOS-26-5'
     if args.platform == 'android':
         final['android_api'] = invoke(adb, 'shell', 'getprop', 'ro.build.version.sdk')
-    (ROOT / 'result.json').write_text(json.dumps(final, indent=2))
+    (ROOT / 'result.json').write_text(json.dumps(final, indent=2), encoding='utf-8')
     print(json.dumps(final, indent=2))
 except Exception as error:
-    (ROOT / 'result.json').write_text(json.dumps({'passed': False, 'error': str(error)}, indent=2))
+    failed = True
+    (ROOT / 'result.json').write_text(json.dumps({'passed': False, 'error': str(error)}, indent=2), encoding='utf-8')
     raise
 finally:
     if args.platform == 'maccatalyst':
@@ -110,10 +158,17 @@ finally:
                 (ROOT / 'app-result.json').write_bytes(report.read_bytes())
     if args.platform == 'android':
         try:
-            (ROOT / 'logcat.txt').write_text(invoke(adb, 'logcat', '-d'))
+            (ROOT / 'logcat.txt').write_text(invoke(adb, 'logcat', '-d'), encoding='utf-8')
         except (OSError, subprocess.SubprocessError):
             pass
     if simulator:
+        if failed:
+            try:
+                invoke('xcrun', 'simctl', 'spawn', simulator, 'log', 'show', '--style', 'compact',
+                       '--last', '5m', '--predicate', 'process == "EmbedIO.MauiHttpsSmoke"', timeout=30)
+            except (OSError, subprocess.SubprocessError):
+                # Diagnostics must not replace the original validation failure.
+                pass
         try:
             container = Path(invoke('xcrun', 'simctl', 'get_app_container', simulator, PACKAGE, 'data'))
             for report in container.rglob('https-result.json'):

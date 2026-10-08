@@ -120,3 +120,19 @@ allocation-budget jobs on all three desktop operating systems. Performance
 probes remain sequential within each dedicated job to avoid competing with the
 regression suite on the same host. Both job groups are required by `CI passed`;
 regression TRX/coverage and compatibility/probe reports have separate artifacts.
+
+## Investigating slow or failed smoke runs
+
+Each platform artifact includes `timings.json` with elapsed time and outcome for
+every native command, including simulator boot, app launch, report collection
+and cleanup. Numbered `command-*.log` files retain bounded command output; a
+timeout keeps its partial output and is still a failure. `probe-events.jsonl`
+and `last-probe-state.json` identify the last host request and reachable app state.
+The app report contains a bounded monotonic timeline for listener startup, native
+trust, WebView navigation/rendering, finish-response handling and shutdown.
+
+On an iOS validation failure, the harness also attempts a bounded app-process
+simulator log query before cleanup. Diagnostic capture cannot turn a failed trust
+or rendering assertion into a pass. The existing trust checks, navigation/DOM
+budgets and host request timeouts remain unchanged. This instrumentation gathers
+evidence for issue #185; it does not by itself repair an intermittent failure.
