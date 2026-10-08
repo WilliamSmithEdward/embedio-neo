@@ -100,6 +100,7 @@ namespace EmbedIO.Tests
         [TestCase("missing-method", 0x10e, false)]
         [TestCase("length-mismatch", 0x10e, false)]
         [TestCase("settings-on-request", 0x105, true)]
+        [TestCase("priority-state", 0, false)]
         [TestCase("priority-malformed", 0x101, true)]
         [TestCase("priority-push", 0x108, true)]
         [TestCase("priority-invalid-id", 0x108, true)]
@@ -115,6 +116,55 @@ namespace EmbedIO.Tests
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
             { Assert.Ignore("The netstandard asset exposes framing but no direct QUIC transport."); return; }
             await Raw(scenario, code, connectionError);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task ExercisePriorityState(QuicConnection client, QuicStream control, object session, CancellationToken token)
+        {
+            var owner = session.GetType();
+            var state = owner.GetField("_priorities", Flags)?.GetValue(session) ?? throw new AssertionException("Missing priority state.");
+            var type = state.GetType();
+            int Count(string name) => (int)(type.GetProperty(name)?.GetValue(state) ?? throw new AssertionException("Missing count."));
+            (int, bool) Value()
+            {
+                var entry = type.GetMethod("Get", Flags)?.Invoke(state, new object[] { 0L }) ?? throw new AssertionException("Missing active priority.");
+                var value = entry.GetType().GetProperty("Value")?.GetValue(entry) ?? throw new AssertionException("Missing priority value.");
+                return ((int)(value.GetType().GetProperty("Urgency")?.GetValue(value) ?? throw new AssertionException("Missing urgency.")),
+                    (bool)(value.GetType().GetProperty("Incremental")?.GetValue(value) ?? throw new AssertionException("Missing incremental.")));
+            }
+            await control.WriteAsync(Convert.FromHexString("800f07000700753d302c2069"), token);
+            while (Count("PendingCount") != 1) await Task.Delay(1, token);
+            await using var request = await client.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+            Assert.That(request.Id, Is.Zero);
+            // Independently encoded QPACK literals: priority: u=5.
+            await request.WriteAsync(Convert.FromHexString("011e0000D1D7C150096C6F63616C686F737427017072696f7269747903753d35"), token);
+            var gate = owner.GetField("_sync", Flags)?.GetValue(session) ?? throw new AssertionException("Missing gate.");
+            var admitted = (System.Collections.Generic.HashSet<long>)(owner.GetField("_admitted", Flags)?.GetValue(session) ?? throw new AssertionException("Missing admitted streams."));
+            while (true) { lock (gate) { if (admitted.Contains(0)) break; } await Task.Delay(1, token); }
+            Assert.That(Value(), Is.EqualTo((0, true)), "Earlier control update must override the header.");
+            Assert.That(Count("PendingCount"), Is.Zero);
+            await control.WriteAsync(Convert.FromHexString("800f07000400753d37"), token);
+            while (Value() != (7, false)) await Task.Delay(1, token);
+            await control.WriteAsync(Convert.FromHexString("800f07000100"), token);
+            while (Value() != (3, false)) await Task.Delay(1, token);
+            request.CompleteWrites();
+            using var response = new MemoryStream();
+            await request.CopyToAsync(response, token);
+            Assert.That(response.Length, Is.GreaterThan(2));
+            while (Count("ActiveCount") != 0) await Task.Delay(1, token);
+            // A second target provides an ordering witness that the preceding
+            // late update for closed stream zero has been consumed and ignored.
+            await control.WriteAsync(Convert.FromHexString("800f07000400753d30800f07000404753d32"), token);
+            while (Count("PendingCount") == 0) await Task.Delay(1, token);
+            Assert.That(Count("PendingCount"), Is.EqualTo(1));
+            await using var healthy = await client.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+            await healthy.WriteAsync(Convert.FromHexString("01100000D1D7C150096C6F63616C686F7374"), true, token);
+            using var completed = new MemoryStream();
+            await healthy.CopyToAsync(completed, token);
+            Assert.That(completed.Length, Is.GreaterThan(2));
+            while (Count("ActiveCount") != 0) await Task.Delay(1, token);
+            Assert.That(Count("PendingCount"), Is.Zero);
         }
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
@@ -174,6 +224,11 @@ namespace EmbedIO.Tests
             try
             {
                 await control.WriteAsync(new byte[] { 0, 4, 0 }, scenario == "closed-control", deadline.Token);
+                if (scenario == "priority-state")
+                {
+                    await ExercisePriorityState(client, control, await sessionReady.Task.WaitAsync(deadline.Token), deadline.Token);
+                    return;
+                }
                 await using var request = await client.OpenOutboundStreamAsync(
                     scenario == "duplicate-control" ? QuicStreamType.Unidirectional : QuicStreamType.Bidirectional, deadline.Token);
                 var blocked = scenario.StartsWith("blocked-", StringComparison.Ordinal);

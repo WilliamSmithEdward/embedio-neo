@@ -39,6 +39,8 @@ namespace EmbedIO.Net.Internal.Http3
             _peerFieldLimit = peerFieldLimit; _failed = failed; CancellationToken = token;
             Body = new Http3RequestBody(stream.Id, reader, decode, failed);
         }
+        internal Http3PriorityState.Entry? PriorityState { get; set; }
+        internal HttpPriority Priority => PriorityState?.Value ?? new HttpPriority(3, false);
         public long Id => _stream.Value.Id;
         public Http2RequestHeaders Request { get; }
         public Stream InputStream => Body;

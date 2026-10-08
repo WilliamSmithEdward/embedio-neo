@@ -27,6 +27,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Dictionary<long, Task> _workers = new();
         private readonly Dictionary<long, QuicStream> _requests = new();
         private readonly HashSet<long> _admitted = new();
+        private readonly Http3PriorityState _priorities = new(256);
         private readonly Dictionary<long, TaskCompletionSource<HpackField[]>> _pending = new();
         private readonly QpackDecoder _decoder = new(4096, 16, 65536, 65536, 1048576, 65536);
         private readonly SemaphoreSlim _feedbackReady = new(0, 1);
@@ -97,7 +98,7 @@ namespace EmbedIO.Net.Internal.Http3
                         // Register under the tracking gate before a worker can finish.
                         if (!rejected)
                         {
-                            if ((stream.Id & 3) == 0) _requests.Add(stream.Id, stream);
+                            if ((stream.Id & 3) == 0) { _priorities.Open(stream.Id); _requests.Add(stream.Id, stream); }
                             _workers.Add(stream.Id, Task.Run(() => ProcessStreamAsync(stream)));
                         }
                     }
@@ -221,7 +222,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
             finally
             {
-                if ((streamId & 3) == 0) CancelDecode(streamId);
+                if ((streamId & 3) == 0) { CancelDecode(streamId); _priorities.Close(streamId); }
                 try { await stream.DisposeAsync().ConfigureAwait(false); }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
                 { if (!_token.IsCancellationRequested) Fail(error); }
@@ -248,10 +249,12 @@ namespace EmbedIO.Net.Internal.Http3
                 try { request = Http2RequestHeaders.Parse(new Http2HeaderBlock(0, false, fields, 0), true); }
                 catch (Http2ProtocolException error) { throw new Http3StreamException(stream.Id, 0x10e, error.Message); }
                 reader.ConfirmHeaders(request.ContentLength);
+                _priorities.Headers(stream.Id, request.Headers["priority"]);
                 using var exchange = new Http3QuicExchange(stream, reader, request,
                     (wire, token) => DecodeRequestAsync(stream.Id, wire, token, requestToken),
                     () => (int)Math.Min(65536, Volatile.Read(ref _peer).MaximumFieldSectionSize),
-                    error => RequestFailed(stream, error), requestToken);
+                    error => RequestFailed(stream, error), requestToken)
+                { PriorityState = _priorities.Get(stream.Id) };
                 lock (_sync)
                 {
                     if (_draining) throw new Http3StreamException(stream.Id, 0x10b, "Request arrived during connection drain.");
@@ -386,6 +389,8 @@ namespace EmbedIO.Net.Internal.Http3
             while (true)
             {
                 var received = await control.ReadAsync(_token).ConfigureAwait(false);
+                if (received.Type == 0xf0700)
+                    _priorities.Update(received.Identifier, received.Priority ?? throw new Http3ProtocolException(0x102, "Missing parsed priority."));
                 if (received.Type == 4) Volatile.Write(ref _peer, control.Settings ?? throw new Http3ProtocolException(0x102, "Missing peer settings."));
                 // No push IDs have been promised by this server yet.
                 if (received.Type == 3 || received.Type == 0xf0701)
@@ -456,7 +461,7 @@ namespace EmbedIO.Net.Internal.Http3
             try { _stop.Cancel(); }
             catch (ObjectDisposedException) { }
         }
-        public void Dispose() { _decoder.Dispose(); _feedbackReady.Dispose(); _applicationDrain.Dispose(); _stop.Dispose(); }
+        public void Dispose() { _priorities.Clear(); _decoder.Dispose(); _feedbackReady.Dispose(); _applicationDrain.Dispose(); _stop.Dispose(); }
     }
 }
 #endif

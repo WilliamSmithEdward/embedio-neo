@@ -1483,3 +1483,39 @@ passed. The combined Windows run passed 2,911 cases with five expected skips
 (2,916 total; priority-parser-full log). Fresh exact-head CI remains required.
 Discovery floor: 2,916. No complete scheduling/performance claim is
 made, and the public support badges remain unchanged.
+
+
+## Bounded HTTP/3 priority state
+
+HTTP/3 connections now retain the latest priority update across request arrival
+and header decoding. An update overrides the Priority header even when it arrives
+first; later updates replace both parameters, including an empty dictionary's
+default reset. Active exchanges expose an atomic urgency/incremental snapshot.
+Malformed header dictionaries fall back to defaults without invalidating the
+request; malformed PRIORITY_UPDATE dictionaries retain the preceding increment's
+connection error behavior.
+
+Active state follows the existing 256-worker limit and is removed when the stream
+worker ends. Each connection retains at most 256 pending targets and 256 recently
+closed IDs. Pending eviction removes the least recently updated target without
+evicting active state; this is an explicit local policy for advisory updates.
+Recent closed-stream updates are ignored. IDs older than that bounded history can
+occupy pending-cache space, but cannot reopen a QUIC stream and cannot grow the
+cache beyond its bound. Disposal clears all three collections.
+
+Six state tests cover precedence, default/reset handling, latest-update eviction,
+10,000-stream churn, active capacity and atomic concurrent reads. A real QUIC case
+sends an update before request HEADERS, verifies that it overrides the independently
+encoded header, applies late updates and a default reset, then verifies release,
+ignored late closed-stream updates and a healthy successor. All 50 initial
+state/QUIC focused cases passed on Windows. The broader Linux selection passed
+230 cases, and the actual netstandard asset passed 186 on both Windows and
+Linux. Both targets build without warnings/errors; formatting, analyzer guards
+and the pinned YARA scan passed. The full Windows suite passed 2,918 cases
+with five expected skips (2,923 total; priority-state-full log). Fresh exact-head
+CI remains required.
+
+This state is prepared for scheduling; it does not yet change DATA transmission
+order. HTTP/2 signaling and a scheduler that keeps flow-blocked streams from
+stalling unrelated streams remain required, followed by mixed-workload performance
+measurements. No complete priority or extreme-performance claim is made.
