@@ -52,7 +52,7 @@ await server.RunAsync(stop.Token);
 static string ClientKey(IPAddress address) =>
     (address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address).ToString();
 static Task Reply(IHttpContext context, bool recorded) => context.SendStringAsync(
-    recorded ? "changed" : "unchanged", "text/plain", WebServer.Utf8NoBomEncoding);
+    recorded ? "confirmed" : "unchanged", "text/plain", WebServer.Utf8NoBomEncoding);
 ```
 
 Run `dotnet run --project TestResults/ClientBansDemo`. In another terminal:
@@ -63,7 +63,7 @@ curl -i -u demo:local-demo-password -X POST http://127.0.0.1:9697/admin/permanen
 curl -i http://127.0.0.1:9697/api
 ```
 
-Expect 200 with `ok`, 200 with `changed`, then 403. Stop and rerun the server:
+Expect 200 with `ok`, 200 with `confirmed`, then 403. Stop and rerun the server:
 `/api` still returns 403. The permanent key was restored from the same file.
 Remove it live:
 
@@ -72,7 +72,7 @@ curl -i -u demo:local-demo-password -X POST http://127.0.0.1:9697/admin/unban-pe
 curl -i http://127.0.0.1:9697/api
 ```
 
-Expect `changed`, then 200 with `ok`. Another restart preserves the removal.
+Expect `confirmed`, then 200 with `ok`. Another restart preserves the removal.
 The `/admin/temporary` and `/admin/unban-temporary` commands exercise live temporary
 bans; those expire and are not saved across restarts. A request with
 `User-Agent: block-example` triggers a temporary ban through the context criterion.
@@ -164,7 +164,8 @@ lease; it does not wait for an uncooperative application callback or delete the 
 
 `WithPermanentBanStore(path)` is optional and configured before startup. Without
 it, permanent bans last for the module lifetime but are not durable. With it, the
-application-selected JSON file is loaded during configuration. Missing files
+application-selected JSON file is loaded during configuration. Client keys are stored
+in plaintext; the application owns file permissions and backups. Missing files
 start empty; malformed, duplicate, oversized, unsupported-version or unavailable
 stores throw rather than discarding bans. Do not catch these errors and start a
 security policy that the application intended to restore.
