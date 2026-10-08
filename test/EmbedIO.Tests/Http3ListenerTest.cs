@@ -56,6 +56,65 @@ namespace EmbedIO.Tests
             { Version = HttpVersion.Version30, VersionPolicy = HttpVersionPolicy.RequestVersionExact, Content = content };
             return request;
         }
+        [TestCase(true, true)]
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        [TestCase(false, false)]
+        public async Task TcpAndQuicSharePortAndStopIndependently(bool stopQuic, bool http2)
+        {
+            using var certificate = Certificate();
+            var prefix = Prefix();
+            var tcpCount = 0;
+            var quicCount = 0;
+            using var tcp = new WebServer(HttpListenerMode.EmbedIO, certificate, prefix)
+                .WithAction("/", HttpVerbs.Get, async context =>
+                {
+                    Interlocked.Increment(ref tcpCount);
+                    await context.SendStringAsync("tcp", "text/plain", WebServer.Utf8NoBomEncoding);
+                });
+            using var quic = new WebServer(HttpListenerMode.EmbedIOHttp3, certificate, prefix)
+                .WithAction("/", HttpVerbs.Get, async context =>
+                {
+                    Interlocked.Increment(ref quicCount);
+                    await context.SendStringAsync("quic", "text/plain", WebServer.Utf8NoBomEncoding);
+                });
+            using var tcpStop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var quicStop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var tcpRunning = tcp.RunAsync(tcpStop.Token);
+            var quicRunning = quic.RunAsync(quicStop.Token);
+            using var tcpClient = Client(certificate);
+            var tcpVersion = http2 ? HttpVersion.Version20 : HttpVersion.Version11;
+            tcpClient.DefaultRequestVersion = tcpVersion;
+            using var quicClient = Client(certificate);
+            try
+            {
+                await Task.WhenAll(Enumerable.Range(0, 32).Select(async index =>
+                {
+                    var client = index % 2 == 0 ? tcpClient : quicClient;
+                    using var response = await client.GetAsync(prefix);
+                    Assert.That(response.Version, Is.EqualTo(index % 2 == 0 ? tcpVersion : HttpVersion.Version30));
+                    Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo(index % 2 == 0 ? "tcp" : "quic"));
+                }));
+                Assert.That(tcpCount, Is.EqualTo(16));
+                Assert.That(quicCount, Is.EqualTo(16));
+                (stopQuic ? quicStop : tcpStop).Cancel();
+                await (stopQuic ? quicRunning : tcpRunning).WaitAsync(TimeSpan.FromSeconds(5));
+                using var survivorClient = Client(certificate);
+                survivorClient.DefaultRequestVersion = stopQuic ? tcpVersion : HttpVersion.Version30;
+                using var survivor = await survivorClient.GetAsync(prefix);
+                Assert.That(survivor.Version, Is.EqualTo(stopQuic ? tcpVersion : HttpVersion.Version30));
+                Assert.That(await survivor.Content.ReadAsStringAsync(), Is.EqualTo(stopQuic ? "tcp" : "quic"));
+                Assert.That(tcpCount, Is.EqualTo(stopQuic ? 17 : 16));
+                Assert.That(quicCount, Is.EqualTo(stopQuic ? 16 : 17));
+            }
+            finally
+            {
+                tcpStop.Cancel();
+                quicStop.Cancel();
+                await Task.WhenAll(tcpRunning, quicRunning).WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+
         [TestCase(true)]
         [TestCase(false)]
         public async Task QueryRouteReceivesHttp3Content(bool mediaType)

@@ -2168,3 +2168,45 @@ Standard asset on Windows/Linux under .NET 10. Full Windows validation passed:
 pinned YARA scans passed. Exact-head CI remains required.
 This does not change the existing local-port URL contract or finish absolute-target
 scheme/port semantics.
+
+
+### Combined TCP/QUIC hosting: transport boundary validation (2026-10-08)
+
+Four independent-client cases now bind the existing TCP and QUIC listeners to
+one HTTPS authority and port. Each case sends 16 requests per transport
+concurrently, checks the negotiated protocol and response owner, stops either
+listener, and uses a fresh client connection to verify that the surviving
+listener still accepts requests. Both HTTP/1.1 and HTTP/2 are paired with HTTP/3.
+All four cases passed on Windows and the pinned Linux SDK/MsQuic container,
+with QUIC required on Linux and no skipped cases. Both library targets built;
+changed-file formatting and the source guards passed. Evidence is under
+`TestResults/http-engine/shared-port-*`. The discovery floor is now 3,119;
+this increment did not rerun the full suite and does not claim that total passed.
+
+This establishes transport coexistence, not a combined listener implementation.
+The source inspection identifies the following integration requirements:
+
+- The TCP listener owns queued contexts and connection shutdown. HTTP/3 dispatch
+  waits for `MultiplexedContext.Completion`, and exchange cancellation closes
+  contexts that remain queued. The shared host must preserve these owners rather
+  than flush an unhandled response as a substitute for aborting it.
+- Each transport must retain its pending accept across delivery from the other
+  transport. Creating two accepts per call and discarding the loser can consume
+  a context that is never dispatched. A canceled caller must not orphan either
+  pending accept. Admission and ownership must be bounded and tested with both
+  accepts completing simultaneously.
+- Startup must publish the combined session only after all selected bindings
+  succeed. Failure must roll back only resources owned by that session. Tests
+  must occupy TCP and UDP separately and verify rollback and later restart.
+- HTTP/3 already supports graceful draining; the current TCP listener does not.
+  A combined drain cannot silently translate TCP draining into immediate Stop.
+  TCP connection admission, HTTP/1 keep-alive completion and HTTP/2 GOAWAY must
+  participate in one deadline before the combined host advertises drain support.
+- Lifecycle tests must cover stop, disposal, restart, individual accept failure,
+  peer cancellation, mixed-protocol load and resource recovery. The new tests
+  above cover independent transport shutdown only.
+
+Default selection and legacy deprecation remain incomplete. Combining the
+existing transports alone would not establish the promised replacement of the
+Mono-derived HTTP/1 implementation. Protocol discovery, optional QUIC policy,
+platform behavior and measured shared-dispatch overhead also remain open.
