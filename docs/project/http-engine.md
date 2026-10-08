@@ -766,3 +766,34 @@ zero warnings/errors after the process exited. Evidence retains both logs. The
 final modern-asset HTTP/3 set passes all 217 cases; the actual netstandard asset
 passes 208 framing/codec cases and explicitly skips the nine QUIC cases. The
 modern test-host assembly is restored and hash-verified afterward.
+
+
+### Reset-aware HTTP/3 request lifetime
+
+Each QUIC request now has a linked cancellation lifetime and observes both
+transport directions. Successful FIN is a half-close, not cancellation. A reset
+or STOP_SENDING cancels that request even while its initial or trailing field
+section is blocked on QPACK. Trailer decoding combines the application caller's
+cancellation with the request lifetime, including callers that supply no token.
+The worker releases QPACK state and queues stream cancellation once during final
+cleanup; an unrelated request remains usable. Direction observers are joined
+before their cancellation source is disposed.
+
+Three deterministic wire cases first failed on e00cb8a: after confirming a section
+was blocked, read-only, write-only and bidirectional peer aborts all timed out
+waiting for QPACK cancellation. All pass after the change. Additional cases prove
+that a normally half-closed blocked request completes after its encoder insert
+arrives, and that blocked trailers are canceled even when the application uses
+body reads without a cancellation token. These tests inspect pending ownership
+under the connection gate to establish the precondition, then assert real wire
+feedback and a healthy subsequent request. Evidence is under
+TestResults/http-engine/http3-reset-before2 and http3-reset-trailers. Fourteen
+QUIC cases pass locally; the discovery minimum is now 2,704. The preceding full
+2,699-case Windows run does not include these five new cases. Noncooperative
+application shutdown and broader lifecycle/conformance work remain outstanding.
+
+The complete HTTP/3 set passes 222 cases on the modern asset and the 14 QUIC
+cases pass a second run. The solution builds without warnings/errors; formatting,
+both suppression guards and the pinned YARA scan pass. The prior checkpoint's
+Linux and Windows test jobs passed in CI 37786567665; its remaining jobs and the
+new source's full cross-platform gates must still complete.

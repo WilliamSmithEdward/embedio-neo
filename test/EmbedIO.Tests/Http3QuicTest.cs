@@ -81,6 +81,11 @@ namespace EmbedIO.Tests
             try { await Task.WhenAll(calls); }
             finally { deadline.Cancel(); try { await server; } catch (OperationCanceledException) { } }
         }
+        [TestCase("blocked-trailer-reset", 0x10c, false)]
+        [TestCase("blocked-fin", 0, false)]
+        [TestCase("blocked-read-reset", 0x10c, false)]
+        [TestCase("blocked-write-reset", 0x10c, false)]
+        [TestCase("blocked-both-reset", 0x10c, false)]
         [TestCase("missing-method", 0x10e, false)]
         [TestCase("length-mismatch", 0x10e, false)]
         [TestCase("settings-on-request", 0x105, true)]
@@ -88,6 +93,7 @@ namespace EmbedIO.Tests
         [TestCase("duplicate-control", 0x103, true)]
         public async Task WireErrorsUseTheCorrectScopeAndCode(string scenario, long code, bool connectionError)
         {
+            ArgumentNullException.ThrowIfNull(scenario);
             if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
             { Assert.Ignore("The host does not provide QUIC."); return; }
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
@@ -122,10 +128,15 @@ namespace EmbedIO.Tests
             var exchange = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicExchange", true) ?? throw new AssertionException("Missing HTTP/3 test target.");
             var connection = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection", true) ?? throw new AssertionException("Missing HTTP/3 test target.");
             var handler = (typeof(Http3QuicTest).GetMethod(nameof(Handle), Flags) ?? throw new AssertionException("Missing HTTP/3 test target.")).MakeGenericMethod(exchange).CreateDelegate(typeof(Func<,>).MakeGenericType(exchange, typeof(Task)));
+            var sessionReady = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             var server = Task.Run(async () =>
             {
-                var accepted = await listener.AcceptConnectionAsync(deadline.Token);
-                await ((Task)(connection.GetMethod("RunAsync", Flags)?.Invoke(null, new object[] { accepted, handler, deadline.Token }) ?? throw new AssertionException("Missing HTTP/3 test target.")));
+                await using var accepted = await listener.AcceptConnectionAsync(deadline.Token);
+                var session = Activator.CreateInstance(connection, Flags, null, new object[] { accepted, handler, deadline.Token }, null)
+                    ?? throw new AssertionException("Missing connection owner.");
+                using var owner = (IDisposable)session;
+                sessionReady.SetResult(session);
+                await ((Task)(connection.GetMethod("RunCoreAsync", Flags)?.Invoke(session, null) ?? throw new AssertionException("Missing connection runner.")));
             });
             await using var client = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
             {
@@ -148,28 +159,67 @@ namespace EmbedIO.Tests
                 await control.WriteAsync(new byte[] { 0, 4, 0 }, scenario == "closed-control", deadline.Token);
                 await using var request = await client.OpenOutboundStreamAsync(
                     scenario == "duplicate-control" ? QuicStreamType.Unidirectional : QuicStreamType.Bidirectional, deadline.Token);
+                var blocked = scenario.StartsWith("blocked-", StringComparison.Ordinal);
                 var wire = scenario switch
                 {
+                    "blocked-trailer-reset" => Convert.FromHexString("01100000D1D7C150096C6F63616C686F73740103020080"),
                     "missing-method" => Convert.FromHexString("010F0000D7C150096C6F63616C686F7374"),
                     "length-mismatch" => Convert.FromHexString("01110000D1D7C1C450096C6F63616C686F7374000161"),
                     "settings-on-request" => new byte[] { 4, 0 },
                     "duplicate-control" => new byte[] { 0, 4, 0 },
-                    _ => Array.Empty<byte>()
+                    _ => blocked ? Convert.FromHexString("01110200D1D7C150096C6F63616C686F737480") : Array.Empty<byte>()
                 };
                 QuicException? observed = null;
                 try
                 {
-                    if (wire.Length != 0) await request.WriteAsync(wire, scenario != "duplicate-control", deadline.Token);
+                    if (wire.Length != 0) await request.WriteAsync(wire, scenario != "duplicate-control" && !blocked, deadline.Token);
+                    if (blocked)
+                    {
+                        var session = await sessionReady.Task.WaitAsync(deadline.Token);
+                        var gate = connection.GetField("_sync", Flags)?.GetValue(session) ?? throw new AssertionException("Missing gate.");
+                        var pending = (System.Collections.IDictionary)(connection.GetField("_pending", Flags)?.GetValue(session) ?? throw new AssertionException("Missing pending sections."));
+                        while (true)
+                        {
+                            lock (gate) { if (pending.Count == 1) break; }
+                            await Task.Delay(1, deadline.Token);
+                        }
+                        if (scenario == "blocked-fin")
+                        {
+                            request.CompleteWrites();
+                            var encoder = await client.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, deadline.Token);
+                            peerStreams.Add(encoder);
+                            await encoder.WriteAsync(Convert.FromHexString("023FE11F41780179"), deadline.Token);
+                            using var completed = new MemoryStream();
+                            await request.CopyToAsync(completed, deadline.Token);
+                            Assert.That(completed.Length, Is.GreaterThan(2), "FIN must permit a blocked request to complete after inserts arrive.");
+                        }
+                        else
+                            request.Abort(scenario == "blocked-read-reset" ? QuicAbortDirection.Read : scenario == "blocked-write-reset" ? QuicAbortDirection.Write : QuicAbortDirection.Both, code);
+                        while (true)
+                        {
+                            var peer = await client.AcceptInboundStreamAsync(deadline.Token);
+                            peerStreams.Add(peer);
+                            var type = new byte[1]; await peer.ReadExactlyAsync(type, deadline.Token);
+                            if (type[0] != 3) continue;
+                            var cancellation = new byte[1];
+                            await peer.ReadExactlyAsync(cancellation, deadline.Token).AsTask().WaitAsync(TimeSpan.FromSeconds(3));
+                            Assert.That(cancellation[0], Is.EqualTo(scenario == "blocked-fin" ? 128 : 64), "Stream zero must acknowledge on success or release QPACK references on reset.");
+                            break;
+                        }
+                    }
                     if (connectionError)
                     {
                         while (true) peerStreams.Add(await client.AcceptInboundStreamAsync(deadline.Token));
                     }
-                    else await request.ReadExactlyAsync(new byte[1], deadline.Token);
+                    else if (!blocked) await request.ReadExactlyAsync(new byte[1], deadline.Token);
                 }
                 catch (QuicException error) { observed = error; }
-                Assert.That(observed, Is.Not.Null);
-                Assert.That(observed?.ApplicationErrorCode, Is.EqualTo(code));
-                Assert.That(observed?.QuicError, Is.EqualTo(connectionError ? QuicError.ConnectionAborted : QuicError.StreamAborted));
+                if (!blocked)
+                {
+                    Assert.That(observed, Is.Not.Null);
+                    Assert.That(observed?.ApplicationErrorCode, Is.EqualTo(code));
+                    Assert.That(observed?.QuicError, Is.EqualTo(connectionError ? QuicError.ConnectionAborted : QuicError.StreamAborted));
+                }
                 if (!connectionError)
                 {
                     await using var healthy = await client.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, deadline.Token);
@@ -195,9 +245,8 @@ namespace EmbedIO.Tests
             var type = exchange.GetType();
             var body = (Stream)(type.GetProperty("InputStream", Flags)?.GetValue(exchange) ?? throw new AssertionException("Missing HTTP/3 test target."));
             var token = (CancellationToken)(type.GetProperty("CancellationToken", Flags)?.GetValue(exchange) ?? throw new AssertionException("Missing HTTP/3 test target."));
-            using var output = new MemoryStream(); await body.CopyToAsync(output, token);
+            using var output = new MemoryStream(); await body.CopyToAsync(output);
             await ((Task)(type.GetMethod("RespondAsync", Flags)?.Invoke(exchange, new object[] { output.ToArray(), token }) ?? throw new AssertionException("Missing HTTP/3 test target.")));
         }
     }
 }
-

@@ -159,20 +159,49 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private async Task ProcessRequestAsync(QuicStream stream)
         {
-            var reader = new Http3RequestStream(stream.Id, stream, 65536, long.MaxValue);
-            var first = await reader.ReadEventAsync(_token).ConfigureAwait(false);
-            var fields = await DecodeAsync(stream.Id, first.EncodedFields ?? throw new Http3ProtocolException(0x105, "Missing initial fields."), _token).ConfigureAwait(false);
-            Http2RequestHeaders request;
-            try { request = Http2RequestHeaders.Parse(new Http2HeaderBlock(0, false, fields, 0)); }
-            catch (Http2ProtocolException error) { throw new Http3StreamException(stream.Id, 0x10e, error.Message); }
-            reader.ConfirmHeaders(request.ContentLength);
-            using var exchange = new Http3QuicExchange(stream, reader, request,
-                (wire, token) => DecodeAsync(stream.Id, wire, token),
-                () => (int)Math.Min(65536, Volatile.Read(ref _peer).MaximumFieldSectionSize),
-                error => RequestFailed(stream, error), _token);
-            await _dispatch(exchange).ConfigureAwait(false);
-            if (!exchange.Ended) await exchange.CompleteAsync(_token).ConfigureAwait(false);
-            if (!exchange.Body.Ended) stream.Abort(QuicAbortDirection.Read, 0x100);
+            using var requestStop = CancellationTokenSource.CreateLinkedTokenSource(_token);
+            var requestToken = requestStop.Token;
+            // FIN is a successful half-close. Only faulted direction completion
+            // cancels the request; this observes resets even while QPACK is blocked.
+            var reads = WatchRequestDirectionAsync(stream.ReadsClosed, requestStop);
+            var writes = WatchRequestDirectionAsync(stream.WritesClosed, requestStop);
+            try
+            {
+                var reader = new Http3RequestStream(stream.Id, stream, 65536, long.MaxValue);
+                var first = await reader.ReadEventAsync(requestToken).ConfigureAwait(false);
+                var fields = await DecodeAsync(stream.Id, first.EncodedFields ?? throw new Http3ProtocolException(0x105, "Missing initial fields."), requestToken).ConfigureAwait(false);
+                Http2RequestHeaders request;
+                try { request = Http2RequestHeaders.Parse(new Http2HeaderBlock(0, false, fields, 0)); }
+                catch (Http2ProtocolException error) { throw new Http3StreamException(stream.Id, 0x10e, error.Message); }
+                reader.ConfirmHeaders(request.ContentLength);
+                using var exchange = new Http3QuicExchange(stream, reader, request,
+                    (wire, token) => DecodeRequestAsync(stream.Id, wire, token, requestToken),
+                    () => (int)Math.Min(65536, Volatile.Read(ref _peer).MaximumFieldSectionSize),
+                    error => RequestFailed(stream, error), requestToken);
+                await _dispatch(exchange).ConfigureAwait(false);
+                if (!exchange.Ended) await exchange.CompleteAsync(requestToken).ConfigureAwait(false);
+                if (!exchange.Body.Ended) stream.Abort(QuicAbortDirection.Read, 0x100);
+            }
+            catch (OperationCanceledException) when (requestToken.IsCancellationRequested)
+            { AbortStream(stream, 0x10c); }
+            finally
+            {
+                requestStop.Cancel();
+                await Task.WhenAll(reads, writes).ConfigureAwait(false);
+            }
+        }
+        private static async Task WatchRequestDirectionAsync(Task completion, CancellationTokenSource requestStop)
+        {
+            try { await completion.WaitAsync(requestStop.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (requestStop.IsCancellationRequested) { }
+            catch (QuicException) { requestStop.Cancel(); }
+        }
+        private async Task<HpackField[]> DecodeRequestAsync(long streamId, byte[] wire, CancellationToken caller, CancellationToken lifetime)
+        {
+            if (!caller.CanBeCanceled || caller == lifetime)
+                return await DecodeAsync(streamId, wire, lifetime).ConfigureAwait(false);
+            using var combined = CancellationTokenSource.CreateLinkedTokenSource(caller, lifetime);
+            return await DecodeAsync(streamId, wire, combined.Token).ConfigureAwait(false);
         }
         private async Task<HpackField[]> DecodeAsync(long streamId, byte[] wire, CancellationToken token)
         {
@@ -180,6 +209,7 @@ namespace EmbedIO.Net.Internal.Http3
             lock (_sync)
             {
                 _token.ThrowIfCancellationRequested();
+                token.ThrowIfCancellationRequested();
                 var decoded = _decoder.Submit(streamId, wire);
                 SignalFeedback();
                 if (decoded != null) return decoded;
@@ -187,8 +217,7 @@ namespace EmbedIO.Net.Internal.Http3
                 _pending.Add(streamId, completion);
                 pending = completion.Task;
             }
-            try { return await pending.WaitAsync(token).ConfigureAwait(false); }
-            catch (OperationCanceledException) { CancelDecode(streamId); throw; }
+            return await pending.WaitAsync(token).ConfigureAwait(false);
         }
         private void CancelDecode(long streamId)
         {
