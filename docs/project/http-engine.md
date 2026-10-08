@@ -1840,3 +1840,26 @@ Every applicable check on the preceding add4e0f checkpoint passed. This incremen
 does not complete other transports' graceful shutdown, combined hosting,
 discovery, priority scheduling, datagrams, the frozen standards inventory or the
 engine program's remaining performance/conformance work.
+
+### HTTP/1.1 CONNECT rejection audit
+
+Three real TCP cases now cover authority-form CONNECT with DNS, IPv4 and bracketed
+IPv6 targets, followed in the same write by a complete HTTP request. Current
+source closes with no response and dispatches neither request; a fresh healthy
+connection reaches the same pending accept and completes successfully. All 41
+ModernHttpEngineTest cases passed on Windows and pinned Linux. The first fixture run incorrectly
+expected a 400 response (three failures); the observed empty response is recorded
+explicitly rather than claimed as a useful protocol-level rejection.
+
+This establishes connection isolation for the current unsupported authority-form
+path only. It does not implement CONNECT tunneling or prove application-level
+rejection/authentication handling. Proper authority parsing and explicit rejection
+responses remain development requirements, with RFC 9931 connection closure to be
+retained when those paths are implemented. Evidence: local ignored
+`connect-audit-test.log` and `connect-audit-focused.log` under
+`TestResults/http-engine`. No production behavior changed in this checkpoint.
+
+The final Windows suite passed: 2,994 total, 2,989 passed and five expected skips
+(`connect-audit-full.log`). Both-target build, whitespace validation, suppression
+and syntax guards passed. The pinned YARA scan found no matches in the changed
+files. Cross-platform CI on the committed head remains required.

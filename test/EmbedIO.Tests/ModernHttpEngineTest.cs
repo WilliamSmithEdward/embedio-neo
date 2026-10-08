@@ -124,6 +124,47 @@ namespace EmbedIO.Tests
             Assert.That(Encoding.ASCII.GetString(replies.ToArray()).Split("HTTP/1.1 204", StringSplitOptions.None).Length, Is.EqualTo(3));
         }
 
+        [TestCase("example.test:443")]
+        [TestCase("127.0.0.1:443")]
+        [TestCase("[::1]:443")]
+        public async Task UnsupportedConnectClosesBeforeOptimisticSuccessor(string authority)
+        {
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var listener = new Net.HttpListener();
+            var url = HttpsSmoke.GetUrl().Replace("https://", "http://", StringComparison.Ordinal);
+            listener.AddPrefix(url);
+            listener.Start();
+            var accept = listener.GetContextAsync(stop.Token);
+            using var client = new TcpClient { NoDelay = true };
+            await client.ConnectAsync("127.0.0.1", new Uri(url).Port, stop.Token);
+            var stream = client.GetStream();
+            var wire = "CONNECT " + authority + " HTTP/1.1\r\nHost: " + authority
+                + "\r\n\r\nGET /must-not-dispatch HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(wire), stop.Token);
+            using var replies = new MemoryStream();
+            await stream.CopyToAsync(replies, stop.Token);
+            var response = Encoding.ASCII.GetString(replies.ToArray());
+            Assert.Multiple(() =>
+            {
+                Assert.That(response, Is.Empty, "Current unsupported authority-form parsing closes without a response.");
+                Assert.That(accept.IsCompleted, Is.False, "Rejected CONNECT and optimistic bytes must not dispatch.");
+            });
+
+            using var healthy = new TcpClient();
+            await healthy.ConnectAsync("127.0.0.1", new Uri(url).Port, stop.Token);
+            await healthy.GetStream().WriteAsync(Encoding.ASCII.GetBytes(
+                "GET /healthy HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"), stop.Token);
+            var context = await accept;
+            Assert.That(context.Request.RawTarget, Is.EqualTo("/healthy"));
+            context.Response.StatusCode = 204;
+            context.Response.ContentLength64 = 0;
+            context.Response.OutputStream.Write(Array.Empty<byte>(), 0, 0);
+            context.Close();
+            using var healthyReply = new MemoryStream();
+            await healthy.GetStream().CopyToAsync(healthyReply, stop.Token);
+            Assert.That(Encoding.ASCII.GetString(healthyReply.ToArray()), Does.StartWith("HTTP/1.1 204 "));
+        }
+
         [TestCase("Content-Length: 1\r\nContent-Length: 2\r\n")]
         [TestCase("Content-Length: +1\r\n")]
         [TestCase("Content-Length: 1, 2\r\n")]
