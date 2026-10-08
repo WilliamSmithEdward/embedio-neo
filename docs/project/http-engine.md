@@ -107,6 +107,33 @@ HTTP field, HTTP/2, HTTP/3 and QUIC registries, relevant RFC updates and verifie
 errata before freezing the full conformance matrix. Record optional application
 extensions separately from requirements of a conforming core server.
 
+### October 8 registry and update-chain audit
+
+The first captured inventory comprises eight IANA XML registries (HTTP/2,
+HTTP/3, HTTP parameters, fields, status codes, methods, QUIC and WebSocket), with
+retrieval timestamps and SHA-256 hashes in local evidence
+`TestResults/http-engine/standards-2026-10-08/registries.json`. RFC Editor JSON
+metadata for 31 starting specifications is in `rfc-metadata.json`; follow-up
+metadata files capture discovered updates. This is an audit checkpoint, not a
+frozen complete inventory. Recursively finish update/obsolescence relationships,
+verified errata, normative dependencies and requirement-to-test mappings.
+
+| Newly identified requirement | Current evidence and required follow-up |
+| --- | --- |
+| [RFC 10008: QUERY](https://www.rfc-editor.org/rfc/rfc10008.html) | IANA registers QUERY as safe and idempotent. `HttpVerbs` has no Query member; managed `HttpListenerRequest.IsKnownHttpMethod` maps it to Any, shared by multiplexed requests. Add dedicated routing and test request content, required media-type validation, Accept-Query discovery and resource-level semantics. An enum alone does not implement the specification. |
+| [RFC 9931: optimistic transitions](https://www.rfc-editor.org/rfc/rfc9931.html#section-8) | Updates RFC 9112 and RFC 9298. Audit HTTP/1.1 rejected CONNECT closure and ensure subsequent bytes cannot become another request. Cover rejection/authentication paths with real pipelined input. Do not apply this requirement indiscriminately to every rejected Upgrade or to HTTP/2/3. No vulnerability reproduction is claimed by this inventory. |
+| [RFC 9846: TLS 1.3](https://www.rfc-editor.org/rfc/rfc9846.json) | Official metadata dates publication to July 2026 and lists RFC 8446 as obsoleted. Inspect the full replacement and map relevant requirements to supported platform TLS implementations and configuration. Metadata alone does not establish runtime compliance; cryptography remains delegated to maintained platform providers. |
+| [RFC 9659: Zstandard windows](https://www.rfc-editor.org/rfc/rfc9659.html) | Include this update to RFC 8878 when implementing zstd negotiation and bounded decompression. |
+| [RFC 9841: shared Brotli](https://www.rfc-editor.org/rfc/rfc9841.html) | Include this RFC 7932 update in dictionary-compression work alongside RFC 9842. |
+| WebSocket and ALPN update chains | RFC 6455 metadata lists RFCs 7936, 8307 and 8441; RFC 7301 lists RFC 8447, whose metadata also lists RFC 9847. Review applicability and later updates before freezing the baseline. |
+
+The method audit also found case-insensitive enum parsing in `SystemHttpRequest`
+and a separate parser in the testing asset. Any method integration must review
+all three paths, preserve existing enum numeric values and verify exact wire
+method handling. Application handlers remain responsible for the safety and
+idempotence of their query operations; the framework cannot infer that from a
+method name. Broader standards and performance completion gates remain open.
+
 ## Architecture and performance acceptance
 
 Separate transport ownership, protocol framing, request dispatch and application
