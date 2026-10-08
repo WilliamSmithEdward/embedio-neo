@@ -47,6 +47,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Start iOS simulator boot alongside SDK setup and compilation
+        if: matrix.platform == 'ios'
+        run: python3 scripts/run_maui_https_smoke.py ios --ios-stage prepare
       # A private SDK avoids updating unrelated Visual Studio workloads through MSI.
       - name: Isolate the Windows smoke SDK
         if: matrix.platform == 'windows'
@@ -81,6 +84,9 @@ jobs:
       - name: Execute native client, WebView and external HTTPS tests
         shell: pwsh
         run: ./scripts/maui_https_ci.ps1 run
+      - name: Clean up the owned iOS simulator even after setup or build failure
+        if: always() && matrix.platform == 'ios'
+        run: python3 scripts/run_maui_https_smoke.py ios --ios-stage cleanup
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

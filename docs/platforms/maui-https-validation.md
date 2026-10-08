@@ -143,3 +143,18 @@ cannot skip device cleanup; deletion is attempted even when shutdown fails.
 `cleanup-errors.json` retains any cleanup failures. Cleanup errors fail an
 otherwise successful job while preserving the original exception if validation
 already failed.
+
+The iOS job creates and starts its owned simulator immediately after checkout,
+allowing startup to overlap pinned SDK/workload setup and compilation. The
+240-second readiness budget is measured from the original boot start across
+processes; starting it early does not grant extra boot time. The app execution
+still waits for readiness and imports the generated CA before installation. An
+always-run cleanup stage removes only the recorded owned simulator if setup or
+compilation fails; it is a no-op after successful deletion by the execution stage.
+No simulator state is cached or reused between jobs.
+
+A background worker enforces the boot deadline independently of compilation and
+atomically records readiness in `boot-result.json`; `boot-timings.json`,
+`boot-command-*.log` and `boot-worker.log` retain its evidence. A slow build can
+consume an already successful result; it neither resets nor extends the boot
+deadline. Failure or a missing worker result stops app execution.
