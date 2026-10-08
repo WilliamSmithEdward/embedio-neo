@@ -300,3 +300,23 @@ These rules are the same in every WilliamSmithEdward repository.
 - Main9a20aa4 authentication helper was integrated as49df971, preserving both
   changes and raising the combined discovery floor to2034. Exact combined-source
   tests and PR checks remain pending; draft/unmerged, no public contributor reply.
+
+- William explicitly requested finishing all development as a goal on2026-10-08;
+  an active unbudgeted goal now tracks the full program. Do not mark it complete
+  after the first increment. docs/project/http-engine.md contains completion gates.
+- First increment head41ff73e had overallSUCCESS/28 successful checks/one intentional
+  skip. CI37756524880 attempt2 passed after unchanged macOS native-listener retry;
+  original failure retained. Final local combined2034 passed on Windows repeat and
+  Linux;38 new cases passed with final netstandard2.0 asset. PR182 remains draft.
+- Work has resumed beyond that tested head: PrefixInteger HPACK/QPACK primitive
+  adds17 focused passing cases and builds both targets. It is not yet connected to
+  the wire and does not constitute HTTP2 support. Next: bounded HPACK tables,
+  Huffman/string decoding and independent vectors, then stream/connection separation
+  and HTTP2 integration. New changes require fresh final checks; preserve old green
+  evidence without claiming it covers the new working tree.
+- Compression checkpoint: PrefixInteger, nibble-table HpackHuffman and HpackDecoder
+  implemented in isolation;49 focused cases pass on modern and netstandard2.0
+  assets (.NET10.0.11 runtime). Decoder bounds decoded headers/table sizes, preserves
+  never-indexed flags and poisons failed state. RFC7541 tables attributed in LICENSE.
+  Combined discovery floor2083. Encoder, independent differential tests and actual
+  HTTP2 negotiation/frame/stream integration remain pending. No HTTP2 support claim.

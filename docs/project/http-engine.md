@@ -6,6 +6,38 @@ the October 2026 standards baseline. Strict rejection of malformed and ambiguous
 framing is explicitly approved; valid application interfaces remain compatible.
 This document is a development plan, not a claim of complete protocol support.
 
+## Development completion criteria
+
+On 2026-10-08 the owner explicitly requested completion of all development as an
+active goal. A green first increment does not complete that goal. Track these
+gates against the final source; future protocol claims require implemented and
+independently tested behavior, not a codec or roadmap alone.
+
+- [ ] Freeze the October 2026 RFC/errata/registry inventory and map mandatory core
+  requirements and applicable extensions to implementations and tests. Record
+  optional application extensions and platform restrictions explicitly.
+- [ ] Complete HTTP/1 request/response semantics, framing, streaming, upgrades,
+  bounded resource policies and compatibility/migration coverage.
+- [ ] Implement HTTP/2 negotiation, HPACK, frame/state validation, multiplexed
+  request lifecycles, flow control, cancellation and graceful shutdown.
+- [ ] Implement HTTP/3 negotiation/discovery, QUIC integration, QPACK, control
+  streams, stream lifecycle/flow control and graceful shutdown on supported hosts.
+- [ ] Complete the applicable modern extension work, including WebSocket extended
+  CONNECT, priorities, trailers, content-coding negotiation and datagram/capsule
+  support, with explicit capability and configuration documentation.
+- [ ] Pass independent clients, protocol conformance suites, deterministic
+  fragmented/malformed-input tests, fuzzing and resource-abuse/lifecycle tests.
+- [ ] Profile and optimize representative ordinary/pipelined/multiplexed, JSON,
+  upload, TLS, static-file, WebSocket, slow-peer and mixed workloads. Publish
+  reproducible baseline and established-engine comparisons, error counts,
+  throughput/latency, CPU, allocations and retained-memory results. Investigate
+  material regressions rather than treating isolated allocation wins as success.
+- [ ] Validate retained APIs, target assets and platform applications; finish
+  migration/support documentation and green checks on every final PR head.
+
+Release publication, HTTP Arena submission and the contributor reply are outside
+this development goal unless separately authorized.
+
 ## Protocol support and milestones
 
 | Area | Required scope | Current replacement status |
@@ -41,6 +73,7 @@ work items; the first transport increment does not implement them. Review the
 HTTP field, HTTP/2, HTTP/3 and QUIC registries, relevant RFC updates and verified
 errata before freezing the full conformance matrix. Record optional application
 extensions separately from requirements of a conforming core server.
+
 ## Architecture and performance acceptance
 
 Separate transport ownership, protocol framing, request dispatch and application
@@ -145,3 +178,17 @@ hashes. These are development results, not HTTP Arena submissions.
 - [HTTP/3 WebSockets](https://www.rfc-editor.org/rfc/rfc9220.html)
 - [HTTP datagrams](https://www.rfc-editor.org/rfc/rfc9297.html)
 - [.NET QUIC platform prerequisites](https://learn.microsoft.com/dotnet/fundamentals/networking/quic/quic-overview)
+
+## HTTP/2 compression development checkpoint
+
+The bounded prefix-integer and Huffman codecs and HPACK decoder are implemented
+in isolation. Forty-nine focused cases pass against the modern and netstandard2.0
+assets on .NET 10.0.11. They cover published request sequences, all Huffman octets,
+malformed padding/EOS, dynamic eviction, acknowledged table-size reductions,
+never-indexed flags, truncation and decoded-header limits. Normative wire tables
+are attributed in source and the distributed LICENSE.
+
+This is not HTTP/2 listener support. The encoder, broader independent compression
+vectors, frame/stream state machines, negotiation and actual client integration
+remain to be implemented and tested. New source requires fresh full/remote checks;
+the first increment's green result does not certify these changes.
