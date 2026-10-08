@@ -46,7 +46,7 @@ this development goal unless separately authorized.
 | HTTP semantics | RFC 9110; methods, status, authority, informational responses, headers and trailers | Existing application layer; full conformance audit pending |
 | HTTP/1.1 | RFC 9112; incremental parsing, fixed/chunked bodies, pipelines, persistence, bounded input and errors | First implementation under test |
 | HTTP/2 | RFC 9113; TLS/ALPN, prior knowledge, HPACK (RFC 7541), multiplexed streams, flow control, SETTINGS, GOAWAY and reset | Implemented incrementally; listener integration under validation |
-| HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Internal QUIC connection dispatch passes initial HTTP-client/wire tests; public listener integration and lifecycle completion pending |
+| HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Opt-in WebServer listener passes Windows/Ubuntu tests; discovery, extension and lifecycle completion pending |
 | WebSockets | Existing RFC 6455 plus extended CONNECT over HTTP/2 (RFC 8441) and HTTP/3 (RFC 9220) | HTTP/1.1 existing; HTTP/2 initial integration tested locally; HTTP/3 planned |
 | Extensions | Priorities (RFC 9218), HTTP datagrams/capsules (RFC 9297), discovery/Alt-Svc, current registered extensions and errata | Inventory and applicability review pending |
 | Security/resource control | Framing ambiguity, input limits, slow readers/writers, cancellation, compression expansion and multiplexed-stream abuse | First framing work under test; broad abuse tests pending |
@@ -984,3 +984,57 @@ Content-Length: 0; all nine adapter cases pass again. Solution builds are warnin
 free, format verification and both suppression guards pass, and the pinned full
 YARA scan has no matches in the transport/shared-adapter files. New-head CI and
 complete listener integration remain outstanding; no performance claim is made.
+
+
+### Opt-in HTTP/3 WebServer listener
+
+HttpListenerMode.EmbedIOHttp3 now selects an internal QUIC listener through the
+public WebServer options. It binds HTTPS UDP endpoints, adapts exchanges through
+the shared application context and runs the ordinary module/session pipeline.
+It requires the modern asset/native support and a private-key certificate. Its
+configuration, sample and current limits are in the [HTTP/3 guide](../guides/http3.md).
+TCP defaults and existing listener modes are unchanged.
+
+Listener startup binds all endpoints transactionally, including both localhost
+loopbacks where enabled, before starting accept loops. Per-endpoint prefix maps
+prevent authority on another configured port from crossing the receiving binding.
+A bounded context channel applies backpressure, connection admission is capped,
+and stop/dispose cancel transport work and pending accepts. Repeated direct
+listener restart and canceled accept waiters are exercised with real requests.
+
+The initial candidate had two reproduced defects: authority for a different
+configured port incorrectly reached application code, and one failed peer TLS
+handshake terminated the accept loop. Tests failed with 200 instead of 404 and
+listener error 995 respectively. Routing now uses the actual endpoint's prefixes;
+peer authentication/connection-handshake errors are scoped to that peer. The
+BCL's [QuicListener implementation](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.Quic/src/System/Net/Quic/QuicListener.cs)
+confirms handshake errors are propagated through AcceptConnectionAsync.
+
+All 15 listener cases pass on Windows and isolated Ubuntu 24.04/.NET 10.0.12 with
+MsQuic 2.6.2. Coverage includes concurrent empty/100,003-byte/1 MiB uploads, sessions,
+path and endpoint isolation, client reset, server stop, accept cancellation,
+three restart cycles with traffic, partial startup rollback, rejected peer TLS,
+and invalid prefix/certificate configuration. The initial IP-literal Ubuntu run
+failed six TLS/client cases; DNS-named localhost targets pass. This is retained
+as a documented runtime/platform limitation, not described as an IP-TLS fix.
+Evidence is under TestResults/http-engine/http3-listener-*; the discovery floor is
+2,743. Full-suite/new-head CI and the remaining engine goals still apply.
+
+All checks on preceding adapter head 5134f15 passed, including CI 37794987741,
+Security 37794986717 and Malware 37794986798. The prior macOS native-prefix reset
+in CI 37791977129 passed on unchanged attempt 2; the original failure is retained,
+and no cause or repair of that native case is claimed.
+
+The first full Windows listener run reported one failure outside HTTP/3:
+PermanentBansWorkLiveAndAcrossRealServerRestarts(EmbedIO) failed at File.Replace
+with "Unable to remove the file to be replaced" (2,737 passed/5 skipped, 2,743 total).
+Both listener variants passed the unchanged focused recheck. The full unchanged
+rerun is retained separately; no persistence fix or environmental cause is claimed.
+The complete guide server compiles with zero warnings/errors, and a separate
+probe using the actual netstandard assembly confirms the explicit unsupported-mode
+exception. Formatting, suppression guards and the pinned YARA scan pass.
+
+The unchanged full Windows rerun passed 2,738 cases with five expected skips
+(2,743 total, zero failures). All new listener cases passed in both full runs.
+This establishes the local checkpoint while retaining the initial persistence
+failure and separate retry provenance; fresh exact-head CI is still required.

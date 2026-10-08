@@ -16,5 +16,12 @@
         /// provided by the .NET runtime in use.
         /// </summary>
         Microsoft,
+
+        /// <summary>
+        /// Use the managed HTTP/3 engine over QUIC and TLS 1.3. Requires the .NET 10
+        /// asset, native QUIC support and an HTTPS certificate with its private key.
+        /// This mode listens on UDP; it does not accept HTTP/1 or HTTP/2 TCP connections.
+        /// </summary>
+        EmbedIOHttp3,
     }
 }

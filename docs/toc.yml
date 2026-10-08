@@ -40,6 +40,8 @@
   items:
     - name: HTTPS
       href: guides/https.md
+    - name: HTTP/3 listener (unreleased)
+      href: guides/http3.md
     - name: Command-line server
       href: guides/cli.md
     - name: Static folders

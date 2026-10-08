@@ -14,6 +14,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Usage guides
 
+- [HTTP/3 listener](guides/http3.md): unreleased QUIC mode, certificates, usage and current limits.
 - [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
 - [Command-line server](guides/cli.md): options, static serving, plugins, and CLI provenance.
 - [Multiple static folders](guides/multiple-static-folders.md): mount order and explicit fallback.
