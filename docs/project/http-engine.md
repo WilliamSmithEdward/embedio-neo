@@ -574,3 +574,42 @@ All 97 HTTP/3 cases pass on both target assemblies on .NET 10.0.11, including 30
 new QPACK cases and looped wrap-boundary checks. Both builds and suppression checks
 pass; CI's discovery floor is 2,571. The full HTTP/3/QPACK integration and independent
 interop remain required. The relevant RFC code-component notice is retained.
+
+
+### QPACK decoder table and field representations
+
+The decoder now includes RFC 9204's 99-entry static table, a capacity-bounded
+FIFO dynamic table with monotonic absolute indices, and an incremental encoder
+instruction reader. Literal/name-reference insertion, duplication and capacity
+changes preserve referenced values before eviction. Incomplete instructions do
+not mutate the table; malformed instructions poison it with QPACK encoder-stream
+errors. A zero advertised maximum forbids encoder instructions. Pending encoded
+instruction storage and decoded string allocation are bounded by local capacity.
+
+All five field representation forms decode with Huffman support, ordered duplicate
+fields and the never-indexed bit retained. A section owns a bounded copy of its
+encoded payload, resolves its wrapped prefix once at arrival, and returns blocked
+until its Required Insert Count exists. Table locking prevents concurrent eviction
+during decoding. Missing/evicted, underflowing, overflowing or out-of-range dynamic
+references fail explicitly; encoded and decoded field budgets are enforced,
+including repeated indexed entries. This layer does not validate HTTP field
+semantics or yet coordinate blocked-stream budgets, cancellation, acknowledgments
+and QUIC flow-control credit. Those remain connection-integration requirements.
+
+All 149 HTTP/3 cases (52 additional cases) pass against both net10.0 and the actual
+netstandard2.0 assembly hosted on .NET 10.0.11. The solution builds without
+warnings/errors and both suppression guards pass. Independent decoder interop
+used pinned pylsqpack 0.3.24 (ls-qpack): 1,200 generated sections across capacities
+0, 220 and 4,096, including 405 dynamic instruction batches, fragmented encoder
+instructions, repeated fields, Huffman data and non-ASCII octets. Both assemblies
+matched every expected field and its ordering. This is decoder interop, not a
+claim of a complete QPACK encoder, HTTP/3 endpoint or QUIC conformance. Local
+inputs/results are under ignored TestResults/http-engine/qpack-independent.json,
+qpack-interop*, and qpack-sections*. The discovery floor is 2,623.
+Full Windows validation of the decoder increment reported 2,623 cases: 2,618 passed
+and five expected skips on an unchanged-binary rerun. The first run had one
+AddressAlreadyInUse bind failure in DefaultJsonContractTest's depth case; all 14
+JSON fixture cases then passed unchanged. The first failure and both recheck logs
+are retained as qpack-full*, qpack-json-recheck* and qpack-full-recheck*. This does
+not claim that the test port-allocation race was repaired. Pinned YARA-X/full
+Forge rules reported no matches in the five new QPACK decoder source/test files.
