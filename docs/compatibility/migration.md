@@ -574,6 +574,12 @@ extensions. String prefix APIs continue supporting `*` and `+`; ordinary URI
 overloads retain `OriginalString`. When passing a null literal to an overloaded
 API, specify the intended argument type to avoid overload ambiguity.
 
+Argument-validation exceptions report the renamed parameter as well. For example,
+invalid `UrlPath.Normalize` and `UrlPath.Split` inputs now have
+`ArgumentException.ParamName` equal to `requestPath` rather than `urlPath`.
+Update tests or error handling that compare parameter names; exception types and
+the accepted/rejected input policies are retained.
+
 Nullability metadata now describes values that already could be absent, including
 user-agent/content-type headers, MIME lookup results, session values, file-provider
 results, dictionary values, and JSON deserialization results. `Json.Deserialize<T>`,

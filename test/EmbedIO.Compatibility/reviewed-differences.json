@@ -508,14 +508,6 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/EmbedIO/file/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
           "path": "/http/EmbedIO/file-head/encoding",
           "upstream": [
             "identity"
@@ -576,6 +568,14 @@
           "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
         },
         {
+          "path": "/http/EmbedIO/file/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
           "path": "/http/EmbedIO/healthy-after-errors/encoding",
           "upstream": [
             "identity"
@@ -585,14 +585,6 @@
         },
         {
           "path": "/http/EmbedIO/index/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
-          "path": "/http/EmbedIO/integer/encoding",
           "upstream": [
             "identity"
           ],
@@ -634,6 +626,14 @@
           "upstream": 500,
           "neo": 400,
           "reason": "Explicitly approved malformed typed-route status correction. Issue #163 / merged PR #165; docs/user-reports/typed-route-validation.md."
+        },
+        {
+          "path": "/http/EmbedIO/integer/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
           "path": "/http/EmbedIO/json-cycle/body",
@@ -793,14 +793,6 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/EmbedIO/post-json/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
           "path": "/http/EmbedIO/post-json-case/body/Amount",
           "upstream": 0,
           "neo": 12.5,
@@ -851,14 +843,6 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/EmbedIO/post-json-invalid/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
           "path": "/http/EmbedIO/post-json-invalid-number/body",
           "upstream": {
             "Id": 0,
@@ -887,6 +871,14 @@
           "upstream": 200,
           "neo": 400,
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
+        },
+        {
+          "path": "/http/EmbedIO/post-json-invalid/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
           "path": "/http/EmbedIO/post-json-null/contentType",
@@ -963,6 +955,14 @@
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
         },
         {
+          "path": "/http/EmbedIO/post-json/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
           "path": "/http/EmbedIO/put/encoding",
           "upstream": [
             "identity"
@@ -971,7 +971,7 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/EmbedIO/query/encoding",
+          "path": "/http/EmbedIO/query-field-missing/encoding",
           "upstream": [
             "identity"
           ],
@@ -987,7 +987,7 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/EmbedIO/query-field-missing/encoding",
+          "path": "/http/EmbedIO/query/encoding",
           "upstream": [
             "identity"
           ],
@@ -1131,14 +1131,6 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/Microsoft/file/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
           "path": "/http/Microsoft/file-head/encoding",
           "upstream": [
             "identity"
@@ -1199,6 +1191,14 @@
           "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
         },
         {
+          "path": "/http/Microsoft/file/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
           "path": "/http/Microsoft/healthy-after-errors/encoding",
           "upstream": [
             "identity"
@@ -1208,14 +1208,6 @@
         },
         {
           "path": "/http/Microsoft/index/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
-          "path": "/http/Microsoft/integer/encoding",
           "upstream": [
             "identity"
           ],
@@ -1257,6 +1249,14 @@
           "upstream": 500,
           "neo": 400,
           "reason": "Explicitly approved malformed typed-route status correction. Issue #163 / merged PR #165; docs/user-reports/typed-route-validation.md."
+        },
+        {
+          "path": "/http/Microsoft/integer/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
           "path": "/http/Microsoft/json-cycle/body",
@@ -1416,14 +1416,6 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/Microsoft/post-json/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
           "path": "/http/Microsoft/post-json-case/body/Amount",
           "upstream": 0,
           "neo": 12.5,
@@ -1474,14 +1466,6 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/Microsoft/post-json-invalid/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
           "path": "/http/Microsoft/post-json-invalid-number/body",
           "upstream": {
             "Id": 0,
@@ -1510,6 +1494,14 @@
           "upstream": 200,
           "neo": 400,
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
+        },
+        {
+          "path": "/http/Microsoft/post-json-invalid/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
           "path": "/http/Microsoft/post-json-null/contentType",
@@ -1586,6 +1578,14 @@
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
         },
         {
+          "path": "/http/Microsoft/post-json/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
           "path": "/http/Microsoft/put/encoding",
           "upstream": [
             "identity"
@@ -1594,7 +1594,7 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/Microsoft/query/encoding",
+          "path": "/http/Microsoft/query-field-missing/encoding",
           "upstream": [
             "identity"
           ],
@@ -1610,7 +1610,7 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/Microsoft/query-field-missing/encoding",
+          "path": "/http/Microsoft/query/encoding",
           "upstream": [
             "identity"
           ],
@@ -1640,6 +1640,60 @@
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/utility/normalize/0/False/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/normalize/0/True/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/normalize/1/False/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/normalize/1/True/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/normalize/2/False/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/normalize/2/True/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/split/0/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/split/1/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/split/2/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
         }
       ]
     },
@@ -1903,14 +1957,6 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/EmbedIO/file/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
           "path": "/http/EmbedIO/file-head/encoding",
           "upstream": [
             "identity"
@@ -1971,6 +2017,14 @@
           "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
         },
         {
+          "path": "/http/EmbedIO/file/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
           "path": "/http/EmbedIO/healthy-after-errors/encoding",
           "upstream": [
             "identity"
@@ -1980,14 +2034,6 @@
         },
         {
           "path": "/http/EmbedIO/index/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
-          "path": "/http/EmbedIO/integer/encoding",
           "upstream": [
             "identity"
           ],
@@ -2029,6 +2075,14 @@
           "upstream": 500,
           "neo": 400,
           "reason": "Explicitly approved malformed typed-route status correction. Issue #163 / merged PR #165; docs/user-reports/typed-route-validation.md."
+        },
+        {
+          "path": "/http/EmbedIO/integer/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
           "path": "/http/EmbedIO/json-cycle/body",
@@ -2188,14 +2242,6 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/EmbedIO/post-json/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
           "path": "/http/EmbedIO/post-json-case/body/Amount",
           "upstream": 0,
           "neo": 12.5,
@@ -2246,14 +2292,6 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/EmbedIO/post-json-invalid/encoding",
-          "upstream": [
-            "identity"
-          ],
-          "neo": [],
-          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
-        },
-        {
           "path": "/http/EmbedIO/post-json-invalid-number/body",
           "upstream": {
             "Id": 0,
@@ -2282,6 +2320,14 @@
           "upstream": 200,
           "neo": 400,
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
+        },
+        {
+          "path": "/http/EmbedIO/post-json-invalid/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
           "path": "/http/EmbedIO/post-json-null/contentType",
@@ -2358,6 +2404,14 @@
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
         },
         {
+          "path": "/http/EmbedIO/post-json/encoding",
+          "upstream": [
+            "identity"
+          ],
+          "neo": [],
+          "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
           "path": "/http/EmbedIO/put/encoding",
           "upstream": [
             "identity"
@@ -2366,7 +2420,7 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/EmbedIO/query/encoding",
+          "path": "/http/EmbedIO/query-field-missing/encoding",
           "upstream": [
             "identity"
           ],
@@ -2382,7 +2436,7 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
-          "path": "/http/EmbedIO/query-field-missing/encoding",
+          "path": "/http/EmbedIO/query/encoding",
           "upstream": [
             "identity"
           ],
@@ -2440,6 +2494,60 @@
           "upstream": null,
           "neo": 200,
           "reason": "Verified historical native response-stream disposal failure on modern Unix: upstream serves one DTO then faults the accept loop and cancellation; Neo caches the stream and serves a second DTO before clean cancellation. docs/parity-audit/lifecycle.md. This is a characterized existing correction, not a new production change or a passing upstream native workload."
+        },
+        {
+          "path": "/utility/normalize/0/False/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/normalize/0/True/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/normalize/1/False/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/normalize/1/True/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/normalize/2/False/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/normalize/2/True/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/split/0/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/split/1/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
+        },
+        {
+          "path": "/utility/split/2/parameter",
+          "upstream": "urlPath",
+          "neo": "requestPath",
+          "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
         }
       ]
     }
