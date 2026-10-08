@@ -275,7 +275,11 @@ Configuration is read when the server is constructed. This integration does not
 reload listener options while running. Use normal application configuration or
 `IOptions<T>` in your own services where appropriate. Core diagnostic messages
 still use `TraceSource`; this adapter logs hosting faults but does not replace
-all EmbedIO diagnostics with Microsoft logging.
+all EmbedIO diagnostics with Microsoft logging. The separately opted-in,
+unreleased `factory.ForwardEmbedIODiagnostics()` registration forwards the
+process-wide source to the borrowed factory; it is not in published 1.0.3.
+See [logging provider integration](../user-reports/logging-provider-integration.md)
+for startup/disposal ownership, provider filtering and scope limits.
 
 Long-running actions should observe `WebApiController.CancellationToken`.
 A host shutdown timeout can stop waiting, but it cannot safely force arbitrary

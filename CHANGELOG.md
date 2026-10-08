@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add owner-approved opt-in ILoggerFactory diagnostics forwarding in the optional DI package, with registration disposal and failure/recursion counters. Core APIs, defaults and dependency groups remain unchanged (upstream #475).
+
 - Add opt-in SameSite controls for application and local session cookies, with existing defaults retained. Preserve independent raw cookie attributes and WebSocket response cookies, including mixed native typed/raw headers and long-lived expiration (upstream #479).
 - Correct inherited suffix byte ranges: select final bytes, clamp oversized suffixes, reject zero suffixes, and ignore positive suffixes for empty files. Retain Int64 skip offsets for non-seekable resources beyond 2 GiB. Existing explicit-range, HEAD and validator policies remain; see suffix-range migration guidance (issue #170).
 
