@@ -8,11 +8,135 @@ documents those earlier API changes; this guide introduces no further breaking
 change. In the linked design discussion, [gabriele-ricci-kyklos](https://github.com/unosquare/embedio/issues/546#issuecomment-1054160980)
 recommended Microsoft's abstractions so applications could select providers.
 
+[Upstream #475](https://github.com/unosquare/embedio/issues/475), reported by
+MopsiMauser, also requested integration with an existing ILoggerFactory.
+gabriele-ricci-kyklos described using NLog through a custom bridge, and bdurrer
+reported a similar bridge. Original maintainer rdeago discussed provider
+abstractions and callbacks independent of any provider. Their attributed
+discussion is preserved in [Neo #173](https://github.com/WilliamSmithEdward/embedio-neo/issues/173).
+
 Neo emits through `EmbedIO.Diagnostics.Log.Source`, a `TraceSource`. An
 application-owned listener can forward those events to its `ILoggerFactory`.
 The core remains free of logging-provider packages; installing the example's
-Console provider is an application dependency. No new Neo logging API or
-adapter package is required for this approach.
+Console provider is an application dependency. The application-owned approach needs no new Neo logging API or
+adapter package.
+
+## Optional factory forwarding helper
+
+The new source implementation in `EmbedIO-Neo.DependencyInjection` provides
+`factory.ForwardEmbedIODiagnostics()`. William approved this additive helper
+for #475. It uses logging abstractions already present in that optional package;
+core APIs, dependencies and defaults remain unchanged. The helper is
+**unreleased** and is not in published 1.0.3. Use a checkout containing this
+change until a release is announced:
+
+```sh
+dotnet new console --framework net10.0 --name NeoLogging --output TestResults/NeoLogging
+dotnet add TestResults/NeoLogging/NeoLogging.csproj reference src/EmbedIO.DependencyInjection/EmbedIO.DependencyInjection.csproj
+dotnet add TestResults/NeoLogging/NeoLogging.csproj package Microsoft.Extensions.Logging.Console --version 10.0.12
+```
+
+Replace `TestResults/NeoLogging/Program.cs` with this complete program:
+
+```csharp
+using System;
+using System.Threading;
+using EmbedIO;
+using EmbedIO.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+using var factory = LoggerFactory.Create(builder => builder
+    .SetMinimumLevel(LogLevel.Information)
+    .AddSimpleConsole(options => options.SingleLine = true));
+using var diagnostics = factory.ForwardEmbedIODiagnostics();
+using var stopping = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; stopping.Cancel(); };
+using var server = new WebServer(o => o
+    .WithUrlPrefix("http://127.0.0.1:8877/")
+    .WithMode(HttpListenerMode.EmbedIO))
+    .OnGet("/hello", c => c.SendStringAsync("hello", "text/plain", WebServer.Utf8NoBomEncoding));
+Console.WriteLine("GET http://127.0.0.1:8877/hello ; press Ctrl+C to stop.");
+try { await server.RunAsync(stopping.Token); }
+catch (OperationCanceledException) when (stopping.IsCancellationRequested) { }
+```
+
+Run `dotnet run --project TestResults/NeoLogging`, then request
+`curl http://127.0.0.1:8877/hello`. The body is `hello`; Console records use the
+`EmbedIO` category. Press Ctrl+C to stop. The server is disposed before its
+diagnostics registration; the factory is disposed last. This route matches the
+`/hello` base path, including children.
+
+In a Generic Host, borrow its existing ILoggerFactory. Register once per
+destination before starting servers, keep the registration through their
+shutdown and disposal, then dispose it before the host disposes the factory.
+Each call creates a separate registration; repeated calls for the same
+destination forward duplicate events. The helper does not add provider
+registrations or dispose the borrowed factory/providers.
+
+The source is process-wide. This supplies opt-in factory forwarding, not
+per-server factory injection or automatic request scopes. All servers sharing
+the source share its configuration. Source/provider filters and the severity,
+text and exception limits below still apply. The packaged helper forwards Neo
+TraceEvent output; it ignores activity events and TraceData instead of
+misrepresenting them as ordinary severity records. The helper does not change the
+source switch, global trace settings or other listeners. Factory construction
+errors propagate before a listener is attached.
+
+The registration exposes `ForwardingFailures` and `RecursiveEventsDropped`.
+Provider, filter and formatting exceptions reaching the bridge are contained.
+Observe counters through an independent health path; reporting them through
+the same source can recurse. Disposal stops new delivery and ordinary disposal
+waits for the current provider callback. With the default global trace lock, callback-originated disposal defers
+only collection removal until the trace iteration can finish. If the application
+disables that lock, callback disposal stops forwarding but leaves the inactive
+listener registered; dispose again outside callbacks after emission stops to
+remove it safely. There is no
+logging queue or delivery worker. Providers must return promptly and must not
+wait for another thread to dispose the registration from inside a callback.
+Configure registrations before emission and remove them after shutdown,
+especially when changing `Trace.UseGlobalLock` from its default.
+
+### Serilog
+
+Serilog is an application-selected provider behind the same ILoggerFactory.
+Install the pinned packages in the example application:
+
+```sh
+dotnet add TestResults/NeoLogging/NeoLogging.csproj package Serilog.Extensions.Logging --version 10.0.0
+dotnet add TestResults/NeoLogging/NeoLogging.csproj package Serilog.Sinks.Console --version 6.1.1
+```
+
+Add `using Serilog;`, and replace only the factory declaration with this partial
+replacement; keep the diagnostics registration and server lifecycle above:
+
+```csharp
+using var serilog = new LoggerConfiguration()
+    .Enrich.FromLogContext()
+    .WriteTo.Console(outputTemplate: "[{Level:u3}] {SourceContext}: {Message:lj}{NewLine}")
+    .CreateLogger();
+using var factory = LoggerFactory.Create(builder =>
+    builder.AddSerilog(serilog, dispose: false));
+```
+
+The application owns both objects: stop/dispose servers, dispose the diagnostics
+registration and factory, then dispose the Serilog logger. An existing host
+already configured with Serilog can forward its registered factory directly.
+Serilog sees `SourceContext=EmbedIO` and the formatted `TraceMessage` field.
+Application-created scopes can flow normally; this helper creates no request
+scope and cannot recover original template arguments or exception objects.
+Serilog/sink packages stay out of Neo's production dependencies. See the
+[official provider documentation](https://github.com/serilog/serilog-extensions-logging).
+
+Providers may contain sink failures internally, so a zero ForwardingFailures
+count does not certify delivery. Observe Serilog's
+[SelfLog](https://github.com/serilog/serilog/wiki/Debugging-and-Diagnostics)
+separately when diagnosing sink errors, without forwarding it into the same
+logging pipeline.
+
+## Application-owned bridge for published packages
+
+Applications that omit the optional DI package can use the helper below with
+published core 1.0.3. It remains application-owned, not a package API.
 
 ## Run the complete Console example
 
@@ -21,7 +145,7 @@ Create a .NET 10 application using the verified package versions:
 ```sh
 dotnet new console --framework net10.0 --name NeoLogging
 cd NeoLogging
-dotnet add package EmbedIO-Neo --version 1.0.2
+dotnet add package EmbedIO-Neo --version 1.0.3
 dotnet add package Microsoft.Extensions.Logging.Console --version 10.0.12
 ```
 
@@ -277,8 +401,9 @@ or replace those observers.
 ## Validation and limits
 
 The complete Console setup and helper server were compiled against published
-EmbedIO-Neo 1.0.2 and Logging.Console 10.0.12. Twenty-three local cases passed
-against both current source and the exact published core on Windows/.NET 10.0.11:
+EmbedIO-Neo 1.0.3 and Logging.Console 10.0.12. Twenty-three isolated cases passed
+against current source and the exact published net10.0/netstandard2.0 assets
+on Windows/.NET 10.0.12:
 level/category/ID/template mapping, literal braces, disabled filters before
 formatting, failure recovery, line-break protection, concurrent whole records,
 disposal, recursion, original security-observer text, real HTTP, cancellation,
@@ -286,9 +411,17 @@ startup cleanup and actual Console-provider shutdown output.
 
 The helper files also compile for .NET Standard 2.0 with pinned
 Logging.Abstractions 10.0.12. That is compilation evidence, not certification of
-every old runtime, Unity, UWP or mobile provider. Existing replacement/diagnostics
-regressions pass without changing production APIs, defaults, targets, dependencies
-or test baselines. The temporary application-helper harness lives under ignored
+every old runtime, Unity, UWP or mobile provider. The application-owned example changes no core APIs, defaults, targets or
+dependency groups. The approved optional package helper adds 32 permanent
+regressions; the full discovery minimum is 1,954. The temporary application-helper harness lives under ignored
 TestResults; the source listener and provider dependency are not added to Neo's
 production packages. Package/assembly metadata auditing confirms SWAN is absent;
 historical migration and parity-test references are documentation of prior work.
+
+The optional factory registration has 32 real diagnostics/ownership/concurrency/HTTP
+regressions. The complete source-linked Console and Serilog programs passed exact
+HTTP bodies, base-path children, startup/shutdown logs and graceful cancellation
+on .NET 10.0.12; only the stop trigger was made automatic for verification.
+A real Serilog probe passed 13 assertions for category/severity/text/template/ID
+and application-owned scopes, factory/logger ownership, detachment and SelfLog
+sink errors. These checks do not certify every provider or old runtime.

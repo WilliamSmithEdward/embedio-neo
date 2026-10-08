@@ -47,7 +47,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [WebSocket message callbacks](user-reports/websocket-message-callbacks.md): opt-in text/binary callbacks, strict UTF-8, ordering and transport limits.
 
-- [Logging provider integration](user-reports/logging-provider-integration.md): an application-owned ILogger bridge, mapping, filtering and lifetime ownership after SWAN removal.
+- [Logging provider integration](user-reports/logging-provider-integration.md): opt-in ILoggerFactory forwarding, application-owned bridges, Serilog, filtering and lifetime ownership.
 
 - [Modern .NET and legacy compatibility](user-reports/modern-dotnet-legacy-compatibility.md): current targets, NuGet asset selection and SDK versus runtime requirements.
 
