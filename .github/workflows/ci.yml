@@ -11,6 +11,10 @@ on:
         description: Regenerate test-only MAUI HTTPS dependency locks for review
         type: boolean
         default: false
+      runtime-close-probe:
+        description: Run the independent .NET 10.0.12 close diagnostic on all three desktop platforms
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -67,6 +71,7 @@ jobs:
 
   runtime-close-probe:
     name: Runtime close probe (${{ matrix.os }})
+    if: inputs.runtime-close-probe == true
     env:
       DOTNET_PROCESSOR_COUNT: 2
     strategy:
@@ -256,9 +261,15 @@ jobs:
     steps:
       - name: Check every CI job passed
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          RESULTS: ${{ toJSON(needs) }}
+          RUNTIME_PROBE_REQUESTED: ${{ inputs.runtime-close-probe == true }}
         run: |
-          echo "Results: $RESULTS"
-          for result in $RESULTS; do
-            [ "$result" = success ] || exit 1
-          done
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          requested = os.environ['RUNTIME_PROBE_REQUESTED'] == 'true'
+          for name, job in results.items():
+              expected = 'skipped' if name == 'runtime-close-probe' and not requested else 'success'
+              assert job['result'] == expected, f"{name}: {job['result']}; required {expected}"
+          print('All required CI jobs passed.')
+          PY
