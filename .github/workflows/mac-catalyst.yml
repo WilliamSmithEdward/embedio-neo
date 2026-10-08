@@ -2,6 +2,10 @@ name: Mac Catalyst smoke
 on:
   workflow_call:
   workflow_dispatch:
+env:
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  DisableImplicitNuGetFallbackFolder: true
+
 permissions:
   contents: read
 jobs:
@@ -18,6 +22,10 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.401
+          cache: true
+          cache-dependency-path: |
+            src/**/packages.lock.json
+            test/EmbedIO.MacCatalystSmoke/packages.lock.json
       - name: Install the pinned Mac Catalyst workload
         run: dotnet workload install maui-maccatalyst --version 10.0.401
       - name: Build the sandboxed smoke app

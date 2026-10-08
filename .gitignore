@@ -172,3 +172,6 @@ TestResult.xml
 
 # JetBrains Rider IDE folder
 .idea/
+
+# CI NuGet download cache
+/.nuget/
