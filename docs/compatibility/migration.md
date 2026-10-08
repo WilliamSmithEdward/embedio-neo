@@ -812,3 +812,11 @@ percent-encoded forms. Valid escapes and URI delimiters remain unchanged, includ
 leading `//` paths and slash/question-mark characters within queries. HTTP/2
 rejection resets the malformed stream with PROTOCOL_ERROR; other streams remain
 usable. This increment does not finish the HTTP/1 absolute-target grammar audit.
+
+HTTP/1 now applies the same path/query character grammar to origin-form and the
+raw path/query component of absolute-form requests before URI normalization.
+Literal brackets, braces, quotes, backticks, carets and vertical bars must be
+percent-encoded. Valid encoded equivalents remain accepted. Invalid input receives
+the bounded empty 400 response and closes before application dispatch. Existing
+transport scheme/local-port URL behavior is preserved; absolute-form authority
+precedence is a separate outstanding conformance item.

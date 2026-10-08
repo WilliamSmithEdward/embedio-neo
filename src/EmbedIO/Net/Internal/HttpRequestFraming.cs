@@ -10,9 +10,9 @@ namespace EmbedIO.Net.Internal
                 || c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_'
                 || c == '`' || c == '|' || c == '~';
 
-        internal static bool IsValidPathAndQuery(string value)
+        internal static bool IsValidPathAndQuery(string value, int start = 0)
         {
-            for (var i = 0; i < value.Length; i++)
+            for (var i = start; i < value.Length; i++)
             {
                 var c = value[i];
                 if (c == '%')

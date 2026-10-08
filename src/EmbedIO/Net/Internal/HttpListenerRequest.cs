@@ -219,6 +219,23 @@ namespace EmbedIO.Net.Internal
                 return;
             }
 
+            var targetPathStart = 0;
+            if (RawTarget[0] != '/')
+            {
+                var schemeEnd = RawTarget.IndexOf("://", StringComparison.Ordinal);
+                if (schemeEnd >= 0)
+                {
+                    targetPathStart = schemeEnd + 3;
+                    while (targetPathStart < RawTarget.Length && RawTarget[targetPathStart] != '/' && RawTarget[targetPathStart] != '?')
+                        targetPathStart++;
+                }
+            }
+            if (!HttpRequestFraming.IsValidPathAndQuery(RawTarget, targetPathStart))
+            {
+                _connection.SetError("Invalid request target syntax.");
+                return;
+            }
+
             var rawUri = UriUtility.StringToAbsoluteUri(RawTarget);
             if (RawTarget == "*" && HttpVerb != HttpVerbs.Options)
             {

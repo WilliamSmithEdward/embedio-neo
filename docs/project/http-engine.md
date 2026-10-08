@@ -2089,3 +2089,20 @@ Windows and pinned Linux with QUIC required and no skips
 source guards and changed-file pinned YARA scans passed. Test discovery rises to 3,082. The preceding production increment
 passed the full Windows suite with 3,073 cases; no new full local run is claimed
 for this test-only increment. Exact-head CI remains required.
+
+### HTTP/1 path/query grammar consistency
+
+Six malformed character cases in both origin-form and absolute-form reproduced
+acceptance before correction (`h1-grammar-before.log`, twelve failures). Four
+valid encoded/punctuation cases also run over real TCP. HTTP/1 now locates the raw
+path/query component and invokes the shared grammar validator before constructing
+a URI, avoiding normalization hiding malformed syntax. The validator accepts a
+start offset without creating a substring. Existing transport/local-port URL
+semantics remain intact; authority precedence and the full absolute-target audit
+remain open. All 94 focused cases passed locally (`h1-grammar-focused.log`).
+All 94 focused cases also passed on pinned Linux and against the actual .NET
+Standard library asset on Windows/Linux under .NET 10. The full Windows suite
+passed: 3,098 total, 3,093 passed, five expected skips and zero failures
+(`h1-grammar-full.log`). Both-target build, formatting, source guards and
+changed-file pinned YARA scans passed. Exact-head CI remains required.
+Discovery rises to 3,098.

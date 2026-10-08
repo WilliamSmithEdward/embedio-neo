@@ -26,6 +26,25 @@ namespace EmbedIO.Tests
         public Task TargetSyntaxIsValidatedBeforeDispatch(string method, string target, bool valid)
             => CheckRequest(method, target, "127.0.0.1", valid);
 
+        [TestCase("/x[0]", false)]
+        [TestCase("http://127.0.0.1/x[0]", false)]
+        [TestCase("/x?y={z}", false)]
+        [TestCase("http://127.0.0.1/x?y={z}", false)]
+        [TestCase("/x|y", false)]
+        [TestCase("http://127.0.0.1/x|y", false)]
+        [TestCase("/x^y", false)]
+        [TestCase("http://127.0.0.1/x^y", false)]
+        [TestCase("/x`y", false)]
+        [TestCase("http://127.0.0.1/x`y", false)]
+        [TestCase("/\"x\"", false)]
+        [TestCase("http://127.0.0.1/\"x\"", false)]
+        [TestCase("/x%5B0%5D?y=%7Bz%7D", true)]
+        [TestCase("http://127.0.0.1/x%5B0%5D?y=%7Bz%7D", true)]
+        [TestCase("/a:b@c!$&'()*+,;=~-._/next?x=/?:@%2F", true)]
+        [TestCase("http://127.0.0.1/a:b@c!$&'()*+,;=~-._/next?x=/?:@%2F", true)]
+        public Task PathGrammarIsValidatedBeforeUriNormalization(string target, bool valid)
+            => CheckRequest("GET", target, "127.0.0.1", valid);
+
         [TestCase("127.0.0.1:abc", false)]
         [TestCase("127.0.0.1:-1", false)]
         [TestCase("127.0.0.1:+80", false)]
