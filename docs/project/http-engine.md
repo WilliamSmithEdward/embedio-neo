@@ -35,6 +35,10 @@ independently tested behavior, not a codec or roadmap alone.
   material regressions rather than treating isolated allocation wins as success.
 - [ ] Validate retained APIs, target assets and platform applications; finish
   migration/support documentation and green checks on every final PR head.
+- [ ] Make the completed replacement engine the default managed listener and
+  deprecate the Mono-derived implementation. Verify default construction, explicit
+  listener selection, retained target assets and migration behavior; preserve the
+  Microsoft backend as an explicit compatibility option.
 - [ ] Update the README HTTP support badges when the new engine is ready, using
   validated protocol support and documented target/platform limits. Preserve the
   existing badges until their replacement claims are supported.
@@ -66,6 +70,31 @@ detected and documented. The retained .NET Standard 2.0 and .NET 10 assets canno
 be assumed to expose identical protocol capabilities. Target removal, hidden
 fallback, and a new native dependency in the legacy asset are not implied by this
 plan. The Microsoft listener remains available.
+
+## Default listener transition
+
+The owner confirmed on 2026-10-08 that the completed replacement must become the
+default and the old Mono-derived managed implementation must be deprecated.
+This is a final delivery requirement, not a claim that the transition is complete.
+The current `WebServerOptions.Mode` defaults to `HttpListenerMode.EmbedIO`, which
+constructs `Net.HttpListener`; HTTP/3 currently requires the separate
+`EmbedIOHttp3` mode. Retaining that enum default alone does not prove replacement
+of the underlying implementation.
+
+Preserve existing public names and enum values where they remain valid entry
+points to the replacement. Deprecation concerns the old implementation; do not
+mark `HttpListenerMode.EmbedIO` obsolete merely because its implementation changes.
+Document any explicit legacy selection and its support policy before deprecation;
+immediate removal is not part of this transition. Keep the Microsoft backend
+available as an explicit compatibility option.
+
+Acceptance requires real listener tests for default constructors, unconfigured
+options and explicit modes, plus retained target/platform coverage. Demonstrate
+that default requests reach the replacement engine and that enabled protocols
+negotiate correctly, including combined TCP/QUIC hosting and hosts without QUIC.
+Document capabilities, prerequisites and failure behavior; a successful HTTP/3
+opt-in test is insufficient evidence for the default switch. Complete the strict
+framing migration notes and README support badges against this final behavior.
 
 ## Standards inventory checkpoints
 

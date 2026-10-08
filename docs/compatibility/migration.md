@@ -734,3 +734,19 @@ ignored, including self-dependency values. Their frame shape, size and stream-ID
 requirements remain checked, and HEADERS compression state remains synchronized.
 Use the Priority header or PRIORITY_UPDATE for extensible urgency/incremental
 signals. These are scheduling hints, not guaranteed response completion order.
+
+## Default managed listener transition (planned, unreleased)
+
+The completed modern engine will become the default managed listener. The old
+Mono-derived implementation will be deprecated, with its migration and support
+policy documented before that transition. Immediate removal is not implied.
+Existing valid public entry points, including `HttpListenerMode.EmbedIO`, are to
+remain usable; changing the implementation does not itself require renaming this
+mode. The Microsoft listener remains an explicit compatibility option.
+
+This transition is still in development. In the current branch HTTP/3 uses the
+separate opt-in `EmbedIOHttp3` mode and its documented .NET 10, certificate and
+native QUIC prerequisites. Do not interpret the planned default switch as current
+combined HTTP/1, HTTP/2 and HTTP/3 hosting or identical capabilities across target
+assets. See the [default listener transition acceptance criteria](../project/http-engine.md#default-listener-transition)
+and [HTTP/3 guide](../guides/http3.md) for the implementation and validation scope.
