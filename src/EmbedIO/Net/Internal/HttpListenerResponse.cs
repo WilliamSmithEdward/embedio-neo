@@ -1,5 +1,5 @@
-using EmbedIO.Internal;
-﻿using System;
+﻿using EmbedIO.Internal;
+using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -342,64 +342,135 @@ namespace EmbedIO.Net.Internal
             _connection.Close(force);
         }
 
-        private string GetHeaderData()
-        {
-            var sb = new StringBuilder()
-                .Append("HTTP/")
-                .Append(ProtocolVersion)
-                .Append(' ')
-                .Append(_statusCode)
-                .Append(' ')
-                .Append(StatusDescription)
-                .Append("\r\n");
-
-            foreach (var key in Headers.AllKeys)
-            {
-                if (string.Equals(key, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase)) continue;
-                _ = sb
-                    .Append(key)
-                    .Append(": ")
-                    .Append(Headers[key])
-                    .Append("\r\n");
-            }
-
-            if (_cookies != null)
-            {
-                foreach (var cookie in _cookies)
-                {
-                    AppendSetCookieHeader(sb, cookie);
-                }
-            }
-
-            if (Headers.GetValues(HttpHeaderNames.SetCookie) is { } rawCookieValues)
-            {
-                // Set-Cookie fields are independent; preserve attributes not represented by Cookie.
-                foreach (var value in rawCookieValues)
-                    sb.Append("Set-Cookie: ").Append(value).Append("\r\n");
-            }
-
-            return sb.Append("\r\n").ToString();
-        }
-
         private MemoryStream WriteHeaders()
         {
             var encoding = WebServer.DefaultEncoding;
-            var text = GetHeaderData();
             var preamble = encoding.GetPreamble();
-            var size = preamble.Length + encoding.GetByteCount(text);
-            var stream = new MemoryStream(size);
-            stream.SetLength(size);
-            var buffer = stream.GetBuffer();
-            Buffer.BlockCopy(preamble, 0, buffer, 0, preamble.Length);
-            encoding.GetBytes(text, 0, text.Length, buffer, preamble.Length);
-
+            var keys = Headers.AllKeys;
+            var rawCookies = Headers.GetValues(HttpHeaderNames.SetCookie);
+            string? cookies = null;
+            if (_cookies != null && _cookies.Count > 0)
+            {
+                var builder = new StringBuilder();
+                foreach (var cookie in _cookies) AppendSetCookieHeader(builder, cookie);
+                cookies = builder.ToString();
+            }
+            var version = ProtocolVersion == HttpVersion.Version11 ? "1.1"
+                : ProtocolVersion == HttpVersion.Version10 ? "1.0" : ProtocolVersion.ToString();
+            var status = _statusCode.ToString(CultureInfo.InvariantCulture);
+            MemoryStream stream;
+#if NET10_0_OR_GREATER
+            // Common headers fit on the stack: concatenate without a builder, then
+            // perform one encoding operation. Large fields use the exact-size path.
+            Span<char> text = stackalloc char[2048];
+            var characters = new HeaderWriter(text);
+            WriteHeaderFields(ref characters, version, status, keys, cookies, rawCookies);
+            if (!characters.Overflow)
+            {
+                var content = text.Slice(0, characters.Position);
+                var size = checked(preamble.Length + encoding.GetByteCount(content));
+                stream = new MemoryStream(size);
+                stream.SetLength(size);
+                preamble.CopyTo(stream.GetBuffer(), 0);
+                encoding.GetBytes(content, stream.GetBuffer().AsSpan(preamble.Length));
+            }
+            else
+#endif
+            {
+                var writer = new HeaderWriter(encoding, null, preamble.Length);
+                WriteHeaderFields(ref writer, version, status, keys, cookies, rawCookies);
+                stream = new MemoryStream(writer.Position);
+                stream.SetLength(writer.Position);
+                var buffer = stream.GetBuffer();
+                Buffer.BlockCopy(preamble, 0, buffer, 0, preamble.Length);
+                writer = new HeaderWriter(encoding, buffer, preamble.Length);
+                WriteHeaderFields(ref writer, version, status, keys, cookies, rawCookies);
+            }
             _outputStream ??= _connection.GetResponseStream();
-
-            // Assumes that the ms was at position 0
             stream.Position = preamble.Length;
             HeadersSent = true;
-
             return stream;
+        }
+
+        private void WriteHeaderFields(ref HeaderWriter writer, string version, string status,
+            string[] keys, string? cookies, string[]? rawCookies)
+        {
+            writer.Append("HTTP/");
+            writer.Append(version);
+            writer.Append(" ");
+            writer.Append(status);
+            writer.Append(" ");
+            writer.Append(StatusDescription);
+            writer.Append("\r\n");
+            foreach (var key in keys)
+            {
+                if (string.Equals(key, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase)) continue;
+                writer.Append(key);
+                writer.Append(": ");
+                writer.Append(Headers[key]);
+                writer.Append("\r\n");
+            }
+            writer.Append(cookies);
+            if (rawCookies != null)
+                foreach (var value in rawCookies)
+                {
+                    writer.Append("Set-Cookie: ");
+                    writer.Append(value);
+                    writer.Append("\r\n");
+                }
+            writer.Append("\r\n");
+        }
+
+        // Count once, then encode directly into the one output allocation. Ordinary
+        // and large headers never need an intermediate UTF-16 builder or string.
+        private ref struct HeaderWriter
+        {
+            private readonly Encoding _encoding;
+            private readonly byte[]? _buffer;
+            internal int Position;
+#if NET10_0_OR_GREATER
+            private readonly Span<char> _characters;
+            private readonly bool _textMode;
+            internal bool Overflow;
+
+            internal HeaderWriter(Span<char> characters)
+            {
+                _encoding = WebServer.DefaultEncoding;
+                _buffer = null;
+                _characters = characters;
+                _textMode = true;
+                Position = 0;
+                Overflow = false;
+            }
+#endif
+
+            internal HeaderWriter(Encoding encoding, byte[]? buffer, int position)
+            {
+                _encoding = encoding;
+                _buffer = buffer;
+                Position = position;
+#if NET10_0_OR_GREATER
+                _characters = default;
+                _textMode = false;
+                Overflow = false;
+#endif
+            }
+
+            internal void Append(string? text)
+            {
+                if (string.IsNullOrEmpty(text)) return;
+#if NET10_0_OR_GREATER
+                if (_textMode)
+                {
+                    if (Overflow || text.Length > _characters.Length - Position) { Overflow = true; return; }
+                    text.AsSpan().CopyTo(_characters.Slice(Position));
+                    Position += text.Length;
+                    return;
+                }
+#endif
+                Position = checked(Position + (_buffer == null ? _encoding.GetByteCount(text)
+                    : _encoding.GetBytes(text, 0, text.Length, _buffer, Position)));
+            }
         }
 
         private void EnsureCanChangeHeaders()

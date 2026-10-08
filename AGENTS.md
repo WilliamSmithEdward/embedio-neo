@@ -255,3 +255,39 @@ These rules are the same in every WilliamSmithEdward repository.
 - William requested aligning as closely as reasonable with upstream EmbedIO, explicitly "transparent" and "not opt in". PR #154 restores default raw string controls/trailing commas/lossless legacy number syntax, quoted booleans/named enums/culture-valid dates/public properties with nonpublic setters, empty-input defaults and named non-finite floating output. Existing APIs/targets and production dependency groups remain unchanged; fresh explicit JsonSerializerOptions remain strict, copied CreateOptions and deserializer snapshots retain compatibility, and application converters override built-in compatibility defaults.
 - Retain rejection of silently failed conversions, unknown escapes/trailing garbage/unrelated malformed input; accurate Unicode and ISO UTC/offset semantics remain. Keep Neo's existing case-insensitive matching, class-field and constructor support rather than reproducing ignored/lost values. The original macro bytes were not supplied; do not claim the original VBA application repaired. Maintain docs/user-reports/json-migration-compatibility.md plus migration/release notes.
 - The differential probe is test-only/outside the solution and packages, pinned to SWAN 3.1.0 and legacy reference assemblies with locks. It executes both the net10.0 core and netstandard2.0 asset on .NET Framework, records 272 observations and enforces 16 portable assertions plus default binding HTTP/value checks per run. Ordinary discovery rises from the reconciled main baseline of 1541 to 1630 (89 focused regressions); required CI/Security/Malware gates remain necessary. No release/tag or other backlog issue is authorized by this work.
+
+
+## Authorized modern HTTP engine program (2026-10-08)
+
+- William explicitly authorized an ambitious replacement managed transport with
+  extreme performance, no time/effort limit, and all modern HTTP support through
+  October 2026. Incremental delivery is approved. He separately approved strict
+  malformed/ambiguous framing with documented migration impact. Preserve valid
+  public application interfaces, targets and Microsoft backend. No release or
+  HTTP Arena submission, and no contributor reply yet.
+- Isolated managed worktree: C:/Users/William/.codex/worktrees/managed-http-engine/embedio-neo,
+  branch codex/managed-http-engine, base 2e8e98c. Preserve concurrent root memory and
+  other backlog work. docs/project/http-engine.md records HTTP/1.1, HTTP/2, HTTP/3,
+  HPACK/QPACK, TLS/QUIC and extension roadmap; only first HTTP/1 increment is being
+  implemented. Do not claim HTTP/2/3 support or all-modern completion.
+- Initial full Windows suite passed 2019 (2014 success, five existing skips).
+  Five additional body-boundary/cancellation tests bring intended discovery to
+  2024; expanded focused195 passed. Latest header stack-buffer optimization needs
+  final full/cross-platform validation. Initial fixture failures preserved under
+  ignored TestResults/http-engine; no PR or commit yet.
+- Same-runner allocation evidence: 64-request parser batch 10868.88 to3368 B/request;
+  headers1KB7904to1168B,16KB98584to16528B. These are isolated microbenchmarks, not
+  server throughput. Early direct-header CPU regression led to bounded stack path;
+  timing tradeoffs still need sustained separate-process validation. All normal
+  exact-head gates/green overall/clean merge credits remain required.
+
+- First-increment final source passed Windows full discovery2024 (2019 passed,
+  five platform skips) and pinned Linux SDK10.0.401/runtime10.0.12 discovery2024
+  (1995 passed,29 platform skips). Actual netstandard2.0 assembly focused195 passed
+  on Windows .NET10.0.11. Two async-only fixed-body tests fail against the original
+  core and pass against the candidate. Artifacts/source manifest are under ignored
+  TestResults/http-engine. Remote/macOS/platform/security gates remain outstanding.
+- Program tracking issue181 exists, assigned William/enhancement/.NET/Feature
+  planning. Keep it open across increments. Initial sustained-load attempts were
+  invalid due to client socket exhaustion; preserve their logs. The corrected
+  client verifies EOF after every explicit final close; no OS limits were changed.

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace EmbedIO.Net.Internal
 {
@@ -21,10 +23,10 @@ namespace EmbedIO.Net.Internal
             _remainingBody = contentLength;
         }
 
-        internal bool IsBodyConsumed => _remainingBody == 0;
+        internal virtual bool IsBodyConsumed => _remainingBody == 0;
 
         // Only bytes beyond the completed body belong to the next request.
-        internal ArraySegment<byte> BufferedRemainder
+        internal virtual ArraySegment<byte> BufferedRemainder
             => IsBodyConsumed ? new ArraySegment<byte>(_buffer, _offset, _length) : default;
 
         public override bool CanRead => true;
@@ -76,6 +78,51 @@ namespace EmbedIO.Net.Internal
             return nread;
         }
 
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            // Validate even when canceled, but do not consume buffered input on cancellation.
+            ValidateDestination(buffer, offset, count);
+            if (cancellationToken.IsCancellationRequested) return Task.FromCanceled<int>(cancellationToken);
+            var read = FillFromBuffer(buffer, offset, count);
+            if (read != 0 || count == 0) return Task.FromResult(Math.Max(read, 0));
+            return ReadTransportAsync(buffer, offset, count, cancellationToken);
+        }
+
+        private async Task<int> ReadTransportAsync(byte[] buffer, int offset, int count, CancellationToken token)
+        {
+            if (_remainingBody > 0) count = (int)Math.Min(count, _remainingBody);
+            var read = await _stream.ReadAsync(buffer, offset, count, token).ConfigureAwait(false);
+            if (read > 0 && _remainingBody > 0) _remainingBody -= read;
+            return read;
+        }
+
+#if NET10_0_OR_GREATER
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (cancellationToken.IsCancellationRequested) return ValueTask.FromCanceled<int>(cancellationToken);
+            if (_remainingBody == 0 || buffer.Length == 0) return new ValueTask<int>(0);
+            if (_length > 0)
+            {
+                var count = Math.Min(buffer.Length, _length);
+                if (_remainingBody > 0) count = (int)Math.Min(count, _remainingBody);
+                _buffer.AsMemory(_offset, count).CopyTo(buffer);
+                _offset += count;
+                _length -= count;
+                if (_remainingBody > 0) _remainingBody -= count;
+                return new ValueTask<int>(count);
+            }
+            return ReadTransportAsync(buffer, cancellationToken);
+        }
+
+        private async ValueTask<int> ReadTransportAsync(Memory<byte> buffer, CancellationToken token)
+        {
+            if (_remainingBody > 0 && buffer.Length > _remainingBody) buffer = buffer.Slice(0, (int)_remainingBody);
+            var read = await _stream.ReadAsync(buffer, token).ConfigureAwait(false);
+            if (read > 0 && _remainingBody > 0) _remainingBody -= read;
+            return read;
+        }
+#endif
+
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 
         public override void SetLength(long value) => throw new NotSupportedException();
@@ -85,7 +132,7 @@ namespace EmbedIO.Net.Internal
         // Returns 0 if we can keep reading from the base stream,
         // > 0 if we read something from the buffer.
         // -1 if we had a content length set and we finished reading that many bytes.
-        private int FillFromBuffer(byte[] buffer, int off, int count)
+        protected static void ValidateDestination(byte[] buffer, int off, int count)
         {
             if (buffer == null)
             {
@@ -114,6 +161,11 @@ namespace EmbedIO.Net.Internal
                 throw new ArgumentException("Reading would overrun buffer");
             }
 
+        }
+
+        private int FillFromBuffer(byte[] buffer, int off, int count)
+        {
+            ValidateDestination(buffer, off, count);
             if (_remainingBody == 0)
             {
                 return -1;

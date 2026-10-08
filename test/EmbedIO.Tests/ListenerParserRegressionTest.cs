@@ -28,7 +28,13 @@ namespace EmbedIO.Tests
                 while (offset < count)
                 {
                     var args = new object[] { bytes, start + offset, count - offset, 0 };
-                    var line = (string?)ReadLine.Invoke(connection, args);
+                    string? line;
+                    try { line = (string?)ReadLine.Invoke(connection, args); }
+                    catch (TargetInvocationException exception) when (exception.InnerException is InvalidDataException)
+                    {
+                        Assert.That(expectedPartial, Is.EqualTo("INVALID"));
+                        return;
+                    }
                     var used = (int)args[3];
                     Assert.That(used, Is.InRange(1, count - offset));
                     offset += used;
@@ -36,6 +42,7 @@ namespace EmbedIO.Tests
                 }
             }
 
+            Assert.That(expectedPartial, Is.Not.EqualTo("INVALID"), "Malformed line must be rejected.");
             Assert.That(lines, Is.EqualTo(expectedLines));
             var partial = ConnectionType.GetField("_currentLine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(connection)?.ToString() ?? string.Empty;
             Assert.That(partial, Is.EqualTo(expectedPartial));
@@ -116,12 +123,12 @@ namespace EmbedIO.Tests
             var cases = new[]
             {
                 ("crlf", "header: value\r\n", new[] { "header: value" }, string.Empty),
-                ("lf", "header: value\n", new[] { "header: value" }, string.Empty),
-                ("empty", "\r\n\n", new[] { string.Empty, string.Empty }, string.Empty),
-                ("embedded-cr", "ab\rcd\r\r\n", new[] { "abcd" }, string.Empty),
-                ("leading-cr", "\rX\rY\nz\n", new[] { "XY", "z" }, string.Empty),
+                ("lf", "header: value\n", Array.Empty<string>(), "INVALID"),
+                ("empty", "\r\n\r\n", new[] { string.Empty, string.Empty }, string.Empty),
+                ("embedded-cr", "ab\rcd\r\r\n", Array.Empty<string>(), "INVALID"),
+                ("leading-cr", "\rX\rY\nz\n", Array.Empty<string>(), "INVALID"),
                 ("partial", "partial\r", Array.Empty<string>(), "partial"),
-                ("consecutive", "foo\r\n\r\nbar\n", new[] { "foo", string.Empty, "bar" }, string.Empty),
+                ("consecutive", "foo\r\n\r\nbar\r\n", new[] { "foo", string.Empty, "bar" }, string.Empty),
             };
             foreach (var fragmentSize in new[] { 1, 2, 3, 7, 8192 })
             {

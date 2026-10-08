@@ -100,3 +100,42 @@ unchanged. Use `--payload-bytes 65536` for a 64 KB response, and
 `--verify-listener-http` for bounded HTTP/HTTPS/churn cleanup verification. Client
 response bytes are validated after decoding transfer framing; dedicated regression
 cases check the exact raw chunk framing separately.
+
+## Managed engine parser
+
+`--engine-parser` measures context construction, header parsing and handoff for
+buffered batches of 1, 16 and 64 requests. It validates the resulting request path,
+header value and complete consumption. Reflection observations are included equally
+on both revisions; URI finalization, sockets and application work are excluded.
+Use the same runner binary against baseline and candidate core assemblies. These
+figures are parser microbenchmarks, not end-to-end server throughput.
+
+
+## Separate-process engine comparison
+
+Build this runner once, copy its output to a baseline directory, and replace only
+that copy's EmbedIO.dll with the baseline core built for the same target. Keep the
+candidate core in the original output. Run from PowerShell 7:
+
+```powershell
+./test/EmbedIO.Performance/CompareEngine.ps1 -BaselineRunner <baseline>/EmbedIO.Performance.dll -CandidateRunner test/EmbedIO.Performance/bin/Release/net10.0/EmbedIO.Performance.dll -OutputDirectory TestResults/engine-comparison -Rounds 3 -Seconds 15
+```
+
+The script uses independent server/client processes, five seconds of warmup and
+an explicit measurement handshake. It compares plaintext GET at pipeline depths
+1 and 16, with 16 concurrent connections by default. Each connection sends 80
+requests and explicitly closes on its final request; the client verifies server
+EOF before disposing the socket. Every response payload is checked. Workload
+errors abort the comparison and are retained in stderr.log; they are not retried.
+Use a fresh output directory for each experiment to preserve failed evidence.
+
+On machines with at least eight logical CPUs, server and client use disjoint
+affinity masks 15 and 240. Record CPU topology, OS, runtime, source revision and
+background activity alongside results. JSON includes the core assembly hash,
+throughput, sampled batch-send-to-response p50/p95/p99, server CPU time,
+allocations and GC counts. Divide server allocations and CPU by validated client
+requests for per-request figures. Samples every 67 responses distribute across
+pipeline positions. This is a closed-loop, same-host micro workload: it excludes
+connection setup from latency samples and cannot characterize open-loop overload,
+Internet latency, TLS, uploads, or HTTP Arena performance. Retained-memory and
+broader workload comparisons remain separate validation work.

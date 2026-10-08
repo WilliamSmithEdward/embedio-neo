@@ -7,6 +7,8 @@ using System.Linq;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using EmbedIO.Internal;
 using EmbedIO.Utilities;
 
@@ -18,13 +20,16 @@ namespace EmbedIO.Net.Internal
     internal sealed partial class HttpListenerRequest : IHttpRequest
     {
         private static readonly byte[] HttpStatus100 = WebServer.DefaultEncoding.GetBytes("HTTP/1.1 100 Continue\r\n\r\n");
-        private static readonly char[] Separators = { ' ' };
+
 
         private readonly HttpConnection _connection;
         private CookieList? _cookies;
         private Stream? _inputStream;
         private bool _kaSet;
         private bool _keepAlive;
+        private bool _chunked;
+        private bool _framingInitialized;
+        private long _contentLength;
 
         internal HttpListenerRequest(HttpListenerContext context)
         {
@@ -67,7 +72,7 @@ namespace EmbedIO.Net.Internal
         }
 
         /// <inheritdoc />
-        public long ContentLength64 => long.TryParse(Headers[HttpHeaderNames.ContentLength], out var val) ? val : 0;
+        public long ContentLength64 => _framingInitialized ? _contentLength : long.TryParse(Headers[HttpHeaderNames.ContentLength], out var val) ? val : 0;
 
         /// <inheritdoc />
         public string ContentType => Headers[HttpHeaderNames.ContentType];
@@ -76,7 +81,7 @@ namespace EmbedIO.Net.Internal
         public ICookieCollection Cookies => _cookies ??= new CookieList();
 
         /// <inheritdoc />
-        public bool HasEntityBody => ContentLength64 > 0;
+        public bool HasEntityBody => _chunked || ContentLength64 > 0;
 
         /// <inheritdoc />
         public NameValueCollection Headers { get; } = new();
@@ -88,7 +93,7 @@ namespace EmbedIO.Net.Internal
         public HttpVerbs HttpVerb { get; private set; }
 
         /// <inheritdoc />
-        public Stream InputStream => _inputStream ??= ContentLength64 > 0 ? _connection.GetRequestStream(ContentLength64) : Stream.Null;
+        public Stream InputStream => _inputStream ??= HasEntityBody ? _connection.GetRequestStream(ContentLength64, _chunked) : Stream.Null;
 
         /// <inheritdoc />
         public bool IsAuthenticated => false;
@@ -106,10 +111,8 @@ namespace EmbedIO.Net.Internal
             {
                 if (!_kaSet)
                 {
-                    var cnc = Headers.GetValues(HttpHeaderNames.Connection);
-                    _keepAlive = ProtocolVersion < HttpVersion.Version11
-                        ? cnc != null && cnc.Length == 1 && string.Compare(cnc[0], "keep-alive", StringComparison.OrdinalIgnoreCase) == 0
-                        : cnc == null || cnc.All(s => string.Compare(s, "close", StringComparison.OrdinalIgnoreCase) != 0);
+                    _keepAlive = !Headers.Contains(HttpHeaderNames.Connection, "close")
+                        && (ProtocolVersion >= HttpVersion.Version11 || Headers.Contains(HttpHeaderNames.Connection, "keep-alive"));
 
                     _kaSet = true;
                 }
@@ -157,53 +160,56 @@ namespace EmbedIO.Net.Internal
 
         internal void SetRequestLine(string req)
         {
-            const string forbiddenMethodChars = "\"(),/:;<=>?@[\\]{}";
-
-            var parts = req.Split(Separators, 3);
-            if (parts.Length != 3)
+            var first = req.IndexOf(' ');
+            var second = first < 0 ? -1 : req.IndexOf(' ', first + 1);
+            if (first <= 0 || second <= first + 1 || second + 9 != req.Length)
             {
-                _connection.SetError("Invalid request line (parts).");
+                _connection.SetError("Invalid request line.");
                 return;
             }
-
-            HttpMethod = parts[0];
-            foreach (var c in HttpMethod)
-            {
-                // See https://tools.ietf.org/html/rfc7230#section-3.2.6
-                // for the list of allowed characters
-                if (c < 32 || c >= 127 || forbiddenMethodChars.IndexOf(c) >= 0)
+            for (var i = 0; i < first; i++)
+                if (!HttpRequestFraming.IsTokenCharacter(req[i]))
                 {
-                    _connection.SetError("(Invalid verb)");
+                    _connection.SetError("Invalid method.");
                     return;
                 }
-            }
-
-            HttpVerb = IsKnownHttpMethod(HttpMethod, out var verb) ? verb : HttpVerbs.Any;
-
-            RawUrl = parts[1];
-            if (parts[2].Length != 8 || !parts[2].StartsWith("HTTP/", StringComparison.Ordinal))
-            {
-                _connection.SetError("Invalid request line (missing HTTP version).");
-                return;
-            }
-
-            try
-            {
-                ProtocolVersion = new Version(parts[2].Substring(5));
-
-                if (ProtocolVersion.Major < 1)
+            for (var i = first + 1; i < second; i++)
+                if (req[i] <= 32 || req[i] == 127)
                 {
-                    throw new InvalidOperationException();
+                    _connection.SetError("Invalid request target.");
+                    return;
                 }
-            }
-            catch
-            {
-                _connection.SetError("Invalid request line (could not parse HTTP version).");
-            }
+            HttpMethod = req.Substring(0, first);
+            HttpVerb = IsKnownHttpMethod(HttpMethod, out var verb) ? verb : HttpVerbs.Any;
+            RawUrl = req.Substring(first + 1, second - first - 1);
+            if (string.CompareOrdinal(req, second + 1, "HTTP/1.1", 0, 8) == 0)
+                ProtocolVersion = HttpVersion.Version11;
+            else if (string.CompareOrdinal(req, second + 1, "HTTP/1.0", 0, 8) == 0)
+                ProtocolVersion = HttpVersion.Version10;
+            else _connection.SetError("Unsupported HTTP version.");
         }
 
         internal void FinishInitialization()
         {
+            var transfer = Headers[HttpHeaderNames.TransferEncoding];
+            var length = Headers[HttpHeaderNames.ContentLength];
+            if (transfer != null)
+            {
+                if (length != null || ProtocolVersion != HttpVersion.Version11
+                    || !string.Equals(transfer, "chunked", StringComparison.OrdinalIgnoreCase))
+                {
+                    _connection.SetError("Unsupported or ambiguous request framing.");
+                    return;
+                }
+                _chunked = true;
+                _contentLength = -1;
+            }
+            else if (length != null && !HttpRequestFraming.TryContentLength(length, out _contentLength))
+            {
+                _connection.SetError("Invalid Content-Length.");
+                return;
+            }
+            _framingInitialized = true;
             var host = UserHostName;
             if (ProtocolVersion > HttpVersion.Version10 && string.IsNullOrEmpty(host))
             {
@@ -236,7 +242,7 @@ namespace EmbedIO.Net.Internal
             Url = url;
             InitializeQueryString(Url.Query);
 
-            if (ContentLength64 == 0 && (HttpVerb == HttpVerbs.Post || HttpVerb == HttpVerbs.Put))
+            if (!HasEntityBody && (HttpVerb == HttpVerbs.Post || HttpVerb == HttpVerbs.Put))
             {
                 return;
             }
@@ -256,9 +262,38 @@ namespace EmbedIO.Net.Internal
                 return;
             }
 
-            var name = header.Substring(0, colon).Trim();
-            var val = header.Substring(colon + 1).Trim();
-
+            for (var i = 0; i < colon; i++)
+                if (!HttpRequestFraming.IsTokenCharacter(header[i]))
+                {
+                    _connection.SetError("Invalid header name.");
+                    return;
+                }
+            for (var i = colon + 1; i < header.Length; i++)
+                if ((header[i] < 32 && header[i] != '\t') || header[i] == 127)
+                {
+                    _connection.SetError("Invalid header value.");
+                    return;
+                }
+            var name = header.Substring(0, colon);
+            var val = header.Substring(colon + 1).Trim(' ', '\t');
+            var previous = Headers[name];
+            if (name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!HttpRequestFraming.TryContentLength(val, out var parsed)
+                    || (previous != null && (!HttpRequestFraming.TryContentLength(previous, out var existing) || existing != parsed)))
+                {
+                    _connection.SetError("Invalid or conflicting Content-Length.");
+                    return;
+                }
+            }
+            else if (previous != null && (name.Equals("Host", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Transfer-Encoding", StringComparison.OrdinalIgnoreCase)))
+            {
+                _connection.SetError("Duplicate framing header.");
+                return;
+            }
+            else if (previous != null && name.Equals("Connection", StringComparison.OrdinalIgnoreCase))
+                val = previous + ", " + val;
             Headers.Set(name, val);
 
             switch (name.ToLowerInvariant())
@@ -347,6 +382,21 @@ namespace EmbedIO.Net.Internal
                 // Request data must not survive in a buffer shared with another caller.
                 ArrayPool<byte>.Shared.Return(bytes, clearArray: true);
             }
+        }
+
+        internal async Task<bool> FlushInputAsync()
+        {
+            if (!HasEntityBody) return true;
+            var input = InputStream;
+            if (input is RequestStream body && body.IsBodyConsumed) return true;
+            var bytes = ArrayPool<byte>.Shared.Rent(2048);
+            try
+            {
+                while (await input.ReadAsync(bytes, 0, 2048, CancellationToken.None).ConfigureAwait(false) > 0) { }
+                return input is not RequestStream request || request.IsBodyConsumed;
+            }
+            catch { return false; }
+            finally { ArrayPool<byte>.Shared.Return(bytes, true); }
         }
 
         // Optimized for the following list of methods:

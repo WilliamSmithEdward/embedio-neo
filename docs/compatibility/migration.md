@@ -550,3 +550,32 @@ precise scope, tests and limitations. No release date/version is promised.
 ## Suffix byte ranges (unreleased)
 
 The owner-requested correction in [#170](https://github.com/WilliamSmithEdward/embedio-neo/issues/170) changes `Range: bytes=-N` from an incorrect leading slice to the final N bytes, clamped to file size. `bytes=-0` now returns 416; a positive suffix on an empty file is ignored and returns 200. HEAD, If-Range validation, explicit/open-ended ranges and existing multipart handling retain their policies. Clients using explicit offsets may continue to do so; clients relying on wrong leading bytes must adopt correct suffix semantics. Published 1.0.3 retains the defect. No public API, dependency or target changes. See [suffix-range guidance](../user-reports/suffix-range-responses.md).
+
+## Managed HTTP framing (unreleased)
+
+The owner approved strict framing on 2026-10-08 as part of the modern engine
+replacement. The managed listener now decodes chunked request bodies. Such
+requests report `HasEntityBody = true` and `ContentLength64 = -1`; consume their
+stream to completion instead of treating an unknown length as an empty body.
+Trailer fields are validated and consumed without merging them into request
+headers. The current public request interface does not expose trailers separately.
+
+Send CRLF line endings, valid field names, decimal nonnegative lengths and one
+unambiguous framing scheme. Conflicting Content-Length fields, Content-Length
+together with Transfer-Encoding, repeated/unsupported transfer coding, duplicate
+Host, invalid field controls and malformed chunk boundaries now terminate the
+connection. Equal repeated decimal Content-Length is accepted. This intentionally
+changes the permissive behavior recorded by earlier listener-boundary audits.
+
+Fixed-length reads now use asynchronous transport I/O. Closing a response starts
+asynchronous draining of unread request data before admitting a successor; it no
+longer blocks the closing caller on that drain. The connection is closed if the
+body is incomplete or malformed. Applications must finish their own body reads
+before closing a response and must not concurrently read a request stream.
+
+Header parsing enforces a cumulative 32768-byte budget even across fragmented
+reads, and keeps the existing request-header deadline active until parsing is
+complete. Chunk metadata lines are limited to 8192 bytes and trailers to 32768
+bytes. The native Microsoft backend is unchanged. No package version or release
+is implied; see the [engine program](../project/http-engine.md) for validation
+status and the HTTP/2 and HTTP/3 milestones.

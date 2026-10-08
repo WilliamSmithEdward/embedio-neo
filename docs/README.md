@@ -1,4 +1,4 @@
-# Documentation
+﻿# Documentation
 
 EmbedIO-Neo keeps the existing `EmbedIO` namespaces and offers a small modular
 HTTP/WebSocket server, integrated CLI, JsonServer, and testing helpers.
@@ -127,6 +127,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Streaming write errors](user-reports/streaming-write-errors.md): error policy, reverse proxies, compression and buffering.
 
 ## Architecture
+
+- [Modern HTTP engine program](project/http-engine.md): protocol roadmap, compatibility changes and performance acceptance.
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
 

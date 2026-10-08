@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Net;
 using System.Net.Security;
@@ -14,6 +14,9 @@ namespace EmbedIO.Net.Internal
     internal sealed partial class HttpConnection : IDisposable
     {
         private const int BufferSize = 8192;
+        private static readonly Encoding HeaderEncoding = Encoding.GetEncoding(28591);
+        private int _headerBytes;
+        private int _responseFinishing;
 
         private readonly Timer _timer;
         private readonly object _connectionSync = new();
@@ -103,7 +106,7 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        public RequestStream GetRequestStream(long contentLength)
+        public RequestStream GetRequestStream(long contentLength, bool chunked = false)
         {
             if (_iStream == null)
             {
@@ -111,7 +114,8 @@ namespace EmbedIO.Net.Internal
                 var length = (int)_ms.Length;
                 _ms = null;
 
-                _iStream = new RequestStream(Stream, buffer, _position, length - _position, contentLength);
+                _iStream = chunked ? new ChunkedRequestStream(Stream, buffer, _position, length - _position)
+                    : new RequestStream(Stream, buffer, _position, length - _position, contentLength);
             }
 
             return _iStream;
@@ -126,6 +130,7 @@ namespace EmbedIO.Net.Internal
         internal void Close(bool forceClose = false)
         {
             if (forceClose) Volatile.Write(ref _forceClosing, 1);
+            if (!forceClose && Interlocked.Exchange(ref _responseFinishing, 1) != 0) return;
             if (_sock != null)
             {
                 // Dispose may call Response.Close recursively. A forced close is
@@ -136,32 +141,52 @@ namespace EmbedIO.Net.Internal
             if (_sock == null) return;
 
             if (Volatile.Read(ref _forceClosing) == 0 && _context.Request.KeepAlive
-                && _context.Response.Headers["connection"] != "close"
-                && _context.HttpListenerRequest.FlushInput())
+                && _context.Response.Headers["connection"] != "close")
             {
-                var restart = false;
-                lock (_connectionSync)
+                _ = CompleteResponseAsync();
+                return;
+            }
+            CloseTransport(true);
+        }
+
+        private async Task CompleteResponseAsync()
+        {
+            try
+            {
+                if (!await _context.HttpListenerRequest.FlushInputAsync().ConfigureAwait(false))
                 {
-                    if (_sock != null && _resourcesDisposed == 0 && _forceClosing == 0)
-                    {
-                        var pending = _iStream != null ? _iStream.BufferedRemainder
-                            : _ms != null ? new ArraySegment<byte>(_ms.GetBuffer(), _position, (int)_ms.Length - _position)
-                            : default;
-                        var previousBuffer = _ms;
-                        Reuses++;
-                        Unbind();
-                        InitWithPendingInput(pending);
-                        previousBuffer?.Dispose();
-                        restart = true;
-                    }
-                }
-                // RegisterContext acquires the listener lock; do not enter the
-                // request reader while holding a connection lock.
-                if (restart)
-                {
-                    _ = BeginReadRequest();
+                    CloseTransport(true);
                     return;
                 }
+                RestartRequest();
+            }
+            catch { CloseTransport(true); }
+        }
+
+        private void RestartRequest()
+        {
+            var restart = false;
+            lock (_connectionSync)
+            {
+                if (_sock != null && _resourcesDisposed == 0 && _forceClosing == 0)
+                {
+                    var pending = _iStream != null ? _iStream.BufferedRemainder
+                        : _ms != null ? new ArraySegment<byte>(_ms.GetBuffer(), _position, (int)_ms.Length - _position)
+                        : default;
+                    var previousBuffer = _ms;
+                    Reuses++;
+                    Unbind();
+                    InitWithPendingInput(pending);
+                    previousBuffer?.Dispose();
+                    restart = true;
+                }
+            }
+            // RegisterContext acquires the listener lock; do not enter the
+            // request reader while holding a connection lock.
+            if (restart)
+            {
+                _ = BeginReadRequest();
+                return;
             }
 
             CloseTransport(true);
@@ -174,9 +199,19 @@ namespace EmbedIO.Net.Internal
             _iStream = null;
             _oStream = null;
             Prefix = null;
-            _ms = new MemoryStream();
-            if (pending.Count > 0) _ms.Write(pending.Array!, pending.Offset, pending.Count);
-            _position = 0;
+            // Adopt immutable unread bytes instead of copying the tail for each pipelined request.
+            // The preceding body is complete and cannot expose this storage again.
+            if (pending.Count > 0)
+            {
+                _ms = new MemoryStream(pending.Array!, 0, pending.Array!.Length, true, true);
+                _ms.SetLength(pending.Offset + pending.Count);
+                _ms.Position = _ms.Length;
+                _position = pending.Offset;
+            }
+            else { _ms = new MemoryStream(); _position = 0; }
+            _headerBytes = 0;
+            _responseFinishing = 0;
+            _errorMessage = null;
             _inputState = InputState.RequestLine;
             _lineState = LineState.None;
             _context = new HttpListenerContext(this);
@@ -189,8 +224,7 @@ namespace EmbedIO.Net.Internal
 
         private async Task OnReadInternal(int offset, bool bufferedInput = false)
         {
-            StopRequestTimer();
-
+            // Keep the header deadline active through every fragmented read.
             // Continue reading until full header is received.
             // Especially important for multipart requests when the second part of the header arrives after a tiny delay
             // because the web browser has to measure the content length first.
@@ -198,11 +232,14 @@ namespace EmbedIO.Net.Internal
             {
                 try
                 {
-                    if (offset > 0) await _ms.WriteAsync(_buffer, 0, offset).ConfigureAwait(false);
-                    if (_ms.Length > 32768)
+                    if (offset > 0)
                     {
-                        Close(true);
-                        return;
+                        if (_ms.Capacity < offset)
+                        {
+                            _ms.Dispose();
+                            _ms = new MemoryStream(Math.Max(offset, 256));
+                        }
+                        _ms.Write(_buffer, 0, offset);
                     }
                 }
                 catch
@@ -220,6 +257,7 @@ namespace EmbedIO.Net.Internal
                 bufferedInput = false;
                 if (ProcessInput(_ms))
                 {
+                    StopRequestTimer();
                     if (_errorMessage is null)
                     {
                         _context.HttpListenerRequest.FinishInitialization();
@@ -285,6 +323,8 @@ namespace EmbedIO.Net.Internal
                 {
                     line = ReadLine(buffer, _position, len - _position, out used);
                     _position += used;
+                    _headerBytes += used;
+                    if (_headerBytes > 32768) throw new InvalidDataException("Request headers exceed 32768 bytes.");
                 }
                 catch
                 {
@@ -328,49 +368,50 @@ namespace EmbedIO.Net.Internal
                 }
             }
 
-            if (used == len)
-            {
-                ms.SetLength(0);
-                _position = 0;
-            }
+            // Incomplete input has been fully consumed into the partial line.
+            // Reuse its storage; the next read must not grow with fragmentation.
+            ms.SetLength(0);
+            ms.Position = 0;
+            _position = 0;
 
             return false;
         }
 
         private string? ReadLine(byte[] buffer, int offset, int len, out int used)
         {
-            _currentLine ??= new StringBuilder(128);
-
-            var last = offset + len;
             used = 0;
-            for (var i = offset; i < last && _lineState != LineState.Lf; i++)
+            // A complete line in the receive buffer requires only its final string,
+            // not an intermediate char buffer and a per-byte append loop.
+            if (_currentLine == null && _lineState == LineState.None)
             {
-                used++;
-                var b = buffer[i];
-
-                switch (b)
+                var end = Array.IndexOf(buffer, (byte)13, offset, len);
+                var lf = Array.IndexOf(buffer, (byte)10, offset, len);
+                if (lf >= 0 && (end < 0 || lf < end)) throw new InvalidDataException("Bare LF in request headers.");
+                if (end >= 0 && end + 1 < offset + len)
                 {
-                    case 13:
-                        _lineState = LineState.Cr;
-                        break;
-                    case 10:
-                        _lineState = LineState.Lf;
-                        break;
-                    default:
-                        _ = _currentLine.Append((char)b);
-                        break;
+                    if (buffer[end + 1] != 10) throw new InvalidDataException("Invalid request line ending.");
+                    used = end - offset + 2;
+                    return HeaderEncoding.GetString(buffer, offset, end - offset);
                 }
             }
-
-            if (_lineState != LineState.Lf)
+            _currentLine ??= new StringBuilder(128);
+            for (var i = offset; i < offset + len; i++)
             {
-                return null;
+                used++;
+                var value = buffer[i];
+                if (_lineState == LineState.Cr)
+                {
+                    if (value != 10) throw new InvalidDataException("Invalid request line ending.");
+                    _lineState = LineState.None;
+                    var result = _currentLine.ToString();
+                    _currentLine = null;
+                    return result;
+                }
+                if (value == 10) throw new InvalidDataException("Bare LF in request headers.");
+                if (value == 13) _lineState = LineState.Cr;
+                else _currentLine.Append((char)value);
             }
-
-            _lineState = LineState.None;
-            var result = _currentLine.ToString();
-            _currentLine.Length = 0;
-            return result;
+            return null;
         }
 
         private void Unbind()

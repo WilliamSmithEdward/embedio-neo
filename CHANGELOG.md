@@ -1,6 +1,14 @@
-# Changelog
+﻿# Changelog
 
 ## [Unreleased]
+
+- Begin the owner-approved modern HTTP engine replacement: managed chunked request
+  decoding, asynchronous body reads and draining, strict framing validation,
+  pipeline buffer adoption and reduced response-header allocations. Malformed or
+  ambiguous requests previously tolerated are rejected; see the
+  [migration notes](docs/compatibility/migration.md#managed-http-framing-unreleased)
+  and [protocol roadmap](docs/project/http-engine.md). HTTP/2 and HTTP/3 remain
+  planned and are not advertised by this increment.
 
 - Document existing streaming write-error controls, with reverse-proxy disconnect, compression and buffering compatibility coverage (upstream #457).
 

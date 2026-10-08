@@ -1,4 +1,9 @@
-# Returning a response without reading the request body
+﻿# Returning a response without reading the request body
+
+The unreleased [modern engine increment](../project/http-engine.md) supersedes
+this report's managed chunked-input and synchronous-read limitations, and tightens
+ambiguous framing. Measurements below describe the earlier source; see the
+[migration notes](../compatibility/migration.md#managed-http-framing-unreleased).
 
 [Upstream #558](https://github.com/unosquare/embedio/issues/558), reported by bdurrer, described the fourth request in a .NET Framework HttpClient sequence failing with EmbedIO 3.4.3 when a POST controller ignored its body. Current source completes that sequence with both listeners. Applications do not need to read a fixed-length body merely to make the response work.
 

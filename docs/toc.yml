@@ -1,4 +1,4 @@
-- name: Documentation
+﻿- name: Documentation
   href: README.md
 - name: Parity audit
   items:
@@ -200,6 +200,8 @@
   items:
     - name: Baseline and direction
       href: project/embed_io_neo.md
+    - name: Modern HTTP engine program
+      href: project/http-engine.md
 
 - name: Suffix byte ranges
   href: user-reports/suffix-range-responses.md
