@@ -10,6 +10,8 @@
   and [protocol roadmap](docs/project/http-engine.md). HTTP/2 and HTTP/3 remain
   planned and are not advertised by this increment.
 
+- Add the owner-approved WithBasicAuthentication fluent helper with explicit scope, configure-before-registration and optional realm, preserving existing authentication behavior and manual registration (upstream #439).
+
 - Document existing streaming write-error controls, with reverse-proxy disconnect, compression and buffering compatibility coverage (upstream #457).
 
 - Retain URL-prefix configuration and document endpoint binding, path routing and certificate ownership, with real listener compatibility coverage (upstream #464).
