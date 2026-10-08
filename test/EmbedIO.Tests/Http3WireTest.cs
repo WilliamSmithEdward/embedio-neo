@@ -8,7 +8,7 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    public class Http3WireTest
+    public partial class Http3WireTest
     {
         private const BindingFlags Hidden = BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic;
         private static Type InternalType(string name) => typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3." + name, true)

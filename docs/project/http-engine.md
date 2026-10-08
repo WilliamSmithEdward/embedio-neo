@@ -531,3 +531,29 @@ truncation, constant-storage skipping, oversize metadata and cancellation.
 The solution builds with no warnings/errors; both suppression guards pass.
 CI's test discovery floor becomes 2,507. This is an internal foundation, not an
 HTTP/3 endpoint or QUIC interoperability claim.
+
+
+### HTTP/3 peer settings and control-stream parsing
+
+Immutable peer settings now parse QPACK capacity/blocked-stream limits, maximum
+field-section size, extended CONNECT and datagram flags. Unknown identifiers are
+ignored semantically but participate in duplicate and entry-budget checks.
+Forbidden HTTP/2 settings, duplicate identifiers, invalid boolean values and
+truncated pairs receive explicit connection error codes. Full-width peer limits
+are retained without allocating tables or enabling an extension merely because
+the peer advertised it.
+
+The control reader enforces SETTINGS first and once, critical-stream closure,
+forbidden frame types/directions, exact identifier payload lengths, decreasing
+GOAWAY bounds and increasing MAX_PUSH_ID bounds. Unknown frames are streamed
+past. It emits cancellation identifiers for the future connection push registry;
+promise existence and stream uniqueness are not yet validated by this layer.
+QUIC connection integration, QPACK state and 0-RTT settings handling remain open.
+The behavior follows RFC 9114 sections 6.2.1 and 7.2, RFC 9204 section 5,
+[RFC 9220](https://www.rfc-editor.org/rfc/rfc9220.html) and
+[RFC 9297](https://www.rfc-editor.org/rfc/rfc9297.html).
+
+All 67 HTTP/3 cases (34 new settings/control cases) pass against both target
+assemblies hosted on .NET 10.0.11. The solution builds without warnings/errors and
+both suppression guards pass. The discovery floor is 2,541. These local tests do
+not establish QUIC interoperability or complete HTTP/3 conformance.
