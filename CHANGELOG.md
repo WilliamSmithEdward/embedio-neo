@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Document existing streaming write-error controls, with reverse-proxy disconnect, compression and buffering compatibility coverage (upstream #457).
+
 - Retain URL-prefix configuration and document endpoint binding, path routing and certificate ownership, with real listener compatibility coverage (upstream #464).
 
 - Add owner-approved opt-in ILoggerFactory diagnostics forwarding in the optional DI package, with registration disposal and failure/recursion counters. Core APIs, defaults and dependency groups remain unchanged (upstream #475).

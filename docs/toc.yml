@@ -177,6 +177,9 @@
     - name: Endpoint configuration
       href: user-reports/endpoint-configuration.md
 
+    - name: Streaming write errors
+      href: user-reports/streaming-write-errors.md
+
 - name: Architecture
   items:
     - name: Dependency injection
