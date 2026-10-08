@@ -31,6 +31,7 @@ namespace EmbedIO.Tests
         [TestCase(0, 1, false)]
         [TestCase(100003, 8, false)]
         [TestCase(1048576, 3, false)]
+        [TestCase(262145, 1, false)]
         [TestCase(0, 4, true)]
         public async Task HttpClientExchangesExactHttp3Bodies(int size, int concurrency, bool head)
         {

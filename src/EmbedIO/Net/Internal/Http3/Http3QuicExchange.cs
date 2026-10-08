@@ -16,6 +16,7 @@ namespace EmbedIO.Net.Internal.Http3
     [SupportedOSPlatform("macos")]
     internal sealed class Http3QuicExchange : IMultiplexedExchange, IDisposable
     {
+        private const int MaximumDataPayload = 256 * 1024;
         private readonly BorrowedResource<QuicStream> _stream;
         private readonly Http3RequestStream _reader;
         private readonly Func<int> _peerFieldLimit;
@@ -93,8 +94,19 @@ namespace EmbedIO.Net.Internal.Http3
                     throw new InvalidDataException("Response exceeds Content-Length.");
                 if (endStream && _bodyAllowed && _length.HasValue && _sent + count != _length.Value)
                     throw new InvalidDataException("Response does not match Content-Length.");
-                if (count != 0) await FrameAsync(0, bytes.AsMemory(offset, count), endStream, token).ConfigureAwait(false);
-                else if (endStream) _stream.Value.CompleteWrites();
+                // Bound each transport submission: QUIC may buffer an entire write
+                // before completing it, regardless of the peer's stream credit.
+                // Keep ownership of the caller's buffer and the output gate until
+                // every DATA fragment has completed or the transport has failed.
+                var remaining = count;
+                while (remaining != 0)
+                {
+                    var size = Math.Min(MaximumDataPayload, remaining);
+                    await FrameAsync(0, bytes.AsMemory(offset, size), endStream && size == remaining, token).ConfigureAwait(false);
+                    offset += size;
+                    remaining -= size;
+                }
+                if (count == 0 && endStream) _stream.Value.CompleteWrites();
                 _sent += count;
                 if (endStream) _ended = true;
             }

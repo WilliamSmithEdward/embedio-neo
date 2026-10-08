@@ -1661,3 +1661,84 @@ requirement remains a pre-merge limitation. A fresh complete scan must pass.
 Transport-queue scheduling, HTTP/3 write admission/native transport capabilities,
 configuration, frozen standards inventory and end-to-end performance/conformance
 work remain required; this checkpoint does not complete the engine program.
+
+
+## HTTP/3 response backpressure and bounded DATA writes
+
+The d40d839 checkpoint passed every applicable PR check, including macOS,
+Windows/Linux regression suites, MAUI, security, malware and fuzzing. The engine
+program remains incomplete and unreleased.
+
+The response adapter now submits DATA in fragments of at most 256 KiB. QUIC can
+complete a single large write after buffering it, so asynchronous completion
+alone does not establish backpressure from an unread peer. The adapter retains
+the caller buffer and per-stream output gate until all fragments finish or the
+transport fails; only the final fragment can carry FIN. This bounds each DATA
+submission, not total native transport memory, connection bandwidth or retained
+application buffers. Headers and critical control streams are unchanged.
+
+Four real QUIC cases advertise a 64 KiB receive window, leave an 8 MiB response
+unread and require a sibling response to finish while the large writer remains
+pending. Both repeated application writes and one large application write are
+covered. Draining validates exact body bytes; reset terminates the pending writer;
+both paths require another healthy request on the same connection. The expanded
+pre-change set failed one of four cases, confirming that a single large write can
+complete depending on transport buffering/timing. An additional 262,145-byte
+HttpClient response checks a short final fragment. All 49 QUIC cases pass on
+Windows and Linux (pinned MsQuic 2.6.2). The final full Windows suite passed 2,970 cases with five expected skips
+(2,975 total; h3-backpressure-selected-full log). Both targets build without
+warnings/errors and formatting/analyzer guards pass. Fresh exact-head CI remains
+required.
+The earlier 2,974-case full Windows pass applies to the rejected 16 KiB candidate,
+not the selected 256 KiB implementation. Initial fixture failures and a build
+attempt blocked by the running test apphost remain in local evidence; they are
+not reported as production failures or clean-build passes.
+
+Run `python scripts/compare_http3_writes.py` to reproduce the comparison. It builds
+identical current core snapshots with only the baseline exchange taken from
+commit d40d839, hashes sources/binaries and records SDK information. The default
+output is `TestResults/http3-write-comparison`; `--output` must stay under
+TestResults. Native QUIC support is required. Each of three alternating process
+pairs runs three samples per size/concurrency with tiered compilation disabled.
+TLS setup and warmup are excluded, exact body checking is included. Client and
+server share one process; CPU and managed allocations cover both, while native
+allocation is not counted. Per-sample p50/p95/p99 values and raw results are saved;
+these short loopback samples are not production tail-latency guarantees.
+
+The 16 KiB trial reduced sequential throughput by 27% for 1 MiB and 34% for 8 MiB
+responses, with increased CPU, and was rejected. A 64 KiB trial recovered much
+of that cost. The selected 256 KiB comparison (`h3-write-comparison-selected`)
+measured these medians over nine samples per cell on local Windows/.NET 10:
+
+| Response / concurrency | Baseline MiB/s | Candidate MiB/s | Baseline CPU ms/response | Candidate CPU ms/response |
+| --- | ---: | ---: | ---: | ---: |
+| 1 MiB / 1 | 354.84 | 447.85 | 5.86 | 5.86 |
+| 1 MiB / 8 | 427.69 | 544.35 | 5.86 | 5.37 |
+| 8 MiB / 1 | 386.43 | 439.85 | 44.92 | 42.48 |
+| 8 MiB / 8 | 428.19 | 458.76 | 49.32 | 47.85 |
+
+Managed allocation rose by roughly 5 KiB per 1 MiB response and 30–37 KiB per
+8 MiB response, under 0.3% of combined client/server allocation in those cases.
+Small-response results varied: sequential 128-byte throughput fell from 0.92 to
+0.73 MiB/s in the selected run, while concurrency eight rose from 4.78 to 5.41.
+No universal speedup or resolved small-response performance claim is made.
+The shorter exploratory samples were inadequate for fine CPU comparisons;
+the checked-in runner uses longer small-response batches. All rejected trial
+sources and raw results are retained under TestResults/http-engine.
+
+A queue that immediately starts every ready asynchronous write would only order
+submission calls; it would not establish relative bandwidth under congestion.
+Do not present bounded writes as completed RFC 9218 scheduling. The .NET 10
+transport still needs a maintained strategy for stream priority and datagrams;
+no private native handle workaround was introduced. The public priority property
+appears in [.NET 11 preview 5](https://github.com/dotnet/core/blob/main/release-notes/11.0/preview/preview5/libraries.md),
+which is not evidence of .NET 10 availability or validated scheduling. Native
+retention measurements, small-response investigation, mixed-workload performance,
+transport scheduling and the wider completion checklist remain required.
+
+The new comparison runner triggered the same pinned runtime-compilation heuristic
+previously reviewed for the HTTP/2 fixture. The complete rule and fixed reflection
+calls were reviewed; canonical hashes and a narrow rule/path acceptance are in
+`.github/security/http3-benchmark-yara-review.md`. Source/rules were not rewritten
+to evade detection. No matching GitHub alert exists to dismiss, leaving the
+owner's pre-merge requirement outstanding; fresh CI scans remain necessary.
