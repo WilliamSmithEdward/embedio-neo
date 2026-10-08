@@ -1067,3 +1067,95 @@ The complete Windows suite for the WebSocket increment passed 2,748 cases with
 five expected skips (2,753 total, zero failures). Both targets build without
 warnings, formatting and analyzer guards pass, and the pinned YARA scan reports
 no matches in the new wire fixture. No performance improvement is claimed.
+
+### Managed WebSocket message UTF-8 validation (#190)
+
+Thirteen independently encoded malformed text-message cases reached the echo
+callback on the preceding source instead of closing with 1007. Eleven valid
+text/binary/fragmented cases already passed. The frame reader now validates
+complete text directly and carries a strict BCL decoder across partial text
+frames, flushing at the final fragment. Control and binary payloads do not change
+text state. Fragment conversion borrows a bounded character buffer and clears it
+on return; no decoded message string is retained by validation.
+
+An initial GetCharCount-based attempt did not advance decoder state and failed
+six valid fragmentation cases; that evidence remains under ws-text-after. The
+corrected streaming Convert implementation passes all 118 initial focused cases.
+Two further wire cases prove rejection before a malformed non-final message
+finishes; four large text cases cover both unfragmented and fragmented HTTP/2
+and HTTP/3 tunnels. All 61 text/tunnel/listener cases pass on Windows. Against the
+actual netstandard2.0 core assembly, all 97 applicable managed framing/close/text
+and HTTP/2 WebSocket cases pass on runtime 10.0.12. Evidence is under
+TestResults/http-engine/ws-text-*. The discovery floor is 2,783. Migration guidance
+records the malformed-text behavior change; performance costs and full-source
+checks remain to be measured and validated.
+
+All 124 focused cases pass on isolated Ubuntu 24.04 with runtime 10.0.12 and
+MsQuic 2.6.2. The pinned YARA scan has no matches in the changed parser, new wire
+fixture or benchmark harness. The initial scanner command incorrectly supplied
+multiple target paths as rule inputs; its syntax errors are retained separately
+from the corrected one-target-per-invocation scan. Preceding WebSocket head
+2b6bbbc passed CI 37800390714, Security 37800389784 and Malware 37800389812.
+
+The initial decoder implementation passed the complete Windows suite (2,778
+successes/five expected skips, 2,783 total). A measured refinement then added the
+.NET 10 Utf8.IsValid complete-chunk path and reuses a strict decoder when code
+points span frames. Binary/control frames do not inherit decoder state. A later
+fragmented text message and arbitrary binary message on the same connection now
+exercise reuse explicitly. All 124 focused cases pass; the actual netstandard
+asset passes all 97 applicable cases again. The full refined-source run remains
+separate evidence.
+
+#### UTF-8 reader cost experiment, 2026-10-08
+
+The new `--websocket-read` harness validates every decoded byte and complete wire
+consumption. AMD Ryzen 7 9800X3D (8 cores/16 logical), Windows 10.0.26300 x64,
+.NET 10.0.12, Release, one process at a time, no full-suite test run concurrent
+with measurements. Three alternating baseline/decoder/refined process runs,
+five timed samples per workload after 1,000 warmup messages; median of 15 samples.
+`DOTNET_TieredCompilation=0` avoids tier transitions observed in the first run.
+The initial tiered results are retained but are not used for these comparisons.
+No affinity or clock-frequency control was imposed; this is local diagnostic
+evidence, not a portable percentage guarantee.
+
+The final experiment verifies an identical runner binary for all three versions
+(SHA-256 38FC9B67BD85A8220E5DF1BE6D542948539B154DCDFED23BBF40807D436B196A);
+only the core DLL is replaced. An earlier comparison used a rebuilt candidate
+runner with a different hash; those results are retained but superseded here.
+Baseline core is built from 2b6bbbc.
+The intermediate decoder and refined cores are identified by SHA-256 below.
+UTF-8 payloads repeat U+00E9; the 16-byte/16-frame case deliberately splits each
+code point. MemoryStream parsing includes masking, reflection and content checks;
+network, message reassembly, callback work and sending are excluded.
+
+| Text bytes / frames | Unchecked baseline ns/message | Initial decoder ns/message | Refined ns/message | Refined allocated B/message |
+| --- | ---: | ---: | ---: | ---: |
+| 16 / 1 | 311.3 | 320.8 | 325.9 | 624.0 |
+| 16 / 16 | 2,884.1 | 4,076.6 | 4,099.6 | 8,704.1 |
+| 1,024 / 1 | 663.4 | 775.8 | 773.0 | 1,736.0 |
+| 1,024 / 16 | 3,466.6 | 4,396.4 | 3,640.8 | 10,752.1 |
+| 65,536 / 1 | 30,088.0 | 35,888.0 | 36,268.2 | 132,016.8 |
+| 65,536 / 16 | 31,380.2 | 47,131.0 | 38,117.4 | 76,928.8 |
+
+Refined steady-state allocations equal the unchecked baseline for all twelve
+text/binary workloads; the initial decoder added 56 or 112 bytes per fragmented
+text message in these measurements. The refinement reduces the measured large
+fragmented-text cost relative to the first correct implementation, but does not
+make validation free or prove end-to-end speedups. Binary medians stay within
+about 2% of baseline in the final comparison; small differences are not treated
+as improvements. Decoder allocation on first use and connection retention are
+outside these warmed steady-state allocation figures.
+
+Core hashes: baseline `A82D3DD7685C0FCFA912030A53C86D4D424021217A60DFB3D63D4B7170FC2337`;
+initial decoder `E38B35FEA660AC93686C43F938B5108699E9F62AD4D4D6C2C0B03022CE1B2FF0`;
+refined `412D5A6312BDFE6EC5EAB5EEE0C9B2725212164341FBC584D5EBB02C66959367`.
+Raw JSON, stderr and earlier experiments remain under
+TestResults/http-engine/ws-text-identical-*, ws-text-comparison-* and ws-text-perf-*.
+Reproduce with the same runner against each core and `DOTNET_TieredCompilation=0`;
+see the performance README. Broad WebSocket throughput/tail latency, retained
+memory, overload and cross-platform performance remain required by #190.
+
+The final refined Windows suite passed 2,778 cases with five expected skips
+(2,783 total, zero failures). Linux focused tests, both-target builds, actual
+netstandard tests, formatting/analyzer guards and the final YARA scan also pass.
+Fresh exact-head CI remains required; #190 and the full engine goal remain open.

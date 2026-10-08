@@ -37,6 +37,8 @@ namespace EmbedIO.Tests
             protected override Task OnClientDisconnectedAsync(IWebSocketContext context)
             { Interlocked.Increment(ref DisconnectCount); Disconnected.TrySetResult(); return Task.CompletedTask; }
         }
+        [TestCase(262144, true, false, false)]
+        [TestCase(262144, true, true, false)]
         [TestCase(0, true, false, false)]
         [TestCase(127, true, false, false)]
         [TestCase(262144, false, false, false)]

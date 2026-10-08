@@ -139,3 +139,28 @@ pipeline positions. This is a closed-loop, same-host micro workload: it excludes
 connection setup from latency samples and cannot characterize open-loop overload,
 Internet latency, TLS, uploads, or HTTP Arena performance. Retained-memory and
 broader workload comparisons remain separate validation work.
+
+## Managed WebSocket reader
+
+`--websocket-read` measures masked frame parsing, unmasking and incoming text
+validation from a MemoryStream. It checks every payload byte and full wire
+consumption. Workloads use 16, 1,024 and 65,536-byte UTF-8 payloads, one or sixteen
+frames, and both text and binary opcodes. A reader is reused across messages;
+the 16-byte/16-frame text workload splits multibyte code points across frames.
+Five samples follow warmup. JSON identifies the core assembly hash, runtime,
+OS, architecture, nanoseconds/message and allocated bytes/message.
+
+Use the same built runner for baseline and candidate; copy its output and
+replace only EmbedIO.dll in the baseline copy. Run each process separately on an
+otherwise quiet machine and retain every sample. Reflection and content checks
+are included equally on both versions. This isolates reader costs; it excludes
+network I/O, message reassembly, application callbacks and sender work, and is
+not end-to-end throughput or tail-latency evidence.
+
+For stable-JIT comparisons, set `DOTNET_TieredCompilation=0` in each benchmark
+process environment (and restore the shell's previous setting afterward).
+The JSON records this value. Ordinary tiered runs remain useful but tier
+transitions can distort a short workload; do not combine those samples with
+stable-JIT runs. Record CPU topology and source revisions as well as assembly
+hashes. The 2026-10-08 validation-cost experiment is recorded in
+[the engine program](../../docs/project/http-engine.md#utf-8-reader-cost-experiment-2026-10-08).

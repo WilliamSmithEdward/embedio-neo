@@ -29,6 +29,8 @@ namespace EmbedIO.Tests
                 => context.WebSocket.SendAsync(buffer, result.MessageType == (int)WebSocketMessageType.Text, context.CancellationToken);
         }
 
+        [TestCase(262144, true, false, false)]
+        [TestCase(262144, true, true, false)]
         [TestCase(0, true, false, false)]
         [TestCase(127, true, false, false)]
         [TestCase(262144, false, false, false)]

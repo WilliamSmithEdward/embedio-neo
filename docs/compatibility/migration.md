@@ -674,3 +674,16 @@ Header comparisons remain explicitly case-insensitive. The supported library
 targets and runtime dependency groups are unchanged. CI enables analyzers for
 test/platform builds, treats warnings as errors, verifies formatting, and rejects
 compiler/analyzer suppression directives, null-forgiving operators, and build opt-outs.
+
+### Managed WebSocket text validation (unreleased)
+
+Incoming text messages now require valid UTF-8 before application callbacks run,
+as required by [RFC 6455 section 8.1](https://www.rfc-editor.org/rfc/rfc6455.html#section-8.1).
+Malformed text closes the managed WebSocket with code 1007; this includes overlong
+encodings, surrogate code points, values above U+10FFFF, stray continuation bytes
+and incomplete final sequences. Partial UTF-8 sequences may span fragments;
+interleaved ping/pong payloads do not affect the text decoder. Binary messages
+continue accepting arbitrary bytes. Applications previously sending non-UTF-8
+bytes as text must encode UTF-8 or use binary messages. These checks apply to the
+managed engine over HTTP/1.1, HTTP/2 and HTTP/3; native-backend behavior, public
+APIs, callback scheduling and message-size defaults are unchanged.
