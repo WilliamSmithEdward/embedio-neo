@@ -83,7 +83,7 @@ namespace EmbedIO.Tests
                 var settings = await Receive(client, token);
                 Assert.That(settings.Type, Is.EqualTo(4));
                 Assert.That(settings.Flags, Is.Zero);
-                Assert.That(settings.Payload, Is.EqualTo(Settings((3, 128), (6, 32768))));
+                Assert.That(settings.Payload, Is.EqualTo(Settings((3, 128), (6, 32768), (8, 1))));
                 var ack = await Receive(client, token);
                 Assert.That((ack.Type, ack.Flags, ack.Payload.Length), Is.EqualTo(((byte)4, (byte)1, 0)));
                 var peer = Property<object>(connection, "Peer");

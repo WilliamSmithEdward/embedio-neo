@@ -11,6 +11,7 @@ using EmbedIO.Routing;
 using EmbedIO.Sessions;
 using EmbedIO.Utilities;
 using EmbedIO.WebSockets;
+using EmbedIO.WebSockets.Internal;
 
 namespace EmbedIO.Net.Internal.Http2
 {
@@ -25,6 +26,7 @@ namespace EmbedIO.Net.Internal.Http2
         private CancellationTokenSource? _linked;
         private CancellationToken _cancellation;
         private bool _closed;
+        private int _webSocketAccepted;
         internal Http2Context(Http2Exchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
         {
             _exchange = exchange; _cancellation = exchange.CancellationToken;
@@ -90,7 +92,30 @@ namespace EmbedIO.Net.Internal.Http2
                 if (failure == null) _completion.TrySetResult(true); else _completion.TrySetException(failure);
             }
         }
-        public Task<IWebSocketContext> AcceptWebSocketAsync(IEnumerable<string> requestedProtocols, string acceptedProtocol, int receiveBufferSize, TimeSpan keepAliveInterval, CancellationToken cancellationToken)
-            => throw new NotSupportedException("HTTP/2 extended CONNECT is not advertised until WebSocket stream integration is available.");
+        public async Task<IWebSocketContext> AcceptWebSocketAsync(IEnumerable<string> requestedProtocols, string acceptedProtocol, int receiveBufferSize, TimeSpan keepAliveInterval, CancellationToken cancellationToken)
+        {
+            if (!Request.IsWebSocketRequest || Request.Headers[HttpHeaderNames.SecWebSocketVersion] != "13")
+                throw new InvalidOperationException("A WebSocket tunnel requires extended CONNECT and version 13.");
+            if (Interlocked.Exchange(ref _webSocketAccepted, 1) != 0)
+                throw new InvalidOperationException("WebSocket already accepted.");
+            Response.StatusCode = 200;
+            if (!string.IsNullOrEmpty(acceptedProtocol)) Response.Headers[HttpHeaderNames.SecWebSocketProtocol] = acceptedProtocol;
+            // RFC 8441 replaces the key/accept exchange with :protocol. Headers
+            // and cookies still flow through the ordinary response serializer.
+            Response.Headers.Remove(HttpHeaderNames.SecWebSocketAccept);
+            var transport = new Http2DuplexStream(Request.InputStream, Response.OutputStream);
+            try
+            {
+                await Response.OutputStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                var socket = WebSockets.Internal.WebSocket.FromStream(transport, () =>
+                {
+                    transport.Dispose();
+                    // WebServer still flushes and completes this context after the module returns.
+                });
+                return new WebSocketContext(this, "13", requestedProtocols, acceptedProtocol,
+                    socket, cancellationToken);
+            }
+            catch { transport.Dispose(); throw; }
+        }
     }
 }

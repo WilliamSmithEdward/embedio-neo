@@ -1,0 +1,94 @@
+﻿using System;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.WebSockets;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using EmbedIO.Actions;
+using EmbedIO.PlatformTests;
+using EmbedIO.WebSockets;
+using NUnit.Framework;
+
+namespace EmbedIO.Tests
+{
+    public class Http2WebSocketTest
+    {
+        private sealed class Echo : WebSocketModule
+        {
+            internal int RemotePort;
+            internal Echo() : base("/ws", false) { }
+            protected override Task OnClientConnectedAsync(IWebSocketContext context)
+            {
+                RemotePort = context.RemoteEndPoint.Port;
+                return Task.CompletedTask;
+            }
+            protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
+                => context.WebSocket.SendAsync(buffer, result.MessageType == (int)WebSocketMessageType.Text, context.CancellationToken);
+        }
+
+        [TestCase(0, true, false, false)]
+        [TestCase(127, true, false, false)]
+        [TestCase(262144, false, false, false)]
+        [TestCase(127, true, true, false)]
+        [TestCase(262144, false, true, false)]
+        [TestCase(127, true, false, true)]
+        public async Task ExtendedConnectEchoAndCloseKeepSiblingHttpStreamUsable(int length, bool text, bool fragmented, bool abort)
+        {
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:");
+            var echo = new Echo();
+            var httpPort = 0;
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(echo)
+                .WithModule(new ActionModule("/", HttpVerbs.Get, context =>
+                {
+                    httpPort = context.RemoteEndPoint.Port;
+                    return context.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding);
+                }));
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var running = server.RunAsync(stop.Token);
+            using var handler = new SocketsHttpHandler { UseProxy = false, MaxConnectionsPerServer = 1 };
+            using var invoker = new HttpMessageInvoker(handler, false);
+            using var client = new HttpClient(handler, false) { DefaultRequestVersion = HttpVersion.Version20, DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact };
+            using var socket = new ClientWebSocket();
+            socket.Options.HttpVersion = HttpVersion.Version20;
+            socket.Options.HttpVersionPolicy = HttpVersionPolicy.RequestVersionExact;
+            try
+            {
+                await socket.ConnectAsync(new Uri(url.Replace("http:", "ws:") + "ws"), invoker, stop.Token);
+                Assert.That(socket.State, Is.EqualTo(WebSocketState.Open));
+                var bytes = text ? Encoding.UTF8.GetBytes(new string('x', length)) : Enumerable.Range(0, length).Select(i => (byte)i).ToArray();
+                var kind = text ? WebSocketMessageType.Text : WebSocketMessageType.Binary;
+                if (fragmented)
+                {
+                    await socket.SendAsync(new ArraySegment<byte>(bytes, 0, length / 2), kind, false, stop.Token);
+                    await socket.SendAsync(new ArraySegment<byte>(bytes, length / 2, length - length / 2), kind, true, stop.Token);
+                }
+                else await socket.SendAsync(bytes, kind, true, stop.Token);
+                using var received = new MemoryStream();
+                var buffer = new byte[4096];
+                WebSocketReceiveResult result;
+                do
+                {
+                    result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), stop.Token);
+                    Assert.That(result.MessageType, Is.EqualTo(text ? WebSocketMessageType.Text : WebSocketMessageType.Binary));
+                    received.Write(buffer, 0, result.Count);
+                } while (!result.EndOfMessage);
+                Assert.That(received.ToArray(), Is.EqualTo(bytes));
+                Assert.That(await client.GetStringAsync(url + "during", stop.Token), Is.EqualTo("healthy"));
+                Assert.That(httpPort, Is.EqualTo(echo.RemotePort));
+                if (abort) socket.Abort();
+                else await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", stop.Token);
+                Assert.That(await client.GetStringAsync(url + "after", stop.Token), Is.EqualTo("healthy"));
+                Assert.That(httpPort, Is.EqualTo(echo.RemotePort));
+            }
+            finally
+            {
+                stop.Cancel();
+                await running.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+    }
+}

@@ -121,8 +121,8 @@ namespace EmbedIO.Net.Internal.Http2
         }
         private async Task FlushAsync(CancellationToken token)
         {
-            await EnterAsync(token, false).ConfigureAwait(false);
-            try { if (_closed) throw new ObjectDisposedException(nameof(Http2Response)); await EnsureSentAsync(false, token).ConfigureAwait(false); }
+            if (!await EnterAsync(token, true).ConfigureAwait(false)) return;
+            try { if (!_closed) await EnsureSentAsync(false, token).ConfigureAwait(false); }
             finally { Exit(); }
         }
         internal Task CloseAsync() { lock (_lifecycle) return _closeTask ??= CloseCoreAsync(); }

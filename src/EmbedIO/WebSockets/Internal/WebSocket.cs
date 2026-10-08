@@ -42,11 +42,20 @@ namespace EmbedIO.WebSockets.Internal
         private AutoResetEvent? _receivePong;
         private Stream? _stream;
 
-        private WebSocket(HttpConnection connection)
+        private WebSocket(HttpConnection connection) : this(connection.Stream, connection.ForceClose) { }
+
+        private WebSocket(Stream stream, Action close)
         {
-            _closeConnection = connection.ForceClose;
-            _stream = connection.Stream;
+            _closeConnection = close;
+            _stream = stream;
             _readyState = WebSocketState.Open;
+        }
+
+        internal static WebSocket FromStream(Stream stream, Action close)
+        {
+            var socket = new WebSocket(stream, close);
+            socket.Open();
+            return socket;
         }
 
         ~WebSocket()

@@ -26,6 +26,7 @@ namespace EmbedIO.Net.Internal.Http2
         private readonly int _maximum;
         private int _highest;
         private bool _stopped;
+        internal bool ExtendedConnectEnabled { get; set; }
         internal Http2StreamRegistry(int maximum = 128)
         {
             if (maximum < 1) throw new ArgumentOutOfRangeException(nameof(maximum));
@@ -58,7 +59,7 @@ namespace EmbedIO.Net.Internal.Http2
                         _highest = block.StreamId;
                         if (_active.Count >= _maximum) throw new Http2ProtocolException(7, "Concurrent stream limit exceeded.", block.StreamId);
                         if (block.StreamError != 0) throw new Http2ProtocolException(block.StreamError, "Invalid stream headers.", block.StreamId);
-                        stream = new Http2StreamState(block.StreamId, block.EndStream, Http2RequestHeaders.Parse(block));
+                        stream = new Http2StreamState(block.StreamId, block.EndStream, Http2RequestHeaders.Parse(block, ExtendedConnectEnabled));
                         _active.Add(block.StreamId, stream);
                         return stream;
                     }

@@ -29,6 +29,18 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public async Task CompletedOutputAllowsFinalServerFlush()
+        {
+            await WithAdapter(async context =>
+            {
+                await context.SendStringAsync("finished", "text/plain", WebServer.Utf8NoBomEncoding);
+                context.Response.OutputStream.Dispose();
+                await context.Response.OutputStream.FlushAsync();
+                context.Response.OutputStream.Flush();
+            }, async client => Assert.That(await client.GetStringAsync("flush"), Is.EqualTo("finished")));
+        }
+
+        [Test]
         public async Task ClosedContextAcceptsLateServerTokenWithoutRevivingRequest()
         {
             var delivered = new TaskCompletionSource<IHttpContextImpl>(TaskCreationOptions.RunContinuationsAsynchronously);

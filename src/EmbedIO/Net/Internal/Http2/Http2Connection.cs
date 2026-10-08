@@ -19,7 +19,7 @@ namespace EmbedIO.Net.Internal.Http2
         public Http2PeerSettings Peer { get; } = new();
         internal Http2SendFlowControl SendFlow { get; } = new();
         internal Http2ReceiveFlowControl ReceiveFlow { get; } = new();
-        internal Http2StreamRegistry Streams { get; } = new();
+        internal Http2StreamRegistry Streams { get; } = new() { ExtendedConnectEnabled = true };
         public bool PeerSentGoAway { get; private set; }
         public int PeerLastStreamId { get; private set; }
         public uint PeerErrorCode { get; private set; }
@@ -44,9 +44,8 @@ namespace EmbedIO.Net.Internal.Http2
             var connection = new Http2Connection(stream);
             try
             {
-                // Bound incoming stream count and decoded headers. Do not advertise
-                // extended CONNECT until its application/stream implementation exists.
-                var settings = new byte[] { 0, 3, 0, 0, 0, 128, 0, 6, 0, 0, 128, 0 };
+                // Bound incoming streams/headers and advertise RFC 8441 tunnels.
+                var settings = new byte[] { 0, 3, 0, 0, 0, 128, 0, 6, 0, 0, 128, 0, 0, 8, 0, 0, 0, 1 };
                 await connection.SendAsync(new[] { new Http2Frame(4, 0, 0, settings) }, token).ConfigureAwait(false);
                 var first = await connection.ReadFrameAsync(token).ConfigureAwait(false);
                 if (first == null || first.Type != 4 || (first.Flags & 1) != 0)

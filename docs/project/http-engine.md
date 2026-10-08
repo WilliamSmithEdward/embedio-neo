@@ -25,6 +25,7 @@ independently tested behavior, not a codec or roadmap alone.
 - [ ] Complete the applicable modern extension work, including WebSocket extended
   CONNECT, priorities, trailers, content-coding negotiation and datagram/capsule
   support, with explicit capability and configuration documentation.
+- [ ] Complete the managed WebSocket hardening and performance work in [#190](https://github.com/WilliamSmithEdward/embedio-neo/issues/190), a required sub-issue of this program.
 - [ ] Pass independent clients, protocol conformance suites, deterministic
   fragmented/malformed-input tests, fuzzing and resource-abuse/lifecycle tests.
 - [ ] Profile and optimize representative ordinary/pipelined/multiplexed, JSON,
@@ -46,7 +47,7 @@ this development goal unless separately authorized.
 | HTTP/1.1 | RFC 9112; incremental parsing, fixed/chunked bodies, pipelines, persistence, bounded input and errors | First implementation under test |
 | HTTP/2 | RFC 9113; TLS/ALPN, prior knowledge, HPACK (RFC 7541), multiplexed streams, flow control, SETTINGS, GOAWAY and reset | Implemented incrementally; listener integration under validation |
 | HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Planned; not implemented |
-| WebSockets | Existing RFC 6455 plus extended CONNECT over HTTP/2 (RFC 8441) and HTTP/3 (RFC 9220) | HTTP/1.1 existing; multiplexed transports planned |
+| WebSockets | Existing RFC 6455 plus extended CONNECT over HTTP/2 (RFC 8441) and HTTP/3 (RFC 9220) | HTTP/1.1 existing; HTTP/2 initial integration tested locally; HTTP/3 planned |
 | Extensions | Priorities (RFC 9218), HTTP datagrams/capsules (RFC 9297), discovery/Alt-Svc, current registered extensions and errata | Inventory and applicability review pending |
 | Security/resource control | Framing ambiguity, input limits, slow readers/writers, cancellation, compression expansion and multiplexed-stream abuse | First framing work under test; broad abuse tests pending |
 
@@ -398,3 +399,36 @@ five expected skips (2,290 total). A subsequently strengthened assertion verifie
 that the healthy request after reset uses the same TCP client port; all 256
 HTTP/2 cases passed again with both assemblies. Remote exact-head checks remain
 required. The complete development goal remains active.
+### HTTP/2 WebSockets and managed-engine work
+
+The owner added managed WebSocket hardening and aggressive performance work to
+this active workflow, tracked in [#190](https://github.com/WilliamSmithEdward/embedio-neo/issues/190)
+as a sub-issue of #181. This includes independent conformance/fuzz coverage,
+lifecycle/resource checks and reproducible comparative measurements. It is a
+completion requirement, not a deferred optional audit. No release is authorized.
+
+The HTTP/2 connection now advertises SETTINGS_ENABLE_CONNECT_PROTOCOL and admits
+extended CONNECT. The context accepts the websocket protocol with version 13,
+sends status 200 without the HTTP/1 key/accept exchange, and preserves response
+headers/cookies through the existing serializer. The existing managed WebSocket
+engine operates over a duplex HTTP/2 stream; it does not own the TCP connection.
+An initial BCL stream-factory approach was unavailable in the netstandard2.0 API
+and was replaced without adding runtime dependencies.
+
+Six independent .NET ClientWebSocket cases cover empty/text/binary messages,
+256-KiB messages, fragmentation, orderly close and client abort. HTTP requests
+during and after the WebSocket use the same client TCP port. These tests exposed
+a separate adapter defect: disposing a helper's response output made the server's
+final FlushAsync throw, triggering listener shutdown. Final flush is now harmless
+once the response is closed; subsequent writes remain invalid. A focused regression
+covers both synchronous and asynchronous final flush.
+
+All 263 HTTP/2 tests pass with both actual library assemblies on .NET 10.0.11.
+The newly advertised setting is verified by both startup-fragmentation cases.
+Broader WebSocket wire validation, reset-code/resource behavior, TLS/platform
+coverage, independent conformance and performance validation remain required.
+
+The complete Windows suite passed: 2,292 successes, five expected platform skips,
+2,297 total. Existing hot-path allocation checks also passed. This is not yet a
+WebSocket throughput/latency comparison or completion of #190. Exact-head remote
+checks and broader platform/conformance validation remain required.
