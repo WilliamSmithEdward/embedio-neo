@@ -1960,3 +1960,21 @@ must not be conflated. Mapping the verified corrections to code/tests remains
 open, including HTTP/3 path grammar (7014), GOAWAY error scope (7780), QPACK dynamic
 index counting (8410) and Structured Field display strings (8869). TLS-provider
 requirements and obsoleted specifications require separate applicability review.
+
+### Verified multiplexed-protocol errata mapping
+
+The following mappings use the captured RFC Editor feed; they do not complete
+the full October 2026 inventory or all 44 verified errata.
+
+| Erratum | Implementation and evidence |
+| --- | --- |
+| [9114 / 7014](https://www.rfc-editor.org/errata/eid7014) | The shared request-header parser accepts HTTP absolute-path. Three real HTTP/3 cases preserve `//`, `///items` and `//items?filter=one` in RawTarget without changing the authority: `Http3ListenerTest.LeadingEmptyPathSegmentsReachApplication`. |
+| [9114 / 7780](https://www.rfc-editor.org/errata/eid7780) | Existing `Http3WireTest.ControlAndReservedFramesAreConnectionErrorsOnRequestStreams(7)` verifies GOAWAY on a request stream raises connection-level H3_FRAME_UNEXPECTED. This test covers the server receive direction corrected by the erratum. |
+| [9651 / 8869](https://www.rfc-editor.org/errata/eid8869) | The priority parser recognizes display strings, including the existing escaped-byte fixture in `HttpPriorityTest`; the corrected item-category list does not require a production change here. |
+| [9204 / 8410](https://www.rfc-editor.org/errata/eid8410) | Dynamic response encoding remains pending. `QpackEncoder` currently emits zero Required Insert Count and Base and uses static/literal fields. The dynamic encoder must derive Required Insert Count from the highest referenced absolute index plus one, including dynamic-name references; no completed implementation is claimed. |
+
+All 79 selected path/control/priority cases passed on Windows and pinned Linux
+with QUIC required (`h3-errata-focused.log`, `h3-errata-linux.log`). Three new
+real-wire cases raise discovery to 3,029. This increment changes tests and audit
+documentation, not production behavior. The preceding production increment's full
+Windows suite passed with 3,026 cases; new exact-head full CI remains required.

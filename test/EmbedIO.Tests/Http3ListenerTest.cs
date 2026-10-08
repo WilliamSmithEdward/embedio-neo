@@ -85,6 +85,34 @@ namespace EmbedIO.Tests
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
         }
 
+        [TestCase("//")]
+        [TestCase("///items")]
+        [TestCase("//items?filter=one")]
+        public async Task LeadingEmptyPathSegmentsReachApplication(string path)
+        {
+            // RFC 9114 erratum 7014 uses HTTP absolute-path, including leading //.
+            using var certificate = Certificate();
+            var prefix = Prefix();
+            using var server = new WebServer(o => o.WithUrlPrefix(prefix).WithMode(HttpListenerMode.EmbedIOHttp3).WithCertificate(certificate))
+                .WithAction("/", HttpVerbs.Get, context =>
+                {
+                    Assert.That(context.Request.Url.Host, Is.EqualTo("localhost"));
+                    return context.SendStringAsync(context.Request.RawTarget, "text/plain", WebServer.Utf8NoBomEncoding);
+                });
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var running = server.RunAsync(stop.Token);
+            using var client = Client(certificate);
+            try
+            {
+                using var request = Request(HttpMethod.Get, prefix.TrimEnd('/') + path);
+                using var response = await client.SendAsync(request, stop.Token);
+                Assert.That(response.Version, Is.EqualTo(HttpVersion.Version30));
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo(path));
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+        }
+
         [TestCase(0, 1)]
         [TestCase(100003, 8)]
         [TestCase(1048576, 3)]
