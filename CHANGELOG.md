@@ -6,7 +6,9 @@
   members, member exposure, timestamps, references, numeric tokens, formatting
   and depth. Added fourteen default-contract regressions including real HTTP
   preservation and failure recovery. Current serializer behavior, public APIs
-  and dependencies are unchanged.
+  and dependencies are unchanged. Increased the full-suite time budget to five
+  minutes after two coverage runs ended near three minutes with no failing
+  assertions but incomplete case counts; the 1717-case minimum remains required.
 
 - Serialize shared ZIP archive lookup/open and entry reads without whole-entry buffering. Preserve stream ownership/capabilities and cancellation, and wake pending archive operations during disposal (upstream #491).
 
