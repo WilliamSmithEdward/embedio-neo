@@ -286,7 +286,7 @@ namespace EmbedIO
                     {
                         throw; // Let outer catch block handle it
                     }
-                    catch (Exception exception) when (exception is IHttpException)
+                    catch (Exception exception) when (exception is IHttpException && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                     {
                         await HttpExceptionHandler.Handle(LogSource, context, exception, _onHttpException)
                             .ConfigureAwait(false);

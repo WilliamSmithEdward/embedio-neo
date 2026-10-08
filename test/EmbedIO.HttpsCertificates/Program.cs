@@ -34,7 +34,8 @@ using var publicLeaf = leafRequest.Create(root, start, end, RandomNumberGenerato
 using var leaf = publicLeaf.CopyWithPrivateKey(leafKey);
 using var publicRoot = X509CertificateLoader.LoadCertificate(root.Export(X509ContentType.Cert));
 var chain = new X509Certificate2Collection { leaf, publicRoot };
-File.WriteAllBytes(Path.Combine(args[0], "https-server.pfx"), chain.Export(X509ContentType.Pfx));
+File.WriteAllBytes(Path.Combine(args[0], "https-server.pfx"), chain.Export(X509ContentType.Pfx)
+    ?? throw new CryptographicException("The disposable certificate chain could not be exported."));
 File.WriteAllBytes(Path.Combine(args[0], "https-test-root.cer"), publicRoot.RawData);
 File.WriteAllText(Path.Combine(args[0], "https-test-root.pem"), publicRoot.ExportCertificatePem());
 Console.WriteLine($"Generated disposable test CA {root.Thumbprint}; expires {end:O}");

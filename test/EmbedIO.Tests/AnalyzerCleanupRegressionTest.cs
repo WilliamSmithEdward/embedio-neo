@@ -56,6 +56,7 @@ namespace EmbedIO.Tests
         [TestCase("memory")]
         [TestCase("stack")]
         [TestCase("access")]
+        [TestCase("http-memory")]
         public async Task RequestBoundariesHandleApplicationErrorsAndPropagateFatalErrors(string kind)
         {
             Exception failure = kind switch
@@ -63,6 +64,7 @@ namespace EmbedIO.Tests
                 "memory" => new OutOfMemoryException("synthetic test failure"),
                 "stack" => new StackOverflowException("synthetic test failure"),
                 "access" => new AccessViolationException("synthetic test failure"),
+                "http-memory" => new FatalHttpException(),
                 _ => new InvalidOperationException("synthetic test failure")
             };
             var handled = 0;
@@ -86,6 +88,16 @@ namespace EmbedIO.Tests
                 await Assert.ThatAsync(() => server.Client.GetAsync("/"), Throws.TypeOf(failure.GetType()));
                 Assert.That(handled, Is.Zero);
             }
+        }
+
+        [Test]
+        public async Task ErrorCallbackDoesNotConvertFatalHttpExceptions()
+        {
+            var failure = new FatalHttpException();
+            using var server = new TestWebServer().OnAny(_ => throw new InvalidOperationException("ordinary request failure"))
+                .HandleUnhandledException((_, _) => throw failure);
+            server.Start();
+            await Assert.ThatAsync(() => server.Client.GetAsync("/"), Throws.TypeOf<FatalHttpException>());
         }
 
         [TestCase(false)]
@@ -165,6 +177,13 @@ namespace EmbedIO.Tests
             var result = writer.BeginWrite(bytes, 0, bytes.Length, null, null);
             writer.EndWrite(result);
             Assert.That(transport.ToArray(), Is.EqualTo(bytes));
+        }
+
+        private sealed class FatalHttpException : OutOfMemoryException, IHttpException
+        {
+            public int StatusCode => 503;
+            public object? DataObject => null;
+            public void PrepareResponse(IHttpContext context) => throw new AssertionException("A fatal failure must not prepare an HTTP response.");
         }
 
         private static Type InternalType(string name)

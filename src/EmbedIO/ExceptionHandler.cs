@@ -149,7 +149,7 @@ namespace EmbedIO
             {
                 throw;
             }
-            catch (Exception httpException) when (httpException is IHttpException httpException1)
+            catch (Exception httpException) when (httpException is IHttpException httpException1 && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(httpException))
             {
                 if (httpHandler == null)
                     throw;
