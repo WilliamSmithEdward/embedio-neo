@@ -23,7 +23,9 @@ namespace EmbedIO.Net.Internal
             if (context is null) throw new System.NullReferenceException();
             _request = context.Request;
             _ = Enum.TryParse<HttpVerbs>(_request.HttpMethod.Trim(), true, out var verb);
-            HttpVerb = verb;
+            // Preserve legacy mappings while keeping the new case-sensitive method exact.
+            HttpVerb = verb == HttpVerbs.Query && !string.Equals(_request.HttpMethod, "QUERY", StringComparison.Ordinal)
+                ? HttpVerbs.Any : verb;
             Cookies = new SystemCookieCollection(_request.Cookies);
             LocalEndPoint = _request.LocalEndPoint;
             RemoteEndPoint = _request.RemoteEndPoint;

@@ -120,7 +120,7 @@ verified errata, normative dependencies and requirement-to-test mappings.
 
 | Newly identified requirement | Current evidence and required follow-up |
 | --- | --- |
-| [RFC 10008: QUERY](https://www.rfc-editor.org/rfc/rfc10008.html) | IANA registers QUERY as safe and idempotent. `HttpVerbs` has no Query member; managed `HttpListenerRequest.IsKnownHttpMethod` maps it to Any, shared by multiplexed requests. Add dedicated routing and test request content, required media-type validation, Accept-Query discovery and resource-level semantics. An enum alone does not implement the specification. |
+| [RFC 10008: QUERY](https://www.rfc-editor.org/rfc/rfc10008.html) | IANA registers QUERY as safe and idempotent. Dedicated Query routing and request content now have initial tests across the testing asset and HTTP/1, HTTP/2 and HTTP/3. Required media-type validation, Accept-Query discovery policy and resource-level semantics remain to complete. An enum alone does not implement the specification. |
 | [RFC 9931: optimistic transitions](https://www.rfc-editor.org/rfc/rfc9931.html#section-8) | Updates RFC 9112 and RFC 9298. Audit HTTP/1.1 rejected CONNECT closure and ensure subsequent bytes cannot become another request. Cover rejection/authentication paths with real pipelined input. Do not apply this requirement indiscriminately to every rejected Upgrade or to HTTP/2/3. No vulnerability reproduction is claimed by this inventory. |
 | [RFC 9846: TLS 1.3](https://www.rfc-editor.org/rfc/rfc9846.json) | Official metadata dates publication to July 2026 and lists RFC 8446 as obsoleted. Inspect the full replacement and map relevant requirements to supported platform TLS implementations and configuration. Metadata alone does not establish runtime compliance; cryptography remains delegated to maintained platform providers. |
 | [RFC 9659: Zstandard windows](https://www.rfc-editor.org/rfc/rfc9659.html) | Include this update to RFC 8878 when implementing zstd negotiation and bounded decompression. |
@@ -1863,3 +1863,28 @@ The final Windows suite passed: 2,994 total, 2,989 passed and five expected skip
 (`connect-audit-full.log`). Both-target build, whitespace validation, suppression
 and syntax guards passed. The pinned YARA scan found no matches in the changed
 files. Cross-platform CI on the committed head remains required.
+
+### QUERY routing increment
+
+`HttpVerbs.Query` is appended without changing existing enum values. The managed
+parser, shared multiplexed request adapter and testing asset recognize exact
+QUERY; the native adapter retains existing method behavior while requiring exact
+case for the new method. Nine tests cover route/body delivery, POST/lowercase
+non-matches, an application-provided Accept-Query field and real HTTP/1 (both
+backends), HTTP/2 and HTTP/3 requests. All nine passed on Windows and pinned Linux with QUIC required. The initial
+in-process QUERY route failed before implementation. A client-based wire fixture
+normalized method case; raw TCP replaced it and reproduced the native adapter's
+case-insensitive mapping before correction.
+
+This is routing support, not complete RFC 10008 support. Handlers must preserve
+safe/idempotent behavior and validate content against their supported media types.
+Automatic missing Content-Type rejection, discovery policy, conditional/range
+semantics and guidance remain pending. No automatic caching or query language is
+introduced. Evidence is under local `TestResults/http-engine/query-*.log`.
+
+Final QUERY validation: 3,003 Windows cases, 2,998 passed and five expected skips
+(`query-full.log`). The actual .NET Standard core/testing assets passed eight
+applicable cases on Windows and Linux, hosted on .NET 10; this is not validation
+on every legacy runtime. Both targets build, formatting and repository source
+guards pass, and pinned YARA reports no changed-file matches. Exact-head CI is
+still required before integration.

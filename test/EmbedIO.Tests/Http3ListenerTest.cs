@@ -56,6 +56,32 @@ namespace EmbedIO.Tests
             { Version = HttpVersion.Version30, VersionPolicy = HttpVersionPolicy.RequestVersionExact, Content = content };
             return request;
         }
+        [Test]
+        public async Task QueryRouteReceivesHttp3Content()
+        {
+            using var certificate = Certificate();
+            var prefix = Prefix();
+            using var server = new WebServer(o => o.WithUrlPrefix(prefix).WithMode(HttpListenerMode.EmbedIOHttp3).WithCertificate(certificate))
+                .WithAction("/", HttpVerbs.Query, async context =>
+                {
+                    Assert.That(context.Request.ProtocolVersion, Is.EqualTo(HttpVersion.Version30));
+                    await context.SendStringAsync(await context.GetRequestBodyAsStringAsync(), "text/plain", WebServer.Utf8NoBomEncoding);
+                });
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var running = server.RunAsync(stop.Token);
+            using var client = Client(certificate);
+            try
+            {
+                using var request = Request(new HttpMethod("QUERY"), prefix,
+                    new StringContent("quic-query", WebServer.Utf8NoBomEncoding, "text/plain"));
+                using var response = await client.SendAsync(request, stop.Token);
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                Assert.That(response.Version, Is.EqualTo(HttpVersion.Version30));
+                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("quic-query"));
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+        }
+
         [TestCase(0, 1)]
         [TestCase(100003, 8)]
         [TestCase(1048576, 3)]

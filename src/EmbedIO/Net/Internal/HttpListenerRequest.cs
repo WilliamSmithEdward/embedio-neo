@@ -411,7 +411,7 @@ namespace EmbedIO.Net.Internal
         }
 
         // Optimized for the following list of methods:
-        // "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"
+        // "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "QUERY"
         // ***NOTE***: The verb parameter is NOT VALID upon exit if false is returned.
         internal static bool IsKnownHttpMethod(string method, out HttpVerbs verb)
         {
@@ -450,6 +450,11 @@ namespace EmbedIO.Net.Internal
                     }
 
                 case 5:
+                    if (method[0] == 'Q')
+                    {
+                        verb = HttpVerbs.Query;
+                        return method[1] == 'U' && method[2] == 'E' && method[3] == 'R' && method[4] == 'Y';
+                    }
                     verb = HttpVerbs.Patch;
                     return method[0] == 'P'
                         && method[1] == 'A'

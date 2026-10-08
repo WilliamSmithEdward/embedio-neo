@@ -750,3 +750,13 @@ native QUIC prerequisites. Do not interpret the planned default switch as curren
 combined HTTP/1, HTTP/2 and HTTP/3 hosting or identical capabilities across target
 assets. See the [default listener transition acceptance criteria](../project/http-engine.md#default-listener-transition)
 and [HTTP/3 guide](../guides/http3.md) for the implementation and validation scope.
+
+## QUERY routing (unreleased, development increment)
+
+`HttpVerbs.Query` adds explicit QUERY routes while preserving existing enum values.
+Existing wildcard handlers can still receive the method. Method names are case
+sensitive: lowercase `query` does not match a Query route. This increment provides
+routing and request-body access, not complete RFC 10008 semantics. A QUERY handler
+must perform a safe, idempotent operation and validate the request media type and
+content. Automatic media-type validation and complete QUERY support remain under
+development; do not advertise full support based on the enum alone.
