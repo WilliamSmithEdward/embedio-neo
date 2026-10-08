@@ -355,3 +355,15 @@ These rules are the same in every WilliamSmithEdward repository.
   Next stream lifecycle/inbound flow/request semantics, then bridge managed
   listener's concrete HttpListenerContext queue to IHttpContextImpl dispatch.
   Whole modern-engine goal remains active; no HTTP2 service advertised yet.
+
+- Receive-flow/lifecycle checkpoint: prior7e9182f final full Windows rerun passed
+  2156/five skips (2161). New9 inbound-flow and11 stream-state cases pass;147
+  focused HTTP2 tests pass modern+actualnetstandard on .NET10.0.11. Both targets
+  build. Initial fixture TestDelegate compile error corrected to NUnit5 Action.
+  Discovery floor2181. Incoming DATA credit is consumption-driven, batched, counts
+  padding and survives reset races; stream registry bounds active state, counts
+  half-closed streams, permits continued upload after early response, handles
+  trailers/idle-frame errors and minimally discards closed IDs without tombstones.
+  Connection owns/aborts both components, but body/stream dispatch not wired yet.
+  Next request semantics, bounded async request-body delivery and dispatch using
+  these components. Full/remote validation still required on final program head.

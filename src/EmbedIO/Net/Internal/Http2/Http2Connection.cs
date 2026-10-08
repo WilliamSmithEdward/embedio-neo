@@ -17,6 +17,8 @@ namespace EmbedIO.Net.Internal.Http2
         private int _pendingSettings = 1;
         public Http2PeerSettings Peer { get; } = new();
         internal Http2SendFlowControl SendFlow { get; } = new();
+        internal Http2ReceiveFlowControl ReceiveFlow { get; } = new();
+        internal Http2StreamRegistry Streams { get; } = new();
         public bool PeerSentGoAway { get; private set; }
         public int PeerLastStreamId { get; private set; }
         public uint PeerErrorCode { get; private set; }
@@ -108,6 +110,8 @@ namespace EmbedIO.Net.Internal.Http2
         {
             SendFlow.Abort(new ObjectDisposedException(nameof(Http2Connection)));
             _headers.Dispose();
+            ReceiveFlow.Abort();
+            Streams.Abort();
         }
 
         internal Task SendAsync(Http2Frame[] frames, CancellationToken token)

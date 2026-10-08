@@ -254,3 +254,19 @@ skips (2,161 total). Final review added explicit header-state disposal and clean
 of failed connection startup, and strengthened real TCP SETTINGS-to-credit checks.
 All 127 focused cases pass again on both assemblies after those changes; a fresh
 full run and remote final-source checks remain required before merge.
+
+The final header/flow checkpoint (`7e9182f`) also passed its full Windows rerun:
+2,156 successes and five expected skips. The next increment adds consumption-driven
+inbound credit, batched updates, padded-DATA accounting and reset recovery, plus
+bounded client-stream tracking. Half-closed streams count toward concurrency;
+closed streams retain no per-stream objects. Already closed streams use the minimal
+processing/discard policy permitted by RFC 9113 section 5.1: the future dispatcher
+must still decode their headers and count their DATA against connection credit.
+
+Nine receive-flow and eleven lifecycle cases bring focused HTTP/2 coverage to 147
+passing cases on both assemblies (.NET 10.0.11 runtime). Both library targets build.
+An initial fixture build used an obsolete NUnit delegate type; correcting it to
+Action resolved the compile error without changing assertions. The registry and
+receive coordinator are owned by connection cleanup but are not yet wired into a
+body-delivery/application loop. No end-to-end HTTP/2 performance or conformance
+claim is made. Next work is request semantics/body delivery and stream dispatch.
