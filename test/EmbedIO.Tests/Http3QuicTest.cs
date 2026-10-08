@@ -100,6 +100,10 @@ namespace EmbedIO.Tests
         [TestCase("missing-method", 0x10e, false)]
         [TestCase("length-mismatch", 0x10e, false)]
         [TestCase("settings-on-request", 0x105, true)]
+        [TestCase("priority-push", 0x108, true)]
+        [TestCase("priority-invalid-id", 0x108, true)]
+        [TestCase("priority-oversized", 0x107, true)]
+        [TestCase("priority-on-request", 0x105, true)]
         [TestCase("closed-control", 0x104, true)]
         [TestCase("duplicate-control", 0x103, true)]
         public async Task WireErrorsUseTheCorrectScopeAndCode(string scenario, long code, bool connectionError)
@@ -179,12 +183,18 @@ namespace EmbedIO.Tests
                     "length-mismatch" => Convert.FromHexString("01110000D1D7C1C450096C6F63616C686F7374000161"),
                     "settings-on-request" => new byte[] { 4, 0 },
                     "duplicate-control" => new byte[] { 0, 4, 0 },
+                    "priority-push" => Convert.FromHexString("800f07010100"),
+                    "priority-invalid-id" => Convert.FromHexString("800f07000101"),
+                    "priority-oversized" => Convert.FromHexString("800f070080004001"),
+                    "priority-on-request" => Convert.FromHexString("800f07000100"),
                     _ => blocked ? Convert.FromHexString("01110200D1D7C150096C6F63616C686F737480") : Array.Empty<byte>()
                 };
                 QuicException? observed = null;
                 try
                 {
-                    if (wire.Length != 0) await request.WriteAsync(wire, scenario != "duplicate-control" && !blocked, deadline.Token);
+                    if (scenario.StartsWith("priority-", StringComparison.Ordinal) && scenario != "priority-on-request")
+                        await control.WriteAsync(wire, deadline.Token);
+                    else if (wire.Length != 0) await request.WriteAsync(wire, scenario != "duplicate-control" && !blocked, deadline.Token);
                     if (blocked)
                     {
                         var session = await sessionReady.Task.WaitAsync(deadline.Token);

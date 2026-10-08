@@ -388,7 +388,8 @@ namespace EmbedIO.Net.Internal.Http3
                 var received = await control.ReadAsync(_token).ConfigureAwait(false);
                 if (received.Type == 4) Volatile.Write(ref _peer, control.Settings ?? throw new Http3ProtocolException(0x102, "Missing peer settings."));
                 // No push IDs have been promised by this server yet.
-                if (received.Type == 3) throw new Http3ProtocolException(0x108, "CANCEL_PUSH refers to an unpromised push.");
+                if (received.Type == 3 || received.Type == 0xf0701)
+                    throw new Http3ProtocolException(0x108, "Control frame refers to an unpromised push.");
             }
         }
         private async Task WriteFeedbackAsync(QuicStream stream)

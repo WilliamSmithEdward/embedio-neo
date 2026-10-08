@@ -107,6 +107,41 @@ namespace EmbedIO.Tests
             await Assert.ThatAsync(async () => await control.Next(), Throws.TypeOf<IOException>());
         }
 
+        [TestCase("0400800f070000", false, 0x106)]
+        [TestCase("0400800f07000140", false, 0x106)]
+        [TestCase("0400800f07000101", false, 0x108)]
+        [TestCase("0400800f07000102", false, 0x108)]
+        [TestCase("0400800f07000103", false, 0x108)]
+        [TestCase("0400800f0700020080", false, 0x101)]
+        [TestCase("0400800f07000100", true, 0x105)]
+        [TestCase("0400800f07010100", true, 0x105)]
+        [TestCase("0400800f070080004001", false, 0x107)]
+        public async Task InvalidPriorityUpdateRejectsBeforeFollowingFrame(string wire, bool server, int code)
+        {
+            using var source = new FragmentedStream(Convert.FromHexString(wire + "070100"), 1);
+            var control = new Control(source, server);
+            await control.Next();
+            var error = await Assert.CatchAsync<IOException>(async () => await control.Next());
+            Assert.That(Property(error, "ErrorCode"), Is.EqualTo(code));
+            await Assert.ThatAsync(async () => await control.Next(), Throws.TypeOf<IOException>());
+        }
+
+        [TestCase("800f07000100", 0xf0700, 0, "")]
+        [TestCase("800f07000404753d31", 0xf0700, 4, "u=1")]
+        [TestCase("800f07000bcffffffffffffffc753d37", 0xf0700, 1152921504606846972L, "u=7")]
+        [TestCase("800f07010407753d32", 0xf0701, 7, "u=2")]
+        public async Task PriorityUpdatePreservesFieldAndFollowingControlFrame(string wire, long type, long id, string field)
+        {
+            using var source = new FragmentedStream(Convert.FromHexString("0400" + wire + "070100"), 1);
+            var control = new Control(source);
+            await control.Next();
+            var update = await control.Next();
+            Assert.That(Property(update, "Type"), Is.EqualTo(type));
+            Assert.That(Property(update, "Identifier"), Is.EqualTo(id));
+            Assert.That(update.GetType().GetProperty("PriorityFieldValue")?.GetValue(update), Is.EqualTo(field));
+            Assert.That(Property(await control.Next(), "Type"), Is.EqualTo(7));
+        }
+
         [Test]
         public async Task ControlSkipsUnknownFramesAndPreservesIdentifiers()
         {

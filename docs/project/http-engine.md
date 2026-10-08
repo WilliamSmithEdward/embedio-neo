@@ -1413,5 +1413,40 @@ Both core targets built without warnings or errors. Formatting, suppression and
 C# parser guards, existing allocation budgets and the pinned YARA scan of all
 four changed C# files passed. Logs use the growth-acquisition prefix under the
 ignored evidence directory. Fresh exact-head CI, particularly the reported
-macOS cancellation schedule, remains required. Discovery floor: 2,831. No release or contributor reply is included; the full
+macOS cancellation schedule, was subsequently verified in CI 37813837559
+on 1da822edf0929d78ebd419a67b3e15876215e8c4. The macOS regression,
+interoperability and reset stress steps passed; every reported PR check on that
+head was passing or intentionally skipped. Discovery floor: 2,831. No release or contributor reply is included; the full
 engine program and #190 remain open.
+
+
+## HTTP/3 priority-update ingestion
+
+The extension audit checked the [IANA HTTP/3 registry](https://www.iana.org/assignments/http3-parameters/)
+and [RFC 9218 section 7.2](https://www.rfc-editor.org/rfc/rfc9218.html#section-7.2).
+The control reader previously skipped both PRIORITY_UPDATE frame types. It now
+returns their identifiers and ASCII field values, rejects server-originated
+updates and non-request stream identifiers, and bounds buffered metadata at
+16 KiB before allocation. Empty field values are retained for default resets.
+The connection rejects push updates because it has not promised any push IDs.
+The request reader already rejects these control-only frames on request streams.
+
+Thirteen control-reader regressions failed before the increment and pass after
+it, including fragmented input, full-width identifiers, truncation, non-ASCII
+fields, oversized declared length and exact successor-frame preservation.
+Four raw QUIC cases check connection-scoped error codes for invalid request IDs,
+unpromised push IDs, oversized frames and updates on request streams. All 155
+focused modern cases passed on Windows and Linux, and all 113 framing cases
+passed with the actual netstandard asset on both hosts. Both targets built
+without warnings/errors; formatting, analyzer guards and the pinned YARA scan
+passed. The full Windows run passed 2,843 cases with five expected skips
+(2,848 total). Fresh exact-head CI remains required. Evidence uses the
+h3-priority prefix under TestResults/http-engine.
+
+This is ingestion and wire validation, not completed priority scheduling.
+Structured Field parsing, effective-priority state, bounded early-update storage,
+HTTP/2 equivalents and scheduling measurements remain required. The transport's
+live QUIC stream limit is not exposed here; request-ID kind is checked, but the
+RFC's recommended stream-limit rejection is still pending. ORIGIN advertisement
+(RFC 8336/9412), datagrams/capsules and the rest of the standards inventory remain
+open. No support badge changes are justified by this increment.
