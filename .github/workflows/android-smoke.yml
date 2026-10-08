@@ -2,6 +2,10 @@ name: Android smoke
 on:
   workflow_dispatch:
   workflow_call:
+env:
+  NUGET_PACKAGES: ${{ runner.temp }}/nuget-packages
+  DisableImplicitNuGetFallbackFolder: true
+
 permissions:
   contents: read
 jobs:
@@ -16,6 +20,10 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.401
+          cache: true
+          cache-dependency-path: |
+            src/**/packages.lock.json
+            test/EmbedIO.AndroidSmoke/packages.lock.json
       - name: Install the pinned MAUI Android workload
         run: dotnet workload install maui-android --version 10.0.401
       - name: Build the test-only Android app

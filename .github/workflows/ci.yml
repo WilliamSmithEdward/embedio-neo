@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+env:
+  NUGET_PACKAGES: ${{ runner.temp }}/nuget-packages
+  DisableImplicitNuGetFallbackFolder: true
+
 jobs:
   test:
     name: Test (${{ matrix.os }})
@@ -31,6 +35,8 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
       - name: Restore from the lock files
         run: dotnet restore EmbedIO.sln --locked-mode
       - name: Build the tests
@@ -127,6 +133,8 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
       - name: Restore from the lock files
         run: dotnet restore EmbedIO.sln --locked-mode
       # Inherited CA/IDE warnings remain visible. New analyzer errors fail;
@@ -145,6 +153,8 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
       - name: Restore from the lock files
         run: dotnet restore EmbedIO.sln --locked-mode
       - name: Build and pack both library targets and the CLI

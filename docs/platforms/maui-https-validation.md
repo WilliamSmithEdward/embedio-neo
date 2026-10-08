@@ -95,3 +95,22 @@ The [macOS reset guide](../user-reports/mac-accept-reset.md) describes the
 runtime accept-crash mitigation and its additional thread per IPv6 endpoint.
 Immediate-reset HTTP/TLS regressions and repeated macOS stress runs remain
 required alongside this native HTTPS fixture.
+
+## CI setup and timing
+
+The HTTPS Windows job installs its pinned SDK into a private runner-temporary
+directory. This keeps workload installation separate from the runner's Visual
+Studio installation, whose other workloads otherwise get updated as well. The
+SDK and workload versions remain 10.0.401. Each platform still performs its own
+locked restore, build, native trust checks, WebView checks and external probes.
+
+CI caches only downloaded NuGet packages, keyed by committed dependency locks;
+it does not reuse compiled applications, generated certificates, simulator state
+or test results. A cache miss performs an ordinary restore. The Android HTTPS
+emulator starts before the app build, allowing boot to overlap compilation; the
+existing readiness checks still run before application installation and testing.
+
+Compare complete job times (including SDK setup and cache transfer), not just
+workload-install times. Cold and warm runs can differ, and hosted runner queue
+time is separate from execution time. These setup changes do not repair the
+intermittent iOS navigation/finish failures tracked in issue #185.
