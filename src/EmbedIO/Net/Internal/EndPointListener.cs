@@ -22,6 +22,7 @@ namespace EmbedIO.Net.Internal
         private readonly Socket _sock;
         private readonly Task? _acceptWorker;
         private int _disposed;
+        private int _acceptingStopped;
         private Dictionary<ListenerPrefix, HttpListener> _prefixes;
         private List<ListenerPrefix>? _unhandled; // unhandled; host = '*'
         private List<ListenerPrefix>? _all; //  all;  host = '+
@@ -87,13 +88,30 @@ namespace EmbedIO.Net.Internal
 
         public void UnbindContext(HttpListenerContext context) => context.Listener?.UnregisterContext(context);
 
+        // Called under the endpoint manager's registration lock. Retain routes and
+        // accepted transports, but never stop a socket needed by another listener.
+        internal void StopAcceptingIfExclusive(HttpListener owner)
+        {
+            if (_prefixes.Values.Any(listener => listener != owner)
+                || (_unhandled != null && _unhandled.Any(prefix => prefix.Listener != owner))
+                || (_all != null && _all.Any(prefix => prefix.Listener != owner)))
+                return;
+            StopAccepting();
+        }
+
+        private void StopAccepting()
+        {
+            if (Interlocked.Exchange(ref _acceptingStopped, 1) == 0)
+                _sock.Dispose();
+        }
+
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
 
             // Closing the listening socket also interrupts the blocking macOS accept.
-            _sock.Dispose();
+            StopAccepting();
             List<HttpConnection> connections;
 
             lock (_unregistered)
@@ -111,6 +129,8 @@ namespace EmbedIO.Net.Internal
 
         public bool AddPrefix(ListenerPrefix prefix, HttpListener listener)
         {
+            if (Volatile.Read(ref _acceptingStopped) != 0)
+                throw new HttpListenerException(995, "The endpoint stopped accepting connections.");
             if (prefix.Host == "*")
             {
                 AddSpecial(ref _unhandled, prefix, listener);
@@ -259,7 +279,7 @@ namespace EmbedIO.Net.Internal
         private void AcceptOnWorker()
         {
             var reportedInvalidAddress = false;
-            while (Volatile.Read(ref _disposed) == 0)
+            while (Volatile.Read(ref _acceptingStopped) == 0)
             {
                 Socket accepted;
                 try
@@ -284,7 +304,7 @@ namespace EmbedIO.Net.Internal
                 }
                 catch (SocketException)
                 {
-                    if (Volatile.Read(ref _disposed) != 0)
+                    if (Volatile.Read(ref _acceptingStopped) != 0)
                         return;
 
                     // Transient reset/resource errors must not stop the endpoint or spin.
@@ -298,7 +318,7 @@ namespace EmbedIO.Net.Internal
 
         private void ProcessAcceptedSocket(Socket accepted)
         {
-            if (Volatile.Read(ref _disposed) != 0 || (Secure && Listener.Certificate == null))
+            if (Volatile.Read(ref _acceptingStopped) != 0 || (Secure && Listener.Certificate == null))
             {
                 accepted.Dispose();
                 return;
@@ -318,7 +338,7 @@ namespace EmbedIO.Net.Internal
             var registered = false;
             lock (_unregistered)
             {
-                if (Volatile.Read(ref _disposed) == 0)
+                if (Volatile.Read(ref _acceptingStopped) == 0)
                 {
                     _ = _unregistered.Add(conn);
                     registered = true;

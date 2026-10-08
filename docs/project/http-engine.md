@@ -2412,3 +2412,36 @@ The final full Windows suite passed 3,138 tests with five expected skips
 cold-start and listener allocation gates passed against the rebuilt current
 library. These budgets do not establish end-to-end performance or combined
 drain completion. The CI discovery floor is 3,143.
+
+
+### Endpoint admission boundary before listener-wide drain
+
+Endpoint admission can now stop independently of accepted transport disposal.
+The endpoint manager checks ownership under its registration lock and stops only
+sockets whose exact-host and wildcard routes all belong to the draining listener.
+Shared sockets remain available to sibling listeners. Routes and accepted HTTP/1.1
+and HTTP/2 transports remain alive until their owners drain or abort them. The
+Windows asynchronous accept and macOS blocking accept paths both observe the
+admission-stop state; sockets caught before registration are discarded.
+
+A stopped endpoint rejects new prefix registration until its original owner
+releases it, preventing successful registration on a closed listening socket.
+Seven regression cases cover accepted HTTP/1.1 and HTTP/2 responses, explicit
+abort, repeat admission stop, sibling routing before and after the first listener
+stops, and failed registration followed by successful replacement after cleanup.
+The focused set passed 77 cases on pinned Linux with two logical processors and
+77 cases against the actual .NET Standard asset on Windows and Linux .NET 10
+hosts. Both assets build without warnings; changed-file formatting, source guards
+and pinned YARA scanning pass. Evidence is under
+`TestResults/http-engine/endpoint-admission-*`.
+
+This admission primitive is not yet connected to public listener-wide drain.
+Shared-endpoint request admission, accepted HTTP/2 streams awaiting routing,
+incomplete handshakes, deadline ownership and combined-host coordination remain
+open. Public WebServer graceful drain is still HTTP/3-only; the new engine is not
+yet the default.
+
+The full Windows suite passed 3,145 tests with five expected skips (3,150 total,
+zero failures). The rebuilt cold-start allocation gate also passed. The CI
+discovery floor is now 3,150. Final-head CI and macOS admission-path validation
+remain required; these local results do not establish completed host draining.

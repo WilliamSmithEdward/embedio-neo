@@ -67,6 +67,18 @@ namespace EmbedIO.Net
             epl.Dispose();
         }
 
+        internal static void StopExclusiveEndpoints(HttpListener listener)
+        {
+            lock (RegistrationLock)
+            {
+                if (!Registrations.TryGetValue(listener, out var prefixes)) return;
+                var endpoints = new HashSet<EndPointListener>();
+                foreach (var registered in prefixes.Values)
+                    foreach (var endpoint in registered)
+                        if (endpoints.Add(endpoint)) endpoint.StopAcceptingIfExclusive(listener);
+            }
+        }
+
         internal static void RemoveListener(HttpListener listener)
         {
             foreach (var prefix in listener.Prefixes)
