@@ -99,7 +99,6 @@ namespace EmbedIO.Tests
 
         [TestCase("user@example.com")]
         [TestCase("example.com/path")]
-        [TestCase("example.com:")]
         [TestCase("example.com:65536")]
         [TestCase("example.com?x")]
         [TestCase("")]
@@ -109,11 +108,37 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public void EmptyPortUsesTheSchemeDefault(
+            [Values("http", "https")] string scheme,
+            [Values("example.com", "[::1]")] string host,
+            [Values(false, true)] bool hostFallback)
+        {
+            var pairs = new[] { ":method", "GET", ":scheme", scheme, ":path", "/" };
+            pairs = pairs.Concat(hostFallback
+                ? new[] { "host", host + ":" }
+                : new[] { ":authority", host + ":", "host", host + (scheme == "http" ? ":80" : ":443") }).ToArray();
+            var parsed = Invoke("Parse", pairs);
+            Assert.That(Property<string>(parsed, "Authority"), Is.EqualTo(host + ":"));
+            Assert.That(Property<NameValueCollection>(parsed, "Headers")["Host"], Is.EqualTo(host + ":"));
+        }
+
+        [TestCase("example.com:")]
+        [TestCase("[::1]:")]
+        public void ExtendedConnectUsesTheSchemeDefaultForAnEmptyPort(string authority)
+        {
+            var pairs = (string[])Basic.Clone(); pairs[1] = "CONNECT"; pairs[5] = authority;
+            pairs = pairs.Concat(new[] { ":protocol", "websocket" }).ToArray();
+            Assert.That(Property<string>(Invoke("Parse", pairs, extended: true), "Authority"), Is.EqualTo(authority));
+        }
+
+        [Test]
         public void ClassicConnectRequiresExplicitAuthorityPortAndNoSchemeOrPath()
         {
             var pairs = new[] { ":method", "CONNECT", ":authority", "[::1]:443" };
             Invoke("Parse", pairs);
             Reject(new[] { ":method", "CONNECT", ":authority", "example.com" });
+            Reject(new[] { ":method", "CONNECT", ":authority", "example.com:" });
+            Reject(new[] { ":method", "CONNECT", ":authority", "[::1]:" });
             Reject(pairs.Concat(new[] { ":path", "/" }).ToArray());
             Reject(pairs.Concat(new[] { ":scheme", "https" }).ToArray());
         }

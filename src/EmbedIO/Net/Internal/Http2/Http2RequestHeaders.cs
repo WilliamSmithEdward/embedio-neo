@@ -169,7 +169,7 @@ namespace EmbedIO.Net.Internal.Http2
             if (requirePort && !hasPort) throw Invalid(id, "CONNECT requires an explicit port.");
             if (hasPort)
             {
-                if (colon == value.Length - 1) throw Invalid(id, "Empty authority port.");
+                if (requirePort && colon == value.Length - 1) throw Invalid(id, "CONNECT requires a nonempty port.");
                 for (var i = colon + 1; i < value.Length; i++)
                     if (value[i] < '0' || value[i] > '9') throw Invalid(id, "Invalid authority port.");
             }

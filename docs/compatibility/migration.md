@@ -797,3 +797,8 @@ decimal port; bracket IPv6 addresses. An empty port remains accepted as permitte
 by RFC 3986. Valid requests retain the existing transport scheme and local listener
 port in `Request.Url`. Rejections use the bounded empty 400 response and close the
 connection before application dispatch.
+
+HTTP/2 and HTTP/3 now also accept empty authority ports for ordinary requests and
+extended CONNECT, treating them as the scheme default when comparing Host and
+authority. Classic CONNECT still requires an explicit nonempty port. The original
+authority text remains available through the request headers.

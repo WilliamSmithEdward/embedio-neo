@@ -2014,8 +2014,38 @@ against the actual .NET Standard asset on both hosts under .NET 10. The full
 Windows suite passed: 3,052 total, 3,047 passed and five expected skips
 (`h1-host-full.log`). Both-target build, formatting, source guards and changed-file
 YARA scans passed. Exact-head CI remains required. Cross-protocol empty-port
-handling still needs reconciliation: the shared HTTP/2/3 authority validator
-currently rejects an empty port even outside CONNECT.
+handling was identified for the following shared-validator increment.
 
 References: [HTTP/1 Host rejection](https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2)
 and [URI port syntax](https://www.rfc-editor.org/rfc/rfc3986.html#section-3.2.3).
+
+### Shared HTTP/2 and HTTP/3 empty authority ports
+
+Ten new parser cases reproduce rejection of valid empty ports for ordinary and
+extended CONNECT requests. The shared authority validator now permits these while
+retaining the nonempty explicit-port requirement for classic CONNECT. Coverage
+includes HTTP/HTTPS defaults, DNS/bracketed IPv6 authorities, Host fallback and
+Host equivalence to the default numeric port. One older invalid-authority case
+was corrected, giving a net discovery increase of nine (3,061 total).
+
+All 141 selected parser, HTTP/2 wire and HTTP/3 listener cases passed on Windows
+with no skips (`empty-port-focused.log` plus `empty-port-h2-wire.log`); all ten new cases failed before the
+correction (`empty-port-before.log`). These new cases directly exercise the shared
+parser; the selected wire tests are existing integration coverage, not new
+empty-port wire reproductions. The initial filter used a source filename rather
+than its partial-class name and omitted the 45 HTTP/2 wire cases; the corrected
+filter ran those cases separately on Windows and included all 141 on pinned Linux
+with QUIC required. The actual .NET Standard asset passed 100 applicable cases on
+both hosts under .NET 10. Full Windows regression passed: 3,061 total, 3,056
+passed, five expected skips and zero failures (`empty-port-full.log`). Both-target
+build, formatting and source guards passed. The YARA scan reported only the
+previously accepted request-header fixture heuristic, re-reviewed in
+`.github/security/http2-fixture-yara-review.md`.
+
+Prior-head CI run 37840025467 failed macOS compatibility while the unchanged
+published upstream fixture awaited a WebSocket receive (ten-second cancellation),
+and Android smoke failed extracting the downloaded emulator archive. Logs and
+upstream artifacts are retained locally under `ci-8e9f870-*`. Neither is claimed
+fixed by the authority change; unchanged job reruns were requested. Exact-head
+checks remain mandatory. GitHub rejected both rerun requests while the parent
+run was still active; no retry success is claimed.

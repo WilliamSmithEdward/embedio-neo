@@ -35,3 +35,10 @@ paginated query of open repository code-scanning alerts found no corresponding
 alert to dismiss. No dismissal is claimed. The owner's matching-alert requirement
 therefore remains an explicit pre-merge limitation; PR #182 stays draft and
 unmerged. A fresh scan is still required before claiming green checks.
+
+The empty-port authority increment was re-reviewed on 2026-10-08. It adds fixed
+NUnit inputs for scheme defaults, IPv6, Host fallback and extended CONNECT, and
+retains classic CONNECT rejection assertions. Reflection targets and executable
+behavior are unchanged. The pinned full bundle still reports only the same
+accepted rule for this path. Updated canonical LF source SHA-256: `6bb46831092048897cc05ab71a0a5fe92fc6b8b51a827ea6657902aec0fb0703`.
+The absent matching GitHub alert remains a pre-merge limitation.
