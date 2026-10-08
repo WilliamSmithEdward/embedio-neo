@@ -191,3 +191,6 @@
   items:
     - name: Baseline and direction
       href: project/embed_io_neo.md
+
+- name: Suffix byte ranges
+  href: user-reports/suffix-range-responses.md

@@ -202,6 +202,9 @@ namespace EmbedIO
         /// <para>If any of the other conditions are not satisfied, this method returns <see langword="false"/>.</para>
         /// </returns>
         /// <remarks>
+        /// <para>A positive suffix range selects the final requested number of bytes, clamped to
+        /// the representation length. A zero suffix is unsatisfiable; positive suffix ranges
+        /// for empty representations are ignored.</para>
         /// <para>According to <see href="https://tools.ietf.org/html/rfc7233#section-3.1">RFC7233, Section 3.1</see>,
         /// there are several conditions under which a server may ignore or reject a range request; therefore,
         /// clients are (or should be) prepared to receive a <c>200 OK</c> response with the whole response
@@ -228,8 +231,7 @@ namespace EmbedIO
             if (rangeHeader == null)
                 return false;
 
-            // Ignore the Range header if there is no If-Range header
-            // or if the If-Range header specifies a non-matching validator.
+            // Ignore Range when a supplied If-Range validator does not match.
             // RFC7233, Section 3.2: "If the validator given in the If-Range header field matches the
             //                       current validator for the selected representation of the target
             //                       resource, then the server SHOULD process the Range header field as
@@ -253,13 +255,30 @@ namespace EmbedIO
                 return false;
 
             // EmbedIO does not support multipart/byteranges responses (yet),
-            // thus ignore range requests that specify one range.
+            // thus ignore range requests that specify more than one range.
             if (range.Ranges.Count != 1)
                 return false;
 
             var firstRange = range.Ranges.First();
-            start = firstRange.From ?? 0L;
-            upperBound = firstRange.To ?? contentLength - 1;
+            if (!firstRange.From.HasValue)
+            {
+                var suffixLength = firstRange.To.GetValueOrDefault();
+                if (suffixLength == 0)
+                    throw HttpException.RangeNotSatisfiable(contentLength);
+
+                // RFC 9110 permits ignoring Range for an empty representation.
+                if (contentLength == 0)
+                    return false;
+
+                // To is a suffix length here, not an inclusive offset.
+                start = suffixLength >= contentLength ? 0 : contentLength - suffixLength;
+                upperBound = contentLength - 1;
+            }
+            else
+            {
+                start = firstRange.From.Value;
+                upperBound = firstRange.To ?? contentLength - 1;
+            }
             if (start >= contentLength || upperBound < start || upperBound >= contentLength)
                 throw HttpException.RangeNotSatisfiable(contentLength);
 

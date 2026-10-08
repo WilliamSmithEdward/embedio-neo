@@ -13,14 +13,13 @@ this exact header difference while preserving comparison of other fields.
 
 ## Inherited suffix-range defect
 
-For a ten-byte `0123456789` file, a request with `Range: bytes=-3` returns 206,
-`Content-Range: bytes 0-3/10`, and `0123` under both implementations. A three-byte
+The original audit found that a ten-byte `0123456789` file with `Range: bytes=-3` returned 206,
+`Content-Range: bytes 0-3/10`, and `0123` under both implementations before this correction. A three-byte
 suffix should be `789`, with `bytes 7-9/10`, under
 [RFC 9110 section 14.1.2](https://www.rfc-editor.org/rfc/rfc9110.html#section-14.1.2).
 The match therefore identifies a
 concrete inherited defect, not correct range behavior and not a newly introduced
-Neo regression. It remains unfixed by this audit. A focused follow-up needs
-boundary/zero-length/oversized-suffix and HEAD coverage before a correction.
+Neo regression. The owner-requested follow-up in [issue #170](https://github.com/WilliamSmithEdward/embedio-neo/issues/170) corrects Neo to `789` and `bytes 7-9/10`, while upstream remains wrong. This unreleased correction is an exact explained audit difference, not a parity match. [Suffix guidance](../user-reports/suffix-range-responses.md) records boundaries, empty/zero suffixes, HEAD, validators and migration effects.
 
 ZIP/resource/custom providers, symlinks/traversal, cache invalidation, ETag
 semantics, multi-ranges and large/concurrent transfers are not compared here.
