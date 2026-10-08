@@ -883,3 +883,40 @@ QUIC cases in the isolated Ubuntu container, including the callback cap and the
 exportable test-certificate setup. Complete formatting, suppression guards and
 the pinned full YARA scan pass. This does not substitute for fresh full-source
 CI or the still-unconfirmed macOS TLS correction.
+
+
+### Confirmed desktop QUIC execution and bounded graceful drain
+
+CI 37790277013 artifacts for cb2e6d5 confirm all 19 direct QUIC cases passed,
+without skips, on Windows 2025, Ubuntu 24.04 and macOS 15 ARM64. The exportable
+synthetic certificate correction resolved the observed macOS TLS setup failure.
+The full platform suites reported 2,709 cases each: Windows 2,706 passed/3 skipped,
+Linux 2,680 passed/29 skipped, macOS 2,678 passed/31 skipped, with zero failures.
+The skipped cases are outside the required QUIC set. Downloaded TRX evidence is
+under TestResults/http-engine/ci-cb2e6d5. This supersedes the earlier missing-native
+and TLS-failure status, while retaining their provenance above.
+
+The internal connection driver now accepts a separate graceful-drain signal and
+deadline through RunWithDrainAsync. It freezes request admission, sends GOAWAY with
+an exclusive upper bound for requests that may have reached application code,
+rejects newly arriving requests with H3_REQUEST_REJECTED, and lets already-admitted
+requests finish. Unprocessed streams, including incomplete or QPACK-blocked
+headers, are explicitly rejected even when their IDs are below that bound. Critical
+control and QPACK streams remain active during drain. Completion or the deadline
+closes with H3_NO_ERROR; the independent abort token can interrupt the drain.
+If the entire client request-ID space is exhausted, no GOAWAY is needed, as allowed
+by [RFC 9114 section 5.2](https://www.rfc-editor.org/rfc/rfc9114.html#section-5.2).
+
+An initial lower-ID test revealed that QUIC can surface an implicit stream before
+its header bytes arrive. Admission is therefore recorded after valid initial
+fields, separately from transport stream acceptance. Six real-wire cases cover
+successful completion, drain timeout with a stalled application, explicit abort,
+a delayed lower-ID stream, confirmed QPACK-blocked headers and an idle connection.
+They inspect GOAWAY's cutoff, retryable rejection, preserved response bytes and
+normal connection closure. All 233 HTTP/3 cases pass locally on Windows; all 25
+QUIC cases pass in the isolated Ubuntu container. Solution build, complete format
+verification, suppression guards and the pinned full YARA rules pass. Logs are
+under TestResults/http-engine/http3-drain-*; the initial lower-ID failure is retained.
+The discovery floor is 2,715. This is internal connection support; listener-wide
+drain/configuration, discovery, application adapters and other extension/performance
+acceptance criteria remain incomplete. Fresh exact-head CI is still required.

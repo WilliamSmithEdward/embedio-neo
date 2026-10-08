@@ -25,6 +25,8 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly CancellationToken _token;
         private readonly object _sync = new();
         private readonly Dictionary<long, Task> _workers = new();
+        private readonly Dictionary<long, QuicStream> _requests = new();
+        private readonly HashSet<long> _admitted = new();
         private readonly Dictionary<long, TaskCompletionSource<HpackField[]>> _pending = new();
         private readonly QpackDecoder _decoder = new(4096, 16, 65536, 65536, 1048576, 65536);
         private readonly SemaphoreSlim _feedbackReady = new(0, 1);
@@ -32,6 +34,10 @@ namespace EmbedIO.Net.Internal.Http3
         private Exception? _failure;
         private int _critical;
         private int _applicationCount;
+        private CancellationToken _drainToken;
+        private TimeSpan _drainTimeout;
+        private bool _draining;
+        private long _highestRequestId = -4;
 
         private Http3QuicConnection(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token)
         {
@@ -48,6 +54,21 @@ namespace EmbedIO.Net.Internal.Http3
             using (var session = new Http3QuicConnection(connection, dispatch, token))
                 await session.RunCoreAsync().ConfigureAwait(false);
         }
+        internal static async Task RunWithDrainAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch,
+            CancellationToken abortToken, CancellationToken drainToken, TimeSpan drainTimeout)
+        {
+            if (connection == null) throw new ArgumentNullException(nameof(connection));
+            if (dispatch == null) throw new ArgumentNullException(nameof(dispatch));
+            if (drainTimeout <= TimeSpan.Zero || drainTimeout.TotalMilliseconds > uint.MaxValue - 1)
+                throw new ArgumentOutOfRangeException(nameof(drainTimeout));
+            await using (connection.ConfigureAwait(false))
+            using (var session = new Http3QuicConnection(connection, dispatch, abortToken))
+            {
+                session._drainToken = drainToken;
+                session._drainTimeout = drainTimeout;
+                await session.RunCoreAsync().ConfigureAwait(false);
+            }
+        }
         private async Task RunCoreAsync()
         {
             QuicStream? control = null;
@@ -62,22 +83,28 @@ namespace EmbedIO.Net.Internal.Http3
                 await control.WriteAsync(new byte[] { 0, 4, 10, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16 }, startup.Token).ConfigureAwait(false);
                 feedback = await _connection.Value.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, startup.Token).ConfigureAwait(false);
                 await feedback.WriteAsync(new byte[] { 3 }, startup.Token).ConfigureAwait(false);
-                background = new[] { WriteFeedbackAsync(feedback), WatchCriticalOutputAsync(control), WatchCriticalOutputAsync(feedback) };
+                background = new[] { WriteFeedbackAsync(feedback), WatchCriticalOutputAsync(control), WatchCriticalOutputAsync(feedback), WatchDrainAsync(control) };
                 while (!_token.IsCancellationRequested)
                 {
                     var stream = await _connection.Value.AcceptInboundStreamAsync(_token).ConfigureAwait(false);
                     bool rejected;
+                    bool draining;
                     lock (_sync)
                     {
-                        rejected = _workers.Count >= 256;
+                        draining = _draining && stream.Type == QuicStreamType.Bidirectional;
+                        rejected = draining || _workers.Count >= 256;
                         // Register under the tracking gate before a worker can finish.
-                        if (!rejected) _workers.Add(stream.Id, Task.Run(() => ProcessStreamAsync(stream)));
+                        if (!rejected)
+                        {
+                            if ((stream.Id & 3) == 0) _requests.Add(stream.Id, stream);
+                            _workers.Add(stream.Id, Task.Run(() => ProcessStreamAsync(stream)));
+                        }
                     }
                     if (rejected)
                     {
-                        AbortStream(stream, 0x107);
+                        AbortStream(stream, draining ? 0x10b : 0x107);
                         await stream.DisposeAsync().ConfigureAwait(false);
-                        throw new Http3ProtocolException(0x107, "Too many active HTTP/3 stream workers.");
+                        if (!draining) throw new Http3ProtocolException(0x107, "Too many active HTTP/3 stream workers.");
                     }
                 }
             }
@@ -104,6 +131,43 @@ namespace EmbedIO.Net.Internal.Http3
                 if (control != null) await control.DisposeAsync().ConfigureAwait(false);
             }
             if (_failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(_failure).Throw();
+        }
+        private async Task WatchDrainAsync(QuicStream control)
+        {
+            if (!_drainToken.CanBeCanceled) return;
+            using var requested = CancellationTokenSource.CreateLinkedTokenSource(_token, _drainToken);
+            try { await Task.Delay(Timeout.Infinite, requested.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (requested.IsCancellationRequested) { }
+            if (_token.IsCancellationRequested) return;
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_token);
+            deadline.CancelAfter(_drainTimeout);
+            try
+            {
+                long cutoff;
+                Task[] accepted;
+                QuicStream[] unprocessed;
+                lock (_sync)
+                {
+                    _draining = true;
+                    cutoff = _highestRequestId + 4;
+                    unprocessed = _requests.Where(item => !_admitted.Contains(item.Key)).Select(item => item.Value).ToArray();
+                    accepted = _workers.Where(item => (item.Key & 3) == 0).Select(item => item.Value).ToArray();
+                }
+                foreach (var request in unprocessed) AbortStream(request, 0x10b);
+                // Exhausted request stream IDs need no GOAWAY (RFC 9114 section 5.2).
+                if (cutoff <= QuicInteger.Maximum)
+                {
+                    var frame = new byte[10];
+                    var length = QuicInteger.Write(frame, 2, cutoff);
+                    frame[0] = 7; frame[1] = (byte)length;
+                    await control.WriteAsync(frame.AsMemory(0, length + 2), deadline.Token).ConfigureAwait(false);
+                }
+                await Task.WhenAll(accepted).WaitAsync(deadline.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+            { if (!_token.IsCancellationRequested) Fail(error); }
+            finally { _stop.Cancel(); }
         }
         private async Task ProcessStreamAsync(QuicStream stream)
         {
@@ -155,7 +219,10 @@ namespace EmbedIO.Net.Internal.Http3
                 try { await stream.DisposeAsync().ConfigureAwait(false); }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
                 { if (!_token.IsCancellationRequested) Fail(error); }
-                finally { lock (_sync) _workers.Remove(streamId); }
+                finally
+                {
+                    lock (_sync) { _workers.Remove(streamId); _requests.Remove(streamId); _admitted.Remove(streamId); }
+                }
             }
         }
         private async Task ProcessRequestAsync(QuicStream stream)
@@ -179,6 +246,12 @@ namespace EmbedIO.Net.Internal.Http3
                     (wire, token) => DecodeRequestAsync(stream.Id, wire, token, requestToken),
                     () => (int)Math.Min(65536, Volatile.Read(ref _peer).MaximumFieldSectionSize),
                     error => RequestFailed(stream, error), requestToken);
+                lock (_sync)
+                {
+                    if (_draining) throw new Http3StreamException(stream.Id, 0x10b, "Request arrived during connection drain.");
+                    _highestRequestId = Math.Max(_highestRequestId, stream.Id);
+                    _admitted.Add(stream.Id);
+                }
                 // Isolate even callbacks that block before returning their Task.
                 if (Interlocked.Increment(ref _applicationCount) > 256)
                 {
