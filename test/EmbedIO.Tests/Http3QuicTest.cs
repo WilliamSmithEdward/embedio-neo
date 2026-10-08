@@ -98,6 +98,15 @@ namespace EmbedIO.Tests
         [TestCase("blocked-read-reset", 0x10c, false)]
         [TestCase("blocked-write-reset", 0x10c, false)]
         [TestCase("blocked-both-reset", 0x10c, false)]
+        [TestCase("path:/bad%", 0x10e, false)]
+        [TestCase("path:/bad%2", 0x10e, false)]
+        [TestCase("path:/bad%GG", 0x10e, false)]
+        [TestCase("path:/x[0]", 0x10e, false)]
+        [TestCase("path:/x?y={z}", 0x10e, false)]
+        [TestCase("path:/x|y", 0x10e, false)]
+        [TestCase("path:/x^y", 0x10e, false)]
+        [TestCase("path:/x`y", 0x10e, false)]
+        [TestCase("path:/\"x\"", 0x10e, false)]
         [TestCase("missing-method", 0x10e, false)]
         [TestCase("length-mismatch", 0x10e, false)]
         [TestCase("settings-on-request", 0x105, true)]
@@ -247,6 +256,15 @@ namespace EmbedIO.Tests
                     "priority-on-request" => Convert.FromHexString("800f07000100"),
                     _ => blocked ? Convert.FromHexString("01110200D1D7C150096C6F63616C686F737480") : Array.Empty<byte>()
                 };
+                if (scenario.StartsWith("path:", StringComparison.Ordinal))
+                {
+                    // Independent QPACK static-name literals, with no dynamic table references.
+                    var path = Encoding.ASCII.GetBytes(scenario.Substring(5));
+                    var payload = new byte[] { 0, 0, 0xd1, 0xd7, 0x51, (byte)path.Length }
+                        .Concat(path).Concat(new byte[] { 0x50, 9 }).Concat(Encoding.ASCII.GetBytes("localhost")).ToArray();
+                    Assert.That(payload.Length, Is.LessThan(64));
+                    wire = new byte[] { 1, (byte)payload.Length }.Concat(payload).ToArray();
+                }
                 QuicException? observed = null;
                 try
                 {

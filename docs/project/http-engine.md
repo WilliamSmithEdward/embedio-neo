@@ -2076,3 +2076,16 @@ HTTP/3 uses the same parser but new malformed-path QUIC wire cases remain pendin
 HTTP/1 origin/absolute-target grammar reconciliation also remains pending.
 
 Path grammar reference: [RFC 3986 sections 3.3 and 3.4](https://www.rfc-editor.org/rfc/rfc3986.html#section-3.3).
+
+### Raw QUIC malformed-path coverage
+
+Nine independently encoded QPACK requests cover the malformed paths added to
+HTTP/2 wire coverage. Each asserts a QUIC stream abort with H3_MESSAGE_ERROR
+(0x10e), then sends a healthy request on the same connection and reads its
+response. This closes the malformed-path QUIC wire coverage gap from the prior
+increment without changing production code. All 59 selected QUIC cases passed on
+Windows and pinned Linux with QUIC required and no skips
+(`path-quic-focused.log`, `path-quic-linux.log`). Both-target build, formatting,
+source guards and changed-file pinned YARA scans passed. Test discovery rises to 3,082. The preceding production increment
+passed the full Windows suite with 3,073 cases; no new full local run is claimed
+for this test-only increment. Exact-head CI remains required.
