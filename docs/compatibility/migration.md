@@ -871,3 +871,9 @@ by the server or transport when cleanup runs before the linked cancellation
 callback. Captured application tokens and close callbacks observe cancellation;
 normal successful close does not cancel them. Recoverable exceptions from
 application cancellation callbacks are logged and do not interrupt cleanup.
+
+When TCP endpoint prefixes are shared, stopping or disposing one managed listener
+now cancels only its HTTP/2 exchanges. Active sibling streams and later sibling
+requests retain the same connection. Stopping the last endpoint owner still
+closes its connections. Shared endpoint graceful drain remains unsupported until
+owner-specific admission and completion coordination is implemented.

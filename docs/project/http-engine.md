@@ -2648,3 +2648,47 @@ Android lifecycle setup failure: the emulator download could not be unpacked
 `context-cancel-ci-android.log`. Every other non-skipped job in that CI run passed.
 New-head platform checks remain required; the separate POST timeout and earlier
 HTTP/3 client-reset timeout are not claimed resolved by passing local runs.
+
+### Shared HTTP/2 listener shutdown ownership
+
+Four real-client cases reproduce sibling stream loss when Stop/Dispose of one
+listener closes a shared HTTP/2 connection. Each verifies both listeners use the
+same peer endpoint, then keeps the sibling response in flight while stopping the
+other owner, both with an active and an already-completed owner response. Before
+the correction all four fail with premature sibling response termination
+(`shared-http2-stop-before-final.log`). The initial fixture also observed the
+expected pending-accept error 995 as a test failure; it now handles that specific
+shutdown outcome, and the corrected pre-change reproduction remains failing.
+
+Connection ownership now retains the active exchanges for each HTTP/2 listener.
+After removing an owner's routes, an endpoint that remains shared cancels only
+that owner's exchanges. The sibling response and subsequent requests keep using
+the original connection; the tests also reject a hidden retry. Exclusive/last-owner
+endpoint shutdown still closes the transport, as does HTTP/1 shutdown. All four
+regressions pass, with 192 Windows protocol/drain/two-server cases and 123 pinned
+Linux TCP cases passing. Both assets build. Full, allocation and exact-head checks
+for this candidate remain pending; discovery floor is 3,195.
+
+This is a prerequisite for shared graceful drain, not its completion. Shared drain
+still rejects before mutation. It needs owner-specific admission and completion
+tracking without connection-wide GOAWAY, preservation of sibling streams through
+deadline/cancellation, mixed exclusive/shared endpoints and concurrent owner
+shutdown/restart coverage. Cancellation callbacks and active response cleanup
+must not allow a shared-owner deadline to hang or abort another owner's stream.
+
+Final shared-owner checkpoint validation passes the coverage-enabled Windows
+suite: 3,190 successes, five expected skips, zero failures (3,195 total), 4m12s;
+TRX and Cobertura are under `shared-http2-stop-coverage`. The actual .NET Standard
+asset passes 123 selected TCP/two-server cases on each Windows/Linux .NET 10 host.
+The unchanged compatibility comparator passes 207 cases / 414 comparisons with
+zero errors. Rebuilt hot-path, queue, cold-start and listener allocation gates,
+formatting, both source-policy guards and changed-source pinned YARA scans pass.
+This does not yet measure the additional HTTP/2 owner/exchange tracking cost in a
+representative end-to-end HTTP/2 benchmark; no performance gain is claimed.
+
+Preceding pushed head `1529221efefcf418c0877de83982944be0cb3917` has all 34 checks
+completed with success or intentional skips and an overall passing CI aggregate;
+`shared-owner-ci-final.json` records the exact-head check snapshot. Windows full
+coverage and POST compatibility checks pass on that head, but those passes do
+not establish the root cause of prior intermittent failures. New shared-owner
+source still needs its own exact-head CI, and the full engine remains incomplete.

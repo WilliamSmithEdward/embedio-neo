@@ -22,7 +22,7 @@ namespace EmbedIO.Net.Internal
         private int _headerBytes;
         private bool _http2;
         private EmbedIO.Internal.BorrowedResource<CancellationTokenSource>? _http2Stop;
-        private HashSet<HttpListener>? _http2Listeners;
+        private Dictionary<HttpListener, HashSet<Http2Exchange>>? _http2Listeners;
         private int _responseFinishing;
         private volatile bool _draining;
         private bool _closeFinished;
@@ -549,7 +549,7 @@ namespace EmbedIO.Net.Internal
                 socket = _sock;
                 _sock = null;
                 protocolStop = _http2Stop?.Value;
-                protocolListeners = _http2Listeners == null ? Array.Empty<HttpListener>() : new List<HttpListener>(_http2Listeners).ToArray();
+                protocolListeners = _http2Listeners == null ? Array.Empty<HttpListener>() : new List<HttpListener>(_http2Listeners.Keys).ToArray();
                 _http2Listeners?.Clear();
             }
             if (socket == null) return;

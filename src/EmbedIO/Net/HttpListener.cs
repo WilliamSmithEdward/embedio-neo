@@ -291,7 +291,7 @@ namespace EmbedIO.Net
             _connections.Clear();
             for (var i = connections.Length - 1; i >= 0; i--)
             {
-                connections[i].Key.ForceClose();
+                connections[i].Key.CloseForListener(this);
             }
 
             while (!_ctxQueue.IsEmpty)
