@@ -1578,7 +1578,51 @@ runtime-cleared property and a successful completion after endpoint stop. The
 both the modern and actual netstandard assets (hosted on .NET 10). One hundred
 unchanged cancellation stress repeats passed: 12,800 client connections per
 listener mode. Both assets built without warnings/errors; formatting, analyzer
-guards, the pinned YARA scan and existing allocation budgets passed. Full Windows
-validation is running; fresh exact-head CI remains required. Temporary production
+guards, the pinned YARA scan and existing allocation budgets passed. The combined local Windows suite passed 2,948 cases with five expected skips
+(2,953 total, including the then-local scheduler). Exact-head CI 37821402117
+and all checks passed on 759db37. Temporary production
 tracing has been removed. This checkpoint makes no new protocol-support or
 performance claim; the original failing CI remains recorded.
+
+
+## HTTP/2 priority-aware flow-credit scheduling
+
+DATA reservations now use one explicitly owned waiter per stream. Only waiters
+with positive stream credit enter an indexed priority heap; connection-credit
+updates grant the most urgent writable request first. At equal urgency,
+non-incremental responses follow stream order and incremental responses follow
+reservation arrival order. Priority changes and SETTINGS/WINDOW_UPDATE changes
+update eligibility before grants. A flow-blocked urgent stream cannot stall a
+writable lower-priority peer. Canceling an ungranted waiter removes it without
+spending credit; close/abort faults pending writers. Cancellation registrations
+are disposed outside the flow lock, including synchronous completion races.
+
+Eight focused cases cover priority order, reprioritization, blocked-stream
+independence, 256 cancellation/grant races and seeded 128-stream ordering models
+with cancellation, arbitrary removal and window changes. A real TCP case queues
+two writers at exhausted connection credit and verifies the high-priority DATA
+frame arrives first after a one-byte WINDOW_UPDATE. The 81-case focused selection
+passes on Windows and Linux with both production assets hosted on .NET 10. The
+final full Windows run passed 2,950 cases with five expected skips (2,955 total;
+h2-scheduler-final-full log). Both targets build without warnings/errors;
+formatting, analyzer guards, pinned YARA scans and existing allocation budgets
+pass. Fresh exact-head CI remains required.
+
+`python scripts/compare_http2_flow.py` reproduces the component comparison against
+759db37: baseline and candidate share one runner with only the baseline class
+identifier renamed. Three stable-JIT processes each run five alternating samples;
+source/binary hashes, raw samples and summaries remain under TestResults. The
+initial scan scheduler regressed the 128-writer batch from 44.9 to 88.4 us. A tree
+reduced that to 53.0 us; the final indexed heap removed per-waiter tree/list nodes.
+The final direct comparison measured 44.4 versus 44.5 us for 128 writers, while
+a later reproduction measured 51.4 versus 45.1 us. No robust latency improvement
+is claimed for that larger batch. Allocation consistently fell from about 80,379
+to 58,435 bytes per batch (27%). The eight-writer comparison measured 3.87 versus
+3.20 us and 5,978 versus 4,490 bytes; writable reserve/replenish cycles measured
+52.0 versus 46.5 ns with unchanged 72 B/cycle. These include bookkeeping and
+worker allocation, use no network, and are not end-to-end throughput/tail-latency
+claims. The rejected implementations and raw measurements are retained locally.
+
+This schedules flow-credit admission, not the final transport write queue or
+QUIC packets. HTTP/2 legacy-priority negotiation, HTTP/3 output scheduling,
+policy/fairness validation and mixed-workload end-to-end performance remain open.

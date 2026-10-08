@@ -108,6 +108,39 @@ namespace EmbedIO.Tests
             });
         }
 
+        [Test]
+        public async Task ConnectionCreditSchedulesHighPriorityDataBeforeEarlierLowPriorityWriter()
+        {
+            var flowReady = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            await WithRawServer(Array.Empty<byte>(), async (wire, token) =>
+            {
+                byte[] Block(string priority) => RequestBlock().Concat(new byte[] { 0, 8 }).Concat(Encoding.ASCII.GetBytes("priority"))
+                    .Concat(new byte[] { (byte)priority.Length }).Concat(Encoding.ASCII.GetBytes(priority)).ToArray();
+                await SendWire(wire, 1, 5, 1, Block("u=7"), token);
+                var total = 0;
+                while (total < 65535) total += (await Until(wire, 0, 1, token)).Payload.Length;
+                Assert.That(total, Is.EqualTo(65535));
+                await SendWire(wire, 8, 0, 1, new byte[] { 0, 0, 0, 1 }, token);
+                await SendWire(wire, 1, 5, 3, Block("u=0"), token);
+                await Until(wire, 1, 3, token);
+                var flow = await flowReady.Task.WaitAsync(token);
+                while (Property<int>(flow, "PendingCount") != 2) await Task.Delay(1, token);
+                await SendWire(wire, 8, 0, 0, new byte[] { 0, 0, 0, 1 }, token);
+                var first = await ReceiveWire(wire, token);
+                Assert.That((first.Type, first.Id), Is.EqualTo(((byte)0, 3)), "Only the high-priority writer should receive this byte of credit.");
+                Assert.That(first.Payload, Is.EqualTo(new byte[] { 3 }));
+                await SendWire(wire, 8, 0, 0, new byte[] { 0, 0, 0, 1 }, token);
+                var second = await Until(wire, 0, 1, token);
+                Assert.That(second.Payload.Length, Is.EqualTo(1));
+                Assert.That(second.Flags & 1, Is.EqualTo(1));
+            }, app: async exchange =>
+            {
+                var connection = exchange.GetType().GetField("_connection", Flags)?.GetValue(exchange) ?? throw new AssertionException("Missing connection.");
+                flowReady.TrySetResult(connection.GetType().GetProperty("SendFlow", Flags)?.GetValue(connection) ?? throw new AssertionException("Missing flow control."));
+                await Respond(exchange, Property<int>(exchange, "Id") == 1 ? new byte[65536] : new byte[] { 3 });
+            });
+        }
+
         private static async Task RawEcho(object exchange)
         {
             if (Property<string>(Property<object>(exchange, "Request"), "Method") == "GET")

@@ -62,11 +62,13 @@ namespace EmbedIO.Net.Internal.Http2
                                 if (frame.Type == 0) QueueCredit(0, _connection.ReceiveFlow.Discard(frame.Payload.Length));
                                 continue;
                             }
+                            if (frame.Type == 16) _connection.SendFlow.SetPriority(state.Id, state.Priority);
                             if (frame.HeaderBlock != null)
                             {
                                 if (exchange == null)
                                 {
                                     _connection.SendFlow.Open(state.Id);
+                                    _connection.SendFlow.SetPriority(state.Id, state.Priority);
                                     _connection.ReceiveFlow.Open(state.Id);
                                     started = new Http2Exchange(_connection, state, count => Consumed(state.Id, count), _stop.Token);
                                     _exchanges.Add(state.Id, started);

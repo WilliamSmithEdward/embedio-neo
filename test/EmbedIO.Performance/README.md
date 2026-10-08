@@ -166,3 +166,19 @@ transitions can distort a short workload; do not combine those samples with
 stable-JIT runs. Record CPU topology and source revisions as well as assembly
 hashes. The 2026-10-08 validation-cost experiment is recorded in
 [the engine program](../../docs/project/http-engine.md#utf-8-reader-cost-experiment-2026-10-08).
+
+
+### HTTP/2 flow scheduler comparison
+
+Run `python scripts/compare_http2_flow.py` from the repository root. The default
+baseline is the pre-scheduler commit `759db37b396c4727f6fbb63540aed7b2126fcd2b`;
+`--baseline` can select another compatible revision. Generated sources, hashes,
+build log and raw/summary measurements go under ignored
+`TestResults/http2-flow-comparison` (`--output` must stay under `TestResults`).
+The baseline class is renamed so both exact implementations share one runner;
+no reflection occurs in the measured operations. Three stable-JIT processes each
+run five alternating samples. The writable case measures reserve/replenish cycles;
+blocked batches include opening streams, queueing one-byte reservations and
+releasing shared connection credit with a cancellable token. Allocation totals
+include asynchronous workers. These are .NET 10 component comparisons, not whole
+server throughput, fairness under arbitrary workloads or tail-latency evidence.

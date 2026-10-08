@@ -54,7 +54,7 @@ namespace EmbedIO.Net.Internal.Http2
                 if (_stopped) throw new ObjectDisposedException(nameof(Http2StreamRegistry));
                 frame.ValidateShape();
                 if (frame.Type == 5) throw new Http2ProtocolException(1, "Clients cannot send PUSH_PROMISE.");
-                if (frame.Type == 16) { UpdatePriority(frame); return null; }
+                if (frame.Type == 16) return UpdatePriority(frame);
                 if (frame.Type == 2)
                 {
                     if ((Http2PeerSettings.ReadUInt32(frame.Payload, 0) & 0x7fffffff) == frame.StreamId)
@@ -116,7 +116,7 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
-        private void UpdatePriority(Http2Frame frame)
+        private Http2StreamState? UpdatePriority(Http2Frame frame)
         {
             var id = (int)(Http2PeerSettings.ReadUInt32(frame.Payload, 0) & 0x7fffffff);
             // This server has never opened a push stream: an even target is idle.
@@ -126,11 +126,12 @@ namespace EmbedIO.Net.Internal.Http2
             if (!HttpPriority.TryParse(Encoding.ASCII.GetString(frame.Payload, 4, frame.Payload.Length - 4), out var priority))
                 throw new Http2ProtocolException(1, "Malformed priority dictionary.");
             if (_active.TryGetValue(id, out var stream))
-            { if (!stream.LocalEnded) stream.SetPriority(priority); return; }
-            if (id <= _highest) return;
+            { if (stream.LocalEnded) return null; stream.SetPriority(priority); return stream; }
+            if (id <= _highest) return null;
             if (!_priorities.ContainsKey(id) && _active.Count + _priorities.Count >= _maximum)
                 throw new Http2ProtocolException(1, "Idle priority targets and active streams exceed the concurrency limit.");
             _priorities[id] = priority;
+            return null;
         }
 
         internal void EndLocal(int id)
