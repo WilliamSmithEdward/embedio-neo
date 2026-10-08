@@ -86,6 +86,59 @@ namespace EmbedIO.Tests
             Assert.That(stream.Position, Is.EqualTo(stream.Length));
         }
 
+        private static byte[] CloseWire(byte[] payload)
+        {
+            var wire = new byte[6 + payload.Length]; wire[0] = 0x88; wire[1] = (byte)(0x80 | payload.Length);
+            payload.CopyTo(wire, 6); // A zero masking key is valid and keeps fixtures readable.
+            return wire;
+        }
+        private static IEnumerable<TestCaseData> InvalidClosePayloads()
+        {
+            yield return new TestCaseData(new byte[] { 3 }, 1002).SetName("OneByteClosePayload");
+            foreach (var code in new[] { 0, 999, 1004, 1005, 1006, 1015, 1016, 2999, 5000, 65535 })
+                yield return new TestCaseData(new byte[] { (byte)(code >> 8), (byte)code }, 1002).SetName("InvalidCloseCode" + code);
+            foreach (var hex in new[] { "80", "C080", "EDA080", "F4908080", "E282", "FF" })
+            {
+                var invalid = Convert.FromHexString(hex);
+                var payload = new byte[2 + invalid.Length]; payload[0] = 3; payload[1] = 0xe8;
+                invalid.CopyTo(payload, 2);
+                yield return new TestCaseData(payload, 1007).SetName("InvalidCloseReason" + hex);
+            }
+        }
+        [TestCaseSource(nameof(InvalidClosePayloads))]
+        public async Task InvalidClosePayloadNeverReachesCloseHandling(byte[] payload, int code)
+        {
+            using var stream = new MemoryStream(CloseWire(payload));
+            var error = await Assert.ThrowsAsync<WebSocketException>(async () => await Read(stream, false));
+            Assert.That((int)error!.Code, Is.EqualTo(code));
+        }
+        [TestCase(1000)]
+        [TestCase(1001)]
+        [TestCase(1002)]
+        [TestCase(1003)]
+        [TestCase(1007)]
+        [TestCase(1008)]
+        [TestCase(1009)]
+        [TestCase(1010)]
+        [TestCase(1011)]
+        [TestCase(1012)]
+        [TestCase(1013)]
+        [TestCase(1014)]
+        [TestCase(3000)]
+        [TestCase(3003)]
+        [TestCase(3999)]
+        [TestCase(4000)]
+        [TestCase(4999)]
+        public async Task ValidCloseCodesAndUnicodeReasonRemainReadable(int code)
+        {
+            var reason = System.Text.Encoding.UTF8.GetBytes("done 世界 \U0001F680");
+            var payload = new byte[2 + reason.Length]; payload[0] = (byte)(code >> 8); payload[1] = (byte)code;
+            reason.CopyTo(payload, 2);
+            using var stream = new MemoryStream(CloseWire(payload));
+            Assert.That(await Read(stream, false), Is.Not.Null);
+            Assert.That(stream.Position, Is.EqualTo(stream.Length));
+        }
+
         private sealed class HeaderOnlyStream : MemoryStream
         {
             internal HeaderOnlyStream(byte[] bytes) : base(bytes) { }

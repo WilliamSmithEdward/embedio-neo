@@ -602,3 +602,14 @@ HTTP/2 stream integration. Valid masked frames and interleaved control frames
 remain supported. Public APIs, callback scheduling and message-size defaults
 are unchanged. The native Microsoft WebSocket backend is unchanged. These
 changes are unreleased.
+
+Managed close frames now reject a one-byte status, forbidden/reserved codes and
+codes outside the supported 1000-4999 ranges with 1002. Incoming 1012-1014 codes
+and application/private-use 3000-4999 codes remain accepted. Close reasons must
+be valid UTF-8; invalid sequences fail with 1007. Empty close payloads remain
+valid. The registry snapshot is the [IANA WebSocket registry](https://www.iana.org/assignments/websocket)
+checked on 2026-10-08; no extension currently negotiates additional reserved
+codes. Rejection can occur before later bytes are consumed. Depending on TCP
+shutdown state, an invalid peer may observe transport closure/reset rather than
+a readable close frame. Applications must not rely on echoing malformed close
+payloads. This change does not alter application text-message callback policy.

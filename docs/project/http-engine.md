@@ -453,3 +453,26 @@ UTF-8/close checks, resource policies, fuzzing or performance work.
 The full Windows suite passed with this frame-parser change: 2,316 successes,
 five expected skips, 2,321 total. Existing hot-path allocation checks passed.
 No throughput or latency improvement is claimed by this correctness increment.
+
+### Managed close-frame validation (#190)
+
+Seventeen malformed close payload cases were accepted before correction: a
+one-byte status, forbidden/out-of-range codes and invalid UTF-8 reasons. The
+parser now rejects one-byte close lengths at the base header, checks unmasked
+status codes against RFC 6455 and the IANA registry snapshot (2026-10-08), and
+validates reasons without allocating a decoded string. Protocol violations use
+1002 and malformed UTF-8 uses 1007. Seventeen valid-code/Unicode cases retain
+1012-1014 and application/private-use ranges; the existing empty-close case passes.
+
+Five real HTTP/1.1 wire cases verify emitted status codes and healthy subsequent
+requests. The first one-byte fixture supplied unread trailing bytes and saw a
+Windows TCP reset; its corrected header-only form isolates early rejection
+without assuming TCP preserves a close reply with unread input. All 326 managed
+WebSocket/HTTP2 cases pass with both library assemblies on .NET 10.0.11. Public
+outgoing-close argument handling and application text callback policy are not
+changed by this increment. The broader #190 audit remains open.
+
+The full Windows suite passed: 2,355 successes, five expected skips, 2,360 total.
+Existing allocation checks passed. Main has since added analyzer enforcement and
+CI changes (tracked origin/main 83d0b96); reconciliation and fresh exact-head
+remote validation are required before this program can be considered complete.

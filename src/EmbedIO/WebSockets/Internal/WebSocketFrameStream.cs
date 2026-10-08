@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using EmbedIO.Internal;
 
@@ -7,6 +8,7 @@ namespace EmbedIO.WebSockets.Internal
 {
     internal class WebSocketFrameStream
     {
+        private static readonly UTF8Encoding StrictUtf8 = new(false, true);
         private readonly bool _unmask;
         private readonly Stream? _stream;
 
@@ -33,6 +35,7 @@ namespace EmbedIO.WebSockets.Internal
                 frame.Unmask();
 
             frame.Unmask();
+            if (frame.Opcode == Opcode.Close) ValidateClosePayload(frame.PayloadData.ToArray());
 
             return frame;
         }
@@ -71,12 +74,29 @@ namespace EmbedIO.WebSockets.Internal
             : !IsOpcodeData(opcode) && rsv1 == Rsv.On ? "A non data frame is compressed."
             : IsOpcodeControl(opcode) && fin == Fin.More ? "A control frame is fragmented."
             : IsOpcodeControl(opcode) && payloadLen > 125 ? "A control frame has a long payload length."
+            : opcode == 8 && payloadLen == 1 ? "A close frame cannot contain a one-byte status."
             : null;
 
             if (err != null)
                 throw new WebSocketException(CloseStatusCode.ProtocolError, err);
 
             return new WebSocketFrame(fin, rsv1, rsv2, rsv3, (Opcode)opcode, mask, payloadLen);
+        }
+
+        private static void ValidateClosePayload(byte[] payload)
+        {
+            if (payload.Length == 0) return;
+            // RFC 6455 and the IANA registry as of 2026-10-08. No negotiated
+            // extension defines another status in the reserved 1000-2999 range.
+            var code = (payload[0] << 8) | payload[1];
+            if (code < 1000 || code >= 5000 || code == 1004 || code == 1005 || code == 1006
+                || (code >= 1015 && code < 3000))
+                throw new WebSocketException(CloseStatusCode.ProtocolError, "Invalid close status on the wire.");
+            try { _ = StrictUtf8.GetCharCount(payload, 2, payload.Length - 2); }
+            catch (DecoderFallbackException error)
+            {
+                throw new WebSocketException(CloseStatusCode.InvalidData, "Close reason is not valid UTF-8.", error);
+            }
         }
 
         private async Task ReadExtendedPayloadLengthAsync(WebSocketFrame frame)

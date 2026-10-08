@@ -13,7 +13,8 @@
 
 - Reject malformed managed WebSocket frame metadata before consuming payloads,
   enforce minimal wire-length encoding, and reject lengths that cannot fit the
-  current payload representation before integer conversion (#190). See the
+  current payload representation before integer conversion. Validate incoming
+  close status codes and UTF-8 reasons before processing or echoing them (#190). See the
   [compatibility notes](docs/compatibility/migration.md#managed-websocket-framing-unreleased).
 
 - Add the owner-approved WithBasicAuthentication fluent helper with explicit scope, configure-before-registration and optional realm, preserving existing authentication behavior and manual registration (upstream #439).
