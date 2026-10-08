@@ -56,7 +56,8 @@ From the repository root, with the SDK in `global.json` and Python 3:
 python scripts/compatibility_audit.py
 ```
 
-The runner restores with `--locked-mode`, builds three separate processes from
+The runner restores with `--locked-mode`, audits each consumer's direct/transitive
+packages using the existing fail-on-any-finding dependency checker, builds three separate processes from
 `test/EmbedIO.Compatibility/Program.cs`, checks the loaded assembly targets, and
 compares their reports. The baseline dependencies are test-only, outside the
 solution and shipped package dependency groups. No production changes are made.

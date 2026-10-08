@@ -6,6 +6,7 @@ import copy
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -151,11 +152,14 @@ def main():
         if not args.compare_only:
             commands = [
                 ["dotnet", "restore", str(project), "--locked-mode"],
+                ["dotnet", "list", str(project), "package", "--no-restore", "--vulnerable", "--include-transitive", "--format", "json"],
+                [sys.executable, str(ROOT / "scripts" / "security" / "nuget_audit.py"), str(results / f"{variant}-audit.json")],
                 ["dotnet", "build", str(project), "-c", "Release", "--no-restore", "-p:UseSharedCompilation=false"],
                 ["dotnet", str(project.parent / "bin" / "Release" / "net10.0" / (variant + ".dll")), str(results / (variant + ".json"))],
             ]
-            for stage, command in zip(("restore", "build", "run"), commands):
-                with (results / f"{variant}-{stage}.log").open("w", encoding="utf-8") as log:
+            for stage, command in zip(("restore", "audit", "audit-check", "build", "run"), commands):
+                extension = "json" if stage == "audit" else "log"
+                with (results / f"{variant}-{stage}.{extension}").open("w", encoding="utf-8") as log:
                     subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=180)
         reports[variant] = read(results / (variant + ".json"))
     expected_frameworks = {"Upstream": ".NETStandard,Version=v2.0", "Neo": ".NETCoreApp,Version=v10.0", "NeoStandard": ".NETStandard,Version=v2.0"}
