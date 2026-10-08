@@ -1553,3 +1553,32 @@ Transport investigation also confirmed that native QUIC stream priority is a
 This program retains .NET 10; it must not describe a managed write-admission policy
 as control over native QUIC packet scheduling. A scheduler must allow a flow-blocked
 stream's asynchronous write to remain pending while healthy streams progress.
+
+
+## Windows accept completion ownership during shutdown
+
+CI 37818002036 failed the managed WebSocket upgrade cancellation stress on
+Windows; an unchanged local repeat reproduced it. Temporary connection tracing
+showed the stuck peer had never become an HttpConnection. Two deterministic
+real-socket cases then showed that failed accept completions discarded their
+AcceptSocket without disposal; the successful completion control already passed.
+Disposing only that property was insufficient: a later stress run still failed.
+
+The Windows runtime can clear AcceptSocket when completion's accept-context
+update races listener disposal ([runtime completion source](https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/System.Net.Sockets/src/System/Net/Sockets/SocketAsyncEventArgs.cs#L833-L855)).
+The endpoint now supplies and retains its Windows accept socket independently
+until completion. Both inline and asynchronous completions transfer successful
+ownership or dispose failed sockets, including when the runtime clears the
+property. Terminal rearm failure also releases its event arguments. Unix keeps
+its existing socket allocation path. No private runtime access is used.
+
+Five real-socket cases cover aborted/reset completions with and without the
+runtime-cleared property and a successful completion after endpoint stop. The
+36-case shutdown/lifetime/endpoint selection passed on Windows and Linux for
+both the modern and actual netstandard assets (hosted on .NET 10). One hundred
+unchanged cancellation stress repeats passed: 12,800 client connections per
+listener mode. Both assets built without warnings/errors; formatting, analyzer
+guards, the pinned YARA scan and existing allocation budgets passed. Full Windows
+validation is running; fresh exact-head CI remains required. Temporary production
+tracing has been removed. This checkpoint makes no new protocol-support or
+performance claim; the original failing CI remains recorded.

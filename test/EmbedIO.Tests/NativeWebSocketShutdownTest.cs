@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections;
+using System.Linq;
+using System.Reflection;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -100,6 +103,49 @@ namespace EmbedIO.Tests
                     await running.WaitAsync(timeout.Token);
                 }
             }
+        }
+
+        [TestCase(SocketError.OperationAborted, false)]
+        [TestCase(SocketError.OperationAborted, true)]
+        [TestCase(SocketError.ConnectionReset, false)]
+        [TestCase(SocketError.ConnectionReset, true)]
+        [TestCase(SocketError.Success, false)]
+        public async Task StoppedEndpointDisposesSocketFromAcceptCompletion(SocketError result, bool runtimeClearedSocket)
+        {
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
+            using var listener = new Net.HttpListener();
+            listener.AddPrefix(url);
+            listener.Start();
+            var registrations = (IDictionary)(typeof(Net.EndPointManager).GetField("Registrations", BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null)
+                ?? throw new AssertionException("Missing endpoint registrations."));
+            var prefixes = (IDictionary)(registrations[listener] ?? throw new AssertionException("Missing listener registration."));
+            var endpoints = (IEnumerable)(prefixes[url] ?? throw new AssertionException("Missing endpoint."));
+            var endpoint = endpoints.Cast<object>().Single();
+            listener.Stop();
+
+            // Inject a completed accept that still owns a real connected socket.
+            // Windows can report an aborted completion after TCP has connected.
+            using var peerListener = new TcpListener(IPAddress.Loopback, 0);
+            peerListener.Start();
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var client = new TcpClient();
+            var accepting = peerListener.AcceptSocketAsync(deadline.Token);
+            await client.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)peerListener.LocalEndpoint).Port, deadline.Token);
+            using var accepted = await accepting;
+            var argsType = endpoint.GetType().GetNestedType("AcceptEventArgs", BindingFlags.NonPublic)
+                ?? throw new AssertionException("Missing owned accept arguments.");
+            using var args = (SocketAsyncEventArgs)(Activator.CreateInstance(argsType, true)
+                ?? throw new AssertionException("Cannot create accept arguments."));
+            args.UserToken = endpoint;
+            args.AcceptSocket = runtimeClearedSocket ? null : accepted;
+            args.SocketError = result;
+            (argsType.GetField("PendingSocket", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new AssertionException("Missing pending accept socket.")).SetValue(args, accepted);
+            var complete = endpoint.GetType().GetMethod("ProcessAccept", BindingFlags.NonPublic | BindingFlags.Static)
+                ?? throw new AssertionException("Missing accept completion handler.");
+            complete.Invoke(null, new object[] { args });
+            Assert.That(accepted.SafeHandle.IsClosed, Is.True, "Every completed accept socket must be released when its endpoint is stopped.");
+            Assert.That(await client.GetStream().ReadAsync(new byte[1], deadline.Token), Is.Zero);
         }
 
         private static async Task FinishUpgrade(NetworkStream stream, Task release, CancellationToken timeout)
