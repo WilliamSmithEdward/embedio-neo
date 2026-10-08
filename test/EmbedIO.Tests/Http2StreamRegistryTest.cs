@@ -175,7 +175,8 @@ namespace EmbedIO.Tests
             Assert.That(registry.Frame(240, 101), Is.Null);
             Assert.That(registry.Count, Is.Zero);
             Assert.That(registry.Frame(1, 1), Is.Not.Null);
-            Error(() => registry.Frame(2, 3, 0, new byte[] { 0, 0, 0, 3, 0 }), 1, 3);
+            Assert.That(registry.Frame(2, 3, 0, new byte[] { 0, 0, 0, 3, 0 }), Is.Null);
+            Assert.That(registry.Count, Is.EqualTo(1));
         }
 
         [Test]

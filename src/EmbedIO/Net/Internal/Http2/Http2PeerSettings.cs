@@ -6,6 +6,8 @@ namespace EmbedIO.Net.Internal.Http2
     // caller; callbacks apply stream-window and encoder changes in wire order.
     internal sealed class Http2PeerSettings
     {
+        private bool _receivedInitial;
+        public bool NoRfc7540Priorities { get; private set; }
         public uint HeaderTableSize { get; private set; } = 4096;
         public bool EnablePush { get; private set; } = true;
         public uint MaximumConcurrentStreams { get; private set; } = uint.MaxValue;
@@ -29,6 +31,8 @@ namespace EmbedIO.Net.Internal.Http2
                 if (id == 2 && value > 1) throw new Http2ProtocolException(1, "Invalid ENABLE_PUSH.");
                 if (id == 4 && value > int.MaxValue) throw new Http2ProtocolException(3, "Invalid initial flow-control window.");
                 if (id == 5 && (value < 16384 || value > 16777215)) throw new Http2ProtocolException(1, "Invalid maximum frame size.");
+                if (id == 9 && (value > 1 || (_receivedInitial && (value == 1) != NoRfc7540Priorities)))
+                    throw new Http2ProtocolException(1, "Invalid or changed NO_RFC7540_PRIORITIES.");
                 if (id == 8)
                 {
                     if (value > 1 || (connectEnabled && value == 0)) throw new Http2ProtocolException(1, "Invalid CONNECT protocol setting.");
@@ -51,9 +55,11 @@ namespace EmbedIO.Net.Internal.Http2
                     case 5: MaximumFrameSize = (int)value; break;
                     case 6: MaximumHeaderListSize = value; break;
                     case 8: EnableConnectProtocol = value != 0; break;
+                    case 9: NoRfc7540Priorities = value != 0; break;
                         // Unknown settings are explicitly ignored by HTTP/2.
                 }
             }
+            _receivedInitial = true;
         }
 
         internal static uint ReadUInt32(byte[] bytes, int offset) => ((uint)bytes[offset] << 24)

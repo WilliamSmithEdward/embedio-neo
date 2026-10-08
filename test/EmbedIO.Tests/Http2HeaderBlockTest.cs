@@ -62,11 +62,11 @@ namespace EmbedIO.Tests
         }
 
         [Test]
-        public void RejectedSelfDependencyStillUpdatesCompressionStateForOtherStreams()
+        public void IgnoredSelfDependencyStillUpdatesCompressionStateForOtherStreams()
         {
             using var blocks = new Blocks();
             var first = (blocks.Process(1, 36, 1, Convert.FromHexString("80000001104001610162")) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
-            Assert.That(Property<uint>(first, "StreamError"), Is.EqualTo(1));
+            Assert.That(Property<uint>(first, "StreamError"), Is.Zero);
             var second = (blocks.Process(1, 4, 3, new byte[] { 0xbe }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             Assert.That(Property<uint>(second, "StreamError"), Is.Zero);
             var fields = Property<Array>(second, "Fields");

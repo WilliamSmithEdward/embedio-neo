@@ -46,6 +46,36 @@ namespace EmbedIO.Tests
             }
             throw new IOException("Expected frame did not arrive.");
         }
+        [TestCase(0u, 1u)]
+        [TestCase(1u, 0u)]
+        [TestCase(1u, 2u)]
+        [TestCase(0u, uint.MaxValue)]
+        public async Task ChangedOrInvalidPrioritySettingSendsProtocolGoaway(uint initial, uint later)
+        {
+            var start = new byte[] { 0, 9, 0, 0, 0, (byte)initial };
+            await WithRawServer(start, async (wire, token) =>
+            {
+                var value = new byte[] { 0, 9, (byte)(later >> 24), (byte)(later >> 16), (byte)(later >> 8), (byte)later };
+                await SendWire(wire, 4, 0, 0, value, token);
+                Assert.That((await Until(wire, 7, 0, token)).Payload.Skip(4).Take(4), Is.EqualTo(new byte[] { 0, 0, 0, 1 }));
+            }, expectedConnectionError: 1);
+        }
+
+        [TestCase(0)]
+        [TestCase(1)]
+        public async Task DeprecatedPriorityDependenciesDoNotResetRequests(int peerSetting)
+        {
+            await WithRawServer(new byte[] { 0, 9, 0, 0, 0, (byte)peerSetting }, async (wire, token) =>
+            {
+                var selfDependency = new byte[] { 128, 0, 0, 1, 255 };
+                await SendWire(wire, 2, 0, 1, selfDependency, token);
+                await SendWire(wire, 1, 37, 1, selfDependency.Concat(RequestBlock()).ToArray(), token);
+                Assert.That((await Until(wire, 0, 1, token)).Payload, Is.EqualTo(new byte[] { 1, 2, 3 }));
+                await SendWire(wire, 1, 5, 3, RequestBlock(), token);
+                Assert.That((await Until(wire, 0, 3, token)).Payload, Is.EqualTo(new byte[] { 1, 2, 3 }));
+            });
+        }
+
         private static byte[] PriorityPayload(int target, string field)
         {
             var text = Encoding.ASCII.GetBytes(field); var payload = new byte[4 + text.Length];

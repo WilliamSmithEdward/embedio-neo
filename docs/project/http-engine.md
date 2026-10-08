@@ -1626,3 +1626,38 @@ claims. The rejected implementations and raw measurements are retained locally.
 This schedules flow-credit admission, not the final transport write queue or
 QUIC packets. HTTP/2 legacy-priority negotiation, HTTP/3 output scheduling,
 policy/fairness validation and mixed-workload end-to-end performance remain open.
+
+
+## HTTP/2 extensible priority settings
+
+The initial server SETTINGS now advertises NO_RFC7540_PRIORITIES=1 alongside
+stream/header bounds and extended CONNECT. The peer parser validates Boolean
+values before applying any settings and freezes the initial effective value.
+Omission means zero; equal repeats remain valid. Initial duplicates apply in
+wire order, while a later value change fails the connection with PROTOCOL_ERROR.
+Deprecated PRIORITY and HEADERS dependency/weight semantics are ignored, including
+self-dependency, while their framing checks and HPACK synchronization remain.
+This follows [RFC 9218 section 2.1](https://www.rfc-editor.org/rfc/rfc9218.html#section-2.1);
+[the migration guide](../compatibility/migration.md#http2-extensible-priority-settings-unreleased)
+records the change from the development engine's previous unknown-setting behavior.
+
+Fifteen cases were added, including independent TCP startup/settings and GOAWAY
+checks. The pre-change focused selection failed 15 cases; the final expanded
+135-case selection passed on Windows and Linux with both target assets hosted
+on .NET 10. The full Windows suite passed 2,965 cases with five expected skips
+(2,970 total; h2-priority-settings-full log). Both targets build without warnings
+or errors; formatting and analyzer guards pass. Exact-head CI remains required.
+
+The preceding dc7daab malware run flagged a casing heuristic in the performance
+README. Exact committed bytes, the complete rule and command examples were
+reviewed; the finding is restricted to a canonical product name and Markdown
+language tag. Full-bundle scanning reproduces it, while the isolated rule does
+not. The source/rules were not rewritten to avoid detection. The narrow review
+is in `.github/security/performance-readme-yara-review.md`; scanner failures,
+other paths/rules and stale acceptances remain fatal. No corresponding GitHub
+code-scanning alert exists to dismiss, so the owner's matching-alert dismissal
+requirement remains a pre-merge limitation. A fresh complete scan must pass.
+
+Transport-queue scheduling, HTTP/3 write admission/native transport capabilities,
+configuration, frozen standards inventory and end-to-end performance/conformance
+work remain required; this checkpoint does not complete the engine program.

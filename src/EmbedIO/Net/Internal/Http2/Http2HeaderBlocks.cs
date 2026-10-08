@@ -24,7 +24,6 @@ namespace EmbedIO.Net.Internal.Http2
         private int _streamId;
         private int _fragments;
         private bool _endStream;
-        private uint _streamError;
         private bool _failed;
         private bool _disposed;
 
@@ -59,12 +58,10 @@ namespace EmbedIO.Net.Internal.Http2
                 {
                     _streamId = frame.StreamId;
                     _endStream = (frame.Flags & 1) != 0;
-                    _streamError = 0;
                     if ((frame.Flags & 8) != 0) { offset++; count -= 1 + frame.Payload[0]; }
                     if ((frame.Flags & 32) != 0)
                     {
-                        var dependency = Http2PeerSettings.ReadUInt32(frame.Payload, offset) & 0x7fffffff;
-                        if (dependency == frame.StreamId) _streamError = 1;
+                        // Skip deprecated dependency/weight fields, preserving HPACK bytes.
                         offset += 5;
                         count -= 5;
                     }
@@ -93,7 +90,7 @@ namespace EmbedIO.Net.Internal.Http2
                 try { fields = _decoder.Decode(encoded); }
                 catch (Exception error) when (error is InvalidDataException || error is EndOfStreamException)
                 { throw new Http2ProtocolException(9, "Invalid HPACK header block."); }
-                var block = new Http2HeaderBlock(_streamId, _endStream, fields, _streamError);
+                var block = new Http2HeaderBlock(_streamId, _endStream, fields, 0);
                 Reset();
                 return block;
             }

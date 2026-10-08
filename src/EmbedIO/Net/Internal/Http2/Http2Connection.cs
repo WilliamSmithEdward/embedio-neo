@@ -44,8 +44,8 @@ namespace EmbedIO.Net.Internal.Http2
             var connection = new Http2Connection(stream);
             try
             {
-                // Bound incoming streams/headers and advertise RFC 8441 tunnels.
-                var settings = new byte[] { 0, 3, 0, 0, 0, 128, 0, 6, 0, 0, 128, 0, 0, 8, 0, 0, 0, 1 };
+                // Bound incoming streams/headers, advertise RFC 8441 tunnels and RFC 9218 priorities.
+                var settings = new byte[] { 0, 3, 0, 0, 0, 128, 0, 6, 0, 0, 128, 0, 0, 8, 0, 0, 0, 1, 0, 9, 0, 0, 0, 1 };
                 await connection.SendAsync(new[] { new Http2Frame(4, 0, 0, settings) }, token).ConfigureAwait(false);
                 var first = await connection.ReadFrameAsync(token).ConfigureAwait(false);
                 if (first == null || first.Type != 4 || (first.Flags & 1) != 0)

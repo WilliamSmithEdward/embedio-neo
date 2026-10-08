@@ -83,7 +83,7 @@ namespace EmbedIO.Tests
                 var settings = await Receive(client, token);
                 Assert.That(settings.Type, Is.EqualTo(4));
                 Assert.That(settings.Flags, Is.Zero);
-                Assert.That(settings.Payload, Is.EqualTo(Settings((3, 128), (6, 32768), (8, 1))));
+                Assert.That(settings.Payload, Is.EqualTo(Settings((3, 128), (6, 32768), (8, 1), (9, 1))));
                 var ack = await Receive(client, token);
                 Assert.That((ack.Type, ack.Flags, ack.Payload.Length), Is.EqualTo(((byte)4, (byte)1, 0)));
                 var peer = Property<object>(connection, "Peer");
@@ -159,12 +159,66 @@ namespace EmbedIO.Tests
         [TestCase(5, 16383L, 1)]
         [TestCase(5, 16777216L, 1)]
         [TestCase(8, 2L, 1)]
+        [TestCase(9, 2L, 1)]
+        [TestCase(9, 4294967295L, 1)]
         public void InvalidSettingsRetainErrorCode(int id, long value, int code)
         {
             var peer = (Activator.CreateInstance(PeerType, true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             var apply = (PeerType.GetMethod("Apply", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CreateDelegate<Action<byte[], Action<int>, Action<uint>>>(peer);
             var error = Assert.Catch<IOException>(() => apply(Settings((id, (uint)value)), _ => { }, _ => { }));
             Assert.That(Property<uint>((error ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")), "ErrorCode"), Is.EqualTo(code));
+        }
+
+        [TestCase(0u)]
+        [TestCase(1u)]
+        public void PrioritySettingIsImmutableAfterInitialSettings(uint initial)
+        {
+            var peer = Activator.CreateInstance(PeerType, true) ?? throw new AssertionException("Missing peer settings.");
+            var apply = (PeerType.GetMethod("Apply", Flags) ?? throw new AssertionException("Missing settings parser."))
+                .CreateDelegate<Action<byte[], Action<int>, Action<uint>>>(peer);
+            apply(Settings((9, initial)), _ => { }, _ => { });
+            apply(Array.Empty<byte>(), _ => { }, _ => { });
+            apply(Settings((9, initial)), _ => { }, _ => { });
+            Assert.That(Property<bool>(peer, "NoRfc7540Priorities"), Is.EqualTo(initial == 1));
+            var windows = new List<int>();
+            var error = Assert.Catch<IOException>(() => apply(Settings((4, 0), (9, 1 - initial)), windows.Add, _ => { }))
+                ?? throw new AssertionException("Expected changed priority setting error.");
+            Assert.That(Property<uint>(error, "ErrorCode"), Is.EqualTo(1u));
+            Assert.That(windows, Is.Empty);
+            Assert.That(Property<int>(peer, "InitialWindowSize"), Is.EqualTo(65535));
+        }
+
+        [Test]
+        public void OmittedInitialPrioritySettingKeepsItsDefault()
+        {
+            var peer = Activator.CreateInstance(PeerType, true) ?? throw new AssertionException("Missing peer settings.");
+            var apply = (PeerType.GetMethod("Apply", Flags) ?? throw new AssertionException("Missing settings parser."))
+                .CreateDelegate<Action<byte[], Action<int>, Action<uint>>>(peer);
+            apply(Array.Empty<byte>(), _ => { }, _ => { });
+            apply(Settings((9, 0)), _ => { }, _ => { });
+            Assert.Catch<IOException>(() => apply(Settings((9, 1)), _ => { }, _ => { }));
+            Assert.That(Property<bool>(peer, "NoRfc7540Priorities"), Is.False);
+        }
+
+        [TestCase(0u, 1u)]
+        [TestCase(1u, 0u)]
+        public void InitialPriorityDuplicatesApplyInWireOrder(uint first, uint last)
+        {
+            var peer = Activator.CreateInstance(PeerType, true) ?? throw new AssertionException("Missing peer settings.");
+            var apply = (PeerType.GetMethod("Apply", Flags) ?? throw new AssertionException("Missing settings parser."))
+                .CreateDelegate<Action<byte[], Action<int>, Action<uint>>>(peer);
+            apply(Settings((9, first), (9, last)), _ => { }, _ => { });
+            Assert.That(Property<bool>(peer, "NoRfc7540Priorities"), Is.EqualTo(last == 1));
+            apply(Settings((9, last)), _ => { }, _ => { });
+        }
+
+        [TestCase(2u)]
+        [TestCase(uint.MaxValue)]
+        public async Task InvalidInitialPrioritySettingFailsTcpStartup(uint value)
+        {
+            var error = await Assert.CatchAsync<IOException>(() => WithConnection(Frame(4, 0, 0, Settings((9, value))), false, (_, _, _) => Task.CompletedTask))
+                ?? throw new AssertionException("Expected initial SETTINGS error.");
+            Assert.That(Property<uint>(error, "ErrorCode"), Is.EqualTo(1u));
         }
 
         [Test]

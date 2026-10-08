@@ -718,3 +718,19 @@ change Windows behavior or IgnoreWriteExceptions. Unrecognized runtime shapes
 retain their native behavior; use the managed listener to avoid this runtime
 compatibility shim. It does not establish a general guarantee for cancellation
 while a native upgrade itself is still in progress.
+
+
+## HTTP/2 extensible priority settings (unreleased)
+
+The new engine advertises RFC 9218 priority support by sending
+SETTINGS_NO_RFC7540_PRIORITIES=1 in its initial SETTINGS frame. Peer values must
+be 0 or 1; later changes from the initial effective value cause a connection
+PROTOCOL_ERROR. Omission initially means 0. Repeated equal values are accepted;
+duplicates in the initial frame use their last value, in wire order. This setting
+was previously treated as unknown in the development engine.
+
+Deprecated PRIORITY dependency/weight values and equivalent HEADERS fields are
+ignored, including self-dependency values. Their frame shape, size and stream-ID
+requirements remain checked, and HEADERS compression state remains synchronized.
+Use the Priority header or PRIORITY_UPDATE for extensible urgency/incremental
+signals. These are scheduling hints, not guaranteed response completion order.

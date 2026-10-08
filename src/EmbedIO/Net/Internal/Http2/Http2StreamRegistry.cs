@@ -55,12 +55,9 @@ namespace EmbedIO.Net.Internal.Http2
                 frame.ValidateShape();
                 if (frame.Type == 5) throw new Http2ProtocolException(1, "Clients cannot send PUSH_PROMISE.");
                 if (frame.Type == 16) return UpdatePriority(frame);
-                if (frame.Type == 2)
-                {
-                    if ((Http2PeerSettings.ReadUInt32(frame.Payload, 0) & 0x7fffffff) == frame.StreamId)
-                        throw new Http2ProtocolException(1, "Stream depends on itself.", frame.StreamId);
-                    return null;
-                }
+                // The server advertises NO_RFC7540_PRIORITIES. Frame shape still
+                // matters, but deprecated dependency/weight semantics are ignored.
+                if (frame.Type == 2) return null;
                 if (frame.Type == 1 || frame.Type == 9)
                 {
                     var block = frame.HeaderBlock;
