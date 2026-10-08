@@ -219,3 +219,11 @@ malformed shapes, stream/connection error scope and concurrent output. Eighty-ei
 compression/framing cases pass in total. Connection preface, SETTINGS handling,
 continuation assembly, stream state/flow control and application dispatch are still
 pending; these isolated components do not yet provide HTTP/2 service.
+
+Server connection startup now exchanges the preface and initial SETTINGS over a
+real TCP stream, acknowledges settings/PING and records GOAWAY. Fourteen focused
+cases pass, including fragmented startup, invalid initial frames, settings bounds,
+ordered window adjustments and capability withdrawal. The preceding framing
+checkpoint passed the full Windows 2,122-case suite (2,117 successes/five skips).
+Header-block assembly, stream state/flow control and application dispatch remain
+in development; no HTTP/2 endpoint is advertised yet.

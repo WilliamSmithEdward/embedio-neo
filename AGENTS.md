@@ -335,3 +335,10 @@ These rules are the same in every WilliamSmithEdward repository.
   Initial fixture compile/assertion errors retained and corrected; no weakened checks.
   Discovery floor2122. Next: connection preface, SETTINGS/ACK, continuation assembly,
   per-stream lifecycle/flow control and actual WebServer dispatch. No HTTP2 claim yet.
+- Connection-start checkpoint: prior framing commitdc1d138 full Windows suite2122
+  passed2117/five skips. Added14 settings/startup cases pass, including actual TCP
+  fragmented preface, initial SETTINGS/ACK, PING and GOAWAY. Both targets build.
+  Peer settings validate before mutation and apply duplicates/window deltas in wire
+  order. Server does not advertise extended CONNECT before implementation. Combined
+  discovery floor2136. Next header-block assembly plus stream state/flow control and
+  IHttpContext dispatch; startup alone is not HTTP2 application service.
