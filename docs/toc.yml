@@ -180,6 +180,9 @@
     - name: Streaming write errors
       href: user-reports/streaming-write-errors.md
 
+    - name: Fluent Basic authentication
+      href: user-reports/fluent-basic-authentication.md
+
 - name: Architecture
   items:
     - name: Dependency injection
