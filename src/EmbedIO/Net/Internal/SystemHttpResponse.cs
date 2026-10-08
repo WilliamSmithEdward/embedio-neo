@@ -1,4 +1,6 @@
 ﻿using System;
+using EmbedIO.Internal;
+using EmbedIO.Utilities;
 using System.IO;
 using System.Globalization;
 using System.Linq;
@@ -165,7 +167,8 @@ namespace EmbedIO.Net.Internal
                 _response.ContentLength64 = length;
 
             // Leave ordinary native serialization intact when no protected cookie needs correction.
-            if (!Cookies.Any(cookie => cookie.HttpOnly || cookie.Secure))
+            if (Headers.GetValues(HttpHeaderNames.SetCookie) == null
+                && !Cookies.Any(cookie => cookie.HttpOnly || cookie.Secure || CookieSameSiteStore.Get(this, cookie).HasValue))
             {
                 _headersPrepared = true;
                 return;
@@ -190,8 +193,12 @@ namespace EmbedIO.Net.Internal
                     value.Append("; Domain=").Append(cookie.Domain);
                 if (cookie.Expires != DateTime.MinValue)
                 {
-                    var seconds = Math.Max(0, (int)(cookie.Expires.ToUniversalTime() - DateTime.UtcNow).TotalSeconds);
-                    value.Append("; Max-Age=").Append(seconds.ToString(CultureInfo.InvariantCulture));
+                    var seconds = Math.Max(0, (long)(cookie.Expires.ToUniversalTime() - DateTime.UtcNow).TotalSeconds);
+                    // Older CookieContainer parsers reject ages beyond Int32; preserve the date instead.
+                    if (seconds > int.MaxValue)
+                        value.Append("; Expires=").Append(HttpDate.Format(cookie.Expires));
+                    else
+                        value.Append("; Max-Age=").Append(seconds.ToString(CultureInfo.InvariantCulture));
                 }
                 if (explicitPath && cookie.Path.Length > 0)
                     value.Append("; Path=").Append(cookie.Path);
@@ -203,6 +210,7 @@ namespace EmbedIO.Net.Internal
                     value.Append("; Secure");
                 if (cookie.HttpOnly)
                     value.Append("; HttpOnly");
+                CookieSameSiteStore.Append(value, this, cookie);
                 var header = cookie.Port.Length > 0 || cookie.ToString().EndsWith("; $Port", StringComparison.Ordinal)
                     ? "Set-Cookie2" : "Set-Cookie";
                 _response.Headers.Add(header, value.ToString());

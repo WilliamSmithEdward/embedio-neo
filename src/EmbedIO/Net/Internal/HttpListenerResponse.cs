@@ -1,3 +1,4 @@
+using EmbedIO.Internal;
 ﻿using System;
 using System.Globalization;
 using System.IO;
@@ -268,7 +269,7 @@ namespace EmbedIO.Net.Internal
             return WriteHeaders();
         }
 
-        private static void AppendSetCookieHeader(StringBuilder sb, Cookie cookie)
+        private void AppendSetCookieHeader(StringBuilder sb, Cookie cookie)
         {
             if (cookie.Name.Length == 0)
             {
@@ -276,11 +277,11 @@ namespace EmbedIO.Net.Internal
             }
 
             _ = sb.Append("Set-Cookie: ");
-            AppendCookieHeaderValue(sb, cookie);
+            AppendCookieHeaderValue(sb, cookie, this);
             _ = sb.Append("\r\n");
         }
 
-        internal static void AppendCookieHeaderValue(StringBuilder sb, Cookie cookie)
+        internal static void AppendCookieHeaderValue(StringBuilder sb, Cookie cookie, IHttpResponse? response = null)
         {
             if (cookie.Version > 0)
             {
@@ -324,6 +325,8 @@ namespace EmbedIO.Net.Internal
                 _ = sb.Append("; HttpOnly");
             }
 
+            if (response != null) CookieSameSiteStore.Append(sb, response, cookie);
+
         }
 
         private static string QuotedString(Cookie cookie, string value)
@@ -352,7 +355,7 @@ namespace EmbedIO.Net.Internal
 
             foreach (var key in Headers.AllKeys)
             {
-                if (key == "Set-Cookie") continue;
+                if (string.Equals(key, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase)) continue;
                 _ = sb
                     .Append(key)
                     .Append(": ")
@@ -368,12 +371,11 @@ namespace EmbedIO.Net.Internal
                 }
             }
 
-            if (Headers.ContainsKey(HttpHeaderNames.SetCookie))
+            if (Headers.GetValues(HttpHeaderNames.SetCookie) is { } rawCookieValues)
             {
-                foreach (var cookie in CookieList.Parse(Headers[HttpHeaderNames.SetCookie]))
-                {
-                    AppendSetCookieHeader(sb, cookie);
-                }
+                // Set-Cookie fields are independent; preserve attributes not represented by Cookie.
+                foreach (var value in rawCookieValues)
+                    sb.Append("Set-Cookie: ").Append(value).Append("\r\n");
             }
 
             return sb.Append("\r\n").ToString();

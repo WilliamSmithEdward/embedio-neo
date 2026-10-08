@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Net;
+using EmbedIO.Internal;
+using EmbedIO.Net.Internal;
 using EmbedIO.Utilities;
 
 namespace EmbedIO
@@ -8,6 +11,27 @@ namespace EmbedIO
     /// </summary>
     public static class HttpResponseExtensions
     {
+        /// <summary>Sets a cookie with an explicit SameSite policy on a built-in listener response.</summary>
+        /// <param name="this">The response.</param>
+        /// <param name="cookie">The cookie to set.</param>
+        /// <param name="sameSite">The explicit policy; None requires Secure.</param>
+        /// <remarks>Omit this overload to retain existing cookie behavior. Configure before headers commit.</remarks>
+        /// <exception cref="ArgumentNullException">The response or cookie is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The policy is not defined.</exception>
+        /// <exception cref="ArgumentException">None is selected without Secure, or existing cookie validation fails.</exception>
+        /// <exception cref="NotSupportedException">The response uses a custom cookie serializer.</exception>
+        public static void SetCookie(this IHttpResponse @this, Cookie cookie, CookieSameSiteMode sameSite)
+        {
+            if (@this == null) throw new ArgumentNullException(nameof(@this));
+            if (cookie == null) throw new ArgumentNullException(nameof(cookie));
+            CookieSameSiteStore.ValidateMode(sameSite, nameof(sameSite));
+            CookieSameSiteStore.ValidateCookie(cookie, sameSite);
+            if (@this is not EmbedIO.Net.Internal.HttpListenerResponse && @this is not SystemHttpResponse)
+                throw new NotSupportedException("SameSite cookie metadata requires a built-in listener response.");
+            @this.SetCookie(cookie);
+            CookieSameSiteStore.Attach(@this, cookie, sameSite);
+        }
+
         /// <summary>
         /// Sets the necessary headers to disable caching of a response on the client side.
         /// </summary>

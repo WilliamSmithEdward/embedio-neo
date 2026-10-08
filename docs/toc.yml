@@ -171,6 +171,9 @@
     - name: Malformed typed route parameters
       href: user-reports/typed-route-validation.md
 
+    - name: SameSite cookies
+      href: user-reports/samesite-cookies.md
+
 - name: Architecture
   items:
     - name: Dependency injection
