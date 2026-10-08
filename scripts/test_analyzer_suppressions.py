@@ -10,17 +10,22 @@ class SuppressionGuardTests(unittest.TestCase):
             '#pragma warning disable CS8602',
             '#pragma warning restore CS8602',
             '[SuppressMessage("Design", "CA1001")]',
+            '[UnconditionalSuppressMessage("Trimming", "IL2026")]',
             '#nullable disable',
             'dotnet_diagnostic.CA1031.severity = none',
             'dotnet_diagnostic.CA1031.severity = silent',
             '<NoWarn>CS8602</NoWarn>',
             '<WarningsNotAsErrors>CS8602</WarningsNotAsErrors>',
+            'dotnet build -p:NoWarn=CS8602',
+            'csc /nowarn:CS8602',
             '<EnableNETAnalyzers>false</EnableNETAnalyzers>',
             'dotnet build -p:RunAnalyzers=false',
+            '<RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>',
             '<TreatWarningsAsErrors>false</TreatWarningsAsErrors>',
             '<WarningLevel>0</WarningLevel>',
             '<Nullable>disable</Nullable>',
             '<AnalysisMode>None</AnalysisMode>',
+            '<AnalysisLevel>none</AnalysisLevel>',
         ):
             with self.subTest(source=source):
                 self.assertTrue(violations(source))

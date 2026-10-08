@@ -10,14 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_SUFFIXES = {".cs", ".csproj", ".props", ".targets", ".yml", ".yaml", ".ps1"}
 PATTERNS = (
     re.compile(r"^\s*#pragma\s+warning\s+(?:disable|restore)\b", re.IGNORECASE),
-    re.compile(r"\b(?:Global)?SuppressMessage(?:Attribute)?\s*\("),
+    re.compile(r"\b(?:(?:Global|Unconditional)?SuppressMessage)(?:Attribute)?\s*\("),
     re.compile(r"^\s*#nullable\s+disable\b", re.IGNORECASE),
     re.compile(r"\.severity\s*=\s*(?:none|silent)\b", re.IGNORECASE),
     re.compile(r"<(?:NoWarn|WarningsNotAsErrors)\b", re.IGNORECASE),
-    re.compile(r"(?:RunAnalyzers(?:DuringBuild)?|EnableNETAnalyzers|EnforceCodeStyleInBuild|TreatWarningsAsErrors)\s*(?:=|>)\s*(?:[\"']\s*)?false\b", re.IGNORECASE),
+    re.compile(r"\b(?:NoWarn|WarningsNotAsErrors)\s*=|[/\-]nowarn\s*:", re.IGNORECASE),
+    re.compile(r"(?:RunAnalyzers(?:DuringBuild|DuringLiveAnalysis)?|EnableNETAnalyzers|EnforceCodeStyleInBuild|TreatWarningsAsErrors)\s*(?:=|>)\s*(?:[\"']\s*)?false\b", re.IGNORECASE),
     re.compile(r"<WarningLevel>\s*0\s*</WarningLevel>", re.IGNORECASE),
     re.compile(r"<Nullable>\s*disable\s*</Nullable>", re.IGNORECASE),
-    re.compile(r"<AnalysisMode>\s*(?:none|disabled)\s*</AnalysisMode>", re.IGNORECASE),
+    re.compile(r"(?:AnalysisMode|AnalysisLevel)\s*(?:=|>)\s*(?:none|disabled)\b", re.IGNORECASE),
 )
 
 # Mask literals/comments before recognizing a postfix nullable-suppression token.
