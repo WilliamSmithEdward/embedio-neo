@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Retain URL-prefix configuration and document endpoint binding, path routing and certificate ownership, with real listener compatibility coverage (upstream #464).
+
 - Add owner-approved opt-in ILoggerFactory diagnostics forwarding in the optional DI package, with registration disposal and failure/recursion counters. Core APIs, defaults and dependency groups remain unchanged (upstream #475).
 
 - Add opt-in SameSite controls for application and local session cookies, with existing defaults retained. Preserve independent raw cookie attributes and WebSocket response cookies, including mixed native typed/raw headers and long-lived expiration (upstream #479).
