@@ -35,7 +35,7 @@ namespace EmbedIO.WebSockets.Internal
         private bool _sendGatesDisposed;
 
         private volatile WebSocketState _readyState;
-        private AutoResetEvent? _exitReceiving;
+        private TaskCompletionSource<bool>? _exitReceiving;
         private FragmentBuffer? _fragmentsBuffer;
         private bool _inMessage;
         private EventHandler<MessageEventArgs>? _onMessage;
@@ -356,15 +356,13 @@ namespace EmbedIO.WebSockets.Internal
             var exitReceiving = _exitReceiving;
             if (receive && sent && exitReceiving != null)
             {
-                if (cancellationToken.CanBeCanceled)
+                using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, CancellationToken.None))
                 {
-                    _ = WaitHandle.WaitAny(new WaitHandle[] { exitReceiving, cancellationToken.WaitHandle }, _waitTime);
-                    cancellationToken.ThrowIfCancellationRequested();
+                    var timeout = Task.Delay(_waitTime, deadline.Token);
+                    try { await Task.WhenAny(exitReceiving.Task, timeout).ConfigureAwait(false); }
+                    finally { deadline.Cancel(); }
                 }
-                else
-                {
-                    _ = exitReceiving.WaitOne(_waitTime);
-                }
+                cancellationToken.ThrowIfCancellationRequested();
             }
         }
 
@@ -520,7 +518,7 @@ namespace EmbedIO.WebSockets.Internal
                 return;
             }
 
-            _exitReceiving.Dispose();
+            _exitReceiving.TrySetResult(true);
             _exitReceiving = null;
         }
 
@@ -606,40 +604,44 @@ namespace EmbedIO.WebSockets.Internal
                 // do nothing
             }
 
-            _exitReceiving = new AutoResetEvent(false);
+            var receivingStopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _exitReceiving = receivingStopped;
             _receivePong = new AutoResetEvent(false);
 
             var frameStream = new WebSocketFrameStream(_stream);
 
             _ = Task.Run(async () =>
             {
-                while (_readyState == WebSocketState.Open)
+                try
                 {
-                    try
+                    while (_readyState == WebSocketState.Open || _readyState == WebSocketState.CloseSent)
                     {
-                        var frame = await frameStream.ReadFrameAsync(this).ConfigureAwait(false);
-
-                        if (frame == null)
+                        try
                         {
+                            var frame = await frameStream.ReadFrameAsync(this).ConfigureAwait(false);
+
+                            if (frame == null) return;
+
+                            // Keep reading the close acknowledgement without dispatching
+                            // new application messages once local closing has started.
+                            if (_readyState == WebSocketState.CloseSent && frame.Opcode != Opcode.Close)
+                                continue;
+
+                            var result = await ProcessReceivedFrame(frame).ConfigureAwait(false);
+
+                            if (!result || frame.Opcode == Opcode.Close || _readyState == WebSocketState.Closed)
+                                return;
+
+                            _ = Task.Run(Message);
+                        }
+                        catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+                        {
+                            Fatal("An exception has occurred while receiving.", ex);
                             return;
                         }
-
-                        var result = await ProcessReceivedFrame(frame).ConfigureAwait(false);
-
-                        if (!result || _readyState == WebSocketState.Closed)
-                        {
-                            _ = _exitReceiving?.Set();
-
-                            return;
-                        }
-
-                        _ = Task.Run(Message);
-                    }
-                    catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
-                    {
-                        Fatal("An exception has occurred while receiving.", ex);
                     }
                 }
+                finally { receivingStopped.TrySetResult(true); }
             });
         }
     }
