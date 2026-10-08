@@ -110,6 +110,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [JSON migration compatibility](user-reports/json-migration-compatibility.md): transparent legacy acceptance and documented boundaries.
 
+- [SPA client routes](user-reports/spa-client-routes.md): direct navigation without redirects using existing provider injection.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.

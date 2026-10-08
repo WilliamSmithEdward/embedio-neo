@@ -137,6 +137,9 @@
     - name: JSON migration compatibility
       href: user-reports/json-migration-compatibility.md
 
+    - name: SPA client routes
+      href: user-reports/spa-client-routes.md
+
 - name: Architecture
   items:
     - name: Dependency injection
