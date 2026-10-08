@@ -20,7 +20,9 @@ namespace EmbedIO.Utilities
         /// with their values.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         public static Dictionary<string, object?> ToDictionary(this NameValueCollection @this)
-            => @this.Keys.Cast<string>().ToDictionary(key => key, key =>
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            return @this.Keys.Cast<string>().ToDictionary(key => key, key =>
             {
                 var values = @this.GetValues(key);
                 if (values == null)
@@ -33,6 +35,7 @@ namespace EmbedIO.Utilities
                     _ => (object)values
                 };
             });
+        }
 
         /// <summary>
         /// Converts a <see cref="NameValueCollection"/> to a dictionary of strings.
@@ -41,8 +44,11 @@ namespace EmbedIO.Utilities
         /// <returns>A <see cref="Dictionary{TKey,TValue}"/> associating the collection's keys
         /// with their values (or comma-separated lists in case of multiple values).</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
-        public static Dictionary<string, string> ToStringDictionary(this NameValueCollection @this)
-            => @this.Keys.Cast<string>().ToDictionary(key => key, @this.Get);
+        public static Dictionary<string, string?> ToStringDictionary(this NameValueCollection @this)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            return @this.Keys.Cast<string>().ToDictionary(key => key, @this.Get);
+        }
 
         /// <summary>
         /// Converts a <see cref="NameValueCollection"/> to a dictionary of arrays of strings.
@@ -51,8 +57,11 @@ namespace EmbedIO.Utilities
         /// <returns>A <see cref="Dictionary{TKey,TValue}"/> associating the collection's keys
         /// with arrays of their values.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
-        public static Dictionary<string, string[]> ToArrayDictionary(this NameValueCollection @this)
-            => @this.Keys.Cast<string>().ToDictionary(key => key, @this.GetValues);
+        public static Dictionary<string, string[]?> ToArrayDictionary(this NameValueCollection @this)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            return @this.Keys.Cast<string>().ToDictionary(key => key, @this.GetValues);
+        }
 
         /// <summary>
         /// Determines whether a <see cref="NameValueCollection"/> contains one or more values
@@ -65,7 +74,10 @@ namespace EmbedIO.Utilities
         /// </returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         public static bool ContainsKey(this NameValueCollection @this, string key)
-            => @this.Keys.Cast<string>().Contains(key);
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            return @this.Keys.Cast<string>().Contains(key);
+        }
 
         /// <summary>
         /// Determines whether a <see cref="NameValueCollection"/> contains one or more values
@@ -104,6 +116,7 @@ namespace EmbedIO.Utilities
         /// <seealso cref="Contains(NameValueCollection,string,string)"/>
         public static bool Contains(this NameValueCollection @this, string name, string? value, StringComparison comparisonType)
         {
+            if (@this is null) throw new System.NullReferenceException();
             value = value?.Trim();
             var header = @this[name];
             if (header == null)

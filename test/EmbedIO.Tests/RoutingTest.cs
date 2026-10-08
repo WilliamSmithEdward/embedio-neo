@@ -90,12 +90,13 @@ namespace EmbedIO.Tests
         [TestCase("/abc/{id}/{date?}", "id", "date")] // 2 parameters, different segments, 1 optional.
         public void RouteParameters_HaveCorrectNames(string route, params string[] parameterNames)
         {
+            if (parameterNames is null) throw new System.NullReferenceException();
             RouteMatcher.ClearCache();
 
-            Assert.IsTrue(RouteMatcher.TryParse(route, false, out var matcher));
-            Assert.AreEqual(parameterNames.Length, matcher.ParameterNames.Count);
+            Assert.IsTrue(RouteMatcher.TryParse(route, false, out var matcher) && matcher != null);
+            Assert.AreEqual(parameterNames.Length, (matcher ?? throw new InvalidOperationException("The valid route must be parsed.")).ParameterNames.Count);
             for (var i = 0; i < parameterNames.Length; i++)
-                Assert.AreEqual(parameterNames[i], matcher.ParameterNames[i]);
+                Assert.AreEqual(parameterNames[i], (matcher ?? throw new InvalidOperationException("The valid route must be parsed.")).ParameterNames[i]);
         }
 
         [TestCase("/", "/")] // Root.
@@ -107,18 +108,19 @@ namespace EmbedIO.Tests
         [TestCase("/abc/{id?}/{date}", "/abc/20190223", "id", "", "date", "20190223")]
         public void MatchedRoute_HasCorrectParameters(string route, string path, params string[] parameters)
         {
+            if (parameters is null) throw new System.NullReferenceException();
             if (parameters.Length % 2 != 0)
                 throw new InvalidOperationException("Parameters should be in name, value pairs.");
 
             RouteMatcher.ClearCache();
 
             var parameterCount = parameters.Length / 2;
-            Assert.IsTrue(RouteMatcher.TryParse(route, false, out var matcher));
-            Assert.AreEqual(parameterCount, matcher.ParameterNames.Count);
+            Assert.IsTrue(RouteMatcher.TryParse(route, false, out var matcher) && matcher != null);
+            Assert.AreEqual(parameterCount, (matcher ?? throw new InvalidOperationException("The valid route must be parsed.")).ParameterNames.Count);
             for (var i = 0; i < parameterCount; i++)
-                Assert.AreEqual(parameters[2 * i], matcher.ParameterNames[i]);
+                Assert.AreEqual(parameters[2 * i], (matcher ?? throw new InvalidOperationException("The valid route must be parsed.")).ParameterNames[i]);
 
-            var match = matcher.Match(path);
+            var match = (matcher ?? throw new InvalidOperationException("The valid route must be parsed.")).Match(path);
             Assert.IsNotNull(match);
             var keys = match.Keys.ToArray();
             var values = match.Values.ToArray();
@@ -145,11 +147,11 @@ namespace EmbedIO.Tests
         {
             RouteMatcher.ClearCache();
 
-            Assert.IsTrue(RouteMatcher.TryParse(route, true, out var matcher));
+            Assert.IsTrue(RouteMatcher.TryParse(route, true, out var matcher) && matcher != null);
 
-            var match = matcher.Match(path);
+            var match = (matcher ?? throw new InvalidOperationException("The valid route must be parsed.")).Match(path);
             Assert.IsNotNull(match);
-            Assert.AreEqual(subPath, match.SubPath);
+            Assert.AreEqual(subPath, (match ?? throw new InvalidOperationException("The valid route must match.")).SubPath);
         }
     }
 }

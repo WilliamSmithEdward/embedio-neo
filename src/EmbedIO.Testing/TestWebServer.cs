@@ -20,7 +20,7 @@ namespace EmbedIO.Testing
         /// </summary>
         public const string DefaultBaseUrl = "http://test.example.com:8080/";
 
-        private CancellationTokenSource _internalCancellationTokenSource;
+        private CancellationTokenSource? _internalCancellationTokenSource;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TestWebServer"/> class.
@@ -28,8 +28,14 @@ namespace EmbedIO.Testing
         /// <param name="baseUrl"></param>
         public TestWebServer(string baseUrl = DefaultBaseUrl)
         {
-            BaseUrl = Validate.NotNullOrEmpty(nameof(baseUrl), baseUrl);
+            BaseUrl = new Uri(Validate.NotNullOrEmpty(nameof(baseUrl), baseUrl), UriKind.Absolute);
             Client = TestHttpClient.Create(this);
+        }
+
+        /// <inheritdoc cref="TestWebServer(string)"/>
+        public TestWebServer(Uri baseUrl)
+            : this(Validate.NotNull(nameof(baseUrl), baseUrl).OriginalString)
+        {
         }
 
         /// <summary>
@@ -37,7 +43,7 @@ namespace EmbedIO.Testing
         /// <para>The returned client is already initialized with a base address,
         /// so requests URLs may omit the scheme and host parts.</para>
         /// </summary>
-        public string BaseUrl { get; }
+        public Uri BaseUrl { get; }
 
         /// <summary>
         /// <para>Gets a <see cref="TestHttpClient"/> that communicates with this server.</para>
@@ -58,8 +64,8 @@ namespace EmbedIO.Testing
         /// </exception>
         public static async Task UseAsync(Action<IWebServer> configure, Func<HttpClient, Task> use)
         {
-            Validate.NotNull(nameof(configure), configure);
-            Validate.NotNull(nameof(use), use);
+            configure = Validate.NotNull(nameof(configure), configure);
+            use = Validate.NotNull(nameof(use), use);
 
             using var server = new TestWebServer();
             configure(server);
@@ -81,7 +87,7 @@ namespace EmbedIO.Testing
         protected override Task ProcessRequestsAsync(CancellationToken cancellationToken)
         {
             // Since there's nothing to listen to, just wait for the server to be stopped.
-            _internalCancellationTokenSource.Token.WaitHandle.WaitOne();
+            (_internalCancellationTokenSource ?? throw new InvalidOperationException("The server has not been prepared.")).Token.WaitHandle.WaitOne();
             return Task.CompletedTask;
         }
 

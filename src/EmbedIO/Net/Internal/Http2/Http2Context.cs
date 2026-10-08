@@ -66,7 +66,7 @@ namespace EmbedIO.Net.Internal.Http2
         public MimeTypeProviderStack MimeTypeProviders { get; } = new();
         internal Task Completion => _completion.Task;
         public void SetHandled() => IsHandled = true;
-        public string GetMimeType(string extension) => MimeTypeProviders.GetMimeType(extension);
+        public string? GetMimeType(string extension) => MimeTypeProviders.GetMimeType(extension);
         public bool TryDetermineCompression(string mimeType, out bool preferCompression) => MimeTypeProviders.TryDetermineCompression(mimeType, out preferCompression);
         public void OnClose(Action<IHttpContext> callback)
         {
@@ -87,7 +87,7 @@ namespace EmbedIO.Net.Internal.Http2
             finally
             {
                 foreach (var callback in _callbacks)
-                    try { callback(this); } catch (Exception error) { error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback."); }
+                    try { callback(this); } catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback."); }
                 _linked?.Dispose();
                 if (failure == null) _completion.TrySetResult(true); else _completion.TrySetException(failure);
             }

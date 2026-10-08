@@ -22,11 +22,21 @@ namespace EmbedIO.Tests
             Dispose(false);
         }
 
-        protected string WebServerUrl { get; private set; }
+        protected Uri WebServerUrl { get; private set; } = new Uri(TestWebServer.DefaultBaseUrl);
 
-        protected TestHttpClient Client { get; private set; }
+        private TestHttpClient? _client;
+        protected TestHttpClient Client
+        {
+            get => _client ?? throw new InvalidOperationException("The fixture has not been initialized.");
+            private set => _client = value;
+        }
 
-        protected IWebServer Server { get; set; }
+        private IWebServer? _server;
+        protected IWebServer Server
+        {
+            get => _server ?? throw new InvalidOperationException("The fixture has not been initialized.");
+            set => _server = value;
+        }
 
         public void Dispose()
         {
@@ -37,7 +47,7 @@ namespace EmbedIO.Tests
         [SetUp]
         public void SetUp()
         {
-            WebServerUrl = Resources.GetServerAddress();
+            WebServerUrl = new Uri(Resources.GetServerAddress());
 
             if (_useTestWebServer)
             {
@@ -59,7 +69,7 @@ namespace EmbedIO.Tests
         public void TearDown()
         {
             Task.Delay(500).ConfigureAwait(false).GetAwaiter().GetResult();
-            Server?.Dispose();
+            _server?.Dispose();
             OnTearDown();
         }
 
@@ -67,8 +77,8 @@ namespace EmbedIO.Tests
         {
             if (!disposing) return;
 
-            Client?.Dispose();
-            Server?.Dispose();
+            _client?.Dispose();
+            _server?.Dispose();
         }
 
         protected virtual void OnSetUp()

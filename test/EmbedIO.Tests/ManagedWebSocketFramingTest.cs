@@ -13,8 +13,8 @@ namespace EmbedIO.Tests
     public class ManagedWebSocketFramingTest
     {
         private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static readonly Type SocketType = typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true)!;
-        private static readonly Type ReaderType = typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.WebSocketFrameStream", true)!;
+        private static readonly Type SocketType = (typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static readonly Type ReaderType = (typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.WebSocketFrameStream", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         private static IEnumerable<TestCaseData> InvalidHeaders()
         {
             yield return new TestCaseData("817F", false, 1002).SetName("UnmaskedBeforeLength");
@@ -38,18 +38,18 @@ namespace EmbedIO.Tests
         {
             var socket = RuntimeHelpers.GetUninitializedObject(SocketType);
             GC.SuppressFinalize(socket);
-            SocketType.GetProperty("InContinuation", Hidden)!.SetValue(socket, continuation);
-            var reader = Activator.CreateInstance(ReaderType, new object[] { stream, false })!;
-            var task = (Task)ReaderType.GetMethod("ReadFrameAsync", Hidden)!.Invoke(reader, new[] { socket })!;
+            (SocketType.GetProperty("InContinuation", Hidden) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).SetValue(socket, continuation);
+            var reader = (Activator.CreateInstance(ReaderType, new object[] { stream, false }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            var task = (Task)((ReaderType.GetMethod("ReadFrameAsync", Hidden) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(reader, new[] { socket }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             await task;
-            return task.GetType().GetProperty("Result")!.GetValue(task)!;
+            return ((task.GetType().GetProperty("Result") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(task) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         }
         [TestCaseSource(nameof(InvalidHeaders))]
         public async Task InvalidHeaderIsRejectedBeforeReadingFurtherBytes(string hex, bool continuation, int code)
         {
             using var stream = new HeaderOnlyStream(Convert.FromHexString(hex));
             var error = await Assert.ThrowsAsync<WebSocketException>(async () => await Read(stream, continuation));
-            Assert.That((int)error!.Code, Is.EqualTo(code));
+            Assert.That((int)(error ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Code, Is.EqualTo(code));
             Assert.That(stream.Position, Is.EqualTo(stream.Length));
         }
         [TestCase(0, 1, false)]
@@ -80,8 +80,8 @@ namespace EmbedIO.Tests
             for (var i = 0; i < length; i++) { expected[i] = (byte)i; stream.WriteByte((byte)(expected[i] ^ mask[i % 4])); }
             stream.Position = 0;
             var frame = await Read(stream, continuation);
-            var payload = frame.GetType().GetProperty("PayloadData", Hidden | BindingFlags.Public)!.GetValue(frame)!;
-            var bytes = (byte[])payload.GetType().GetMethod("ToArray", Hidden)!.Invoke(payload, null)!;
+            var payload = ((frame.GetType().GetProperty("PayloadData", Hidden | BindingFlags.Public) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(frame) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            var bytes = (byte[])((payload.GetType().GetMethod("ToArray", Hidden) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(payload, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             Assert.That(bytes, Is.EqualTo(expected));
             Assert.That(stream.Position, Is.EqualTo(stream.Length));
         }
@@ -108,9 +108,10 @@ namespace EmbedIO.Tests
         [TestCaseSource(nameof(InvalidClosePayloads))]
         public async Task InvalidClosePayloadNeverReachesCloseHandling(byte[] payload, int code)
         {
+            ArgumentNullException.ThrowIfNull(payload);
             using var stream = new MemoryStream(CloseWire(payload));
             var error = await Assert.ThrowsAsync<WebSocketException>(async () => await Read(stream, false));
-            Assert.That((int)error!.Code, Is.EqualTo(code));
+            Assert.That((int)(error ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Code, Is.EqualTo(code));
         }
         [TestCase(1000)]
         [TestCase(1001)]

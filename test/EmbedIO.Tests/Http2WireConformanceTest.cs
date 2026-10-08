@@ -65,15 +65,15 @@ namespace EmbedIO.Tests
             {
                 using var socket = await listener.AcceptTcpClientAsync(stop.Token);
                 using var stream = socket.GetStream();
-                var connection = await Result((Task)Type("Http2Connection").GetMethod("AcceptAsync", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { stream, stop.Token })!);
+                var connection = await Result((Task)((Type("Http2Connection").GetMethod("AcceptAsync", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(null, new object[] { stream, stop.Token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")));
                 using var connectionLifetime = (IDisposable)connection;
-                var dispatcher = Activator.CreateInstance(Type("Http2Dispatcher"), Flags, null, new[] { connection }, null)!;
+                var dispatcher = (Activator.CreateInstance(Type("Http2Dispatcher"), Flags, null, new[] { connection }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
                 using var dispatcherLifetime = (IDisposable)dispatcher;
                 var argument = Expression.Parameter(Type("Http2Exchange"));
                 var delegateType = typeof(Func<,>).MakeGenericType(Type("Http2Exchange"), typeof(Task));
                 Func<object, Task> application = app ?? RawEcho;
                 var callback = Expression.Lambda(delegateType, Expression.Invoke(Expression.Constant(application), Expression.Convert(argument, typeof(object))), argument).Compile();
-                await (Task)dispatcher.GetType().GetMethod("RunAsync", Flags)!.Invoke(dispatcher, new object[] { callback, stop.Token })!;
+                await (Task)((dispatcher.GetType().GetMethod("RunAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(dispatcher, new object[] { callback, stop.Token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             });
             using var client = new TcpClient { NoDelay = true };
             try
@@ -93,7 +93,7 @@ namespace EmbedIO.Tests
                     if (expectedConnectionError.HasValue)
                     {
                         var error = await Assert.CatchAsync<IOException>(async () => await server.WaitAsync(TimeSpan.FromSeconds(5)));
-                        Assert.That(Property<uint>(error!.InnerException!, "ErrorCode"), Is.EqualTo(expectedConnectionError.Value));
+                        Assert.That(Property<uint>(((error ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).InnerException ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")), "ErrorCode"), Is.EqualTo(expectedConnectionError.Value));
                     }
                     else await server.WaitAsync(TimeSpan.FromSeconds(5));
                 }
@@ -198,9 +198,9 @@ namespace EmbedIO.Tests
                 Assert.That(await observed.Task.WaitAsync(token), Is.True);
             }, app: async exchange =>
             {
-                var state = exchange.GetType().GetProperty("State", Flags)!.GetValue(exchange)!;
+                var state = ((exchange.GetType().GetProperty("State", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(exchange) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
                 using var registration = Property<CancellationToken>(exchange, "CancellationToken").Register(() =>
-                    observed.TrySetResult((bool)state.GetType().GetField("Reset", Flags)!.GetValue(state)!));
+                    observed.TrySetResult((bool)((state.GetType().GetField("Reset", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(state) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."))));
                 entered.TrySetResult();
                 using var body = new MemoryStream();
                 await Property<Stream>(exchange, "InputStream").CopyToAsync(body, Property<CancellationToken>(exchange, "CancellationToken"));

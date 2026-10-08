@@ -14,12 +14,12 @@ namespace EmbedIO.Tests
     public class Http2ConnectionStartTest
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static readonly Type Connection = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2Connection", true)!;
-        private static readonly Type PeerType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2PeerSettings", true)!;
+        private static readonly Type Connection = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2Connection", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static readonly Type PeerType = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2PeerSettings", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         private static readonly byte[] Preface = Encoding.ASCII.GetBytes("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
-        private static T Property<T>(object value, string name) => (T)value.GetType().GetProperty(name)!.GetValue(value)!;
-        private static async Task<object> Result(Task task) { await task; return task.GetType().GetProperty("Result")!.GetValue(task)!; }
-        private static Task<object> Accept(Stream stream, CancellationToken token) => Result((Task)Connection.GetMethod("AcceptAsync", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { stream, token })!);
+        private static T Property<T>(object value, string name) => (T)((value.GetType().GetProperty(name) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(value) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static async Task<object> Result(Task task) { await task; return ((task.GetType().GetProperty("Result") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(task) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")); }
+        private static Task<object> Accept(Stream stream, CancellationToken token) => Result((Task)((Connection.GetMethod("AcceptAsync", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(null, new object[] { stream, token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")));
         private static byte[] Settings(params (int Id, uint Value)[] values)
         {
             var bytes = new byte[values.Length * 6];
@@ -92,13 +92,13 @@ namespace EmbedIO.Tests
                 async Task Process(byte[] wire)
                 {
                     await client.WriteAsync(wire, token);
-                    var frame = await Result((Task)Connection.GetMethod("ReadFrameAsync", Flags)!.Invoke(connection, new object[] { token })!);
-                    var handled = await (Task<bool>)Connection.GetMethod("ProcessControlAsync", Flags)!.Invoke(connection, new[] { frame, (object)token })!;
+                    var frame = await Result((Task)((Connection.GetMethod("ReadFrameAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(connection, new object[] { token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")));
+                    var handled = await (Task<bool>)((Connection.GetMethod("ProcessControlAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(connection, new[] { frame, (object)token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
                     Assert.That(handled, Is.True);
                 }
-                var flow = Connection.GetProperty("SendFlow", Flags)!.GetValue(connection)!;
-                flow.GetType().GetMethod("Open", Flags)!.Invoke(flow, new object[] { 1 });
-                var waiting = (Task<int>)flow.GetType().GetMethod("ReserveAsync", Flags)!.Invoke(flow, new object[] { 1, 16, token })!;
+                var flow = ((Connection.GetProperty("SendFlow", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+                (flow.GetType().GetMethod("Open", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(flow, new object[] { 1 });
+                var waiting = (Task<int>)((flow.GetType().GetMethod("ReserveAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(flow, new object[] { 1, 16, token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
                 Assert.That(waiting.IsCompleted, Is.False, "Initial SETTINGS must reach new stream credit.");
                 await Process(Frame(4, 0, 0, Settings((4, 8))));
                 Assert.That(await waiting.WaitAsync(token), Is.EqualTo(8));
@@ -124,7 +124,7 @@ namespace EmbedIO.Tests
         public async Task InvalidInitialFrameIsRejected(byte type, byte flags, int id, int length, int code)
         {
             var error = await Assert.CatchAsync<IOException>(() => WithConnection(Frame(type, flags, id, new byte[length]), false, (_, _, _) => Task.CompletedTask));
-            Assert.That(Property<uint>(error!, "ErrorCode"), Is.EqualTo(code));
+            Assert.That(Property<uint>((error ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")), "ErrorCode"), Is.EqualTo(code));
         }
 
         [Test]
@@ -132,7 +132,7 @@ namespace EmbedIO.Tests
         {
             using var wrong = new MemoryStream(Encoding.ASCII.GetBytes("GET / HTTP/1.1\r\n\r\n"));
             var error = await Assert.CatchAsync<IOException>(async () => await Accept(wrong, CancellationToken.None));
-            Assert.That(Property<uint>(error!, "ErrorCode"), Is.EqualTo(1));
+            Assert.That(Property<uint>((error ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")), "ErrorCode"), Is.EqualTo(1));
             using var truncated = new MemoryStream(Preface, 0, 23);
             await Assert.ThatAsync(async () => await Accept(truncated, CancellationToken.None), Throws.TypeOf<EndOfStreamException>());
         }
@@ -140,8 +140,8 @@ namespace EmbedIO.Tests
         [Test]
         public void SettingsAreValidatedBeforeMutationAndAppliedInWireOrder()
         {
-            var peer = Activator.CreateInstance(PeerType, true)!;
-            var apply = PeerType.GetMethod("Apply", Flags)!.CreateDelegate<Action<byte[], Action<int>, Action<uint>>>(peer);
+            var peer = (Activator.CreateInstance(PeerType, true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            var apply = (PeerType.GetMethod("Apply", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CreateDelegate<Action<byte[], Action<int>, Action<uint>>>(peer);
             var windows = new List<int>();
             var tables = new List<uint>();
             apply(Settings((4, 0), (4, 100), (4, 50), (1, uint.MaxValue), (2, 0)), windows.Add, tables.Add);
@@ -161,17 +161,17 @@ namespace EmbedIO.Tests
         [TestCase(8, 2L, 1)]
         public void InvalidSettingsRetainErrorCode(int id, long value, int code)
         {
-            var peer = Activator.CreateInstance(PeerType, true)!;
-            var apply = PeerType.GetMethod("Apply", Flags)!.CreateDelegate<Action<byte[], Action<int>, Action<uint>>>(peer);
+            var peer = (Activator.CreateInstance(PeerType, true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            var apply = (PeerType.GetMethod("Apply", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CreateDelegate<Action<byte[], Action<int>, Action<uint>>>(peer);
             var error = Assert.Catch<IOException>(() => apply(Settings((id, (uint)value)), _ => { }, _ => { }));
-            Assert.That(Property<uint>(error!, "ErrorCode"), Is.EqualTo(code));
+            Assert.That(Property<uint>((error ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")), "ErrorCode"), Is.EqualTo(code));
         }
 
         [Test]
         public void ExtendedConnectCapabilityCannotBeWithdrawn()
         {
-            var peer = Activator.CreateInstance(PeerType, true)!;
-            var apply = PeerType.GetMethod("Apply", Flags)!.CreateDelegate<Action<byte[], Action<int>, Action<uint>>>(peer);
+            var peer = (Activator.CreateInstance(PeerType, true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            var apply = (PeerType.GetMethod("Apply", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CreateDelegate<Action<byte[], Action<int>, Action<uint>>>(peer);
             apply(Settings((8, 1)), _ => { }, _ => { });
             Assert.Catch<IOException>(() => apply(Settings((8, 0)), _ => { }, _ => { }));
             Assert.That(Property<bool>(peer, "EnableConnectProtocol"), Is.True);

@@ -35,7 +35,7 @@ namespace EmbedIO.Tests.Issues
             }
             finally { raw.Release(); }
             Assert.That(await a.WaitAsync(TimeSpan.FromSeconds(5)), Is.EqualTo((int)'a'));
-            Assert.That(await b!.WaitAsync(TimeSpan.FromSeconds(5)), Is.EqualTo((int)'b'));
+            Assert.That(await b.WaitAsync(TimeSpan.FromSeconds(5)), Is.EqualTo((int)'b'));
         }
 
         [TestCase(CompressionLevel.NoCompression)]
@@ -130,7 +130,7 @@ namespace EmbedIO.Tests.Issues
         {
             using var archiveBytes = CreateArchive(compression);
             using var baseline = new ZipArchive(archiveBytes, ZipArchiveMode.Read, true);
-            using var expected = baseline.GetEntry("a.bin")!.Open();
+            using var expected = ((baseline).GetEntry("a.bin") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Open();
             using var actualArchive = CreateArchive(compression);
             using var provider = new ZipFileProvider(actualArchive, true);
             using var actual = provider.OpenFile("a.bin");
@@ -148,11 +148,11 @@ namespace EmbedIO.Tests.Issues
                 stream => stream.FlushAsync(CancellationToken.None),
                 stream => { stream.Write(new byte[1], 0, 1); return Task.CompletedTask; },
                 stream => stream.WriteAsync(new byte[1], 0, 1),
-                stream => { stream.Read(null!, 0, 1); return Task.CompletedTask; },
-                stream => { stream.Read(new byte[1], -1, 1); return Task.CompletedTask; },
-                stream => { stream.Read(new byte[1], 0, -1); return Task.CompletedTask; },
-                stream => { stream.Read(new byte[1], 1, 1); return Task.CompletedTask; },
-                stream => stream.ReadAsync(null!, 0, 1),
+                stream => { TestObjects.InvalidInput.Invoke((Func<byte[], int, int, int>)stream.Read, null, 0, 1); return Task.CompletedTask; },
+                stream => { _ = stream.Read(new byte[1], -1, 1); return Task.CompletedTask; },
+                stream => { _ = stream.Read(new byte[1], 0, -1); return Task.CompletedTask; },
+                stream => { _ = stream.Read(new byte[1], 1, 1); return Task.CompletedTask; },
+                stream => TestObjects.InvalidInput.Invoke<Task<int>>((Func<byte[], int, int, Task<int>>)stream.ReadAsync, null, 0, 1),
                 stream => stream.ReadAsync(new byte[1], -1, 1),
                 stream => { _ = stream.ReadTimeout; return Task.CompletedTask; },
                 stream => { _ = stream.WriteTimeout; return Task.CompletedTask; },
@@ -170,9 +170,9 @@ namespace EmbedIO.Tests.Issues
             using var actualBytes = CreateArchive(CompressionLevel.NoCompression);
             using var provider = new ZipFileProvider(actualBytes, true);
             if (closed) { zip.Dispose(); provider.Dispose(); }
-            var expected = Assert.Throws<ArgumentNullException>(() => zip.GetEntry(null!));
-            var actual = Assert.Throws<ArgumentNullException>(() => provider.OpenFile(null!));
-            Assert.That(actual!.ParamName, Is.EqualTo(expected!.ParamName));
+            var expected = Assert.Throws<ArgumentNullException>(() => TestObjects.InvalidInput.Invoke((Func<string, ZipArchiveEntry?>)zip.GetEntry, new object?[] { null }));
+            var actual = Assert.Throws<ArgumentNullException>(() => TestObjects.InvalidInput.Invoke((Func<string, Stream?>)provider.OpenFile, new object?[] { null }));
+            Assert.That(actual.ParamName, Is.EqualTo(expected.ParamName));
         }
 
         [Test]
@@ -182,7 +182,7 @@ namespace EmbedIO.Tests.Issues
             using var provider = new ZipFileProvider(bytes, true);
             var mime = new ReentrantMime(() => { using var entry = provider.OpenFile("b.bin"); Assert.That(entry.ReadByte(), Is.EqualTo((int)'b')); });
             var result = await Task.Run(() => provider.MapUrlPath("/a.bin", mime)).WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.That(result!.ContentType, Is.EqualTo("application/octet-stream"));
+            Assert.That((result ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).ContentType, Is.EqualTo("application/octet-stream"));
         }
 
         [TestCase(CompressionLevel.NoCompression)]
@@ -283,7 +283,7 @@ namespace EmbedIO.Tests.Issues
         private static async Task<string> Outcome(Stream stream, Func<Stream, Task> operation)
         {
             try { await operation(stream); return "success"; }
-            catch (Exception error) { return error.GetType().Name + ":" + (error as ArgumentException)?.ParamName; }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { return error.GetType().Name + ":" + (error as ArgumentException)?.ParamName; }
         }
 
         private sealed class ReentrantMime : IMimeTypeProvider

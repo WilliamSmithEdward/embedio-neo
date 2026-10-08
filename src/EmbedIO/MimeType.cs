@@ -51,12 +51,13 @@ namespace EmbedIO
         /// <para>This method does not validate <paramref name="value"/>: if it is not
         /// a valid MIME type or media range, it is just returned unchanged.</para>
         /// </remarks>
-        public static string StripParameters(string value)
+        [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull(nameof(value))]
+        public static string? StripParameters(string? value)
         {
-            if (string.IsNullOrEmpty(value))
+            if (value == null || value.Length == 0)
                 return value;
 
-            var semicolonPos = value.IndexOf(';');
+            var semicolonPos = value.IndexOf(";", System.StringComparison.Ordinal);
             return semicolonPos < 0
                 ? value
                 : value.Substring(0, semicolonPos).TrimEnd();
@@ -73,12 +74,12 @@ namespace EmbedIO
         /// <returns><see langword="true"/> if <paramref name="value"/> is valid,
         /// according to the value of <paramref name="acceptMediaRange"/>;
         /// otherwise, <see langword="false"/>.</returns>
-        public static bool IsMimeType(string value, bool acceptMediaRange)
+        public static bool IsMimeType(string? value, bool acceptMediaRange)
         {
-            if (string.IsNullOrEmpty(value))
+            if (value == null || value.Length == 0)
                 return false;
 
-            var slashPos = value.IndexOf('/');
+            var slashPos = value.IndexOf("/", System.StringComparison.Ordinal);
             if (slashPos < 0)
                 return false;
 
@@ -138,7 +139,7 @@ namespace EmbedIO
 
         internal static (string type, string subtype) UnsafeSplit(string mimeType)
         {
-            var slashPos = mimeType.IndexOf('/');
+            var slashPos = mimeType.IndexOf("/", System.StringComparison.Ordinal);
             return (mimeType.Substring(0, slashPos), mimeType.Substring(slashPos + 1));
         }
 
@@ -148,8 +149,8 @@ namespace EmbedIO
             if (mediaRange[0] == '*')
                 return true;
 
-            var typeSlashPos = mimeType.IndexOf('/');
-            var rangeSlashPos = mediaRange.IndexOf('/');
+            var typeSlashPos = mimeType.IndexOf("/", System.StringComparison.Ordinal);
+            var rangeSlashPos = mediaRange.IndexOf("/", System.StringComparison.Ordinal);
 
             if (typeSlashPos != rangeSlashPos)
                 return false;

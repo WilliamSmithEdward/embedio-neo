@@ -55,8 +55,8 @@ namespace EmbedIO.WebSockets.Internal
             var result = new byte[2 + length];
             result[0] = (byte)(code >> 8);
             result[1] = (byte)code;
-            if (length > 0)
-                Encoding.UTF8.GetBytes(reason!, 0, reason!.Length, result, 2);
+            if (length > 0 && reason != null)
+                Encoding.UTF8.GetBytes(reason, 0, reason.Length, result, 2);
             return result;
         }
 

@@ -84,17 +84,17 @@ namespace EmbedIO.Files
         }
 
         /// <inheritdoc />
-        public MappedResourceInfo? MapUrlPath(string urlPath, IMimeTypeProvider mimeTypeProvider)
+        public MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider)
         {
-            urlPath = urlPath.Substring(1); // Drop the initial slash
+            if (requestPath is null) throw new System.NullReferenceException();
+            requestPath = requestPath.Substring(1); // Drop the initial slash
             string localPath;
 
-            // Disable CA1031 as there's little we can do if IsPathRooted or GetFullPath fails.
-#pragma warning disable CA1031
+            // Invalid or inaccessible filesystem paths cannot map to a resource.
             try
             {
                 // Unescape the url before continue
-                urlPath = Uri.UnescapeDataString(urlPath);
+                requestPath = Uri.UnescapeDataString(requestPath);
 
                 // Bail out early if the path is a rooted path,
                 // as Path.Combine would ignore our base path.
@@ -105,27 +105,26 @@ namespace EmbedIO.Files
                 // (e.g. "D:\foo\bar" or "\\192.168.0.1\Shared\MyDocuments\BankAccounts.docx").
                 // Under Unix-like operating systems we have no such problems, as relativeUrlPath
                 // can never start with a slash. IsPathRooted is inexpensive on either OS.
-                if (Path.IsPathRooted(urlPath))
+                if (Path.IsPathRooted(requestPath))
                     return null;
 
                 // Convert the relative URL path to a relative filesystem path
                 // (practically a no-op under Unix-like operating systems)
                 // and combine it with our base local path to obtain a full path.
-                localPath = Path.Combine(FileSystemPath, urlPath.Replace('/', Path.DirectorySeparatorChar));
+                localPath = Path.Combine(FileSystemPath, requestPath.Replace('/', Path.DirectorySeparatorChar));
 
                 // Use GetFullPath as an additional safety check
                 // for relative paths that contain a rooted path
                 // (e.g. "valid/path/C:\Windows\System.ini")
                 localPath = Path.GetFullPath(localPath);
             }
-            catch
+            catch (Exception error) when (error is ArgumentException or NotSupportedException or System.Security.SecurityException or IOException)
             {
                 // Both IsPathRooted and GetFullPath throw exceptions
                 // if a path contains invalid characters or is otherwise invalid;
                 // bail out in this case too, as the path would not exist on disk anyway.
                 return null;
             }
-#pragma warning restore CA1031
 
             // As a final precaution, check that the resulting local path
             // is inside the folder intended to be served.
@@ -190,7 +189,7 @@ namespace EmbedIO.Files
         private static MappedResourceInfo GetMappedResourceInfo(IMimeTypeProvider mimeTypeProvider, FileSystemInfo info)
             => info is DirectoryInfo directoryInfo
                 ? GetMappedDirectoryInfo(directoryInfo)
-                : GetMappedFileInfo(mimeTypeProvider, (FileInfo) info);
+                : GetMappedFileInfo(mimeTypeProvider, (FileInfo)info);
 
         private void Watcher_ChangedOrDeleted(object sender, FileSystemEventArgs e)
             => ResourceChanged?.Invoke(e.FullPath);

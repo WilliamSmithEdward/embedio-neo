@@ -86,7 +86,7 @@ namespace EmbedIO.Sessions
                 }
             }
 
-            public bool TryRemove(string key, out object value)
+            public bool TryRemove(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value)
             {
                 lock (_data)
                 {
@@ -106,7 +106,7 @@ namespace EmbedIO.Sessions
                 }
             }
 
-            public bool TryGetValue(string key, out object value)
+            public bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value)
             {
                 lock (_data)
                 {

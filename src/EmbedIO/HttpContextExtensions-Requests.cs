@@ -21,6 +21,7 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         public static async Task<byte[]> GetRequestBodyAsByteArrayAsync(this IHttpContext @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             using var buffer = new MemoryStream();
             using var stream = @this.OpenRequestStream();
             await stream.CopyToAsync(buffer, WebServer.StreamCopyBufferSize, @this.CancellationToken).ConfigureAwait(false);
@@ -62,7 +63,7 @@ namespace EmbedIO
         /// <returns>A <see cref="Task{TResult}">Task</see>, representing the ongoing operation,
         /// whose result will be the deserialized data.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
-        public static Task<TData> GetRequestDataAsync<TData>(this IHttpContext @this)
+        public static Task<TData?> GetRequestDataAsync<TData>(this IHttpContext @this)
             => RequestDeserializer.Default<TData>(@this);
 
         /// <summary>
@@ -91,6 +92,7 @@ namespace EmbedIO
         /// </remarks>
         public static async Task<NameValueCollection> GetRequestFormDataAsync(this IHttpContext @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             if (!@this.Items.TryGetValue(FormDataKey, out var previousResult))
             {
                 NameValueCollection result;
@@ -140,6 +142,7 @@ namespace EmbedIO
         /// </remarks>
         public static NameValueCollection GetRequestQueryData(this IHttpContext @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             if (!@this.Items.TryGetValue(QueryDataKey, out var previousResult))
             {
                 NameValueCollection result;

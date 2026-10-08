@@ -11,6 +11,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -76,7 +77,7 @@ internal static class Program
                 else if (member is FieldInfo field && (field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly))
                     lines.Add("Field: " + field + (field.IsLiteral ? " = " + Convert.ToString(field.GetRawConstantValue(), CultureInfo.InvariantCulture) : ""));
             }
-            api.Add(type.FullName!, lines.Distinct().OrderBy(s => s, StringComparer.Ordinal).ToArray());
+            api.Add(type.FullName ?? throw new InvalidOperationException("The exported type has no full name."), lines.Distinct().OrderBy(s => s, StringComparer.Ordinal).ToArray());
         }
         return api;
     }
@@ -115,7 +116,7 @@ internal static class Program
             runError = "UnexpectedCompletion";
         }
         catch (TimeoutException) { } // A live accept loop is expected to stay pending.
-        catch (Exception ex) { runError = ex.GetType().FullName; Console.Error.WriteLine($"Native baseline observation: {ex}"); }
+        catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { runError = ex.GetType().FullName; Console.Error.WriteLine($"Native baseline observation: {ex}"); }
         if (runError == null)
         {
             using var next = await client.GetAsync($"http://127.0.0.1:{port}/api/dto");
@@ -123,7 +124,7 @@ internal static class Program
             secondBody = JsonSerializer.Deserialize<JsonElement>(await next.Content.ReadAsByteArrayAsync());
         }
         try { lifetime.Cancel(); }
-        catch (Exception ex) { cancelError = ex.GetType().FullName; Console.Error.WriteLine($"Native cancellation observation: {ex}"); }
+        catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { cancelError = ex.GetType().FullName; Console.Error.WriteLine($"Native cancellation observation: {ex}"); }
         if (!running.IsCompleted) await running.WaitAsync(TimeSpan.FromSeconds(10));
         Cases.Add("native/unix-response-lifetime", new { status = (int)response.StatusCode, body, runError, cancelError, secondStatus, secondBody, state = server.State.ToString() });
     }
@@ -196,16 +197,26 @@ internal static class Program
         }
     }
 
+    private static object? InvokeInvalidInput(Delegate operation, params object?[] arguments)
+    {
+        try { return operation.DynamicInvoke(arguments); }
+        catch (TargetInvocationException error) when (error.InnerException != null)
+        {
+            ExceptionDispatchInfo.Capture(error.InnerException).Throw();
+            throw;
+        }
+    }
+
     private static void Utilities()
     {
         string?[] paths = [null, "", "invalid", "/", "/api", "/api/", "//api///items//", "/caf\u00e9", "/a%2Fb", "/a/../b", "/a?x=1", "/a\\b"];
         for (var i = 0; i < paths.Length; i++)
         {
-            var path = paths[i]!;
-            Capture($"utility/valid/{i}", () => UrlPath.IsValid(path));
-            Capture($"utility/split/{i}", () => UrlPath.Split(path));
+            var path = paths[i];
+            Capture($"utility/valid/{i}", () => InvokeInvalidInput((Func<string, bool>)UrlPath.IsValid, path));
+            Capture($"utility/split/{i}", () => InvokeInvalidInput((Func<string, IEnumerable<string>>)UrlPath.Split, path));
             foreach (var basePath in new[] { false, true })
-                Capture($"utility/normalize/{i}/{basePath}", () => UrlPath.Normalize(path, basePath));
+                Capture($"utility/normalize/{i}/{basePath}", () => InvokeInvalidInput((Func<string, bool, string>)UrlPath.Normalize, path, basePath));
         }
         string?[] values = [null, "", " ", "\t\r\n", "value", "caf\u00e9"];
         for (var i = 0; i < values.Length; i++)
@@ -375,7 +386,7 @@ internal static class Program
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         using var socket = new ClientWebSocket();
-        await socket.ConnectAsync(new Uri(prefix.Replace("http:", "ws:") + "ws"), deadline.Token);
+        await socket.ConnectAsync(new Uri(prefix.Replace("http:", "ws:", StringComparison.Ordinal) + "ws"), deadline.Token);
         // Wait for an application-owned greeting, avoiding upstream's known early-message bug.
         var buffer = new byte[1024];
         var greeting = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), deadline.Token);
@@ -463,7 +474,7 @@ public sealed class EchoSocket : WebSocketModule
     public EchoSocket() : base("/ws", true) { }
     protected override Task OnClientConnectedAsync(IWebSocketContext context) => SendAsync(context, "ready");
     protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
-        => result.MessageType == (int)WebSocketMessageType.Binary
+        => (result ?? throw new ArgumentNullException(nameof(result))).MessageType == (int)WebSocketMessageType.Binary
             ? SendAsync(context, buffer)
             : SendAsync(context, Encoding.UTF8.GetString(buffer));
 }

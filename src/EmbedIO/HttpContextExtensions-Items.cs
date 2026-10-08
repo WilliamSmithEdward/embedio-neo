@@ -19,17 +19,16 @@ namespace EmbedIO
         /// otherwise, <see langword="false"/>.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
-        public static bool TryGetItem<T>(this IHttpContext @this, object key, out T value)
+        public static bool TryGetItem<T>(this IHttpContext @this, object key, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out T value)
         {
+            if (@this is null) throw new System.NullReferenceException();
             if (@this.Items.TryGetValue(key, out var item) && item is T typedItem)
             {
                 value = typedItem;
                 return true;
             }
 
-#pragma warning disable CS8653 // value is non-nullable - We are returning false, so value is undefined.
             value = default;
-#pragma warning restore CS8653
             return false;
         }
 
@@ -41,7 +40,10 @@ namespace EmbedIO
         /// if the key is found in <see cref="IHttpContext.Items">Items</see>
         /// and the associated value is of type <typeparamref name="T"/>;
         /// otherwise, the default value for <typeparamref name="T"/>.</returns>
-        public static T GetItem<T>(this IHttpContext @this, object key)
-            => @this.Items.TryGetValue(key, out var item) && item is T typedItem ? typedItem : default;
+        public static T? GetItem<T>(this IHttpContext @this, object key)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            return @this.Items.TryGetValue(key, out var item) && item is T typedItem ? typedItem : default;
+        }
     }
 }

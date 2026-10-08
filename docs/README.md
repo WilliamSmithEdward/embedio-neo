@@ -126,6 +126,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Streaming write errors](user-reports/streaming-write-errors.md): error policy, reverse proxies, compression and buffering.
 - [Fluent Basic authentication](user-reports/fluent-basic-authentication.md): scoped registration, configuration and preserved authentication behavior.
+- [Context and persistent client banning](user-reports/context-client-banning.md): live controls, CIDR policies and optional restart persistence.
 
 ## Architecture
 

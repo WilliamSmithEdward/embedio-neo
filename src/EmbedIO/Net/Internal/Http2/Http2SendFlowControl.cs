@@ -112,7 +112,7 @@ namespace EmbedIO.Net.Internal.Http2
         {
             if (!token.CanBeCanceled) { await changed.ConfigureAwait(false); return; }
             var canceled = NewSignal();
-            using (token.Register(state => ((TaskCompletionSource<bool>)state!).TrySetResult(true), canceled))
+            using (token.Register(state => ((TaskCompletionSource<bool>)(state ?? throw new InvalidOperationException("Missing cancellation signal."))).TrySetResult(true), canceled))
             {
                 await Task.WhenAny(changed, canceled.Task).ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();

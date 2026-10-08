@@ -22,7 +22,7 @@ namespace EmbedIO.Tests
             using var provider = new ZipFileProvider(archive, leaveOpen: true);
             var info = provider.MapUrlPath("/sub/hello%20world.txt", new MockMimeTypeProvider());
             Assert.That(info, Is.Not.Null);
-            Assert.That(info!.IsFile, Is.True);
+            Assert.That(info.IsFile, Is.True);
             Assert.That(info.Path, Is.EqualTo("sub/hello world.txt"));
             Assert.That(info.Name, Is.EqualTo("hello world.txt"));
             Assert.That(info.Length, Is.EqualTo(Encoding.UTF8.GetByteCount("Hello ZIP")));

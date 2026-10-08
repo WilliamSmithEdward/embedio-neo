@@ -35,12 +35,12 @@ namespace EmbedIO.Tests
                 cases.Add(new string(Enumerable.Range(0, random.Next(0, 60)).Select(_ => alphabet[random.Next(alphabet.Length)]).ToArray()));
             foreach (var text in cases)
             {
-                var list = new QValueList(true, text!);
+                var list = new QValueList(true, text);
                 Assert.That(list.QValues, Is.EquivalentTo(ReferenceQuality(new[] { text })));
             }
             var headers = new[] { "gzip;q=0.5,deflate;q=0.5", null, "br, gzip;q=0.8" };
-            Assert.That(new QValueList(true, (IEnumerable<string>)headers!).QValues, Is.EquivalentTo(ReferenceQuality(headers)));
-            Assert.That(new QValueList(true, (IEnumerable<string>)null!).QValues, Is.Empty);
+            Assert.That(new QValueList(true, headers).QValues, Is.EquivalentTo(ReferenceQuality(headers)));
+            Assert.That(new QValueList(true, (IEnumerable<string?>?)null).QValues, Is.Empty);
         }
 
 
@@ -102,7 +102,7 @@ namespace EmbedIO.Tests
                                 var collection = new NameValueCollection();
                                 if (header != null) collection.Add("value", header);
                                 var expected = header?.Split(',').Any(token => string.Equals(token.Trim(), value?.Trim(), comparison)) ?? false;
-                                Assert.That(collection.Contains("value", value!, comparison), Is.EqualTo(expected));
+                                Assert.That(collection.Contains("value", value, comparison), Is.EqualTo(expected));
                             }
                 }
             }
@@ -116,28 +116,28 @@ namespace EmbedIO.Tests
         public void TokenValidationPreservesEveryUtf16CharacterAndErrorContracts()
         {
             const string allowed = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'*+-.^_`|~";
-            var validate = typeof(Validate).GetMethod("IsRfc2616Token", BindingFlags.Static | BindingFlags.NonPublic)!
-                .CreateDelegate<Func<string, bool>>();
+            var validate = ((typeof(Validate)).GetMethod("IsRfc2616Token", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
+                .CreateDelegate<Func<string?, bool>>();
             for (var i = 0; i <= char.MaxValue; i++)
             {
                 var character = (char)i;
-                Assert.That(validate(character.ToString()), Is.EqualTo(allowed.IndexOf(character) >= 0), $"U+{i:X4}");
+                Assert.That(validate(character.ToString()), Is.EqualTo(allowed.IndexOf((character).ToString(), System.StringComparison.Ordinal) >= 0), $"U+{i:X4}");
             }
-            Assert.That(validate(null!), Is.False);
+            Assert.That(validate(null), Is.False);
             Assert.That(validate(""), Is.False);
             Assert.That(Validate.Rfc2616Token("value", "valid-token+json"), Is.EqualTo("valid-token+json"));
-            Assert.That(Assert.Throws<ArgumentNullException>(() => Validate.Rfc2616Token("value", null!))!.ParamName, Is.EqualTo("value"));
-            Assert.That(Assert.Throws<ArgumentException>(() => Validate.Rfc2616Token("value", "x/y"))!.ParamName, Is.EqualTo("value"));
+            Assert.That(Assert.Throws<ArgumentNullException>(() => Validate.Rfc2616Token("value", null)).ParamName, Is.EqualTo("value"));
+            Assert.That(Assert.Throws<ArgumentException>(() => Validate.Rfc2616Token("value", "x/y")).ParamName, Is.EqualTo("value"));
         }
 
         [Test]
         public void RouteKeyLookupPreservesOrdinalAndNullNameBehavior()
         {
             var names = new string?[] { "id", null, "Name" };
-            var match = (RouteMatch)Activator.CreateInstance(typeof(RouteMatch), BindingFlags.Instance | BindingFlags.NonPublic,
-                null, new object?[] { "/", names, new[] { "1", "2", "3" }, null }, null)!;
+            var match = (RouteMatch)(Activator.CreateInstance(typeof(RouteMatch), BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new object?[] { "/", names, new[] { "1", "2", "3" }, null }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             foreach (var key in new[] { "id", "ID", null, "Name", "name", "missing" })
-                Assert.That(match.ContainsKey(key!), Is.EqualTo(names.Any(name => name == key)));
+                Assert.That(match.ContainsKey(key), Is.EqualTo(names.Any(name => name == key)));
             Assert.That(RouteMatch.None.ContainsKey("id"), Is.False);
         }
 
@@ -152,7 +152,7 @@ namespace EmbedIO.Tests
         [TestCase(18446744073709551615UL)]
         public void WebSocketLengthsDecodeNetworkByteOrderWithoutChangingSource(ulong length)
         {
-            var frameType = Core.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true)!;
+            var frameType = Core.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true);
             var frame = NewFrame();
             byte[] extended;
             if (length < 126) extended = Array.Empty<byte>();
@@ -160,9 +160,9 @@ namespace EmbedIO.Tests
             else extended = BitConverter.GetBytes(length);
             if (BitConverter.IsLittleEndian) Array.Reverse(extended);
             var original = (byte[])extended.Clone();
-            frameType.GetProperty("PayloadLength")!.SetValue(frame, (byte)(length < 126 ? length : length <= ushort.MaxValue ? 126UL : 127UL));
-            frameType.GetProperty("ExtendedPayloadLength")!.SetValue(frame, extended);
-            Assert.That(frameType.GetProperty("FullPayloadLength", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(frame), Is.EqualTo(length));
+            ((frameType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetProperty("PayloadLength") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(frame, (byte)(length < 126 ? length : length <= ushort.MaxValue ? 126UL : 127UL));
+            ((frameType).GetProperty("ExtendedPayloadLength") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(frame, extended);
+            Assert.That(((frameType).GetProperty("FullPayloadLength", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(frame), Is.EqualTo(length));
             Assert.That(extended, Is.EqualTo(original));
         }
 
@@ -173,14 +173,14 @@ namespace EmbedIO.Tests
         [TestCase(1000, "\uD800")]
         public void WebSocketClosePayloadPreservesCodeUtf8AndUnpairedSurrogateFallback(int code, string? reason)
         {
-            var payloadType = Core.GetType("EmbedIO.WebSockets.Internal.PayloadData", true)!;
-            var append = payloadType.GetMethod("Append", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var payloadType = Core.GetType("EmbedIO.WebSockets.Internal.PayloadData", true);
+            var append = (payloadType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetMethod("Append", BindingFlags.Static | BindingFlags.NonPublic);
             var expected = new byte[] { (byte)(code >> 8), (byte)code }.Concat(Encoding.UTF8.GetBytes(reason ?? "")).ToArray();
-            var actual = (byte[])append.Invoke(null, new object?[] { (ushort)code, reason })!;
+            var actual = (byte[])((append ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(null, new object?[] { (ushort)code, reason }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             Assert.That(actual, Is.EqualTo(expected));
             var payload = Activator.CreateInstance(payloadType, BindingFlags.Instance | BindingFlags.NonPublic,
-                null, new object[] { actual }, null)!;
-            Assert.That(payloadType.GetProperty("Code", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(payload), Is.EqualTo((ushort)code));
+                null, new object[] { actual }, null);
+            Assert.That(((payloadType).GetProperty("Code", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(payload), Is.EqualTo((ushort)code));
             Assert.That(actual, Is.EqualTo(expected));
         }
 
@@ -192,8 +192,8 @@ namespace EmbedIO.Tests
         [TestCase(16384, 0, 4096)]
         public async Task FrameReadsReturnOnlyAvailableBytesAndIndependentBuffers(int requested, int available, int bufferSize)
         {
-            var read = Core.GetType("EmbedIO.Internal.StreamExtensions", true)!
-                .GetMethod("ReadBytesAsync", BindingFlags.Static | BindingFlags.NonPublic)!
+            var read = ((((Core).GetType("EmbedIO.Internal.StreamExtensions", true)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
+                .GetMethod("ReadBytesAsync", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
                 .CreateDelegate<Func<Stream, int, int, Task<byte[]>>>();
             var source = new byte[available];
             new Random(1729).NextBytes(source);
@@ -210,11 +210,11 @@ namespace EmbedIO.Tests
             }
         }
 
-        private static object NewFrame() => Activator.CreateInstance(Core.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true)!,
+        private static object NewFrame() => (Activator.CreateInstance((Core.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
             BindingFlags.Instance | BindingFlags.NonPublic, null, new[] {
-                Enum.Parse(Core.GetType("EmbedIO.WebSockets.Internal.Fin", true)!, "Final"),
-                Enum.Parse(Core.GetType("EmbedIO.WebSockets.Opcode", true)!, "Binary"), (object)Array.Empty<byte>(), false
-            }, null)!;
+                Enum.Parse((Core.GetType("EmbedIO.WebSockets.Internal.Fin", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), "Final"),
+                Enum.Parse((Core.GetType("EmbedIO.WebSockets.Opcode", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), "Binary"), (object)Array.Empty<byte>(), false
+            }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         private static Dictionary<string, (int Weight, int Ordinal)> ReferenceQuality(IEnumerable<string?> headers)
         {

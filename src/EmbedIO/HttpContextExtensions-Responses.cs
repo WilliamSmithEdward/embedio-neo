@@ -32,6 +32,7 @@ namespace EmbedIO
             string contentType,
             Encoding encoding)
         {
+            if (@this is null) throw new System.NullReferenceException();
             content = Validate.NotNull(nameof(content), content);
             encoding = Validate.NotNull(nameof(encoding), encoding);
 
@@ -74,6 +75,7 @@ namespace EmbedIO
             int statusCode,
             Action<TextWriter>? writeAdditionalHtml)
         {
+            if (@this is null) throw new System.NullReferenceException();
             if (!HttpStatusDescription.TryGet(statusCode, out var statusDescription))
                 throw new ArgumentException("Status code has no standard description.", nameof(statusCode));
 
@@ -102,7 +104,7 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <seealso cref="SendDataAsync(IHttpContext,ResponseSerializerCallback,object)"/>
         /// <seealso cref="ResponseSerializer.Default"/>
-        public static Task SendDataAsync(this IHttpContext @this, object data)
+        public static Task SendDataAsync(this IHttpContext @this, object? data)
             => ResponseSerializer.Default(@this, data);
 
         /// <summary>
@@ -118,7 +120,7 @@ namespace EmbedIO
         /// <exception cref="ArgumentNullException"><paramref name="serializer"/> is <see langword="null"/>.</exception>
         /// <seealso cref="SendDataAsync(IHttpContext,ResponseSerializerCallback,object)"/>
         /// <seealso cref="ResponseSerializer.Default"/>
-        public static Task SendDataAsync(this IHttpContext @this, ResponseSerializerCallback serializer, object data)
+        public static Task SendDataAsync(this IHttpContext @this, ResponseSerializerCallback serializer, object? data)
             => Validate.NotNull(nameof(serializer), serializer)(@this, data);
     }
 }

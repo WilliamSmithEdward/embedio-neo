@@ -16,11 +16,10 @@ namespace EmbedIO.Routing
     /// <para>When enumerated in a non-generic fashion via the <see cref="IEnumerable"/> interface,
     /// this class iterates over name / value pairs.</para>
     /// </summary>
-#pragma warning disable CA1710 // Rename class to end in "Collection"
     public sealed class RouteMatch : IReadOnlyList<string>, IReadOnlyDictionary<string, string>
-#pragma warning restore CA1710
     {
         private static readonly IReadOnlyList<string> EmptyStringList = Array.Empty<string>();
+        private static readonly IReadOnlyDictionary<string, string> EmptyParameters = new Dictionary<string, string>();
 
         private readonly IReadOnlyList<string> _values;
 
@@ -110,47 +109,51 @@ namespace EmbedIO.Routing
         /// that would result by matching the specified URL path against a
         /// base route of <c>"/"</c>.
         /// </summary>
-        /// <param name="urlPath">The URL path to match.</param>
+        /// <param name="requestPath">The URL path to match.</param>
         /// <returns>A newly-constructed <see cref="RouteMatch"/>.</returns>
         /// <remarks>
-        /// <para>This method assumes that <paramref name="urlPath"/>
+        /// <para>This method assumes that <paramref name="requestPath"/>
         /// is a valid, non-base URL path or route. Otherwise, the behavior of this method
         /// is unspecified.</para>
-        /// <para>Ensure that you validate <paramref name="urlPath"/> before
-        /// calling this method, using either <see cref="Validate.UrlPath"/>
+        /// <para>Ensure that you validate <paramref name="requestPath"/> before
+        /// calling this method, using either <see cref="Validate.RoutePath"/>
         /// or <see cref="UrlPath.IsValid"/>.</para>
         /// </remarks>
-        public static RouteMatch UnsafeFromRoot(string urlPath)
-            => new RouteMatch(urlPath, EmptyStringList, EmptyStringList, urlPath);
+        public static RouteMatch UnsafeFromRoot(string requestPath)
+            => new RouteMatch(requestPath, EmptyStringList, EmptyStringList, requestPath);
 
         /// <summary>
         /// Returns a <see cref="RouteMatch"/> object equal to the one
         /// that would result by matching the specified URL path against
         /// the specified parameterless base route.
         /// </summary>
-        /// <param name="baseUrlPath">The base route to match <paramref name="urlPath"/> against.</param>
-        /// <param name="urlPath">The URL path to match.</param>
+        /// <param name="basePath">The base route to match <paramref name="requestPath"/> against.</param>
+        /// <param name="requestPath">The URL path to match.</param>
         /// <returns>A newly-constructed <see cref="RouteMatch"/>.</returns>
         /// <remarks>
-        /// <para>This method assumes that <paramref name="baseUrlPath"/> is a
-        /// valid base URL path, and <paramref name="urlPath"/>
+        /// <para>This method assumes that <paramref name="basePath"/> is a
+        /// valid base URL path, and <paramref name="requestPath"/>
         /// is a valid, non-base URL path or route. Otherwise, the behavior of this method
         /// is unspecified.</para>
         /// <para>Ensure that you validate both parameters before
-        /// calling this method, using either <see cref="Validate.UrlPath"/>
+        /// calling this method, using either <see cref="Validate.RoutePath"/>
         /// or <see cref="UrlPath.IsValid"/>.</para>
         /// </remarks>
-        public static RouteMatch? UnsafeFromBasePath(string baseUrlPath, string urlPath)
+        public static RouteMatch? UnsafeFromBasePath(string basePath, string requestPath)
         {
-            var subPath = UrlPath.UnsafeStripPrefix(urlPath, baseUrlPath);
-            return subPath == null ? null : new RouteMatch(urlPath, EmptyStringList, EmptyStringList, "/" + subPath);
+            var subPath = UrlPath.UnsafeStripPrefix(requestPath, basePath);
+            return subPath == null ? null : new RouteMatch(requestPath, EmptyStringList, EmptyStringList, "/" + subPath);
         }
 
         /// <inheritdoc />
-        public bool ContainsKey(string key) => IndexOf(key) >= 0;
+        public bool ContainsKey(string? key) => IndexOf(key) >= 0;
 
         /// <inheritdoc />
-        public bool TryGetValue(string key, out string? value)
+        public bool TryGetValue(string key,
+#if NET10_0
+            [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)]
+#endif
+            out string value)
         {
             var count = Names.Count;
             for (var i = 0; i < count; i++)
@@ -162,8 +165,9 @@ namespace EmbedIO.Routing
                 }
             }
 
-            value = null;
-            return false;
+            // Delegate the absent-value contract to the framework dictionary. The
+            // netstandard reference assembly predates nullable dictionary metadata.
+            return EmptyParameters.TryGetValue(string.Empty, out value);
         }
 
         /// <summary>
@@ -172,9 +176,9 @@ namespace EmbedIO.Routing
         /// <param name="name">The parameter name.</param>
         /// <returns>The index of the parameter, or -1 if none of the
         /// route parameters have the specified name.</returns>
-        public int IndexOf(string name)
+        public int IndexOf(string? name)
         {
-            if (Names is List<string> list)
+            if (Names is List<string?> list)
                 return list.IndexOf(name);
             if (Names is string[] array)
                 return Array.IndexOf(array, name);

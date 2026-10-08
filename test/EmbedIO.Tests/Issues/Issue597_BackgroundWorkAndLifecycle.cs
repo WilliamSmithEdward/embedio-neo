@@ -71,7 +71,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(accepted.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                 Assert.That(await accepted.Content.ReadAsStringAsync(), Is.EqualTo("accepted"));
                 Assert.That(worker, Is.Not.Null);
-                Assert.That(worker!.IsCompleted, Is.False);
+                Assert.That(worker.IsCompleted, Is.False);
                 if (cancel) workerStop.Cancel();
                 else release.SetResult();
                 Assert.That(await observed.Task.WaitAsync(TimeSpan.FromSeconds(10)),

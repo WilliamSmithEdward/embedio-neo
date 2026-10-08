@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.DependencyInjection;
@@ -41,7 +42,7 @@ namespace EmbedIO.Tests.Issues
         public void NullFactoryDoesNotChangeListeners()
         {
             var before = Snapshot();
-            Assert.That(() => DiagnosticsLoggingExtensions.ForwardEmbedIODiagnostics(null!), Throws.ArgumentNullException);
+            Assert.That(() => DiagnosticsLoggingExtensions.ForwardEmbedIODiagnostics(null), Throws.ArgumentNullException);
             Assert.That(Snapshot(), Is.EqualTo(before));
         }
 
@@ -50,8 +51,9 @@ namespace EmbedIO.Tests.Issues
         public void FailedFactoryConstructionDoesNotLeaveARegistration(bool nullLogger)
         {
             var before = Snapshot();
-            using var factory = new CaptureFactory { NullLogger = nullLogger, FailCreate = !nullLogger };
-            Assert.That(() => factory.ForwardEmbedIODiagnostics(), Throws.Exception);
+            using var factory = new CaptureFactory { FailCreate = !nullLogger };
+            var source = nullLogger ? DispatchProxy.Create<ILoggerFactory, NullLoggerFactory>() : (ILoggerFactory)factory;
+            Assert.That(() => source.ForwardEmbedIODiagnostics(), Throws.Exception);
             Assert.That(Snapshot(), Is.EqualTo(before));
             Assert.That(factory.Disposed, Is.False);
         }
@@ -341,7 +343,7 @@ namespace EmbedIO.Tests.Issues
             using var factory = new CaptureFactory { FailLog = failingProvider };
             using var registration = factory.ForwardEmbedIODiagnostics();
             using var stop = new CancellationTokenSource();
-            var url = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+            var url = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
             using (var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .OnGet("/hello", c => c.SendStringAsync("hello", "text/plain", WebServer.Utf8NoBomEncoding)))
             {
@@ -355,7 +357,7 @@ namespace EmbedIO.Tests.Issues
             }
             Assert.That(factory.Disposed, Is.False);
             if (failingProvider) Assert.That(registration.ForwardingFailures, Is.GreaterThan(0));
-            else Assert.That(factory.Events.Any(e => e.Text.Contains("Listener closed.")), Is.True);
+            else Assert.That(factory.Events.Any(e => (e.Text.IndexOf("Listener closed.", System.StringComparison.Ordinal) >= 0)), Is.True);
         }
 
         private static TraceListener[] Snapshot() => NeoLog.Source.Listeners.Cast<TraceListener>().ToArray();
@@ -366,7 +368,6 @@ namespace EmbedIO.Tests.Issues
             public ConcurrentQueue<Entry> Events { get; } = new();
             public bool Enabled { get; set; } = true;
             public bool FailCreate { get; set; }
-            public bool NullLogger { get; set; }
             public bool FailEnabled { get; set; }
             public bool FailLog { get; set; }
             public bool Disposed { get; private set; }
@@ -375,7 +376,7 @@ namespace EmbedIO.Tests.Issues
             public void AddProvider(ILoggerProvider provider) => throw new NotSupportedException();
             public void Dispose() => Disposed = true;
             public ILogger CreateLogger(string categoryName)
-                => FailCreate ? throw new InvalidOperationException("create failed") : NullLogger ? null! : new CaptureLogger(this, categoryName);
+                => FailCreate ? throw new InvalidOperationException("create failed") : new CaptureLogger(this, categoryName);
 
             private sealed class CaptureLogger(CaptureFactory owner, string category) : ILogger
             {
@@ -403,6 +404,12 @@ namespace EmbedIO.Tests.Issues
             public override void WriteLine(string? message) { }
             public override void TraceEvent(TraceEventCache? cache, string source, TraceEventType type, int id, string? message) => Messages.Enqueue(message);
         }
+        public class NullLoggerFactory : DispatchProxy
+        {
+            protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+                => targetMethod?.Name == nameof(ILoggerFactory.CreateLogger) ? null : throw new NotSupportedException();
+        }
+
         private sealed class BadText { public override string ToString() => throw new InvalidOperationException("must not format"); }
         private sealed class BadFilter : TraceFilter
         {

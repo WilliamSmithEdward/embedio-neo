@@ -12,7 +12,7 @@ namespace EmbedIO.Tests
     public class HttpListenerResourceLifecycleTest
     {
         private static readonly Assembly Core = typeof(WebServer).Assembly;
-        private static readonly Type ConnectionType = Core.GetType("EmbedIO.Net.Internal.HttpConnection", true)!;
+        private static readonly Type ConnectionType = (Core.GetType("EmbedIO.Net.Internal.HttpConnection", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
 
         [TestCase(0, 0)]
@@ -60,11 +60,11 @@ namespace EmbedIO.Tests
         {
             using var source = new ControlledFailingReadStream();
             var connection = NewConnection(source);
-            var reading = (Task)ConnectionType.GetMethod("BeginReadRequest")!.Invoke(connection, null)!;
+            var reading = (Task)((((ConnectionType).GetMethod("BeginReadRequest") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             Assert.That(source.ReadStarted, Is.True);
             ((IDisposable)connection).Dispose();
             source.FailRead();
-            await Assert.DoesNotThrowAsync(async () => await reading.WaitAsync(TimeSpan.FromSeconds(2)));
+            await Assert.DoesNotThrowAsync(async () => await (reading).WaitAsync(TimeSpan.FromSeconds(2)));
             Assert.That(source.Disposed, Is.True);
         }
 
@@ -123,31 +123,31 @@ namespace EmbedIO.Tests
         {
             using var source = new CountingReadStream(Encoding.ASCII.GetBytes("abc"));
             using var input = NewRequestStream(source, Array.Empty<byte>(), 0, 0, contentLength);
-            Assert.That(Assert.Throws<ArgumentNullException>(() => input.Read(null!, 0, 0))!.ParamName, Is.EqualTo("buffer"));
-            Assert.That(Assert.Throws<ArgumentOutOfRangeException>(() => input.Read(Array.Empty<byte>(), -1, 0))!.ParamName, Is.EqualTo("off"));
-            Assert.That(Assert.Throws<ArgumentOutOfRangeException>(() => input.Read(Array.Empty<byte>(), 0, -1))!.ParamName, Is.EqualTo("count"));
-            Assert.Throws<ArgumentException>(() => input.Read(Array.Empty<byte>(), 1, 0));
-            Assert.Throws<ArgumentException>(() => input.Read(new byte[1], 1, 1));
+            Assert.That(Assert.Throws<ArgumentNullException>(() => TestObjects.InvalidInput.Invoke((Func<byte[], int, int, int>)input.Read, null, 0, 0)).ParamName, Is.EqualTo("buffer"));
+            Assert.That(Assert.Throws<ArgumentOutOfRangeException>(() => _ = input.Read(Array.Empty<byte>(), -1, 0)).ParamName, Is.EqualTo("off"));
+            Assert.That(Assert.Throws<ArgumentOutOfRangeException>(() => _ = input.Read(Array.Empty<byte>(), 0, -1)).ParamName, Is.EqualTo("count"));
+            Assert.Throws<ArgumentException>(() => _ = input.Read(Array.Empty<byte>(), 1, 0));
+            Assert.Throws<ArgumentException>(() => _ = input.Read(new byte[1], 1, 1));
             Assert.That(input.Read(new byte[1], 1, 0), Is.Zero);
             Assert.That(source.ReadCalls, Is.Zero);
         }
 
         private static Stream NewRequestStream(Stream source, byte[] buffer, int offset, int length, long contentLength)
-            => (Stream)Activator.CreateInstance(Core.GetType("EmbedIO.Net.Internal.RequestStream", true)!,
-                PrivateInstance, null, new object[] { source, buffer, offset, length, contentLength }, null)!;
+            => (Stream)(Activator.CreateInstance((Core.GetType("EmbedIO.Net.Internal.RequestStream", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
+                PrivateInstance, null, new object[] { source, buffer, offset, length, contentLength }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         private static object NewConnection(Stream source)
         {
             var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
-            ConnectionType.GetField("_connectionSync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(connection, new object());
+            ((ConnectionType).GetField("_connectionSync", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, new object());
             Field("<Stream>k__BackingField").SetValue(connection, source);
             Field("_timer").SetValue(connection, new Timer(_ => { }, null, Timeout.Infinite, Timeout.Infinite));
             Field("_sTimeout").SetValue(connection, 90000);
-            ConnectionType.GetMethod("Init", PrivateInstance)!.Invoke(connection, null);
+            ((ConnectionType).GetMethod("Init", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
             return connection;
         }
 
-        private static FieldInfo Field(string name) => ConnectionType.GetField(name, PrivateInstance)!;
+        private static FieldInfo Field(string name) => (ConnectionType.GetField(name, PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         private sealed class ShortReadStream(byte[] data) : MemoryStream(data)
         {

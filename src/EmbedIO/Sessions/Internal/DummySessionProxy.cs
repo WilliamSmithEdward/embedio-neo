@@ -29,7 +29,7 @@ namespace EmbedIO.Sessions.Internal
         public bool IsEmpty => true;
 
         /// <inheritdoc/>
-        public object this[string key]
+        public object? this[string key]
         {
             get => throw NoSessionManager();
             set => throw NoSessionManager();
@@ -52,10 +52,10 @@ namespace EmbedIO.Sessions.Internal
         public bool ContainsKey(string key) => throw NoSessionManager();
 
         /// <inheritdoc/>
-        public bool TryGetValue(string key, out object value) => throw NoSessionManager();
+        public bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value) => throw NoSessionManager();
 
         /// <inheritdoc/>
-        public bool TryRemove(string key, out object value) => throw NoSessionManager();
+        public bool TryRemove(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value) => throw NoSessionManager();
 
         /// <inheritdoc/>
         public IReadOnlyList<KeyValuePair<string, object>> TakeSnapshot() => throw NoSessionManager();

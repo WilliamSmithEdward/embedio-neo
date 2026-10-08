@@ -111,7 +111,7 @@ namespace EmbedIO.Net.Internal.Http2
                         if (nodes[current].Symbol >= 0)
                         {
                             // Every code is at least five bits: a nibble emits at most one byte.
-                            if (output >= 0) throw new InvalidOperationException("Invalid Huffman table.");
+                            System.Diagnostics.Debug.Assert(output < 0, "RFC 7541 codes are at least five bits long.");
                             output = nodes[current].Symbol;
                             current = 0;
                         }

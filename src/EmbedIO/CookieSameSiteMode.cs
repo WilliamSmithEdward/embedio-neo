@@ -1,4 +1,4 @@
-namespace EmbedIO
+﻿namespace EmbedIO
 {
     /// <summary>Controls whether a cookie is included in cross-site requests.</summary>
     public enum CookieSameSiteMode

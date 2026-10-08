@@ -26,6 +26,7 @@ namespace EmbedIO.Authentication
         /// </remarks>
         public static BasicAuthenticationModule WithAccount(this BasicAuthenticationModule @this, string userName, string password)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Accounts.AddOrUpdate(userName, password, (_, __) => password);
 
             return @this;

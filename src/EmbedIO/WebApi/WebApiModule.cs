@@ -17,7 +17,7 @@ namespace EmbedIO.WebApi
         /// </summary>
         /// <param name="baseRoute">The base URL path served by this module.</param>
         /// <seealso cref="IWebModule.BaseRoute" />
-        /// <seealso cref="Validate.UrlPath" />
+        /// <seealso cref="Validate.RoutePath" />
         public WebApiModule(string baseRoute)
             : base(baseRoute)
         {
@@ -33,7 +33,7 @@ namespace EmbedIO.WebApi
         /// or <see cref="Task{TResult}">Task&lt;object&gt;</see>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="serializer"/> is <see langword="null"/>.</exception>
         /// <seealso cref="IWebModule.BaseRoute" />
-        /// <seealso cref="Validate.UrlPath" />
+        /// <seealso cref="Validate.RoutePath" />
         public WebApiModule(string baseRoute, ResponseSerializerCallback serializer)
             : base(baseRoute, serializer)
         {
@@ -101,7 +101,7 @@ namespace EmbedIO.WebApi
         /// <param name="release">Releases the instance; use a completed task when its container owns it.</param>
         public void RegisterControllerWithContext(
             Type controllerType,
-            Func<IHttpContext, WebApiController> factory,
+            Func<IHttpContext, WebApiController?> factory,
             Func<IHttpContext, WebApiController, Task> release)
             => RegisterControllerTypeWithContext(controllerType, factory, release);
     }

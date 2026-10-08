@@ -35,10 +35,10 @@ internal static class EngineLoad
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(seconds + 45));
         var token = timeout.Token;
         await Exercise(5, false);
-        Console.WriteLine("READY");
+        BenchmarkControl.Write("READY");
         if (await Console.In.ReadLineAsync(token) != "start") throw new InvalidOperationException("Missing measurement handshake.");
         var result = await Exercise(seconds, true);
-        Console.WriteLine("DONE");
+        BenchmarkControl.Write("DONE");
         if (await Console.In.ReadLineAsync(token) != "report") throw new InvalidOperationException("Missing report handshake.");
         var latencies = result.Samples.Order().ToArray();
         double Percentile(double p) => latencies.Length == 0 ? 0 : latencies[(int)Math.Min(latencies.Length - 1, Math.Ceiling(latencies.Length * p) - 1)];

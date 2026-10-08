@@ -29,7 +29,7 @@ namespace EmbedIO.Utilities
         /// will be treated as signifying "anything".</param>
         /// <param name="headerValues">A list of comma-separated header values.</param>
         /// <seealso cref="UseWildcard"/>
-        public QValueList(bool useWildcard, string headerValues)
+        public QValueList(bool useWildcard, string? headerValues)
         {
             UseWildcard = useWildcard;
             QValues = Parse(headerValues);
@@ -45,7 +45,7 @@ namespace EmbedIO.Utilities
         /// Note that each element of the enumeration may in turn be
         /// a comma-separated list.</param>
         /// <seealso cref="UseWildcard"/>
-        public QValueList(bool useWildcard, IEnumerable<string> headerValues)
+        public QValueList(bool useWildcard, IEnumerable<string?>? headerValues)
         {
             UseWildcard = useWildcard;
             QValues = Parse(headerValues);
@@ -61,8 +61,8 @@ namespace EmbedIO.Utilities
         /// Note that each element of the array may in turn be
         /// a comma-separated list.</param>
         /// <seealso cref="UseWildcard"/>
-        public QValueList(bool useWildcard, params string[] headerValues)
-            : this(useWildcard, headerValues as IEnumerable<string>)
+        public QValueList(bool useWildcard, params string?[]? headerValues)
+            : this(useWildcard, headerValues as IEnumerable<string?>)
         {
         }
 
@@ -138,14 +138,14 @@ namespace EmbedIO.Utilities
         /// if none of the values in <paramref name="values"/> is accepted.</returns>
         public int FindPreferredIndex(params string[] values) => FindPreferredIndex(values as IReadOnlyList<string>);
 
-        private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(string headerValues)
+        private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(string? headerValues)
         {
             var result = new Dictionary<string, (int Weight, int Ordinal)>();
             ParseCore(headerValues, result);
             return result;
         }
 
-        private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(IEnumerable<string> headerValues)
+        private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(IEnumerable<string?>? headerValues)
         {
             var result = new Dictionary<string, (int Weight, int Ordinal)>();
 
@@ -157,9 +157,9 @@ namespace EmbedIO.Utilities
             return result;
         }
 
-        private static void ParseCore(string text, IDictionary<string, (int Weight, int Ordinal)> dictionary)
+        private static void ParseCore(string? text, IDictionary<string, (int Weight, int Ordinal)> dictionary)
         {
-            if (string.IsNullOrEmpty(text))
+            if (text == null || text.Length == 0)
                 return;
 
             var length = text.Length;

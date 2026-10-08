@@ -11,20 +11,20 @@ namespace EmbedIO.Tests
     {
         private sealed class Flow
         {
-            private static readonly Type Type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2ReceiveFlowControl", true)!;
+            private static readonly Type Type = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2ReceiveFlowControl", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             private readonly object _instance;
-            internal Flow(int window = 65535) => _instance = Activator.CreateInstance(Type, BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { window }, null)!;
+            internal Flow(int window = 65535) => _instance = (Activator.CreateInstance(Type, BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { window }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             internal object? Call(string name, params object[] args)
             {
-                try { return Type.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_instance, args); }
-                catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture(error.InnerException!).Throw(); throw; }
+                try { return (Type.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(_instance, args); }
+                catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture((error.InnerException ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."))).Throw(); throw; }
             }
             internal void Open(int id) => Call("Open", id);
             internal void Receive(int id, int bytes) => Call("Receive", id, bytes);
             internal (int Connection, int Stream) Consume(int id, int bytes, bool flush = false)
             {
-                var value = Call("Consume", id, bytes, flush)!;
-                return ((int)value.GetType().GetProperty("Connection")!.GetValue(value)!, (int)value.GetType().GetProperty("Stream")!.GetValue(value)!);
+                var value = (Call("Consume", id, bytes, flush) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+                return ((int)((value.GetType().GetProperty("Connection") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(value) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")), (int)((value.GetType().GetProperty("Stream") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(value) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")));
             }
         }
 
@@ -33,8 +33,8 @@ namespace EmbedIO.Tests
         {
             var flow = new Flow(); flow.Open(1); flow.Open(3);
             flow.Receive(1, 65535);
-            var error = Assert.Catch<IOException>(() => flow.Receive(3, 1))!;
-            Assert.That(error.GetType().GetProperty("StreamId")!.GetValue(error), Is.EqualTo(0));
+            var error = (Assert.Catch<IOException>(() => flow.Receive(3, 1)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            Assert.That((error.GetType().GetProperty("StreamId") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(error), Is.EqualTo(0));
             Assert.That(flow.Consume(1, 32768), Is.EqualTo((32768, 32768)));
             flow.Receive(3, 32768);
             Assert.Catch<IOException>(() => flow.Receive(3, 1));
@@ -56,9 +56,9 @@ namespace EmbedIO.Tests
         public void StreamViolationStillCountsConnectionBytesUntilReset()
         {
             var flow = new Flow(16); flow.Open(1); flow.Open(3);
-            var error = Assert.Catch<IOException>(() => flow.Receive(1, 40000))!;
-            Assert.That(error.GetType().GetProperty("StreamId")!.GetValue(error), Is.EqualTo(1));
-            Assert.That(error.GetType().GetProperty("ErrorCode")!.GetValue(error), Is.EqualTo(3u));
+            var error = (Assert.Catch<IOException>(() => flow.Receive(1, 40000)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            Assert.That((error.GetType().GetProperty("StreamId") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(error), Is.EqualTo(1));
+            Assert.That((error.GetType().GetProperty("ErrorCode") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(error), Is.EqualTo(3u));
             Assert.That(flow.Call("Close", 1), Is.EqualTo(40000));
             Assert.That(flow.Call("Close", 1), Is.Zero);
             Assert.That(flow.Consume(1, 40000, true), Is.EqualTo((0, 0)));
@@ -116,7 +116,7 @@ namespace EmbedIO.Tests
                 var flow = new Flow(); flow.Open(1); flow.Open(3); flow.Receive(1, 65535);
                 var consumed = 0; var closed = 0;
                 Parallel.Invoke(() => consumed = flow.Consume(1, 65535, true).Connection,
-                    () => closed = (int)flow.Call("Close", 1)!);
+                    () => closed = (int)(flow.Call("Close", 1) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")));
                 Assert.That(consumed + closed, Is.EqualTo(65535));
                 flow.Receive(3, 65535);
                 Assert.Catch<IOException>(() => flow.Receive(3, 1));

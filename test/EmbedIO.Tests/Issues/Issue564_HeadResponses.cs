@@ -172,7 +172,7 @@ namespace EmbedIO.Tests.Issues
                     try
                     {
                         var stream = context.Response.OutputStream;
-                        Assert.Throws<ArgumentNullException>(() => stream.Write(null!, 0, 0));
+                        Assert.Throws<ArgumentNullException>(() => TestObjects.InvalidInput.Invoke((Action<byte[], int, int>)stream.Write, null, 0, 0));
                         Assert.Throws<ArgumentOutOfRangeException>(() => stream.Write(new byte[1], -1, 1));
                         Assert.Throws<ArgumentException>(() => stream.Write(new byte[1], 0, 2));
                         Assert.Throws<NotSupportedException>(() => stream.SetLength(123));

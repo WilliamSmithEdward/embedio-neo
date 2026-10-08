@@ -13,12 +13,12 @@ namespace EmbedIO.Tests
         {
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
             var assembly = typeof(WebServer).Assembly;
-            var fieldType = assembly.GetType("EmbedIO.Net.Internal.Http2.HpackField", true)!;
+            var fieldType = (assembly.GetType("EmbedIO.Net.Internal.Http2.HpackField", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             var fields = Array.CreateInstance(fieldType, pairs.Length / 2);
             for (var i = 0; i < pairs.Length; i += 2)
                 fields.SetValue(Activator.CreateInstance(fieldType, flags, null, new object[] { pairs[i], pairs[i + 1], false }, null), i / 2);
-            try { return assembly.GetType("EmbedIO.Net.Internal.Http2.Http2ResponseHeaders", true)!.GetMethod("Validate", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { fields, method, end })!; }
-            catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture(error.InnerException!).Throw(); throw; }
+            try { return (((assembly.GetType("EmbedIO.Net.Internal.Http2.Http2ResponseHeaders", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetMethod("Validate", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(null, new object[] { fields, method, end }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")); }
+            catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture((error.InnerException ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."))).Throw(); throw; }
         }
         [TestCase("101")]
         [TestCase("099")]
@@ -51,7 +51,7 @@ namespace EmbedIO.Tests
         public void MetadataContentLengthDoesNotRequireData(string method, string status)
         {
             var result = Validate(new[] { ":status", status, "content-length", "123" }, method, true);
-            Assert.That(result.GetType().GetProperty("BodyAllowed")!.GetValue(result), Is.EqualTo(false));
+            Assert.That((result.GetType().GetProperty("BodyAllowed") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(result), Is.EqualTo(false));
         }
         [Test]
         public void OrdinaryResponseCannotEndBeforeDeclaredLength()
@@ -63,7 +63,7 @@ namespace EmbedIO.Tests
         public void ResetContentCannotHaveBody()
         {
             var result = Validate(new[] { ":status", "205", "content-length", "0" }, end: true);
-            Assert.That(result.GetType().GetProperty("BodyAllowed")!.GetValue(result), Is.EqualTo(false));
+            Assert.That((result.GetType().GetProperty("BodyAllowed") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(result), Is.EqualTo(false));
             Assert.Throws<InvalidDataException>(() => Validate(new[] { ":status", "205", "content-length", "1" }));
         }
     }

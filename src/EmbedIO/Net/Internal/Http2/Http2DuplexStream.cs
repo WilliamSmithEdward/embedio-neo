@@ -9,13 +9,13 @@ namespace EmbedIO.Net.Internal.Http2
     // Context completion performs the HTTP/2 END_STREAM/reset transition.
     internal sealed class Http2DuplexStream : Stream
     {
-        private readonly Stream _input;
-        private readonly Stream _output;
+        private readonly EmbedIO.Internal.BorrowedResource<Stream> _input;
+        private readonly EmbedIO.Internal.BorrowedResource<Stream> _output;
         private readonly CancellationTokenSource _stop = new();
         private readonly CancellationToken _token;
         private int _disposed;
         internal Http2DuplexStream(Stream input, Stream output)
-        { _input = input; _output = output; _token = _stop.Token; }
+        { _input = new EmbedIO.Internal.BorrowedResource<Stream>(input); _output = new EmbedIO.Internal.BorrowedResource<Stream>(output); _token = _stop.Token; }
         public override bool CanRead => _disposed == 0;
         public override bool CanWrite => _disposed == 0;
         public override bool CanSeek => false;
@@ -26,21 +26,21 @@ namespace EmbedIO.Net.Internal.Http2
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _token);
             linked.Token.ThrowIfCancellationRequested();
-            return await _input.ReadAsync(buffer, offset, count, linked.Token).ConfigureAwait(false);
+            return await _input.Value.ReadAsync(buffer, offset, count, linked.Token).ConfigureAwait(false);
         }
         public override void Write(byte[] buffer, int offset, int count) => WriteAsync(buffer, offset, count, CancellationToken.None).GetAwaiter().GetResult();
         public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken token)
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _token);
             linked.Token.ThrowIfCancellationRequested();
-            await _output.WriteAsync(buffer, offset, count, linked.Token).ConfigureAwait(false);
+            await _output.Value.WriteAsync(buffer, offset, count, linked.Token).ConfigureAwait(false);
         }
         public override void Flush() => FlushAsync(CancellationToken.None).GetAwaiter().GetResult();
         public override async Task FlushAsync(CancellationToken token)
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _token);
             linked.Token.ThrowIfCancellationRequested();
-            await _output.FlushAsync(linked.Token).ConfigureAwait(false);
+            await _output.Value.FlushAsync(linked.Token).ConfigureAwait(false);
         }
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();

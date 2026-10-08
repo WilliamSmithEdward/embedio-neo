@@ -88,7 +88,7 @@ namespace EmbedIO.Tests
                     await Task.Yield();
                     Assert.That(scoped.DisposeCount, Is.Zero);
                     Assert.That(probe.ControllerDisposeCount, Is.Zero);
-                    await context.SendStringAsync((string)value!, "text/plain", WebServer.DefaultEncoding);
+                    await context.SendStringAsync((string)(value ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), "text/plain", WebServer.DefaultEncoding);
                 }, module => module.WithControllerServices<InjectedController>()), async client =>
                 {
                     Assert.That(await client.GetStringAsync("/api/value"), Is.EqualTo("value"));
@@ -318,7 +318,7 @@ namespace EmbedIO.Tests
             var released = 0;
             await TestWebServer.UseAsync(server => server.WithWebApi("/api", module =>
             {
-                module.RegisterControllerWithContext(typeof(ManualController), _ => null!, (_, _) => Task.CompletedTask);
+                module.RegisterControllerWithContext(typeof(ManualController), _ => null, (_, _) => Task.CompletedTask);
                 module.RegisterControllerWithContext(typeof(DualDisposableController), _ => new ManualController(new Probe()), (_, _) =>
                 {
                     released++;
@@ -437,7 +437,8 @@ namespace EmbedIO.Tests
             finally
             {
                 try { await provider.DisposeAsync(); }
-                catch (Exception) { /* Disposal observes the same startup failure. */ }
+                catch (InvalidOperationException error) when (error.Message == "startup")
+                { /* Disposal observes the same startup failure. */ }
             }
         }
 
@@ -470,7 +471,10 @@ namespace EmbedIO.Tests
         public sealed class RequestService : IAsyncDisposable
         {
             private readonly Probe _probe;
-            public RequestService(Probe probe, IHttpContext context) { _probe = probe; Context = context; probe.Requests.Enqueue(this); }
+            public RequestService(Probe probe, IHttpContext context)
+            {
+                if (probe is null) throw new System.NullReferenceException(); _probe = probe; Context = context; probe.Requests.Enqueue(this);
+            }
             public IHttpContext Context { get; }
             public Guid Id { get; } = Guid.NewGuid();
             public int DisposeCount { get; private set; }
@@ -505,7 +509,12 @@ namespace EmbedIO.Tests
             [Route(HttpVerbs.Get, "/argument")] public bool Argument([FromServices] RequestService service) => ReferenceEquals(service, _request);
             [Route(HttpVerbs.Get, "/sync-failure")] public string Fail() => throw new InvalidOperationException("sync");
             [Route(HttpVerbs.Get, "/async-failure")] public async Task<string> FailAsync() { await Task.Yield(); throw new InvalidOperationException("async"); }
-            [Route(HttpVerbs.Get, "/binding-failure")] public string FailBinding([JsonData] Payload data) => data.Text;
+            [Route(HttpVerbs.Get, "/binding-failure")]
+            public string FailBinding([JsonData] Payload data)
+            {
+                if (data is null) throw new System.NullReferenceException();
+                return data.Text;
+            }
             [Route(HttpVerbs.Get, "/wait")]
             public async Task<string> Wait([QueryField] string name)
             {
@@ -536,13 +545,17 @@ namespace EmbedIO.Tests
         }
         public sealed class ThrowingConstructorController : WebApiController
         {
-            public ThrowingConstructorController(RequestService request) => throw new InvalidOperationException(request.Id.ToString());
+            public ThrowingConstructorController(RequestService request)
+            {
+                if (request is null) throw new System.NullReferenceException();
+                throw new InvalidOperationException(request.Id.ToString());
+            }
             [Route(HttpVerbs.Get, "/value")] public string Get() => "unreachable";
         }
         public interface IMissing { }
         public sealed class MissingDependencyController(IMissing missing) : WebApiController
         {
-            [Route(HttpVerbs.Get, "/missing")] public string Get() => missing.ToString()!;
+            [Route(HttpVerbs.Get, "/missing")] public string Get() => (missing.ToString() ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         }
         public sealed class ManualController(Probe probe) : WebApiController
         {

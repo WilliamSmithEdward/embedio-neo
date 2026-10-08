@@ -40,7 +40,7 @@ namespace EmbedIO.Tests.Issues
             Assert.That(pending.IsCompleted, Is.False);
             cancel.Cancel();
             var error = await Assert.CatchAsync<OperationCanceledException>(async () => await pending);
-            Assert.That(error!.CancellationToken, Is.EqualTo(cancel.Token));
+            Assert.That(error.CancellationToken, Is.EqualTo(cancel.Token));
             Assert.That(fixture.Transport.SynchronousWrites, Is.Zero);
         }
 
@@ -138,7 +138,7 @@ namespace EmbedIO.Tests.Issues
         public async Task InvalidBuffersDoNotCommitHeadersAndDisposedWritesAreRejected()
         {
             using var fixture = await Fixture.Create(false);
-            Assert.Throws<ArgumentNullException>(() => fixture.Stream.WriteAsync(null!, 0, 0));
+            Assert.Throws<ArgumentNullException>(() => TestObjects.InvalidInput.Invoke((Func<byte[], int, int, Task>)fixture.Stream.WriteAsync, null, 0, 0));
             Assert.Throws<ArgumentOutOfRangeException>(() => fixture.Stream.WriteAsync(new byte[1], -1, 0));
             Assert.Throws<ArgumentOutOfRangeException>(() => fixture.Stream.WriteAsync(new byte[1], 0, -1));
             Assert.Throws<ArgumentException>(() => fixture.Stream.WriteAsync(new byte[1], int.MaxValue, 1));
@@ -159,9 +159,9 @@ namespace EmbedIO.Tests.Issues
                 _listener = listener;
                 _client = client;
                 Response = response;
-                var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.ResponseStream")!;
-                Stream = (Stream)Activator.CreateInstance(type, BindingFlags.Instance | BindingFlags.NonPublic,
-                    null, new object[] { Transport, response, ignoreErrors }, null)!;
+                var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.ResponseStream");
+                Stream = (Stream)(Activator.CreateInstance((type ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), BindingFlags.Instance | BindingFlags.NonPublic,
+                    null, new object[] { Transport, response, ignoreErrors }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
             public static async Task<Fixture> Create(bool chunked, bool ignoreErrors = false)
             {

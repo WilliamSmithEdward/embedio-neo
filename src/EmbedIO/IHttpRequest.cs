@@ -25,7 +25,7 @@ namespace EmbedIO
         /// <summary>
         /// Gets the raw URL.
         /// </summary>
-        string RawUrl { get; }
+        string RawTarget { get; }
 
         /// <summary>
         /// Gets the query string.
@@ -50,7 +50,7 @@ namespace EmbedIO
         /// <summary>
         /// Gets a value indicating whether this instance has entity body.
         /// </summary>
-        bool HasEntityBody { get;  }
+        bool HasEntityBody { get; }
 
         /// <summary>
         /// Gets the input stream.
@@ -80,7 +80,7 @@ namespace EmbedIO
         /// <summary>
         /// Gets the user agent.
         /// </summary>
-        string UserAgent { get; }
+        string? UserAgent { get; }
 
         /// <summary>
         /// Gets a value indicating whether this instance is web socket request.

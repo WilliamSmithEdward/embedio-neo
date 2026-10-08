@@ -16,7 +16,7 @@ namespace EmbedIO.Net.Internal
             {
                 if (_sock == null || _resourcesDisposed != 0) return;
                 _http2 = true;
-                _http2Stop = stop;
+                _http2Stop = new EmbedIO.Internal.BorrowedResource<CancellationTokenSource>(stop);
                 _http2Listeners = new HashSet<HttpListener>();
             }
             try
@@ -49,7 +49,7 @@ namespace EmbedIO.Net.Internal
                 lock (_connectionSync)
                 {
                     if (_sock == null || _resourcesDisposed != 0) throw new IOException("Connection closed before routing.");
-                    _http2Listeners!.Add(listener);
+                    (_http2Listeners ?? throw new InvalidOperationException("HTTP/2 routing has not started.")).Add(listener);
                 }
                 // Do not hold a connection lock while entering listener lifecycle
                 // synchronization: listener shutdown closes its connections.
@@ -62,7 +62,7 @@ namespace EmbedIO.Net.Internal
                     throw new IOException("Connection closed during routing.");
                 }
                 var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                using var registration = exchange.CancellationToken.Register(state => ((TaskCompletionSource<bool>)state!).TrySetResult(true), canceled);
+                using var registration = exchange.CancellationToken.Register(state => ((TaskCompletionSource<bool>)(state ?? throw new InvalidOperationException("Missing cancellation signal."))).TrySetResult(true), canceled);
                 var completed = await Task.WhenAny(context.Completion, canceled.Task).ConfigureAwait(false);
                 if (completed == canceled.Task) exchange.CancellationToken.ThrowIfCancellationRequested();
                 await context.Completion.ConfigureAwait(false);
@@ -73,7 +73,7 @@ namespace EmbedIO.Net.Internal
                 // Cleanup runs on application dispatch, never synchronously inside
                 // a cancellation callback holding a listener/connection lock.
                 try { context.Close(); }
-                catch (Exception) when (exchange.CancellationToken.IsCancellationRequested) { }
+                catch (Exception error) when (exchange.CancellationToken.IsCancellationRequested && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { }
                 if (context.Completion.IsFaulted) _ = context.Completion.Exception;
             }
         }

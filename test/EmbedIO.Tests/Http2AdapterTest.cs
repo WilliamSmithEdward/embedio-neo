@@ -14,8 +14,8 @@ namespace EmbedIO.Tests
     public partial class Http2InteroperabilityTest
     {
         private static IHttpContextImpl Adapter(object exchange)
-            => (IHttpContextImpl)Activator.CreateInstance(Type("Http2Context"), Flags, null,
-                new object[] { exchange, new IPEndPoint(IPAddress.Loopback, 80), new IPEndPoint(IPAddress.Loopback, 12345), false }, null)!;
+            => (IHttpContextImpl)(Activator.CreateInstance(Type("Http2Context"), Flags, null,
+                new object[] { exchange, new IPEndPoint(IPAddress.Loopback, 80), new IPEndPoint(IPAddress.Loopback, 12345), false }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
 
         private static async Task WithAdapter(Func<IHttpContextImpl, Task> application, Func<HttpClient, Task> verify)
         {
@@ -24,7 +24,7 @@ namespace EmbedIO.Tests
                 var context = Adapter(exchange);
                 try { await application(context); }
                 finally { context.Close(); }
-                await (Task)context.GetType().GetProperty("Completion", Flags)!.GetValue(context)!;
+                await (Task)((context.GetType().GetProperty("Completion", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(context) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             }, verify);
         }
 
@@ -70,11 +70,11 @@ namespace EmbedIO.Tests
             {
                 Assert.That(context.Request.ProtocolVersion, Is.EqualTo(HttpVersion.Version20));
                 Assert.That(context.Request.QueryString.GetValues("x"), Is.EqualTo(new[] { "a b", "c" }));
-                Assert.That(context.Request.Cookies["first"]!.Value, Is.EqualTo("1"));
-                Assert.That(context.Request.Cookies["second"]!.Value, Is.EqualTo("2"));
+                Assert.That((context.Request.Cookies["first"] ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Value, Is.EqualTo("1"));
+                Assert.That((context.Request.Cookies["second"] ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Value, Is.EqualTo("2"));
                 Assert.That(context.Request.IsLocal, Is.True);
                 Assert.That(context.Request.IsSecureConnection, Is.False);
-                Assert.That(context.Request.RawUrl, Is.EqualTo("/hello?x=a+b&x=c"));
+                Assert.That(context.Request.RawTarget, Is.EqualTo("/hello?x=a+b&x=c"));
                 context.Response.Headers["Server"] = "custom-engine";
                 await context.SendStringAsync("Hello, 世界", "text/plain", new UTF8Encoding(false));
             }, async client =>
@@ -83,7 +83,7 @@ namespace EmbedIO.Tests
                 request.Headers.TryAddWithoutValidation("Cookie", "first=1; second=2");
                 using var response = await client.SendAsync(request);
                 Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("Hello, 世界"));
-                Assert.That(response.Content.Headers.ContentType!.CharSet, Is.EqualTo("utf-8"));
+                Assert.That((response.Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CharSet, Is.EqualTo("utf-8"));
                 Assert.That(response.Headers.Server.ToString(), Is.EqualTo("custom-engine"));
                 Assert.That(response.Headers.Date, Is.Not.Null);
             });

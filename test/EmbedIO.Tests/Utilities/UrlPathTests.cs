@@ -12,8 +12,8 @@ namespace EmbedIO.Tests.Utilities
         [TestCase("does/not/start/with/slash", false)]
         [TestCase("/", true)]
         [TestCase("/starts/with/slash", true)]
-        public void IsValid_ReturnsCorrectValue(string? urlPath, bool expectedResult)
-            => Assert.AreEqual(expectedResult, UrlPath.IsValid(urlPath));
+        public void IsValid_ReturnsCorrectValue(string? requestPath, bool expectedResult)
+            => Assert.AreEqual(expectedResult, UrlPath.IsValid(requestPath));
 
         [TestCase(true)]
         [TestCase(false)]
@@ -36,51 +36,51 @@ namespace EmbedIO.Tests.Utilities
         [TestCase("/starts/with/slash", true, "/starts/with/slash/")]
         [TestCase("//has/multiple///slashes////", false, "/has/multiple/slashes")]
         [TestCase("//has/multiple//slashes////", true, "/has/multiple/slashes/")]
-        public void Normalize_ReturnsCorrectValue(string urlPath, bool isBasePath, string? expectedResult)
-            => Assert.AreEqual(expectedResult, UrlPath.Normalize(urlPath, isBasePath));
+        public void Normalize_ReturnsCorrectValue(string requestPath, bool isBasePath, string? expectedResult)
+            => Assert.AreEqual(expectedResult, UrlPath.Normalize(requestPath, isBasePath));
 
         [TestCase(null, null)]
         [TestCase(null, "/api/")]
         [TestCase("/api/endpoint", null)]
-        public void HasPrefix_OnNullParameter_ThrowsArgumentNullException(string? urlPath, string? baseUrlPath)
-            => Assert.Throws<ArgumentNullException>(() => UrlPath.HasPrefix(urlPath, baseUrlPath));
+        public void HasPrefix_OnNullParameter_ThrowsArgumentNullException(string? requestPath, string? basePath)
+            => Assert.Throws<ArgumentNullException>(() => UrlPath.HasPrefix(requestPath, basePath));
 
         [TestCase("", "")]
         [TestCase("", "/api/")]
         [TestCase("/api/endpoint", "")]
-        public void HasPrefix_OnEmptyParameter_ThrowsArgumentException(string urlPath, string baseUrlPath)
-            => Assert.Throws<ArgumentException>(() => UrlPath.HasPrefix(urlPath, baseUrlPath));
+        public void HasPrefix_OnEmptyParameter_ThrowsArgumentException(string requestPath, string basePath)
+            => Assert.Throws<ArgumentException>(() => UrlPath.HasPrefix(requestPath, basePath));
 
         [TestCase("!!!", "!!!")]
         [TestCase("!!!", "/api/")]
         [TestCase("/api/endpoint", "!!!")]
-        public void HasPrefix_OnInvalidParameter_ThrowsArgumentException(string urlPath, string baseUrlPath)
-            => Assert.Throws<ArgumentException>(() => UrlPath.HasPrefix(urlPath, baseUrlPath));
+        public void HasPrefix_OnInvalidParameter_ThrowsArgumentException(string requestPath, string basePath)
+            => Assert.Throws<ArgumentException>(() => UrlPath.HasPrefix(requestPath, basePath));
 
         [TestCase("/api/v1/endpoint", "/api/v1", true)]
         [TestCase("/api/v1/endpoint", "/api/v1/", true)]
         [TestCase("/api/v1/endpoint", "/api/v2", false)]
         [TestCase("/api/v1/endpoint", "/api/v2/", false)]
-        public void HasPrefix_ReturnsCorrectValue(string urlPath, string baseUrlPath, bool expectedResult)
-            => Assert.AreEqual(expectedResult, UrlPath.HasPrefix(urlPath, baseUrlPath));
+        public void HasPrefix_ReturnsCorrectValue(string requestPath, string basePath, bool expectedResult)
+            => Assert.AreEqual(expectedResult, UrlPath.HasPrefix(requestPath, basePath));
 
         [TestCase(null, null)]
         [TestCase(null, "/api/")]
         [TestCase("/api/endpoint", null)]
-        public void StripPrefix_OnNullParameter_ThrowsArgumentNullException(string? urlPath, string? baseUrlPath)
-            => Assert.Throws<ArgumentNullException>(() => UrlPath.StripPrefix(urlPath, baseUrlPath));
+        public void StripPrefix_OnNullParameter_ThrowsArgumentNullException(string? requestPath, string? basePath)
+            => Assert.Throws<ArgumentNullException>(() => UrlPath.StripPrefix(requestPath, basePath));
 
         [TestCase("", "")]
         [TestCase("", "/api/")]
         [TestCase("/api/endpoint", "")]
-        public void StripPrefix_OnEmptyParameter_ThrowsArgumentException(string urlPath, string baseUrlPath)
-            => Assert.Throws<ArgumentException>(() => UrlPath.StripPrefix(urlPath, baseUrlPath));
+        public void StripPrefix_OnEmptyParameter_ThrowsArgumentException(string requestPath, string basePath)
+            => Assert.Throws<ArgumentException>(() => UrlPath.StripPrefix(requestPath, basePath));
 
         [TestCase("!!!", "!!!")]
         [TestCase("!!!", "/api/")]
         [TestCase("/api/endpoint", "!!!")]
-        public void StripPrefix_OnInvalidParameter_ThrowsArgumentException(string urlPath, string baseUrlPath)
-            => Assert.Throws<ArgumentException>(() => UrlPath.StripPrefix(urlPath, baseUrlPath));
+        public void StripPrefix_OnInvalidParameter_ThrowsArgumentException(string requestPath, string basePath)
+            => Assert.Throws<ArgumentException>(() => UrlPath.StripPrefix(requestPath, basePath));
 
         [TestCase("/api/v1/endpoint", "/api/v1", "endpoint")]
         [TestCase("/api/v1/endpoint", "/api/v1/", "endpoint")]
@@ -88,8 +88,8 @@ namespace EmbedIO.Tests.Utilities
         [TestCase("/api/v1", "/api/v1/", "")]
         [TestCase("/api/v1/endpoint", "/api/v2", null)]
         [TestCase("/api/v1/endpoint", "/api/v2/", null)]
-        public void StripPrefix_ReturnsCorrectValue(string urlPath, string baseUrlPath, string? expectedResult)
-            => Assert.AreEqual(expectedResult, UrlPath.StripPrefix(urlPath, baseUrlPath));
+        public void StripPrefix_ReturnsCorrectValue(string requestPath, string basePath, string? expectedResult)
+            => Assert.AreEqual(expectedResult, UrlPath.StripPrefix(requestPath, basePath));
 
         [Test]
         public void Split_OnNullUrlPath_ThrowsArgumentNullException()
@@ -106,7 +106,7 @@ namespace EmbedIO.Tests.Utilities
         [TestCase("/")]
         [TestCase("/api/v1/endpoint", "api", "v1", "endpoint")]
         [TestCase("///multiple///slashes//get///normalized/", "multiple", "slashes", "get", "normalized")]
-        public void Split_ReturnsCorrectValues(string urlPath, params string[] segments)
-            => CollectionAssert.AreEqual(segments, UrlPath.Split(urlPath));
+        public void Split_ReturnsCorrectValues(string requestPath, params string[] segments)
+            => Assert.That(UrlPath.Split(requestPath), Is.EqualTo(segments).AsCollection);
     }
 }

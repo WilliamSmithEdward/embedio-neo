@@ -10,22 +10,22 @@ namespace EmbedIO.Tests
     public class Http2StreamRegistryTest
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static Type Type(string name) => typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2." + name, true)!;
+        private static Type Type(string name) => (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2." + name, true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         private sealed class Registry
         {
             private readonly object _instance;
             private readonly HashSet<int> _seen = new();
-            internal Registry(int maximum = 128) => _instance = Activator.CreateInstance(Type("Http2StreamRegistry"), Flags, null, new object[] { maximum }, null)!;
-            internal int Count => (int)_instance.GetType().GetProperty("ActiveCount")!.GetValue(_instance)!;
+            internal Registry(int maximum = 128) => _instance = (Activator.CreateInstance(Type("Http2StreamRegistry"), Flags, null, new object[] { maximum }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            internal int Count => (int)((_instance.GetType().GetProperty("ActiveCount") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(_instance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             internal object? Call(string name, params object[] args)
             {
-                try { return _instance.GetType().GetMethod(name, Flags)!.Invoke(_instance, args); }
-                catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture(error.InnerException!).Throw(); throw; }
+                try { return (_instance.GetType().GetMethod(name, Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(_instance, args); }
+                catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture((error.InnerException ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."))).Throw(); throw; }
             }
             internal object? Frame(byte type, int id, byte flags = 0, byte[]? payload = null, bool pseudo = false)
             {
                 payload ??= type == 3 || type == 8 ? new byte[4] : type == 2 ? new byte[5] : Array.Empty<byte>();
-                var frame = Activator.CreateInstance(Type("Http2Frame"), Flags, null, new object[] { type, flags, id, payload }, null)!;
+                var frame = (Activator.CreateInstance(Type("Http2Frame"), Flags, null, new object[] { type, flags, id, payload }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
                 if (type == 1)
                 {
                     var pairs = pseudo ? new[] { ":path", "/" } : _seen.Add(id)
@@ -33,17 +33,17 @@ namespace EmbedIO.Tests
                     var fields = Array.CreateInstance(Type("HpackField"), pairs.Length / 2);
                     for (var i = 0; i < pairs.Length; i += 2)
                         fields.SetValue(Activator.CreateInstance(Type("HpackField"), Flags | BindingFlags.Public, null, new object[] { pairs[i], pairs[i + 1], false }, null), i / 2);
-                    var block = Activator.CreateInstance(Type("Http2HeaderBlock"), Flags, null, new object[] { id, (flags & 1) != 0, fields, 0u }, null)!;
-                    frame.GetType().GetProperty("HeaderBlock")!.SetValue(frame, block);
+                    var block = (Activator.CreateInstance(Type("Http2HeaderBlock"), Flags, null, new object[] { id, (flags & 1) != 0, fields, 0u }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+                    (frame.GetType().GetProperty("HeaderBlock") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).SetValue(frame, block);
                 }
                 return Call("Receive", frame);
             }
         }
         private static void Error(Action action, uint code, int id)
         {
-            var error = Assert.Catch<IOException>(action)!;
-            Assert.That(error.GetType().GetProperty("ErrorCode")!.GetValue(error), Is.EqualTo(code));
-            Assert.That(error.GetType().GetProperty("StreamId")!.GetValue(error), Is.EqualTo(id));
+            var error = (Assert.Catch<IOException>(action) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            Assert.That((error.GetType().GetProperty("ErrorCode") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(error), Is.EqualTo(code));
+            Assert.That((error.GetType().GetProperty("StreamId") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(error), Is.EqualTo(id));
         }
 
         [Test]

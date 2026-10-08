@@ -18,7 +18,7 @@ namespace EmbedIO.Utilities
         /// </summary>
         /// <param name="address">The IP address.</param>
         /// <returns>A collection of <see cref="IPAddress"/> parsed correctly from <paramref name="address"/>.</returns>
-        public static async Task<IEnumerable<IPAddress>> ParseAsync(string address)
+        public static async Task<IEnumerable<IPAddress>> ParseAsync(string? address)
         {
             if (address == null)
                 return Enumerable.Empty<IPAddress>();
@@ -34,7 +34,7 @@ namespace EmbedIO.Utilities
             {
                 socketEx.Log(nameof(IPParser));
             }
-            catch
+            catch (System.ArgumentException)
             {
                 // Ignore
             }
@@ -52,9 +52,9 @@ namespace EmbedIO.Utilities
         /// <returns>
         ///   <c>true</c> if the IP-range string is CIDR notation; otherwise, <c>false</c>.
         /// </returns>
-        public static bool IsCidrNotation(string range)
+        public static bool IsCidrNotation(string? range)
         {
-            if (string.IsNullOrWhiteSpace(range))
+            if (range == null || string.IsNullOrWhiteSpace(range))
                 return false;
 
             var parts = range.Split('/');
@@ -76,9 +76,9 @@ namespace EmbedIO.Utilities
         /// </summary>
         /// <param name="range">The IP-range string.</param>
         /// <returns>A collection of <see cref="IPAddress"/> parsed correctly from <paramref name="range"/>.</returns>
-        public static IEnumerable<IPAddress> ParseCidrNotation(string range)
+        public static IEnumerable<IPAddress> ParseCidrNotation(string? range)
         {
-            if (!IsCidrNotation(range))
+            if (range == null || !IsCidrNotation(range))
                 return Enumerable.Empty<IPAddress>();
 
             var parts = range.Split('/');
@@ -129,9 +129,9 @@ namespace EmbedIO.Utilities
         /// <returns>
         ///   <c>true</c> if the IP-range string is in simple IP range notation; otherwise, <c>false</c>.
         /// </returns>
-        public static bool IsSimpleIPRange(string range)
+        public static bool IsSimpleIPRange(string? range)
         {
-            if (string.IsNullOrWhiteSpace(range))
+            if (range == null || string.IsNullOrWhiteSpace(range))
                 return false;
 
             var parts = range.Split('.');
@@ -157,9 +157,9 @@ namespace EmbedIO.Utilities
         /// </summary>
         /// <param name="range">The IP-range string.</param>
         /// <returns>A collection of <see cref="IPAddress"/> parsed correctly from <paramref name="range"/>.</returns>
-        public static IEnumerable<IPAddress> TryParseSimpleIPRange(string range)
+        public static IEnumerable<IPAddress> TryParseSimpleIPRange(string? range)
         {
-            if (!IsSimpleIPRange(range))
+            if (range == null || !IsSimpleIPRange(range))
                 return Enumerable.Empty<IPAddress>();
 
             var beginIP = new byte[4];

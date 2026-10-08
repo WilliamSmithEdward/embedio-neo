@@ -103,7 +103,7 @@ namespace JsonMigrationProbe
                         var output = parser == "SWAN 3.1.0" ? Swan.Formatters.Json.Serialize(value) : Json.Serialize(value);
                         Console.WriteLine(JsonSerializer.Serialize(new { name, parser, accepted = true, output }));
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
                     {
                         Console.WriteLine(JsonSerializer.Serialize(new { name, parser, accepted = false, error = ex.GetType().Name }));
                     }
@@ -129,7 +129,7 @@ namespace JsonMigrationProbe
                     if ((int)response.StatusCode != expectedStatus)
                         throw new InvalidOperationException($"Unexpected HTTP status for {name} at {path}.");
                     var responseBody = await response.Content.ReadAsStringAsync();
-                    if (expectedStatus == 200 && Json.Deserialize<TextData>(responseBody).Text != "first\r\nsecond")
+                    if (expectedStatus == 200 && ((Json.Deserialize<TextData>(responseBody)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).Text != "first\r\nsecond")
                         throw new InvalidOperationException($"CRLF value changed at {path}.");
                     Console.WriteLine(JsonSerializer.Serialize(new { name, path, status = (int)response.StatusCode, body = responseBody }));
                 }
@@ -140,23 +140,23 @@ namespace JsonMigrationProbe
         {
             var assertions = 0;
             var value = Json.Deserialize<CompatibilityData>("{\"Text\":\"first\r\nsecond\",\"Flag\":\"true\",\"Choice\":\"Second\",\"Count\":+001,\"PrivateCount\":7,\"IgnoreReads\":10,\"IgnoreWrites\":11,\"Date\":\"10/07/2026\",}");
-            Check(value.Text == "first\r\nsecond", "raw CRLF");
+            Check(((value) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).Text == "first\r\nsecond", "raw CRLF");
             Check(value.Flag, "quoted boolean");
             Check(value.Choice == Choice.Second, "enum name");
             Check(value.Count == 1, "legacy number");
             Check(value.PrivateCount == 7 && value.IgnoreReads == 9 && value.IgnoreWrites == 11
-                && !Json.Serialize(value).Contains("IgnoreWrites"), "private setter and directional ignores");
+                && Json.Serialize(value).IndexOf("IgnoreWrites", StringComparison.Ordinal) < 0, "private setter and directional ignores");
             Check(value.Date == new DateTime(2026, 10, 7), "legacy date");
             Check(Json.Deserialize<TextData>(" \r\n") == null, "empty reference");
             Check(Json.Deserialize<int>("") == 0, "empty value");
             var members = Json.Deserialize<MemberData>("{\"Field\":3,\"PrivateCount\":5,\"ReadOnly\":6}");
-            Check(members.Field == 3 && members.PrivateCount == 5 && members.ReadOnly == 9, "member binding");
+            Check(((members) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).Field == 3 && members.PrivateCount == 5 && members.ReadOnly == 9, "member binding");
             var options = Json.CreateOptions();
             options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-            Check(Json.Serialize(new EnumData { Value = Choice.Second }, options).Contains("Second"), "custom converter precedence");
-            Check(double.IsNaN(Json.Deserialize<double[]>(Json.Serialize(new[] { double.NaN }))[0]), "named float");
-            var nested = (Dictionary<string, object>)Json.Deserialize("{\"a\nb\":{\"Text\":\"x\ty\"}}")!;
-            Check(((Dictionary<string, object>)nested["a\nb"])["Text"].Equals("x\ty"), "nested controls");
+            Check(Json.Serialize(new EnumData { Value = Choice.Second }, options).IndexOf("Second", StringComparison.Ordinal) >= 0, "custom converter precedence");
+            Check(double.IsNaN(((Json.Deserialize<double[]>(Json.Serialize(new[] { double.NaN }))) ?? throw new System.InvalidOperationException("Expected a non-null test value."))[0]), "named float");
+            var nested = (Dictionary<string, object>)((Json.Deserialize("{\"a\nb\":{\"Text\":\"x\ty\"}}")) ?? throw new System.InvalidOperationException("Expected a non-null test value."));
+            Check(((Dictionary<string, object>)((nested) ?? throw new System.InvalidOperationException("Expected a non-null test value."))["a\nb"])["Text"].Equals("x\ty"), "nested controls");
             Reject("{\"Text\":\"a\nb\"}", new JsonSerializerOptions());
             Reject("{\"Count\":\"invalid\"}");
             Reject("{\"Text\":\"a\\qb\"}");
@@ -186,7 +186,7 @@ namespace JsonMigrationProbe
                         : Json.Deserialize<T>(body, parser == "Explicit strict options" ? new JsonSerializerOptions() : null);
                     Console.WriteLine(JsonSerializer.Serialize(new { name, parser, accepted = true, type = value?.GetType().FullName, value, stringUnits = StringUnits(value) }, ReportOptions));
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
                 {
                     Console.WriteLine(JsonSerializer.Serialize(new { name, parser, accepted = false, error = ex.GetType().Name }));
                 }

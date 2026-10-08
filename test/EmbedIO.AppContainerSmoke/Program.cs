@@ -21,7 +21,7 @@ internal static class Program
         if (args.Length > 0 && args[0] == "serve")
         {
             try { await ServeAsync(int.Parse(args[1]), args[2], args[3]); return 0; }
-            catch (Exception error) { File.WriteAllText(Path.Combine(args[2], "failure.txt"), error.ToString()); return 1; }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { File.WriteAllText(Path.Combine(args[2], "failure.txt"), error.ToString()); return 1; }
         }
         if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" || Environment.GetEnvironmentVariable("GITHUB_REPOSITORY") != "WilliamSmithEdward/embedio-neo")
             throw new InvalidOperationException("Profile, ACL and exemption changes are restricted to disposable GitHub runners.");
@@ -64,7 +64,7 @@ internal static class Program
             checks["ending_inbound_session_restores_isolation"] = true;
             passed = true;
         }
-        catch (Exception error) { failure = error.ToString(); }
+        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { failure = error.ToString(); }
         finally
         {
             Stop(inbound);
@@ -74,7 +74,8 @@ internal static class Program
             {
                 await inbound.WaitForExitAsync();
                 File.WriteAllText(Path.Combine(results, "inbound-session.txt"),
-                    await inboundOutput! + await inboundError!);
+                    await (inboundOutput ?? throw new InvalidOperationException("The inbound output capture is missing."))
+                    + await (inboundError ?? throw new InvalidOperationException("The inbound error capture is missing.")));
             }
             if (firewallAdded)
                 await RunToolAsync("WindowsPowerShell/v1.0/powershell.exe", "-NoProfile", "-NonInteractive", "-Command", $"Remove-NetFirewallRule -Name '{profile.Name}' -ErrorAction SilentlyContinue");
@@ -121,7 +122,7 @@ internal static class Program
         var first = JsonSerializer.Deserialize<JsonElement>(await client.GetStringAsync("api/probe"));
         var second = JsonSerializer.Deserialize<JsonElement>(await client.GetStringAsync("api/probe"));
         Require(first.GetProperty("session").GetString() == second.GetProperty("session").GetString(), "Session continuity failed");
-        Require(IPAddress.Parse(first.GetProperty("localAddress").GetString()!).MapToIPv4().Equals(IPAddress.Loopback), "Unexpected actual request endpoint");
+        Require(IPAddress.Parse(((first.GetProperty("localAddress").GetString()) ?? throw new System.InvalidOperationException("Expected a non-null test value."))).MapToIPv4().Equals(IPAddress.Loopback), "Unexpected actual request endpoint");
         Require(!string.IsNullOrEmpty(first.GetProperty("session").GetString()), "Missing session");
     }
 

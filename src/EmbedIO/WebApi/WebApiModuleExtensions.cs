@@ -21,6 +21,7 @@ namespace EmbedIO.WebApi
         public static WebApiModule WithController<TController>(this WebApiModule @this)
             where TController : WebApiController, new()
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.RegisterController<TController>();
             return @this;
         }
@@ -40,6 +41,7 @@ namespace EmbedIO.WebApi
         public static WebApiModule WithController<TController>(this WebApiModule @this, Func<TController> factory)
             where TController : WebApiController
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.RegisterController(factory);
             return @this;
         }
@@ -57,6 +59,7 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type)"/>
         public static WebApiModule WithController(this WebApiModule @this, Type controllerType)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.RegisterController(controllerType);
             return @this;
         }
@@ -75,6 +78,7 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type,Func{WebApiController})"/>
         public static WebApiModule WithController(this WebApiModule @this, Type controllerType, Func<WebApiController> factory)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.RegisterController(controllerType, factory);
             return @this;
         }

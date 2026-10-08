@@ -11,17 +11,17 @@ internal static class EngineParser
     internal static bool Run(string[] args)
     {
         if (!args.Contains("--engine-parser", StringComparer.Ordinal)) return false;
-        var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true)!;
+        var type = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var connection = RuntimeHelpers.GetUninitializedObject(type);
-        type.GetField("_connectionSync", flags)!.SetValue(connection, new object());
-        type.GetField("<Stream>k__BackingField", flags)!.SetValue(connection, Stream.Null);
-        var initialize = type.GetMethod("InitWithPendingInput", flags)!.CreateDelegate<Action<ArraySegment<byte>>>(connection);
-        var process = type.GetMethod("ProcessInput", flags)!.CreateDelegate<Func<MemoryStream, bool>>(connection);
-        var streamField = type.GetField("_ms", flags)!;
-        var positionField = type.GetField("_position", flags)!;
-        var contextField = type.GetField("_context", flags)!;
-        var errorField = type.GetField("_errorMessage", flags)!;
+        (type.GetField("_connectionSync", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value.")).SetValue(connection, new object());
+        (type.GetField("<Stream>k__BackingField", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value.")).SetValue(connection, Stream.Null);
+        var initialize = (type.GetMethod("InitWithPendingInput", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value.")).CreateDelegate<Action<ArraySegment<byte>>>(connection);
+        var process = (type.GetMethod("ProcessInput", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value.")).CreateDelegate<Func<MemoryStream, bool>>(connection);
+        var streamField = (type.GetField("_ms", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
+        var positionField = (type.GetField("_position", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
+        var contextField = (type.GetField("_context", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
+        var errorField = (type.GetField("_errorMessage", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
         var rows = new List<object>();
         foreach (var batch in new[] { 1, 16, 64 })
         {
@@ -33,12 +33,12 @@ internal static class EngineParser
                 for (var index = 0; index < batch; index++)
                 {
                     initialize(pending);
-                    using var stream = (MemoryStream)streamField.GetValue(connection)!;
+                    using var stream = (MemoryStream)(streamField.GetValue(connection) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
                     if (!process(stream) || errorField.GetValue(connection) != null) throw new InvalidOperationException("Parser failed.");
-                    var context = (IHttpContext)contextField.GetValue(connection)!;
-                    if (context.Request.RawUrl != "/baseline11?a=13&b=42" || context.Request.Headers["X-Padding"]?.Length != 128)
+                    var context = (IHttpContext)(contextField.GetValue(connection) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
+                    if (context.Request.RawTarget != "/baseline11?a=13&b=42" || context.Request.Headers["X-Padding"]?.Length != 128)
                         throw new InvalidOperationException("Parsed request changed.");
-                    var position = (int)positionField.GetValue(connection)!;
+                    var position = (int)(positionField.GetValue(connection) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
                     pending = new ArraySegment<byte>(stream.GetBuffer(), position, (int)stream.Length - position);
                 }
                 if (pending.Count != 0) throw new InvalidOperationException("Pipeline was not fully consumed.");

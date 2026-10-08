@@ -34,7 +34,7 @@ namespace EmbedIO.WebSockets.Internal
             WebSocketVersion = webSocketVersion;
             Cookies = httpContext.Request.Cookies;
             User = httpContext.User;
-            IsAuthenticated = httpContext.User.Identity.IsAuthenticated;
+            IsAuthenticated = httpContext.User?.Identity?.IsAuthenticated ?? false;
             IsLocal = httpContext.Request.IsLocal;
             IsSecureConnection = httpContext.Request.IsSecureConnection;
             WebSocket = webSocket;
@@ -68,7 +68,7 @@ namespace EmbedIO.WebSockets.Internal
         public NameValueCollection Headers { get; }
 
         /// <inheritdoc />
-        public string Origin { get; }
+        public string? Origin { get; }
 
         /// <inheritdoc />
         public IEnumerable<string> RequestedProtocols { get; }

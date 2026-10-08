@@ -40,8 +40,9 @@ namespace EmbedIO.Testing
         /// <seealso cref="Create(string)"/>
         public static TestHttpClient Create(ITestWebServer server)
         {
-            var handler = new TestMessageHandler(Validate.NotNull(nameof(server), server));
-            return new TestHttpClient(handler, server.BaseUrl);
+            server = Validate.NotNull(nameof(server), server);
+            var handler = new TestMessageHandler(server);
+            return new TestHttpClient(handler, server.BaseUrl.OriginalString);
         }
 
         /// <summary>
@@ -56,5 +57,9 @@ namespace EmbedIO.Testing
             var handler = new HttpClientHandler();
             return new TestHttpClient(handler, baseUrl);
         }
+
+        /// <inheritdoc cref="Create(string)"/>
+        public static TestHttpClient Create(Uri baseUrl)
+            => Create(Validate.NotNull(nameof(baseUrl), baseUrl).OriginalString);
     }
 }

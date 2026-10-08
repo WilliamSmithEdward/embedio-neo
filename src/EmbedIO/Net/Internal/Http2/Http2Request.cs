@@ -19,7 +19,7 @@ namespace EmbedIO.Net.Internal.Http2
             var request = exchange.Request;
             HttpMethod = request.Method;
             HttpVerb = HttpListenerRequest.IsKnownHttpMethod(HttpMethod, out var verb) ? verb : HttpVerbs.Any;
-            RawUrl = request.Path.Length == 0 ? request.Authority : request.Path;
+            RawTarget = request.Path.Length == 0 ? request.Authority : request.Path;
             var scheme = request.Scheme.Length == 0 ? (secure ? "https" : "http") : request.Scheme;
             Url = new Uri(scheme + "://" + request.Authority + (request.Path.Length == 0 || request.Path == "*" ? "/" : request.Path));
             HasEntityBody = !exchange.State.InitialEndStream || request.ContentLength.GetValueOrDefault() > 0;
@@ -28,7 +28,7 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 foreach (var part in query.Substring(1).Split('&'))
                 {
-                    var equals = part.IndexOf('=');
+                    var equals = EmbedIO.Internal.StringOperations.IndexOfOrdinal(part, '=');
                     if (equals < 0) QueryString.Add(null, WebUtility.UrlDecode(part));
                     else QueryString.Add(WebUtility.UrlDecode(part.Substring(0, equals)), WebUtility.UrlDecode(part.Substring(equals + 1)));
                 }
@@ -37,7 +37,7 @@ namespace EmbedIO.Net.Internal.Http2
         }
         public NameValueCollection Headers => _exchange.Request.Headers;
         public bool KeepAlive => true;
-        public string RawUrl { get; }
+        public string RawTarget { get; }
         public NameValueCollection QueryString { get; } = new();
         public string HttpMethod { get; }
         public HttpVerbs HttpVerb { get; }

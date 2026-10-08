@@ -59,7 +59,7 @@ namespace EmbedIO.Sessions
         /// </value>
         /// <param name="key">The key of the value to get or set.</param>
         /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
-        object this[string key] { get; set; }
+        object? this[string key] { get; set; }
 
         /// <summary>
         /// Removes all keys and values from a session.
@@ -86,7 +86,7 @@ namespace EmbedIO.Sessions
         /// <returns><see langword="true"/> if the object that implements <see cref="ISession"/>
         /// contains an element with the specified key; otherwise, <see langword="false"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
-        bool TryGetValue(string key, out object value);
+        bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value);
 
         /// <summary>
         /// Attempts to remove and return the value that has the specified key from a session.
@@ -96,7 +96,7 @@ namespace EmbedIO.Sessions
         /// if the key is found; otherwise, <see langword="null"/>. This parameter is passed uninitialized.</param>
         /// <returns><see langword="true"/> if the value was removed successfully; otherwise, <see langword="false"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
-        bool TryRemove(string key, out object value);
+        bool TryRemove(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value);
 
         /// <summary>
         /// Takes and returns a snapshot of the contents of a session at the time of calling.

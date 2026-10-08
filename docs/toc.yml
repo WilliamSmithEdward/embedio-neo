@@ -183,6 +183,9 @@
     - name: Fluent Basic authentication
       href: user-reports/fluent-basic-authentication.md
 
+    - name: Context and persistent client banning
+      href: user-reports/context-client-banning.md
+
 - name: Architecture
   items:
     - name: Dependency injection

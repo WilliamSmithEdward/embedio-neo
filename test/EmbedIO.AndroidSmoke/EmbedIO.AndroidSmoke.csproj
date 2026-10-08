@@ -18,6 +18,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../Shared/HttpsSmoke.cs" Link="PlatformTests/HttpsSmoke.cs" />
+    <Compile Include="../../src/EmbedIO/Internal/AsyncWriteGate.cs" Link="PlatformTests/AsyncWriteGate.cs" />
     <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.110" />
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
   </ItemGroup>

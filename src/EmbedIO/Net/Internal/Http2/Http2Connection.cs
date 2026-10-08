@@ -144,6 +144,7 @@ namespace EmbedIO.Net.Internal.Http2
             ReceiveFlow.Abort();
             Streams.Abort();
             _headerOutput.Dispose();
+            _transport.Dispose();
         }
 
         internal async Task SendAsync(Http2Frame[] frames, CancellationToken token)

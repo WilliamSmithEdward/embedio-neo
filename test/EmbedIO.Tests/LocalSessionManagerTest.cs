@@ -20,7 +20,8 @@ namespace EmbedIO.Tests
         protected override void OnSetUp()
         {
             Server
-                .WithSessionManager(new LocalSessionManager {
+                .WithSessionManager(new LocalSessionManager
+                {
                     SessionDuration = TimeSpan.FromSeconds(1),
                 })
                 .WithWebApi("/api", m => m.RegisterController<TestLocalSessionController>())
@@ -34,7 +35,7 @@ namespace EmbedIO.Tests
 
         protected void ClearServerCookies()
         {
-            foreach (var cookie in Client.CookieContainer.GetCookies(new Uri(WebServerUrl)).Cast<Cookie>())
+            foreach (var cookie in Client.CookieContainer.GetCookies(WebServerUrl).Cast<Cookie>())
             {
                 cookie.Expired = true;
             }
@@ -49,7 +50,7 @@ namespace EmbedIO.Tests
 
             Assert.IsNotNull(Client.CookieContainer, "Cookies are not null");
             Assert.Greater(
-                Client.CookieContainer.GetCookies(new Uri(WebServerUrl)).Count,
+                Client.CookieContainer.GetCookies(WebServerUrl).Count,
                 0,
                 "Cookies are not empty");
         }
@@ -101,17 +102,17 @@ namespace EmbedIO.Tests
             {
                 var request = new HttpRequestMessage(HttpMethod.Get, WebServerUrl);
                 await ValidateCookie(request);
-                var firstCookie = Client.CookieContainer.GetCookieHeader(new Uri(WebServerUrl));
+                var firstCookie = Client.CookieContainer.GetCookieHeader(WebServerUrl);
 
                 request = new HttpRequestMessage(HttpMethod.Get, WebServerUrl);
                 await ValidateCookie(request);
-                Assert.AreEqual(firstCookie, Client.CookieContainer.GetCookieHeader(new Uri(WebServerUrl)));
+                Assert.AreEqual(firstCookie, Client.CookieContainer.GetCookieHeader(WebServerUrl));
 
                 ClearServerCookies();
 
                 request = new HttpRequestMessage(HttpMethod.Get, WebServerUrl);
                 await ValidateCookie(request);
-                Assert.AreNotEqual(firstCookie, Client.CookieContainer.GetCookieHeader(new Uri(WebServerUrl)));
+                Assert.AreNotEqual(firstCookie, Client.CookieContainer.GetCookieHeader(WebServerUrl));
             }
         }
 
@@ -140,7 +141,7 @@ namespace EmbedIO.Tests
                 var request = new HttpRequestMessage(HttpMethod.Get, WebServerUrl);
                 await ValidateCookie(request);
                 Assert.IsNotEmpty(
-                    Client.CookieContainer.GetCookieHeader(new Uri(WebServerUrl)),
+                    Client.CookieContainer.GetCookieHeader(WebServerUrl),
                     "Cookie content is not null");
             }
         }

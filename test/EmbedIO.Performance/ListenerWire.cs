@@ -13,8 +13,8 @@ internal static class ListenerWire
         if (!verify && !args.Contains("--listener-wire", StringComparer.Ordinal)) return false;
         var rows = new List<object>();
         var assembly = typeof(WebServer).Assembly;
-        var chunk = assembly.GetType("EmbedIO.Net.Internal.ResponseStream", true)!
-            .GetMethod("GetChunkSizeBytes", BindingFlags.Static | BindingFlags.NonPublic)!.CreateDelegate<Func<int, bool, byte[]>>();
+        var chunk = ((((assembly.GetType("EmbedIO.Net.Internal.ResponseStream", true)) ?? throw new System.InvalidOperationException("Expected a non-null test value."))
+            .GetMethod("GetChunkSizeBytes", BindingFlags.Static | BindingFlags.NonPublic)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).CreateDelegate<Func<int, bool, byte[]>>();
         foreach (var size in new[] { 0, 15, 256, 16384 })
         {
             var final = size == 0;
@@ -24,8 +24,8 @@ internal static class ListenerWire
                 if (!chunk(size, final).AsSpan().SequenceEqual(expected)) throw new InvalidOperationException("Chunk bytes changed.");
             }, 40);
         }
-        var charset = assembly.GetType("EmbedIO.Net.Internal.HeaderUtility", true)!
-            .GetMethod("GetCharset")!.CreateDelegate<Func<string?, string?>>();
+        var charset = ((((assembly.GetType("EmbedIO.Net.Internal.HeaderUtility", true)) ?? throw new System.InvalidOperationException("Expected a non-null test value."))
+            .GetMethod("GetCharset")) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).CreateDelegate<Func<string?, string?>>();
         foreach (var (name, value, expected, budget) in new[]
         {
             ("charset-none", "application/json", (string?)null, 0L),

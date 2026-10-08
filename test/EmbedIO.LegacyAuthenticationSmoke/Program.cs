@@ -31,6 +31,6 @@ internal static class Program
             Console.WriteLine(result);
             return 0;
         }
-        catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { Console.Error.WriteLine(error); return 1; }
     }
 }

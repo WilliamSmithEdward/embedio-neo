@@ -59,9 +59,9 @@ namespace EmbedIO.Tests
             await body.CopyToAsync(result, 2);
             Assert.That(Encoding.ASCII.GetString(result.ToArray()), Is.EqualTo("abcde"));
             Assert.That(await body.ReadAsync(new byte[5]), Is.Zero);
-            var tail = (ArraySegment<byte>)body.GetType().GetProperty("BufferedRemainder", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(body)!;
+            var tail = (ArraySegment<byte>)((body.GetType().GetProperty("BufferedRemainder", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(body) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             using var next = new MemoryStream();
-            if (tail.Count > 0) next.Write(tail.Array!, tail.Offset, tail.Count);
+            if (tail.Count > 0) next.Write((tail.Array ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")), tail.Offset, tail.Count);
             await source.CopyToAsync(next);
             Assert.That(Encoding.ASCII.GetString(next.ToArray()), Is.EqualTo("NEXT"));
         }
@@ -111,7 +111,7 @@ namespace EmbedIO.Tests
             first.Response.OutputStream.Write(Array.Empty<byte>(), 0, 0);
             first.Close();
             var second = await listener.GetContextAsync(stop.Token);
-            Assert.That(second.Request.RawUrl, Is.EqualTo("/next"));
+            Assert.That(second.Request.RawTarget, Is.EqualTo("/next"));
             Assert.That(second.Request.Headers["X-Trailer"], Is.Null);
             Assert.That(await oldBody.ReadAsync(new byte[20], stop.Token), Is.Zero);
             second.Response.StatusCode = 204;
@@ -168,9 +168,9 @@ namespace EmbedIO.Tests
                 int read;
                 while ((read = body.Read(buffer, 0, buffer.Length)) != 0) decoded.Write(buffer, 0, read);
                 Assert.That(Encoding.ASCII.GetString(decoded.ToArray()), Is.EqualTo("abcde"), $"split {split}");
-                var tail = (ArraySegment<byte>)body.GetType().GetProperty("BufferedRemainder", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(body)!;
+                var tail = (ArraySegment<byte>)((body.GetType().GetProperty("BufferedRemainder", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(body) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
                 using var successor = new MemoryStream();
-                if (tail.Count > 0) successor.Write(tail.Array!, tail.Offset, tail.Count);
+                if (tail.Count > 0) successor.Write((tail.Array ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")), tail.Offset, tail.Count);
                 source.CopyTo(successor);
                 Assert.That(Encoding.ASCII.GetString(successor.ToArray()), Is.EqualTo("NEXT"), $"split {split}");
             }
@@ -221,26 +221,30 @@ namespace EmbedIO.Tests
         }
 
         private static Stream Body(Stream source, byte[] buffered, long length)
-            => (Stream)Activator.CreateInstance(typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.RequestStream", true)!,
-                BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { source, buffered, 0, buffered.Length, length }, null)!;
+            => (Stream)(Activator.CreateInstance((typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.RequestStream", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")),
+                BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { source, buffered, 0, buffered.Length, length }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
 
         private static Stream Chunked(Stream source, byte[] buffered)
-            => (Stream)Activator.CreateInstance(typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.ChunkedRequestStream", true)!,
-                BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { source, buffered, 0, buffered.Length }, null)!;
+            => (Stream)(Activator.CreateInstance((typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.ChunkedRequestStream", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")),
+                BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { source, buffered, 0, buffered.Length }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
 
-        private sealed class AsyncOnlyStream(byte[] bytes, int fragment = int.MaxValue) : MemoryStream(bytes)
+        private sealed class AsyncOnlyStream : MemoryStream
         {
+            private readonly byte[] _bytes;
+            private readonly int _fragment;
+            internal AsyncOnlyStream(byte[] bytes, int fragment = int.MaxValue) : base(bytes)
+            { _bytes = bytes; _fragment = fragment; }
             public override int Read(byte[] buffer, int offset, int count) => throw new InvalidOperationException("Synchronous transport read.");
             public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return Task.FromResult(base.Read(buffer, offset, Math.Min(count, fragment)));
+                return Task.FromResult(base.Read(buffer, offset, Math.Min(count, _fragment)));
             }
             public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var count = (int)Math.Min(Math.Min(buffer.Length, fragment), Length - Position);
-                bytes.AsMemory((int)Position, count).CopyTo(buffer);
+                var count = (int)Math.Min(Math.Min(buffer.Length, _fragment), Length - Position);
+                _bytes.AsMemory((int)Position, count).CopyTo(buffer);
                 Position += count;
                 return new ValueTask<int>(count);
             }

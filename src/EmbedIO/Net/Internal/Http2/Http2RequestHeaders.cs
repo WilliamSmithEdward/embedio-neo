@@ -192,7 +192,7 @@ namespace EmbedIO.Net.Internal.Http2
             foreach (var ch in value) if (!TokenChar(ch)) return false;
             return true;
         }
-        private static bool TokenChar(char ch) => Letter(ch) || (ch >= '0' && ch <= '9') || "!#$%&'*+-.^_`|~".IndexOf(ch) >= 0;
+        private static bool TokenChar(char ch) => Letter(ch) || (ch >= '0' && ch <= '9') || EmbedIO.Internal.StringOperations.IndexOfOrdinal("!#$%&'*+-.^_`|~", ch) >= 0;
         private static Http2ProtocolException Invalid(int id, string reason) => new(1, reason, id);
     }
 }

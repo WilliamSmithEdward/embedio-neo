@@ -81,7 +81,7 @@ namespace EmbedIO.Net.Internal.Http2
             foreach (var key in Headers.AllKeys)
             {
                 if (key == null) continue;
-                var name = key.ToLowerInvariant();
+                var name = WireHeaderName(key);
                 // The application API preserves these legacy options; HTTP/2 uses
                 // its own framing and connection-control frames on the wire.
                 if (name == "connection" || name == "keep-alive" || name == "proxy-connection" || name == "transfer-encoding" || name == "upgrade") continue;
@@ -98,6 +98,23 @@ namespace EmbedIO.Net.Internal.Http2
                 }
             }
             return fields.ToArray();
+        }
+        private static string WireHeaderName(string name)
+        {
+            // HTTP/2 field names are ASCII tokens and must be lowercase on the wire.
+            // Unicode case folding could turn an invalid application name into a valid one.
+            char[]? characters = null;
+            for (var i = 0; i < name.Length; i++)
+            {
+                var character = name[i];
+                if (!HttpRequestFraming.IsTokenCharacter(character)) throw new InvalidDataException("Invalid HTTP field name.");
+                if (character >= 'A' && character <= 'Z')
+                {
+                    characters ??= name.ToCharArray();
+                    characters[i] = (char)(character + ('a' - 'A'));
+                }
+            }
+            return characters == null ? name : new string(characters);
         }
         private async Task EnsureSentAsync(bool closing, CancellationToken token)
         {

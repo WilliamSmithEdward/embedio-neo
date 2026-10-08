@@ -476,3 +476,32 @@ The full Windows suite passed: 2,355 successes, five expected skips, 2,360 total
 Existing allocation checks passed. Main has since added analyzer enforcement and
 CI changes (tracked origin/main 83d0b96); reconciliation and fresh exact-head
 remote validation are required before this program can be considered complete.
+
+
+### Mainline analyzer and API integration
+
+Reconciled the engine branch with main `83d0b96`, including the separately
+owner-approved `RawTarget` API migration, context/network banning, CI structure
+and enforced analyzer/no-suppression rules. Borrowed streams and cancellation
+sources now express their existing ownership explicitly; the HTTP/2 frame
+transport disposes its write gate after connection I/O has joined. Recoverable
+exception filters preserve cleanup without swallowing fatal runtime failures.
+HTTP/2 response names use ASCII token validation and lowercase wire conversion,
+avoiding Unicode case folding. Test reflection helpers use explicit null checks;
+void-returning validation methods retain nullable results.
+
+The integrated solution and standalone performance harness build with zero
+warnings/errors on both library targets. Formatting, lexical and semantic
+suppression guards pass. All 364 focused HTTP/1/HTTP/2/managed-WebSocket cases pass
+on both the modern and actual netstandard2.0 assemblies (host .NET 10.0.11).
+The full Windows suite passes with 2,469 successes and five expected skips,
+2,474 total; CI's discovery floor is updated accordingly. Independent hpack 4.1.0
+interoperability passes 1,200 blocks in each direction. Existing hot-path, queue
+and cold-start allocation gates pass. No new throughput improvement is claimed.
+
+The first focused integration run exposed a test-helper assertion on a legitimate
+null reflection result from void trailer validation; the corrected run passes.
+Local logs retain that failure. Current-source cross-platform and remote checks
+remain outstanding; earlier green checks on `41ff73e` do not validate this source.
+HTTP/3, broader conformance/resource policies and the complete #190 performance
+and hardening scope remain development requirements.

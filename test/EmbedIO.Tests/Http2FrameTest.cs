@@ -13,27 +13,27 @@ namespace EmbedIO.Tests
     public class Http2FrameTest
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static readonly Type FrameType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2Frame", true)!;
-        private static readonly Type TransportType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2FrameTransport", true)!;
-        private static object Frame(byte type, byte flags, int id, byte[] bytes) => Activator.CreateInstance(FrameType, Flags, null, new object[] { type, flags, id, bytes }, null)!;
-        private static object Transport(Stream stream) => Activator.CreateInstance(TransportType, Flags, null, new object[] { stream, 16384 }, null)!;
-        private static T Property<T>(object value, string name) => (T)value.GetType().GetProperty(name)!.GetValue(value)!;
+        private static readonly Type FrameType = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2Frame", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static readonly Type TransportType = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2FrameTransport", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static object Frame(byte type, byte flags, int id, byte[] bytes) => (Activator.CreateInstance(FrameType, Flags, null, new object[] { type, flags, id, bytes }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static object Transport(Stream stream) => (Activator.CreateInstance(TransportType, Flags, null, new object[] { stream, 16384 }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static T Property<T>(object value, string name) => (T)((value.GetType().GetProperty(name) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(value) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         private static async Task<object?> Read(object transport, CancellationToken token = default)
         {
-            var task = (Task)TransportType.GetMethod("ReadAsync", Flags)!.Invoke(transport, new object[] { token })!;
+            var task = (Task)((TransportType.GetMethod("ReadAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(transport, new object[] { token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             await task;
-            return task.GetType().GetProperty("Result")!.GetValue(task);
+            return (task.GetType().GetProperty("Result") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(task);
         }
         private static Task Write(object transport, params object[] frames)
         {
             var array = Array.CreateInstance(FrameType, frames.Length);
             for (var i = 0; i < frames.Length; i++) array.SetValue(frames[i], i);
-            return (Task)TransportType.GetMethod("WriteAsync", Flags)!.Invoke(transport, new object[] { array, 16384, CancellationToken.None })!;
+            return (Task)((TransportType.GetMethod("WriteAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(transport, new object[] { array, 16384, CancellationToken.None }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         }
         private static void Validate(object frame)
         {
-            try { FrameType.GetMethod("ValidateShape", Flags)!.Invoke(frame, null); }
-            catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture(error.InnerException!).Throw(); }
+            try { (FrameType.GetMethod("ValidateShape", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(frame, null); }
+            catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture((error.InnerException ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."))).Throw(); }
         }
 
         [TestCase(1)]
@@ -45,12 +45,12 @@ namespace EmbedIO.Tests
             var wire = Convert.FromHexString("00000300A180000001616263000000F5FF00000000");
             using var source = new AsyncSource(wire, fragment);
             var transport = Transport(source);
-            var first = (await Read(transport))!;
+            var first = ((await Read(transport)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             Assert.That(Property<int>(first, "StreamId"), Is.EqualTo(1));
             Assert.That(Property<byte>(first, "Flags"), Is.EqualTo(0xa1));
             Assert.That(Property<byte[]>(first, "Payload"), Is.EqualTo(new byte[] { 97, 98, 99 }));
             Validate(first);
-            var second = (await Read(transport))!;
+            var second = ((await Read(transport)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             Assert.That(Property<byte>(second, "Type"), Is.EqualTo(0xf5));
             Validate(second);
             Assert.That(await Read(transport), Is.Null);
@@ -74,8 +74,8 @@ namespace EmbedIO.Tests
         public async Task ExcessiveLengthIsRejectedBeforeReadingAnyPayload()
         {
             using var source = new AsyncSource(Convert.FromHexString("00400100000000000155"), 1024);
-            var error = await Assert.CatchAsync<IOException>(async () => await Read(Transport(source)))!;
-            Assert.That(Property<uint>(error, "ErrorCode"), Is.EqualTo(6));
+            var error = await Assert.CatchAsync<IOException>(async () => await Read(Transport(source)));
+            Assert.That(Property<uint>(error ?? throw new AssertionException("Expected oversized-frame error."), "ErrorCode"), Is.EqualTo(6));
             Assert.That(source.Position, Is.EqualTo(9));
             await Task.CompletedTask;
         }
@@ -132,16 +132,16 @@ namespace EmbedIO.Tests
         [TestCase(5, 0, 1, 3, 6, 0)]
         public void ShapeErrorsRetainProtocolCodeAndScope(byte type, byte flags, int id, int length, int code, int scope)
         {
-            var error = Assert.Catch<IOException>(() => Validate(Frame(type, flags, id, new byte[length])))!;
-            Assert.That(Property<uint>(error, "ErrorCode"), Is.EqualTo(code));
+            var error = (Assert.Catch<IOException>(() => Validate(Frame(type, flags, id, new byte[length]))) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            Assert.That(Property<uint>(error ?? throw new AssertionException("Expected oversized-frame error."), "ErrorCode"), Is.EqualTo(code));
             Assert.That(Property<int>(error, "StreamId"), Is.EqualTo(scope));
         }
 
         [Test]
         public void PaddingCannotConsumeRequiredFields()
         {
-            var error = Assert.Catch<IOException>(() => Validate(Frame(1, 40, 1, new byte[] { 1, 0, 0, 0, 0, 0 })))!;
-            Assert.That(Property<uint>(error, "ErrorCode"), Is.EqualTo(1));
+            var error = (Assert.Catch<IOException>(() => Validate(Frame(1, 40, 1, new byte[] { 1, 0, 0, 0, 0, 0 }))) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            Assert.That(Property<uint>(error ?? throw new AssertionException("Expected oversized-frame error."), "ErrorCode"), Is.EqualTo(1));
             Validate(Frame(0, 8, 1, new byte[] { 1, 0 }));
         }
 

@@ -22,7 +22,7 @@ namespace EmbedIO.Tests
         [TestCase("0FA0646F6E65", 4000)]
         public async Task CloseValidationEmitsExpectedCodeAndListenerSurvives(string hex, int expected)
         {
-            var url = HttpsSmoke.GetUrl().Replace("https:", "http:");
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new TestWebSocket("/ws"))
                 .WithModule(new ActionModule("/", HttpVerbs.Get, context => context.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding)));

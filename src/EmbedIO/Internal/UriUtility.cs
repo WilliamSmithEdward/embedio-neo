@@ -4,7 +4,7 @@ namespace EmbedIO.Internal
 {
     internal static class UriUtility
     {
-        public static Uri StringToUri(string str)
+        public static Uri? StringToUri(string? str)
         {
             _ = Uri.TryCreate(str, CanBeAbsoluteUrl(str) ? UriKind.Absolute : UriKind.Relative, out var result);
             return result;
@@ -22,8 +22,8 @@ namespace EmbedIO.Internal
         }
 
         // URI schemes are case-insensitive; the path and query must retain their case.
-        private static bool CanBeAbsoluteUrl(string str)
-            => !string.IsNullOrEmpty(str)
+        private static bool CanBeAbsoluteUrl(string? str)
+            => str != null && str.Length > 0
             && (str.StartsWith("http:", StringComparison.OrdinalIgnoreCase)
                 || str.StartsWith("https:", StringComparison.OrdinalIgnoreCase)
                 || str.StartsWith("ws:", StringComparison.OrdinalIgnoreCase)

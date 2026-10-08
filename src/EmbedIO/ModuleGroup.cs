@@ -63,10 +63,12 @@ namespace EmbedIO
             GC.SuppressFinalize(this);
         }
 
-        string IMimeTypeProvider.GetMimeType(string extension)
+        /// <inheritdoc />
+        public string? GetMimeType(string extension)
             => _mimeTypeCustomizer.GetMimeType(extension);
 
-        bool IMimeTypeProvider.TryDetermineCompression(string mimeType, out bool preferCompression)
+        /// <inheritdoc />
+        public bool TryDetermineCompression(string mimeType, out bool preferCompression)
             => _mimeTypeCustomizer.TryDetermineCompression(mimeType, out preferCompression);
 
         /// <inheritdoc />
@@ -79,7 +81,10 @@ namespace EmbedIO
 
         /// <inheritdoc />
         protected override Task OnRequestAsync(IHttpContext context)
-            => _modules.DispatchRequestAsync(context);
+        {
+            if (context is null) throw new System.NullReferenceException();
+            return _modules.DispatchRequestAsync(context);
+        }
 
         /// <summary>
         /// Releases unmanaged and - optionally - managed resources.

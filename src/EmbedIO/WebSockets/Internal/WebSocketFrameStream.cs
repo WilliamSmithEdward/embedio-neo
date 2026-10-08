@@ -109,7 +109,7 @@ namespace EmbedIO.WebSockets.Internal
                 return;
             }
 
-            var bytes = await _stream.ReadBytesAsync(len).ConfigureAwait(false);
+            var bytes = await (_stream ?? throw new InvalidOperationException("The frame reader has no stream.")).ReadBytesAsync(len).ConfigureAwait(false);
 
             if (bytes.Length != len)
             {
@@ -138,7 +138,7 @@ namespace EmbedIO.WebSockets.Internal
                 return;
             }
 
-            var bytes = await _stream.ReadBytesAsync(len).ConfigureAwait(false);
+            var bytes = await (_stream ?? throw new InvalidOperationException("The frame reader has no stream.")).ReadBytesAsync(len).ConfigureAwait(false);
             if (bytes.Length != len)
             {
                 throw new WebSocketException(
@@ -162,8 +162,8 @@ namespace EmbedIO.WebSockets.Internal
                 throw new WebSocketException(CloseStatusCode.TooBig, "A frame has a long payload length.");
 
             var bytes = frame.PayloadLength < 127
-                ? await _stream.ReadBytesAsync((int)len).ConfigureAwait(false)
-                : await _stream.ReadBytesAsync((int)len, 1024).ConfigureAwait(false);
+                ? await (_stream ?? throw new InvalidOperationException("The frame reader has no stream.")).ReadBytesAsync((int)len).ConfigureAwait(false)
+                : await (_stream ?? throw new InvalidOperationException("The frame reader has no stream.")).ReadBytesAsync((int)len, 1024).ConfigureAwait(false);
 
             if (bytes.Length != (int)len)
             {

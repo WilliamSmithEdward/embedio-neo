@@ -10,18 +10,18 @@ namespace EmbedIO.Tests
     {
         private sealed class Decoder
         {
-            private static readonly Type Type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.HpackDecoder", true)!;
+            private static readonly Type Type = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.HpackDecoder", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             private readonly Func<byte[], Array> _decode;
             internal readonly Action<int> Maximum;
             internal Decoder(int limit = 32768)
             {
-                var instance = Activator.CreateInstance(Type, BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { limit }, null)!;
-                _decode = Type.GetMethod("Decode", BindingFlags.Instance | BindingFlags.NonPublic)!.CreateDelegate<Func<byte[], Array>>(instance);
-                Maximum = Type.GetMethod("SetMaximumTableSize", BindingFlags.Instance | BindingFlags.NonPublic)!.CreateDelegate<Action<int>>(instance);
+                var instance = (Activator.CreateInstance(Type, BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { limit }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+                _decode = (Type.GetMethod("Decode", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CreateDelegate<Func<byte[], Array>>(instance);
+                Maximum = (Type.GetMethod("SetMaximumTableSize", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CreateDelegate<Action<int>>(instance);
             }
             internal Array Raw(string hex) => _decode(Convert.FromHexString(hex));
             internal string[] Read(string hex) => Raw(hex).Cast<object>().Select(field =>
-                field.GetType().GetProperty("Name")!.GetValue(field) + ": " + field.GetType().GetProperty("Value")!.GetValue(field)).ToArray();
+                (field.GetType().GetProperty("Name") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(field) + ": " + (field.GetType().GetProperty("Value") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(field)).ToArray();
         }
 
         [TestCase(false)]
@@ -41,8 +41,8 @@ namespace EmbedIO.Tests
         public void NeverIndexedIsPreservedAndLiteralWithoutIndexingDoesNotInsert()
         {
             var decoder = new Decoder();
-            var field = decoder.Raw("100870617373776f726406736563726574").GetValue(0)!;
-            Assert.That(field.GetType().GetProperty("NeverIndexed")!.GetValue(field), Is.True);
+            var field = (decoder.Raw("100870617373776f726406736563726574").GetValue(0) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            Assert.That((field.GetType().GetProperty("NeverIndexed") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(field), Is.True);
             Assert.That(decoder.Read("040c2f73616d706c652f70617468"), Is.EqualTo(new[] { ":path: /sample/path" }));
             Assert.That(() => decoder.Read("be"), Throws.TypeOf<InvalidDataException>());
         }

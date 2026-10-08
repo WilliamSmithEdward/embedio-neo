@@ -28,9 +28,9 @@ namespace EmbedIO.Tests.Issues
             var text = "first" + (char)code + "second";
             var body = "{\"" + text + "\":\"" + text + "\"}";
             var data = Json.Deserialize<Dictionary<string, string>>(body);
-            Assert.That(data[text], Is.EqualTo(text));
-            var untyped = (Dictionary<string, object>)Json.Deserialize(body)!;
-            Assert.That(untyped[text], Is.EqualTo(text));
+            Assert.That((data ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))[text], Is.EqualTo(text));
+            var untyped = (Dictionary<string, object>)(Json.Deserialize(body) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            Assert.That((untyped)[text], Is.EqualTo(text));
             using var serialized = JsonDocument.Parse(Json.Serialize(data));
             Assert.That(serialized.RootElement.GetProperty(text).GetString(), Is.EqualTo(text));
         }
@@ -46,7 +46,7 @@ namespace EmbedIO.Tests.Issues
         {
             var body = "{\"Values\":[" + number + ",],\"Text\":\"+001 .5 1.\",}";
             var model = Json.Deserialize<NumberList>(body);
-            Assert.That(model.Values, Is.EqualTo(new[] { expected }));
+            Assert.That((model ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Values, Is.EqualTo(new[] { expected }));
             Assert.That(model.Text, Is.EqualTo("+001 .5 1."));
         }
 
@@ -75,8 +75,8 @@ namespace EmbedIO.Tests.Issues
         {
             var text = "quote \" slash \\ pair \\\" actual\r\n escaped \\r\\n emoji 😀";
             var encoded = JsonSerializer.Serialize(text);
-            var body = "{\r\n\"Text\":" + encoded.Replace("actual\\r\\n", "actual\r\n") + "\r\n}";
-            Assert.That(Json.Deserialize<TextData>(body).Text, Is.EqualTo(text));
+            var body = "{\r\n\"Text\":" + EmbedIO.Internal.StringOperations.ReplaceOrdinal(encoded, "actual\\r\\n", "actual\r\n") + "\r\n}";
+            Assert.That((Json.Deserialize<TextData>(body) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Text, Is.EqualTo(text));
         }
 
         [TestCase("")]
@@ -97,10 +97,10 @@ namespace EmbedIO.Tests.Issues
             options.Converters.Add(new JsonStringEnumConverter());
             options.Converters.Add(new YesBooleanConverter());
             var data = Json.Deserialize<Values>("{\"Flag\":\"yes\",\"Choice\":\"Second\",}", options);
-            Assert.That(data.Flag, Is.True);
+            Assert.That((data ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Flag, Is.True);
             Assert.That(data.Choice, Is.EqualTo(Choice.Second));
             Assert.That(Json.Serialize(data, options), Does.Contain("\"Second\""));
-            Assert.That(Json.Deserialize<TextData>("{\"Text\":\"a\nb\"}", options).Text, Is.EqualTo("a\nb"));
+            Assert.That((Json.Deserialize<TextData>("{\"Text\":\"a\nb\"}", options) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Text, Is.EqualTo("a\nb"));
         }
 
         [TestCase("{\"Text\":\"a\nb\"}")]
@@ -121,7 +121,7 @@ namespace EmbedIO.Tests.Issues
             options.ReadCommentHandling = JsonCommentHandling.Skip;
             var body = "{/* \" backslash \\ */\"Values\":[+01,],// \" quoted comment\n\"Text\":\"a\nb\"}";
             var model = Json.Deserialize<NumberList>(body, options);
-            Assert.That(model.Values, Is.EqualTo(new[] { 1m }));
+            Assert.That((model ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Values, Is.EqualTo(new[] { 1m }));
             Assert.That(model.Text, Is.EqualTo("a\nb"));
             Assert.Throws<JsonException>(() => Json.Deserialize<object>("{/* unterminated", options));
         }
@@ -133,8 +133,8 @@ namespace EmbedIO.Tests.Issues
         public void BooleanStringsAndTokensBindWithoutChangingOutput(string value, bool expected)
         {
             var data = Json.Deserialize<Values>("{\"Flag\":" + value + "}");
-            Assert.That(data.Flag, Is.EqualTo(expected));
-            Assert.That(Json.Deserialize<Values>(Json.Serialize(data)).Flag, Is.EqualTo(expected));
+            Assert.That((data ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Flag, Is.EqualTo(expected));
+            Assert.That((Json.Deserialize<Values>(Json.Serialize(data)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Flag, Is.EqualTo(expected));
         }
 
         [TestCase("\"Second\"")]
@@ -143,7 +143,7 @@ namespace EmbedIO.Tests.Issues
         public void EnumNamesAndNumbersBindWithNumericOutput(string value)
         {
             var data = Json.Deserialize<Values>("{\"Choice\":" + value + ",\"MaybeChoice\":" + value + "}");
-            Assert.That(data.Choice, Is.EqualTo(Choice.Second));
+            Assert.That((data ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Choice, Is.EqualTo(Choice.Second));
             Assert.That(data.MaybeChoice, Is.EqualTo(Choice.Second));
             using var document = JsonDocument.Parse(Json.Serialize(data));
             Assert.That(document.RootElement.GetProperty("Choice").GetInt32(), Is.EqualTo(1));
@@ -169,12 +169,12 @@ namespace EmbedIO.Tests.Issues
             {
                 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
                 var legacy = Json.Deserialize<DateValues>("{\"Date\":\"10/07/2026\",\"Offset\":\"10/07/2026 12:30:00 +02:00\"}");
-                Assert.That(legacy.Date, Is.EqualTo(new DateTime(2026, 10, 7)));
+                Assert.That((legacy ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Date, Is.EqualTo(new DateTime(2026, 10, 7)));
                 Assert.That(legacy.Offset.Offset, Is.EqualTo(TimeSpan.FromHours(2)));
                 var iso = Json.Deserialize<DateValues>("{\"Date\":\"2026-10-07T12:30:00Z\",\"Offset\":\"2026-10-07T12:30:00+02:00\"}");
-                Assert.That(iso.Date.Kind, Is.EqualTo(DateTimeKind.Utc));
+                Assert.That((iso ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Date.Kind, Is.EqualTo(DateTimeKind.Utc));
                 Assert.That(Json.Serialize(iso), Does.Contain("12:30:00Z"));
-                Assert.That(Json.Deserialize<DateValues>(Json.Serialize(iso)).Offset, Is.EqualTo(iso.Offset));
+                Assert.That((Json.Deserialize<DateValues>(Json.Serialize(iso)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Offset, Is.EqualTo(iso.Offset));
                 Assert.Throws<JsonException>(() => Json.Deserialize<DateValues>("{\"Date\":\"invalid\"}"));
             }
             finally { CultureInfo.CurrentCulture = previous; }
@@ -184,7 +184,7 @@ namespace EmbedIO.Tests.Issues
         public void LegacyPrivateSettersBindWithoutOverridingIgnoredOrReadOnlyMembers()
         {
             var data = Json.Deserialize<MemberData>("{\"Count\":4,\"Ignored\":5,\"ReadOnly\":6,\"IgnoreReads\":10,\"IgnoreWrites\":11}");
-            Assert.That(data.Count, Is.EqualTo(4));
+            Assert.That((data ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Count, Is.EqualTo(4));
             Assert.That(data.Ignored, Is.EqualTo(7));
             Assert.That(data.ReadOnly, Is.EqualTo(8));
             Assert.That(data.IgnoreReads, Is.EqualTo(9));
@@ -193,7 +193,7 @@ namespace EmbedIO.Tests.Issues
             Assert.That(document.RootElement.GetProperty("IgnoreReads").GetInt32(), Is.EqualTo(9));
             Assert.That(document.RootElement.TryGetProperty("IgnoreWrites", out _), Is.False);
             var strict = Json.Deserialize<MemberData>("{\"Count\":4}", new JsonSerializerOptions());
-            Assert.That(strict.Count, Is.EqualTo(3));
+            Assert.That((strict ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Count, Is.EqualTo(3));
         }
 
         [Test]
@@ -202,7 +202,7 @@ namespace EmbedIO.Tests.Issues
             var body = Json.Serialize(new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity });
             Assert.That(body, Is.EqualTo("[\"NaN\",\"Infinity\",\"-Infinity\"]"));
             var values = Json.Deserialize<double[]>(body);
-            Assert.That(double.IsNaN(values[0]), Is.True);
+            Assert.That(double.IsNaN((values ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))[0]), Is.True);
             Assert.That(values[1], Is.EqualTo(double.PositiveInfinity));
             Assert.That(values[2], Is.EqualTo(double.NegativeInfinity));
         }
@@ -220,7 +220,7 @@ namespace EmbedIO.Tests.Issues
             using var response = await server.Client.PostAsync(controller ? "/api/echo" : "/callback", content);
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             var data = Json.Deserialize<Values>(await response.Content.ReadAsStringAsync());
-            Assert.That(data.Text, Is.EqualTo("first\r\nsecond"));
+            Assert.That((data ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Text, Is.EqualTo("first\r\nsecond"));
             Assert.That(data.Flag, Is.True);
             Assert.That(data.Choice, Is.EqualTo(Choice.Second));
             Assert.That(data.Count, Is.EqualTo(1));

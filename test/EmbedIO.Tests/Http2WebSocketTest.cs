@@ -37,7 +37,7 @@ namespace EmbedIO.Tests
         [TestCase(127, true, false, true)]
         public async Task ExtendedConnectEchoAndCloseKeepSiblingHttpStreamUsable(int length, bool text, bool fragmented, bool abort)
         {
-            var url = HttpsSmoke.GetUrl().Replace("https:", "http:");
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
             var echo = new Echo();
             var httpPort = 0;
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
@@ -57,7 +57,7 @@ namespace EmbedIO.Tests
             socket.Options.HttpVersionPolicy = HttpVersionPolicy.RequestVersionExact;
             try
             {
-                await socket.ConnectAsync(new Uri(url.Replace("http:", "ws:") + "ws"), invoker, stop.Token);
+                await socket.ConnectAsync(new Uri(url.Replace("http:", "ws:", StringComparison.Ordinal) + "ws"), invoker, stop.Token);
                 Assert.That(socket.State, Is.EqualTo(WebSocketState.Open));
                 var bytes = text ? Encoding.UTF8.GetBytes(new string('x', length)) : Enumerable.Range(0, length).Select(i => (byte)i).ToArray();
                 var kind = text ? WebSocketMessageType.Text : WebSocketMessageType.Binary;

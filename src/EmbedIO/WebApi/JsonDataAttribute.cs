@@ -21,6 +21,8 @@ namespace EmbedIO.WebApi
         /// <inheritdoc />
         public async Task<object?> GetRequestDataAsync(WebApiController controller, Type type, string parameterName)
         {
+            if (controller is null) throw new System.NullReferenceException();
+            if (type is null) throw new System.NullReferenceException();
             string body;
             using (var reader = controller.HttpContext.OpenRequestText())
             {

@@ -1,4 +1,4 @@
-using EmbedIO.Net;
+﻿using EmbedIO.Net;
 using NUnit.Framework;
 using System;
 using System.Reflection;
@@ -16,7 +16,7 @@ namespace EmbedIO.Tests.Utilities
             Assert.NotNull(method, "Could not find static method ParseCookies");
 
             var result = method.Invoke(null, new object[] { cookieHeader });
-            return (CookieList)result;
+            return (CookieList)(result ?? throw new InvalidOperationException("The parser must return a cookie collection."));
         }
     }
 

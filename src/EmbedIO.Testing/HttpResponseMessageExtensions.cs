@@ -16,6 +16,7 @@ namespace EmbedIO.Testing
         /// <returns>A <see cref="Task{TResult}"/> whose result will be the response body as a string.</returns>
         public static async Task<string?> ReceiveStringAsync(this Task<HttpResponseMessage> @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             using var response = await @this.ConfigureAwait(false);
             if (response == null) return null;
             return await response.Content.ReadAsStringAsync().ConfigureAwait(false);

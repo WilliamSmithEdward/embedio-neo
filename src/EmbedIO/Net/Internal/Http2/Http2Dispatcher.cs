@@ -107,7 +107,7 @@ namespace EmbedIO.Net.Internal.Http2
                 WriteUInt32(payload, 0, (uint)_connection.Streams.LastStreamId);
                 WriteUInt32(payload, 4, error.ErrorCode);
                 try { await _connection.SendAsync(new[] { new Http2Frame(7, 0, 0, payload) }, deadline.Token).ConfigureAwait(false); }
-                catch (Exception) { }
+                catch (Exception failure) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(failure)) { }
             }
             finally
             {
@@ -138,10 +138,10 @@ namespace EmbedIO.Net.Internal.Http2
                         if (exchange.CloseConnectionAfterResponse) await DrainAsync().ConfigureAwait(false);
                         if (!exchange.State.RemoteEnded) await ResetAsync(exchange.Id, 0, new IOException("Response completed before request body.")).ConfigureAwait(false);
                     }
-                    catch (Exception error)
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
                     {
                         if (!_stop.IsCancellationRequested && !exchange.State.Reset)
-                            try { await ResetAsync(exchange.Id, 2, error).ConfigureAwait(false); } catch (Exception failure) { Abort(failure); }
+                            try { await ResetAsync(exchange.Id, 2, error).ConfigureAwait(false); } catch (Exception failure) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(failure)) { Abort(failure); }
                     }
                     finally
                     {
@@ -235,7 +235,7 @@ namespace EmbedIO.Net.Internal.Http2
                     await _connection.SendAsync(frames, _stop.Token).ConfigureAwait(false);
                 }
             }
-            catch (Exception error) { if (!_stop.IsCancellationRequested) Abort(error); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { if (!_stop.IsCancellationRequested) Abort(error); }
             lock (_creditSync) _pumping = false;
         }
 

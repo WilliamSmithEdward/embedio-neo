@@ -19,7 +19,7 @@ namespace EmbedIO.Net.Internal
         private static readonly Encoding HeaderEncoding = Encoding.GetEncoding(28591);
         private int _headerBytes;
         private bool _http2;
-        private CancellationTokenSource? _http2Stop;
+        private EmbedIO.Internal.BorrowedResource<CancellationTokenSource>? _http2Stop;
         private HashSet<HttpListener>? _http2Listeners;
         private int _responseFinishing;
 
@@ -48,8 +48,8 @@ namespace EmbedIO.Net.Internal
             _sock = sock;
             _epl = epl;
             IsSecure = epl.Secure;
-            LocalEndPoint = (IPEndPoint)sock.LocalEndPoint;
-            RemoteEndPoint = (IPEndPoint)sock.RemoteEndPoint;
+            LocalEndPoint = (IPEndPoint)(sock.LocalEndPoint ?? throw new ArgumentException("The socket has no local endpoint.", nameof(sock)));
+            RemoteEndPoint = (IPEndPoint)(sock.RemoteEndPoint ?? throw new ArgumentException("The socket has no remote endpoint.", nameof(sock)));
 
             Stream = new NetworkStream(sock, false);
             if (IsSecure)
@@ -58,7 +58,6 @@ namespace EmbedIO.Net.Internal
             }
 
             _timer = new Timer(OnTimeout, null, Timeout.Infinite, Timeout.Infinite);
-            _context = null!; // Silence warning about uninitialized field - _context will be initialized by the Init method
             Init();
         }
 
@@ -100,7 +99,7 @@ namespace EmbedIO.Net.Internal
 #if NET10_0_OR_GREATER
                     await sslStream.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
                     {
-                        ServerCertificate = _epl.Listener.Certificate,
+                        ServerCertificate = _epl.Listener.Certificate ?? throw new InvalidOperationException("The HTTPS listener has no certificate."),
                         EnabledSslProtocols = SslProtocols.None,
                         ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http2, SslApplicationProtocol.Http11 },
                     }).ConfigureAwait(false);
@@ -112,7 +111,7 @@ namespace EmbedIO.Net.Internal
                         return;
                     }
 #else
-                    await sslStream.AuthenticateAsServerAsync(_epl.Listener.Certificate,
+                    await sslStream.AuthenticateAsServerAsync(_epl.Listener.Certificate ?? throw new InvalidOperationException("The HTTPS listener has no certificate."),
                         false, SslProtocols.None, false).ConfigureAwait(false);
 #endif
                 }
@@ -140,7 +139,7 @@ namespace EmbedIO.Net.Internal
                 }
                 await OnReadInternal(data, bufferedInput).ConfigureAwait(false);
             }
-            catch
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
                 StopRequestTimer();
                 CloseSocket();
@@ -151,8 +150,9 @@ namespace EmbedIO.Net.Internal
         {
             if (_iStream == null)
             {
-                var buffer = _ms.GetBuffer();
-                var length = (int)_ms.Length;
+                var requestBuffer = _ms ?? throw new InvalidOperationException("The request headers have not been read.");
+                var buffer = requestBuffer.GetBuffer();
+                var length = (int)requestBuffer.Length;
                 _ms = null;
 
                 _iStream = chunked ? new ChunkedRequestStream(Stream, buffer, _position, length - _position)
@@ -202,7 +202,7 @@ namespace EmbedIO.Net.Internal
                 }
                 RestartRequest();
             }
-            catch { CloseTransport(true); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { CloseTransport(true); }
         }
 
         private void RestartRequest()
@@ -233,8 +233,10 @@ namespace EmbedIO.Net.Internal
 
             CloseTransport(true);
         }
+        [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_context))]
         private void Init() => InitWithPendingInput(default);
 
+        [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_context))]
         private void InitWithPendingInput(ArraySegment<byte> pending)
         {
             _contextBound = false;
@@ -243,9 +245,9 @@ namespace EmbedIO.Net.Internal
             Prefix = null;
             // Adopt immutable unread bytes instead of copying the tail for each pipelined request.
             // The preceding body is complete and cannot expose this storage again.
-            if (pending.Count > 0)
+            if (pending.Count > 0 && pending.Array is { } bytes)
             {
-                _ms = new MemoryStream(pending.Array!, 0, pending.Array!.Length, true, true);
+                _ms = new MemoryStream(bytes, 0, bytes.Length, true, true);
                 _ms.SetLength(pending.Offset + pending.Count);
                 _ms.Position = _ms.Length;
                 _position = pending.Offset;
@@ -259,7 +261,7 @@ namespace EmbedIO.Net.Internal
             _context = new HttpListenerContext(this);
         }
 
-        private void OnTimeout(object unused)
+        private void OnTimeout(object? unused)
         {
             CloseSocket();
         }
@@ -272,19 +274,23 @@ namespace EmbedIO.Net.Internal
             // because the web browser has to measure the content length first.
             while (true)
             {
+                var input = _ms;
+                var buffer = _buffer;
+                if (input == null || buffer == null) { CloseSocket(); return; }
                 try
                 {
                     if (offset > 0)
                     {
-                        if (_ms.Capacity < offset)
+                        if (input.Capacity < offset)
                         {
-                            _ms.Dispose();
-                            _ms = new MemoryStream(Math.Max(offset, 256));
+                            input.Dispose();
+                            input = new MemoryStream(Math.Max(offset, 256));
+                            _ms = input;
                         }
-                        _ms.Write(_buffer, 0, offset);
+                        input.Write(buffer, 0, offset);
                     }
                 }
-                catch
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
                 {
                     CloseSocket();
                     return;
@@ -297,7 +303,7 @@ namespace EmbedIO.Net.Internal
                 }
 
                 bufferedInput = false;
-                if (ProcessInput(_ms))
+                if (ProcessInput(input))
                 {
                     StopRequestTimer();
                     if (_errorMessage is null)
@@ -311,7 +317,7 @@ namespace EmbedIO.Net.Internal
                         return;
                     }
 
-                    var listener = _context.Listener;
+                    var listener = _context.Listener ?? throw new InvalidOperationException("The request has not been bound to a listener.");
                     if (_lastListener != listener)
                     {
                         RemoveConnection();
@@ -324,7 +330,7 @@ namespace EmbedIO.Net.Internal
                     return;
                 }
 
-                offset = await Stream.ReadAsync(_buffer, 0, BufferSize).ConfigureAwait(false);
+                offset = await Stream.ReadAsync(_buffer ?? throw new InvalidOperationException("The read buffer has been released."), 0, BufferSize).ConfigureAwait(false);
             }
         }
 
@@ -368,7 +374,7 @@ namespace EmbedIO.Net.Internal
                     _headerBytes += used;
                     if (_headerBytes > 32768) throw new InvalidDataException("Request headers exceed 32768 bytes.");
                 }
-                catch
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
                 {
                     _errorMessage = "Bad request";
                     return true;
@@ -402,7 +408,7 @@ namespace EmbedIO.Net.Internal
                     {
                         _context.HttpListenerRequest.AddHeader(line);
                     }
-                    catch (Exception e)
+                    catch (Exception e) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(e))
                     {
                         _errorMessage = e.Message;
                         return true;
@@ -478,7 +484,7 @@ namespace EmbedIO.Net.Internal
             {
                 socket = _sock;
                 _sock = null;
-                protocolStop = _http2Stop;
+                protocolStop = _http2Stop?.Value;
                 protocolListeners = _http2Listeners == null ? Array.Empty<HttpListener>() : new List<HttpListener>(_http2Listeners).ToArray();
                 _http2Listeners?.Clear();
             }
@@ -491,7 +497,8 @@ namespace EmbedIO.Net.Internal
                 if (shutdown)
                 {
                     try { socket.Shutdown(SocketShutdown.Both); }
-                    catch { /* A disconnected socket has nothing left to shut down. */ }
+                    catch (Exception error) when (error is SocketException or ObjectDisposedException)
+                    { /* A disconnected socket has nothing left to shut down. */ }
                 }
             }
             finally

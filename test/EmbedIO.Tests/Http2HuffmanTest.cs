@@ -9,9 +9,9 @@ namespace EmbedIO.Tests
 {
     public class Http2HuffmanTest
     {
-        private static readonly Type Codec = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.HpackHuffman", true)!;
-        private static readonly Func<byte[], int, int, int, string> Decode = Codec.GetMethod("Decode", BindingFlags.NonPublic | BindingFlags.Static)!.CreateDelegate<Func<byte[], int, int, int, string>>();
-        private static readonly Action<Stream, byte[]> Encode = Codec.GetMethod("Encode", BindingFlags.NonPublic | BindingFlags.Static)!.CreateDelegate<Action<Stream, byte[]>>();
+        private static readonly Type Codec = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.HpackHuffman", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static readonly Func<byte[], int, int, int, string> Decode = (Codec.GetMethod("Decode", BindingFlags.NonPublic | BindingFlags.Static) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CreateDelegate<Func<byte[], int, int, int, string>>();
+        private static readonly Action<Stream, byte[]> Encode = (Codec.GetMethod("Encode", BindingFlags.NonPublic | BindingFlags.Static) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CreateDelegate<Action<Stream, byte[]>>();
 
         [TestCase("www.example.com", "f1e3c2e5f23a6ba0ab90f4ff")]
         [TestCase("no-cache", "a8eb10649cbf")]

@@ -59,8 +59,7 @@ namespace EmbedIO.Tests.Issues
         {
             using var fixture = new Fixture(mode, scenario);
             using var client = await fixture.Connect();
-            using var output = new StringWriter();
-            using var trace = new TextWriterTraceListener(TextWriter.Synchronized(output));
+            using var trace = new CapturingTraceListener();
             EmbedIO.Diagnostics.Log.Source.Listeners.Add(trace);
             var data = scenario == "invalid" ? new byte[] { 0xc0, 0xaf }
                 : Encoding.UTF8.GetBytes(scenario == "oversize" ? "12345" : scenario == "failure" ? "fail" : scenario == "away" ? "away" : "binary");
@@ -72,7 +71,7 @@ namespace EmbedIO.Tests.Issues
                     var result = await client.ReceiveAsync(new ArraySegment<byte>(new byte[256]), fixture.Timeout.Token);
                     Assert.That(result.MessageType, Is.EqualTo(WebSocketMessageType.Close));
                     Assert.That((int?)result.CloseStatus, Is.EqualTo(expected));
-                    await client.CloseOutputAsync(result.CloseStatus!.Value, "ack", fixture.Timeout.Token);
+                    await client.CloseOutputAsync(result.CloseStatus ?? throw new AssertionException("Expected a close status."), "ack", fixture.Timeout.Token);
                 }
                 catch (System.Net.WebSockets.WebSocketException error) when (scenario == "invalid"
                     && mode == HttpListenerMode.Microsoft && RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
@@ -80,9 +79,8 @@ namespace EmbedIO.Tests.Issues
                 {
                     Assert.That(fixture.Module.Messages, Is.Empty, "The native runtime rejects invalid text before application dispatch.");
                     await fixture.Module.Disconnected.Task.WaitAsync(fixture.Timeout.Token);
-                    string diagnostics;
-                    lock (output) diagnostics = output.ToString();
-                    TestContext.WriteLine("Native invalid UTF-8 diagnostics: " + diagnostics);
+                    var diagnostics = trace.Snapshot();
+                    TestContext.Out.WriteLine("Native invalid UTF-8 diagnostics: " + diagnostics);
                 }
             }
             finally { EmbedIO.Diagnostics.Log.Source.Listeners.Remove(trace); }
@@ -105,11 +103,11 @@ namespace EmbedIO.Tests.Issues
             try
             {
                 using var client = new ClientWebSocket();
-                await client.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                await client.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                 await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("text")), WebSocketMessageType.Text, true, timeout.Token);
                 var result = await client.ReceiveAsync(new ArraySegment<byte>(new byte[128]), timeout.Token);
                 Assert.That((int?)result.CloseStatus, Is.EqualTo(1003));
-                await client.CloseOutputAsync(result.CloseStatus!.Value, "ack", timeout.Token);
+                await client.CloseOutputAsync(result.CloseStatus ?? throw new AssertionException("Expected a close status."), "ack", timeout.Token);
             }
             finally { stop.Cancel(); await running.WaitAsync(timeout.Token); }
         }
@@ -127,7 +125,7 @@ namespace EmbedIO.Tests.Issues
             try
             {
                 using var client = new ClientWebSocket();
-                await client.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                await client.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                 var payload = new byte[10000];
                 await client.SendAsync(new ArraySegment<byte>(payload), WebSocketMessageType.Binary, true, timeout.Token);
                 Assert.That((await Read(client, timeout.Token)).Data, Is.EqualTo(payload));
@@ -185,12 +183,12 @@ namespace EmbedIO.Tests.Issues
         [TestCase(CloseStatusCode.ServerError, 1011)]
         public void NativeCloseMappingsMatchTheirWireValues(CloseStatusCode code, int expected)
         {
-            var type = typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.SystemWebSocket", true)!;
+            var type = typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.SystemWebSocket", true);
             using var client = new ClientWebSocket();
-            var wrapper = Activator.CreateInstance(type, new object[] { client })!;
-            var mapped = type.GetMethod("MapCloseStatus", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(wrapper, new object[] { code });
-            Assert.That((int)(WebSocketCloseStatus)mapped!, Is.EqualTo(expected));
-            ((IDisposable)wrapper).Dispose();
+            var wrapper = Activator.CreateInstance((type ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), new object[] { client });
+            var mapped = ((type).GetMethod("MapCloseStatus", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(wrapper, new object[] { code });
+            Assert.That((int)(WebSocketCloseStatus)(mapped ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), Is.EqualTo(expected));
+            ((IDisposable)(wrapper ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).Dispose();
         }
 
         [TestCase(new byte[] { 0xc0, 0xaf })]
@@ -200,6 +198,7 @@ namespace EmbedIO.Tests.Issues
         [TestCase(new byte[] { 0x80 })]
         public async Task InvalidTextDeliveredToTheModuleNeverReachesApplicationCode(byte[] data)
         {
+            if (data is null) throw new System.NullReferenceException();
             using var module = new Echo("echo");
             var socket = new RecordingSocket();
             var context = DispatchProxy.Create<IWebSocketContext, ContextProxy>();
@@ -222,9 +221,12 @@ namespace EmbedIO.Tests.Issues
 
         public class ContextProxy : DispatchProxy
         {
-            public IWebSocket Socket { get; set; } = null!;
+            public IWebSocket? Socket { get; set; }
             protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
-                => targetMethod!.Name == "get_WebSocket" ? Socket : targetMethod.Name == "get_CancellationToken" ? CancellationToken.None : null;
+            {
+                if (targetMethod is null) throw new System.NullReferenceException();
+                return targetMethod.Name == "get_WebSocket" ? Socket : targetMethod.Name == "get_CancellationToken" ? CancellationToken.None : null;
+            }
         }
 
         private sealed class RecordingSocket : IWebSocket
@@ -274,14 +276,29 @@ namespace EmbedIO.Tests.Issues
         public async Task CancellationReleasesTheActiveCallbackAndServer(HttpListenerMode mode)
         {
             using var fixture = new Fixture(mode, "gate");
-            using var client = await fixture.Connect();
-            await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hold")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
-            await fixture.Module.Entered.Task.WaitAsync(fixture.Timeout.Token);
-            await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("next")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
-            fixture.Stop.Cancel();
-            await fixture.Running.WaitAsync(fixture.Timeout.Token);
-            await fixture.Module.CallbackFinished.Task.WaitAsync(fixture.Timeout.Token);
-            Assert.That(fixture.Module.Messages.ToArray(), Does.Not.Contain("next"));
+            var phase = "connect";
+            try
+            {
+                using var client = await fixture.Connect();
+                phase = "send hold";
+                await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hold")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
+                phase = "wait callback entry";
+                await fixture.Module.Entered.Task.WaitAsync(fixture.Timeout.Token);
+                phase = "send next";
+                await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("next")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
+                phase = "cancel server";
+                fixture.Stop.Cancel();
+                phase = "wait server completion";
+                await fixture.Running.WaitAsync(fixture.Timeout.Token);
+                phase = "wait callback completion";
+                await fixture.Module.CallbackFinished.Task.WaitAsync(fixture.Timeout.Token);
+                Assert.That(fixture.Module.Messages.ToArray(), Does.Not.Contain("next"));
+            }
+            catch (Exception error)
+            {
+                TestContext.Error.WriteLine($"Cancellation failure before cleanup: mode={mode}, phase={phase}, server={fixture.Running.Status}, callback={fixture.Module.CallbackFinished.Task.Status}, canceled={fixture.Stop.IsCancellationRequested}. {error}");
+                throw;
+            }
         }
 
         private static async Task<(WebSocketMessageType Type, byte[] Data)> Read(ClientWebSocket client, CancellationToken cancellation)
@@ -296,6 +313,27 @@ namespace EmbedIO.Tests.Issues
                 output.Write(buffer, 0, result.Count);
             } while (!result.EndOfMessage);
             return (result.MessageType, output.ToArray());
+        }
+
+        private sealed class CapturingTraceListener : TraceListener
+        {
+            private readonly object _sync = new();
+            private readonly StringBuilder _messages = new();
+
+            public override void Write(string? message)
+            {
+                lock (_sync) _messages.Append(message);
+            }
+
+            public override void WriteLine(string? message)
+            {
+                lock (_sync) _messages.AppendLine(message);
+            }
+
+            internal string Snapshot()
+            {
+                lock (_sync) return _messages.ToString();
+            }
         }
 
         private sealed class Fixture : IDisposable
@@ -315,7 +353,7 @@ namespace EmbedIO.Tests.Issues
             public async Task<ClientWebSocket> Connect()
             {
                 var client = new ClientWebSocket();
-                try { await client.ConnectAsync(new Uri(_url.Replace("http", "ws") + "socket"), Timeout.Token); return client; }
+                try { await client.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(_url, "http", "ws") + "socket"), Timeout.Token); return client; }
                 catch { client.Dispose(); throw; }
             }
             public void Dispose()

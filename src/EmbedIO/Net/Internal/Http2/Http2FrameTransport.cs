@@ -9,9 +9,9 @@ namespace EmbedIO.Net.Internal.Http2
 {
     // Stream lifetime belongs to the connection. One read may run concurrently
     // with one serialized write batch. Header-block batches cannot interleave.
-    internal sealed class Http2FrameTransport
+    internal sealed class Http2FrameTransport : IDisposable
     {
-        private readonly Stream _stream;
+        private readonly EmbedIO.Internal.BorrowedResource<Stream> _stream;
         private readonly byte[] _header = new byte[9];
         private readonly SemaphoreSlim _writeGate = new(1, 1);
         private readonly int _receiveMaximum;
@@ -21,7 +21,7 @@ namespace EmbedIO.Net.Internal.Http2
 
         internal Http2FrameTransport(Stream stream, int receiveMaximum = 16384)
         {
-            _stream = stream ?? throw new ArgumentNullException(nameof(stream));
+            _stream = new EmbedIO.Internal.BorrowedResource<Stream>(stream ?? throw new ArgumentNullException(nameof(stream)));
             ValidateMaximum(receiveMaximum);
             _receiveMaximum = receiveMaximum;
         }
@@ -33,7 +33,7 @@ namespace EmbedIO.Net.Internal.Http2
             try
             {
                 if (_readFailed) throw new IOException("HTTP/2 input is no longer usable.");
-                var count = await _stream.ReadAsync(_header, 0, 9, token).ConfigureAwait(false);
+                var count = await _stream.Value.ReadAsync(_header, 0, 9, token).ConfigureAwait(false);
                 if (count == 0) return null;
                 await ReadRemaining(_header, count, 9, token).ConfigureAwait(false);
                 var length = (_header[0] << 16) | (_header[1] << 8) | _header[2];
@@ -51,7 +51,7 @@ namespace EmbedIO.Net.Internal.Http2
         {
             while (offset < end)
             {
-                var count = await _stream.ReadAsync(buffer, offset, end - offset, token).ConfigureAwait(false);
+                var count = await _stream.Value.ReadAsync(buffer, offset, end - offset, token).ConfigureAwait(false);
                 if (count == 0) throw new EndOfStreamException("Truncated HTTP/2 frame.");
                 offset += count;
             }
@@ -83,7 +83,7 @@ namespace EmbedIO.Net.Internal.Http2
                     buffer[5] = (byte)(frame.StreamId >> 24); buffer[6] = (byte)(frame.StreamId >> 16);
                     buffer[7] = (byte)(frame.StreamId >> 8); buffer[8] = (byte)frame.StreamId;
                     Buffer.BlockCopy(frame.Payload, 0, buffer, 9, length);
-                    await _stream.WriteAsync(buffer, 0, length + 9, token).ConfigureAwait(false);
+                    await _stream.Value.WriteAsync(buffer, 0, length + 9, token).ConfigureAwait(false);
                 }
             }
             catch { _writeFailed = true; throw; }
@@ -93,6 +93,9 @@ namespace EmbedIO.Net.Internal.Http2
                 _writeGate.Release();
             }
         }
+
+        // The connection joins all I/O before disposing its serialization gate.
+        public void Dispose() => _writeGate.Dispose();
 
         private static void ValidateMaximum(int maximum)
         {

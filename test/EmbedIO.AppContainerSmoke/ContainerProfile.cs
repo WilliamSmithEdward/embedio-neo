@@ -65,7 +65,7 @@ internal sealed class ContainerProfile : IDisposable
             Check(NativeMethods.UpdateProcThreadAttribute(attributes, 0, (IntPtr)0x20009, security, (nuint)Marshal.SizeOf<SecurityCapabilities>(), IntPtr.Zero, IntPtr.Zero));
             var startup = new StartupInfoEx { Startup = new StartupInfo { Size = (uint)Marshal.SizeOf<StartupInfoEx>(), Flags = 1, ShowWindow = 0 }, Attributes = attributes };
             var command = new StringBuilder($"\"{executable}\" serve {port} \"{Folder}\" \"{Sid}\"");
-            Check(NativeMethods.CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x00080000 | 0x08000000, IntPtr.Zero, Path.GetDirectoryName(executable)!, ref startup, out var child));
+            Check(NativeMethods.CreateProcess(executable, command, IntPtr.Zero, IntPtr.Zero, false, 0x00080000 | 0x08000000, IntPtr.Zero, ((Path.GetDirectoryName(executable)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")), ref startup, out var child));
             try { return Process.GetProcessById((int)child.Id); }
             finally { NativeMethods.CloseHandle(child.Thread); NativeMethods.CloseHandle(child.Process); }
         }

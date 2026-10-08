@@ -10,8 +10,8 @@ namespace EmbedIO.Tests
 {
     public class FileCacheRegressionTest
     {
-        private static readonly Type SectionType = typeof(FileCache).GetNestedType("Section", BindingFlags.NonPublic)!;
-        private static readonly Type ItemType = typeof(FileCache).Assembly.GetType("EmbedIO.Files.Internal.FileCacheItem", true)!;
+        private static readonly Type SectionType = (typeof(FileCache).GetNestedType("Section", BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static readonly Type ItemType = (typeof(FileCache).Assembly.GetType("EmbedIO.Files.Internal.FileCacheItem", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         [Test]
         public void FirstItemCanBeEvictedAndSectionCanBeReused()
@@ -92,11 +92,11 @@ namespace EmbedIO.Tests
             {
                 Call(cache, "RemoveSection", "a");
                 Call(cache, "RemoveSection", "a");
-                var cleaner = typeof(FileCache).GetField("_cleaner", BindingFlags.Instance | BindingFlags.NonPublic)!;
-                Assert.That(cleaner.GetValue(cache), Is.Not.Null);
+                var cleaner = typeof(FileCache).GetField("_cleaner", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That((cleaner ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(cache), Is.Not.Null);
                 Call(cache, "RemoveSection", "b");
                 Assert.That(cleaner.GetValue(cache), Is.Null);
-                Assert.That(typeof(FileCache).GetField("_sectionCount", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(cache), Is.EqualTo(0));
+                Assert.That(((typeof(FileCache)).GetField("_sectionCount", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(cache), Is.EqualTo(0));
             }
             finally
             {
@@ -110,22 +110,22 @@ namespace EmbedIO.Tests
         public async Task PurgeAcrossSectionsRetainsMostRecentlyUsedFiles()
         {
             var cache = new FileCache { MaxSizeKb = 3 };
-            var a = Call(cache, "AddSection", "a")!;
-            var b = Call(cache, "AddSection", "b")!;
+            var a = Call(cache, "AddSection", "a");
+            var b = Call(cache, "AddSection", "b");
             try
             {
                 foreach (var entry in new[] { (Section: a, Path: "a1"), (Section: b, Path: "b1"),
                     (Section: a, Path: "a2"), (Section: b, Path: "b2") })
                 {
-                    var item = NewItem(entry.Section);
+                    var item = NewItem((entry.Section ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
                     Add(entry.Section, entry.Path, item);
                     Call(item, "SetContent", CompressionMethod.None, new byte[1024]);
                 }
+                Assert.That(Contains((a ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), "a1"), Is.True);
+                await (Task)((((typeof(FileCache)).GetMethod("CheckMaxSize", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
+                    .Invoke(cache, new object[] { System.Threading.CancellationToken.None })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
                 Assert.That(Contains(a, "a1"), Is.True);
-                await (Task)typeof(FileCache).GetMethod("CheckMaxSize", BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(cache, new object[] { System.Threading.CancellationToken.None })!;
-                Assert.That(Contains(a, "a1"), Is.True);
-                Assert.That(Contains(b, "b2"), Is.True);
+                Assert.That(Contains((b ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), "b2"), Is.True);
                 Assert.That(Contains(a, "a2"), Is.False);
                 Assert.That(Contains(b, "b1"), Is.False);
                 Assert.That(Size(a) + Size(b), Is.LessThan(3 * 1024));
@@ -148,10 +148,10 @@ namespace EmbedIO.Tests
             var payload = new byte[200000];
             new Random(42).NextBytes(payload);
             var source = Encode(payload, sourceMethod);
-            var convert = typeof(FileCache).Assembly.GetType("EmbedIO.Internal.CompressionUtility", true)!
-                .GetMethod("ConvertCompression", BindingFlags.Public | BindingFlags.Static)!;
-            var converted = (byte[])convert.Invoke(null, new object[] { source, sourceMethod, targetMethod })!;
-            Assert.That(Decode(converted, targetMethod), Is.EqualTo(payload));
+            var convert = ((typeof(FileCache)).Assembly.GetType("EmbedIO.Internal.CompressionUtility", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
+                .GetMethod("ConvertCompression", BindingFlags.Public | BindingFlags.Static);
+            var converted = (byte[])((convert ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(null, new object[] { source, sourceMethod, targetMethod }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            Assert.That(Decode((converted), targetMethod), Is.EqualTo(payload));
         }
 
         private static byte[] Encode(byte[] bytes, CompressionMethod method)
@@ -177,14 +177,14 @@ namespace EmbedIO.Tests
             return output.ToArray();
         }
 
-        private static object NewSection() => Activator.CreateInstance(SectionType, true)!;
-        private static object NewItem(object section) => Activator.CreateInstance(ItemType,
-            BindingFlags.Instance | BindingFlags.NonPublic, null, new[] { section, (object)DateTime.UtcNow, 0L }, null)!;
+        private static object NewSection() => (Activator.CreateInstance(SectionType, true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static object NewItem(object section) => (Activator.CreateInstance(ItemType,
+            BindingFlags.Instance | BindingFlags.NonPublic, null, new[] { section, (object)DateTime.UtcNow, 0L }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         private static void Add(object section, string path, object item) => Call(section, "Add", path, item);
-        private static long Size(object section) => (long)Call(section, "GetTotalSize")!;
-        private static long Evict(object section) => (long)Call(section, "RemoveLeastRecentItem")!;
-        private static bool Contains(object section, string path) => (bool)Call(section, "TryGet", path, null!)!;
-        private static object? Call(object target, string name, params object[] args)
-            => target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.Invoke(target, args);
+        private static long Size(object section) => (long)(Call(section, "GetTotalSize") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static long Evict(object section) => (long)(Call(section, "RemoveLeastRecentItem") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static bool Contains(object section, string path) => (bool)(Call(section, "TryGet", path, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static object? Call(object target, string name, params object?[] args)
+            => ((target).GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(target, args);
     }
 }

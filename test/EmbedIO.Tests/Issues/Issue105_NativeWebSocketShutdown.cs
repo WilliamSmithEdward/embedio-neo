@@ -14,10 +14,10 @@ namespace EmbedIO.Tests.Issues
     public class Issue105_NativeWebSocketShutdown
     {
         private static IWebSocket Wrap(System.Net.WebSockets.WebSocket socket)
-            => (IWebSocket)Activator.CreateInstance(typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.SystemWebSocket", true)!, socket)!;
+            => (IWebSocket)(Activator.CreateInstance((typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.SystemWebSocket", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), socket) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         private static Task<WebSocketReceiveResult> Receive(IWebSocket socket, CancellationToken token)
-            => (Task<WebSocketReceiveResult>)socket.GetType().GetMethod("ReceiveAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(socket, new object[] { new ArraySegment<byte>(new byte[16]), token })!;
+            => (Task<WebSocketReceiveResult>)((((socket).GetType().GetMethod("ReceiveAsync", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, new object[] { new ArraySegment<byte>(new byte[16]), token })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         [TestCase(false)]
         [TestCase(true)]
@@ -55,8 +55,8 @@ namespace EmbedIO.Tests.Issues
             if (receive != null) await FinishInterrupted(receive);
             foreach (var name in new[] { "_receiveGate", "_closeGate" })
             {
-                var gate = (SemaphoreSlim)socket.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(socket)!;
-                Assert.That(() => gate.Wait(0), Throws.InstanceOf<ObjectDisposedException>());
+                var gate = (SemaphoreSlim)((((socket).GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                Assert.That(() => (gate).Wait(0), Throws.InstanceOf<ObjectDisposedException>());
             }
         }
 
@@ -181,7 +181,7 @@ namespace EmbedIO.Tests.Issues
             try
             {
                 using var client = new ClientWebSocket();
-                await client.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                await client.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                 var context = await module.Connected.Task.WaitAsync(timeout.Token);
                 using var cancellation = new CancellationTokenSource();
                 var close = context.WebSocket.CloseAsync(cancellation.Token);
@@ -202,7 +202,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(module.ActiveCount, Is.Zero);
                 module.Reset();
                 using var healthy = new ClientWebSocket();
-                await healthy.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                await healthy.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                 await healthy.SendAsync(new ArraySegment<byte>(new byte[] { 7 }), WebSocketMessageType.Binary, true, timeout.Token);
                 var buffer = new byte[32];
                 var response = await healthy.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token);
@@ -240,7 +240,7 @@ namespace EmbedIO.Tests.Issues
                 {
                     module.Reset();
                     using var client = new ClientWebSocket();
-                    await client.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                    await client.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                     var context = await module.Connected.Task.WaitAsync(timeout.Token);
                     if (scenario == "reset")
                     {
@@ -279,7 +279,7 @@ namespace EmbedIO.Tests.Issues
                 module.Scenario = "echo";
                 module.Reset();
                 using var healthy = new ClientWebSocket();
-                await healthy.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                await healthy.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                 await healthy.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("healthy")), WebSocketMessageType.Text, true, timeout.Token);
                 var buffer = new byte[32];
                 var echo = await healthy.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token);
@@ -303,7 +303,7 @@ namespace EmbedIO.Tests.Issues
             try
             {
                 using var client = new ClientWebSocket();
-                await client.ConnectAsync(new Uri(url.Replace("http", "ws") + "socket"), timeout.Token);
+                await client.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http", "ws") + "socket"), timeout.Token);
                 await module.Connected.Task.WaitAsync(timeout.Token);
                 var peerClose = client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "peer", timeout.Token);
                 var dispose = Task.Run(module.Dispose);

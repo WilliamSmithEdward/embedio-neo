@@ -122,7 +122,7 @@ namespace EmbedIO.WebApi
             return data.GetValues(fieldName)?.LastOrDefault();
         }
 
-        async Task<string[]> IRequestDataAttribute<WebApiController, string[]>.GetRequestDataAsync(
+        async Task<string[]?> IRequestDataAttribute<WebApiController, string[]>.GetRequestDataAsync(
             WebApiController controller,
             string parameterName)
         {
@@ -152,7 +152,7 @@ namespace EmbedIO.WebApi
             {
                 var fieldValues = data.GetValues(fieldName) ?? Array.Empty<string>();
                 if (!FromString.TryConvertTo(type, fieldValues, out var result))
-                    throw HttpException.BadRequest($"Cannot convert field {fieldName} to an array of {type.GetElementType().Name}.");
+                    throw HttpException.BadRequest($"Cannot convert field {fieldName} to an array of {type.GetElementType()?.Name}.");
 
                 return result;
             }

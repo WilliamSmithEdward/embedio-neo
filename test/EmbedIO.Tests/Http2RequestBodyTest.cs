@@ -11,12 +11,12 @@ namespace EmbedIO.Tests
     public class Http2RequestBodyTest
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static readonly Type Type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2RequestBody", true)!;
-        private static Stream Body(long? length, Action<int> consumed) => (Stream)Activator.CreateInstance(Type, Flags, null, new object?[] { 1, length, consumed }, null)!;
+        private static readonly Type Type = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2RequestBody", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static Stream Body(long? length, Action<int> consumed) => (Stream)(Activator.CreateInstance(Type, Flags, null, new object?[] { 1, length, consumed }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         private static void Call(Stream body, string method, params object[] args)
         {
-            try { Type.GetMethod(method, Flags)!.Invoke(body, args); }
-            catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture(error.InnerException!).Throw(); throw; }
+            try { (Type.GetMethod(method, Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(body, args); }
+            catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture((error.InnerException ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."))).Throw(); throw; }
         }
         private static void Append(Stream body, byte[] bytes, bool end = false) => Call(body, "Append", bytes, 0, bytes.Length, end);
 
@@ -47,8 +47,8 @@ namespace EmbedIO.Tests
                 Call(body, "Append", frame, 123, 1, i == 65534);
             }
             Array.Fill(frame, (byte)0);
-            var queue = Type.GetField("_chunks", Flags)!.GetValue(body)!;
-            Assert.That((int)queue.GetType().GetProperty("Count")!.GetValue(queue)!, Is.EqualTo(16));
+            var queue = ((Type.GetField("_chunks", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(body) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            Assert.That((int)((queue.GetType().GetProperty("Count") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(queue) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")), Is.EqualTo(16));
             var actual = new byte[65535];
             await body.ReadExactlyAsync(actual);
             for (var i = 0; i < actual.Length; i++) Assert.That(actual[i], Is.EqualTo((byte)i));

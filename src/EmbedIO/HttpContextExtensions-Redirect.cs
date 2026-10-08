@@ -21,7 +21,8 @@ namespace EmbedIO
         /// </exception>
         public static void Redirect(this IHttpContext @this, string location, int statusCode = (int)HttpStatusCode.Found)
         {
-            location = Validate.Url(nameof(location), location, @this.Request.Url);
+            if (@this is null) throw new System.NullReferenceException();
+            location = Validate.Url(nameof(location), location, @this.Request.Url).ToString();
 
             if (statusCode < 300 || statusCode > 399)
                 throw new ArgumentException("Redirect status code is not valid.", nameof(statusCode));

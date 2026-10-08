@@ -38,7 +38,7 @@ internal static class BenchmarkHost
                 var bytes = GC.GetTotalAllocatedBytes(true);
                 var collections = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
                 var clock = Stopwatch.StartNew();
-                Console.WriteLine("MEASURING");
+                BenchmarkControl.Write("MEASURING");
                 if (await Console.In.ReadLineAsync(stop.Token) != "stop") throw new InvalidOperationException("Expected stop.");
                 clock.Stop();
                 Console.WriteLine(JsonSerializer.Serialize(new

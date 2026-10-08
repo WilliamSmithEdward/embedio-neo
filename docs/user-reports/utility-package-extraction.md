@@ -8,6 +8,10 @@ comments, reactions or concrete independent consumer examples were present.
 
 ## Decision for Neo
 
+The published-package examples below target 1.0.2. In the unreleased warning cleanup,
+`Validate.UrlPath` is named `Validate.RoutePath`; see the
+[migration notes](../compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved).
+
 Keep the current utilities in `EmbedIO.dll` and the existing `EmbedIO-Neo`
 package. A standalone utility package is **not planned for this request**. The
 existing helpers can already be used without constructing or starting a server.

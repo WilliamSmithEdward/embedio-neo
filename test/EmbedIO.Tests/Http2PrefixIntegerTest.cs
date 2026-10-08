@@ -8,9 +8,9 @@ namespace EmbedIO.Tests
     public class Http2PrefixIntegerTest
     {
         private delegate int ReadInteger(byte[] source, ref int offset, int end, int prefixBits);
-        private static readonly Type Codec = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.PrefixInteger", true)!;
-        private static readonly ReadInteger Read = Codec.GetMethod("Read", BindingFlags.NonPublic | BindingFlags.Static)!.CreateDelegate<ReadInteger>();
-        private static readonly Action<Stream, int, int, byte> Write = Codec.GetMethod("Write", BindingFlags.NonPublic | BindingFlags.Static)!.CreateDelegate<Action<Stream, int, int, byte>>();
+        private static readonly Type Codec = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.PrefixInteger", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static readonly ReadInteger Read = (Codec.GetMethod("Read", BindingFlags.NonPublic | BindingFlags.Static) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CreateDelegate<ReadInteger>();
+        private static readonly Action<Stream, int, int, byte> Write = (Codec.GetMethod("Write", BindingFlags.NonPublic | BindingFlags.Static) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).CreateDelegate<Action<Stream, int, int, byte>>();
 
         [TestCase(10, 5, "0a")]
         [TestCase(1337, 5, "1f9a0a")]

@@ -63,8 +63,8 @@ internal static class ListenerHttp
                             ports.TryAdd(context.Request.RemoteEndPoint.Port, 0);
                             if (retain)
                             {
-                                connectionProperty ??= context.GetType().GetProperty("Connection", BindingFlags.Instance | BindingFlags.NonPublic)!;
-                                connections.TryAdd(connectionProperty.GetValue(context)!, 0);
+                                connectionProperty ??= context.GetType().GetProperty("Connection", BindingFlags.Instance | BindingFlags.NonPublic);
+                                connections.TryAdd(((((connectionProperty) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).GetValue(context)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")), 0);
                             }
                             if (bodySize > 0)
                             {
@@ -95,7 +95,7 @@ internal static class ListenerHttp
                         }));
                     using var stop = new CancellationTokenSource();
                     var running = server.RunAsync(stop.Token);
-                    using var client = secure ? HttpsSmoke.CreateClient(certificate!) : new HttpClient();
+                    using var client = secure ? HttpsSmoke.CreateClient(((certificate) ?? throw new System.InvalidOperationException("Expected a non-null test value."))) : new HttpClient();
                     client.DefaultRequestVersion = HttpVersion.Version11;
                     client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
                     client.Timeout = TimeSpan.FromSeconds(20);
@@ -162,9 +162,9 @@ internal static class ListenerHttp
                         foreach (var connection in connections.Keys)
                         {
                             var type = connection.GetType();
-                            if (((Stream)type.GetProperty("Stream")!.GetValue(connection)!).CanRead) openStreams++;
-                            var timer = (Timer)type.GetField("_timer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(connection)!;
-                            try { if (timer.Change(Timeout.Infinite, Timeout.Infinite)) activeTimers++; }
+                            if (((Stream)((((type.GetProperty("Stream")) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).GetValue(connection)) ?? throw new System.InvalidOperationException("Expected a non-null test value."))).CanRead) openStreams++;
+                            var timer = (Timer)((((type.GetField("_timer", BindingFlags.Instance | BindingFlags.NonPublic)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).GetValue(connection)) ?? throw new System.InvalidOperationException("Expected a non-null test value."));
+                            try { if (((timer) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).Change(Timeout.Infinite, Timeout.Infinite)) activeTimers++; }
                             catch (ObjectDisposedException) { }
                         }
                         GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();

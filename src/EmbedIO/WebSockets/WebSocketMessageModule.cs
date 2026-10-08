@@ -22,10 +22,10 @@ namespace EmbedIO.WebSockets
         private readonly ConditionalWeakTable<IWebSocketContext, DispatchState> _dispatch = new ConditionalWeakTable<IWebSocketContext, DispatchState>();
 
         /// <summary>Initializes a message-oriented WebSocket endpoint.</summary>
-        /// <param name="urlPath">The endpoint URL path.</param>
+        /// <param name="requestPath">The endpoint URL path.</param>
         /// <param name="enableConnectionWatchdog">Whether to purge disconnected contexts periodically.</param>
-        protected WebSocketMessageModule(string urlPath, bool enableConnectionWatchdog = true)
-            : base(urlPath, enableConnectionWatchdog)
+        protected WebSocketMessageModule(string requestPath, bool enableConnectionWatchdog = true)
+            : base(requestPath, enableConnectionWatchdog)
         {
         }
 
@@ -35,7 +35,10 @@ namespace EmbedIO.WebSockets
         /// <returns>The asynchronous callback operation.</returns>
         /// <remarks>The default implementation rejects text with close status 1003.</remarks>
         protected virtual Task OnTextMessageReceivedAsync(IWebSocketContext context, string text)
-            => context.WebSocket.CloseAsync(CloseStatusCode.UnsupportedData, "Text messages are not supported.", context.CancellationToken);
+        {
+            if (context is null) throw new System.NullReferenceException();
+            return context.WebSocket.CloseAsync(CloseStatusCode.UnsupportedData, "Text messages are not supported.", context.CancellationToken);
+        }
 
         /// <summary>Handles a complete binary message.</summary>
         /// <param name="context">The connection context.</param>
@@ -43,11 +46,17 @@ namespace EmbedIO.WebSockets
         /// <returns>The asynchronous callback operation.</returns>
         /// <remarks>The default implementation rejects binary with close status 1003.</remarks>
         protected virtual Task OnBinaryMessageReceivedAsync(IWebSocketContext context, byte[] data)
-            => context.WebSocket.CloseAsync(CloseStatusCode.UnsupportedData, "Binary messages are not supported.", context.CancellationToken);
+        {
+            if (context is null) throw new System.NullReferenceException();
+            return context.WebSocket.CloseAsync(CloseStatusCode.UnsupportedData, "Binary messages are not supported.", context.CancellationToken);
+        }
 
         /// <inheritdoc />
         protected sealed override async Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
         {
+            if (context is null) throw new System.NullReferenceException();
+            if (buffer is null) throw new System.NullReferenceException();
+            if (result is null) throw new System.NullReferenceException();
             // The managed backend's legacy event callback can overlap asynchronous handlers.
             // Chain completion tasks without retaining disconnected contexts or native wait handles.
             var state = _dispatch.GetValue(context, _ => new DispatchState());
@@ -92,7 +101,7 @@ namespace EmbedIO.WebSockets
                         await context.WebSocket.CloseAsync(CloseStatusCode.UnsupportedData, "Message type is not supported.", context.CancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested) { }
-                catch (Exception exception)
+                catch (Exception exception) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                 {
                     exception.Log(nameof(WebSocketMessageModule));
                     await context.WebSocket.CloseAsync(CloseStatusCode.ServerError, "Message callback failed.", context.CancellationToken).ConfigureAwait(false);

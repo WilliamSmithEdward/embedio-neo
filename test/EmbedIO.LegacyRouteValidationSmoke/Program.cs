@@ -120,7 +120,7 @@ public static class Program
         public string RequiredOptional(ushort value) => value.ToString(CultureInfo.InvariantCulture);
 
         [Route(HttpVerbs.Get, "/custom/{value}")]
-        public string Custom(CustomValue value) => value.Value;
+        public string Custom(CustomValue value) => (value ?? throw new ArgumentNullException(nameof(value))).Value;
 
         [Route(HttpVerbs.Get, "/query")]
         public string Query([QueryField] ushort value) => value.ToString(CultureInfo.InvariantCulture);

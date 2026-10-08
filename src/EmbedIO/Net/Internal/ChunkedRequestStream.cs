@@ -11,7 +11,7 @@ namespace EmbedIO.Net.Internal
     internal sealed class ChunkedRequestStream : RequestStream
     {
         private enum Phase { Size, Data, DataCr, DataLf, Trailers, Complete, Failed }
-        private readonly Stream _source;
+        private readonly EmbedIO.Internal.BorrowedResource<Stream> _source;
         private byte[] _input;
         private int _offset;
         private int _available;
@@ -25,7 +25,7 @@ namespace EmbedIO.Net.Internal
         internal ChunkedRequestStream(Stream source, byte[] buffer, int offset, int length)
             : base(source, Array.Empty<byte>(), 0, 0, 0)
         {
-            _source = source;
+            _source = new EmbedIO.Internal.BorrowedResource<Stream>(source);
             _input = buffer;
             _offset = offset;
             _available = length;
@@ -52,7 +52,7 @@ namespace EmbedIO.Net.Internal
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             if (System.Runtime.InteropServices.MemoryMarshal.TryGetArray((ReadOnlyMemory<byte>)buffer, out var array))
-                return new ValueTask<int>(ReadAsync(array.Array!, array.Offset, array.Count, cancellationToken));
+                return new ValueTask<int>(ReadAsync(array.Array ?? throw new InvalidOperationException("Missing array-backed read buffer."), array.Offset, array.Count, cancellationToken));
             return ReadMemoryAsync(buffer, cancellationToken);
         }
 
@@ -85,8 +85,8 @@ namespace EmbedIO.Net.Internal
                         if (!_ownsInput) { _input = new byte[8192]; _ownsInput = true; }
                         _offset = 0;
                         _available = asynchronous
-                            ? await _source.ReadAsync(_input, 0, _input.Length, token).ConfigureAwait(false)
-                            : _source.Read(_input, 0, _input.Length);
+                            ? await _source.Value.ReadAsync(_input, 0, _input.Length, token).ConfigureAwait(false)
+                            : _source.Value.Read(_input, 0, _input.Length);
                         if (_available == 0) throw new EndOfStreamException("Incomplete chunked request body.");
                     }
 
@@ -210,7 +210,7 @@ namespace EmbedIO.Net.Internal
 
         private static void ValidateTrailer(string line)
         {
-            var colon = line.IndexOf(':');
+            var colon = EmbedIO.Internal.StringOperations.IndexOfOrdinal(line, ':');
             if (colon <= 0) throw new InvalidDataException("Invalid request trailer.");
             for (var i = 0; i < colon; i++)
                 if (!HttpRequestFraming.IsTokenCharacter(line[i])) throw new InvalidDataException("Invalid request trailer name.");

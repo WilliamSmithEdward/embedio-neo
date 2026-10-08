@@ -17,6 +17,7 @@
         public static TModule WithWhitelist<TModule>(this TModule @this, params string[] value)
             where TModule : IPBanningModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.AddToWhitelist(value);
             return @this;
         }
@@ -51,6 +52,7 @@
             params string[] value)
             where TModule : IPBanningModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.RegisterCriterion(new IPBanningRegexCriterion(@this, value, maxMatchCount, secondsMatchingPeriod));
             return @this;
         }
@@ -67,6 +69,7 @@
         public static TModule WithMaxRequestsPerSecond<TModule>(this TModule @this, int maxRequests = IPBanningRequestsCriterion.DefaultMaxRequestsPerSecond)
             where TModule : IPBanningModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.RegisterCriterion(new IPBanningRequestsCriterion(maxRequests));
             return @this;
         }

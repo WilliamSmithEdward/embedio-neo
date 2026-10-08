@@ -130,13 +130,14 @@ namespace EmbedIO.Net.Internal.Http2
                         else changed = (_changed ??= NewSignal()).Task;
                     }
                     if (copied != 0) { _consumed(copied); return copied; }
-                    if (!token.CanBeCanceled) await changed!.ConfigureAwait(false);
+                    var signal = changed ?? throw new InvalidOperationException("Missing pending body signal.");
+                    if (!token.CanBeCanceled) await signal.ConfigureAwait(false);
                     else
                     {
                         var canceled = NewSignal();
-                        using (token.Register(state => ((TaskCompletionSource<bool>)state!).TrySetResult(true), canceled))
+                        using (token.Register(state => ((TaskCompletionSource<bool>)(state ?? throw new InvalidOperationException("Missing cancellation signal."))).TrySetResult(true), canceled))
                         {
-                            await Task.WhenAny(changed!, canceled.Task).ConfigureAwait(false);
+                            await Task.WhenAny(signal, canceled.Task).ConfigureAwait(false);
                             token.ThrowIfCancellationRequested();
                         }
                     }

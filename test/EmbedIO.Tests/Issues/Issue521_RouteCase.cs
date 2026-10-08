@@ -95,7 +95,7 @@ namespace EmbedIO.Tests.Issues
             var after = RouteMatcher.Parse("/GetTest/{id?}", false);
             Assert.That(after, Is.SameAs(before));
             Assert.That(after.Match("/gettest/AbC"), Is.Null);
-            Assert.That(after.Match("/GetTest/AbC")!["id"], Is.EqualTo("AbC"));
+            Assert.That(((after).Match("/GetTest/AbC") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))["id"], Is.EqualTo("AbC"));
             Assert.That(new WebApiModule("/").CaseInsensitiveRoutes, Is.False);
         }
 
@@ -219,14 +219,14 @@ namespace EmbedIO.Tests.Issues
         public sealed class DataController : WebApiController
         {
             [Route(HttpVerbs.Get, "/GetTest/{id?}")]
-            public string Get(string? id) => id + "|" + Request.QueryString["tag"] + "|" + Route.Path + "|" + Request.RawUrl;
+            public string Get(string? id) => id + "|" + Request.QueryString["tag"] + "|" + Route.Path + "|" + Request.RawTarget;
             [Route(HttpVerbs.Get, "/A.B+/{value}")]
             [Route(HttpVerbs.Get, "/FILE/{value}")]
             public string Value(string value) => value;
             [BaseRoute(HttpVerbs.Get, "/Items/{value}")]
             public string Items(string value) => value + "|" + Route.SubPath;
             [BaseRoute(HttpVerbs.Get, "/Loose")]
-            public string Loose() => Route.SubPath!;
+            public string Loose() => (Route.SubPath ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         }
         public sealed class CollisionController : WebApiController
         {
@@ -257,7 +257,11 @@ namespace EmbedIO.Tests.Issues
         public sealed class BodyController : WebApiController
         {
             [Route(HttpVerbs.Post, "/Value/{id}")]
-            public string Post(string id, [QueryField] string? tag, [JsonData] Input input) => id + "|" + tag + "|" + input.Value;
+            public string Post(string id, [QueryField] string? tag, [JsonData] Input input)
+            {
+                if (input is null) throw new System.NullReferenceException();
+                return id + "|" + tag + "|" + input.Value;
+            }
         }
         public sealed class Input { public string? Value { get; set; } }
         public sealed class RenamedAliasController : WebApiController

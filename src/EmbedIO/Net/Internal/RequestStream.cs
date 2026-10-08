@@ -8,7 +8,8 @@ namespace EmbedIO.Net.Internal
 {
     internal class RequestStream : Stream
     {
-        private readonly Stream _stream;
+        private readonly EmbedIO.Internal.BorrowedResource<Stream> _transport;
+        private Stream Transport => _transport.Value;
         private readonly byte[] _buffer;
         private int _offset;
         private int _length;
@@ -16,7 +17,7 @@ namespace EmbedIO.Net.Internal
 
         internal RequestStream(Stream stream, byte[] buffer, int offset, int length, long contentLength = -1)
         {
-            _stream = stream;
+            _transport = new EmbedIO.Internal.BorrowedResource<Stream>(stream);
             _buffer = buffer;
             _offset = offset;
             _length = length;
@@ -68,7 +69,7 @@ namespace EmbedIO.Net.Internal
                 count = (int)Math.Min(count, _remainingBody);
             }
 
-            nread = _stream.Read(buffer, offset, count);
+            nread = Transport.Read(buffer, offset, count);
 
             if (nread > 0 && _remainingBody > 0)
             {
@@ -91,7 +92,7 @@ namespace EmbedIO.Net.Internal
         private async Task<int> ReadTransportAsync(byte[] buffer, int offset, int count, CancellationToken token)
         {
             if (_remainingBody > 0) count = (int)Math.Min(count, _remainingBody);
-            var read = await _stream.ReadAsync(buffer, offset, count, token).ConfigureAwait(false);
+            var read = await Transport.ReadAsync(buffer, offset, count, token).ConfigureAwait(false);
             if (read > 0 && _remainingBody > 0) _remainingBody -= read;
             return read;
         }
@@ -117,7 +118,7 @@ namespace EmbedIO.Net.Internal
         private async ValueTask<int> ReadTransportAsync(Memory<byte> buffer, CancellationToken token)
         {
             if (_remainingBody > 0 && buffer.Length > _remainingBody) buffer = buffer.Slice(0, (int)_remainingBody);
-            var read = await _stream.ReadAsync(buffer, token).ConfigureAwait(false);
+            var read = await Transport.ReadAsync(buffer, token).ConfigureAwait(false);
             if (read > 0 && _remainingBody > 0) _remainingBody -= read;
             return read;
         }

@@ -11,22 +11,22 @@ namespace EmbedIO.Tests
     public class Http2RequestHeadersTest
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static Type Type(string name) => typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2." + name, true)!;
+        private static Type Type(string name) => (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2." + name, true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         private static readonly string[] Basic = { ":method", "GET", ":scheme", "https", ":authority", "example.com", ":path", "/" };
-        private static object Invoke(string method, string[] pairs, bool end = false, bool extended = false)
+        private static object? Invoke(string method, string[] pairs, bool end = false, bool extended = false)
         {
             var fields = Array.CreateInstance(Type("HpackField"), pairs.Length / 2);
             for (var i = 0; i < pairs.Length; i += 2)
                 fields.SetValue(Activator.CreateInstance(Type("HpackField"), Flags, null, new object[] { pairs[i], pairs[i + 1], false }, null), i / 2);
-            var block = Activator.CreateInstance(Type("Http2HeaderBlock"), Flags, null, new object[] { 3, end, fields, 0u }, null)!;
-            try { return Type("Http2RequestHeaders").GetMethod(method, BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, method == "Parse" ? new object[] { block, extended } : new[] { block })!; }
-            catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture(error.InnerException!).Throw(); throw; }
+            var block = (Activator.CreateInstance(Type("Http2HeaderBlock"), Flags, null, new object[] { 3, end, fields, 0u }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            try { return ((Type("Http2RequestHeaders").GetMethod(method, BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(null, method == "Parse" ? new object[] { block, extended } : new[] { block })); }
+            catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture((error.InnerException ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."))).Throw(); throw; }
         }
-        private static T Property<T>(object value, string name) => (T)value.GetType().GetProperty(name)!.GetValue(value)!;
+        private static T Property<T>(object? value, string name) => (T)(((value ?? throw new AssertionException("Expected parsed request headers.")).GetType().GetProperty(name) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(value) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         private static string[] Extra(params string[] pairs) => Basic.Concat(pairs).ToArray();
         private static void Reject(string[] pairs, bool end = false, bool extended = false)
         {
-            var error = Assert.Catch<IOException>(() => Invoke("Parse", pairs, end, extended))!;
+            var error = (Assert.Catch<IOException>(() => Invoke("Parse", pairs, end, extended)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             Assert.That(Property<uint>(error, "ErrorCode"), Is.EqualTo(1u));
             Assert.That(Property<int>(error, "StreamId"), Is.EqualTo(3));
         }

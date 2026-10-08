@@ -18,13 +18,13 @@ namespace EmbedIO.WebApi
     {
         private const string GetRequestDataAsyncMethodName = nameof(IRequestDataAttribute<WebApiController>.GetRequestDataAsync);
 
-        private static readonly MethodInfo PreProcessRequestMethod = typeof(WebApiController).GetMethod(nameof(WebApiController.PreProcessRequest));
-        private static readonly MethodInfo HttpContextSetter = typeof(WebApiController).GetProperty(nameof(WebApiController.HttpContext)).GetSetMethod(true);
-        private static readonly MethodInfo RouteSetter = typeof(WebApiController).GetProperty(nameof(WebApiController.Route)).GetSetMethod(true);
-        private static readonly MethodInfo AwaitResultMethod = typeof(WebApiModuleBase).GetMethod(nameof(AwaitResult), BindingFlags.Static | BindingFlags.NonPublic);
-        private static readonly MethodInfo AwaitAndCastResultMethod = typeof(WebApiModuleBase).GetMethod(nameof(AwaitAndCastResult), BindingFlags.Static | BindingFlags.NonPublic);
-        private static readonly MethodInfo DisposeMethod = typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose));
-        private static readonly MethodInfo SerializeResultAsyncMethod = typeof(WebApiModuleBase).GetMethod(nameof(SerializeResultAsync), BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly MethodInfo PreProcessRequestMethod = typeof(WebApiController).GetMethod(nameof(WebApiController.PreProcessRequest)) ?? throw new MissingMemberException("PreProcessRequestMethod");
+        private static readonly MethodInfo HttpContextSetter = typeof(WebApiController).GetProperty(nameof(WebApiController.HttpContext))?.GetSetMethod(true) ?? throw new MissingMemberException("HttpContextSetter");
+        private static readonly MethodInfo RouteSetter = typeof(WebApiController).GetProperty(nameof(WebApiController.Route))?.GetSetMethod(true) ?? throw new MissingMemberException("RouteSetter");
+        private static readonly MethodInfo AwaitResultMethod = typeof(WebApiModuleBase).GetMethod(nameof(AwaitResult), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("AwaitResultMethod");
+        private static readonly MethodInfo AwaitAndCastResultMethod = typeof(WebApiModuleBase).GetMethod(nameof(AwaitAndCastResult), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("AwaitAndCastResultMethod");
+        private static readonly MethodInfo DisposeMethod = typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose)) ?? throw new MissingMemberException("DisposeMethod");
+        private static readonly MethodInfo SerializeResultAsyncMethod = typeof(WebApiModuleBase).GetMethod(nameof(SerializeResultAsync), BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new MissingMemberException("SerializeResultAsyncMethod");
 
         private readonly HashSet<Type> _controllerTypes = new HashSet<Type>();
         private List<(HttpVerbs Verb, RouteMatcher Matcher, MethodInfo Method, Type ControllerType)>? _caseInsensitiveDeclarations;
@@ -58,7 +58,7 @@ namespace EmbedIO.WebApi
         /// </summary>
         /// <param name="baseRoute">The base route served by this module.</param>
         /// <seealso cref="IWebModule.BaseRoute" />
-        /// <seealso cref="Validate.UrlPath" />
+        /// <seealso cref="Validate.RoutePath" />
         protected WebApiModuleBase(string baseRoute)
             : this(baseRoute, ResponseSerializer.Default)
         {
@@ -74,7 +74,7 @@ namespace EmbedIO.WebApi
         /// or <see cref="Task{TResult}">Task&lt;object&gt;</see>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="serializer"/> is <see langword="null"/>.</exception>
         /// <seealso cref="IWebModule.BaseRoute" />
-        /// <seealso cref="Validate.UrlPath" />
+        /// <seealso cref="Validate.RoutePath" />
         protected WebApiModuleBase(string baseRoute, ResponseSerializerCallback serializer)
             : base(baseRoute)
         {
@@ -298,7 +298,7 @@ namespace EmbedIO.WebApi
         /// <param name="release">Releases the controller, or does nothing for container-owned instances.</param>
         protected void RegisterControllerTypeWithContext(
             Type controllerType,
-            Func<IHttpContext, WebApiController> factory,
+            Func<IHttpContext, WebApiController?> factory,
             Func<IHttpContext, WebApiController, Task> release)
         {
             EnsureConfigurationNotLocked();
@@ -323,7 +323,7 @@ namespace EmbedIO.WebApi
 
         private static T AwaitResult<T>(Task<T> task) => task.ConfigureAwait(false).GetAwaiter().GetResult();
 
-        private static T AwaitAndCastResult<T>(string parameterName, Task<object> task)
+        private static T? AwaitAndCastResult<T>(string parameterName, Task<object> task)
         {
             var result = task.ConfigureAwait(false).GetAwaiter().GetResult();
 
@@ -336,7 +336,7 @@ namespace EmbedIO.WebApi
             };
         }
 
-        private static bool IsGenericTaskType(Type type, out Type? resultType)
+        private static bool IsGenericTaskType(Type type, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Type? resultType)
         {
             resultType = null;
 
@@ -366,7 +366,7 @@ namespace EmbedIO.WebApi
         // - if the controller implements IDisposable, disposes it.
         private RouteHandlerCallback CompileHandler(
             Expression factoryExpression, MethodInfo method, RouteMatcher matcher,
-            Func<IHttpContext, WebApiController>? contextFactory,
+            Func<IHttpContext, WebApiController?>? contextFactory,
             Func<IHttpContext, WebApiController, Task>? release)
         {
             // Lambda parameters
@@ -377,7 +377,7 @@ namespace EmbedIO.WebApi
             var locals = new List<ParameterExpression>();
 
             // Local variable for controller
-            var controllerType = method.ReflectedType;
+            var controllerType = method.ReflectedType ?? throw new InvalidOperationException("The handler has no reflected controller type.");
             var controller = Expression.Variable(controllerType, "controller");
             locals.Add(controller);
 
@@ -422,7 +422,7 @@ namespace EmbedIO.WebApi
                         // Use the request data interface to get a value for the parameter.
                         Expression useRequestDataInterface = Expression.Call(
                             Expression.Constant(attr),
-                            intf.GetMethod(GetRequestDataAsyncMethodName),
+                            intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
                             controller,
                             Expression.Constant(parameter.Name));
 
@@ -465,7 +465,7 @@ namespace EmbedIO.WebApi
                         // Use the request data interface to get a value for the parameter.
                         Expression useRequestDataInterface = Expression.Call(
                             Expression.Constant(attr),
-                            intf.GetMethod(GetRequestDataAsyncMethodName),
+                            intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
                             controller,
                             Expression.Constant(parameterType),
                             Expression.Constant(parameter.Name));
@@ -495,7 +495,7 @@ namespace EmbedIO.WebApi
                     throw new InvalidOperationException($"No request data attribute for parameter {parameter.Name} of method {controllerType.Name}.{method.Name} can provide the expected data type.");
 
                 // Check whether the name of the handler parameter matches the name of a route parameter.
-                var index = IndexOfRouteParameter(matcher, parameter.Name);
+                var index = IndexOfRouteParameter(matcher, parameter.Name ?? throw new InvalidOperationException("The handler parameter has no name."));
                 if (index >= 0)
                 {
                     // Convert the parameter to the handler's parameter type.
@@ -579,7 +579,7 @@ namespace EmbedIO.WebApi
                     }
                     finally
                     {
-                        await release!(context, created).ConfigureAwait(false);
+                        await (release ?? throw new InvalidOperationException("No controller release callback is configured."))(context, created).ConfigureAwait(false);
                     }
                 };
             }
@@ -655,7 +655,7 @@ namespace EmbedIO.WebApi
 
         private bool TryRegisterControllerTypeCore(
             Type controllerType, Expression factoryExpression,
-            Func<IHttpContext, WebApiController>? contextFactory = null,
+            Func<IHttpContext, WebApiController?>? contextFactory = null,
             Func<IHttpContext, WebApiController, Task>? release = null)
         {
             var handlerCount = 0;
@@ -678,7 +678,7 @@ namespace EmbedIO.WebApi
                     {
                         var matcher = attribute.Matcher.WithCaseInsensitiveLiterals();
                         _caseInsensitiveDeclarations ??= new List<(HttpVerbs, RouteMatcher, MethodInfo, Type)>();
-                        var declarations = _caseInsensitiveDeclarations.Concat(pending!.Select(p => (p.Verb, p.Matcher, p.Method, ControllerType: controllerType)));
+                        var declarations = _caseInsensitiveDeclarations.Concat((pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Select(p => (p.Verb, p.Matcher, p.Method, ControllerType: controllerType)));
                         var overlapping = declarations.Where(d => (d.Verb == attribute.Verb || d.Verb == HttpVerbs.Any || attribute.Verb == HttpVerbs.Any)
                             && matcher.HasCaseEquivalentTemplate(d.Matcher)).ToArray();
                         if (overlapping.Any(d => d.Method != method || d.ControllerType != controllerType))
@@ -688,7 +688,7 @@ namespace EmbedIO.WebApi
                             throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' must retain the same parameter names.");
                         if (overlapping.Any(d => d.Verb == attribute.Verb && d.Method == method))
                             continue;
-                        pending.Add((attribute.Verb, matcher, method, CompileHandler(factoryExpression, method, matcher, contextFactory, release)));
+                        (pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Add((attribute.Verb, matcher, method, CompileHandler(factoryExpression, method, matcher, contextFactory, release)));
                     }
                     else
                     {
@@ -706,7 +706,7 @@ namespace EmbedIO.WebApi
                 foreach (var entry in pending)
                 {
                     AddHandler(entry.Verb, entry.Matcher, entry.Handler);
-                    _caseInsensitiveDeclarations!.Add((entry.Verb, entry.Matcher, entry.Method, controllerType));
+                    (_caseInsensitiveDeclarations ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Add((entry.Verb, entry.Matcher, entry.Method, controllerType));
                 }
             }
 

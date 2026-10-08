@@ -15,7 +15,7 @@ namespace EmbedIO.Tests
     [NonParallelizable]
     public sealed class CliTest
     {
-        private string _root = null!;
+        private string _root = string.Empty;
 
         [SetUp]
         public void SetUp() => _root = Directory.CreateTempSubdirectory("embedio-cli-test-").FullName;
@@ -114,7 +114,7 @@ namespace EmbedIO.Tests
                 Assert.That(await client.GetStringAsync("/"), Is.EqualTo("static fallback"));
                 using var socket = new ClientWebSocket();
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await socket.ConnectAsync(new Uri(host.Url.Replace("http:", "ws:") + "cli-echo"), timeout.Token);
+                await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(host.Url, "http:", "ws:") + "cli-echo"), timeout.Token);
                 await socket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("echo")), WebSocketMessageType.Text, true, timeout.Token);
                 var buffer = new byte[32];
                 var response = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token);

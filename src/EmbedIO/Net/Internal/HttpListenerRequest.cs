@@ -75,7 +75,7 @@ namespace EmbedIO.Net.Internal
         public long ContentLength64 => _framingInitialized ? _contentLength : long.TryParse(Headers[HttpHeaderNames.ContentLength], out var val) ? val : 0;
 
         /// <inheritdoc />
-        public string ContentType => Headers[HttpHeaderNames.ContentType];
+        public string? ContentType => Headers[HttpHeaderNames.ContentType];
 
         /// <inheritdoc />
         public ICookieCollection Cookies => _cookies ??= new CookieList();
@@ -111,8 +111,8 @@ namespace EmbedIO.Net.Internal
             {
                 if (!_kaSet)
                 {
-                    _keepAlive = !Headers.Contains(HttpHeaderNames.Connection, "close")
-                        && (ProtocolVersion >= HttpVersion.Version11 || Headers.Contains(HttpHeaderNames.Connection, "keep-alive"));
+                    _keepAlive = !Headers.Contains(HttpHeaderNames.Connection, "close", StringComparison.OrdinalIgnoreCase)
+                        && (ProtocolVersion >= HttpVersion.Version11 || Headers.Contains(HttpHeaderNames.Connection, "keep-alive", StringComparison.OrdinalIgnoreCase));
 
                     _kaSet = true;
                 }
@@ -131,7 +131,7 @@ namespace EmbedIO.Net.Internal
         public NameValueCollection QueryString { get; } = new();
 
         /// <inheritdoc />
-        public string RawUrl { get; private set; } = string.Empty;
+        public string RawTarget { get; private set; } = string.Empty;
 
         /// <inheritdoc />
         public IPEndPoint RemoteEndPoint => _connection.RemoteEndPoint;
@@ -143,11 +143,11 @@ namespace EmbedIO.Net.Internal
         public Uri? UrlReferrer { get; private set; }
 
         /// <inheritdoc />
-        public string UserAgent => Headers[HttpHeaderNames.UserAgent];
+        public string? UserAgent => Headers[HttpHeaderNames.UserAgent];
 
         public string UserHostAddress => LocalEndPoint.ToString();
 
-        public string UserHostName => Headers[HttpHeaderNames.Host];
+        public string? UserHostName => Headers[HttpHeaderNames.Host];
 
         public string[] UserLanguages { get; private set; } = Array.Empty<string>();
 
@@ -155,12 +155,12 @@ namespace EmbedIO.Net.Internal
         public bool IsWebSocketRequest
             => HttpVerb == HttpVerbs.Get
             && ProtocolVersion >= HttpVersion.Version11
-            && Headers.Contains(HttpHeaderNames.Upgrade, "websocket")
-            && Headers.Contains(HttpHeaderNames.Connection, "Upgrade");
+            && Headers.Contains(HttpHeaderNames.Upgrade, "websocket", StringComparison.OrdinalIgnoreCase)
+            && Headers.Contains(HttpHeaderNames.Connection, "Upgrade", StringComparison.OrdinalIgnoreCase);
 
         internal void SetRequestLine(string req)
         {
-            var first = req.IndexOf(' ');
+            var first = EmbedIO.Internal.StringOperations.IndexOfOrdinal(req, ' ');
             var second = first < 0 ? -1 : req.IndexOf(' ', first + 1);
             if (first <= 0 || second <= first + 1 || second + 9 != req.Length)
             {
@@ -181,7 +181,7 @@ namespace EmbedIO.Net.Internal
                 }
             HttpMethod = req.Substring(0, first);
             HttpVerb = IsKnownHttpMethod(HttpMethod, out var verb) ? verb : HttpVerbs.Any;
-            RawUrl = req.Substring(first + 1, second - first - 1);
+            RawTarget = req.Substring(first + 1, second - first - 1);
             if (string.CompareOrdinal(req, second + 1, "HTTP/1.1", 0, 8) == 0)
                 ProtocolVersion = HttpVersion.Version11;
             else if (string.CompareOrdinal(req, second + 1, "HTTP/1.0", 0, 8) == 0)
@@ -217,14 +217,15 @@ namespace EmbedIO.Net.Internal
                 return;
             }
 
-            var rawUri = UriUtility.StringToAbsoluteUri(RawUrl);
-            var path = rawUri?.PathAndQuery ?? RawUrl;
+            var rawUri = UriUtility.StringToAbsoluteUri(RawTarget);
+            var path = rawUri?.PathAndQuery ?? RawTarget;
 
             if (string.IsNullOrEmpty(host))
             {
                 host = rawUri?.Host ?? UserHostAddress;
             }
 
+            host ??= UserHostAddress;
             var colon = host.LastIndexOf(':');
             if (colon >= 0 && colon > host.LastIndexOf(']'))
             {
@@ -255,7 +256,7 @@ namespace EmbedIO.Net.Internal
 
         internal void AddHeader(string header)
         {
-            var colon = header.IndexOf(':');
+            var colon = header.IndexOf(":", System.StringComparison.Ordinal);
             if (colon == -1 || colon == 0)
             {
                 _connection.SetError("Bad Request");
@@ -296,15 +297,15 @@ namespace EmbedIO.Net.Internal
                 val = previous + ", " + val;
             Headers.Set(name, val);
 
-            switch (name.ToLowerInvariant())
+            switch (name.ToUpperInvariant())
             {
-                case "accept-language":
+                case "ACCEPT-LANGUAGE":
                     UserLanguages = val.SplitByComma(); // yes, only split with a ','
                     break;
-                case "accept":
+                case "ACCEPT":
                     AcceptTypes = val.SplitByComma(); // yes, only split with a ','
                     break;
-                case "content-length":
+                case "CONTENT-LENGTH":
                     Headers[HttpHeaderNames.ContentLength] = val.Trim();
 
                     if (ContentLength64 < 0)
@@ -313,18 +314,18 @@ namespace EmbedIO.Net.Internal
                     }
 
                     break;
-                case "referer":
+                case "REFERER":
                     try
                     {
                         UrlReferrer = new Uri(val);
                     }
-                    catch
+                    catch (UriFormatException)
                     {
                         UrlReferrer = null;
                     }
 
                     break;
-                case "cookie":
+                case "COOKIE":
                     _cookies = ParseCookies(val);
 
                     break;
@@ -346,7 +347,7 @@ namespace EmbedIO.Net.Internal
                 _inputStream = null;
                 return true;
             }
-            catch { return false; }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { return false; }
             if (input is RequestStream body && body.IsBodyConsumed)
                 return true;
 
@@ -371,7 +372,7 @@ namespace EmbedIO.Net.Internal
                         _inputStream = null;
                         return true;
                     }
-                    catch
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
                     {
                         return false;
                     }
@@ -395,7 +396,7 @@ namespace EmbedIO.Net.Internal
                 while (await input.ReadAsync(bytes, 0, 2048, CancellationToken.None).ConfigureAwait(false) > 0) { }
                 return input is not RequestStream request || request.IsBodyConsumed;
             }
-            catch { return false; }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { return false; }
             finally { ArrayPool<byte>.Shared.Return(bytes, true); }
         }
 
@@ -485,19 +486,19 @@ namespace EmbedIO.Net.Internal
                 var str = cookieString.Trim();
                 if (str.StartsWith("$Version", StringComparison.Ordinal))
                 {
-                    version = int.Parse(str.Substring(str.IndexOf('=') + 1).Unquote(), CultureInfo.InvariantCulture);
+                    version = int.Parse(str.Substring(str.IndexOf("=", System.StringComparison.Ordinal) + 1).Unquote(), CultureInfo.InvariantCulture);
                 }
                 else if (str.StartsWith("$Path", StringComparison.Ordinal) && current != null)
                 {
-                    current.Path = str.Substring(str.IndexOf('=') + 1).Trim();
+                    current.Path = str.Substring(str.IndexOf("=", System.StringComparison.Ordinal) + 1).Trim();
                 }
                 else if (str.StartsWith("$Domain", StringComparison.Ordinal) && current != null)
                 {
-                    current.Domain = str.Substring(str.IndexOf('=') + 1).Trim();
+                    current.Domain = str.Substring(str.IndexOf("=", System.StringComparison.Ordinal) + 1).Trim();
                 }
                 else if (str.StartsWith("$Port", StringComparison.Ordinal) && current != null)
                 {
-                    current.Port = $"\"{str.Substring(str.IndexOf('=') + 1).Trim()}\"";
+                    current.Port = $"\"{str.Substring(str.IndexOf("=", System.StringComparison.Ordinal) + 1).Trim()}\"";
                 }
                 else
                 {
@@ -509,7 +510,7 @@ namespace EmbedIO.Net.Internal
                     try
                     {
                         var ck = new Cookie();
-                        var idx = str.IndexOf('=');
+                        var idx = str.IndexOf("=", System.StringComparison.Ordinal);
                         if (idx > 0)
                         {
                             ck.Name = str.Substring(0, idx).Trim();
@@ -525,7 +526,7 @@ namespace EmbedIO.Net.Internal
 
                         current = ck;
                     }
-                    catch (Exception e)
+                    catch (Exception error) when (error is CookieException or ArgumentException)
                     {
                         current = null;
                     }
@@ -556,7 +557,7 @@ namespace EmbedIO.Net.Internal
 
             foreach (var kv in components)
             {
-                var pos = kv.IndexOf('=');
+                var pos = kv.IndexOf("=", System.StringComparison.Ordinal);
                 if (pos == -1)
                 {
                     QueryString.Add(null, WebUtility.UrlDecode(kv));

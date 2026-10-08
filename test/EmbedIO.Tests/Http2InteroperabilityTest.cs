@@ -15,11 +15,11 @@ namespace EmbedIO.Tests
     public partial class Http2InteroperabilityTest
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static Type Type(string name) => typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2." + name, true)!;
-        private static T Property<T>(object value, string name) => (T)value.GetType().GetProperty(name)!.GetValue(value)!;
-        private static async Task<object> Result(Task task) { await task; return task.GetType().GetProperty("Result")!.GetValue(task)!; }
+        private static Type Type(string name) => (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2." + name, true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static T Property<T>(object value, string name) => (T)((value.GetType().GetProperty(name) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(value) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+        private static async Task<object> Result(Task task) { await task; return ((task.GetType().GetProperty("Result") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(task) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")); }
         private static Task Respond(object exchange, byte[] bytes)
-            => (Task)exchange.GetType().GetMethod("RespondAsync", Flags)!.Invoke(exchange, new object[] { bytes, Property<CancellationToken>(exchange, "CancellationToken") })!;
+            => (Task)((exchange.GetType().GetMethod("RespondAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(exchange, new object[] { bytes, Property<CancellationToken>(exchange, "CancellationToken") }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         private static async Task WithServer(Func<object, Task> application, Func<HttpClient, Task> verify)
         {
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
@@ -29,14 +29,14 @@ namespace EmbedIO.Tests
             {
                 using var socket = await listener.AcceptTcpClientAsync(stop.Token);
                 using var stream = socket.GetStream();
-                var connection = await Result((Task)Type("Http2Connection").GetMethod("AcceptAsync", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { stream, stop.Token })!);
+                var connection = await Result((Task)((Type("Http2Connection").GetMethod("AcceptAsync", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(null, new object[] { stream, stop.Token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")));
                 using var connectionLifetime = (IDisposable)connection;
-                var dispatcher = Activator.CreateInstance(Type("Http2Dispatcher"), Flags, null, new[] { connection }, null)!;
+                var dispatcher = (Activator.CreateInstance(Type("Http2Dispatcher"), Flags, null, new[] { connection }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
                 using var dispatcherLifetime = (IDisposable)dispatcher;
                 var argument = Expression.Parameter(Type("Http2Exchange"));
                 var delegateType = typeof(Func<,>).MakeGenericType(Type("Http2Exchange"), typeof(Task));
                 var callback = Expression.Lambda(delegateType, Expression.Invoke(Expression.Constant(application), Expression.Convert(argument, typeof(object))), argument).Compile();
-                await (Task)dispatcher.GetType().GetMethod("RunAsync", Flags)!.Invoke(dispatcher, new object[] { callback, stop.Token })!;
+                await (Task)((dispatcher.GetType().GetMethod("RunAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(dispatcher, new object[] { callback, stop.Token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             });
             try
             {
@@ -135,7 +135,7 @@ namespace EmbedIO.Tests
                 var fields = Array.CreateInstance(Type("HpackField"), 3);
                 for (var i = 0; i < pairs.Length; i += 2)
                     fields.SetValue(Activator.CreateInstance(Type("HpackField"), Flags, null, new object[] { pairs[i], pairs[i + 1], false }, null), i / 2);
-                return (Task)exchange.GetType().GetMethod("SendHeadersAsync", Flags)!.Invoke(exchange, new object[] { fields, true, Property<CancellationToken>(exchange, "CancellationToken") })!;
+                return (Task)((exchange.GetType().GetMethod("SendHeadersAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(exchange, new object[] { fields, true, Property<CancellationToken>(exchange, "CancellationToken") }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             }, async client =>
             {
                 for (var i = 0; i < 3; i++)
@@ -151,7 +151,7 @@ namespace EmbedIO.Tests
             var fields = Array.CreateInstance(Type("HpackField"), pairs.Length / 2);
             for (var i = 0; i < pairs.Length; i += 2)
                 fields.SetValue(Activator.CreateInstance(Type("HpackField"), Flags, null, new object[] { pairs[i], pairs[i + 1], false }, null), i / 2);
-            return (Task)exchange.GetType().GetMethod("SendHeadersAsync", Flags)!.Invoke(exchange, new object[] { fields, end, Property<CancellationToken>(exchange, "CancellationToken") })!;
+            return (Task)((exchange.GetType().GetMethod("SendHeadersAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(exchange, new object[] { fields, end, Property<CancellationToken>(exchange, "CancellationToken") }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         }
 
         [Test]
@@ -193,7 +193,7 @@ namespace EmbedIO.Tests
             await WithServer(async exchange =>
             {
                 await SendResponseHeaders(exchange, new[] { ":status", "200", "content-length", "3" }, false);
-                await (Task)exchange.GetType().GetMethod("WriteAsync", Flags)!.Invoke(exchange, new object[] { new byte[] { 1, 2, 3 }, 0, 3, false, Property<CancellationToken>(exchange, "CancellationToken") })!;
+                await (Task)((exchange.GetType().GetMethod("WriteAsync", Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(exchange, new object[] { new byte[] { 1, 2, 3 }, 0, 3, false, Property<CancellationToken>(exchange, "CancellationToken") }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             }, async client => Assert.That(await client.GetByteArrayAsync("streamed"), Is.EqualTo(new byte[] { 1, 2, 3 })));
         }
     }

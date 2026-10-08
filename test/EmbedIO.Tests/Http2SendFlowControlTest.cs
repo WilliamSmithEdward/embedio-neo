@@ -13,18 +13,18 @@ namespace EmbedIO.Tests
     {
         private sealed class Flow
         {
-            private static readonly Type Type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2SendFlowControl", true)!;
-            private readonly object _instance = Activator.CreateInstance(Type, true)!;
+            private static readonly Type Type = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2SendFlowControl", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            private readonly object _instance = (Activator.CreateInstance(Type, true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             internal object? Call(string method, params object[] args)
             {
-                try { return Type.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_instance, args); }
-                catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture(error.InnerException!).Throw(); throw; }
+                try { return (Type.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(_instance, args); }
+                catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture((error.InnerException ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."))).Throw(); throw; }
             }
             internal void Open(int id) => Call("Open", id);
             internal void Update(int id, int count) => Call("Update", id, count);
             internal void Adjust(int delta) => Call("AdjustInitialWindow", delta);
             internal Task<int> Reserve(int id, int max, CancellationToken token = default)
-                => (Task<int>)Call("ReserveAsync", id, max, token)!;
+                => (Task<int>)(Call("ReserveAsync", id, max, token) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         }
 
         [Test]
@@ -95,9 +95,9 @@ namespace EmbedIO.Tests
         public void WindowUpdateErrorsHaveCorrectScope(int id, int code)
         {
             var flow = new Flow(); flow.Open(1);
-            var error = Assert.Catch<IOException>(() => flow.Update(id, code == 1 ? 0 : int.MaxValue))!;
-            Assert.That(error.GetType().GetProperty("StreamId")!.GetValue(error), Is.EqualTo(id));
-            Assert.That(error.GetType().GetProperty("ErrorCode")!.GetValue(error), Is.EqualTo((uint)code));
+            var error = (Assert.Catch<IOException>(() => flow.Update(id, code == 1 ? 0 : int.MaxValue)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            Assert.That((error.GetType().GetProperty("StreamId") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(error), Is.EqualTo(id));
+            Assert.That((error.GetType().GetProperty("ErrorCode") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(error), Is.EqualTo((uint)code));
         }
 
         [Test]
@@ -105,9 +105,9 @@ namespace EmbedIO.Tests
         {
             var flow = new Flow(); flow.Open(1); flow.Open(3);
             flow.Update(3, int.MaxValue - 65535);
-            var error = Assert.Catch<IOException>(() => flow.Adjust(1))!;
-            Assert.That(error.GetType().GetProperty("StreamId")!.GetValue(error), Is.EqualTo(0));
-            Assert.That(error.GetType().GetProperty("ErrorCode")!.GetValue(error), Is.EqualTo(3u));
+            var error = (Assert.Catch<IOException>(() => flow.Adjust(1)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
+            Assert.That((error.GetType().GetProperty("StreamId") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(error), Is.EqualTo(0));
+            Assert.That((error.GetType().GetProperty("ErrorCode") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(error), Is.EqualTo(3u));
             flow.Update(0, 100);
             Assert.That(await flow.Reserve(1, 65536), Is.EqualTo(65535));
         }

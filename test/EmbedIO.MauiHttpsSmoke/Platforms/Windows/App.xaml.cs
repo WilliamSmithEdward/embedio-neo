@@ -1,4 +1,4 @@
-namespace EmbedIO.MauiHttpsSmoke.WinUI;
+﻿namespace EmbedIO.MauiHttpsSmoke.WinUI;
 
 public partial class App : MauiWinUIApplication
 {

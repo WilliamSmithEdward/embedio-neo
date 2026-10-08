@@ -46,7 +46,7 @@ namespace EmbedIO
                 {
                     await callbacks.Pop()().ConfigureAwait(false);
                 }
-                catch (Exception exception)
+                catch (Exception exception) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                 {
                     exception.Log("HTTP context", "Exception thrown by a request completion callback.");
                 }

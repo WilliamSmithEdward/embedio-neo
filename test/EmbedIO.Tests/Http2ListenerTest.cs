@@ -18,7 +18,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task StopCancelsActiveHttp2Application()
         {
-            var url = HttpsSmoke.GetUrl().Replace("https:", "http:");
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
             var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var exited = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
@@ -58,7 +58,7 @@ namespace EmbedIO.Tests
         {
             var blockedPort = 0;
             var healthyPort = 0;
-            var url = HttpsSmoke.GetUrl().Replace("https:", "http:");
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
             var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var exited = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
@@ -110,7 +110,7 @@ namespace EmbedIO.Tests
         {
             using var certificate = HttpsSmoke.CreateCertificate();
             var url = HttpsSmoke.GetUrl();
-            if (!secure) url = url.Replace("https:", "http:");
+            if (!secure) url = url.Replace("https:", "http:", StringComparison.Ordinal);
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithCertificate(certificate))
                 .WithModule(new ActionModule("/", HttpVerbs.Any, async context =>
                 {
@@ -125,7 +125,7 @@ namespace EmbedIO.Tests
             var running = server.RunAsync(stop.Token);
             using var client = secure ? HttpsSmoke.CreateClient(certificate) : new HttpClient(new SocketsHttpHandler { UseProxy = false, MaxConnectionsPerServer = 1 });
             client.Timeout = TimeSpan.FromSeconds(15);
-            var standardAssembly = typeof(WebServer).Assembly.GetCustomAttribute<TargetFrameworkAttribute>()!.FrameworkName.StartsWith(".NETStandard", StringComparison.Ordinal);
+            var standardAssembly = (typeof(WebServer).Assembly.GetCustomAttribute<TargetFrameworkAttribute>() ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).FrameworkName.StartsWith(".NETStandard", StringComparison.Ordinal);
             var version = secure && standardAssembly ? HttpVersion.Version11 : HttpVersion.Version20;
             try
             {
