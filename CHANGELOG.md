@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Documented default JSON migration contracts and audited DTO fidelity, derived
+  members, member exposure, timestamps, references, numeric tokens, formatting
+  and depth. Added fourteen default-contract regressions including real HTTP
+  preservation and failure recovery. Current serializer behavior, public APIs
+  and dependencies are unchanged.
+
 - Serialize shared ZIP archive lookup/open and entry reads without whole-entry buffering. Preserve stream ownership/capabilities and cancellation, and wake pending archive operations during disposal (upstream #491).
 
 - Preserve managed-listener bytes for pipelined requests, including successors after drained Content-Length bodies. Add isolated JSON/plaintext benchmark endpoints and protocol regressions (upstream #495).
