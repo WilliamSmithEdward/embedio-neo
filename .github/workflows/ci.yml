@@ -37,11 +37,39 @@ jobs:
           global-json-file: global.json
           cache: true
           cache-dependency-path: '**/packages.lock.json'
+      - name: Install pinned Linux QUIC prerequisite
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$RUNNER_TEMP/libmsquic_2.6.2_amd64.deb"
+          curl --fail --location --retry 3 --output "$package" https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/libm/libmsquic/libmsquic_2.6.2_amd64.deb
+          printf '%s  %s\n' 9ac90841ad45d99c1ff85b427d6dc7f0849291d596f0049d13db779a5a66ba4e "$package" | sha256sum --check
+          sudo apt-get update
+          sudo apt-get install --yes "$package"
+          dpkg-query --show libmsquic
+      - name: Install pinned macOS QUIC prerequisite
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_INSTALL_CLEANUP: '1'
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          bottle="$RUNNER_TEMP/libmsquic--2.6.2.arm64_sequoia.bottle.tar.gz"
+          curl --fail --location --retry 3 --header 'Authorization: Bearer QQ==' --output "$bottle" https://ghcr.io/v2/homebrew/core/libmsquic/blobs/sha256:c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55
+          printf '%s  %s\n' c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55 "$bottle" | shasum -a 256 --check
+          brew install --force-bottle "$bottle"
+          test "$(brew list --versions libmsquic)" = 'libmsquic 2.6.2'
+          printf 'DYLD_FALLBACK_LIBRARY_PATH=%s/lib\n' "$(brew --prefix libmsquic)" >> "$GITHUB_ENV"
       - name: Restore from the lock files
         run: dotnet restore EmbedIO.sln --locked-mode
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=true
       - name: Run the regression suite with coverage
+        env:
+          EMBEDIO_REQUIRE_QUIC: '1'
         run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 2704 --coverlet
       - name: Verify independent HPACK interoperability
         if: runner.os == 'Linux'

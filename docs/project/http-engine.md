@@ -797,3 +797,35 @@ cases pass a second run. The solution builds without warnings/errors; formatting
 both suppression guards and the pinned YARA scan pass. The prior checkpoint's
 Linux and Windows test jobs passed in CI 37786567665; its remaining jobs and the
 new source's full cross-platform gates must still complete.
+
+
+### Required native QUIC coverage in desktop CI
+
+Artifact inspection of CI 37786567665 (e00cb8a) showed nine QUIC passes on Windows
+and nine explicit capability skips on each of Linux and macOS. The overall run
+passed, but did not prove Unix QUIC interoperability. CI now installs MsQuic 2.6.2
+on Ubuntu 24.04 from Microsoft's versioned package and on macOS 15 ARM64 from the
+Homebrew bottle. Both downloads have verified, fixed SHA-256 hashes. Homebrew
+handles its OpenSSL dependency; distro/Homebrew transitive crypto dependencies
+remain runner-managed. Windows uses the MsQuic shipped with its pinned .NET
+runtime. Setting EMBEDIO_REQUIRE_QUIC=1 makes missing capability or a legacy test
+asset fail fixture setup instead of skipping; ordinary unsupported local hosts
+retain an explicit skip.
+
+The same 14 transport tests passed locally on Windows and in an isolated Ubuntu
+24.04.5 container with .NET 10.0.12, MsQuic 2.6.2 and libnuma1 2.0.18-1build1.
+The Linux container had a read-only root, dropped capabilities and no external
+network, with loopback TLS/QUIC and a dedicated result mount. Its initial four
+HTTP-client cases failed TLS setup with the IP-based server name; raw QUIC cases
+already passed with localhost. The fixture now uses localhost as the HTTP/TLS
+server name while connecting explicitly to IPv4 loopback, retaining the exact
+certificate-hash validation. All cases then passed on both operating systems.
+Logs under TestResults/http-engine/http3-required-* retain the initial TLS failure
+and the corrected runs. macOS execution still requires the new CI run; installing
+a prerequisite is not proof that the transport works there.
+
+Prerequisite sources: [Microsoft QUIC platform documentation](https://learn.microsoft.com/en-us/dotnet/fundamentals/networking/quic/quic-overview),
+[Microsoft Ubuntu 24.04 packages](https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/libm/libmsquic/),
+and [Homebrew libmsquic metadata](https://formulae.brew.sh/api/formula/libmsquic.json).
+Microsoft documents macOS support as partial; this work does not broaden that
+support promise. Production packages do not gain a native runtime dependency.

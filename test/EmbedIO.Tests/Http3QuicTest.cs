@@ -19,6 +19,15 @@ namespace EmbedIO.Tests
 {
     public sealed class Http3QuicTest
     {
+        [SetUp]
+        public void EnforceRequiredQuicCoverage()
+        {
+            if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") != "1") return;
+            Assert.That(QuicListener.IsSupported && QuicConnection.IsSupported, Is.True,
+                "This CI job requires QUIC; missing native prerequisites must not become skipped coverage.");
+            Assert.That(typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection"), Is.Not.Null,
+                "Required transport coverage must use the modern asset.");
+        }
         [TestCase(0, 1, false)]
         [TestCase(100003, 8, false)]
         [TestCase(1048576, 3, false)]
@@ -72,6 +81,7 @@ namespace EmbedIO.Tests
             {
                 var payload = Encoding.UTF8.GetBytes(new string((char)('a' + index), size));
                 using var message = new HttpRequestMessage(head ? HttpMethod.Head : HttpMethod.Post, uri) { Version = HttpVersion.Version30, VersionPolicy = HttpVersionPolicy.RequestVersionExact, Content = new ByteArrayContent(payload) };
+                message.Headers.Host = "localhost"; // TLS server name stays DNS-based while routing to the explicit loopback address.
                 using var response = await client.SendAsync(message, deadline.Token);
                 var bytes = await response.Content.ReadAsByteArrayAsync(deadline.Token);
                 Assert.That(response.Version, Is.EqualTo(HttpVersion.Version30));
