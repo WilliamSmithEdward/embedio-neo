@@ -142,6 +142,9 @@
     - name: SPA client routes
       href: user-reports/spa-client-routes.md
 
+    - name: Malformed typed route parameters
+      href: user-reports/typed-route-validation.md
+
 - name: Architecture
   items:
     - name: Dependency injection

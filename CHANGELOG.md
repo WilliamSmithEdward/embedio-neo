@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Owner-approved compatibility change: malformed nonempty values rejected by supported controller route converters now return HTTP 400 instead of 500, before handler invocation. Preserve valid conversions, controller/configuration errors, optional/missing routes, query/body binding and transport policies; see the migration guide (issue #163, upstream #505 follow-up).
+
 - Avoid ZIP archive reader thread-pool starvation on modern runtimes by using task-based synchronous gate waits; preserve archive serialization, cancellation, stream ownership and defaults (upstream #491 follow-up).
 
 - Documented default JSON migration contracts and audited DTO fidelity, derived

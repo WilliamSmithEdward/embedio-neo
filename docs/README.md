@@ -114,6 +114,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [SPA client routes](user-reports/spa-client-routes.md): direct navigation without redirects using existing provider injection.
 
+- [Malformed typed route parameters](user-reports/typed-route-validation.md): approved 500-to-400 change and preserved error boundaries.
+
 ## Architecture
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.

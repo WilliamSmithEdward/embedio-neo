@@ -34,7 +34,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 1717
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 1789
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -48,7 +48,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 1717 executed/reported test cases to catch accidental discovery loss; update
+least 1789 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The five-minute suite
 budget allows the full coverage-enabled Windows run to finish; the discovery
 minimum remains enforced. NUnit 5 async assertions
@@ -189,3 +189,5 @@ The Windows CI test job also runs the test-only net472 Basic authentication
 fixture against the netstandard2.0 core on its installed .NET Framework. It is
 outside the ordinary solution and shipped packages; its pinned reference-assembly
 package is development-only. See [the report guide](docs/user-reports/basic-authentication-native-listener.md).
+
+The Windows job also runs `test/EmbedIO.LegacyRouteValidationSmoke` outside the ordinary solution and shipped packages. Its pinned `net472` compile target exercises the actual .NET Standard core on the installed Framework CLR, including the BCL numeric exception wrapper and preserved application/query/configuration errors; its 34-check JSON report is uploaded with the test artifacts.
