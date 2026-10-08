@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="../Shared/HttpsSmoke.cs" Link="PlatformTests/HttpsSmoke.cs" />
     <Compile Include="../Shared/BasicAuthenticationSmoke.cs" Link="PlatformTests/BasicAuthenticationSmoke.cs" />
+    <EmbeddedResource Include="Data/StructuredFields/dictionary.json" />
     <None Update="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="coverlet.MTP" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" PrivateAssets="all" />

@@ -8,11 +8,12 @@ namespace EmbedIO.Net.Internal.Http3
 {
     internal readonly struct Http3ControlEvent
     {
-        internal Http3ControlEvent(long type, long identifier, string? priorityFieldValue = null)
-        { Type = type; Identifier = identifier; PriorityFieldValue = priorityFieldValue; }
+        internal Http3ControlEvent(long type, long identifier, string? priorityFieldValue = null, HttpPriority? priority = null)
+        { Type = type; Identifier = identifier; PriorityFieldValue = priorityFieldValue; Priority = priority; }
         public long Type { get; }
         public long Identifier { get; }
         public string? PriorityFieldValue { get; }
+        public HttpPriority? Priority { get; }
     }
 
     // Called only after the connection has accepted the peer's unique control stream.
@@ -64,9 +65,12 @@ namespace EmbedIO.Net.Internal.Http3
                             throw new Http3ProtocolException(0x108, "Priority target is not a request stream.");
                         for (var i = offset; i < payload.Length; i++)
                             if (payload[i] > 127) throw new Http3ProtocolException(0x101, "Priority field is not ASCII.");
-                        // Field semantics and promised-push ownership belong to the
-                        // connection. Preserve empty fields: they reset defaults.
-                        return new Http3ControlEvent(type, id, Encoding.ASCII.GetString(payload, offset, payload.Length - offset));
+                        // Preserve empty fields: they reset defaults. Scheduling and
+                        // promised-push ownership belong to the connection.
+                        var field = Encoding.ASCII.GetString(payload, offset, payload.Length - offset);
+                        if (!HttpPriority.TryParse(field, out var priority))
+                            throw new Http3ProtocolException(0x101, "Malformed priority field dictionary.");
+                        return new Http3ControlEvent(type, id, field, priority);
                     }
                     if (type == 3 || type == 7 || type == 13)
                     {

@@ -1440,7 +1440,9 @@ focused modern cases passed on Windows and Linux, and all 113 framing cases
 passed with the actual netstandard asset on both hosts. Both targets built
 without warnings/errors; formatting, analyzer guards and the pinned YARA scan
 passed. The full Windows run passed 2,843 cases with five expected skips
-(2,848 total). Fresh exact-head CI remains required. Evidence uses the
+(2,848 total). CI 37815009316 subsequently passed on
+5c2d1ff67a6f2bc2ec2b5ac6bfc6713f54b5e537, including macOS. Every reported
+PR check on that head was passing or intentionally skipped. Evidence uses the
 h3-priority prefix under TestResults/http-engine.
 
 This is ingestion and wire validation, not completed priority scheduling.
@@ -1450,3 +1452,34 @@ live QUIC stream limit is not exposed here; request-ID kind is checked, but the
 RFC's recommended stream-limit rejection is still pending. ORIGIN advertisement
 (RFC 8336/9412), datagrams/capsules and the rest of the standards inventory remain
 open. No support badge changes are justified by this increment.
+
+
+## Structured priority field parser
+
+The next priority increment parses the complete Dictionary required by
+[RFC 9218](https://www.rfc-editor.org/rfc/rfc9218.html#section-4), including
+[RFC 9651](https://www.rfc-editor.org/rfc/rfc9651.html) dates and display strings.
+Urgency defaults to 3 and incremental to false. Last duplicate members replace
+previous members; unsupported types/ranges are ignored. Unknown members and
+parameters still undergo syntax validation, and a malformed dictionary cannot
+retain partially parsed priority values. Input is bounded to 16 KiB, lists do
+not recurse, and unknown dictionaries/lists are not materialized. Display-string
+UTF-8 validation allocates only the individual encoded string's bounded length.
+
+All 432 Dictionary records from httpwg/structured-field-tests revision
+00462dd7938b43bf596cb2af6a373d9c928a6cbe passed a standalone comparison. The same
+records are embedded in the test assembly with source attribution and the
+upstream license, and their syntax results plus effective priority projections
+pass in the regression fixture. Another 64 cases exercise priority-specific
+semantics, malformed fields, numeric limits, Unicode, escapes and input bounds.
+Two control-frame cases and a raw QUIC case cover malformed dictionary errors.
+The control event exposes both the raw value and parsed parameters. Scheduling
+integration, bounded priority state and HTTP/2 signaling are still pending.
+
+Both assets build without warnings/errors. The final focused Linux set passed
+223 cases; the actual netstandard asset passed 180 on Windows and Linux. The
+formatting/analyzer guards and pinned YARA scan of changed C# and fixture files
+passed. The combined Windows run passed 2,911 cases with five expected skips
+(2,916 total; priority-parser-full log). Fresh exact-head CI remains required.
+Discovery floor: 2,916. No complete scheduling/performance claim is
+made, and the public support badges remain unchanged.

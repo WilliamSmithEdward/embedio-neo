@@ -100,6 +100,7 @@ namespace EmbedIO.Tests
         [TestCase("missing-method", 0x10e, false)]
         [TestCase("length-mismatch", 0x10e, false)]
         [TestCase("settings-on-request", 0x105, true)]
+        [TestCase("priority-malformed", 0x101, true)]
         [TestCase("priority-push", 0x108, true)]
         [TestCase("priority-invalid-id", 0x108, true)]
         [TestCase("priority-oversized", 0x107, true)]
@@ -183,6 +184,7 @@ namespace EmbedIO.Tests
                     "length-mismatch" => Convert.FromHexString("01110000D1D7C1C450096C6F63616C686F7374000161"),
                     "settings-on-request" => new byte[] { 4, 0 },
                     "duplicate-control" => new byte[] { 0, 4, 0 },
+                    "priority-malformed" => Convert.FromHexString("800f07000300753d"),
                     "priority-push" => Convert.FromHexString("800f07010100"),
                     "priority-invalid-id" => Convert.FromHexString("800f07000101"),
                     "priority-oversized" => Convert.FromHexString("800f070080004001"),

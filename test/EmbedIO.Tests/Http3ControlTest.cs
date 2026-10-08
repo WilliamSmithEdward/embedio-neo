@@ -113,6 +113,8 @@ namespace EmbedIO.Tests
         [TestCase("0400800f07000102", false, 0x108)]
         [TestCase("0400800f07000103", false, 0x108)]
         [TestCase("0400800f0700020080", false, 0x101)]
+        [TestCase("0400800f07000300753d", false, 0x101)]
+        [TestCase("0400800f07000600753d302c2c", false, 0x101)]
         [TestCase("0400800f07000100", true, 0x105)]
         [TestCase("0400800f07010100", true, 0x105)]
         [TestCase("0400800f070080004001", false, 0x107)]
@@ -139,6 +141,7 @@ namespace EmbedIO.Tests
             Assert.That(Property(update, "Type"), Is.EqualTo(type));
             Assert.That(Property(update, "Identifier"), Is.EqualTo(id));
             Assert.That(update.GetType().GetProperty("PriorityFieldValue")?.GetValue(update), Is.EqualTo(field));
+            Assert.That(update.GetType().GetProperty("Priority")?.GetValue(update), Is.Not.Null);
             Assert.That(Property(await control.Next(), "Type"), Is.EqualTo(7));
         }
 
