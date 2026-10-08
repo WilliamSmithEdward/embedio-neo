@@ -107,7 +107,7 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
-        private static void ValidateField(HpackField field, int id)
+        internal static void ValidateField(HpackField field, int id)
         {
             var start = field.Name.Length > 0 && field.Name[0] == ':' ? 1 : 0;
             if (field.Name.Length == start) throw Invalid(id, "Empty field name.");
@@ -119,7 +119,7 @@ namespace EmbedIO.Net.Internal.Http2
                 if ((ch < 32 && ch != '\t') || ch == 127 || ch > 255) throw Invalid(id, "Invalid field value.");
         }
 
-        private static void ValidateConnectionField(HpackField field, int id)
+        internal static void ValidateConnectionField(HpackField field, int id)
         {
             switch (field.Name)
             {
@@ -135,7 +135,7 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
-        private static long ParseLength(string value, long? previous, int id)
+        internal static long ParseLength(string value, long? previous, int id)
         {
             var i = 0;
             do

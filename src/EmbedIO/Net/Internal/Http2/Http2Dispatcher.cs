@@ -129,7 +129,7 @@ namespace EmbedIO.Net.Internal.Http2
                     try
                     {
                         await application(exchange).ConfigureAwait(false);
-                        if (!exchange.Ended) await exchange.RespondAsync(Array.Empty<byte>(), exchange.CancellationToken).ConfigureAwait(false);
+                        if (!exchange.Ended) await exchange.CompleteAsync(exchange.CancellationToken).ConfigureAwait(false);
                         if (!exchange.State.RemoteEnded) await ResetAsync(exchange.Id, 0, new IOException("Response completed before request body.")).ConfigureAwait(false);
                     }
                     catch (Exception error)
@@ -162,8 +162,8 @@ namespace EmbedIO.Net.Internal.Http2
         private void Release(Http2Exchange exchange, Exception? error)
         {
             if (!_exchanges.Remove(exchange.Id)) return;
-            if (error != null) exchange.Cancel(error);
             _connection.Streams.Reset(exchange.Id);
+            if (error != null) exchange.Cancel(error);
             _connection.SendFlow.Close(exchange.Id);
             QueueCredit(0, _connection.ReceiveFlow.Close(exchange.Id));
         }

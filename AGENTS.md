@@ -393,3 +393,15 @@ These rules are the same in every WilliamSmithEdward repository.
   zero-windowPINGprogress/invalidWINDOW),complete response semantics, IHttpContext
   adapter+TLSALPN/prior-knowledge negotiation. Internalexchange is notcompletepublic
   responseAPI; goalactive HTTP3/extensions/performance/fullremotevalidationpending.
+
+- Wire/response checkpoint: prior2458daa fullWindows2243 passed2238/fiveskips.
+  Added9rawwire cases (zero-windowPING/resume,CLmismatch,padding,invalidheaders,
+  scopedWINDOW/GOAWAY,resetcallbackordering). Reset ordering deterministically
+  failedbefore fix:Release nowRegistry.Reset beforeExchange.Cancel, prevents callback
+  observing live state/redundantRST race. Outboundresponse validation added20cases
+  plus4realclient HEAD/103/204/streamcomplete. Initial15unit failures were wrong
+  expectedIOException vsInvalidDataException; normalizedoutboundvalidation and
+  exactassertions corrected. All242focused modern+actualstd pass;bothtargetsbuild.
+  Discoveryfloor2276. Next PUBLIC IHttpContext/request/response adapter inclDate,
+  cookies,encoding,HEADwrites/closecallbacks; thenlistenernegotiation and platform
+  tests. Still noadvertisedHTTP2/WebServer support. Goalactive; HTTP3 etcpending.

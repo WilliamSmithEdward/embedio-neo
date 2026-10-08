@@ -310,3 +310,23 @@ includes raw-wire error/reset/flow-control conformance, full response semantics,
 the IHttpContext adapter, protocol negotiation and platform validation. The new
 exchange helper is not a completed public response implementation. Performance
 has not yet been measured end-to-end for HTTP/2, and no HTTP/2 capability is advertised.
+
+Direct-wire validation now covers zero-window PING progress and resumption, short/
+long request bodies, padding excluded from Content-Length, malformed header names,
+stream-scoped invalid WINDOW_UPDATE and connection-level GOAWAY. A deterministic
+callback test reproduced cancellation being published before stream reset state;
+release now marks the stream reset before invoking cancellation callbacks.
+
+Outbound response validation runs before HPACK mutation, rejects invalid status/
+field framing, handles informational responses, suppresses DATA for HEAD/no-content
+semantics, and validates declared lengths. Completion can finish a response whose
+headers were already sent. Four additional real-client cases cover HEAD metadata,
+103 Early Hints, 204 and streamed completion. Invalid application response data uses
+InvalidDataException; the initial unit assertions incorrectly expected IOException,
+and were corrected to the exact exception after standardizing shared validation.
+
+All 242 focused cases pass with both assemblies on .NET 10.0.11; both targets build.
+The prior dispatcher commit2458daa passed the full Windows suite:2,238 successes,
+five skips,2,243 total. Public context/response adaptation (including automatic Date,
+cookies, encoding and callback semantics), negotiation, broader conformance and
+HTTP/2 performance measurement are still pending. The goal remains incomplete.

@@ -12,7 +12,7 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    public class Http2InteroperabilityTest
+    public partial class Http2InteroperabilityTest
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
         private static Type Type(string name) => typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2." + name, true)!;
@@ -144,6 +144,57 @@ namespace EmbedIO.Tests
                     Assert.That(response.Headers.GetValues("x-large").Single(), Is.EqualTo(value));
                 }
             });
+        }
+
+        private static Task SendResponseHeaders(object exchange, string[] pairs, bool end)
+        {
+            var fields = Array.CreateInstance(Type("HpackField"), pairs.Length / 2);
+            for (var i = 0; i < pairs.Length; i += 2)
+                fields.SetValue(Activator.CreateInstance(Type("HpackField"), Flags, null, new object[] { pairs[i], pairs[i + 1], false }, null), i / 2);
+            return (Task)exchange.GetType().GetMethod("SendHeadersAsync", Flags)!.Invoke(exchange, new object[] { fields, end, Property<CancellationToken>(exchange, "CancellationToken") })!;
+        }
+
+        [Test]
+        public async Task HeadResponseRetainsLengthWithoutData()
+        {
+            await WithServer(exchange => Respond(exchange, new byte[123]), async client =>
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Head, "head") { Version = HttpVersion.Version20, VersionPolicy = HttpVersionPolicy.RequestVersionExact };
+                using var response = await client.SendAsync(request);
+                Assert.That(response.Content.Headers.ContentLength, Is.EqualTo(123));
+                Assert.That((await response.Content.ReadAsByteArrayAsync()).Length, Is.Zero);
+            });
+        }
+
+        [Test]
+        public async Task InformationalResponsePrecedesFinalResponse()
+        {
+            await WithServer(async exchange =>
+            {
+                await SendResponseHeaders(exchange, new[] { ":status", "103", "link", "</app.css>; rel=preload" }, false);
+                await Respond(exchange, new byte[] { 42 });
+            }, async client => Assert.That(await client.GetByteArrayAsync("hints"), Is.EqualTo(new byte[] { 42 })));
+        }
+
+        [Test]
+        public async Task NoContentResponseEndsWithoutData()
+        {
+            await WithServer(exchange => SendResponseHeaders(exchange, new[] { ":status", "204" }, true), async client =>
+            {
+                using var response = await client.GetAsync("empty");
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+                Assert.That((await response.Content.ReadAsByteArrayAsync()).Length, Is.Zero);
+            });
+        }
+
+        [Test]
+        public async Task CompletionFinishesAlreadyStartedResponse()
+        {
+            await WithServer(async exchange =>
+            {
+                await SendResponseHeaders(exchange, new[] { ":status", "200", "content-length", "3" }, false);
+                await (Task)exchange.GetType().GetMethod("WriteAsync", Flags)!.Invoke(exchange, new object[] { new byte[] { 1, 2, 3 }, 0, 3, false, Property<CancellationToken>(exchange, "CancellationToken") })!;
+            }, async client => Assert.That(await client.GetByteArrayAsync("streamed"), Is.EqualTo(new byte[] { 1, 2, 3 })));
         }
     }
 }
