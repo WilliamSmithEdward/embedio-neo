@@ -60,9 +60,18 @@ jobs:
           bottle="$RUNNER_TEMP/libmsquic--2.6.2.arm64_sequoia.bottle.tar.gz"
           curl --fail --location --retry 3 --header 'Authorization: Bearer QQ==' --output "$bottle" https://ghcr.io/v2/homebrew/core/libmsquic/blobs/sha256:c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55
           printf '%s  %s\n' c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55 "$bottle" | shasum -a 256 --check
-          brew install --force-bottle "$bottle"
-          test "$(brew list --versions libmsquic)" = 'libmsquic 2.6.2'
-          printf 'DYLD_FALLBACK_LIBRARY_PATH=%s/lib\n' "$(brew --prefix libmsquic)" >> "$GITHUB_ENV"
+          # Keep the pinned bottle isolated; current brew does not accept this
+          # local bottle path as an install target. Relocate only its dylib.
+          brew install openssl@3
+          quic_root="$RUNNER_TEMP/embedio-msquic"
+          mkdir -p "$quic_root" TestResults
+          tar -xzf "$bottle" -C "$quic_root"
+          quic_lib="$quic_root/libmsquic/2.6.2/lib"
+          install_name_tool -id "$quic_lib/libmsquic.2.dylib" -change '@@HOMEBREW_PREFIX@@/opt/openssl@3/lib/libcrypto.3.dylib' "$(brew --prefix openssl@3)/lib/libcrypto.3.dylib" "$quic_lib/libmsquic.2.6.2.dylib"
+          codesign --force --sign - "$quic_lib/libmsquic.2.6.2.dylib"
+          otool -L "$quic_lib/libmsquic.2.6.2.dylib" | tee TestResults/quic-native-macos.log
+          shasum -a 256 "$quic_lib/libmsquic.2.6.2.dylib" >> TestResults/quic-native-macos.log
+          printf 'DYLD_FALLBACK_LIBRARY_PATH=%s\n' "$quic_lib" >> "$GITHUB_ENV"
       - name: Restore from the lock files
         run: dotnet restore EmbedIO.sln --locked-mode
       - name: Build the tests

@@ -829,3 +829,12 @@ Prerequisite sources: [Microsoft QUIC platform documentation](https://learn.micr
 and [Homebrew libmsquic metadata](https://formulae.brew.sh/api/formula/libmsquic.json).
 Microsoft documents macOS support as partial; this work does not broaden that
 support promise. Production packages do not gain a native runtime dependency.
+
+The first required-capability CI attempt (37788252866) failed macOS prerequisite
+setup after verifying the bottle hash: the runner's Homebrew interpreted the
+local tarball path as a formula/tap instead of installing it. The revised setup
+extracts that same pinned bottle into a task-private temporary directory, relocates
+its dylib identifier and OpenSSL load path with install_name_tool, and reapplies an
+ad-hoc signature after relocation. The loaded paths and relocated hash are recorded
+as test evidence. Homebrew only supplies OpenSSL; QUIC's version and downloaded
+bytes remain pinned. This setup still needs successful macOS execution.
