@@ -11,24 +11,32 @@ namespace EmbedIO.WebApi
     /// </summary>
     public abstract class WebApiController
     {
-// The HttpContext and Route properties are always initialized to non-null values,
-// but it's done after creation by a runtime-compiled lambda,
-// which the compiler cannot know about, hence the warnings.
-#pragma warning disable CS8618 // Non-nullable property is uninitialized. Consider declaring the property as nullable.
+        // Request activation initializes these properties after construction.
+        // Earlier access reports that the controller has not been activated.
+
+        private IHttpContext? _httpContext;
+        private RouteMatch? _route;
 
         /// <summary>
         /// <para>Gets the HTTP context.</para>
         /// <para>This property is automatically initialized upon controller creation.</para>
         /// </summary>
-        public IHttpContext HttpContext { get; internal set; }
+        public IHttpContext HttpContext
+        {
+            get => _httpContext ?? throw new System.InvalidOperationException("The controller has not been initialized for a request.");
+            internal set => _httpContext = value;
+        }
 
         /// <summary>
         /// <para>Gets the resolved route.</para>
         /// <para>This property is automatically initialized upon controller creation.</para>
         /// </summary>
-        public RouteMatch Route { get; internal set; }
+        public RouteMatch Route
+        {
+            get => _route ?? throw new System.InvalidOperationException("The controller has not been initialized for a request.");
+            internal set => _route = value;
+        }
 
-#pragma warning restore CS8618
 
         /// <summary>
         /// Gets the <see cref="CancellationToken" /> used to cancel processing of the request.

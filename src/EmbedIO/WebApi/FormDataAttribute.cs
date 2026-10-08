@@ -17,7 +17,10 @@ namespace EmbedIO.WebApi
     public sealed class FormDataAttribute : Attribute, IRequestDataAttribute<WebApiController, NameValueCollection>
     {
         /// <inheritdoc />
-        public Task<NameValueCollection?> GetRequestDataAsync(WebApiController controller, string parameterName)
-            => controller.HttpContext.GetRequestFormDataAsync();
+        public async Task<NameValueCollection?> GetRequestDataAsync(WebApiController controller, string parameterName)
+        {
+            if (controller is null) throw new System.NullReferenceException();
+            return await controller.HttpContext.GetRequestFormDataAsync().ConfigureAwait(false);
+        }
     }
 }

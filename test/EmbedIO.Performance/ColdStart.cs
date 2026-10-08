@@ -21,19 +21,20 @@ internal static class ColdStart
             {
                 for (var sample = 0; sample < 3; sample++)
                 {
-                    var info = new ProcessStartInfo(Environment.ProcessPath!)
+                    var processPath = Environment.ProcessPath ?? throw new InvalidOperationException("The performance host has no executable path.");
+                    var info = new ProcessStartInfo(processPath)
                     {
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
-                    if (Path.GetFileNameWithoutExtension(Environment.ProcessPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(Path.GetFileNameWithoutExtension(processPath), "dotnet", StringComparison.OrdinalIgnoreCase))
                         info.ArgumentList.Add(typeof(ColdStart).Assembly.Location);
                     info.ArgumentList.Add("--cold-start");
                     info.ArgumentList.Add(workload);
-                    using var child = Process.Start(info)!;
-                    var output = child.StandardOutput.ReadToEndAsync();
+                    using var child = Process.Start(info);
+                    var output = ((((child) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).StandardOutput) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).ReadToEndAsync();
                     var errors = child.StandardError.ReadToEndAsync();
                     if (!child.WaitForExit(30000))
                     {

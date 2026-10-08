@@ -15,7 +15,8 @@ namespace EmbedIO.Tests.Issues
             const string Content = "content";
 
             using var server = new WebServer(HttpListenerMode.EmbedIO, DefaultUrl);
-            server.WithAction("/", HttpVerbs.Post, async context => {
+            server.WithAction("/", HttpVerbs.Post, async context =>
+            {
                 await context.SendDataAsync(context.Request.ContentLength64);
             });
 
@@ -36,7 +37,8 @@ namespace EmbedIO.Tests.Issues
             const string Content = "content";
 
             using var server = new WebServer(HttpListenerMode.EmbedIO, DefaultUrl);
-            server.WithAction("/", HttpVerbs.Post, async context => {
+            server.WithAction("/", HttpVerbs.Post, async context =>
+            {
                 await context.SendDataAsync(context.Request.Headers[HttpHeaderNames.ContentLength]);
             });
 

@@ -122,10 +122,10 @@ namespace EmbedIO.DependencyInjection
                         if (!logger.IsEnabled(level)) return;
                         var text = args == null ? format ?? string.Empty
                             : string.Format(CultureInfo.InvariantCulture, format ?? string.Empty, args);
-                        text = text.Replace("\r", "\\r").Replace("\n", "\\n");
+                        text = EmbedIO.Internal.StringOperations.ReplaceOrdinal(EmbedIO.Internal.StringOperations.ReplaceOrdinal(text, "\r", "\\r"), "\n", "\\n");
                         logger.Log(level, new EventId(id), null, "{TraceMessage}", text);
                     }
-                    catch (Exception)
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
                     {
                         // Reporting through the same source would create a feedback loop.
                         Interlocked.Increment(ref _failures);

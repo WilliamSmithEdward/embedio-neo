@@ -13,7 +13,7 @@ namespace EmbedIO.Testing.Internal
 {
     internal class TestRequest : IHttpRequest
     {
-        private readonly HttpContent _content;
+        private readonly HttpContent? _content;
 
         public TestRequest(HttpRequestMessage clientRequest)
         {
@@ -47,11 +47,12 @@ namespace EmbedIO.Testing.Internal
 
             ProtocolVersion = clientRequest.Version;
             KeepAlive = !(clientRequest.Headers.ConnectionClose ?? true);
-            RawUrl = clientRequest.RequestUri.PathAndQuery;
-            QueryString = UrlEncodedDataParser.Parse(clientRequest.RequestUri.Query, true);
+            var requestUri = clientRequest.RequestUri ?? throw new ArgumentException("The request must have a URL.", nameof(clientRequest));
+            RawTarget = requestUri.PathAndQuery;
+            QueryString = UrlEncodedDataParser.Parse(requestUri.Query, true);
             HttpMethod = clientRequest.Method.ToString();
             HttpVerb = HttpMethodToVerb(clientRequest.Method);
-            Url = clientRequest.RequestUri;
+            Url = requestUri;
             HasEntityBody = _content != null;
             ContentEncoding = Encoding.GetEncoding(_content?.Headers.ContentType?.CharSet ?? WebServer.DefaultEncoding.WebName);
             RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999);
@@ -68,7 +69,7 @@ namespace EmbedIO.Testing.Internal
 
         public bool KeepAlive { get; }
 
-        public string RawUrl { get; }
+        public string RawTarget { get; }
 
         public NameValueCollection QueryString { get; }
 
@@ -80,7 +81,7 @@ namespace EmbedIO.Testing.Internal
 
         public bool HasEntityBody { get; }
 
-        public Stream? InputStream => _content?.ReadAsStreamAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+        public Stream InputStream => _content?.ReadAsStreamAsync().ConfigureAwait(false).GetAwaiter().GetResult() ?? Stream.Null;
 
         public Encoding ContentEncoding { get; }
 

@@ -121,7 +121,7 @@ namespace EmbedIO.WebApi
             return Task.FromResult(data.GetValues(fieldName)?.LastOrDefault());
         }
 
-        Task<string[]> IRequestDataAttribute<WebApiController, string[]>.GetRequestDataAsync(
+        Task<string[]?> IRequestDataAttribute<WebApiController, string[]>.GetRequestDataAsync(
             WebApiController controller,
             string parameterName)
         {
@@ -131,7 +131,7 @@ namespace EmbedIO.WebApi
             if (!data.ContainsKey(fieldName) && BadRequestIfMissing)
                 throw HttpException.BadRequest($"Missing query field {fieldName}.");
 
-            return Task.FromResult(data.GetValues(fieldName) ?? Array.Empty<string>());
+            return Task.FromResult<string[]?>(data.GetValues(fieldName) ?? Array.Empty<string>());
         }
 
         Task<object?> IRequestDataAttribute<WebApiController>.GetRequestDataAsync(
@@ -149,7 +149,7 @@ namespace EmbedIO.WebApi
             {
                 var fieldValues = data.GetValues(fieldName) ?? Array.Empty<string>();
                 if (!FromString.TryConvertTo(type, fieldValues, out var result))
-                    throw HttpException.BadRequest($"Cannot convert field {fieldName} to an array of {type.GetElementType().Name}.");
+                    throw HttpException.BadRequest($"Cannot convert field {fieldName} to an array of {type.GetElementType()?.Name}.");
 
                 return Task.FromResult(result);
             }

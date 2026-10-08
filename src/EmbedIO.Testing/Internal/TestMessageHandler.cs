@@ -54,10 +54,10 @@ namespace EmbedIO.Testing.Internal
                 switch (GetResponseHeaderType(key))
                 {
                     case ResponseHeaderType.Content:
-                        response.Content?.Headers.Add(key, serverResponse.Headers.GetValues(key));
+                        response.Content?.Headers.Add(key, serverResponse.Headers.GetValues(key) ?? System.Array.Empty<string>());
                         break;
                     case ResponseHeaderType.Response:
-                        response.Headers.Add(key, serverResponse.Headers.GetValues(key));
+                        response.Headers.Add(key, serverResponse.Headers.GetValues(key) ?? System.Array.Empty<string>());
                         break;
                 }
             }

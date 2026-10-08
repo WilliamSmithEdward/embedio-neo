@@ -163,7 +163,7 @@ namespace EmbedIO.Tests.Issues
         public void StaticUnknownRouteKeepsArgumentErrorAndSingleModuleContract()
         {
             var route = "/" + Guid.NewGuid().ToString("N");
-            Assert.That(Assert.Throws<ArgumentException>(() => IPBanningModule.GetBannedIPs(route))!.ParamName, Is.EqualTo("baseRoute"));
+            Assert.That(Assert.Throws<ArgumentException>(() => IPBanningModule.GetBannedIPs(route)).ParamName, Is.EqualTo("baseRoute"));
             Assert.Throws<ArgumentException>(() => IPBanningModule.TryBanIP(IPAddress.Loopback, 1, route));
             Assert.Throws<ArgumentException>(() => IPBanningModule.TryUnbanIP(IPAddress.Loopback, route));
             using (var module = new IPBanningModule(route))
@@ -300,8 +300,8 @@ namespace EmbedIO.Tests.Issues
             }
         }
 
-        private static void Purge() => typeof(IPBanningModule).Assembly.GetType("EmbedIO.Security.Internal.IPBanningExecutor")!
-            .GetMethod("Purge", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, null);
+        private static void Purge() => ((((typeof(IPBanningModule)).Assembly.GetType("EmbedIO.Security.Internal.IPBanningExecutor")) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
+            .GetMethod("Purge", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(null, null);
 
         private static ActionModule Reply() => new ActionModule("/", HttpVerbs.Any, context => context.SendStringAsync("ok", "text/plain", System.Text.Encoding.UTF8));
 

@@ -13,6 +13,18 @@ namespace EmbedIO.Actions
     {
         private readonly Func<IHttpContext, bool>? _shouldRedirect;
 
+        /// <inheritdoc cref="RedirectModule(string,string,HttpStatusCode)"/>
+        public RedirectModule(string baseRoute, Uri redirectUrl, HttpStatusCode statusCode = HttpStatusCode.Found)
+            : this(baseRoute, Validate.NotNull(nameof(redirectUrl), redirectUrl).OriginalString, statusCode)
+        {
+        }
+
+        /// <inheritdoc cref="RedirectModule(string,string,Func{IHttpContext,bool},HttpStatusCode)"/>
+        public RedirectModule(string baseRoute, Uri redirectUrl, Func<IHttpContext, bool>? shouldRedirect, HttpStatusCode statusCode = HttpStatusCode.Found)
+            : this(baseRoute, Validate.NotNull(nameof(redirectUrl), redirectUrl).OriginalString, shouldRedirect, statusCode)
+        {
+        }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="RedirectModule"/> class
         /// that will redirect all served requests.
@@ -77,7 +89,7 @@ namespace EmbedIO.Actions
         /// <summary>
         /// Gets the redirect URL.
         /// </summary>
-        public string RedirectUrl { get; }
+        public Uri RedirectUrl { get; }
 
         /// <summary>
         /// Gets the response status code.
@@ -87,9 +99,10 @@ namespace EmbedIO.Actions
         /// <inheritdoc />
         protected override Task OnRequestAsync(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             if (_shouldRedirect?.Invoke(context) ?? true)
             {
-                context.Redirect(RedirectUrl, (int)StatusCode);
+                context.Redirect(RedirectUrl.ToString(), (int)StatusCode);
                 context.SetHandled();
             }
 

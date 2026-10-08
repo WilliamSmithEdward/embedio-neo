@@ -148,7 +148,7 @@ namespace EmbedIO.Tests.Issues
         {
             var info = provider.MapUrlPath("/sub/hello%20world.txt", new MockMimeTypeProvider());
             Assert.That(info, Is.Not.Null);
-            using var stream = provider.OpenFile(info!.Path);
+            using var stream = provider.OpenFile(info.Path);
             using var reader = new StreamReader(stream);
             return reader.ReadToEnd();
         }

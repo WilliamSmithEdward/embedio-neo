@@ -5,9 +5,7 @@ namespace EmbedIO.WebSockets
     /// <summary>
     /// The exception that is thrown when a WebSocket gets a fatal error.
     /// </summary>
-#pragma warning disable CA1032 // Implement standard exception constructors - this class doesn't need public constructors.
     public class WebSocketException : Exception
-#pragma warning restore CA1032
     {
         internal WebSocketException(string? message = null)
             : this(CloseStatusCode.Abnormal, message)
@@ -35,7 +33,8 @@ namespace EmbedIO.WebSockets
         /// </value>
         public CloseStatusCode Code { get; }
 
-        internal static string GetMessage(CloseStatusCode code) => code switch {
+        internal static string GetMessage(CloseStatusCode code) => code switch
+        {
             CloseStatusCode.ProtocolError => "A WebSocket protocol error has occurred.",
             CloseStatusCode.UnsupportedData => "Unsupported data has been received.",
             CloseStatusCode.Abnormal => "An exception has occurred.",

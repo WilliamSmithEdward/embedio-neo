@@ -34,6 +34,7 @@
             out CompressionMethod compressionMethod,
             out string? compressionMethodName)
         {
+            if (@this is null) throw new System.NullReferenceException();
             if (@this.QValues.Count < 1)
             {
                 compressionMethod = CompressionMethod.None;

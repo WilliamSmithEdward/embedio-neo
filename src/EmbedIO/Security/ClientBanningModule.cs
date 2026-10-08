@@ -37,7 +37,7 @@ namespace EmbedIO.Security
         /// At capacity, requests outside allow networks are rejected until expiration or unban frees capacity.
         /// Manual insertion of a new key returns false at capacity. No active ban is silently evicted.
         /// </remarks>
-        public ClientBanningModule(string baseRoute, Func<IHttpContext, string> clientKeySelector,
+        public ClientBanningModule(string baseRoute, Func<IHttpContext, string>? clientKeySelector,
             TimeSpan? banDuration = null, int maximumBannedClients = 4096) : base(baseRoute)
         {
             _clientKeySelector = clientKeySelector ?? throw new ArgumentNullException(nameof(clientKeySelector));
@@ -141,17 +141,17 @@ namespace EmbedIO.Security
         /// <summary>Adds literal/CIDR allow networks before startup. Allow rules take precedence over every ban.</summary>
         /// <param name="networks">IPv4/IPv6 literals or CIDRs, without DNS or scope identifiers.</param>
         /// <returns>This module.</returns>
-        public ClientBanningModule WithAllowedNetworks(params string[] networks) => AddNetworks(_allowed, networks);
+        public ClientBanningModule WithAllowedNetworks(params string?[]? networks) => AddNetworks(_allowed, networks);
 
         /// <summary>Adds permanent literal/CIDR deny networks before startup; they never expire or appear in BannedClients.</summary>
         /// <param name="networks">IPv4/IPv6 literals or CIDRs, without DNS or scope identifiers.</param>
         /// <returns>This module.</returns>
-        public ClientBanningModule WithDeniedNetworks(params string[] networks) => AddNetworks(_denied, networks);
+        public ClientBanningModule WithDeniedNetworks(params string?[]? networks) => AddNetworks(_denied, networks);
 
         /// <summary>Adds a borrowed callback before startup; true requests a temporary ban of the selected client key.</summary>
         /// <param name="criterion">The callback; exceptions propagate through the existing module error pipeline.</param>
         /// <returns>This module.</returns>
-        public ClientBanningModule WithCriterion(Func<IHttpContext, Task<bool>> criterion)
+        public ClientBanningModule WithCriterion(Func<IHttpContext, Task<bool>>? criterion)
         {
             if (criterion == null) throw new ArgumentNullException(nameof(criterion));
             lock (_gate) { CheckConfiguration(); _criteria.Add(criterion); }
@@ -162,7 +162,7 @@ namespace EmbedIO.Security
         /// <param name="clientKey">The application-selected key.</param>
         /// <param name="duration">A positive duration; an existing later expiration is preserved.</param>
         /// <returns>Whether the ban was recorded.</returns>
-        public bool TryBanClient(string clientKey, TimeSpan duration)
+        public bool TryBanClient(string? clientKey, TimeSpan duration)
         {
             ValidateKey(clientKey);
             ValidateDuration(duration, nameof(duration));
@@ -185,7 +185,7 @@ namespace EmbedIO.Security
         /// <summary>Removes this module's temporary ban; it does not remove network rules or application-owned criterion data.</summary>
         /// <param name="clientKey">The application-selected key.</param>
         /// <returns>Whether an unexpired ban was removed.</returns>
-        public bool TryUnbanClient(string clientKey)
+        public bool TryUnbanClient(string? clientKey)
         {
             ValidateKey(clientKey);
             lock (_gate) { CheckDisposed(); Prune(DateTimeOffset.UtcNow); return _bans.Remove(clientKey); }
@@ -260,7 +260,7 @@ namespace EmbedIO.Security
             }
         }
 
-        private ClientBanningModule AddNetworks(List<ClientNetwork> destination, string[] networks)
+        private ClientBanningModule AddNetworks(List<ClientNetwork> destination, string?[]? networks)
         {
             if (networks == null) throw new ArgumentNullException(nameof(networks));
             var parsed = networks.Select(ClientNetwork.Parse).ToArray();
@@ -282,7 +282,7 @@ namespace EmbedIO.Security
 
         private int BanCount => _bans.Count + _permanentBans.Count;
 
-        internal static void ValidateKey(string key)
+        internal static void ValidateKey([System.Diagnostics.CodeAnalysis.NotNull] string? key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (string.IsNullOrWhiteSpace(key) || key.Length > 1024)

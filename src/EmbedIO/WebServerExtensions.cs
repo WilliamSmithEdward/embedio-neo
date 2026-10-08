@@ -20,6 +20,7 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException">The web server has already been started.</exception>
         public static void Start(this IWebServer @this, CancellationToken cancellationToken = default)
         {
+            if (@this is null) throw new System.NullReferenceException();
             // Listen before dispatching RunAsync so synchronous readiness cannot be missed.
             var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             void OnStateChanged(object sender, WebServerStateChangedEventArgs e)

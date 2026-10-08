@@ -80,7 +80,7 @@ namespace EmbedIO.Net.Internal
             return true;
         }
 
-        public void UnbindContext(HttpListenerContext context) => context.Listener.UnregisterContext(context);
+        public void UnbindContext(HttpListenerContext context) => context.Listener?.UnregisterContext(context);
 
         public void Dispose()
         {
@@ -187,7 +187,7 @@ namespace EmbedIO.Net.Internal
 
         private static void Accept(Socket socket, SocketAsyncEventArgs e, Socket? accepted = null)
         {
-            var endpoint = (EndPointListener)e.UserToken;
+            var endpoint = (EndPointListener)(e.UserToken ?? throw new InvalidOperationException("The accept operation has no listener."));
             while (true)
             {
                 e.AcceptSocket = null;
@@ -196,7 +196,7 @@ namespace EmbedIO.Net.Internal
                 {
                     acceptPending = socket.AcceptAsync(e);
                 }
-                catch
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
                 {
                     accepted?.Dispose();
                     accepted = null;
@@ -222,7 +222,7 @@ namespace EmbedIO.Net.Internal
         private static void ProcessAccept(SocketAsyncEventArgs args)
         {
             var accepted = args.SocketError == SocketError.Success ? args.AcceptSocket : null;
-            var endpoint = (EndPointListener)args.UserToken;
+            var endpoint = (EndPointListener)(args.UserToken ?? throw new InvalidOperationException("The accept operation has no listener."));
             Accept(endpoint._sock, args, accepted);
         }
 
@@ -279,7 +279,7 @@ namespace EmbedIO.Net.Internal
             {
                 conn = new HttpConnection(accepted, this);
             }
-            catch
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
                 accepted.Dispose();
                 return;
@@ -301,7 +301,7 @@ namespace EmbedIO.Net.Internal
                 conn.Dispose();
         }
 
-        private static void OnAccept(object sender, SocketAsyncEventArgs e) => ProcessAccept(e);
+        private static void OnAccept(object? sender, SocketAsyncEventArgs e) => ProcessAccept(e);
 
         private static HttpListener? MatchFromList(string path, List<ListenerPrefix>? list, out ListenerPrefix? prefix)
         {
@@ -352,10 +352,11 @@ namespace EmbedIO.Net.Internal
             do
             {
                 current = prefixes;
-                var index = current?.FindIndex(p => p.Path == prefix.Path && p.Listener == listener) ?? -1;
+                if (current == null) return;
+                var index = current.FindIndex(p => p.Path == prefix.Path && p.Listener == listener);
                 if (index < 0)
                     return;
-                future = new List<ListenerPrefix>(current!);
+                future = new List<ListenerPrefix>(current);
                 future.RemoveAt(index);
             }
             while (Interlocked.CompareExchange(ref prefixes, future, current) != current);

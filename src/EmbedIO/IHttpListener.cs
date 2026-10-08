@@ -50,15 +50,13 @@ namespace EmbedIO
         /// <summary>
         /// Stops this listener.
         /// </summary>
-#pragma warning disable CA1716 // Rename method to avoid conflict with (VB) keyword - It is consistent with Microsoft's HttpListener
         void Stop();
-#pragma warning restore CA1716
 
         /// <summary>
         /// Adds the prefix.
         /// </summary>
-        /// <param name="urlPrefix">The URL prefix.</param>
-        void AddPrefix(string urlPrefix);
+        /// <param name="listenerPrefix">The URL prefix.</param>
+        void AddPrefix(string listenerPrefix);
 
         /// <summary>
         /// Gets the HTTP context asynchronous.

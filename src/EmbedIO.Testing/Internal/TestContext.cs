@@ -96,14 +96,14 @@ namespace EmbedIO.Testing.Internal
                 {
                     callback(this);
                 }
-                catch (Exception e)
+                catch (Exception e) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(e))
                 {
                     Log.Source.TraceEvent(System.Diagnostics.TraceEventType.Error, 0, "HTTP context: close callback failed: {0}", e);
                 }
             }
         }
 
-        public string GetMimeType(string extension)
+        public string? GetMimeType(string extension)
             => MimeTypeProviders.GetMimeType(extension);
 
         public bool TryDetermineCompression(string mimeType, out bool preferCompression)

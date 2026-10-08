@@ -25,13 +25,13 @@ namespace EmbedIO.Utilities
         /// <para><paramref name="value"/> does not start with a slash (<c>/</c>) character.</para>
         /// </exception>
         /// <seealso cref="Utilities.UrlPath.Normalize"/>
-        public static string UrlPath(string argumentName, string value, bool isBasePath)
+        public static string RoutePath(string argumentName, string? value, bool isBasePath)
         {
             var exception = Utilities.UrlPath.ValidateInternal(argumentName, value);
             if (exception != null)
                 throw exception;
 
-            return Utilities.UrlPath.Normalize(value, isBasePath);
+            return Utilities.UrlPath.Normalize(NotNull(argumentName, value), isBasePath);
         }
 
         /// <summary>
@@ -52,7 +52,7 @@ namespace EmbedIO.Utilities
         /// <para>- or -</para>
         /// <para><paramref name="getFullPath"/> is <see langword="true"/> and the full path could not be obtained.</para>
         /// </exception>
-        public static string LocalPath(string argumentName, string value, bool getFullPath)
+        public static string LocalPath(string argumentName, string? value, bool getFullPath)
         {
             if (value == null)
                 throw new ArgumentNullException(argumentName);

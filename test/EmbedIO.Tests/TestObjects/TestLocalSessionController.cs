@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using System;
 using System.Threading.Tasks;
 using EmbedIO.Routing;
 using EmbedIO.Sessions;
@@ -22,7 +23,7 @@ namespace EmbedIO.Tests.TestObjects
             var cookie = new System.Net.Cookie(CookieName, CookieName);
             Response.Cookies.Add(cookie);
 
-            return HttpContext.SendStringAsync(Response.Cookies[CookieName].Value, MimeType.PlainText, WebServer.DefaultEncoding);
+            return HttpContext.SendStringAsync((Response.Cookies[CookieName] ?? throw new InvalidOperationException("The added cookie must be available.")).Value, MimeType.PlainText, WebServer.DefaultEncoding);
         }
 
         [Route(HttpVerbs.Get, "/deletesession")]

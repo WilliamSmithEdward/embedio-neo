@@ -20,13 +20,14 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <seealso cref="CorsModule"/>
         public static TContainer WithCors<TContainer>(
-            this TContainer @this,
+            this TContainer? @this,
             string baseRoute,
             string origins,
             string headers,
             string methods)
             where TContainer : class, IWebModuleContainer
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Modules.Add(new CorsModule(baseRoute, origins, headers, methods));
             return @this;
         }
@@ -43,7 +44,7 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <seealso cref="CorsModule"/>
         public static TContainer WithCors<TContainer>(
-            this TContainer @this,
+            this TContainer? @this,
             string origins = CorsModule.All,
             string headers = CorsModule.All,
             string methods = CorsModule.All)

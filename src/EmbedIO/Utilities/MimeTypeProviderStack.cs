@@ -29,7 +29,7 @@ namespace EmbedIO.Utilities
         public void Pop() => _providers.Pop();
 
         /// <inheritdoc />
-        public string GetMimeType(string extension)
+        public string? GetMimeType(string extension)
         {
             var result = _providers.Select(p => p.GetMimeType(extension))
                 .FirstOrDefault(m => m != null);

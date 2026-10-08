@@ -20,7 +20,7 @@ namespace EmbedIO.Tests.Utilities
             var ids = new string[100];
             for (var i = 0; i < ids.Length; i++)
                 ids[i] = UniqueIdGenerator.GetNext();
-            CollectionAssert.AllItemsAreUnique(ids);
+            Assert.That(ids, Is.Unique);
         }
     }
 }

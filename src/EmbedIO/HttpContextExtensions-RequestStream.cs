@@ -20,7 +20,8 @@ namespace EmbedIO
         /// <seealso cref="WebServerOptionsBase.SupportCompressedRequests"/>
         public static Stream OpenRequestStream(this IHttpContext @this)
         {
-            var stream = @this.Request.InputStream;
+            if (@this is null) throw new System.NullReferenceException();
+            var stream = @this.Request.InputStream ?? Stream.Null;
 
             var encoding = @this.Request.Headers[HttpHeaderNames.ContentEncoding]?.Trim();
             switch (encoding)
@@ -56,6 +57,9 @@ namespace EmbedIO
         /// <seealso cref="OpenRequestStream"/>
         /// <seealso cref="WebServerOptionsBase.SupportCompressedRequests"/>
         public static TextReader OpenRequestText(this IHttpContext @this)
-            => new StreamReader(OpenRequestStream(@this), @this.Request.ContentEncoding);
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            return new StreamReader(OpenRequestStream(@this), @this.Request.ContentEncoding);
+        }
     }
 }

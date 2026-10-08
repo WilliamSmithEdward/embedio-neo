@@ -20,7 +20,7 @@ namespace EmbedIO.Cli
             if (info?.IsDirectory == true)
                 info = provider.MapUrlPath(path.TrimEnd('/') + "/index.html", context);
             if (info?.IsFile != true || !string.Equals(info.ContentType, "text/html", StringComparison.OrdinalIgnoreCase)) return;
-            using var stream = provider.OpenFile(info.Path);
+            using var stream = provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped HTML file is no longer available.", info.Path);
             using var reader = new StreamReader(stream, Encoding.UTF8, true);
             var html = await reader.ReadToEndAsync(context.CancellationToken);
             var script = $"<script>(()=>{{const u=new URL(location.href);u.protocol='ws:';u.port='{port}';u.pathname='/watcher';u.search='';u.hash='';const ws=new WebSocket(u);ws.onmessage=()=>location.reload();}})();</script>";

@@ -549,4 +549,65 @@ precise scope, tests and limitations. No release date/version is promised.
 
 ## Suffix byte ranges (unreleased)
 
+
 The owner-requested correction in [#170](https://github.com/WilliamSmithEdward/embedio-neo/issues/170) changes `Range: bytes=-N` from an incorrect leading slice to the final N bytes, clamped to file size. `bytes=-0` now returns 416; a positive suffix on an empty file is ignored and returns 200. HEAD, If-Range validation, explicit/open-ended ranges and existing multipart handling retain their policies. Clients using explicit offsets may continue to do so; clients relying on wrong leading bytes must adopt correct suffix semantics. Published 1.0.3 retains the defect. No public API, dependency or target changes. See [suffix-range guidance](../user-reports/suffix-range-responses.md).
+
+## Warning-free API cleanup (unreleased, owner-approved)
+
+William approved the necessary source and binary changes for the compiler/analyzer
+cleanup. These changes are in source and require consumers to rebuild before
+adopting them. No release version or publication date has been selected.
+
+| Previous API | Updated API and migration |
+| --- | --- |
+| `IHttpRequest.RawUrl` | `IHttpRequest.RawTarget`, still a string containing the received request target. Update custom request adapters and property references. Raw text retains escaping, case and query data; it is not coerced into a URI. |
+| `Validate.Url(...)` returns `string` | Returns `Uri`. Use the object directly for URI APIs, or `.ToString()` where the previous normalized string is needed. Both validation overloads retain their null/error policies. |
+| `Validate.UrlPath(...)` | `Validate.RoutePath(...)`, still returning a normalized route-path string. Route patterns and raw paths remain text. |
+| `RedirectModule.RedirectUrl` is a string | It is a `Uri`. Use `.ToString()` when displaying or emitting the redirect location. Existing string constructors remain, with new URI overloads. |
+| `ITestWebServer.BaseUrl` / `TestWebServer.BaseUrl` is a string | It is a `Uri`. Update custom implementations. URI constructors/factories are available; string constructors/factories remain. |
+| Named parameters `urlPath`, `baseUrlPath`, `absoluteUrlPath` on route/file APIs | Use `requestPath`, `basePath`, `absolutePath`. Positional calls keep their CLR signatures. |
+| `IHttpListener.AddPrefix(urlPrefix: ...)` | The interface parameter is named `listenerPrefix`. Its string representation still supports wildcard listener syntax. |
+
+URI overloads also exist for `WebServer`, `WebServerOptions.AddUrlPrefix`,
+`WithUrlPrefix`, `TestHttpClient.Create`, and the testing `HeadAsync`/`OptionsAsync`
+extensions. String prefix APIs continue supporting `*` and `+`; ordinary URI
+overloads retain `OriginalString`. When passing a null literal to an overloaded
+API, specify the intended argument type to avoid overload ambiguity.
+
+Argument-validation exceptions report the renamed parameter as well. For example,
+invalid `UrlPath.Normalize` and `UrlPath.Split` inputs now have
+`ArgumentException.ParamName` equal to `requestPath` rather than `urlPath`.
+Update tests or error handling that compare parameter names; exception types and
+the accepted/rejected input policies are retained.
+
+Nullability metadata now describes values that already could be absent, including
+user-agent/content-type headers, MIME lookup results, session values, file-provider
+results, dictionary values, and JSON deserialization results. `Json.Deserialize<T>`,
+the default/JSON request deserializers, and the default `GetRequestDataAsync<T>`
+return a nullable result for reference types: JSON `null` and compatible empty input
+already could produce null. Handle those nulls explicitly. Try-get annotations
+identify successful non-null outputs. Controllers accessed before request
+initialization now report `InvalidOperationException` instead of exposing an
+uninitialized context/route. The obsolete formatter-based exception serialization
+constructor is marked obsolete; use the ordinary exception constructors.
+
+`FileCache` implements `IDisposable`. A module borrows its cache and transport;
+disposing one module does not dispose resources shared with another module.
+An owner should dispose a cache only after its modules have stopped, and must not
+reuse the disposed cache. Async response-write synchronization stays alive until
+all admitted writers, including queued/canceled writers, have exited. The periodic
+worker owns its cancellation source until its callback finishes.
+
+Request/plugin recovery boundaries still handle ordinary application errors.
+`OutOfMemoryException`, `StackOverflowException` and `AccessViolationException`
+are no longer converted into ordinary request failures or discarded by those
+boundaries. They propagate through the caller/task; this does not imply that a
+faulted background task automatically terminates the process. Known parser,
+filesystem and DNS failures use specific exception handling. Cancellation and
+configured write-error policies retain their existing contracts.
+
+Listener-prefix paths now retain case rather than lowercasing the entire prefix.
+Header comparisons remain explicitly case-insensitive. The supported library
+targets and runtime dependency groups are unchanged. CI enables analyzers for
+test/platform builds, treats warnings as errors, verifies formatting, and rejects
+compiler/analyzer suppression directives, null-forgiving operators, and build opt-outs.

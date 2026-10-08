@@ -8,7 +8,7 @@
   <ItemGroup>
     <Compile Include="../Program.cs" Link="Program.cs" />
     <ProjectReference Include="../../../src/EmbedIO/EmbedIO.csproj" SetTargetFramework="TargetFramework=netstandard2.0" />
-    <!-- Exercise the pinned serializer package as well as the actual standard asset on this modern host. -->
-    <PackageReference Include="System.Text.Json" />
+    <!-- Exercise the actual standard asset on the modern shared-framework host.
+         The legacy-runtime probes separately exercise its pinned serializer packages. -->
   </ItemGroup>
 </Project>

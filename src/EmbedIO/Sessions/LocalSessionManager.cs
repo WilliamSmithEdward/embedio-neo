@@ -1,5 +1,5 @@
-using EmbedIO.Internal;
-﻿using System;
+﻿using EmbedIO.Internal;
+using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Net;
@@ -140,7 +140,7 @@ namespace EmbedIO.Sessions
             set
             {
                 EnsureConfigurationNotLocked();
-                _cookiePath = Validate.UrlPath(nameof(value), value, true);
+                _cookiePath = Validate.RoutePath(nameof(value), value, true);
             }
         }
 
@@ -231,12 +231,13 @@ namespace EmbedIO.Sessions
         /// <inheritdoc />
         public ISession Create(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             var id = context.Request.Cookies.FirstOrDefault(IsSessionCookie)?.Value.Trim();
 
-            SessionImpl session;
+            SessionImpl? session;
             lock (_sessions)
             {
-                if (!string.IsNullOrEmpty(id) && _sessions.TryGetValue(id!, out session))
+                if (!string.IsNullOrEmpty(id) && _sessions.TryGetValue(id ?? string.Empty, out session))
                 {
                     session.BeginUse();
                 }
@@ -256,6 +257,7 @@ namespace EmbedIO.Sessions
         /// <inheritdoc />
         public void Delete(IHttpContext context, string id)
         {
+            if (context is null) throw new System.NullReferenceException();
             lock (_sessions)
             {
                 if (_sessions.TryGetValue(id, out var session))
@@ -269,6 +271,7 @@ namespace EmbedIO.Sessions
         /// <inheritdoc />
         public void OnContextClose(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             if (!context.Session.Exists)
                 return;
 

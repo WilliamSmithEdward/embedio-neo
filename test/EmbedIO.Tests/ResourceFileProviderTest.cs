@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System;
 using System.Linq;
 using System.Text;
 using EmbedIO.Files;
@@ -18,24 +19,24 @@ namespace EmbedIO.Tests
 
         [TestCase("/index.html", "index.html")]
         [TestCase("/sub/index.html", "index.html")]
-        public void MapFile_ReturnsCorrectFileInfo(string urlPath, string name)
+        public void MapFile_ReturnsCorrectFileInfo(string requestPath, string name)
         {
-            var info = _fileProvider.MapUrlPath(urlPath, _mimeTypeProvider);
+            var info = _fileProvider.MapUrlPath(requestPath, _mimeTypeProvider) ?? throw new InvalidOperationException("The stock resource must be mapped.");
 
             Assert.IsNotNull(info, "info != null");
             Assert.IsTrue(info.IsFile, "info.IsFile == true");
             Assert.AreEqual(name, info.Name, "info.Name has the correct value");
-            Assert.AreEqual(StockResource.GetLength(urlPath), info.Length, "info.Length has the correct value");
+            Assert.AreEqual(StockResource.GetLength(requestPath), info.Length, "info.Length has the correct value");
         }
 
         [TestCase("/index.html")]
         [TestCase("/sub/index.html")]
-        public void OpenFile_ReturnsCorrectContent(string urlPath)
+        public void OpenFile_ReturnsCorrectContent(string requestPath)
         {
-            var info = _fileProvider.MapUrlPath(urlPath, _mimeTypeProvider);
-            var expectedText = StockResource.GetText(urlPath, WebServer.DefaultEncoding);
+            var info = _fileProvider.MapUrlPath(requestPath, _mimeTypeProvider) ?? throw new InvalidOperationException("The stock resource must be mapped.");
+            var expectedText = StockResource.GetText(requestPath, WebServer.DefaultEncoding);
 
-            using var stream = _fileProvider.OpenFile(info.Path);
+            using var stream = _fileProvider.OpenFile(info.Path) ?? throw new InvalidOperationException("The mapped stock resource must exist.");
             using var reader = new StreamReader(stream, WebServer.DefaultEncoding, false, WebServer.StreamCopyBufferSize, true);
             var actualText = reader.ReadToEnd();
 

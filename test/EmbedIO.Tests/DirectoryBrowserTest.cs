@@ -40,7 +40,7 @@ namespace EmbedIO.Tests
                 Assert.IsNotEmpty(htmlContent);
 
                 foreach (var file in StaticFolder.WithHtmlFiles.RandomHtmls)
-                    Assert.IsTrue(htmlContent.Contains(file));
+                    Assert.IsTrue((htmlContent.IndexOf(file, System.StringComparison.Ordinal) >= 0));
             }
 
             [Test]
@@ -51,7 +51,7 @@ namespace EmbedIO.Tests
                 Assert.IsNotEmpty(htmlContent);
 
                 foreach (var file in StaticFolder.WithHtmlFiles.RandomHtmls)
-                    Assert.IsTrue(htmlContent.Contains(file));
+                    Assert.IsTrue((htmlContent.IndexOf(file, System.StringComparison.Ordinal) >= 0));
             }
         }
     }

@@ -21,7 +21,7 @@ namespace EmbedIO.Net.Internal
 
         public static string? GetAttributeValue(string nameAndValue)
         {
-            var idx = nameAndValue.IndexOf('=');
+            var idx = nameAndValue.IndexOf("=", System.StringComparison.Ordinal);
 
             return idx < 0 || idx == nameAndValue.Length - 1 ? null : nameAndValue.Substring(idx + 1).Trim().Unquote();
         }

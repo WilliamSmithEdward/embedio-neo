@@ -186,6 +186,7 @@ namespace EmbedIO.Security
         /// <inheritdoc />
         protected override Task OnRequestAsync(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             ClientAddress = context.Request.RemoteEndPoint.Address;
             return Configuration.CheckClient(ClientAddress);
         }

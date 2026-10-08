@@ -45,7 +45,7 @@ namespace EmbedIO.Net.Internal
             }
 
             var length = uri.Length;
-            var startHost = uri.IndexOf(':') + 3;
+            var startHost = uri.IndexOf(":", System.StringComparison.Ordinal) + 3;
 
             if (startHost >= length)
             {
@@ -81,7 +81,7 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        public bool IsValid() => Path.IndexOf('%') == -1 && Path.IndexOf("//", StringComparison.Ordinal) == -1;
+        public bool IsValid() => Path.IndexOf("%", System.StringComparison.Ordinal) == -1 && Path.IndexOf("//", StringComparison.Ordinal) == -1;
 
         public override string ToString() => $"{Host}:{Port} ({(Secure ? "Secure" : "Insecure")}";
     }

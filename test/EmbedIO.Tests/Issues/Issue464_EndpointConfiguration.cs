@@ -15,7 +15,7 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.Microsoft)]
         public async Task PrefixPathSelectsRequestsWithoutRewritingModulePaths(HttpListenerMode mode)
         {
-            var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+            var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
             using var server = new WebServer(o => o.WithUrlPrefix(root + "scope/").WithMode(mode))
                 .OnGet("/scope/hello", c => c.SendStringAsync(c.Request.Url.AbsolutePath,
                     "text/plain", WebServer.Utf8NoBomEncoding));
@@ -45,7 +45,7 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.Microsoft)]
         public async Task DistinctPathPrefixesSharePortAndLongestMatchWins(HttpListenerMode mode)
         {
-            var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+            var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
             using var general = CreateServer(root + "scope/", "general", mode);
             using var specific = CreateServer(root + "scope/nested/", "specific", mode);
             using var stopGeneral = new CancellationTokenSource();
@@ -72,8 +72,8 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.Microsoft)]
         public async Task OneServerCanRegisterIndependentPorts(HttpListenerMode mode)
         {
-            var first = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
-            var second = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+            var first = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
+            var second = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
             using var server = new WebServer(o => o.WithUrlPrefixes(first, second).WithMode(mode))
                 .OnGet("/hello", c => c.SendStringAsync(c.Request.Url.Port.ToString(
                     System.Globalization.CultureInfo.InvariantCulture), "text/plain", WebServer.Utf8NoBomEncoding));
@@ -98,7 +98,7 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.Microsoft, "+")]
         public async Task WildcardPrefixAcceptsAnOtherwiseUnregisteredHost(HttpListenerMode mode, string host)
         {
-            var target = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+            var target = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
             var port = new Uri(target).Port;
             using var server = CreateServer($"http://{host}:{port}/", "wildcard", mode);
             using var stop = new CancellationTokenSource();

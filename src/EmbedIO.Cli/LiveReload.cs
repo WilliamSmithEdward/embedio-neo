@@ -29,7 +29,8 @@ namespace EmbedIO.Cli
             _watcher.Created += Changed;
             _watcher.Deleted += Changed;
             _watcher.Renamed += Changed;
-            _watcher.Error += (_, e) => {
+            _watcher.Error += (_, e) =>
+            {
                 Console.Error.WriteLine($"File watcher: {e.GetException().Message}");
                 _changes.Writer.TryWrite(true);
             };
@@ -65,7 +66,7 @@ namespace EmbedIO.Cli
                     await Task.Delay(100, _stop.Token);
                     while (_changes.Reader.TryRead(out _)) { }
                     try { await socket.NotifyAsync(); }
-                    catch (Exception error) { Console.Error.WriteLine($"Live reload: {error.Message}"); }
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { Console.Error.WriteLine($"Live reload: {error.Message}"); }
                 }
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }

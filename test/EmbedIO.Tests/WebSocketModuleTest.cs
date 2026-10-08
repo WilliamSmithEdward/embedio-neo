@@ -27,7 +27,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task TestConnectWebSocket()
         {
-            var websocketUrl = new Uri(WebServerUrl.Replace("http", "ws") + "test");
+            var websocketUrl = new UriBuilder(new Uri(WebServerUrl, "test")) { Scheme = "ws" }.Uri;
 
             var clientSocket = new System.Net.WebSockets.ClientWebSocket();
             await clientSocket.ConnectAsync(websocketUrl, default);
@@ -46,7 +46,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task TestSendBigDataWebSocket()
         {
-            var webSocketUrl = new Uri($"{WebServerUrl.Replace("http", "ws")}bigdata");
+            var webSocketUrl = new UriBuilder(new Uri(WebServerUrl, "bigdata")) { Scheme = "ws" }.Uri;
 
             var clientSocket = new System.Net.WebSockets.ClientWebSocket();
             await clientSocket.ConnectAsync(webSocketUrl, default).ConfigureAwait(false);
@@ -61,7 +61,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task TestWithDifferentCloseResponse()
         {
-            var webSocketUrl = new Uri($"{WebServerUrl.Replace("http", "ws")}close");
+            var webSocketUrl = new UriBuilder(new Uri(WebServerUrl, "close")) { Scheme = "ws" }.Uri;
 
             var clientSocket = new System.Net.WebSockets.ClientWebSocket();
             await clientSocket.ConnectAsync(webSocketUrl, default).ConfigureAwait(false);
@@ -75,6 +75,7 @@ namespace EmbedIO.Tests
 
         protected static async Task<string> ReadString(System.Net.WebSockets.ClientWebSocket ws)
         {
+            if (ws is null) throw new System.NullReferenceException();
             var buffer = new ArraySegment<byte>(new byte[8192]);
 
             await using var ms = new MemoryStream();
@@ -83,7 +84,7 @@ namespace EmbedIO.Tests
             do
             {
                 result = await ws.ReceiveAsync(buffer, default);
-                ms.Write(buffer.Array, buffer.Offset, result.Count);
+                ms.Write(buffer.Array ?? throw new InvalidOperationException("The receive buffer must be allocated."), buffer.Offset, result.Count);
             }
             while (!result.EndOfMessage);
 

@@ -6,8 +6,8 @@ namespace EmbedIO.Tests.TestObjects
 {
     public class TestWebSocket : WebSocketModule
     {
-        public TestWebSocket(string urlPath)
-            : base(urlPath, true)
+        public TestWebSocket(string requestPath)
+            : base(requestPath, true)
         {
         }
 
@@ -2862,8 +2862,8 @@ i01jQpAUwrKkbVu2EzqXmNMgrAdDISXyvKBRr9frjUbDN8eG0uB5gWdshYxag9Ymu4MthcVMpvwB
 cygSR/MggDhTGBrfglUEKIXXbcbfwgukfyVEJJPOIP0xTtdAhAKBTNyWZuTIcRmIjIcgEEau",
         };
 
-        public BigDataWebSocket(string urlPath)
-            : base(urlPath, true)
+        public BigDataWebSocket(string requestPath)
+            : base(requestPath, true)
         {
         }
 
@@ -2873,8 +2873,8 @@ cygSR/MggDhTGBrfglUEKIXXbcbfwgukfyVEJJPOIP0xTtdAhAKBTNyWZuTIcRmIjIcgEEau",
 
     public class CloseWebSocket : WebSocketModule
     {
-        public CloseWebSocket(string urlPath)
-            : base(urlPath, true)
+        public CloseWebSocket(string requestPath)
+            : base(requestPath, true)
         {
         }
 
@@ -2885,6 +2885,9 @@ cygSR/MggDhTGBrfglUEKIXXbcbfwgukfyVEJJPOIP0xTtdAhAKBTNyWZuTIcRmIjIcgEEau",
             => Task.CompletedTask;
 
         protected override Task OnClientConnectedAsync(IWebSocketContext context)
-            => context.WebSocket.CloseAsync(CloseStatusCode.InvalidData, "Your data is invalid");
+        {
+            if (context is null) throw new System.NullReferenceException();
+            return context.WebSocket.CloseAsync(CloseStatusCode.InvalidData, "Your data is invalid");
+        }
     }
 }

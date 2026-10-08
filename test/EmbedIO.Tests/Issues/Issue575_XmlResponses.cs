@@ -38,20 +38,20 @@ namespace EmbedIO.Tests.Issues
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
                 using var response = await client.GetAsync(url + "xml/" + route);
                 response.EnsureSuccessStatusCode();
-                Assert.That(response.Content.Headers.ContentType!.MediaType, Is.EqualTo(mime));
-                Assert.That(response.Content.Headers.ContentType.CharSet, Is.Null.Or.EqualTo("utf-8"));
+                Assert.That(((response).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo(mime));
+                Assert.That(((response).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CharSet, Is.Null.Or.EqualTo("utf-8"));
                 var bytes = await response.Content.ReadAsByteArrayAsync();
                 var xml = XElement.Parse(Encoding.UTF8.GetString(bytes));
                 Assert.That(XNode.DeepEquals(xml, XmlController.CreateElement()), Is.True);
                 Assert.That(bytes[0], Is.EqualTo((byte)'<'), "XML must not be JSON-quoted or prefixed with a BOM.");
                 if (buffer) Assert.That(response.Content.Headers.ContentLength, Is.EqualTo(bytes.Length));
                 using var json = await client.GetAsync(url + "json/text");
-                Assert.That(json.Content.Headers.ContentType!.MediaType, Is.EqualTo(MimeType.Json));
+                Assert.That(((json).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo(MimeType.Json));
                 Assert.That(JsonSerializer.Deserialize<string>(await json.Content.ReadAsStringAsync()),
                     Is.EqualTo(XmlController.CreateElement().ToString()));
                 using var manual = await client.GetAsync(url + "json/manual");
                 manual.EnsureSuccessStatusCode();
-                Assert.That(manual.Content.Headers.ContentType!.MediaType, Is.EqualTo(mime));
+                Assert.That(((manual).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo(mime));
                 Assert.That(XNode.DeepEquals(XElement.Parse(await manual.Content.ReadAsStringAsync()), XmlController.CreateElement()), Is.True);
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }

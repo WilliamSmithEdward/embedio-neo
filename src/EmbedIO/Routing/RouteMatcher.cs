@@ -44,7 +44,7 @@ namespace EmbedIO.Routing
                 result = new RouteMatcher(IsBaseRoute, Route, pattern, new List<string>(names), true), true);
             if (error != null)
                 throw error;
-            return result!;
+            return result ?? throw new InvalidOperationException("The route parser did not produce a matcher.");
         }
 
         internal bool HasCaseEquivalentTemplate(RouteMatcher other)
@@ -81,13 +81,13 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         /// <seealso cref="TryParse"/>
         /// <seealso cref="ClearCache"/>
-        public static RouteMatcher Parse(string route, bool isBaseRoute)
+        public static RouteMatcher Parse(string? route, bool isBaseRoute)
         {
             var exception = TryParseInternal(route, isBaseRoute, out var result);
             if (exception != null)
                 throw exception;
 
-            return result!;
+            return result ?? throw new InvalidOperationException("The route parser did not produce a matcher.");
         }
 
         /// <summary>
@@ -104,7 +104,7 @@ namespace EmbedIO.Routing
         /// <returns><see langword="true"/> if parsing was successful; otherwise, <see langword="false"/>.</returns>
         /// <seealso cref="Parse"/>
         /// <seealso cref="ClearCache"/>
-        public static bool TryParse(string route, bool isBaseRoute, out RouteMatcher? result)
+        public static bool TryParse(string? route, bool isBaseRoute, out RouteMatcher? result)
             => TryParseInternal(route, isBaseRoute, out result) == null;
 
         /// <summary>
@@ -154,7 +154,7 @@ namespace EmbedIO.Routing
         /// <param name="path">The URL path to match.</param>
         /// <returns>If the match is successful, a <see cref="RouteMatch"/> object;
         /// otherwise, <see langword="null"/>.</returns>
-        public RouteMatch? Match(string path)
+        public RouteMatch? Match(string? path)
         {
             if (path == null)
                 return null;
@@ -169,7 +169,7 @@ namespace EmbedIO.Routing
                     return RouteMatch.UnsafeFromBasePath(Route, path);
             }
 
-            var match = (_regex ?? _unusedBaseRegex!.Value).Match(path);
+            var match = (_regex ?? _unusedBaseRegex?.Value ?? throw new InvalidOperationException("The route matcher has no regular expression.")).Match(path);
             if (!match.Success)
                 return null;
 
@@ -184,7 +184,7 @@ namespace EmbedIO.Routing
                 IsBaseRoute ? "/" + path.Substring(match.Groups[0].Length) : null);
         }
 
-        private static Exception? TryParseInternal(string route, bool isBaseRoute, out RouteMatcher? result)
+        private static Exception? TryParseInternal(string? route, bool isBaseRoute, out RouteMatcher? result)
         {
             if (route == null)
             {
@@ -214,7 +214,7 @@ namespace EmbedIO.Routing
                 if (Cache.TryGetValue((isBaseRoute, route), out result))
                     return null;
 
-                result = new RouteMatcher(isBaseRoute, route, pattern!, parameterNames);
+                result = new RouteMatcher(isBaseRoute, route, pattern ?? throw new InvalidOperationException("The route parser did not produce a pattern."), parameterNames);
                 Cache.Add((isBaseRoute, route), result);
                 return null;
             }

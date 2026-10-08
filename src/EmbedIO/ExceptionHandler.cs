@@ -49,10 +49,9 @@ namespace EmbedIO
         /// <param name="context">An <see cref="IHttpContext" /> interface representing the context of the request.</param>
         /// <param name="exception">The unhandled exception.</param>
         /// <returns>A <see cref="Task" /> representing the ongoing operation.</returns>
-#pragma warning disable CA1801 // Unused parameter
         public static Task EmptyResponse(IHttpContext context, Exception exception)
-#pragma warning restore CA1801
         {
+            if (context is null) throw new System.NullReferenceException();
             context.Response.SetEmptyResponse((int)HttpStatusCode.InternalServerError);
             return Task.CompletedTask;
         }
@@ -82,6 +81,8 @@ namespace EmbedIO
         /// <returns>A <see cref="Task" /> representing the ongoing operation.</returns>
         public static Task EmptyResponseWithHeaders(IHttpContext context, Exception exception)
         {
+            if (context is null) throw new System.NullReferenceException();
+            if (exception is null) throw new System.NullReferenceException();
             context.Response.SetEmptyResponse((int)HttpStatusCode.InternalServerError);
             context.Response.Headers[ExceptionTypeHeaderName] = Uri.EscapeDataString(exception.GetType().Name);
             context.Response.Headers[ExceptionMessageHeaderName] = Uri.EscapeDataString(exception.Message);
@@ -148,14 +149,14 @@ namespace EmbedIO
             {
                 throw;
             }
-            catch (Exception httpException) when (httpException is IHttpException httpException1)
+            catch (Exception httpException) when (httpException is IHttpException httpException1 && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(httpException))
             {
                 if (httpHandler == null)
                     throw;
 
                 await httpHandler(context, httpException1).ConfigureAwait(false);
             }
-            catch (Exception exception2)
+            catch (Exception exception2) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception2))
             {
                 exception2.Log(logSource, $"[{context.Id}] Unhandled exception while handling exception.");
             }

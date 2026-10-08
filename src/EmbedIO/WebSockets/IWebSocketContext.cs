@@ -55,7 +55,7 @@ namespace EmbedIO.WebSockets
         NameValueCollection Headers { get; }
 
         /// <summary>The value of the Origin HTTP header included in the opening handshake.</summary>
-        string Origin { get; }
+        string? Origin { get; }
 
         /// <summary>The value of the SecWebSocketKey HTTP header included in the opening handshake.</summary>
         string WebSocketVersion { get; }

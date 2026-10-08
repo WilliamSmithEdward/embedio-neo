@@ -18,7 +18,7 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
-        public static TContainer WithModule<TContainer>(this TContainer @this, IWebModule module)
+        public static TContainer WithModule<TContainer>(this TContainer? @this, IWebModule module)
             where TContainer : class, IWebModuleContainer
             => WithModule(@this, null, module);
 
@@ -34,9 +34,10 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
-        public static TContainer WithModule<TContainer>(this TContainer @this, string? name, IWebModule module)
+        public static TContainer WithModule<TContainer>(this TContainer? @this, string? name, IWebModule module)
             where TContainer : class, IWebModuleContainer
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Modules.Add(name, module);
             return @this;
         }
@@ -53,7 +54,7 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
-        public static TContainer WithModule<TContainer, TWebModule>(this TContainer @this, TWebModule module, Action<TWebModule>? configure)
+        public static TContainer WithModule<TContainer, TWebModule>(this TContainer? @this, TWebModule module, Action<TWebModule>? configure)
             where TContainer : class, IWebModuleContainer
             where TWebModule : IWebModule
         => WithModule(@this, null, module, configure);
@@ -72,10 +73,11 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
-        public static TContainer WithModule<TContainer, TWebModule>(this TContainer @this, string? name, TWebModule module, Action<TWebModule>? configure)
+        public static TContainer WithModule<TContainer, TWebModule>(this TContainer? @this, string? name, TWebModule module, Action<TWebModule>? configure)
             where TContainer : class, IWebModuleContainer
             where TWebModule : IWebModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             configure?.Invoke(module);
             @this.Modules.Add(name, module);
             return @this;

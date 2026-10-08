@@ -36,7 +36,7 @@ namespace EmbedIO.Tests.Issues
                     await context.SendStringAsync("chunk1,", "text/plain", Encoding.UTF8);
                     await context.SendStringAsync("chunk2", "text/plain", Encoding.UTF8);
                 }
-                catch (Exception e) { error = e; }
+                catch (Exception e) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(e)) { error = e; }
                 finally { seen.TrySetResult((requestVersion, responseVersion, error)); }
             }));
             var running = server.RunAsync(stop.Token);
@@ -156,7 +156,7 @@ namespace EmbedIO.Tests.Issues
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO));
             server.WithModule(new ActionModule("/", HttpVerbs.Get, async context =>
             {
-                var next = context.Request.RawUrl == "/next";
+                var next = context.Request.RawTarget == "/next";
                 if (!next && applicationOverride.HasValue) context.Response.KeepAlive = applicationOverride.Value;
                 if (!next) seen.TrySetResult((context.Request.KeepAlive, context.Response.KeepAlive));
                 context.Response.ContentLength64 = 1;

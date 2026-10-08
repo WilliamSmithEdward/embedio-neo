@@ -14,7 +14,7 @@ namespace EmbedIO.Tests
     {
         private static readonly IPAddress Address = IPAddress.Parse("192.0.2.198");
         private static readonly Type CriterionType = typeof(IPBanningRequestsCriterion);
-        private static IDictionary Histories => (IDictionary)CriterionType.GetField("Requests", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        private static IDictionary Histories => (IDictionary)((((CriterionType).GetField("Requests", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         [SetUp]
         public void ClearSharedHistory()
@@ -120,29 +120,29 @@ namespace EmbedIO.Tests
         public void NullAddressErrorContractsRemainUnchanged()
         {
             using var criterion = NewCriterion(50);
-            Assert.That(Assert.Throws<ArgumentNullException>(() => criterion.ValidateIPAddress(null!))!.ParamName, Is.EqualTo("key"));
-            Assert.That(Assert.Throws<ArgumentNullException>(() => criterion.ClearIPAddress(null!))!.ParamName, Is.EqualTo("key"));
+            Assert.That(Assert.Throws<ArgumentNullException>(() => TestObjects.InvalidInput.Invoke((Func<IPAddress, Task<bool>>)criterion.ValidateIPAddress, new object?[] { null })).ParamName, Is.EqualTo("key"));
+            Assert.That(Assert.Throws<ArgumentNullException>(() => TestObjects.InvalidInput.Invoke((Action<IPAddress>)criterion.ClearIPAddress, new object?[] { null })).ParamName, Is.EqualTo("key"));
         }
 
         private static IPBanningRequestsCriterion NewCriterion(int maximum) =>
-            (IPBanningRequestsCriterion)Activator.CreateInstance(CriterionType, BindingFlags.Instance | BindingFlags.NonPublic,
-                null, new object[] { maximum }, null)!;
+            (IPBanningRequestsCriterion)(Activator.CreateInstance(CriterionType, BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new object[] { maximum }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         private static object Seed(IPAddress address)
         {
             var type = Histories.GetType().GetGenericArguments()[1];
-            var history = Activator.CreateInstance(type)!;
+            var history = Activator.CreateInstance(type);
             Histories[address] = history;
-            return history;
+            return (history ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         }
         private static void Add(object history, int count, long ticks)
         {
-            var add = history.GetType().GetMethod("Add")!.CreateDelegate<Action<long>>(history);
+            var add = ((history).GetType().GetMethod("Add") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CreateDelegate<Action<long>>(history);
             for (var i = 0; i < count; i++) add(ticks);
         }
         private static int Count(IPAddress address)
         {
             var history = Histories[address];
-            return history == null ? 0 : (int)history.GetType().GetProperty("Count")!.GetValue(history)!;
+            return history == null ? 0 : (int)((((history).GetType().GetProperty("Count") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(history)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         }
     }
 }

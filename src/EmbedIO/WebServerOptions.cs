@@ -191,6 +191,10 @@ namespace EmbedIO
             _urlPrefixes.Add(urlPrefix);
         }
 
+        /// <inheritdoc cref="AddUrlPrefix(string)"/>
+        public void AddUrlPrefix(Uri urlPrefix)
+            => AddUrlPrefix(Validate.NotNull(nameof(urlPrefix), urlPrefix).OriginalString);
+
         private X509Certificate2? LoadCertificate()
         {
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -239,7 +243,7 @@ namespace EmbedIO
             store.Open(OpenFlags.ReadOnly);
             var signingCert = store.Certificates.Find(
                 X509FindType.FindByThumbprint,
-                thumbprint ?? _certificateThumbprint,
+                thumbprint ?? _certificateThumbprint ?? throw new InvalidOperationException("The certificate thumbprint has not been configured."),
                 false);
             return signingCert.Count == 0 ? null : signingCert[0];
         }
@@ -250,10 +254,10 @@ namespace EmbedIO
             try
             {
                 store.Open(OpenFlags.ReadWrite);
-                store.Add(_certificate);
+                store.Add(_certificate ?? throw new InvalidOperationException("The certificate has not been configured."));
                 return true;
             }
-            catch
+            catch (Exception error) when (error is System.Security.Cryptography.CryptographicException or System.Security.SecurityException or UnauthorizedAccessException or InvalidOperationException)
             {
                 return false;
             }

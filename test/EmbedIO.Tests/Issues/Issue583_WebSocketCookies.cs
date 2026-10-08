@@ -27,6 +27,7 @@ namespace EmbedIO.Tests.Issues
         [TestCase("culture=en; token=demo", false, 2, "echo.v1")]
         public async Task ManagedUpgradeKeepsEachCookieOnItsOwnWireHeader(string cookies, bool createSession, int expectedCount, string? protocol)
         {
+            if (cookies is null) throw new System.NullReferenceException();
             var url = Resources.GetServerAddress();
             var module = new EchoSocket(protocol);
             using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO));
@@ -59,7 +60,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(lines, Does.Contain("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="));
                 if (protocol != null) Assert.That(lines, Does.Contain($"Sec-WebSocket-Protocol: {protocol}"));
                 var setCookies = lines.Where(line => line.StartsWith("Set-Cookie:", StringComparison.OrdinalIgnoreCase))
-                    .Select(line => line.Substring(line.IndexOf(':') + 1).Trim()).ToArray();
+                    .Select(line => line.Substring(line.IndexOf((':').ToString(), System.StringComparison.Ordinal) + 1).Trim()).ToArray();
                 var observed = await module.ObservedCookies.Task.WaitAsync(timeout.Token);
                 Assert.That(observed.Length, Is.EqualTo(expectedCount));
                 if (createSession)
@@ -104,9 +105,9 @@ namespace EmbedIO.Tests.Issues
                 socket.Options.Cookies = new CookieContainer();
                 socket.Options.Cookies.Add(new Uri(url), new Cookie("culture", "en"));
                 socket.Options.Cookies.Add(new Uri(url), new Cookie("token", "demo"));
-                await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "echo"), timeout.Token);
+                await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "ws://") + "echo"), timeout.Token);
                 Assert.That(await module.ObservedCookies.Task.WaitAsync(timeout.Token), Is.EquivalentTo(new[] { "culture=en", "token=demo" }));
-                var responseCookies = socket.HttpResponseHeaders!.Where(pair => pair.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase))
+                var responseCookies = (socket.HttpResponseHeaders ?? throw new AssertionException("Expected upgrade response headers.")).Where(pair => pair.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase))
                     .SelectMany(pair => pair.Value).ToArray();
                 Assert.That(responseCookies, mode == HttpListenerMode.EmbedIO
                     ? Is.EquivalentTo(new[] { "culture=en", "token=demo" }) : Is.Empty);

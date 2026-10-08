@@ -58,7 +58,7 @@ namespace EmbedIO.Files
         }
 
         /// <inheritdoc />
-        public event Action<string> ResourceChanged
+        public event Action<string>? ResourceChanged
         {
             add { }
             remove { }
@@ -80,12 +80,14 @@ namespace EmbedIO.Files
         }
 
         /// <inheritdoc />
-        public MappedResourceInfo? MapUrlPath(string urlPath, IMimeTypeProvider mimeTypeProvider)
+        public MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider)
         {
-            if (urlPath.Length == 1)
+            if (mimeTypeProvider is null) throw new System.NullReferenceException();
+            if (requestPath is null) throw new System.NullReferenceException();
+            if (requestPath.Length == 1)
                 return null;
 
-            urlPath = Uri.UnescapeDataString(urlPath);
+            requestPath = Uri.UnescapeDataString(requestPath);
 
             string fullName;
             string name;
@@ -93,7 +95,7 @@ namespace EmbedIO.Files
             long length;
             using (var scope = _readGate.EnterArchive())
             {
-                var entry = _zipArchive.GetEntry(urlPath.Substring(1));
+                var entry = _zipArchive.GetEntry(requestPath.Substring(1));
                 if (entry == null) return null;
                 fullName = entry.FullName;
                 name = entry.Name;

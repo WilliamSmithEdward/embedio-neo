@@ -27,6 +27,7 @@ namespace EmbedIO.Routing
         /// <seealso cref="RoutingModule.Add(HttpVerbs,RouteMatcher,RouteHandlerCallback)"/>
         public static RoutingModule Handle(this RoutingModule @this, HttpVerbs verb, string route, bool isBaseRoute, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(verb, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -54,6 +55,7 @@ namespace EmbedIO.Routing
         /// <seealso cref="RoutingModule.Add(HttpVerbs,RouteMatcher,RouteHandlerCallback)"/>
         public static RoutingModule Handle(this RoutingModule @this, HttpVerbs verb, string route, bool isBaseRoute, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(verb, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -77,6 +79,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnAny(this RoutingModule @this, string route, bool isBaseRoute, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Any, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -100,6 +103,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnAny(this RoutingModule @this, string route, bool isBaseRoute, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Any, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -123,6 +127,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnDelete(this RoutingModule @this, string route, bool isBaseRoute, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Delete, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -146,6 +151,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnDelete(this RoutingModule @this, string route, bool isBaseRoute, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Delete, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -169,6 +175,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnGet(this RoutingModule @this, string route, bool isBaseRoute, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Get, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -192,6 +199,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnGet(this RoutingModule @this, string route, bool isBaseRoute, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Get, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -215,6 +223,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnHead(this RoutingModule @this, string route, bool isBaseRoute, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Head, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -238,6 +247,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnHead(this RoutingModule @this, string route, bool isBaseRoute, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Head, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -261,6 +271,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnOptions(this RoutingModule @this, string route, bool isBaseRoute, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Options, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -284,6 +295,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnOptions(this RoutingModule @this, string route, bool isBaseRoute, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Options, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -307,6 +319,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnPatch(this RoutingModule @this, string route, bool isBaseRoute, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Patch, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -330,6 +343,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnPatch(this RoutingModule @this, string route, bool isBaseRoute, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Patch, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -353,6 +367,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnPost(this RoutingModule @this, string route, bool isBaseRoute, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Post, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -376,6 +391,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnPost(this RoutingModule @this, string route, bool isBaseRoute, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Post, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -399,6 +415,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnPut(this RoutingModule @this, string route, bool isBaseRoute, RouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Put, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }
@@ -422,6 +439,7 @@ namespace EmbedIO.Routing
         /// <exception cref="FormatException"><paramref name="route"/> is not a valid route.</exception>
         public static RoutingModule OnPut(this RoutingModule @this, string route, bool isBaseRoute, SyncRouteHandlerCallback handler)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Add(HttpVerbs.Put, RouteMatcher.Parse(route, isBaseRoute), handler);
             return @this;
         }

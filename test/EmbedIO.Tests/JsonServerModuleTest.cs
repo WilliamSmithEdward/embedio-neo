@@ -15,7 +15,7 @@ namespace EmbedIO.Tests
     [TestFixture]
     public class JsonServerModuleTest
     {
-        private string _path = null!;
+        private string _path = string.Empty;
 
         [SetUp]
         public void SetUp()

@@ -33,7 +33,7 @@ namespace EmbedIO
         /// <exception cref="ArgumentNullException">Data is null.</exception>
         /// <exception cref="ArgumentException">An event name or ID contains CR, LF or NUL.</exception>
         /// <exception cref="InvalidOperationException">Another write is in progress.</exception>
-        public Task WriteAsync(string data, string? eventName = null, string? id = null, CancellationToken cancellationToken = default)
+        public Task WriteAsync(string? data, string? eventName = null, string? id = null, CancellationToken cancellationToken = default)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
             ValidateField(eventName, nameof(eventName));
@@ -50,7 +50,7 @@ namespace EmbedIO
         /// <param name="comment">Comment text, which can contain multiple lines.</param>
         /// <param name="cancellationToken">Additional cancellation for this write.</param>
         /// <returns>A task that completes after the comment frame is flushed.</returns>
-        public Task WriteCommentAsync(string comment = "keep-alive", CancellationToken cancellationToken = default)
+        public Task WriteCommentAsync(string? comment = "keep-alive", CancellationToken cancellationToken = default)
         {
             if (comment == null) throw new ArgumentNullException(nameof(comment));
             var frame = new StringBuilder();
@@ -67,7 +67,7 @@ namespace EmbedIO
 
         private static void AppendLines(StringBuilder frame, string prefix, string text)
         {
-            foreach (var line in text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+            foreach (var line in EmbedIO.Internal.StringOperations.ReplaceOrdinal(text, "\r\n", "\n").Replace('\r', '\n').Split('\n'))
                 frame.Append(prefix).Append(line).Append('\n');
         }
 

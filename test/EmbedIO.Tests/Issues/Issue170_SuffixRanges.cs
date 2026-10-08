@@ -54,7 +54,7 @@ namespace EmbedIO.Tests.Issues
                     Assert.That((int)response.StatusCode, Is.EqualTo(status));
                     if (status == 206)
                     {
-                        Assert.That(response.Content.Headers.ContentRange!.ToString(), Is.EqualTo($"bytes {start}-{length - 1}/{length}"));
+                        Assert.That(((response).Content.Headers.ContentRange ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).ToString(), Is.EqualTo($"bytes {start}-{length - 1}/{length}"));
                         Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.EqualTo(bytes[start..]));
                     }
                     else if (status == 200)
@@ -63,7 +63,7 @@ namespace EmbedIO.Tests.Issues
                         Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.Empty);
                     }
                     else
-                        Assert.That(response.Content.Headers.ContentRange!.ToString(), Is.EqualTo($"bytes */{length}"));
+                        Assert.That(((response).Content.Headers.ContentRange ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).ToString(), Is.EqualTo($"bytes */{length}"));
                 }
                 using var full = await client.GetAsync("file.txt");
                 Assert.That(full.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -79,7 +79,7 @@ namespace EmbedIO.Tests.Issues
             await WithServer(mode, cached, zip, bytes, async client =>
             {
                 using var initial = await client.GetAsync("file.txt");
-                var tag = initial.Headers.ETag!;
+                var tag = initial.Headers.ETag;
                 using var headRequest = new HttpRequestMessage(HttpMethod.Head, "file.txt");
                 headRequest.Headers.Range = new RangeHeaderValue(null, 3);
                 using var head = await client.SendAsync(headRequest);
@@ -89,7 +89,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(await head.Content.ReadAsByteArrayAsync(), Is.Empty);
                 foreach (var item in new[]
                 {
-                    (Range: "bytes=-3", Validator: tag.ToString(), Status: 206, Body: "789"),
+                    (Range: "bytes=-3", Validator: (tag ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).ToString(), Status: 206, Body: "789"),
                     (Range: "bytes=-3", Validator: "\"different\"", Status: 200, Body: "0123456789"),
                     (Range: "bytes=2-5", Validator: (string?)null, Status: 206, Body: "2345"),
                     (Range: "bytes=7-", Validator: (string?)null, Status: 206, Body: "789"),
@@ -157,7 +157,7 @@ namespace EmbedIO.Tests.Issues
                 request.Headers.Range = new RangeHeaderValue(null, 3);
                 using var response = await client.SendAsync(request);
                 Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.PartialContent));
-                Assert.That(response.Content.Headers.ContentRange!.ToString(), Is.EqualTo($"bytes {length - 3}-{length - 1}/{length}"));
+                Assert.That(((response).Content.Headers.ContentRange ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).ToString(), Is.EqualTo($"bytes {length - 3}-{length - 1}/{length}"));
                 Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.EqualTo(Encoding.ASCII.GetBytes("789")));
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
@@ -167,7 +167,7 @@ namespace EmbedIO.Tests.Issues
         private sealed class LargeProvider(long length) : IFileProvider
         {
             public bool IsImmutable => true;
-            public event Action<string> ResourceChanged { add { } remove { } }
+            public event Action<string>? ResourceChanged { add { } remove { } }
             public void Start(CancellationToken cancellationToken) { }
             public MappedResourceInfo? MapUrlPath(string path, IMimeTypeProvider mime)
                 => path == "/large.bin" ? MappedResourceInfo.ForFile(path, "large.bin", new DateTime(2020, 1, 1), length, "application/octet-stream") : null;

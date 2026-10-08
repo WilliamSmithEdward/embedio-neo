@@ -20,6 +20,7 @@ namespace EmbedIO
         public static TOptions WithSupportCompressedRequests<TOptions>(this TOptions @this, bool value)
             where TOptions : WebServerOptionsBase
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.SupportCompressedRequests = value;
             return @this;
         }

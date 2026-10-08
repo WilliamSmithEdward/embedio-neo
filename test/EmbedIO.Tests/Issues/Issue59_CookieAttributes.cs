@@ -40,7 +40,7 @@ namespace EmbedIO.Tests.Issues
                 });
                 context.Response.SetCookie(new Cookie("secondary", "two", "/") { HttpOnly = true });
                 // Mutation after adding also remains visible until the first write.
-                context.Response.Cookies["primary"]!.Domain = "localhost";
+                ((context).Response.Cookies["primary"] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Domain = "localhost";
                 context.Response.ContentLength64 = 2;
                 await output.WriteAsync(Encoding.ASCII.GetBytes("ok"));
             }), async (client, url) =>
@@ -50,8 +50,8 @@ namespace EmbedIO.Tests.Issues
                 var headers = response.Headers.GetValues("Set-Cookie").ToArray();
                 var parsed = new CookieContainer();
                 foreach (var header in headers)
-                    parsed.SetCookies(new Uri(url.Replace("http://", "https://") + "area/"), header);
-                var primary = parsed.GetCookies(new Uri(url.Replace("http://", "https://") + "area/"))["primary"]!;
+                    parsed.SetCookies(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "https://") + "area/"), header);
+                var primary = parsed.GetCookies(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "https://") + "area/"))["primary"];
                 Assert.That(primary, Is.Not.Null);
                 Assert.That(primary.Value, Is.EqualTo("new"));
                 Assert.That(primary.Path, Is.EqualTo("/area"));
@@ -157,8 +157,8 @@ namespace EmbedIO.Tests.Issues
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 using var socket = new ClientWebSocket();
                 socket.Options.CollectHttpResponseDetails = true;
-                await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "socket"), timeout.Token);
-                var header = socket.HttpResponseHeaders!["Set-Cookie"].Single();
+                await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "ws://") + "socket"), timeout.Token);
+                var header = ((((socket).HttpResponseHeaders) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))["Set-Cookie"] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Single();
                 Assert.That(HasAttribute(header, "HttpOnly"), Is.True);
                 Assert.That(HasAttribute(header, "Secure"), Is.True);
                 await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
@@ -213,7 +213,7 @@ namespace EmbedIO.Tests.Issues
                 }
                 var jar = new CookieContainer();
                 jar.Add(context.Request.Url, cookie);
-                context.Response.Cookies.Add(jar.GetCookies(context.Request.Url)["scoped"]!);
+                context.Response.Cookies.Add((jar.GetCookies(context.Request.Url)["scoped"] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
                 await context.SendStringAsync("ok", "text/plain", Encoding.UTF8);
             }), async (client, url) =>
             {

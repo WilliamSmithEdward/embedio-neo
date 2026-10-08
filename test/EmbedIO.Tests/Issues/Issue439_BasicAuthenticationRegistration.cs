@@ -29,7 +29,7 @@ namespace EmbedIO.Tests.Issues
             }, realm);
             Assert.That(result, Is.SameAs(server));
             Assert.That(server.Modules.Single(), Is.SameAs(configured));
-            Assert.That(configured!.Realm, Is.EqualTo(expectedRealm));
+            Assert.That((configured ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Realm, Is.EqualTo(expectedRealm));
             Assert.That(configured.Accounts["user"], Is.EqualTo("secret"));
         }
 
@@ -47,8 +47,8 @@ namespace EmbedIO.Tests.Issues
         public void NullConfigurationIsRejectedWithoutRegistration()
         {
             using var server = new WebServer();
-            var error = Assert.Throws<ArgumentNullException>(() => server.WithBasicAuthentication("/api", null!));
-            Assert.That(error!.ParamName, Is.EqualTo("configure"));
+            var error = Assert.Throws<ArgumentNullException>(() => server.WithBasicAuthentication("/api", null));
+            Assert.That(error.ParamName, Is.EqualTo("configure"));
             Assert.That(server.Modules, Is.Empty);
         }
 
@@ -68,7 +68,7 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task FluentRegistrationPreservesChallengesCredentialsAndRouteScope(HttpListenerMode mode, bool nested)
         {
-            var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+            var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
             using var server = new WebServer(o => o.WithUrlPrefix(root).WithMode(mode));
             var hits = 0;
             if (nested)

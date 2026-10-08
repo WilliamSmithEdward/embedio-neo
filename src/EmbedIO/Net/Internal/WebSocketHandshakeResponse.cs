@@ -38,7 +38,7 @@ namespace EmbedIO.Net.Internal
             foreach (var raw in rawCookies)
             {
                 Headers.Add(HttpHeaderNames.SetCookie, raw);
-                var equals = raw.IndexOf('=');
+                var equals = raw.IndexOf("=", System.StringComparison.Ordinal);
                 if (equals > 0) configuredNames.Add(raw.Substring(0, equals).Trim());
             }
 

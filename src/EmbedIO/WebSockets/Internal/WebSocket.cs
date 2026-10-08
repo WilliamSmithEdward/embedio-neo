@@ -229,10 +229,8 @@ namespace EmbedIO.WebSockets.Internal
                 const string Guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
                 var buff = new StringBuilder(clientKey, 64).Append(Guid);
-#pragma warning disable CA5350 // Do Not Use Weak Cryptographic Algorithms
                 using var sha1 = SHA1.Create();
                 return Convert.ToBase64String(sha1.ComputeHash(Encoding.UTF8.GetBytes(buff.ToString())));
-#pragma warning restore CA5350 // Do Not Use Weak Cryptographic Algorithms
             }
 
             var requestHeaders = httpContext.Request.Headers;
@@ -290,15 +288,13 @@ namespace EmbedIO.WebSockets.Internal
             || code == CloseStatusCode.Abnormal
             || code == CloseStatusCode.TlsHandshakeFailure;
 
-#pragma warning disable CA1801 // Unused parameter
         private void Dispose(bool disposing)
-#pragma warning restore CA1801
         {
             try
             {
                 InternalCloseAsync(new PayloadData((ushort)CloseStatusCode.Away)).ConfigureAwait(false).GetAwaiter().GetResult();
             }
-            catch
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
                 // Ignored
             }
@@ -352,9 +348,9 @@ namespace EmbedIO.WebSockets.Internal
         {
             var sent = frameAsBytes != null;
 
-            if (sent)
+            if (frameAsBytes != null)
             {
-                sent = await WriteFrameBytesAsync(frameAsBytes!, cancellationToken, allowClosing: true).ConfigureAwait(false);
+                sent = await WriteFrameBytesAsync(frameAsBytes, cancellationToken, allowClosing: true).ConfigureAwait(false);
             }
 
             var exitReceiving = _exitReceiving;
@@ -390,7 +386,7 @@ namespace EmbedIO.WebSockets.Internal
             while (true)
             {
                 EventHandler<MessageEventArgs> handler;
-                MessageEventArgs message;
+                MessageEventArgs? message;
                 lock (_messageSyncRoot)
                 {
                     if (_onMessage == null || _readyState != WebSocketState.Open
@@ -404,7 +400,7 @@ namespace EmbedIO.WebSockets.Internal
                     handler = _onMessage;
                 }
                 try { handler(this, message); }
-                catch (Exception ex) { ex.Log(nameof(WebSocket)); }
+                catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { ex.Log(nameof(WebSocket)); }
             }
         }
 
@@ -432,13 +428,14 @@ namespace EmbedIO.WebSockets.Internal
                 InContinuation = true;
             }
 
-            _fragmentsBuffer.AddPayload(frame.PayloadData.ToArray());
+            var fragments = _fragmentsBuffer ?? throw new InvalidOperationException("A continuation frame has no fragment buffer.");
+            fragments.AddPayload(frame.PayloadData.ToArray());
 
             if (frame.Fin == Fin.Final)
             {
-                using (_fragmentsBuffer)
+                using (fragments)
                 {
-                    _messageEventQueue.Enqueue(_fragmentsBuffer.GetMessage());
+                    _messageEventQueue.Enqueue(fragments.GetMessage());
                 }
 
                 _fragmentsBuffer = null;
@@ -638,7 +635,7 @@ namespace EmbedIO.WebSockets.Internal
 
                         _ = Task.Run(Message);
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
                     {
                         Fatal("An exception has occurred while receiving.", ex);
                     }

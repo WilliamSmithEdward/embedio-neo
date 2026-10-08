@@ -31,7 +31,7 @@ jobs:
       - name: Build the sandboxed smoke app
         run: |
           dotnet restore test/EmbedIO.MacCatalystSmoke/EmbedIO.MacCatalystSmoke.csproj --locked-mode
-          dotnet build test/EmbedIO.MacCatalystSmoke/EmbedIO.MacCatalystSmoke.csproj -c Debug --no-restore -p:RunAnalyzers=false
+          dotnet build test/EmbedIO.MacCatalystSmoke/EmbedIO.MacCatalystSmoke.csproj -c Debug --no-restore -p:RunAnalyzers=true
       - name: Verify entitlements and run the app
         run: |
           mkdir -p TestResults/mac-catalyst

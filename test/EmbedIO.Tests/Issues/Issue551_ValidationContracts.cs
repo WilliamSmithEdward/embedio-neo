@@ -39,16 +39,16 @@ namespace EmbedIO.Tests.Issues
                 {
                     "reference" => Validate.NotNull<object>(callerName, null),
                     "string" => Validate.NotNullOrEmpty(callerName, null),
-                    "local-path" => Validate.LocalPath(callerName, null!, false),
-                    "url" => Validate.Url(callerName, null!),
-                    "url-path" => Validate.UrlPath(callerName, null!, false),
-                    "route" => Validate.Route(callerName, null!, false),
-                    "token" => Validate.Rfc2616Token(callerName, null!),
-                    "mime" => Validate.MimeType(callerName, null!, false),
+                    "local-path" => Validate.LocalPath(callerName, null, false),
+                    "url" => Validate.Url(callerName, null),
+                    "url-path" => Validate.RoutePath(callerName, null, false),
+                    "route" => Validate.Route(callerName, null, false),
+                    "token" => Validate.Rfc2616Token(callerName, null),
+                    "mime" => Validate.MimeType(callerName, null, false),
                     _ => throw new InvalidOperationException(kind),
                 };
             });
-            Assert.That(exception!.ParamName, Is.EqualTo(callerName));
+            Assert.That(exception.ParamName, Is.EqualTo(callerName));
         }
 
         [TestCase(" ")]
@@ -65,7 +65,7 @@ namespace EmbedIO.Tests.Issues
         public void LocalPathRejectsEmptyWhitespaceAndPortableInvalidCharacters(string input)
         {
             var exception = Assert.Throws<ArgumentException>(() => Validate.LocalPath(nameof(input), input, false));
-            Assert.That(exception!.ParamName, Is.EqualTo(nameof(input)));
+            Assert.That(exception.ParamName, Is.EqualTo(nameof(input)));
         }
 
         [Test]
@@ -87,10 +87,10 @@ namespace EmbedIO.Tests.Issues
         public void UrlPathNormalizesReturnedValueWithoutMutatingCaller(bool basePath, string expected)
         {
             const string input = "/api//items///";
-            var normalized = Validate.UrlPath(nameof(input), input, basePath);
+            var normalized = Validate.RoutePath(nameof(input), input, basePath);
             Assert.That(normalized, Is.EqualTo(expected));
             Assert.That(input, Is.EqualTo("/api//items///"));
-            Assert.That(Validate.UrlPath(nameof(input), "/a%2Fb//", false), Is.EqualTo("/a%2Fb"));
+            Assert.That(Validate.RoutePath(nameof(input), "/a%2Fb//", false), Is.EqualTo("/a%2Fb"));
         }
 
         [Test]
@@ -99,11 +99,11 @@ namespace EmbedIO.Tests.Issues
             const string protocol = "json-v1";
             Assert.That(Validate.Rfc2616Token(nameof(protocol), protocol), Is.SameAs(protocol));
             var tokenFailure = Assert.Throws<ArgumentException>(() => Validate.Rfc2616Token(nameof(protocol), "json\r\nforged"));
-            Assert.That(tokenFailure!.ParamName, Is.EqualTo(nameof(protocol)));
+            Assert.That(tokenFailure.ParamName, Is.EqualTo(nameof(protocol)));
             const string media = "*/*";
             Assert.That(Validate.MimeType(nameof(media), media, true), Is.SameAs(media));
             var mediaFailure = Assert.Throws<ArgumentException>(() => Validate.MimeType(nameof(media), media, false));
-            Assert.That(mediaFailure!.ParamName, Is.EqualTo(nameof(media)));
+            Assert.That(mediaFailure.ParamName, Is.EqualTo(nameof(media)));
         }
     }
 }

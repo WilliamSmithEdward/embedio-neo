@@ -15,7 +15,7 @@ namespace EmbedIO.DependencyInjection
         /// registration removes only its own listener and does not dispose the factory.
         /// This forwards Neo's TraceEvent output; activity and TraceData events are ignored.
         /// </remarks>
-        public static EmbedIODiagnosticsRegistration ForwardEmbedIODiagnostics(this ILoggerFactory factory)
+        public static EmbedIODiagnosticsRegistration ForwardEmbedIODiagnostics(this ILoggerFactory? factory)
         {
             if (factory == null) throw new ArgumentNullException(nameof(factory));
             return new EmbedIODiagnosticsRegistration(factory.CreateLogger("EmbedIO"));

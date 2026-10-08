@@ -45,8 +45,8 @@ namespace EmbedIO.Tests.Issues
                 socket.Options.Cookies.Add(new Uri(url), new Cookie("legacy", "keep"));
                 if (collision)
                     socket.Options.Cookies.Add(new Uri(url), new Cookie("AUTH", "old"));
-                await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "socket"), CancellationToken.None);
-                var headers = socket.HttpResponseHeaders!["Set-Cookie"].ToArray();
+                await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "ws://") + "socket"), CancellationToken.None);
+                var headers = ((((socket).HttpResponseHeaders) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))["Set-Cookie"] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).ToArray();
                 Assert.That(headers.Length, Is.EqualTo(mode == HttpListenerMode.EmbedIO ? 3 : 2));
                 var auth = headers.Single(h => h.StartsWith("auth=", StringComparison.OrdinalIgnoreCase));
                 Assert.That(auth, Does.StartWith("auth=new;"));
@@ -55,8 +55,8 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(HasAttribute(auth, "HttpOnly"), Is.True);
                 Assert.That(HasAttribute(auth, "Secure"), Is.True);
                 var jar = new CookieContainer();
-                jar.SetCookies(new Uri(url.Replace("http://", "https://") + "socket"), auth);
-                Assert.That(jar.GetCookies(new Uri(url.Replace("http://", "https://") + "socket"))["auth"]!.Expires.ToUniversalTime(),
+                jar.SetCookies(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "https://") + "socket"), auth);
+                Assert.That((jar.GetCookies(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "https://") + "socket"))["auth"] ?? throw new AssertionException("Expected the auth cookie.")).Expires.ToUniversalTime(),
                     Is.InRange(DateTime.UtcNow.AddMinutes(58), DateTime.UtcNow.AddMinutes(61)));
                 var second = headers.Single(h => h.StartsWith("second=", StringComparison.Ordinal));
                 Assert.That(second, Does.StartWith("second=\"left,right\";"));
@@ -81,11 +81,11 @@ namespace EmbedIO.Tests.Issues
             {
                 socket.Options.Cookies = new CookieContainer();
                 socket.Options.Cookies.Add(new Uri(url), new Cookie("scoped", "old"));
-                await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "socket"), CancellationToken.None);
-                var headers = socket.HttpResponseHeaders!["Set-Cookie"].ToArray();
+                await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "ws://") + "socket"), CancellationToken.None);
+                var headers = ((((socket).HttpResponseHeaders) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))["Set-Cookie"] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).ToArray();
                 Assert.That(headers.Length, Is.EqualTo(2));
-                Assert.That(headers.Any(h => h.StartsWith("scoped=one;", StringComparison.Ordinal) && h.Contains("Path=/socket")), Is.True);
-                Assert.That(headers.Any(h => h.StartsWith("scoped=two;", StringComparison.Ordinal) && h.Contains("Path=/other")), Is.True);
+                Assert.That(headers.Any(h => h.StartsWith("scoped=one;", StringComparison.Ordinal) && (h.IndexOf("Path=/socket", System.StringComparison.Ordinal) >= 0)), Is.True);
+                Assert.That(headers.Any(h => h.StartsWith("scoped=two;", StringComparison.Ordinal) && (h.IndexOf("Path=/other", System.StringComparison.Ordinal) >= 0)), Is.True);
                 Assert.That(headers.All(h => HasAttribute(h, "HttpOnly")), Is.True);
             });
 

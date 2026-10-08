@@ -132,7 +132,7 @@ namespace EmbedIO.Tests.Issues
                             await context.Response.OutputStream.WriteAsync(payload, 0, payload.Length, writeStop.Token);
                     }
                     catch (OperationCanceledException) when (writeStop.IsCancellationRequested) { }
-                    catch (Exception error) { completed.TrySetException(error); }
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { completed.TrySetException(error); }
                     finally { completed.TrySetResult(); }
                 }))
                 .WithModule(new ActionModule("/health", HttpVerbs.Get, context => context.SendStringAsync("healthy", MimeType.PlainText, WebServer.Utf8NoBomEncoding)));

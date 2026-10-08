@@ -11,7 +11,7 @@ namespace EmbedIO.Tests
     {
         [TestCase("http://[::1]:8877")]
         [TestCase("http://127.0.0.1:8877")]
-        public async Task WithUseIpv6_ReturnsValid(string urlTest)
+        public async Task WithUseIpv6_ReturnsValid(string address)
         {
             if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
                 Assert.Ignore("Only Windows");
@@ -23,7 +23,7 @@ namespace EmbedIO.Tests
             if (runTask.IsCompleted) await runTask;
 
             using var client = new HttpClient();
-            Assert.IsNotEmpty(await client.GetStringAsync(urlTest));
+            Assert.IsNotEmpty(await client.GetStringAsync(address));
         }
 
         [Test]

@@ -20,8 +20,8 @@ namespace EmbedIO
         /// outside controlled local demonstrations. Account storage and authentication behavior are
         /// those of <see cref="BasicAuthenticationModule"/>. If configuration throws, no module is added.
         /// </remarks>
-        public static TContainer WithBasicAuthentication<TContainer>(this TContainer @this,
-            string baseRoute, Action<BasicAuthenticationModule> configure, string? realm = null)
+        public static TContainer WithBasicAuthentication<TContainer>(this TContainer? @this,
+            string baseRoute, Action<BasicAuthenticationModule>? configure, string? realm = null)
             where TContainer : class, IWebModuleContainer
         {
             if (configure == null)

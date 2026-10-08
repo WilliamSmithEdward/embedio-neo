@@ -14,7 +14,7 @@ namespace EmbedIO.Files
         /// <para>Occurs when a file or directory provided by this instance is modified or removed.</para>
         /// <para>The event's parameter is the provider-specific path of the resource that changed.</para>
         /// </summary>
-        event Action<string> ResourceChanged;
+        event Action<string>? ResourceChanged;
 
         /// <summary>
         /// Gets a value indicating whether the files and directories provided by this instance
@@ -31,13 +31,13 @@ namespace EmbedIO.Files
         /// <summary>
         /// Maps a URL path to a provider-specific path.
         /// </summary>
-        /// <param name="urlPath">The URL path.</param>
+        /// <param name="requestPath">The URL path.</param>
         /// <param name="mimeTypeProvider">An <see cref="IMimeTypeProvider"/> interface to use
         /// for determining the MIME type of a file.</param>
         /// <returns>A provider-specific path identifying a file or directory,
         /// or <see langword="null"/> if this instance cannot provide a resource associated
-        /// to <paramref name="urlPath"/>.</returns>
-        MappedResourceInfo? MapUrlPath(string urlPath, IMimeTypeProvider mimeTypeProvider);
+        /// to <paramref name="requestPath"/>.</returns>
+        MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider);
 
         /// <summary>
         /// Opens a file for reading.
@@ -46,7 +46,7 @@ namespace EmbedIO.Files
         /// <returns>
         /// <para>A readable <see cref="Stream"/> of the file's contents.</para>
         /// </returns>
-        Stream OpenFile(string path);
+        Stream? OpenFile(string path);
 
         /// <summary>
         /// Returns an enumeration of the entries of a directory.

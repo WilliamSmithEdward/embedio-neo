@@ -13,9 +13,9 @@ namespace EmbedIO.Security.Internal
 
         private ClientNetwork(byte[] bytes, int prefix) { _bytes = bytes; _prefix = prefix; }
 
-        internal static ClientNetwork Parse(string network)
+        internal static ClientNetwork Parse(string? network)
         {
-            if (string.IsNullOrWhiteSpace(network) || network.Trim() != network || network.Contains("%"))
+            if (network == null || string.IsNullOrWhiteSpace(network) || network.Trim() != network || network.IndexOf("%", StringComparison.Ordinal) >= 0)
                 throw new ArgumentException("Expected an IP literal or CIDR without a scope identifier.", nameof(network));
             var parts = network.Split('/');
             if (parts.Length > 2 || !IPAddress.TryParse(parts[0], out var address))
