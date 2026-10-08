@@ -45,6 +45,8 @@ jobs:
         run: |
           dotnet restore test/JsonMigrationProbe/JsonMigrationProbe.csproj --locked-mode
           dotnet run --project test/JsonMigrationProbe/JsonMigrationProbe.csproj -c Release -f net10.0 --no-restore > TestResults/json-migration-net10.log
+      - name: Compare pinned upstream EmbedIO with both Neo assets
+        run: python scripts/compatibility_audit.py
       - name: Verify JSON compatibility on .NET Framework
         if: runner.os == 'Windows'
         shell: bash

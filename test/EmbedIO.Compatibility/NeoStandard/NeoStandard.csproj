@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Program.cs" Link="Program.cs" />
+    <ProjectReference Include="../../../src/EmbedIO/EmbedIO.csproj" SetTargetFramework="TargetFramework=netstandard2.0" />
+    <!-- Exercise the pinned serializer package as well as the actual standard asset on this modern host. -->
+    <PackageReference Include="System.Text.Json" />
+  </ItemGroup>
+</Project>
