@@ -62,6 +62,10 @@ namespace EmbedIO.Net.Internal.Http2
                     RequireConnection();
                     if (length < 8) throw new Http2ProtocolException(6, "Invalid GOAWAY length.");
                     break;
+                case 16: // RFC 9218 PRIORITY_UPDATE
+                    RequireConnection();
+                    if (length < 4) throw new Http2ProtocolException(6, "Truncated priority-update identifier.");
+                    break;
                 case 8: // WINDOW_UPDATE
                     RequireLength(4);
                     break;

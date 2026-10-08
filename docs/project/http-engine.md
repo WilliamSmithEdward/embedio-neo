@@ -1519,3 +1519,37 @@ This state is prepared for scheduling; it does not yet change DATA transmission
 order. HTTP/2 signaling and a scheduler that keeps flow-blocked streams from
 stalling unrelated streams remain required, followed by mixed-workload performance
 measurements. No complete priority or extreme-performance claim is made.
+
+
+## HTTP/2 priority updates and stream ownership
+
+HTTP/2 PRIORITY_UPDATE now validates connection scope, the four-byte target,
+client request IDs and the same structured priority dictionary used by HTTP/3.
+The reserved target bit and undefined frame flags are ignored. Stream state
+exposes an atomic priority snapshot; a stored early update overrides request
+headers, later updates replace it, and locally finished responses ignore updates.
+The implementation does not promise server push, so even-numbered push targets
+are rejected as idle. Closed request targets are discarded using the existing
+stream high-water mark.
+
+Active streams plus idle prioritized targets cannot exceed the advertised stream
+limit. Repeated updates reuse an existing slot. Opening a higher request removes
+priority state for lower implicitly closed idle IDs; abort clears pending state.
+An update that exceeds the shared budget fails the connection. An unprioritized
+request that cannot fit is refused without evicting active or future-target state.
+
+Twelve registry cases and six real TCP/HTTP2 cases cover the new behavior; all
+61 focused registry/interoperability cases passed on Windows. The expanded
+126-case selection passed on both Linux assets and the actual netstandard asset
+on Windows. Both targets built without warnings/errors; formatting, analyzer
+guards and the pinned YARA scan passed. The full Windows suite passed 2,936
+cases with five expected skips (2,941 total; h2-priority-full log). Fresh exact-head
+CI remains required. DATA output
+scheduling and explicit legacy-priority settings negotiation remain unfinished.
+
+Transport investigation also confirmed that native QUIC stream priority is a
+.NET 11 addition ([runtime proposal](https://github.com/dotnet/runtime/issues/90281),
+[preview release notes](https://github.com/dotnet/core/blob/main/release-notes/11.0/preview/preview5/libraries.md)).
+This program retains .NET 10; it must not describe a managed write-admission policy
+as control over native QUIC packet scheduling. A scheduler must allow a flow-blocked
+stream's asynchronous write to remain pending while healthy streams progress.

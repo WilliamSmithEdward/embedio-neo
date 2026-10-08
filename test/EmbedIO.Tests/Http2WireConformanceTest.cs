@@ -46,6 +46,68 @@ namespace EmbedIO.Tests
             }
             throw new IOException("Expected frame did not arrive.");
         }
+        private static byte[] PriorityPayload(int target, string field)
+        {
+            var text = Encoding.ASCII.GetBytes(field); var payload = new byte[4 + text.Length];
+            payload[0] = (byte)(target >> 24); payload[1] = (byte)(target >> 16);
+            payload[2] = (byte)(target >> 8); payload[3] = (byte)target;
+            text.CopyTo(payload, 4); return payload;
+        }
+        [TestCase("zero-target", 1u)]
+        [TestCase("stream-frame", 1u)]
+        [TestCase("truncated", 6u)]
+        [TestCase("malformed", 1u)]
+        [TestCase("idle-budget", 1u)]
+        public async Task PriorityUpdateWireErrorsCloseTheConnection(string scenario, uint expected)
+        {
+            await WithRawServer(Array.Empty<byte>(), async (wire, token) =>
+            {
+                if (scenario == "idle-budget")
+                    for (var i = 0; i < 129; i++) await SendWire(wire, 16, 0, 0, PriorityPayload(i * 2 + 1, "u=1"), token);
+                else await SendWire(wire, 16, 0, scenario == "stream-frame" ? 1 : 0,
+                    scenario == "truncated" ? new byte[3] : PriorityPayload(scenario == "zero-target" ? 0 : 1, scenario == "malformed" ? "u=" : "i"), token);
+                var goaway = await Until(wire, 7, 0, token);
+                var code = ((uint)goaway.Payload[4] << 24) | ((uint)goaway.Payload[5] << 16) | ((uint)goaway.Payload[6] << 8) | goaway.Payload[7];
+                Assert.That(code, Is.EqualTo(expected));
+            }, expectedConnectionError: expected);
+        }
+        [Test]
+        public async Task PriorityUpdatesReachLiveExchangeAndOverrideHeaders()
+        {
+            var entered = new TaskCompletionSource<(int, bool)>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await WithRawServer(Array.Empty<byte>(), async (wire, token) =>
+            {
+                try
+                {
+                    await SendWire(wire, 16, 0, 0, PriorityPayload(1, "u=0,i"), token);
+                    var block = RequestBlock().Concat(new byte[] { 0, 8 }).Concat(Encoding.ASCII.GetBytes("priority"))
+                        .Concat(new byte[] { 3 }).Concat(Encoding.ASCII.GetBytes("u=7")).ToArray();
+                    await SendWire(wire, 1, 5, 1, block, token);
+                    Assert.That(await entered.Task.WaitAsync(token), Is.EqualTo((0, true)));
+                    await SendWire(wire, 16, 0, 0, PriorityPayload(1, ""), token);
+                    await SendWire(wire, 6, 0, 0, new byte[8], token);
+                    var pong = await Until(wire, 6, 0, token);
+                    Assert.That(pong.Flags & 1, Is.EqualTo(1));
+                    release.TrySetResult();
+                    Assert.That((await Until(wire, 0, 1, token)).Payload, Is.EqualTo(new byte[] { 3, 0 }));
+                }
+                finally { release.TrySetResult(); }
+            }, app: async exchange =>
+            {
+                var state = exchange.GetType().GetProperty("State", Flags)?.GetValue(exchange) ?? throw new AssertionException("Missing stream state.");
+                (int, bool) Read()
+                {
+                    var priority = Property<object>(state, "Priority");
+                    return (Property<int>(priority, "Urgency"), Property<bool>(priority, "Incremental"));
+                }
+                entered.TrySetResult(Read());
+                await release.Task.WaitAsync(Property<CancellationToken>(exchange, "CancellationToken"));
+                var current = Read();
+                await Respond(exchange, new byte[] { (byte)current.Item1, current.Item2 ? (byte)1 : (byte)0 });
+            });
+        }
+
         private static async Task RawEcho(object exchange)
         {
             if (Property<string>(Property<object>(exchange, "Request"), "Method") == "GET")

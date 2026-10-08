@@ -1,12 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
+using System.Threading;
 
 namespace EmbedIO.Net.Internal.Http2
 {
     internal sealed class Http2StreamState
     {
         internal Http2StreamState(int id, bool remoteEnded, Http2RequestHeaders headers)
-        { Id = id; RemoteEnded = remoteEnded; InitialEndStream = remoteEnded; RequestHeaders = headers; }
+        {
+            Id = id; RemoteEnded = remoteEnded; InitialEndStream = remoteEnded; RequestHeaders = headers;
+            HttpPriority.TryParse(headers.Headers["priority"] ?? "", out var priority);
+            SetPriority(priority);
+        }
+        private int _priority;
+        public HttpPriority Priority
+        { get { var value = Volatile.Read(ref _priority); return new HttpPriority(value & 7, (value & 8) != 0); } }
+        internal void SetPriority(HttpPriority value) => Volatile.Write(ref _priority, value.Urgency | (value.Incremental ? 8 : 0));
         public Http2RequestHeaders RequestHeaders { get; }
         public bool InitialEndStream { get; }
         public int Id { get; }
@@ -23,6 +33,7 @@ namespace EmbedIO.Net.Internal.Http2
     {
         private readonly object _sync = new();
         private readonly Dictionary<int, Http2StreamState> _active = new();
+        private readonly Dictionary<int, HttpPriority> _priorities = new();
         private readonly int _maximum;
         private int _highest;
         private bool _stopped;
@@ -33,6 +44,7 @@ namespace EmbedIO.Net.Internal.Http2
             _maximum = maximum;
         }
         public int ActiveCount { get { lock (_sync) return _active.Count; } }
+        public int PendingPriorityCount { get { lock (_sync) return _priorities.Count; } }
         public int LastStreamId { get { lock (_sync) return _highest; } }
 
         internal Http2StreamState? Receive(Http2Frame frame)
@@ -42,6 +54,7 @@ namespace EmbedIO.Net.Internal.Http2
                 if (_stopped) throw new ObjectDisposedException(nameof(Http2StreamRegistry));
                 frame.ValidateShape();
                 if (frame.Type == 5) throw new Http2ProtocolException(1, "Clients cannot send PUSH_PROMISE.");
+                if (frame.Type == 16) { UpdatePriority(frame); return null; }
                 if (frame.Type == 2)
                 {
                     if ((Http2PeerSettings.ReadUInt32(frame.Payload, 0) & 0x7fffffff) == frame.StreamId)
@@ -57,9 +70,19 @@ namespace EmbedIO.Net.Internal.Http2
                     {
                         if (block.StreamId <= _highest) return null;
                         _highest = block.StreamId;
-                        if (_active.Count >= _maximum) throw new Http2ProtocolException(7, "Concurrent stream limit exceeded.", block.StreamId);
+                        var prioritized = _priorities.TryGetValue(block.StreamId, out var priority);
+                        // Opening a higher client stream implicitly closes lower
+                        // idle IDs, including their retained advisory signals.
+                        if (_priorities.Count != 0)
+                        {
+                            var closed = new List<int>();
+                            foreach (var id in _priorities.Keys) if (id <= _highest) closed.Add(id);
+                            foreach (var id in closed) _priorities.Remove(id);
+                        }
+                        if (_active.Count + _priorities.Count >= _maximum) throw new Http2ProtocolException(7, "Concurrent stream limit exceeded.", block.StreamId);
                         if (block.StreamError != 0) throw new Http2ProtocolException(block.StreamError, "Invalid stream headers.", block.StreamId);
                         stream = new Http2StreamState(block.StreamId, block.EndStream, Http2RequestHeaders.Parse(block, ExtendedConnectEnabled));
+                        if (prioritized) stream.SetPriority(priority);
                         _active.Add(block.StreamId, stream);
                         return stream;
                     }
@@ -93,6 +116,23 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
+        private void UpdatePriority(Http2Frame frame)
+        {
+            var id = (int)(Http2PeerSettings.ReadUInt32(frame.Payload, 0) & 0x7fffffff);
+            // This server has never opened a push stream: an even target is idle.
+            if (id == 0 || (id & 1) == 0) throw new Http2ProtocolException(1, "Invalid priority-update target.");
+            for (var i = 4; i < frame.Payload.Length; i++)
+                if (frame.Payload[i] > 127) throw new Http2ProtocolException(1, "Priority field is not ASCII.");
+            if (!HttpPriority.TryParse(Encoding.ASCII.GetString(frame.Payload, 4, frame.Payload.Length - 4), out var priority))
+                throw new Http2ProtocolException(1, "Malformed priority dictionary.");
+            if (_active.TryGetValue(id, out var stream))
+            { if (!stream.LocalEnded) stream.SetPriority(priority); return; }
+            if (id <= _highest) return;
+            if (!_priorities.ContainsKey(id) && _active.Count + _priorities.Count >= _maximum)
+                throw new Http2ProtocolException(1, "Idle priority targets and active streams exceed the concurrency limit.");
+            _priorities[id] = priority;
+        }
+
         internal void EndLocal(int id)
         {
             lock (_sync)
@@ -120,6 +160,7 @@ namespace EmbedIO.Net.Internal.Http2
                 _stopped = true;
                 foreach (var stream in _active.Values) stream.Reset = true;
                 _active.Clear();
+                _priorities.Clear();
             }
         }
 
