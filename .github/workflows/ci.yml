@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -36,7 +36,19 @@ jobs:
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=false
       - name: Run the regression suite with coverage
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 2083 --coverlet
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 2092 --coverlet
+      - name: Verify independent HPACK interoperability
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 -m venv "$RUNNER_TEMP/hpack-venv"
+          "$RUNNER_TEMP/hpack-venv/bin/python" -m pip --isolated install --require-hashes --only-binary=:all: -r test/EmbedIO.Fuzz/hpack-requirements.txt
+          "$RUNNER_TEMP/hpack-venv/bin/python" test/EmbedIO.Fuzz/hpack_interop.py generate unused TestResults/hpack-independent.jsonl
+          dotnet restore test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj --locked-mode
+          dotnet run --project test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj -c Release --no-restore -- --hpack-corpus TestResults/hpack-independent.jsonl TestResults/hpack-ours.jsonl
+          "$RUNNER_TEMP/hpack-venv/bin/python" test/EmbedIO.Fuzz/hpack_interop.py verify TestResults/hpack-independent.jsonl TestResults/hpack-ours.jsonl
       - name: Verify ZIP concurrency with a constrained worker pool
         env:
           DOTNET_PROCESSOR_COUNT: 2

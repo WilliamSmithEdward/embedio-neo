@@ -320,3 +320,10 @@ These rules are the same in every WilliamSmithEdward repository.
   never-indexed flags and poisons failed state. RFC7541 tables attributed in LICENSE.
   Combined discovery floor2083. Encoder, independent differential tests and actual
   HTTP2 negotiation/frame/stream integration remain pending. No HTTP2 support claim.
+
+- Encoder checkpoint adds dynamic indexing, sensitive-header protection, table
+  updates and Huffman selection;58 focused compression cases pass. Bidirectional
+  independent corpus1200 blocks passed against hash-pinned test-only hpack4.1.0.
+  CI Linux probe added; ordinary test floor2092. Initial probe import build error
+  retained then corrected. No HTTP2 transport yet. Next: frame reader/writer and
+  stream/connection ownership, followed by independent real HTTP2 clients.

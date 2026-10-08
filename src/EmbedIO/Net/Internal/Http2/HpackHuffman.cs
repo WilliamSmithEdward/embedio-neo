@@ -157,6 +157,35 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
+        internal static int EncodedLength(string input)
+        {
+            long bits = 0;
+            foreach (var value in input)
+            {
+                if (value > 255) throw new ArgumentException("HPACK fields must contain octets.", nameof(input));
+                bits += Lengths[value];
+            }
+            return checked((int)((bits + 7) / 8));
+        }
+
+        internal static void EncodeString(Stream destination, string input)
+        {
+            ulong pending = 0;
+            var bits = 0;
+            foreach (var value in input)
+            {
+                if (value > 255) throw new ArgumentException("HPACK fields must contain octets.", nameof(input));
+                pending = (pending << Lengths[value]) | Codes[value];
+                bits += Lengths[value];
+                while (bits >= 8)
+                {
+                    bits -= 8;
+                    destination.WriteByte((byte)(pending >> bits));
+                }
+            }
+            if (bits > 0) destination.WriteByte((byte)((pending << (8 - bits)) | ((1u << (8 - bits)) - 1)));
+        }
+
         internal static void Encode(Stream destination, byte[] input)
         {
             if (destination == null) throw new ArgumentNullException(nameof(destination));

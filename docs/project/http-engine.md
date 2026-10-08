@@ -192,3 +192,22 @@ This is not HTTP/2 listener support. The encoder, broader independent compressio
 vectors, frame/stream state machines, negotiation and actual client integration
 remain to be implemented and tested. New source requires fresh full/remote checks;
 the first increment's green result does not certify these changes.
+
+
+The encoder now supports dynamic indexing and Huffman selection, retains the
+smallest pending table-size reduction, and never indexes credentials or cookies.
+Fifty-eight focused compression cases pass. A separate deterministic probe checks
+1,200 independently generated blocks in each direction against Python hpack 4.1.0,
+including table changes, arbitrary octets and sensitive headers. The dependency
+is test-only, wheel-hash pinned in `test/EmbedIO.Fuzz/hpack-requirements.txt`; Linux
+CI runs the probe without adding any production dependency. The initial probe
+build failed from missing namespace imports; the corrected run passed. This
+evidence covers compression interoperability, not HTTP/2 transport or conformance.
+
+To reproduce, create an isolated Python virtual environment and install that
+requirements file with `pip --isolated install --require-hashes --only-binary=:all:`.
+Run `hpack_interop.py generate unused <input.jsonl>`, the .NET fuzz project with
+`--hpack-corpus <input.jsonl> <output.jsonl>`, then
+`hpack_interop.py verify <input.jsonl> <output.jsonl>`. Both files retain all blocks
+in connection order, and any mismatch fails the process. Logs and corpora belong
+under ignored TestResults. HTTP/2 frame/stream integration is the next increment.
