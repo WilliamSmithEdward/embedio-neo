@@ -46,7 +46,7 @@ this development goal unless separately authorized.
 | HTTP semantics | RFC 9110; methods, status, authority, informational responses, headers and trailers | Existing application layer; full conformance audit pending |
 | HTTP/1.1 | RFC 9112; incremental parsing, fixed/chunked bodies, pipelines, persistence, bounded input and errors | First implementation under test |
 | HTTP/2 | RFC 9113; TLS/ALPN, prior knowledge, HPACK (RFC 7541), multiplexed streams, flow control, SETTINGS, GOAWAY and reset | Implemented incrementally; listener integration under validation |
-| HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Wire primitives implemented; QUIC listener, QPACK and connection state pending |
+| HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Wire/control primitives and QPACK field codecs implemented; QUIC listener and connection coordination pending |
 | WebSockets | Existing RFC 6455 plus extended CONNECT over HTTP/2 (RFC 8441) and HTTP/3 (RFC 9220) | HTTP/1.1 existing; HTTP/2 initial integration tested locally; HTTP/3 planned |
 | Extensions | Priorities (RFC 9218), HTTP datagrams/capsules (RFC 9297), discovery/Alt-Svc, current registered extensions and errata | Inventory and applicability review pending |
 | Security/resource control | Framing ambiguity, input limits, slow readers/writers, cancellation, compression expansion and multiplexed-stream abuse | First framing work under test; broad abuse tests pending |
@@ -613,3 +613,23 @@ JSON fixture cases then passed unchanged. The first failure and both recheck log
 are retained as qpack-full*, qpack-json-recheck* and qpack-full-recheck*. This does
 not claim that the test port-allocation race was repaired. Pinned YARA-X/full
 Forge rules reported no matches in the five new QPACK decoder source/test files.
+
+
+### QPACK stateless response encoding
+
+A stateless encoder now emits static indices, static-name literals and literal
+names/values with Huffman coding when it saves bytes. It retains explicit
+never-indexed markers and treats authorization, proxy-authorization, cookie and
+set-cookie as sensitive. Exact/static-name dictionaries avoid rescanning the
+static table for each output field. It checks decoded budgets before encoding
+and encoded budgets before each field write. Required Insert Count and Base are
+zero, so this output works with zero-capacity peers and never blocks on inserts.
+Dynamic response-table compression remains future performance work; this is not
+an extreme-performance measurement or complete connection implementation.
+
+All 162 HTTP/3 cases pass against both target assemblies. Bidirectional interop
+with pinned pylsqpack 0.3.24 matched 1,200 sections in each direction on each
+assembly: ls-qpack also decoded every locally generated section with zero dynamic
+capacity and zero permitted blocked streams. Solution builds and suppression
+guards pass. The discovery floor is 2,636; the full 2,623-case decoder-increment
+run above predates these 13 encoder cases. Fresh exact-head CI remains required.
