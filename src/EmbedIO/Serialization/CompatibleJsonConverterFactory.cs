@@ -18,12 +18,14 @@ namespace EmbedIO.Serialization
             foreach (var converter in options.Converters)
             {
                 if (converter is CompatibleJsonConverterFactory || !converter.CanConvert(typeToConvert)) continue;
-                return converter is JsonConverterFactory factory ? factory.CreateConverter(typeToConvert, options)! : converter;
+                return converter is JsonConverterFactory factory
+                    ? factory.CreateConverter(typeToConvert, options) ?? throw new InvalidOperationException("The converter factory returned null.")
+                    : converter;
             }
             if (typeToConvert == typeof(bool)) return new BooleanConverter();
             if (typeToConvert == typeof(DateTime)) return new DateTimeConverter();
             if (typeToConvert == typeof(DateTimeOffset)) return new DateTimeOffsetConverter();
-            return (JsonConverter)Activator.CreateInstance(typeof(EnumConverter<>).MakeGenericType(typeToConvert))!;
+            return (JsonConverter)(Activator.CreateInstance(typeof(EnumConverter<>).MakeGenericType(typeToConvert)) ?? throw new InvalidOperationException("The enum converter could not be created."));
         }
 
         private sealed class BooleanConverter : JsonConverter<bool>
@@ -46,8 +48,8 @@ namespace EmbedIO.Serialization
                 if (reader.TokenType == JsonTokenType.String && Enum.TryParse<T>(reader.GetString(), out var value)) return value;
                 if (reader.TokenType == JsonTokenType.Number)
                 {
-                    var number = JsonSerializer.Deserialize(ref reader, Enum.GetUnderlyingType(typeof(T)), options)!;
-                    return (T)Enum.ToObject(typeof(T), number);
+                    var number = JsonSerializer.Deserialize(ref reader, Enum.GetUnderlyingType(typeof(T)), options);
+                    return (T)Enum.ToObject(typeof(T), number ?? throw new JsonException("Expected an enum number."));
                 }
                 throw new JsonException("Expected an enum name or number.");
             }

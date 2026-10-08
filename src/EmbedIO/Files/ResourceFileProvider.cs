@@ -30,7 +30,7 @@ namespace EmbedIO.Files
         }
 
         /// <inheritdoc />
-        public event Action<string> ResourceChanged
+        public event Action<string>? ResourceChanged
         {
             add { }
             remove { }
@@ -55,9 +55,11 @@ namespace EmbedIO.Files
         }
 
         /// <inheritdoc />
-        public MappedResourceInfo? MapUrlPath(string urlPath, IMimeTypeProvider mimeTypeProvider)
+        public MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider)
         {
-            var resourceName = PathPrefix + urlPath.Replace('/', '.');
+            if (requestPath is null) throw new System.NullReferenceException();
+            if (mimeTypeProvider is null) throw new System.NullReferenceException();
+            var resourceName = PathPrefix + requestPath.Replace('/', '.');
 
             long size;
             try
@@ -73,8 +75,8 @@ namespace EmbedIO.Files
                 return null;
             }
 
-            var lastSlashPos = urlPath.LastIndexOf('/');
-            var name = urlPath.Substring(lastSlashPos + 1);
+            var lastSlashPos = requestPath.LastIndexOf('/');
+            var name = requestPath.Substring(lastSlashPos + 1);
 
             return MappedResourceInfo.ForFile(
                 resourceName,
@@ -85,7 +87,7 @@ namespace EmbedIO.Files
         }
 
         /// <inheritdoc />
-        public Stream OpenFile(string path) => Assembly.GetManifestResourceStream(path);
+        public Stream? OpenFile(string path) => Assembly.GetManifestResourceStream(path);
 
         /// <inheritdoc />
         public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider)

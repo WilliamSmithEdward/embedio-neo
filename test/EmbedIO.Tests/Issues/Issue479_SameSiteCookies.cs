@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -61,9 +61,9 @@ namespace EmbedIO.Tests.Issues
             socket.Options.CollectHttpResponseDetails = true;
             try
             {
-                await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "socket"), CancellationToken.None)
+                await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "ws://") + "socket"), CancellationToken.None)
                     .WaitAsync(TimeSpan.FromSeconds(10));
-                Assert.That(socket.HttpResponseHeaders!["Set-Cookie"].ToArray(), Is.EqualTo(new[] { cookie }));
+                Assert.That(((((socket).HttpResponseHeaders) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))["Set-Cookie"] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).ToArray(), Is.EqualTo(new[] { cookie }));
                 await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
                     .WaitAsync(TimeSpan.FromSeconds(10));
             }
@@ -80,8 +80,8 @@ namespace EmbedIO.Tests.Issues
             => UseHttp(mode, c =>
             {
                 c.Response.SetCookie(new Cookie("entry", "one", "/before") { Secure = policy == CookieSameSiteMode.None }, policy);
-                var stored = c.Response.Cookies["entry"]!;
-                stored.Path = "/changed";
+                var stored = c.Response.Cookies["entry"];
+                (stored ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Path = "/changed";
                 stored.Value = "two";
                 stored.HttpOnly = true;
             }, headers =>
@@ -101,7 +101,7 @@ namespace EmbedIO.Tests.Issues
             {
                 Assert.Throws<ArgumentException>(() => c.Response.SetCookie(new Cookie("bad", "one"), CookieSameSiteMode.None));
                 Assert.Throws<ArgumentOutOfRangeException>(() => c.Response.SetCookie(new Cookie("bad", "one"), (CookieSameSiteMode)99));
-                Assert.Throws<ArgumentNullException>(() => c.Response.SetCookie(null!, CookieSameSiteMode.Lax));
+                Assert.Throws<ArgumentNullException>(() => c.Response.SetCookie(null, CookieSameSiteMode.Lax));
                 Assert.That(c.Response.Cookies.Count, Is.Zero);
                 c.Response.SetCookie(new Cookie("healthy", "yes"), CookieSameSiteMode.Lax);
             }, headers => Assert.That(headers.Single(), Does.StartWith("healthy=yes;")));
@@ -207,9 +207,9 @@ namespace EmbedIO.Tests.Issues
             socket.Options.CollectHttpResponseDetails = true;
             try
             {
-                await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "socket"), CancellationToken.None)
+                await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "ws://") + "socket"), CancellationToken.None)
                     .WaitAsync(TimeSpan.FromSeconds(10));
-                var header = socket.HttpResponseHeaders!["Set-Cookie"].Single();
+                var header = ((((socket).HttpResponseHeaders) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))["Set-Cookie"] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Single();
                 Assert.That(header, Does.Contain("; SameSite=" + policy));
                 Assert.That(header, Does.Contain("; HttpOnly"));
                 Assert.That(header.Contains("; Secure", StringComparison.Ordinal), Is.EqualTo(policy == CookieSameSiteMode.None));
@@ -293,7 +293,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(header, Does.Not.Contain("Max-Age=0"));
                 var jar = new CookieContainer();
                 jar.SetCookies(new Uri("http://localhost/"), header);
-                Assert.That(jar.GetCookies(new Uri("http://localhost/"))["future"]!.Expires.Year, Is.EqualTo(2099));
+                Assert.That((((jar.GetCookies(new Uri("http://localhost/"))))["future"] ?? throw new AssertionException("Expected the future cookie.")).Expires.Year, Is.EqualTo(2099));
             });
 
         private static async Task UseHttp(HttpListenerMode mode, Action<IHttpContext> configure, Action<string[]> check)

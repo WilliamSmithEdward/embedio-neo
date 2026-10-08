@@ -37,7 +37,7 @@
         /// <summary>
         /// Dynamic database.
         /// </summary>
-        public dynamic Data { get; } = null!;
+        public dynamic? Data { get; } = null;
 
         /// <summary>
         /// Default JSON file path.
@@ -55,7 +55,18 @@
         /// <summary>
         /// Releases synchronization resources after all requests have completed.
         /// </summary>
-        public void Dispose() => _dataLock.Dispose();
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>Releases resources owned by the module.</summary>
+        /// <param name="disposing">Whether managed resources should be released.</param>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposing) _dataLock.Dispose();
+        }
 
         /// <summary>
         /// Updates JSON file in disk.
@@ -78,12 +89,13 @@
             if (string.IsNullOrWhiteSpace(JsonPath))
                 return;
 
-            File.WriteAllText(JsonPath, Json.Serialize((object)Data, true));
+            File.WriteAllText(JsonPath, Json.Serialize((object?)Data, true));
         }
 
         /// <inheritdoc />
         protected override async Task OnRequestAsync(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             await _dataLock.WaitAsync(context.CancellationToken).ConfigureAwait(false);
             try
             {
@@ -98,11 +110,11 @@
         private Task ProcessRequestAsync(IHttpContext context)
         {
             if (context.RequestedPath == "/")
-                return context.SendDataAsync((object)Data);
+                return context.SendDataAsync((object?)Data);
 
             var parts = context.RequestedPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
 
-            var database = (IDictionary<string, object>)(object)Data;
+            var database = (IDictionary<string, object>?)(object?)Data;
             if (database == null || !database.TryGetValue(parts[0], out var table))
                 throw HttpException.NotFound();
 
@@ -144,7 +156,7 @@
 
         private async Task AddRow(IHttpContext context, object table)
         {
-            var array = (IList<object>)table;
+            var array = (IList<object?>)table;
             array.Add(await context.GetRequestDataAsync<object>().ConfigureAwait(false));
             PersistDataStore();
         }
@@ -158,7 +170,8 @@
 
         private async Task UpdateRow(IHttpContext context, IDictionary<string, object> row)
         {
-            var update = await context.GetRequestDataAsync<Dictionary<string, object>>().ConfigureAwait(false);
+            var update = await context.GetRequestDataAsync<Dictionary<string, object>>().ConfigureAwait(false)
+                ?? throw new NullReferenceException("The JSON update body is null.");
 
             foreach (var property in update)
             {

@@ -10,9 +10,10 @@ namespace EmbedIO.Net.Internal
     {
         private static readonly byte[] CrLf = { 13, 10 };
         private readonly object _headersSyncRoot = new();
-        private readonly SemaphoreSlim _asyncWriteLock = new(1, 1);
+        private readonly EmbedIO.Internal.AsyncWriteGate _asyncWriteLock = new();
 
-        private readonly Stream _stream;
+        private readonly EmbedIO.Internal.BorrowedResource<Stream> _transport;
+        private Stream _stream => _transport.Value;
         private readonly HttpListenerResponse _response;
         private readonly bool _ignoreErrors;
         private bool _disposed;
@@ -22,7 +23,7 @@ namespace EmbedIO.Net.Internal
         {
             _response = response;
             _ignoreErrors = ignoreErrors;
-            _stream = stream;
+            _transport = new EmbedIO.Internal.BorrowedResource<Stream>(stream);
         }
 
         /// <inheritdoc />
@@ -69,16 +70,9 @@ namespace EmbedIO.Net.Internal
         {
             // Stream's inherited async fallback serialized writes. Preserve that ordering
             // without retaining a worker thread while waiting for transport backpressure.
-            await _asyncWriteLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                ValidateWrite(buffer, offset, count);
-                await WriteAsyncLocked(buffer, offset, count, cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                _asyncWriteLock.Release();
-            }
+            using var scope = await _asyncWriteLock.EnterAsync(cancellationToken).ConfigureAwait(false);
+            ValidateWrite(buffer, offset, count);
+            await WriteAsyncLocked(buffer, offset, count, cancellationToken).ConfigureAwait(false);
         }
 
         private async Task WriteAsyncLocked(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -179,7 +173,7 @@ namespace EmbedIO.Net.Internal
                 {
                     _stream.Write(buffer, offset, count);
                 }
-                catch
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
                 {
                     // ignored
                 }
@@ -200,7 +194,7 @@ namespace EmbedIO.Net.Internal
             {
                 throw;
             }
-            catch when (_ignoreErrors)
+            catch (Exception error) when (_ignoreErrors && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
                 // Preserve IgnoreWriteExceptions, but never suppress caller cancellation.
             }
@@ -234,6 +228,7 @@ namespace EmbedIO.Net.Internal
                 return;
             }
 
+            _asyncWriteLock.Dispose();
             using var ms = GetHeaders(true);
             var chunked = _response.SendChunked;
 

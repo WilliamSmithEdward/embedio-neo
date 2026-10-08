@@ -27,8 +27,8 @@ namespace EmbedIO.Diagnostics
             // Keep observers' original text for security criteria, but prevent
             // request-derived CR/LF from creating forged trace records.
             Source.TraceEvent(level, 0, "[{0}] {1}",
-                source.Replace("\r", "\\r").Replace("\n", "\\n"),
-                message.Replace("\r", "\\r").Replace("\n", "\\n"));
+                EmbedIO.Internal.StringOperations.ReplaceOrdinal(EmbedIO.Internal.StringOperations.ReplaceOrdinal(source, "\r", "\\r"), "\n", "\\n"),
+                EmbedIO.Internal.StringOperations.ReplaceOrdinal(EmbedIO.Internal.StringOperations.ReplaceOrdinal(message, "\r", "\\r"), "\n", "\\n"));
         }
     }
 

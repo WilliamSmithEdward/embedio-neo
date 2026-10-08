@@ -20,12 +20,13 @@ namespace EmbedIO.Net.Internal
         /// <param name="context">The context.</param>
         public SystemHttpRequest(System.Net.HttpListenerContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             _request = context.Request;
             _ = Enum.TryParse<HttpVerbs>(_request.HttpMethod.Trim(), true, out var verb);
             HttpVerb = verb;
             Cookies = new SystemCookieCollection(_request.Cookies);
-            LocalEndPoint = _request.LocalEndPoint!;
-            RemoteEndPoint = _request.RemoteEndPoint!;
+            LocalEndPoint = _request.LocalEndPoint;
+            RemoteEndPoint = _request.RemoteEndPoint;
         }
 
         /// <inheritdoc />
@@ -41,7 +42,7 @@ namespace EmbedIO.Net.Internal
         public ICookieCollection Cookies { get; }
 
         /// <inheritdoc />
-        public string RawUrl => _request.RawUrl;
+        public string RawTarget => _request.RawUrl ?? throw new InvalidOperationException("The accepted request has no URL.");
 
         /// <inheritdoc />
         public NameValueCollection QueryString => _request.QueryString;
@@ -53,7 +54,7 @@ namespace EmbedIO.Net.Internal
         public HttpVerbs HttpVerb { get; }
 
         /// <inheritdoc />
-        public Uri Url => _request.Url;
+        public Uri Url => _request.Url ?? throw new InvalidOperationException("The accepted request has no URL.");
 
         /// <inheritdoc />
         public bool HasEntityBody => _request.HasEntityBody;
@@ -98,7 +99,7 @@ namespace EmbedIO.Net.Internal
         public bool IsLocal => _request.IsLocal;
 
         /// <inheritdoc />
-        public string UserAgent => _request.UserAgent;
+        public string? UserAgent => _request.UserAgent;
 
         /// <inheritdoc />
         public bool IsWebSocketRequest => _request.IsWebSocketRequest;
@@ -107,7 +108,7 @@ namespace EmbedIO.Net.Internal
         public IPEndPoint LocalEndPoint { get; }
 
         /// <inheritdoc />
-        public string ContentType => _request.ContentType;
+        public string? ContentType => _request.ContentType;
 
         /// <inheritdoc />
         public long ContentLength64 => _request.ContentLength64;

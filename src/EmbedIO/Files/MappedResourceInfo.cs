@@ -63,7 +63,7 @@ namespace EmbedIO.Files
         /// <param name="size">The length of the file, expressed in bytes.</param>
         /// <param name="contentType">A MIME type describing the kind of contents of the file.</param>
         /// <returns>A newly-constructed instance of <see cref="MappedResourceInfo"/>.</returns>
-        public static MappedResourceInfo ForFile(string path, string name, DateTime lastModifiedUtc, long size, string contentType)
+        public static MappedResourceInfo ForFile(string path, string name, DateTime lastModifiedUtc, long size, string? contentType)
             => new MappedResourceInfo(path, name, lastModifiedUtc, size, contentType ?? MimeType.Default);
 
         /// <summary>

@@ -42,9 +42,15 @@ public sealed class SmokeApp : Application
 
     private object Report() => new
     {
-        passed = _phase == "passed", phase = _phase, checks = _checks, error = _error,
-        os = Environment.OSVersion.ToString(), runtime = Environment.Version.ToString(),
-        platform = DeviceInfo.Platform.ToString(), pid = Environment.ProcessId, events = _events.ToArray(),
+        passed = _phase == "passed",
+        phase = _phase,
+        checks = _checks,
+        error = _error,
+        os = Environment.OSVersion.ToString(),
+        runtime = Environment.Version.ToString(),
+        platform = DeviceInfo.Platform.ToString(),
+        pid = Environment.ProcessId,
+        events = _events.ToArray(),
     };
 
     private void WriteReport()
@@ -159,7 +165,7 @@ public sealed class SmokeApp : Application
             WriteReport();
             Environment.Exit(0);
         }
-        catch (Exception error)
+        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
         {
             _error = error.ToString();
             _phase = "failed";

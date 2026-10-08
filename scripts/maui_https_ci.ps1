@@ -15,7 +15,7 @@ switch ($Stage) {
         $restoreMode = if ($env:UPDATE_LOCKS -eq 'true') { '--force-evaluate' } else { '--locked-mode' }
         dotnet restore test/EmbedIO.MauiHttpsSmoke/EmbedIO.MauiHttpsSmoke.csproj "-p:SmokePlatform=$env:SMOKE_PLATFORM" $restoreMode
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        dotnet build test/EmbedIO.MauiHttpsSmoke/EmbedIO.MauiHttpsSmoke.csproj "-p:SmokePlatform=$env:SMOKE_PLATFORM" -c Debug --no-restore -p:RunAnalyzers=false
+        dotnet build test/EmbedIO.MauiHttpsSmoke/EmbedIO.MauiHttpsSmoke.csproj "-p:SmokePlatform=$env:SMOKE_PLATFORM" -c Debug --no-restore -p:RunAnalyzers=true
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     'run' {

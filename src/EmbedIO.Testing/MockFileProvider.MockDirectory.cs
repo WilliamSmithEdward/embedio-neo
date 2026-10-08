@@ -11,7 +11,7 @@ namespace EmbedIO.Testing
 
             public IEnumerator<KeyValuePair<string, MockDirectoryEntry>> GetEnumerator() => _entries.GetEnumerator();
 
-            IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable) _entries).GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable)_entries).GetEnumerator();
 
             public void Add(KeyValuePair<string, MockDirectoryEntry> item) => (_entries as ICollection<KeyValuePair<string, MockDirectoryEntry>>).Add(item);
 
@@ -37,7 +37,11 @@ namespace EmbedIO.Testing
 
             public bool Remove(string key) => _entries.Remove(key);
 
-            public bool TryGetValue(string key, out MockDirectoryEntry value) => _entries.TryGetValue(key, out value);
+            public bool TryGetValue(string key,
+#if NET10_0
+                [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)]
+#endif
+                out MockDirectoryEntry value) => _entries.TryGetValue(key, out value);
 
             public MockDirectoryEntry this[string key]
             {

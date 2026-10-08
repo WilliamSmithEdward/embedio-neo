@@ -77,7 +77,7 @@ namespace EmbedIO.Tests.Issues
             }
             else Assert.That(response.Headers.TransferEncodingChunked, Is.True);
             using var json = await fixture.Client.GetAsync(fixture.Url + "api/status");
-            Assert.That(json.Content.Headers.ContentType!.MediaType, Is.EqualTo("application/json"));
+            Assert.That(((json).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo("application/json"));
             Assert.That(await json.Content.ReadAsStringAsync(), Is.EqualTo("{\"status\":\"ok\"}"));
         }
 

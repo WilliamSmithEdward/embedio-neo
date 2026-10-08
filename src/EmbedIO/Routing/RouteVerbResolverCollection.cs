@@ -63,7 +63,8 @@ namespace EmbedIO.Routing
         /// will count as one for each attribute.</para>
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
-        public int AddFrom(object target) => Validate.NotNull(nameof(target), target) switch {
+        public int AddFrom(object target) => Validate.NotNull(nameof(target), target) switch
+        {
             Type type => AddFrom(null, type),
             Assembly assembly => assembly.GetExportedTypes().Sum(t => AddFrom(null, t)),
             MethodInfo method => method.IsStatic ? Add(null, method) : 0,

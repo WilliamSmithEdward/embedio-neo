@@ -40,16 +40,15 @@ namespace EmbedIO.Security
         /// <inheritdoc />
         public Task<bool> ValidateIPAddress(IPAddress address)
         {
-            var attempts = Requests.GetOrAdd(address, _ => new List<long>());
             var requestedAt = DateTime.Now.Ticks;
             while (true)
             {
+                var attempts = Requests.GetOrAdd(address, _ => new List<long>());
                 lock (attempts)
                 {
                     // A purge or explicit reset may remove this history while we wait.
                     if (!Requests.TryGetValue(address, out var current) || !ReferenceEquals(current, attempts))
                     {
-                        attempts = Requests.GetOrAdd(address, _ => new List<long>());
                         continue;
                     }
 
@@ -104,6 +103,8 @@ namespace EmbedIO.Security
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>Releases resources owned by the criterion.</summary>
+        /// <param name="disposing">Whether managed resources should be released.</param>
         protected virtual void Dispose(bool disposing)
         {
             if (_disposed) return;

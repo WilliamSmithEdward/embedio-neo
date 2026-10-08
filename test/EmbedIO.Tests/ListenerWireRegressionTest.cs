@@ -13,11 +13,11 @@ namespace EmbedIO.Tests
     public class ListenerWireRegressionTest
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static readonly Type ConnectionType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true)!;
-        private static readonly Func<int, bool, byte[]> Chunk = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.ResponseStream", true)!
-            .GetMethod("GetChunkSizeBytes", BindingFlags.Static | BindingFlags.NonPublic)!.CreateDelegate<Func<int, bool, byte[]>>();
-        private static readonly Func<string?, string?> Charset = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HeaderUtility", true)!
-            .GetMethod("GetCharset")!.CreateDelegate<Func<string?, string?>>();
+        private static readonly Type ConnectionType = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static readonly Func<int, bool, byte[]> Chunk = ((((typeof(WebServer)).Assembly.GetType("EmbedIO.Net.Internal.ResponseStream", true)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
+            .GetMethod("GetChunkSizeBytes", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CreateDelegate<Func<int, bool, byte[]>>();
+        private static readonly Func<string?, string?> Charset = ((((typeof(WebServer)).Assembly.GetType("EmbedIO.Net.Internal.HeaderUtility", true)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
+            .GetMethod("GetCharset") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).CreateDelegate<Func<string?, string?>>();
 
         [TestCaseSource(nameof(ChunkCases))]
         public void ChunkBytesMatchLegacyFormatAcrossCultures(int size, bool final)
@@ -65,11 +65,11 @@ namespace EmbedIO.Tests
         {
             using var output = new MemoryStream();
             var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
-            ConnectionType.GetField("_connectionSync", PrivateInstance)!.SetValue(connection, new object());
-            ConnectionType.GetField("<Stream>k__BackingField", PrivateInstance)!.SetValue(connection, output);
-            ConnectionType.GetMethod("Init", PrivateInstance)!.Invoke(connection, null);
-            var context = (IHttpContext)ConnectionType.GetField("_context", PrivateInstance)!.GetValue(connection)!;
-            context.Response.SendChunked = true;
+            ((ConnectionType).GetField("_connectionSync", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, new object());
+            ((ConnectionType).GetField("<Stream>k__BackingField", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, output);
+            ((ConnectionType).GetMethod("Init", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
+            var context = (IHttpContext)((((ConnectionType).GetField("_context", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            (context).Response.SendChunked = true;
             var stream = context.Response.OutputStream;
             var expected = new StringBuilder();
             foreach (var size in new[] { 0, 1, 15, 16, 0, 255, 256, 4096, 16384, 20000 })

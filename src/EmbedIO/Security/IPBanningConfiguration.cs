@@ -149,7 +149,7 @@ namespace EmbedIO.Security
 
                 return true;
             }
-            catch
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
                 return false;
             }

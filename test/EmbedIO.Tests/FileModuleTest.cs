@@ -15,7 +15,7 @@ using EmbedIO.Utilities;
 namespace EmbedIO.Tests
 {
     [TestFixture]
-    public class FileModuleTest : EndToEndFixtureBase
+    public abstract class FileModuleTest : EndToEndFixtureBase
     {
         protected StaticFolder.WithDataFiles ServedFolder { get; } = new StaticFolder.WithDataFiles(nameof(FileModuleTest));
 
@@ -58,10 +58,10 @@ namespace EmbedIO.Tests
 
             [TestCase("sub/")]
             [TestCase("sub")]
-            public async Task SubFolderIndex(string url)
+            public async Task SubFolderIndex(string requestPath)
             {
-                var html = await Client.GetStringAsync(url);
-                Assert.AreEqual(Resources.SubIndex, html, $"Same content {url}");
+                var html = await Client.GetStringAsync(requestPath);
+                Assert.AreEqual(Resources.SubIndex, html, $"Same content {requestPath}");
             }
 
             [Test]
@@ -203,7 +203,7 @@ namespace EmbedIO.Tests
 
                 using var response = await Client.SendAsync(request);
                 Assert.AreEqual(HttpStatusCode.RequestedRangeNotSatisfiable, response.StatusCode);
-                Assert.AreEqual(StaticFolder.WithDataFiles.BigDataSize, response.Content.Headers.ContentRange.Length);
+                Assert.AreEqual(StaticFolder.WithDataFiles.BigDataSize, (response.Content.Headers.ContentRange ?? throw new InvalidOperationException("The range error must include Content-Range.")).Length);
             }
         }
 

@@ -56,7 +56,7 @@ namespace EmbedIO.Internal
 
         public override int ReadByte() => throw ReadingNotSupported();
 
-        public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback callback, object state)
+        public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state)
             => throw ReadingNotSupported();
 
         public override int EndRead(IAsyncResult asyncResult) => throw ReadingNotSupported();
@@ -82,14 +82,15 @@ namespace EmbedIO.Internal
             UncompressedLength++;
         }
 
-        public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback callback, object state)
+        public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state)
             => _target.BeginWrite(
                 buffer,
                 offset,
                 count,
-                ar => {
+                ar =>
+                {
                     UncompressedLength += count;
-                    callback(ar);
+                    callback?.Invoke(ar);
                 },
                 state);
 

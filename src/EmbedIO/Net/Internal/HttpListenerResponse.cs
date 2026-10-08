@@ -1,5 +1,5 @@
-using EmbedIO.Internal;
-﻿using System;
+﻿using EmbedIO.Internal;
+using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -178,7 +178,7 @@ namespace EmbedIO.Net.Internal
             if (_contentType != null)
             {
                 var encoding = ContentEncoding;
-                var hasCharset = _contentType.IndexOf(';') >= 0
+                var hasCharset = _contentType.IndexOf(";", System.StringComparison.Ordinal) >= 0
                     && MediaTypeHeaderValue.TryParse(_contentType, out var parsedType)
                     && parsedType.CharSet != null;
                 var contentTypeValue = encoding != null && !hasCharset
@@ -330,7 +330,7 @@ namespace EmbedIO.Net.Internal
         }
 
         private static string QuotedString(Cookie cookie, string value)
-            => cookie.Version == 0 || value.IsToken() ? value : "\"" + value.Replace("\"", "\\\"") + "\"";
+            => cookie.Version == 0 || value.IsToken() ? value : "\"" + EmbedIO.Internal.StringOperations.ReplaceOrdinal(value, "\"", "\\\"") + "\"";
 
         private void Close(bool force)
         {

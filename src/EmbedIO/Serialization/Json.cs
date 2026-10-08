@@ -47,15 +47,15 @@ namespace EmbedIO.Serialization
         public static object? Deserialize(string json) => Deserialize<object>(json);
 
         /// <summary>Deserializes a JSON value with the default or supplied options.</summary>
-        public static T Deserialize<T>(string json, JsonSerializerOptions? options = null)
+        public static T? Deserialize<T>(string json, JsonSerializerOptions? options = null)
         {
             options ??= DefaultOptions;
             if (UsesCompatibleInput(options))
             {
-                if (string.IsNullOrWhiteSpace(json)) return default!;
+                if (string.IsNullOrWhiteSpace(json)) return default;
                 json = CompatibleJsonInput.Normalize(json, options.ReadCommentHandling);
             }
-            return JsonSerializer.Deserialize<T>(json, options)!;
+            return JsonSerializer.Deserialize<T>(json, options);
         }
 
         /// <summary>Deserializes a JSON value to the specified type.</summary>
@@ -100,7 +100,7 @@ namespace EmbedIO.Serialization
                         var dictionary = new Dictionary<string, object?>();
                         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                         {
-                            var name = reader.GetString()!;
+                            var name = reader.GetString() ?? throw new JsonException("Expected a property name.");
                             if (!reader.Read()) throw new JsonException();
                             dictionary[name] = JsonSerializer.Deserialize<object>(ref reader, options);
                         }

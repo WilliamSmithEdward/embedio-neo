@@ -23,7 +23,7 @@ namespace EmbedIO
         /// <summary>
         /// Gets the stack trace of a HTTP exception.
         /// </summary>
-        string StackTrace { get; }
+        string? StackTrace { get; }
 
         /// <summary>
         /// <para>Gets a message that can be included in the response triggered

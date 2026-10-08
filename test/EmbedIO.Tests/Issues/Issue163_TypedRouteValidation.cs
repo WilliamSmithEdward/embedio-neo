@@ -172,8 +172,8 @@ namespace EmbedIO.Tests.Issues
             await using var fixture = new Fixture(mode);
             using var socket = new TcpClient();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            var uri = fixture.Client.BaseAddress!;
-            await socket.ConnectAsync(uri.Host, uri.Port, timeout.Token);
+            var uri = fixture.Client.BaseAddress;
+            await socket.ConnectAsync((uri ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Host, uri.Port, timeout.Token);
             var stream = socket.GetStream();
             // A single small packet contains headers and one body byte. Stop sending
             // when the early rejection closes the connection, as declared by its header.
@@ -191,7 +191,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(lineCount, Is.LessThan(32), "Bound the response header probe.");
                 var line = await reader.ReadLineAsync(timeout.Token);
                 Assert.That(line, Is.Not.Null, "Response ended before the header block.");
-                if (line!.Length == 0) break;
+                if (line.Length == 0) break;
                 headers.AppendLine(line);
             }
             Assert.That(headers.ToString(), Does.StartWith("HTTP/1.1 400"));
@@ -251,14 +251,29 @@ namespace EmbedIO.Tests.Issues
             [Route(HttpVerbs.Get, "/letter/{value}")] public string Letter(char value) => Record(value);
             [Route(HttpVerbs.Get, "/choice/{value}")] public string EnumValue(Choice value) => Record(value);
             [Route(HttpVerbs.Get, "/optional/{value?}")] public string Optional(ushort? value) => Record(value);
-            [Route(HttpVerbs.Get, "/text/{value?}")] public string Text(string value) => Record(value.Length == 0 ? "empty" : value);
+            [Route(HttpVerbs.Get, "/text/{value?}")]
+            public string Text(string value)
+            {
+                if (value is null) throw new System.NullReferenceException();
+                return Record(value.Length == 0 ? "empty" : value);
+            }
             [Route(HttpVerbs.Get, "/defaults")] public string Defaults(int value = 42) => Record(value);
             [Route(HttpVerbs.Get, "/required-optional/{value?}")] public string RequiredOptional(ushort value) => Record(value);
             [Route(HttpVerbs.Get, "/unsupported/{value}")] public string NotSupported(Unsupported value) => Record(value);
-            [Route(HttpVerbs.Get, "/custom/{value}")] public string Custom(Validated value) => Record(value.Value);
+            [Route(HttpVerbs.Get, "/custom/{value}")]
+            public string Custom(Validated value)
+            {
+                if (value is null) throw new System.NullReferenceException();
+                return Record(value.Value);
+            }
             [Route(HttpVerbs.Get, "/query")] public string Query([QueryField] ushort value) => Record(value);
             [Route(HttpVerbs.Get, "/query-priority/{value}")] public string QueryPriority([QueryField] ushort value) => Record(value);
-            [Route(HttpVerbs.Post, "/body")] public string Body([JsonData] Input data) => Record(data.Value);
+            [Route(HttpVerbs.Post, "/body")]
+            public string Body([JsonData] Input data)
+            {
+                if (data is null) throw new System.NullReferenceException();
+                return Record(data.Value);
+            }
             [Route(HttpVerbs.Get, "/raw/{value}")]
             public byte[] Raw(ushort value) { Record(value); Response.ContentType = "application/octet-stream"; Response.ContentEncoding = null; return new byte[] { 42 }; }
             [Route(HttpVerbs.Get, "/throws/{value}")]

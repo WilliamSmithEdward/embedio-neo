@@ -12,13 +12,13 @@ namespace EmbedIO
     {
         /// <summary>
         /// <para>The default request deserializer used by EmbedIO.</para>
-        /// <para>Equivalent to <see cref="Json{TData}"/>.</para>
+        /// <para>Equivalent to <see cref="Json{TData}(IHttpContext)"/>.</para>
         /// </summary>
         /// <typeparam name="TData">The expected type of the deserialized data.</typeparam>
         /// <param name="context">The <see cref="IHttpContext"/> whose request body is to be deserialized.</param>
         /// <returns>A <see cref="Task{TResult}">Task</see>, representing the ongoing operation,
         /// whose result will be the deserialized data.</returns>
-        public static Task<TData> Default<TData>(IHttpContext context) => Json<TData>(context);
+        public static Task<TData?> Default<TData>(IHttpContext context) => Json<TData>(context);
 
         /// <summary>
         /// Asynchronously deserializes a request body in JSON format.
@@ -27,7 +27,11 @@ namespace EmbedIO
         /// <param name="context">The <see cref="IHttpContext"/> whose request body is to be deserialized.</param>
         /// <returns>A <see cref="Task{TResult}">Task</see>, representing the ongoing operation,
         /// whose result will be the deserialized data.</returns>
-        public static Task<TData> Json<TData>(IHttpContext context) => JsonInternal<TData>(context, default);
+        public static Task<TData?> Json<TData>(IHttpContext context)
+        {
+            if (context is null) throw new System.NullReferenceException();
+            return JsonInternal<TData>(context, default);
+        }
 
         /// <summary>
         /// Returns a <see cref="RequestDeserializerCallback{TData}">RequestDeserializerCallback</see>
@@ -37,13 +41,13 @@ namespace EmbedIO
         /// <param name="options">The .NET JSON options to use, or null for EmbedIO defaults.</param>
         /// <returns>A <see cref="RequestDeserializerCallback{TData}"/> that can be used to deserialize
         /// a JSON request body.</returns>
-        public static RequestDeserializerCallback<TData> Json<TData>(JsonSerializerOptions? options)
+        public static RequestDeserializerCallback<TData?> Json<TData>(JsonSerializerOptions? options)
         {
             var snapshot = options == null ? null : new JsonSerializerOptions(options);
             return context => JsonInternal<TData>(context, snapshot);
         }
 
-        private static async Task<TData> JsonInternal<TData>(IHttpContext context, JsonSerializerOptions? options)
+        private static async Task<TData?> JsonInternal<TData>(IHttpContext context, JsonSerializerOptions? options)
         {
             string body;
             using (var reader = context.OpenRequestText())

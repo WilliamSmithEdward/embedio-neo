@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><root><resheader name="resmimetype"><value>text/microsoft-resx</value></resheader><resheader name="version"><value>2.0</value></resheader><data name="Help" xml:space="preserve"><value>EmbedIO-Neo CLI — local development web server
+Usage: embedio-cli [options]
+  -p, --path PATH    Serve PATH (default: ./wwwroot if present, otherwise ./)
+  -o, --port PORT    HTTP port (default: 9696; watch mode also uses PORT+1)
+  -a, --api PATH     Load controllers/WebSocket modules from a DLL or directory
+      --no-watch     Disable file watching and live-reload script injection
+      --no-browser   Do not open the browser
+  -h, --help         Show this help
+      --version      Show the version
+With --api alone, static serving is disabled. Otherwise, DLLs in the current
+directory are scanned. Load only trusted plugins. Press Ctrl+C to stop.</value></data></root>

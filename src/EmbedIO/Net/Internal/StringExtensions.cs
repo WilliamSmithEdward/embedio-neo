@@ -9,7 +9,7 @@ namespace EmbedIO.Net.Internal
         private const string TokenSpecialChars = "()<>@,;:\\\"/[]?={} \t";
 
         internal static bool IsToken(this string @this)
-            => @this.All(c => c >= 0x20 && c < 0x7f && TokenSpecialChars.IndexOf(c) < 0);
+            => @this.All(c => c >= 0x20 && c < 0x7f && EmbedIO.Internal.StringOperations.IndexOfOrdinal(TokenSpecialChars, c) < 0);
 
         internal static IEnumerable<string> SplitHeaderValue(this string @this, bool useCookieSeparators)
         {
@@ -63,7 +63,7 @@ namespace EmbedIO.Net.Internal
 
         internal static string Unquote(this string str)
         {
-            var start = str.IndexOf('\"');
+            var start = str.IndexOf("\"", System.StringComparison.Ordinal);
             var end = str.LastIndexOf('\"');
 
             if (start >= 0 && end >= 0)

@@ -23,11 +23,11 @@ namespace EmbedIO.Tests
         {
             RouteMatcher.ClearCache();
             var matcher = RouteMatcher.Parse(route, true);
-            var match = matcher.Match(path!);
+            var match = matcher.Match(path);
             if (expected == null) Assert.That(match, Is.Null);
             else
             {
-                Assert.That(match!.SubPath, Is.EqualTo(expected));
+                Assert.That((match ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SubPath, Is.EqualTo(expected));
                 Assert.That(match.Path, Is.EqualTo(path));
                 Assert.That(match.Count, Is.Zero);
             }
@@ -43,11 +43,11 @@ namespace EmbedIO.Tests
             names.Add("injected");
             var match = matcher.Match("/compat/item");
             Assert.That(match, Is.Not.Null);
-            Assert.That(match!.Count, Is.Zero);
+            Assert.That(match.Count, Is.Zero);
             Assert.That(match.Names, Is.SameAs(names));
             Assert.That(match.SubPath, Is.EqualTo("/item"));
             names.Clear();
-            Assert.That(matcher.Match("/compat/item")!.SubPath, Is.EqualTo("/item"));
+            Assert.That(((matcher).Match("/compat/item") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SubPath, Is.EqualTo("/item"));
         }
     }
 }

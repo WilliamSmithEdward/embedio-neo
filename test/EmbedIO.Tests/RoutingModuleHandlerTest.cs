@@ -59,10 +59,17 @@ namespace EmbedIO.Tests
         {
             [Route(HttpVerbs.Get, "/async/{id}")]
             public Task Async(IHttpContext context, RouteMatch route)
-                => context.SendStringAsync(route["id"], "text/plain", Encoding.UTF8);
+            {
+                if (route is null) throw new System.NullReferenceException();
+                return context.SendStringAsync(route["id"], "text/plain", Encoding.UTF8);
+            }
 
             [Route(HttpVerbs.Get, "/sync")]
-            public void Sync(IHttpContext context, RouteMatch route) => context.Response.StatusCode = (int)HttpStatusCode.Accepted;
+            public void Sync(IHttpContext context, RouteMatch route)
+            {
+                if (context is null) throw new System.NullReferenceException();
+                context.Response.StatusCode = (int)HttpStatusCode.Accepted;
+            }
         }
     }
 }

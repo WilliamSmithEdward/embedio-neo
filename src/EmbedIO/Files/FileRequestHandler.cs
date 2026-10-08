@@ -8,7 +8,6 @@ namespace EmbedIO.Files
     /// <seealso cref="FileRequestHandlerCallback"/>
     public static class FileRequestHandler
     {
-#pragma warning disable CA1801 // Unused parameters - Must respect FileRequestHandlerCallback signature.
         /// <summary>
         /// <para>Unconditionally passes a request down the module chain.</para>
         /// </summary>
@@ -48,6 +47,5 @@ namespace EmbedIO.Files
         /// <returns>This method never returns; it throws a <see cref="HttpException"/> instead.</returns>
         public static Task ThrowMethodNotAllowed(IHttpContext context, MappedResourceInfo? info)
             => throw HttpException.MethodNotAllowed();
-#pragma warning restore CA1801
     }
 }

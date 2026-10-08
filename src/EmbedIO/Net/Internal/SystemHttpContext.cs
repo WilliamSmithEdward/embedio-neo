@@ -115,7 +115,7 @@ namespace EmbedIO.Net.Internal
                     {
                         callback(this);
                     }
-                    catch (Exception e)
+                    catch (Exception e) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(e))
                     {
                         e.Log("HTTP context", "[Id] Exception thrown by a HTTP context close callback.");
                     }
@@ -123,7 +123,7 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        public string GetMimeType(string extension)
+        public string? GetMimeType(string extension)
             => MimeTypeProviders.GetMimeType(extension);
 
         public bool TryDetermineCompression(string mimeType, out bool preferCompression)

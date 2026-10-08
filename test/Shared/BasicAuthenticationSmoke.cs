@@ -13,6 +13,9 @@ namespace EmbedIO.PlatformTests
 {
     public static class BasicAuthenticationSmoke
     {
+        public static Task<int> RunAsync(HttpListenerMode mode, Uri url, bool layered)
+            => RunAsync(mode, url?.OriginalString ?? throw new ArgumentNullException(nameof(url)), layered);
+
         public static async Task<int> RunAsync(HttpListenerMode mode, string url, bool layered)
         {
             using var stop = new CancellationTokenSource();

@@ -49,7 +49,7 @@ namespace EmbedIO.Internal
         {
             result = null;
             if (!type.IsArray || type.GetArrayRank() != 1) return false;
-            var elementType = type.GetElementType()!;
+            var elementType = type.GetElementType() ?? throw new InvalidOperationException("The array type has no element type.");
             var array = Array.CreateInstance(elementType, values.Length);
             for (var i = 0; i < values.Length; i++)
             {

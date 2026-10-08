@@ -40,7 +40,7 @@ namespace EmbedIO.Tests.Issues
                 {
                     using var response = await client.GetAsync(url + "files/" + row.Item1);
                     Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-                    Assert.That(response.Content.Headers.ContentType!.MediaType, Is.EqualTo(row.Item2));
+                    Assert.That(((response).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo(row.Item2));
                     Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("content"));
                 }
                 Assert.Throws<InvalidOperationException>(() => files.MimeTypeProvider = null);
@@ -107,7 +107,7 @@ namespace EmbedIO.Tests.Issues
                     foreach (var row in new[] { ("one", "application/x-one"), ("two", "application/x-two") })
                     {
                         using var response = await client.GetAsync(url + row.Item1 + "/value.custom");
-                        Assert.That(response.Content.Headers.ContentType!.MediaType, Is.EqualTo(row.Item2));
+                        Assert.That(((response).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo(row.Item2));
                         Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("shared file"));
                     }
                 }
@@ -125,8 +125,8 @@ namespace EmbedIO.Tests.Issues
             first.MimeTypeProvider = second;
             Assert.Throws<ArgumentException>(() => second.MimeTypeProvider = first);
             first.MimeTypeProvider = null;
-            Assert.Throws<ArgumentNullException>(() => new PreRequestModule(null!));
-            Assert.Throws<ArgumentNullException>(() => new PreRequestModule("/", null!));
+            Assert.Throws<ArgumentNullException>(() => new PreRequestModule(null));
+            Assert.Throws<ArgumentNullException>(() => new PreRequestModule("/", null));
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
@@ -147,8 +147,8 @@ namespace EmbedIO.Tests.Issues
                 using var client = new HttpClient();
                 using var custom = await client.GetAsync(url + "custom/value.zzzzneo");
                 using var original = await client.GetAsync(url + "original/value.zzzzneo");
-                Assert.That(custom.Content.Headers.ContentType!.MediaType, Is.EqualTo("application/x-app-default"));
-                Assert.That(original.Content.Headers.ContentType!.MediaType, Is.EqualTo(MimeType.Default));
+                Assert.That(((custom).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo("application/x-app-default"));
+                Assert.That(((original).Content.Headers.ContentType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).MediaType, Is.EqualTo(MimeType.Default));
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); server.Dispose(); Directory.Delete(directory, true); }
         }
@@ -205,7 +205,7 @@ namespace EmbedIO.Tests.Issues
                 return Task.CompletedTask;
             }));
             server.WithModule(new ActionModule("/api", HttpVerbs.Any, context => context.SendStringAsync(
-                context.Items["trace"] + "|" + context.Request.RawUrl + "|" + context.Request.QueryString["tag"], "text/plain", Encoding.UTF8)));
+                context.Items["trace"] + "|" + context.Request.RawTarget + "|" + context.Request.QueryString["tag"], "text/plain", Encoding.UTF8)));
             var running = server.RunAsync(stop.Token);
             try
             {
@@ -266,7 +266,7 @@ namespace EmbedIO.Tests.Issues
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(mode));
             server.WithModule(new PreRequestModule(async context =>
             {
-                context.Items["id"] = context.Request.QueryString["id"]!;
+                context.Items["id"] = context.Request.QueryString["id"] ?? throw new AssertionException("Expected a request ID.");
                 await Task.Delay(10, context.CancellationToken);
             }));
             server.WithModule(new ActionModule("/", HttpVerbs.Post, async context =>
@@ -302,13 +302,13 @@ namespace EmbedIO.Tests.Issues
             private readonly bool? _compression;
             public int Disposals;
             public MimeProvider(string type, bool? compression = null) { _type = type; _compression = compression; }
-            public string GetMimeType(string extension) => extension is ".custom" or ".html" ? _type : null!;
+            public string? GetMimeType(string extension) => extension is ".custom" or ".html" ? _type : null;
             public bool TryDetermineCompression(string mimeType, out bool preferred) { preferred = _compression ?? false; return _compression.HasValue; }
             public void Dispose() => Disposals++;
         }
         private sealed class DefaultProvider : IMimeTypeProvider
         {
-            public string GetMimeType(string extension) => MimeType.Associations.ContainsKey(extension) ? null! : "application/x-app-default";
+            public string? GetMimeType(string extension) => ((MimeType.Associations.ContainsKey(extension) ? null : "application/x-app-default") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             public bool TryDetermineCompression(string mimeType, out bool preferred) { preferred = false; return false; }
         }
     }

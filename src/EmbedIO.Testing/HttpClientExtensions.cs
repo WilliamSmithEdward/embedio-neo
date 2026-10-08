@@ -8,6 +8,14 @@ namespace EmbedIO.Testing
     /// </summary>
     public static class HttpClientExtensions
     {
+        /// <inheritdoc cref="HeadAsync(HttpClient,string)"/>
+        public static Task<HttpResponseMessage> HeadAsync(this HttpClient @this, System.Uri url)
+            => HeadAsync(@this, url?.OriginalString ?? throw new System.ArgumentNullException(nameof(url)));
+
+        /// <inheritdoc cref="OptionsAsync(HttpClient,string)"/>
+        public static Task<HttpResponseMessage> OptionsAsync(this HttpClient @this, System.Uri url)
+            => OptionsAsync(@this, url?.OriginalString ?? throw new System.ArgumentNullException(nameof(url)));
+
         /// <summary>
         /// Asynchronously sends a <c>HEAD</c> request to a specified URL.
         /// </summary>
@@ -15,7 +23,10 @@ namespace EmbedIO.Testing
         /// <param name="url">The request URL.</param>
         /// <returns>A <see cref="Task{TResult}"/> whose result will be a <see cref="HttpResponseMessage"/>.</returns>
         public static Task<HttpResponseMessage> HeadAsync(this HttpClient @this, string url)
-            => @this.SendAsync(new HttpRequestMessage(HttpMethod.Head, url));
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            return @this.SendAsync(new HttpRequestMessage(HttpMethod.Head, url));
+        }
 
         /// <summary>
         /// Asynchronously sends an <c>OPTIONS</c> request to a specified URL.
@@ -24,6 +35,9 @@ namespace EmbedIO.Testing
         /// <param name="url">The request URL.</param>
         /// <returns>A <see cref="Task{TResult}"/> whose result will be a <see cref="HttpResponseMessage"/>.</returns>
         public static Task<HttpResponseMessage> OptionsAsync(this HttpClient @this, string url)
-            => @this.SendAsync(new HttpRequestMessage(HttpMethod.Options, url));
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            return @this.SendAsync(new HttpRequestMessage(HttpMethod.Options, url));
+        }
     }
 }

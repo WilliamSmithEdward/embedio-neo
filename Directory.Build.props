@@ -20,9 +20,12 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)src/AnalyzerUtilities.cs" Link="Properties/AnalyzerUtilities.cs" Condition="'$(MSBuildProjectName)' != 'EmbedIO.Tests'" />
+    <Compile Include="$(MSBuildThisFileDirectory)src/NullableAttributes.cs" Condition="'$(TargetFramework)' == 'netstandard2.0'" Link="Properties/NullableAttributes.cs" />
     <None Include="$(MSBuildThisFileDirectory)images/embedio_neo_icons.png" Pack="true" PackagePath="" />
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath=""
           />

@@ -51,7 +51,7 @@ namespace EmbedIO.Tests.Issues
                 using var body = new StringContent("{}");
                 var secondRequest = client.PostAsync(url + "second", body);
                 var current = await secondReady.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                Assert.That(current.Request.RemoteEndPoint!.Port, Is.EqualTo(old.Request.RemoteEndPoint!.Port), "Exercise actual TCP reuse.");
+                Assert.That(current.Request.RemoteEndPoint.Port, Is.EqualTo(old.Request.RemoteEndPoint.Port), "Exercise actual TCP reuse.");
                 Assert.That(current, Is.Not.SameAs(old));
                 if (operation == "concurrent-dispose")
                     await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(() => ((IDisposable)old.Response).Dispose())));

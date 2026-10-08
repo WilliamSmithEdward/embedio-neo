@@ -12,11 +12,11 @@ namespace EmbedIO.Tests.TestObjects
         {
         }
 
-        protected async Task ValidatePersonAsync(string url)
+        protected async Task ValidatePersonAsync(string requestPath)
         {
             var current = PeopleRepository.Database.First();
 
-            var jsonBody = await Client.GetStringAsync(url);
+            var jsonBody = await Client.GetStringAsync(requestPath);
 
             Assert.IsNotNull(jsonBody, "Json Body is not null");
             Assert.IsNotEmpty(jsonBody, "Json Body is not empty");

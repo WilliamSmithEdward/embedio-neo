@@ -34,7 +34,7 @@ namespace EmbedIO.Tests
                 using var received = new MemoryStream();
                 await context.Request.InputStream.CopyToAsync(received, fixture.Token);
                 Assert.That(Encoding.ASCII.GetString(received.ToArray()), Is.EqualTo(body));
-                Assert.That(context.Request.RawUrl, Is.EqualTo($"/{request}"));
+                Assert.That(context.Request.RawTarget, Is.EqualTo($"/{request}"));
                 Assert.That(context.Request.ContentLength64, Is.EqualTo(body.Length));
                 Respond(context);
                 Assert.That(await fixture.ReadHeaders(), Does.StartWith("HTTP/1.1 204 "));
@@ -60,7 +60,7 @@ namespace EmbedIO.Tests
             accept = fixture.Listener.GetContextAsync(fixture.Token);
             await fixture.Write("GET /next HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n", 7);
             context = await accept;
-            Assert.That(context.Request.RawUrl, Is.EqualTo("/next"));
+            Assert.That(context.Request.RawTarget, Is.EqualTo("/next"));
             Respond(context, false);
             Assert.That(await fixture.ReadHeaders(), Does.StartWith("HTTP/1.1 204 "));
         }
@@ -113,7 +113,7 @@ namespace EmbedIO.Tests
                     peer.Client.LingerState = new LingerOption(true, 0);
                 }
             }
-            using var client = secure ? HttpsSmoke.CreateClient(fixture.Certificate!) : new HttpClient();
+            using var client = secure ? HttpsSmoke.CreateClient((fixture.Certificate ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))) : new HttpClient();
             var serving = Task.Run(async () =>
             {
                 for (var i = 0; i < 64; i++)
@@ -143,29 +143,29 @@ namespace EmbedIO.Tests
             using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
             socket.Listen(500);
-            var port = ((IPEndPoint)socket.LocalEndPoint!).Port;
-            var endpointType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.EndPointListener", true)!;
+            var port = ((IPEndPoint)(socket.LocalEndPoint ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).Port;
+            var endpointType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.EndPointListener", true);
             const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
-            var endpoint = RuntimeHelpers.GetUninitializedObject(endpointType);
-            endpointType.GetField("<Listener>k__BackingField", fields)!.SetValue(endpoint, fixture.Listener);
-            endpointType.GetField("_sock", fields)!.SetValue(endpoint, socket);
-            endpointType.GetField("_endpoint", fields)!.SetValue(endpoint, socket.LocalEndPoint);
+            var endpoint = RuntimeHelpers.GetUninitializedObject((endpointType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
+            ((endpointType).GetField("<Listener>k__BackingField", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, fixture.Listener);
+            ((endpointType).GetField("_sock", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, socket);
+            ((endpointType).GetField("_endpoint", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, socket.LocalEndPoint);
             foreach (var name in new[] { "_prefixes", "_unregistered" })
             {
-                var field = endpointType.GetField(name, fields)!;
-                field.SetValue(endpoint, Activator.CreateInstance(field.FieldType));
+                var field = endpointType.GetField(name, fields);
+                (field ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, Activator.CreateInstance(field.FieldType));
             }
-            var prefixType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.ListenerPrefix", true)!;
-            endpointType.GetMethod("AddPrefix")!.Invoke(endpoint,
-                new[] { Activator.CreateInstance(prefixType, $"http://127.0.0.1:{port}/")!, fixture.Listener });
+            var prefixType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.ListenerPrefix", true);
+            ((endpointType).GetMethod("AddPrefix") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(endpoint,
+                new[] { Activator.CreateInstance((prefixType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), $"http://127.0.0.1:{port}/"), fixture.Listener });
             var clients = new List<TcpClient>();
             using var args = new SocketAsyncEventArgs { UserToken = endpoint };
-            var completion = endpointType.GetMethod("ProcessAccept", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var completion = endpointType.GetMethod("ProcessAccept", BindingFlags.Static | BindingFlags.NonPublic);
             var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             args.Completed += (_, completed) =>
             {
                 var terminal = completed.SocketError != SocketError.Success;
-                completion.Invoke(null, new object[] { completed });
+                (completion ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(null, new object[] { completed });
                 if (terminal) closed.TrySetResult();
             };
             var armed = false;
@@ -180,14 +180,14 @@ namespace EmbedIO.Tests
                     await peer.ConnectAsync(IPAddress.Loopback, port, fixture.Token);
                     await peer.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"GET /{i} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"), fixture.Token);
                 }
-                endpointType.GetMethod("Accept", BindingFlags.Static | BindingFlags.NonPublic)!
+                ((endpointType).GetMethod("Accept", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
                     .Invoke(null, new object?[] { socket, args, null });
                 armed = true;
                 var paths = new HashSet<string>();
                 for (var i = 0; i < count; i++)
                 {
                     var context = await fixture.Listener.GetContextAsync(fixture.Token);
-                    Assert.That(paths.Add(context.Request.RawUrl), Is.True);
+                    Assert.That(paths.Add(context.Request.RawTarget), Is.True);
                     Respond(context, false);
                 }
                 Assert.That(paths, Is.EquivalentTo(Enumerable.Range(0, count).Select(i => $"/{i}")));
@@ -195,7 +195,7 @@ namespace EmbedIO.Tests
                 await late.ConnectAsync(IPAddress.Loopback, port, fixture.Token);
                 await late.GetStream().WriteAsync(Encoding.ASCII.GetBytes("GET /late HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"), fixture.Token);
                 var last = await fixture.Listener.GetContextAsync(fixture.Token);
-                Assert.That(last.Request.RawUrl, Is.EqualTo("/late"));
+                Assert.That(last.Request.RawTarget, Is.EqualTo("/late"));
                 Respond(last, false);
             }
             finally

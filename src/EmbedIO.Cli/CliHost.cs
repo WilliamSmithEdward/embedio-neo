@@ -37,7 +37,8 @@ namespace EmbedIO.Cli
                     host._provider = new CliFileProvider(host._root);
                     if (!options.NoWatch)
                         host.Server.WithModule(new ReloadHtmlModule(host._provider, options.Port + 1));
-                    host.Server.WithModule(new FileModule("/", host._provider) {
+                    host.Server.WithModule(new FileModule("/", host._provider)
+                    {
                         DirectoryLister = DirectoryLister.Html,
                         ContentCaching = false,
                     });
@@ -72,7 +73,7 @@ namespace EmbedIO.Cli
                     if (watch?.IsCompleted == true) { await watch; return; }
                     await Task.Delay(10, stop.Token);
                 }
-                if (_socket != null) reload = new LiveReload(_root!, _socket);
+                if (_socket != null) reload = new LiveReload(_root ?? throw new InvalidOperationException("The live reload root has not been configured."), _socket);
                 onListening?.Invoke();
                 if (watch == null) await main;
                 else await await Task.WhenAny(main, watch);

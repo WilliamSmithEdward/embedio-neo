@@ -23,7 +23,8 @@ namespace EmbedIO.Tests
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
                 Assert.Ignore("Ignore Windows");
 
-            Assert.Throws<PlatformNotSupportedException>(() => {
+            Assert.Throws<PlatformNotSupportedException>(() =>
+            {
                 var options = new WebServerOptions()
                     .WithUrlPrefix(HttpsUrl)
                     .WithAutoLoadCertificate();
@@ -51,9 +52,14 @@ namespace EmbedIO.Tests
             if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
                 Assert.Ignore("Only Windows");
 
+            using var key = System.Security.Cryptography.RSA.Create(2048);
+            var request = new CertificateRequest("CN=invalid-disposed-test", key, System.Security.Cryptography.HashAlgorithmName.SHA256,
+                System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+            using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddMinutes(1));
+            certificate.Dispose();
             var options = new WebServerOptions()
                 .WithUrlPrefix(HttpsUrl)
-                .WithCertificate(new X509Certificate2())
+                .WithCertificate(certificate)
                 .WithAutoRegisterCertificate();
 
             Assert.Throws<System.Security.Cryptography.CryptographicException>(() => _ = new WebServer(options));

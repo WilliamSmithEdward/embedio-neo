@@ -89,10 +89,12 @@ namespace EmbedIO.Routing
             EnsureConfigurationNotLocked();
 
             handler = Validate.NotNull(nameof(handler), handler);
-            _dataHandlerPairs.Add((data, (ctx, route) => {
+            _dataHandlerPairs.Add((data, (ctx, route) =>
+            {
                 handler(ctx, route);
                 return Task.CompletedTask;
-            }));
+            }
+            ));
         }
 
         /// <summary>
@@ -115,6 +117,7 @@ namespace EmbedIO.Routing
         /// <seealso cref="MatchContextData"/>
         public async Task<RouteResolutionResult> ResolveAsync(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             LockConfiguration();
 
             var match = Matcher.Match(context.RequestedPath);

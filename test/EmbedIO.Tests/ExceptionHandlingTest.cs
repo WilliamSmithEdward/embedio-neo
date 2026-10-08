@@ -31,13 +31,13 @@ namespace EmbedIO.Tests
 
                 Assert.IsNotNull(response);
                 Assert.AreEqual(HttpStatusCode.InternalServerError, response.StatusCode);
-                CollectionAssert.AreEqual(
-                    new[] { nameof(Exception) },
-                    response.Headers.GetValues(ExceptionHandler.ExceptionTypeHeaderName));
+                Assert.That(
+                    response.Headers.GetValues(ExceptionHandler.ExceptionTypeHeaderName),
+                    Is.EqualTo(new[] { nameof(Exception) }).AsCollection);
 
-                CollectionAssert.AreEqual(
-                    new[] { _exceptionMessage },
-                    response.Headers.GetValues(ExceptionHandler.ExceptionMessageHeaderName));
+                Assert.That(
+                    response.Headers.GetValues(ExceptionHandler.ExceptionMessageHeaderName),
+                    Is.EqualTo(new[] { _exceptionMessage }).AsCollection);
             }
         }
 

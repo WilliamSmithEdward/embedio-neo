@@ -29,7 +29,7 @@ namespace EmbedIO
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
         public static TContainer WithStaticFolder<TContainer>(
-            this TContainer @this,
+            this TContainer? @this,
             string baseRoute,
             string fileSystemPath,
             bool isImmutable,
@@ -63,7 +63,7 @@ namespace EmbedIO
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
         public static TContainer WithStaticFolder<TContainer>(
-            this TContainer @this,
+            this TContainer? @this,
             string? name,
             string baseRoute,
             string fileSystemPath,
@@ -71,9 +71,7 @@ namespace EmbedIO
             Action<FileModule>? configure = null)
             where TContainer : class, IWebModuleContainer
         {
-#pragma warning disable CA2000 // Call Dispose on disposable - Ownership of provider is transferred to module
             var provider = new FileSystemProvider(fileSystemPath, isImmutable);
-#pragma warning restore CA2000
             try
             {
                 var module = new FileModule(baseRoute, provider);
@@ -105,7 +103,7 @@ namespace EmbedIO
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
         public static TContainer WithEmbeddedResources<TContainer>(
-            this TContainer @this,
+            this TContainer? @this,
             string baseRoute,
             Assembly assembly,
             string pathPrefix,
@@ -134,7 +132,7 @@ namespace EmbedIO
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
         public static TContainer WithEmbeddedResources<TContainer>(
-            this TContainer @this,
+            this TContainer? @this,
             string? name,
             string baseRoute,
             Assembly assembly,
@@ -162,7 +160,7 @@ namespace EmbedIO
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
         public static TContainer WithZipFile<TContainer>(
-            this TContainer @this,
+            this TContainer? @this,
             string baseRoute,
             string zipFilePath,
             Action<FileModule>? configure = null)
@@ -187,16 +185,14 @@ namespace EmbedIO
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
         public static TContainer WithZipFile<TContainer>(
-            this TContainer @this,
+            this TContainer? @this,
             string? name,
             string baseRoute,
             string zipFilePath,
             Action<FileModule>? configure = null)
             where TContainer : class, IWebModuleContainer
         {
-#pragma warning disable CA2000 // Call Dispose on disposable - Ownership of provider is transferred to module
             var provider = new ZipFileProvider(zipFilePath);
-#pragma warning restore CA2000
             try
             {
                 var module = new FileModule(baseRoute, provider);
@@ -225,7 +221,7 @@ namespace EmbedIO
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
         public static TContainer WithZipFileStream<TContainer>(
-            this TContainer @this,
+            this TContainer? @this,
             string baseRoute,
             Stream zipFileStream,
             Action<FileModule>? configure = null)
@@ -250,16 +246,14 @@ namespace EmbedIO
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
         public static TContainer WithZipFileStream<TContainer>(
-            this TContainer @this,
+            this TContainer? @this,
             string? name,
             string baseRoute,
             Stream zipFileStream,
             Action<FileModule>? configure = null)
             where TContainer : class, IWebModuleContainer
         {
-#pragma warning disable CA2000 // Call Dispose on disposable - Ownership of provider is transferred to module
             var provider = new ZipFileProvider(zipFileStream);
-#pragma warning restore CA2000
             try
             {
                 var module = new FileModule(baseRoute, provider);

@@ -174,10 +174,12 @@ namespace EmbedIO
             return DoHandleContextAsync(context);
         }
 
-        string IMimeTypeProvider.GetMimeType(string extension)
+        /// <inheritdoc />
+        public string? GetMimeType(string extension)
             => _mimeTypeCustomizer.GetMimeType(extension);
 
-        bool IMimeTypeProvider.TryDetermineCompression(string mimeType, out bool preferCompression)
+        /// <inheritdoc />
+        public bool TryDetermineCompression(string mimeType, out bool preferCompression)
             => _mimeTypeCustomizer.TryDetermineCompression(mimeType, out preferCompression);
 
         /// <inheritdoc />
@@ -224,7 +226,7 @@ namespace EmbedIO
                 if (!startupCompleted)
                 {
                     try { OnFatalException(); }
-                    catch (Exception cleanupError) { cleanupError.Log(LogSource, "Exception while stopping the failed server."); }
+                    catch (Exception cleanupError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(cleanupError)) { cleanupError.Log(LogSource, "Exception while stopping the failed server."); }
                 }
                 throw;
             }
@@ -249,6 +251,7 @@ namespace EmbedIO
         /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
         protected async Task DoHandleContextAsync(IHttpContextImpl context)
         {
+            if (context is null) throw new System.NullReferenceException();
             context.SupportCompressedRequests = Options.SupportCompressedRequests;
             context.MimeTypeProviders.Push(this);
 
@@ -283,12 +286,12 @@ namespace EmbedIO
                     {
                         throw; // Let outer catch block handle it
                     }
-                    catch (Exception exception) when (exception is IHttpException)
+                    catch (Exception exception) when (exception is IHttpException && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                     {
                         await HttpExceptionHandler.Handle(LogSource, context, exception, _onHttpException)
                             .ConfigureAwait(false);
                     }
-                    catch (Exception exception)
+                    catch (Exception exception) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                     {
                         await ExceptionHandler.Handle(LogSource, context, exception, _onUnhandledException, _onHttpException)
                             .ConfigureAwait(false);
@@ -331,7 +334,7 @@ namespace EmbedIO
             {
                 ex.Log(LogSource, $"[{context.Id}] Listener exception.");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 ex.Log(LogSource, $"[{context.Id}] Fatal exception.");
                 OnFatalException();

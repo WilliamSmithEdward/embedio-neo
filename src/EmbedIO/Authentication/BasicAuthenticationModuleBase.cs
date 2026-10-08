@@ -26,7 +26,7 @@ namespace EmbedIO.Authentication
         protected BasicAuthenticationModuleBase(string baseRoute, string? realm)
             : base(baseRoute)
         {
-            Realm = string.IsNullOrEmpty(realm) ? BaseRoute : realm;
+            Realm = string.IsNullOrEmpty(realm) ? BaseRoute : realm ?? BaseRoute;
 
             _wwwAuthenticateHeaderValue = $"Basic realm=\"{Realm}\" charset=UTF-8";
         }
@@ -42,6 +42,7 @@ namespace EmbedIO.Authentication
         /// <inheritdoc />
         protected sealed override async Task OnRequestAsync(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             async Task<bool> IsAuthenticatedAsync()
             {
                 try
@@ -100,7 +101,7 @@ namespace EmbedIO.Authentication
                 return default;
             }
 
-            var separatorPos = credentials.IndexOf(':');
+            var separatorPos = credentials.IndexOf(":", System.StringComparison.Ordinal);
             return separatorPos < 0
                 ? (credentials, string.Empty)
                 : (credentials.Substring(0, separatorPos), credentials.Substring(separatorPos + 1));

@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 
@@ -61,7 +61,7 @@ public sealed class SmokeApp : Application
             File.WriteAllText(result, JsonSerializer.Serialize(new { passed = true, https = "passed", os = Environment.OSVersion.ToString(), runtime = Environment.Version.ToString() }));
             Environment.Exit(0);
         }
-        catch (Exception error)
+        catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
         {
             File.WriteAllText(result, JsonSerializer.Serialize(new { passed = false, error = error.ToString() }));
             Environment.Exit(1);

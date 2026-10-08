@@ -19,6 +19,7 @@ namespace EmbedIO.Routing
         /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
         public static RoutingModule WithHandlersFrom(this RoutingModule @this, object target)
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.AddFrom(target);
             return @this;
         }

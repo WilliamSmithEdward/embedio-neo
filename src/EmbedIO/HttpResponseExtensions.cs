@@ -20,7 +20,7 @@ namespace EmbedIO
         /// <exception cref="ArgumentOutOfRangeException">The policy is not defined.</exception>
         /// <exception cref="ArgumentException">None is selected without Secure, or existing cookie validation fails.</exception>
         /// <exception cref="NotSupportedException">The response uses a custom cookie serializer.</exception>
-        public static void SetCookie(this IHttpResponse @this, Cookie cookie, CookieSameSiteMode sameSite)
+        public static void SetCookie(this IHttpResponse? @this, Cookie? cookie, CookieSameSiteMode sameSite)
         {
             if (@this == null) throw new ArgumentNullException(nameof(@this));
             if (cookie == null) throw new ArgumentNullException(nameof(cookie));
@@ -39,6 +39,7 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         public static void DisableCaching(this IHttpResponse @this)
         {
+            if (@this is null) throw new System.NullReferenceException();
             var headers = @this.Headers;
             headers.Set(HttpHeaderNames.Expires, "Sat, 26 Jul 1997 05:00:00 GMT");
             headers.Set(HttpHeaderNames.LastModified, HttpDate.Format(DateTime.UtcNow));
@@ -55,6 +56,7 @@ namespace EmbedIO
         /// <exception cref="ArgumentException">There is no standard status description for <paramref name="statusCode"/>.</exception>
         public static void SetEmptyResponse(this IHttpResponse @this, int statusCode)
         {
+            if (@this is null) throw new System.NullReferenceException();
             if (!HttpStatusDescription.TryGet(statusCode, out var statusDescription))
                 throw new ArgumentException("Status code has no standard description.", nameof(statusCode));
 

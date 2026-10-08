@@ -44,6 +44,7 @@ namespace EmbedIO.Actions
         /// <inheritdoc />
         protected override async Task OnRequestAsync(IHttpContext context)
         {
+            if (context is null) throw new System.NullReferenceException();
             if (_verb != HttpVerbs.Any && context.Request.HttpVerb != _verb)
                 return;
 

@@ -60,7 +60,7 @@ namespace EmbedIO.Tests
                     Assert.That(await client.GetStringAsync(url), Is.EqualTo("1"));
                     var cookies = handler.CookieContainer.GetCookies(new Uri(url));
                     Assert.That(cookies[LocalSessionManager.DefaultCookieName], Is.Not.Null);
-                    Assert.That(cookies[LocalSessionManager.DefaultCookieName]!.HttpOnly, Is.True);
+                    Assert.That(cookies[LocalSessionManager.DefaultCookieName].HttpOnly, Is.True);
                     Assert.That(await client.GetStringAsync(url), Is.EqualTo("2"));
                 });
 
@@ -75,7 +75,7 @@ namespace EmbedIO.Tests
                 {
                     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                     using var socket = new ClientWebSocket();
-                    await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "echo"), timeout.Token);
+                    await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "ws://") + "echo"), timeout.Token);
                     var payload = type == WebSocketMessageType.Text
                         ? Encoding.UTF8.GetBytes("héllo € fragmented")
                         : new byte[] { 0, 255, 128, 1, 2, 3, 4 };
@@ -101,7 +101,7 @@ namespace EmbedIO.Tests
                     using var socket = new ClientWebSocket();
                     socket.Options.AddSubProtocol("other.v1");
                     socket.Options.AddSubProtocol("echo.v1");
-                    await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "echo"), timeout.Token);
+                    await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "ws://") + "echo"), timeout.Token);
                     Assert.That(socket.SubProtocol, Is.EqualTo("echo.v1"));
                     await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
                 });
@@ -123,7 +123,7 @@ namespace EmbedIO.Tests
                     if (offered != null)
                         socket.Options.AddSubProtocol(offered);
                     await Assert.ThrowsAsync<System.Net.WebSockets.WebSocketException>(async () =>
-                        await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "echo"), timeout.Token));
+                        await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "ws://") + "echo"), timeout.Token));
                     Assert.That(socket.HttpStatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
                 });
         [TestCase(HttpListenerMode.EmbedIO)]
@@ -139,7 +139,7 @@ namespace EmbedIO.Tests
                 {
                     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                     using var socket = new ClientWebSocket();
-                    await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://") + "echo"), timeout.Token);
+                    await socket.ConnectAsync(new Uri(EmbedIO.Internal.StringOperations.ReplaceOrdinal(url, "http://", "ws://") + "echo"), timeout.Token);
                     await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
                     await completed.Task.WaitAsync(timeout.Token);
                     using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -181,7 +181,7 @@ namespace EmbedIO.Tests
         {
             var url = Resources.GetServerAddress();
             using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(mode));
-            TestContext.WriteLine($"Listener adapter endpoint: {url}");
+            TestContext.Out.WriteLine($"Listener adapter endpoint: {url}");
             configure(server);
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);

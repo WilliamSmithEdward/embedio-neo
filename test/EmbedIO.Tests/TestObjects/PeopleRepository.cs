@@ -36,10 +36,10 @@ namespace EmbedIO.Tests.TestObjects
     public class Person
     {
         public int Key { get; set; }
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public int Age { get; set; }
         public DateTime DoB { get; set; }
-        public string EmailAddress { get; set; }
-        public string MainSkill { get; set; }
+        public string EmailAddress { get; set; } = string.Empty;
+        public string MainSkill { get; set; } = string.Empty;
     }
 }

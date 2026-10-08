@@ -23,6 +23,7 @@ namespace EmbedIO.Files
         public static TModule WithCache<TModule>(this TModule @this, FileCache value)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.Cache = value;
             return @this;
         }
@@ -43,6 +44,7 @@ namespace EmbedIO.Files
         public static TModule WithContentCaching<TModule>(this TModule @this, bool value)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.ContentCaching = value;
             return @this;
         }
@@ -60,6 +62,7 @@ namespace EmbedIO.Files
         public static TModule WithContentCaching<TModule>(this TModule @this)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.ContentCaching = true;
             return @this;
         }
@@ -79,6 +82,7 @@ namespace EmbedIO.Files
         public static TModule WithContentCaching<TModule>(this TModule @this, int maxFileSizeKb, int maxSizeKb)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.ContentCaching = true;
             @this.Cache.MaxFileSizeKb = maxFileSizeKb;
             @this.Cache.MaxSizeKb = maxSizeKb;
@@ -98,6 +102,7 @@ namespace EmbedIO.Files
         public static TModule WithoutContentCaching<TModule>(this TModule @this)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.ContentCaching = false;
             return @this;
         }
@@ -117,6 +122,7 @@ namespace EmbedIO.Files
         public static TModule WithDefaultDocument<TModule>(this TModule @this, string value)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.DefaultDocument = value;
             return @this;
         }
@@ -134,6 +140,7 @@ namespace EmbedIO.Files
         public static TModule WithoutDefaultDocument<TModule>(this TModule @this)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.DefaultDocument = null;
             return @this;
         }
@@ -155,6 +162,7 @@ namespace EmbedIO.Files
         public static TModule WithDefaultExtension<TModule>(this TModule @this, string value)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.DefaultExtension = value;
             return @this;
         }
@@ -172,6 +180,7 @@ namespace EmbedIO.Files
         public static TModule WithoutDefaultExtension<TModule>(this TModule @this)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.DefaultExtension = null;
             return @this;
         }
@@ -192,6 +201,7 @@ namespace EmbedIO.Files
         public static TModule WithDirectoryLister<TModule>(this TModule @this, IDirectoryLister value)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.DirectoryLister = value;
             return @this;
         }
@@ -210,6 +220,7 @@ namespace EmbedIO.Files
         public static TModule WithoutDirectoryLister<TModule>(this TModule @this)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.DirectoryLister = null;
             return @this;
         }
@@ -231,6 +242,7 @@ namespace EmbedIO.Files
         public static TModule HandleMappingFailed<TModule>(this TModule @this, FileRequestHandlerCallback callback)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.OnMappingFailed = callback;
             return @this;
         }
@@ -253,6 +265,7 @@ namespace EmbedIO.Files
         public static TModule HandleDirectoryNotListable<TModule>(this TModule @this, FileRequestHandlerCallback callback)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.OnDirectoryNotListable = callback;
             return @this;
         }
@@ -275,6 +288,7 @@ namespace EmbedIO.Files
         public static TModule HandleMethodNotAllowed<TModule>(this TModule @this, FileRequestHandlerCallback callback)
             where TModule : FileModule
         {
+            if (@this is null) throw new System.NullReferenceException();
             @this.OnMethodNotAllowed = callback;
             return @this;
         }

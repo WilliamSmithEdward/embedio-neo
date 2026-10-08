@@ -54,9 +54,9 @@ namespace EmbedIO.Utilities
         /// and <paramref name="value"/>'s scheme is neither <c>http</c> nor <c>https</c>.</para>
         /// </exception>
         /// <seealso cref="Url(string,string,Uri,bool)"/>
-        public static string Url(
+        public static Uri Url(
             string argumentName,
-            string value,
+            string? value,
             UriKind uriKind = UriKind.RelativeOrAbsolute,
             bool enforceHttp = false)
         {
@@ -73,7 +73,7 @@ namespace EmbedIO.Utilities
             if (enforceHttp && uri.IsAbsoluteUri && uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
                 throw new ArgumentException("URL scheme is neither HTTP nor HTTPS.", argumentName);
 
-            return uri.ToString();
+            return uri;
         }
 
         /// <summary>
@@ -101,7 +101,7 @@ namespace EmbedIO.Utilities
         /// that is neither <c>http</c> nor <c>https</c>.</para>
         /// </exception>
         /// <seealso cref="Url(string,string,UriKind,bool)"/>
-        public static string Url(string argumentName, string value, Uri baseUri, bool enforceHttp = false)
+        public static Uri Url(string argumentName, string? value, Uri baseUri, bool enforceHttp = false)
         {
             if (!NotNull(nameof(baseUri), baseUri).IsAbsoluteUri)
                 throw new ArgumentException("Base URI is not an absolute URI.", nameof(baseUri));
@@ -119,7 +119,7 @@ namespace EmbedIO.Utilities
             if (enforceHttp && uri.IsAbsoluteUri && uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
                 throw new ArgumentException("URL scheme is neither HTTP nor HTTPS.", argumentName);
 
-            return uri.ToString();
+            return uri;
         }
     }
 }

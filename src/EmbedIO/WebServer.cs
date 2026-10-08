@@ -34,6 +34,13 @@ namespace EmbedIO
         {
         }
 
+        /// <summary>Initializes a server with one URI prefix.</summary>
+        /// <param name="urlPrefix">The URI prefix to configure.</param>
+        public WebServer(Uri urlPrefix)
+            : this(Validate.NotNull(nameof(urlPrefix), urlPrefix).OriginalString)
+        {
+        }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer"/> class
         /// with the specified URL prefixes.
@@ -123,7 +130,7 @@ namespace EmbedIO
                 {
                     Listener.Dispose();
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
                 {
                     ex.Log(LogSource, "Exception thrown while disposing HTTP listener.");
                 }
@@ -153,9 +160,7 @@ namespace EmbedIO
                 context.CancellationToken = cancellationToken;
                 context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
 
-#pragma warning disable CS4014 // Call is not awaited - of course, it has to run in parallel.
                 _ = Task.Run(() => DoHandleContextAsync(context), cancellationToken);
-#pragma warning restore CS4014
             }
         }
 
@@ -164,7 +169,8 @@ namespace EmbedIO
 
         private IHttpListener CreateHttpListener()
         {
-            IHttpListener DoCreate() => Options.Mode switch {
+            IHttpListener DoCreate() => Options.Mode switch
+            {
                 HttpListenerMode.Microsoft => System.Net.HttpListener.IsSupported
                     ? new SystemHttpListener(new System.Net.HttpListener()) as IHttpListener
                     : new Net.HttpListener(Options.Certificate),
@@ -179,7 +185,6 @@ namespace EmbedIO
                 var urlPrefix = new string(prefix?.ToCharArray());
 
                 if (!urlPrefix.EndsWith("/")) urlPrefix += "/";
-                urlPrefix = urlPrefix.ToLowerInvariant();
 
                 listener.AddPrefix(urlPrefix);
                 $"Web server prefix '{urlPrefix}' added.".Info(LogSource);

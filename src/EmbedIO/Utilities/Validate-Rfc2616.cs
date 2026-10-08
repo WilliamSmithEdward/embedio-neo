@@ -32,7 +32,7 @@ namespace EmbedIO.Utilities
         /// <para>- or -</para>
         /// <para><paramref name="value"/> contains one or more characters that are not allowed in a token.</para>
         /// </exception>
-        public static string Rfc2616Token(string argumentName, string value)
+        public static string Rfc2616Token(string argumentName, string? value)
         {
             value = NotNullOrEmpty(argumentName, value);
 
@@ -42,9 +42,9 @@ namespace EmbedIO.Utilities
             return value;
         }
 
-        internal static bool IsRfc2616Token(string value)
+        internal static bool IsRfc2616Token(string? value)
         {
-            if (string.IsNullOrEmpty(value))
+            if (value == null || value.Length == 0)
                 return false;
 
             for (var i = 0; i < value.Length; i++)

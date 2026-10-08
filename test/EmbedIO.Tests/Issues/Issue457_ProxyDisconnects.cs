@@ -32,7 +32,7 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.Microsoft, true, true, true)]
         public async Task ProxyDisconnectionHonorsWritePolicyAndLeavesServerHealthy(HttpListenerMode mode, bool ignoreWrites, bool gzip, bool graceful)
         {
-            var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+            var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
             var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -72,7 +72,7 @@ namespace EmbedIO.Tests.Issues
                             await Task.Delay(10, context.CancellationToken);
                         }
                     }
-                    catch (Exception error) { failure = error; }
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { failure = error; }
                     finally { finished.TrySetResult(); }
                 });
             server.Listener.IgnoreWriteExceptions = ignoreWrites;
@@ -127,7 +127,7 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task BufferedWritesRemainMemoryOperationsUntilResponseCommit(HttpListenerMode mode, bool ignoreWrites)
         {
-            var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+            var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
             var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -154,7 +154,7 @@ namespace EmbedIO.Tests.Issues
                         await output.FlushAsync(context.CancellationToken);
                         bufferedWritesSucceeded = true;
                     }
-                    catch (Exception error) { failure = error; }
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { failure = error; }
                     finally { finished.TrySetResult(); }
                 });
             server.Listener.IgnoreWriteExceptions = ignoreWrites;
@@ -218,7 +218,7 @@ namespace EmbedIO.Tests.Issues
             public async ValueTask DisposeAsync()
             {
                 _stopping.Cancel();
-                _listener.Stop();
+                _listener.Dispose();
                 _downstream?.Dispose();
                 _upstream.Dispose();
                 try { await _relaying.WaitAsync(TimeSpan.FromSeconds(5)); }

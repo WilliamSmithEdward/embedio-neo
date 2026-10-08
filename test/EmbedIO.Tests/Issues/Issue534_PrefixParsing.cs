@@ -15,12 +15,13 @@ namespace EmbedIO.Tests.Issues
         [TestCase("http://localhost/files:archive/", 80)]
         public void SupportedPrefixesPassValidationAndRetainTheirPort(string prefix, int port)
         {
+            if (prefix is null) throw new System.NullReferenceException();
             using var listener = new EmbedIO.Net.HttpListener();
             listener.AddPrefix(prefix);
-            var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.ListenerPrefix", true)!;
-            var parsed = Activator.CreateInstance(type, new object[] { prefix })!;
-            Assert.That(type.GetProperty("Port")!.GetValue(parsed), Is.EqualTo(port));
-            Assert.That(type.GetProperty("Secure")!.GetValue(parsed), Is.EqualTo(prefix.StartsWith("https://", StringComparison.Ordinal)));
+            var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.ListenerPrefix", true);
+            var parsed = Activator.CreateInstance((type ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), new object[] { prefix });
+            Assert.That(((type).GetProperty("Port") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(parsed), Is.EqualTo(port));
+            Assert.That(((type).GetProperty("Secure") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(parsed), Is.EqualTo(prefix.StartsWith("https://", StringComparison.Ordinal)));
         }
 
         [TestCase("http://localhost:0/")]

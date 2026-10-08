@@ -45,7 +45,7 @@ namespace EmbedIO.Sessions
             get
             {
                 EnsureSessionExists();
-                return _session!.Id;
+                return _session.Id;
             }
         }
 
@@ -55,7 +55,7 @@ namespace EmbedIO.Sessions
             get
             {
                 EnsureSessionExists();
-                return _session!.Duration;
+                return _session.Duration;
             }
         }
 
@@ -65,7 +65,7 @@ namespace EmbedIO.Sessions
             get
             {
                 EnsureSessionExists();
-                return _session!.LastActivity;
+                return _session.LastActivity;
             }
         }
 
@@ -76,17 +76,17 @@ namespace EmbedIO.Sessions
         public bool IsEmpty => _session?.IsEmpty ?? true;
 
         /// <inheritdoc/>
-        public object this[string key]
+        public object? this[string key]
         {
             get
             {
                 EnsureSessionExists();
-                return _session![key];
+                return _session[key];
             }
             set
             {
                 EnsureSessionExists();
-                _session![key] = value;
+                _session[key] = value;
             }
         }
 
@@ -98,18 +98,19 @@ namespace EmbedIO.Sessions
             if (_session == null)
                 return;
 
-            _sessionManager!.Delete(_context, _session.Id);
+            _sessionManager.Delete(_context, _session.Id);
             _session = null;
         }
 
         /// <inheritdoc/>
         public void Regenerate()
         {
+            EnsureSessionManagerExists();
             if (_session != null)
-                _sessionManager!.Delete(_context, _session.Id);
+                _sessionManager.Delete(_context, _session.Id);
 
             EnsureSessionManagerExists();
-            _session = _sessionManager!.Create(_context);
+            _session = _sessionManager.Create(_context);
         }
 
         /// <inheritdoc/>
@@ -119,43 +120,46 @@ namespace EmbedIO.Sessions
         public bool ContainsKey(string key)
         {
             EnsureSessionExists();
-            return _session!.ContainsKey(key);
+            return _session.ContainsKey(key);
         }
 
         /// <inheritdoc/>
-        public bool TryGetValue(string key, out object value)
+        public bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value)
         {
             EnsureSessionExists();
-            return _session!.TryGetValue(key, out value);
+            return _session.TryGetValue(key, out value);
         }
 
         /// <inheritdoc/>
-        public bool TryRemove(string key, out object value)
+        public bool TryRemove(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value)
         {
             EnsureSessionExists();
-            return _session!.TryRemove(key, out value);
+            return _session.TryRemove(key, out value);
         }
 
         /// <inheritdoc/>
         public IReadOnlyList<KeyValuePair<string, object>> TakeSnapshot()
         {
             EnsureSessionExists();
-            return _session!.TakeSnapshot();
+            return _session.TakeSnapshot();
         }
 
+        [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_sessionManager))]
         private void EnsureSessionManagerExists()
         {
             if (_sessionManager == null)
                 throw new InvalidOperationException("No session manager registered in the web server.");
         }
 
+        [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_session), nameof(_sessionManager))]
         private void EnsureSessionExists()
         {
+            EnsureSessionManagerExists();
             if (_session != null)
                 return;
 
             EnsureSessionManagerExists();
-            _session = _sessionManager!.Create(_context);
+            _session = _sessionManager.Create(_context);
 
             if (_onCloseRegistered)
                 return;
