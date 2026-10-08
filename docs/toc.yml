@@ -26,6 +26,8 @@
       href: guides/listener-stalls.md
 - name: User reports
   items:
+    - name: Default JSON preservation audit
+      href: user-reports/default-json-preservation-audit.md
     - name: Concurrent ZIP resources
       href: user-reports/zip-provider-concurrency.md
     - name: JSON and plaintext benchmark endpoints

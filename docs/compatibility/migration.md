@@ -75,6 +75,430 @@ Direct JSON utility failures use `JsonException` rather than `FormatException`.
 Do not assume byte-for-byte JSON compatibility: validate stored documents and
 client contracts, especially custom SWAN attributes or serializer options.
 
+### Nesting depth and database nulls
+
+An acyclic response graph can still exceed the serializer's nesting limit. In
+the audit, a chain constructed with 32 `Next` links failed under SWAN but
+succeeded under Neo. Chains with 64 and 70 links failed under both; an eight-link
+chain succeeded under both. These fixture results are not universal maximum
+object counts: JSON arrays and objects contribute to nesting, and the location
+of a value within the response affects its depth.
+
+Neo retains System.Text.Json's depth policy. Its default
+[`MaxDepth`](https://learn.microsoft.com/en-us/dotnet/api/system.text.json.jsonserializeroptions.maxdepth?view=net-10.0)
+setting of zero uses the serializer's effective limit of 64. If deeper nesting is an
+intentional API requirement, configure an explicit `MaxDepth` on the serializer
+options and validate the complete payload. Increasing the limit does not resolve
+an actual cycle. Prefer deliberately bounded response DTO graphs so both server
+and client can process their intended structure reliably.
+
+Database null mapping is a separate caveat, not a new Neo regression. In the
+audit, `DBNull.Value` serialized as `{}` under both serializers, rather than JSON
+`null`. Normalize database nulls to CLR `null` when preparing a nullable response
+member. Do not pass `DBNull.Value` through an object-typed DTO property expecting
+the serializer to infer the intended JSON null.
+
+These findings complete the verified default-serialization compatibility topics
+in the [audit](../user-reports/default-json-preservation-audit.md). They do not
+establish actual database/ORM or client behavior beyond the documented fixtures.
+Serializer defaults remain unchanged.
+
+### JSON text, escaping, and exact bytes
+
+Neo retains System.Text.Json's formatting and escaping. Upstream and Neo can
+produce different JSON text while preserving identical parsed values. For
+example, the audited serializers represent the same string differently:
+
+| Serializer | JSON string |
+| --- | --- |
+| Upstream SWAN defaults | `"café <>&"` |
+| Neo defaults | `"caf\u00E9 \u003C\u003E\u0026"` |
+
+After JSON parsing, both values are `café <>&`. Neo also uses compact spacing
+where the audited SWAN output included spaces. Member ordering can differ;
+JSON object member order is not the same contract as JSON array element order.
+These textual differences do not imply changed string values or reordered list
+elements. Parse JSON before interpreting escape sequences.
+
+Update migration checks and response snapshots to compare parsed member values
+when the contract concerns data. Continue checking array order, member presence,
+nulls, and numeric precision; ignoring formatting must not conceal a real data
+change. Assertions requiring string versus number tokens must also preserve that
+distinction.
+
+If raw text or bytes are part of the contract, specify the serialization format
+explicitly. Hashes, signatures, and caches keyed by response-body bytes can change
+even when parsed data is equal. Define the relevant encoding, spacing, escaping,
+member ordering, and numeric/date representations, and use a defined
+canonicalization procedure where required by a signing protocol. Do not assume
+that enabling indentation or changing an encoder restores upstream byte identity.
+
+The audit observed repeatable output for unchanged fixtures on the tested
+runtime, including identical DTO response bodies across repeated HTTP requests.
+That does not guarantee identical bytes across serializer or runtime upgrades.
+Keep exact-byte checks when they are a real application requirement and validate
+the required format against the actual producer and consumer.
+
+These are existing serialization migration differences. See the
+[default JSON preservation audit](../user-reports/default-json-preservation-audit.md)
+for comparison evidence and limits; serializer defaults remain unchanged.
+
+### URI, date-only, and time-only values
+
+Neo retains System.Text.Json's string representations for these supported
+framework values. In the audit, SWAN reflected them into JSON objects with
+multiple properties, while Neo emitted strings:
+
+| Value | Audited upstream shape | Neo response example |
+| --- | --- | --- |
+| `Uri` | Object with properties such as `AbsoluteUri`, `Host`, and `Scheme` | `{"Link":"https://example.com/a?q=1\u0026b=2"}` |
+| `DateOnly` | Object with properties such as `Year`, `Month`, and `Day` | `{"Date":"2026-10-07"}` |
+| `TimeOnly` | Object with properties such as `Hour`, `Minute`, and `Second` | `{"Time":"12:34:56"}` |
+
+Clients must parse the string instead of accessing nested members such as
+`Date.Year` or `Link.Host`. The escaped `\u0026` in the URL is an ampersand after
+JSON parsing; it does not change the URL's value. Parse JSON before interpreting
+the URL, date, or time. Time-only values can include fractional seconds when
+present, so do not assume a fixed string length.
+
+Date-only and time-only values do not carry a timezone or UTC offset. Do not
+silently interpret them as complete timestamps. If clients require structured
+members, map the intended components to a concrete response DTO explicitly.
+Likewise, a URI DTO can expose selected components when the API contract calls
+for them rather than relying on reflection over the framework type.
+
+These are verified serializer comparisons on a Windows .NET 10 host, not a
+claim that all historical upstream runtimes produced the same reflected object.
+Reflection-visible framework members vary with the runtime; `DateOnly` and
+`TimeOnly` did not exist on older runtimes. Their availability also depends on
+the consumer's target framework. See the
+[default JSON preservation audit](../user-reports/default-json-preservation-audit.md)
+for baseline and validation limits. No serializer defaults are changed here.
+
+### Numeric token types and client precision
+
+Neo retains JSON-number output for supported finite numeric values. Upstream
+SWAN emitted strings for the audited `double.MaxValue` and `double.Epsilon`;
+Neo emits numeric tokens instead:
+
+| Value | Audited upstream JSON | Neo JSON |
+| --- | --- | --- |
+| `double.MaxValue` | `"1.7976931348623157E+308"` | `1.7976931348623157E+308` |
+| `double.Epsilon` | `"5E-324"` | `5E-324` |
+
+Clients expecting a string must accept the new numeric token or the application
+must explicitly retain a string representation in its response contract. Do not
+generalize the two observed cases to every floating-point value: conventional
+finite values were numbers in both serializers in the audit. NaN and infinities
+are a separate case covered under
+[payloads that now fail serialization](#payloads-that-now-fail-serialization).
+
+Server serialization and client parsing are separate precision boundaries. The
+audited .NET HTTP client preserved `long.MaxValue`, decimal values including
+decimal scale, and UTC timestamp ticks. The direct serializer comparison also
+round-tripped the two finite double boundaries through .NET JSON parsing. These
+checks do not prove that every client retains the same values.
+
+For example, a JavaScript client using ordinary `Number` values cannot represent
+every signed 64-bit integer or every .NET decimal exactly. Sending a correct JSON
+numeric token therefore does not by itself guarantee exact application values
+after parsing. This is a client-contract consideration, not a newly detected
+transport defect or a regression unique to Neo.
+
+For IDs that require exact large-integer preservation, or decimal values that
+require exact precision, agree on a representation supported by the client.
+Options include strings with a documented format and typed parsing, or a client
+parser that retains the required numeric precision. If strings are selected,
+format them explicitly using invariant culture so deployment locale does not
+change decimal separators or other numeric text. Specify the intended scale
+where it matters, and test the actual client against representative boundaries.
+
+These recommendations do not change default numeric serialization. See the
+[default JSON preservation audit](../user-reports/default-json-preservation-audit.md)
+for comparison scope and evidence.
+
+### Payloads that now fail serialization
+
+Neo retains explicit System.Text.Json failures for the following payloads,
+rather than upstream SWAN's tolerant representations. Review response preparation
+when migrating: serialization failures can turn an otherwise successful endpoint
+into HTTP 500.
+
+| Payload | Audited upstream behavior | Neo defaults | Recommended migration |
+| --- | --- | --- | --- |
+| Property getter that throws | Property omitted | Getter exception propagates | Map to a DTO with reliable stored values; handle retrieval failures before serialization |
+| Multidimensional array such as `int[,]` | Flattened JSON array | `NotSupportedException` | Map to a flat or nested collection deliberately |
+
+Current-main HTTP regression checks returned 500 for throwing getters, unsupported arrays, cycles and excessive depth, then successfully served
+the next valid request. This describes the tested default response path; custom
+exception handlers can choose another response. Do not rely on an exception's
+exact message as a client contract.
+
+Avoid database-backed or computed getters that can fail during serialization.
+Materialize the needed values and handle expected failures while preparing the
+response DTO. Do not silently convert a retrieval failure to missing data unless
+that behavior is explicitly part of the endpoint's contract.
+
+Current main emits NaN and infinities as named JSON strings
+(`"NaN"`, `"Infinity"`, and `"-Infinity"`), restoring upstream compatibility.
+The older checkout used for the original audit rejected them. Fresh strict
+`JsonSerializerOptions` still reject them; see
+[JSON compatibility](../user-reports/json-migration-compatibility.md).
+JSON numbers cannot represent these values. For an optional numeric result,
+an application can deliberately map a nonfinite value to `null`. This is a
+partial mapping snippet; it replaces the value assignment in an application
+that has decided `null` means unavailable:
+
+```csharp
+double? responseValue = double.IsNaN(value) || double.IsInfinity(value)
+    ? (double?)null
+    : value;
+```
+
+If clients need to distinguish NaN from either infinity, use an explicit state
+member, a documented string representation, or a custom converter instead.
+Do not use `null` where it would erase a meaningful distinction. An explicit
+System.Text.Json configuration can also permit named floating-point literals
+as strings; clients must support that change in JSON token type.
+
+For a matrix whose row structure matters, map to a jagged array or list of rows
+so `{{1,2},{3,4}}` becomes `[[1,2],[3,4]]`. If the existing client contract expects
+upstream's flattened `[1,2,3,4]`, flatten explicitly instead. The migration must
+select the intended structure; the serializer should not guess it.
+
+These recommendations document existing migration differences and do not change
+the serializer or introduce a global error-suppression policy. See the
+[default JSON preservation audit](../user-reports/default-json-preservation-audit.md)
+for evidence and validation limits.
+
+### Shared references and circular references
+
+Neo retains its default reference behavior rather than SWAN's `$circref`
+markers. A repeated reference is not necessarily a cycle: two list entries can
+point to the same object without that object pointing back to itself or an
+ancestor.
+
+For example, if `row` has `Id = 42`, serializing `new[] { row, row }` with Neo
+defaults produces:
+
+```json
+[{"Id":42},{"Id":42}]
+```
+
+In the audited upstream SWAN defaults, the later occurrence instead became a
+`$circref` object. Its marker value is not a stable application ID. Neo repeats
+the value at each occurrence; JSON clients do not receive or recover the original
+shared CLR object identity by default. Distinct objects with equal values are
+also serialized as separate values.
+
+An actual cycle is different. For example, an object whose `Next` points back
+to itself, or an entity graph such as `Customer → Orders → Customer`, cannot be
+represented by endlessly expanding values. Upstream emitted a `$circref` marker
+in the audited self-cycle case. Neo defaults throw `JsonException`; the audited
+default HTTP response path returns 500. The server still serves subsequent valid
+requests in the regression checks.
+
+For database endpoints, project entities into concrete response DTOs without
+back-reference navigation properties. Include a related record's ID or a
+deliberately bounded nested DTO where needed. This makes the response graph and
+its contents explicit.
+
+If an endpoint intentionally returns an object graph, choose a reference policy
+explicitly in response `JsonSerializerOptions` and pass those options to
+`ResponseSerializer.Json(options)`. Follow the circular-reference guide's fresh
+response-options example, particularly for object-typed members or dictionaries;
+custom converters can affect reference tracking.
+
+- `ReferenceHandler.IgnoreCycles` writes `null` for a cyclic reference. It does
+  not preserve the omitted relationship; shared references outside the current
+  traversal path still serialize as repeated values.
+- `ReferenceHandler.Preserve` uses System.Text.Json reference metadata such as
+  `$id`, `$ref`, and `$values`. This changes the JSON contract, including collection
+  shapes, and requires client support. It is not the old SWAN `$circref` format.
+
+These are opt-in policies, not changes to the defaults. See the maintained
+[circular-reference guide](../guides/json-circular-references.md) for
+configuration examples and the
+[default JSON preservation audit](../user-reports/default-json-preservation-audit.md)
+for comparison evidence and limits.
+
+### Timestamp representations
+
+Default timestamp serialization follows System.Text.Json rather than SWAN. Neo
+retains this behavior; clients migrating from upstream must review timestamp
+parsing and any assumptions about JSON member types or fixed string lengths.
+
+For the audited UTC `DateTime` with seven fractional-second digits, the response
+changes as follows:
+
+| Serializer | JSON timestamp |
+| --- | --- |
+| Upstream SWAN defaults | `"2026-10-07T12:34:56"` |
+| Neo defaults | `"2026-10-07T12:34:56.1234567Z"` |
+
+Neo preserves the tested fractional seconds and marks the UTC value with `Z`.
+Fractional digits vary with the value; they are not always present. A `DateTime`
+with `Kind.Unspecified` does not acquire a UTC marker: the tested value becomes
+`"2026-10-07T12:34:56.1234567"`. Set the intended `DateTime.Kind` in the database
+mapping rather than assuming a timestamp without an offset means UTC. Do not
+relabel local time as UTC without performing the intended conversion.
+
+`DateTimeOffset` changes JSON shape as well as formatting. In the audit, upstream
+SWAN produced an object containing members such as `DateTime`, `UtcDateTime`,
+and `Offset`. Neo produces one ISO timestamp string. For a value at
+`2026-10-07 12:34:56` with offset `+02:00`, Neo returns:
+
+```json
+{"Offset":"2026-10-07T12:34:56+02:00"}
+```
+
+Clients must parse that string instead of reading nested date/time members.
+Accept ISO timestamps with optional fractional seconds and explicit offsets;
+avoid substring-based parsing and exact string-length assumptions. In .NET,
+deserialize into `DateTimeOffset` when the contract needs an explicit offset,
+or into `DateTime` with an agreed interpretation of its kind.
+
+The source value's precision is distinct from the client's precision. The audited
+.NET HTTP client retained the UTC kind and timestamp ticks; other clients may
+retain fewer fractional digits. Verify the client's behavior if submillisecond
+precision matters. If an existing API requires a particular textual format,
+select that representation explicitly in a response DTO or custom converter and
+document its timezone and precision semantics.
+
+These are existing SWAN migration changes, not a new serializer modification.
+See the [default JSON preservation audit](../user-reports/default-json-preservation-audit.md)
+for the tested runtime and validation limits.
+
+### Ignored members, renamed members, and public fields
+
+SWAN member attributes do not control Neo's System.Text.Json serializer. Replace
+them explicitly when migrating; an old ignore attribute does not prevent a
+property from appearing in a response. Old rename attributes also stop applying,
+so client-visible keys can change back to the CLR member names.
+
+For example, this legacy class uses SWAN attributes (legacy snippet; requires
+the old SWAN package):
+
+```csharp
+public sealed class CustomerResponse
+{
+    [Swan.Formatters.JsonProperty("customer_id", false)]
+    public int Id { get; set; } = 42;
+
+    [Swan.Formatters.JsonProperty("InternalNotes", true)]
+    public string InternalNotes { get; set; } = "Staff only";
+
+    public string InternalCode = "INTERNAL-42";
+}
+```
+
+In the audited upstream defaults, its JSON was `{"customer_id":42}` (ignoring
+whitespace). Neo defaults instead produce
+`{"Id":42,"InternalNotes":"Staff only","InternalCode":"INTERNAL-42"}`.
+The SWAN attributes are not recognized, and Neo enables public fields by default.
+Serialization can succeed with HTTP 200 despite the expanded response.
+
+Replace the legacy class declaration with the following System.Text.Json
+attributes. This is a class snippet, not a complete server:
+
+```csharp
+using System.Text.Json.Serialization;
+
+public sealed class CustomerResponse
+{
+    [JsonPropertyName("customer_id")]
+    public int Id { get; set; } = 42;
+
+    [JsonIgnore]
+    public string InternalNotes { get; set; } = "Staff only";
+
+    [JsonIgnore]
+    public string InternalCode = "INTERNAL-42";
+}
+```
+
+Neo now returns `{"customer_id":42}`. Inspect public fields as well as
+properties, and verify excluded members are absent from actual endpoint
+responses. Prefer a concrete response DTO containing only intended client data;
+internal members then need not be part of that response type at all.
+
+These are existing SWAN migration changes, not newly introduced serializer
+behavior. Explicit custom serializer options can select different field behavior;
+the examples above describe Neo defaults.
+
+### Derived members in base-typed responses
+
+Neo intentionally retains System.Text.Json's declared-type contract for
+base-typed collection elements and object members. This is a migration change
+from upstream SWAN: a `List<Customer>` containing a `PreferredCustomer` includes
+the members declared by `Customer`, but does not automatically include members
+added by `PreferredCustomer`. The same applies to a property declared as
+`Customer` or a value in `Dictionary<string, Customer>`. Omitted derived members
+do not cause a serialization error; the endpoint can still return HTTP 200.
+
+For example, if `Customer` declares `Id` and `PreferredCustomer` adds `Discount`,
+upstream returned both members in the tested base-typed list. Neo defaults return
+`[{"Id":42}]`. This behavior was reviewed and accepted on October 7, 2026;
+runtime-derived member discovery is not being restored globally.
+
+For database endpoints, map the intended members into a concrete response DTO.
+This explicitly selects which derived values belong in the response and avoids
+exposing unrelated internal members. The following is a complete console
+mapping example, not a complete HTTP server. In a controller, return `response`
+or pass it to `HttpContext.SendDataAsync` instead of printing it.
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using EmbedIO.Serialization;
+
+var customers = new List<Customer>
+{
+    new PreferredCustomer { Id = 42, Discount = 0.15m },
+    new Customer { Id = 43 },
+};
+
+var response = customers.Select(customer => new CustomerResponseDto
+{
+    Id = customer.Id,
+    Discount = customer is PreferredCustomer preferred
+        ? preferred.Discount
+        : null,
+}).ToList();
+
+Console.WriteLine(Json.Serialize(response));
+
+public class Customer
+{
+    public int Id { get; set; }
+}
+
+public sealed class PreferredCustomer : Customer
+{
+    public decimal Discount { get; set; }
+}
+
+public sealed class CustomerResponseDto
+{
+    public int Id { get; set; }
+    public decimal? Discount { get; set; }
+}
+```
+
+Expected output with Neo defaults:
+
+```json
+[{"Id":42,"Discount":0.15},{"Id":43,"Discount":null}]
+```
+
+The DTO mapping adds derived data deliberately; it does not discover derived
+members automatically. If inheritance is itself part of the response contract,
+configure System.Text.Json polymorphism explicitly instead. This recommendation
+does not require new library APIs. See the
+[default JSON preservation audit](../user-reports/default-json-preservation-audit.md)
+for verified differences and validation limits.
+
 ## Logging and configuration
 
 Configure `Log.Source.Switch.Level` and `Log.Source.Listeners` using
