@@ -15,7 +15,7 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    public class Http3ListenerTest
+    public partial class Http3ListenerTest
     {
         [SetUp]
         public void RequireQuic()

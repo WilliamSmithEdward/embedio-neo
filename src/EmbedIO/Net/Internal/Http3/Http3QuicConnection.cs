@@ -80,8 +80,8 @@ namespace EmbedIO.Net.Internal.Http3
                 using var startup = CancellationTokenSource.CreateLinkedTokenSource(_token);
                 startup.CancelAfter(TimeSpan.FromSeconds(10));
                 control = await _connection.Value.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, startup.Token).ConfigureAwait(false);
-                // Control type, SETTINGS: capacity 4096, field limit 65536, blocked streams 16.
-                await control.WriteAsync(new byte[] { 0, 4, 10, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16 }, startup.Token).ConfigureAwait(false);
+                // Control type, SETTINGS: capacity 4096, field limit 65536, blocked streams 16, extended CONNECT enabled.
+                await control.WriteAsync(new byte[] { 0, 4, 12, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1 }, startup.Token).ConfigureAwait(false);
                 feedback = await _connection.Value.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, startup.Token).ConfigureAwait(false);
                 await feedback.WriteAsync(new byte[] { 3 }, startup.Token).ConfigureAwait(false);
                 background = new[] { WriteFeedbackAsync(feedback), WatchCriticalOutputAsync(control), WatchCriticalOutputAsync(feedback), WatchDrainAsync(control) };
@@ -245,7 +245,7 @@ namespace EmbedIO.Net.Internal.Http3
                 var first = await reader.ReadEventAsync(requestToken).ConfigureAwait(false);
                 var fields = await DecodeAsync(stream.Id, first.EncodedFields ?? throw new Http3ProtocolException(0x105, "Missing initial fields."), requestToken).ConfigureAwait(false);
                 Http2RequestHeaders request;
-                try { request = Http2RequestHeaders.Parse(new Http2HeaderBlock(0, false, fields, 0)); }
+                try { request = Http2RequestHeaders.Parse(new Http2HeaderBlock(0, false, fields, 0), true); }
                 catch (Http2ProtocolException error) { throw new Http3StreamException(stream.Id, 0x10e, error.Message); }
                 reader.ConfirmHeaders(request.ContentLength);
                 using var exchange = new Http3QuicExchange(stream, reader, request,

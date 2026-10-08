@@ -47,7 +47,7 @@ this development goal unless separately authorized.
 | HTTP/1.1 | RFC 9112; incremental parsing, fixed/chunked bodies, pipelines, persistence, bounded input and errors | First implementation under test |
 | HTTP/2 | RFC 9113; TLS/ALPN, prior knowledge, HPACK (RFC 7541), multiplexed streams, flow control, SETTINGS, GOAWAY and reset | Implemented incrementally; listener integration under validation |
 | HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Opt-in WebServer listener passes Windows/Ubuntu tests; discovery, extension and lifecycle completion pending |
-| WebSockets | Existing RFC 6455 plus extended CONNECT over HTTP/2 (RFC 8441) and HTTP/3 (RFC 9220) | HTTP/1.1 existing; HTTP/2 initial integration tested locally; HTTP/3 planned |
+| WebSockets | Existing RFC 6455 plus extended CONNECT over HTTP/2 (RFC 8441) and HTTP/3 (RFC 9220) | HTTP/1.1 existing; HTTP/2 and HTTP/3 initial integrations tested; broad hardening/performance pending |
 | Extensions | Priorities (RFC 9218), HTTP datagrams/capsules (RFC 9297), discovery/Alt-Svc, current registered extensions and errata | Inventory and applicability review pending |
 | Security/resource control | Framing ambiguity, input limits, slow readers/writers, cancellation, compression expansion and multiplexed-stream abuse | First framing work under test; broad abuse tests pending |
 
@@ -1038,3 +1038,32 @@ The unchanged full Windows rerun passed 2,738 cases with five expected skips
 (2,743 total, zero failures). All new listener cases passed in both full runs.
 This establishes the local checkpoint while retaining the initial persistence
 failure and separate retry provenance; fresh exact-head CI is still required.
+
+### HTTP/3 WebSocket negotiation checkpoint
+
+The QUIC driver now advertises SETTINGS_ENABLE_CONNECT_PROTOCOL=1 and accepts
+validated extended CONNECT headers. The public listener rejects unsupported
+protocols with 501 and invalid WebSocket versions with 400/version 13. Existing
+shared context and managed framing adapters carry accepted tunnels. Six real-wire
+cases failed at the missing setting before implementation; four rejection cases
+also failed before listener validation, including bad versions returning 500.
+All ten now pass, covering empty/text/binary/fragmented messages, cookies,
+subprotocols, orderly QUIC FIN, abort, and sibling HTTP requests.
+
+The 69 focused HTTP/2 WebSocket, HTTP/3 driver and listener cases pass on Windows.
+All 25 public listener cases pass on isolated Ubuntu 24.04, runtime 10.0.12 and
+MsQuic 2.6.2. The fixture uses BCL WebSocket framing over a literal-encoded QUIC
+HTTP/3 request; response QPACK decoding is shared with production and is not an
+independent decoder claim. The ordinary .NET ClientWebSocket cannot negotiate
+HTTP/3 in that runtime. Evidence is under TestResults/http-engine/http3-ws-*;
+the discovery floor is 2,753. Full-suite and exact-head CI remain required.
+
+The preceding public-listener head 7a9cb6e passed CI 37797945219, Security
+37797944618, Malware 37797944578 and the fuzz workflow. This includes all three
+desktop platforms and required MAUI jobs; the new WebSocket increment requires
+its own exact-head checks.
+
+The complete Windows suite for the WebSocket increment passed 2,748 cases with
+five expected skips (2,753 total, zero failures). Both targets build without
+warnings, formatting and analyzer guards pass, and the pinned YARA scan reports
+no matches in the new wire fixture. No performance improvement is claimed.

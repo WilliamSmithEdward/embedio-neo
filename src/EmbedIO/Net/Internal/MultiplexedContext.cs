@@ -101,7 +101,7 @@ namespace EmbedIO.Net.Internal
                 throw new InvalidOperationException("WebSocket already accepted.");
             Response.StatusCode = 200;
             if (!string.IsNullOrEmpty(acceptedProtocol)) Response.Headers[HttpHeaderNames.SecWebSocketProtocol] = acceptedProtocol;
-            // RFC 8441 replaces the key/accept exchange with :protocol. Headers
+            // RFC 8441 / RFC 9220 replace the key/accept exchange with :protocol. Headers
             // and cookies still flow through the ordinary response serializer.
             Response.Headers.Remove(HttpHeaderNames.SecWebSocketAccept);
             var transport = new Http2DuplexStream(Request.InputStream, Response.OutputStream);

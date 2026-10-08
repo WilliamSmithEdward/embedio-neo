@@ -247,6 +247,16 @@ namespace EmbedIO.Net.Internal.Http3
                 try
                 {
                     if (!Matches(context.Request.Url, local, prefixes)) { context.Response.StatusCode = 404; return; }
+                    if (exchange.Request.Protocol != null)
+                    {
+                        if (exchange.Request.Protocol != "websocket") { context.Response.StatusCode = 501; return; }
+                        if (context.Request.Headers[HttpHeaderNames.SecWebSocketVersion] != "13")
+                        {
+                            context.Response.StatusCode = 400;
+                            context.Response.Headers[HttpHeaderNames.SecWebSocketVersion] = "13";
+                            return;
+                        }
+                    }
                     await Contexts.Writer.WriteAsync(context, exchange.CancellationToken).ConfigureAwait(false);
                     await context.Completion.WaitAsync(exchange.CancellationToken).ConfigureAwait(false);
                 }

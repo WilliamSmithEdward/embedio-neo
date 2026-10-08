@@ -90,6 +90,26 @@ A simultaneous restart while cleanup is running is rejected explicitly.
 Application response `KeepAlive=false` initiates the connection driver's bounded
 GOAWAY drain; listener-wide graceful shutdown is not yet exposed.
 
-HTTP/3 WebSockets/extended CONNECT, priorities/datagrams, dynamic response QPACK,
+Priorities/datagrams, dynamic response QPACK,
 discovery and combined-protocol hosting remain under development. No throughput
 or latency improvement is claimed by these interoperability tests.
+
+## WebSockets over HTTP/3
+
+The listener advertises extended CONNECT support (RFC 9220) and routes
+`:protocol=websocket` requests through existing WebSocket modules. Successful
+negotiation returns HTTP 200; subprotocols and cookies use the shared adapters.
+Unsupported extended CONNECT protocols return 501. A WebSocket version other
+than 13 returns 400 with `Sec-WebSocket-Version: 13`.
+
+The .NET 10 ClientWebSocket implementation negotiates only through HTTP/2;
+selecting HTTP/3 on that client does not provide a working HTTP/3 WebSocket
+client. The wire regression fixture uses a QUIC HTTP/3 stream with the BCL
+WebSocket framing implementation on top. It checks text/binary messages,
+fragmentation across a UTF-8 sequence, clean stream FIN, client abort and healthy
+sibling requests. Its literal request encoder is independent; response field
+inspection uses the project's QPACK decoder. This is scoped interoperability
+evidence, not a claim of complete WebSocket conformance or performance.
+
+References: [RFC 9220](https://www.rfc-editor.org/rfc/rfc9220.html) and
+[.NET 10.0.12 client implementation](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.WebSockets.Client/src/System/Net/WebSockets/WebSocketHandle.Managed.cs).
