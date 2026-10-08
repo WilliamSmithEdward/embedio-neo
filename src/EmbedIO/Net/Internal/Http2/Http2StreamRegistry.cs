@@ -5,7 +5,9 @@ namespace EmbedIO.Net.Internal.Http2
 {
     internal sealed class Http2StreamState
     {
-        internal Http2StreamState(int id, bool remoteEnded) { Id = id; RemoteEnded = remoteEnded; }
+        internal Http2StreamState(int id, bool remoteEnded, Http2RequestHeaders headers)
+        { Id = id; RemoteEnded = remoteEnded; RequestHeaders = headers; }
+        public Http2RequestHeaders RequestHeaders { get; }
         public int Id { get; }
         internal volatile bool RemoteEnded;
         internal volatile bool LocalEnded;
@@ -55,15 +57,14 @@ namespace EmbedIO.Net.Internal.Http2
                         _highest = block.StreamId;
                         if (_active.Count >= _maximum) throw new Http2ProtocolException(7, "Concurrent stream limit exceeded.", block.StreamId);
                         if (block.StreamError != 0) throw new Http2ProtocolException(block.StreamError, "Invalid stream headers.", block.StreamId);
-                        stream = new Http2StreamState(block.StreamId, block.EndStream);
+                        stream = new Http2StreamState(block.StreamId, block.EndStream, Http2RequestHeaders.Parse(block));
                         _active.Add(block.StreamId, stream);
                         return stream;
                     }
                     if (stream.RemoteEnded) throw new Http2ProtocolException(5, "Request stream already ended.", stream.Id);
                     if (block.StreamError != 0) throw new Http2ProtocolException(block.StreamError, "Invalid stream headers.", stream.Id);
                     if (!block.EndStream) throw new Http2ProtocolException(1, "Request trailers must end the stream.", stream.Id);
-                    foreach (var field in block.Fields)
-                        if (field.Name.Length > 0 && field.Name[0] == ':') throw new Http2ProtocolException(1, "Pseudo-header in trailers.", stream.Id);
+                    Http2RequestHeaders.ValidateTrailers(block);
                     stream.RemoteEnded = true;
                     Retire(stream);
                     return stream;

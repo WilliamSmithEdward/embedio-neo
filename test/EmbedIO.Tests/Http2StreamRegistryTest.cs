@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using NUnit.Framework;
@@ -13,6 +14,7 @@ namespace EmbedIO.Tests
         private sealed class Registry
         {
             private readonly object _instance;
+            private readonly HashSet<int> _seen = new();
             internal Registry(int maximum = 128) => _instance = Activator.CreateInstance(Type("Http2StreamRegistry"), Flags, null, new object[] { maximum }, null)!;
             internal int Count => (int)_instance.GetType().GetProperty("ActiveCount")!.GetValue(_instance)!;
             internal object? Call(string name, params object[] args)
@@ -26,8 +28,11 @@ namespace EmbedIO.Tests
                 var frame = Activator.CreateInstance(Type("Http2Frame"), Flags, null, new object[] { type, flags, id, payload }, null)!;
                 if (type == 1)
                 {
-                    var fields = Array.CreateInstance(Type("HpackField"), pseudo ? 1 : 0);
-                    if (pseudo) fields.SetValue(Activator.CreateInstance(Type("HpackField"), Flags | BindingFlags.Public, null, new object[] { ":path", "/", false }, null), 0);
+                    var pairs = pseudo ? new[] { ":path", "/" } : _seen.Add(id)
+                        ? new[] { ":method", "GET", ":scheme", "https", ":authority", "example.com", ":path", "/" } : Array.Empty<string>();
+                    var fields = Array.CreateInstance(Type("HpackField"), pairs.Length / 2);
+                    for (var i = 0; i < pairs.Length; i += 2)
+                        fields.SetValue(Activator.CreateInstance(Type("HpackField"), Flags | BindingFlags.Public, null, new object[] { pairs[i], pairs[i + 1], false }, null), i / 2);
                     var block = Activator.CreateInstance(Type("Http2HeaderBlock"), Flags, null, new object[] { id, (flags & 1) != 0, fields, 0u }, null)!;
                     frame.GetType().GetProperty("HeaderBlock")!.SetValue(frame, block);
                 }

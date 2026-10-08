@@ -270,3 +270,21 @@ Action resolved the compile error without changing assertions. The registry and
 receive coordinator are owned by connection cleanup but are not yet wired into a
 body-delivery/application loop. No end-to-end HTTP/2 performance or conformance
 claim is made. Next work is request semantics/body delivery and stream dispatch.
+
+Request admission now validates decoded headers before registering an application
+stream: pseudo-header order/uniqueness, required request metadata, CONNECT and
+negotiated extended CONNECT rules, connection-specific fields, authority/Host
+normalization, content lengths and trailer framing. Split Cookie fields are joined
+with semicolon-space for the application contract. Extended CONNECT remains
+unadvertised and disabled in stream admission until its transport integration exists.
+
+The new asynchronous request-body stream enforces declared length and a 65,535-byte
+unread-content bound, coalesces small DATA fragments into cleared pooled chunks,
+returns consumption credit through its owner callback, and handles cancellation,
+reset and disposal without retaining payload buffers. One stress case delivers
+65,535 one-byte slices of a 16-KiB producer buffer while retaining only sixteen
+4-KiB chunks; this establishes a bounded-storage invariant, not a throughput result.
+Forty-six semantic cases and eight body cases bring focused HTTP/2 tests to 201,
+passing with both library assemblies on .NET 10.0.11. Both targets build. The body
+stream still needs connection frame dispatch and application-context integration;
+HTTP/2 remains unadvertised. Full final-source/remote validation remains required.

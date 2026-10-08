@@ -367,3 +367,15 @@ These rules are the same in every WilliamSmithEdward repository.
   Connection owns/aborts both components, but body/stream dispatch not wired yet.
   Next request semantics, bounded async request-body delivery and dispatch using
   these components. Full/remote validation still required on final program head.
+
+- Request semantics/body checkpoint:46 header and8 body cases added;201 focused
+  HTTP2 tests pass modern+actualnetstandard on .NET10.0.11; both targets build.
+  Stream registry now parses request headers before admission and validates
+  trailers. CONNECT pseudoheaders/authority, CL lists/equality, host normalization,
+  cookies and connection-specific fields validated. ExtendedCONNECT remains off.
+  Body stream pools/coalesces 4KiB chunks, caps unread bytes65535, validates CL,
+  supports canceled/pending reads and returns discarded/consumed bytes once.
+  65535 tiny fragments of16KiB producer buffer retain16 chunks, source not retained.
+  Discovery floor2235. Next connect body stream, receive/send credit and registry
+  in frame dispatcher; then IHttpContext adapter/negotiation and independent client.
+  No HTTP2 endpoint yet. Goal remains active; remote final checks not current.
