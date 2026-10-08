@@ -114,6 +114,11 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
 
+        internal void Abort()
+        {
+            lock (_sync) Fail();
+        }
+
         private bool TryInstruction(byte[] input, ref int offset, int end)
         {
             var cursor = offset;

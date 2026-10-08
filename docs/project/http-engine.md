@@ -633,3 +633,47 @@ assembly: ls-qpack also decoded every locally generated section with zero dynami
 capacity and zero permitted blocked streams. Solution builds and suppression
 guards pass. The discovery floor is 2,636; the full 2,623-case decoder-increment
 run above predates these 13 encoder cases. Fresh exact-head CI remains required.
+
+
+### QPACK connection coordination and repeatable interop
+
+The incoming-direction coordinator now enforces advertised blocked-stream counts
+and local aggregate encoded-data/feedback budgets. It queues Section
+Acknowledgments, Stream Cancellations and Insert Count Increments in decoder-stream
+order, coalescing increments already covered by acknowledgments. Acknowledgments
+for successive sections on one stream remain distinct. Cancellation releases
+blocked storage without implying receipt of inserts. Encoder errors, malformed
+field sections, critical-stream closure and disposal terminate the coordinator
+and release pending sections; subsequent operations cannot revive it. The stream
+owner must stop reading after a blocked section, serialize the decoder-stream
+writer, preserve flow-control/resource accounting and prevent submissions after
+stream cancellation. QUIC integration and connection scheduling remain outstanding.
+
+All 175 HTTP/3 tests pass against both target assemblies on the local .NET 10.0.11
+host. The tracked test-only `test/EmbedIO.QpackInterop` harness exercises an
+independent pylsqpack 0.3.24 / ls-qpack encoder and decoder with shuffled field
+section arrivals, 1-13-byte encoder-instruction fragments, cancellation, duplicates,
+Huffman data and non-ASCII octets. At capacities 0/220/4096 it delivers 400/342/398
+matching sections in both directions and cancels 0/58/2 sections, with 0/400/13
+blocked arrivals and 0/190/400 feedback batches accepted by the independent
+encoder. Both target assemblies produce those results. The harness reports its
+assembly hash, Python and wrapper versions, and counts under
+`TestResults/qpack-interop`; a response deadline and owned-process cleanup bound
+failed probes. The wheel dependency is version/hash pinned and kept outside all
+production dependency groups. Linux CI runs the probe against both assets.
+
+To repeat it from the repository root, build both core target assemblies and
+`test/EmbedIO.QpackInterop/EmbedIO.QpackInterop.csproj` in Release after locked
+restores. In a Python 3.10+ virtual environment, install with
+`python -m pip --isolated install --require-hashes --only-binary=:all: -r test/EmbedIO.QpackInterop/requirements.txt`.
+Run `python test/EmbedIO.QpackInterop/verify.py src/EmbedIO/bin/Release/net10.0/EmbedIO.dll`
+and repeat with `netstandard2.0` in the assembly path. The tool is not a server,
+network interoperability test or QUIC-conformance claim.
+
+Solution builds, standalone probe build/locked restore, complete whitespace checks
+and both suppression guards pass locally. The discovery floor is 2,649. CI on
+26d70a8 caught missing source-encoding markers in two earlier HTTP/3 wire files;
+those markers are corrected, without disabling the formatting check. Its malware
+workflow 37778299872 passed with the narrow reviewed HTTP/2 fixture acceptance;
+this does not supply the absent matching GitHub alert dismissal. Fresh exact-head
+checks remain necessary, and the PR stays draft.
