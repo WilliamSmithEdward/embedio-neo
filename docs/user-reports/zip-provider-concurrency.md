@@ -93,3 +93,20 @@ An additional Windows .NET Framework probe targeting 4.7.2 checked 48 concurrent
 byte/stream-error/ownership assertions using the installed CLR. This does not
 claim exact original application, SharpZipLib or Raspberry Pi validation. Required
 cross-platform and security gates remain necessary before merge.
+
+## Constrained worker pools
+
+The Neo CI follow-up found a 20-second request timeout with 32 ZIP HTTP clients
+on .NET 10.0.12 under a two-processor limit. Synchronous semaphore waits could
+occupy workers while an async read needed another worker to finish and release
+the same gate. Synchronous entry points now wait on semaphore tasks, allowing
+modern runtime task-blocking compensation. Archive reads remain serialized; this
+does not configure the global thread pool, start dedicated workers, buffer whole
+entries, or extend request timeouts.
+
+All four existing ZIP HTTP cases passed five consecutive constrained-host runs
+after the change. CI also runs the full ZIP fixture with a two-processor limit.
+The .NET Standard asset uses the host runtime's thread-pool policy; do not infer
+modern compensation behavior for .NET Framework or other legacy hosts. Existing
+cancellation, disposal, cursor and stream-ownership regressions still apply.
+This follow-up is unreleased and requires all PR checks to pass before merge.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Avoid ZIP archive reader thread-pool starvation on modern runtimes by using task-based synchronous gate waits; preserve archive serialization, cancellation, stream ownership and defaults (upstream #491 follow-up).
+
 - Documented default JSON migration contracts and audited DTO fidelity, derived
   members, member exposure, timestamps, references, numeric tokens, formatting
   and depth. Added fourteen default-contract regressions including real HTTP

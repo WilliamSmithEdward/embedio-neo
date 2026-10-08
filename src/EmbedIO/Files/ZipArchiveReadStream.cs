@@ -32,7 +32,9 @@ namespace EmbedIO.Files
             Retain();
             try
             {
-                _semaphore.Wait(_archiveStopped.Token);
+                // Task-based waiting lets modern runtimes compensate blocked pool workers.
+                // A synchronous semaphore wait can starve the async read holding this gate.
+                _semaphore.WaitAsync(_archiveStopped.Token).GetAwaiter().GetResult();
                 return new Scope(this);
             }
             catch (OperationCanceledException)
@@ -62,7 +64,7 @@ namespace EmbedIO.Files
         internal Scope Enter()
         {
             Retain();
-            try { _semaphore.Wait(); return new Scope(this); }
+            try { _semaphore.WaitAsync().GetAwaiter().GetResult(); return new Scope(this); }
             catch { Release(); throw; }
         }
 
