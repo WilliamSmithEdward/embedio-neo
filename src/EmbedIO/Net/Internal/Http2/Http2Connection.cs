@@ -8,13 +8,15 @@ namespace EmbedIO.Net.Internal.Http2
 {
     // Server-side connection startup and controls. The caller owns the transport
     // lifetime and handshake deadline. Stream dispatch is added above this layer.
-    internal sealed class Http2Connection
+    internal sealed class Http2Connection : IDisposable
     {
         private static readonly byte[] Preface = Encoding.ASCII.GetBytes("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
         private readonly Http2FrameTransport _transport;
         private readonly HpackEncoder _encoder = new();
+        private readonly Http2HeaderBlocks _headers = new();
         private int _pendingSettings = 1;
         public Http2PeerSettings Peer { get; } = new();
+        internal Http2SendFlowControl SendFlow { get; } = new();
         public bool PeerSentGoAway { get; private set; }
         public int PeerLastStreamId { get; private set; }
         public uint PeerErrorCode { get; private set; }
@@ -36,21 +38,30 @@ namespace EmbedIO.Net.Internal.Http2
                 offset += count;
             }
             var connection = new Http2Connection(stream);
-            // Bound incoming stream count and decoded headers. Do not advertise
-            // extended CONNECT until its application/stream implementation exists.
-            var settings = new byte[] { 0, 3, 0, 0, 0, 128, 0, 6, 0, 0, 128, 0 };
-            await connection.SendAsync(new[] { new Http2Frame(4, 0, 0, settings) }, token).ConfigureAwait(false);
-            var first = await connection.ReadFrameAsync(token).ConfigureAwait(false);
-            if (first == null || first.Type != 4 || (first.Flags & 1) != 0)
-                throw new Http2ProtocolException(1, "Client preface must start with non-ACK SETTINGS.");
-            await connection.ProcessControlAsync(first, token).ConfigureAwait(false);
-            return connection;
+            try
+            {
+                // Bound incoming stream count and decoded headers. Do not advertise
+                // extended CONNECT until its application/stream implementation exists.
+                var settings = new byte[] { 0, 3, 0, 0, 0, 128, 0, 6, 0, 0, 128, 0 };
+                await connection.SendAsync(new[] { new Http2Frame(4, 0, 0, settings) }, token).ConfigureAwait(false);
+                var first = await connection.ReadFrameAsync(token).ConfigureAwait(false);
+                if (first == null || first.Type != 4 || (first.Flags & 1) != 0)
+                    throw new Http2ProtocolException(1, "Client preface must start with non-ACK SETTINGS.");
+                await connection.ProcessControlAsync(first, token).ConfigureAwait(false);
+                return connection;
+            }
+            catch { connection.Dispose(); throw; }
         }
 
         internal async Task<Http2Frame?> ReadFrameAsync(CancellationToken token)
         {
             var frame = await _transport.ReadAsync(token).ConfigureAwait(false);
-            frame?.ValidateShape();
+            if (frame == null) _headers.CompleteInput();
+            else
+            {
+                frame.HeaderBlock = _headers.Process(frame);
+                frame.ValidateShape();
+            }
             return frame;
         }
 
@@ -69,7 +80,11 @@ namespace EmbedIO.Net.Internal.Http2
                     }
                     else
                     {
-                        Peer.Apply(frame.Payload, AdjustStreamWindows,
+                        Peer.Apply(frame.Payload, delta =>
+                        {
+                            SendFlow.AdjustInitialWindow(delta);
+                            AdjustStreamWindows(delta);
+                        },
                             size => _encoder.SetMaximumTableSize((int)Math.Min(size, 4096u)));
                         await SendAsync(new[] { new Http2Frame(4, 1, 0, Array.Empty<byte>()) }, token).ConfigureAwait(false);
                     }
@@ -85,6 +100,14 @@ namespace EmbedIO.Net.Internal.Http2
                     return true;
                 default: return false;
             }
+        }
+
+        // The owner cancels and joins connection I/O before disposing this state.
+        // The underlying stream remains caller-owned.
+        public void Dispose()
+        {
+            SendFlow.Abort(new ObjectDisposedException(nameof(Http2Connection)));
+            _headers.Dispose();
         }
 
         internal Task SendAsync(Http2Frame[] frames, CancellationToken token)

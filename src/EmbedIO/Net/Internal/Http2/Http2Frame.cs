@@ -23,6 +23,7 @@ namespace EmbedIO.Net.Internal.Http2
         public byte Flags { get; }
         public int StreamId { get; }
         public byte[] Payload { get; }
+        public Http2HeaderBlock? HeaderBlock { get; internal set; }
 
         // Validate after reading the complete frame so a stream error does not
         // leave unread payload bytes in front of the next frame. Stream lifetime,

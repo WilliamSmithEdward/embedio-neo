@@ -1,4 +1,4 @@
-﻿# Modern HTTP engine program
+# Modern HTTP engine program
 
 The owner authorized a replacement managed transport on 2026-10-08, with extreme
 performance as a core requirement, incremental delivery, and HTTP support through
@@ -227,3 +227,30 @@ ordered window adjustments and capability withdrawal. The preceding framing
 checkpoint passed the full Windows 2,122-case suite (2,117 successes/five skips).
 Header-block assembly, stream state/flow control and application dispatch remain
 in development; no HTTP/2 endpoint is advertised yet.
+
+
+Header assembly and outbound credit checkpoint (2026-10-08): all incoming frames
+now pass an uninterrupted CONTINUATION guard. Header blocks have encoded byte and
+fragment-count bounds, strip priority/padding metadata, and preserve connection
+compression state even when a self-dependent stream must be rejected. Fourteen
+new cases exercise fragmentation, ordering, resource bounds and malformed HPACK.
+
+The outbound flow coordinator reserves connection and stream credit atomically,
+permits negative stream windows after SETTINGS reductions, checks overflow with
+connection/stream error scope, and releases blocked writers on cancellation or
+closure. Eleven new cases include simultaneous reservations across 64 streams.
+Incoming SETTINGS now update this coordinator; live DATA dispatch is still pending.
+Wakeup signals are allocated only when a writer actually blocks. No throughput or
+allocation improvement is claimed for these components before end-to-end measurement.
+
+All 127 focused HTTP/2 cases pass with both the modern library and the actual
+netstandard2.0 library loaded on .NET 10.0.11. This does not establish compatibility
+with a legacy CLR. Both library targets build. Stream state, inbound flow control,
+request semantics and application dispatch remain necessary before enabling HTTP/2;
+HTTP/3 and remaining program acceptance criteria remain open.
+
+The initial header/flow full Windows run passed 2,156 cases with five expected
+skips (2,161 total). Final review added explicit header-state disposal and cleanup
+of failed connection startup, and strengthened real TCP SETTINGS-to-credit checks.
+All 127 focused cases pass again on both assemblies after those changes; a fresh
+full run and remote final-source checks remain required before merge.

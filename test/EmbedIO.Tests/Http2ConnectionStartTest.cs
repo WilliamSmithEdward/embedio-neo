@@ -68,6 +68,7 @@ namespace EmbedIO.Tests
                 else await clientStream.WriteAsync(Preface, stop.Token);
                 await clientStream.WriteAsync(initial, stop.Token);
                 var connection = await accepted;
+                using var connectionLifetime = (IDisposable)connection;
                 await verify(connection, clientStream, stop.Token);
             }
             finally { listener.Stop(); }
@@ -95,6 +96,14 @@ namespace EmbedIO.Tests
                     var handled = await (Task<bool>)Connection.GetMethod("ProcessControlAsync", Flags)!.Invoke(connection, new[] { frame, (object)token })!;
                     Assert.That(handled, Is.True);
                 }
+                var flow = Connection.GetProperty("SendFlow", Flags)!.GetValue(connection)!;
+                flow.GetType().GetMethod("Open", Flags)!.Invoke(flow, new object[] { 1 });
+                var waiting = (Task<int>)flow.GetType().GetMethod("ReserveAsync", Flags)!.Invoke(flow, new object[] { 1, 16, token })!;
+                Assert.That(waiting.IsCompleted, Is.False, "Initial SETTINGS must reach new stream credit.");
+                await Process(Frame(4, 0, 0, Settings((4, 8))));
+                Assert.That(await waiting.WaitAsync(token), Is.EqualTo(8));
+                var windowAck = await Receive(client, token);
+                Assert.That((windowAck.Type, windowAck.Flags), Is.EqualTo(((byte)4, (byte)1)));
                 await Process(Frame(4, 1, 0, Array.Empty<byte>()));
                 var ping = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
                 await Process(Frame(6, 0, 0, ping));

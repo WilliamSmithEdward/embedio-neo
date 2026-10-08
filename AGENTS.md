@@ -342,3 +342,16 @@ These rules are the same in every WilliamSmithEdward repository.
   order. Server does not advertise extended CONNECT before implementation. Combined
   discovery floor2136. Next header-block assembly plus stream state/flow control and
   IHttpContext dispatch; startup alone is not HTTP2 application service.
+
+- Header/flow checkpoint:14 header assembly and11 outbound flow cases added;
+  127 focused HTTP2 cases pass with modern and actual netstandard2.0 assemblies
+  on local .NET10.0.11. Both targets build. SETTINGS updates send credit; no DATA
+  dispatch yet. Continuation guard bounds bytes/fragments and decodes rejected
+  stream blocks to preserve HPACK state. Atomic connection/stream reservations,
+  negative SETTINGS windows, scoped overflow, cancel/close wakeups validated.
+  Discovery floor2161. Full initial increment passed2156/five skips. Subsequent
+  connection IDisposable/failed-start cleanup and real-TCP settings-credit checks
+  passed127 focused cases on both assemblies; final full rerun still required.
+  Next stream lifecycle/inbound flow/request semantics, then bridge managed
+  listener's concrete HttpListenerContext queue to IHttpContextImpl dispatch.
+  Whole modern-engine goal remains active; no HTTP2 service advertised yet.
