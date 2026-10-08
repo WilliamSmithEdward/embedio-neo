@@ -46,7 +46,7 @@ this development goal unless separately authorized.
 | HTTP semantics | RFC 9110; methods, status, authority, informational responses, headers and trailers | Existing application layer; full conformance audit pending |
 | HTTP/1.1 | RFC 9112; incremental parsing, fixed/chunked bodies, pipelines, persistence, bounded input and errors | First implementation under test |
 | HTTP/2 | RFC 9113; TLS/ALPN, prior knowledge, HPACK (RFC 7541), multiplexed streams, flow control, SETTINGS, GOAWAY and reset | Implemented incrementally; listener integration under validation |
-| HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Planned; not implemented |
+| HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Wire primitives implemented; QUIC listener, QPACK and connection state pending |
 | WebSockets | Existing RFC 6455 plus extended CONNECT over HTTP/2 (RFC 8441) and HTTP/3 (RFC 9220) | HTTP/1.1 existing; HTTP/2 initial integration tested locally; HTTP/3 planned |
 | Extensions | Priorities (RFC 9218), HTTP datagrams/capsules (RFC 9297), discovery/Alt-Svc, current registered extensions and errata | Inventory and applicability review pending |
 | Security/resource control | Framing ambiguity, input limits, slow readers/writers, cancellation, compression expansion and multiplexed-stream abuse | First framing work under test; broad abuse tests pending |
@@ -505,3 +505,29 @@ Local logs retain that failure. Current-source cross-platform and remote checks
 remain outstanding; earlier green checks on `41ff73e` do not validate this source.
 HTTP/3, broader conformance/resource policies and the complete #190 performance
 and hardening scope remain development requirements.
+
+
+### HTTP/3 wire primitives
+
+The initial HTTP/3 framing layer implements the full 62-bit integer range from
+[RFC 9000 section 16](https://www.rfc-editor.org/rfc/rfc9000.html#section-16),
+accepting valid non-minimal encodings and emitting minimal encodings. A single
+reader per stream separates frame headers from payload consumption. DATA can be
+read into caller buffers and unknown frames discarded using a bounded pooled
+buffer; the declared payload length is never an automatic allocation request.
+Metadata buffering takes an explicit limit and rejects excess before allocation.
+
+The framing layer distinguishes clean end at a frame boundary from truncation
+within a header or payload (H3_FRAME_ERROR), following
+[RFC 9114 section 7.1](https://www.rfc-editor.org/rfc/rfc9114.html#section-7.1).
+It retains caller transport ownership, rejects concurrent reads, and invalidates
+input after a failed/canceled in-flight read. Cancellation before entry consumes
+no input. It does not yet validate frame placement, SETTINGS, QPACK instructions
+or request semantics; connection/state integration will provide those checks.
+
+All 33 wire cases pass on both library assemblies under .NET 10.0.11, including
+published vectors, range boundaries, fragmentation, non-minimal encodings,
+truncation, constant-storage skipping, oversize metadata and cancellation.
+The solution builds with no warnings/errors; both suppression guards pass.
+CI's test discovery floor becomes 2,507. This is an internal foundation, not an
+HTTP/3 endpoint or QUIC interoperability claim.
