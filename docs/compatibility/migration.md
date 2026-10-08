@@ -102,3 +102,22 @@ These tooling changes do not change either library target or public APIs.
 The CLI now lives in this repository and uses the current core. William approved
 requiring legacy CLI plugins to be rebuilt against the current APIs. See
 [CLI.md](../guides/cli.md#provenance-and-migration) for the command and plugin migration.
+
+
+## Malformed typed route values (unreleased, owner-approved)
+
+Supported controller route conversions that reject a nonempty malformed value
+now produce HTTP 400 instead of the inherited 500. The handler method is not
+called; its exceptions, successful conversions, unmatched routes,
+optional/configuration errors and query/body binding keep their existing
+behavior. This compatibility change was explicitly approved by William in
+[#163](https://github.com/WilliamSmithEdward/embedio-neo/issues/163).
+
+Clients should classify this response as invalid input and correct it rather
+than retrying it as a server failure. Error callbacks can observe an
+`HttpException` for this specific failure; the configured HTTP error handler
+controls its body. Published 1.0.3 still has the old automatic-binding status.
+Application-owned string parsing remains supported for custom validation.
+Existing transport closure policies are unchanged. See
+[typed route validation](../user-reports/typed-route-validation.md) for the
+precise scope, tests and limitations. No release date/version is promised.

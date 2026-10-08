@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Owner-approved compatibility change: malformed nonempty values rejected by supported controller route converters now return HTTP 400 instead of 500, before handler invocation. Preserve valid conversions, controller/configuration errors, optional/missing routes, query/body binding and transport policies; see the migration guide (issue #163, upstream #505 follow-up).
+
 - Serialize shared ZIP archive lookup/open and entry reads without whole-entry buffering. Preserve stream ownership/capabilities and cancellation, and wake pending archive operations during disposal (upstream #491).
 
 - Preserve managed-listener bytes for pipelined requests, including successors after drained Content-Length bodies. Add isolated JSON/plaintext benchmark endpoints and protocol regressions (upstream #495).
