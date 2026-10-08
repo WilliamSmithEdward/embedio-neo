@@ -63,7 +63,7 @@ namespace EmbedIO.Tests
         public async Task TcpAndQuicSharePortAndStopIndependently(bool stopQuic, bool http2)
         {
             using var certificate = Certificate();
-            var prefix = Prefix();
+            var prefix = CombinedPrefix();
             var tcpCount = 0;
             var quicCount = 0;
             using var tcp = new WebServer(HttpListenerMode.EmbedIO, certificate, prefix)

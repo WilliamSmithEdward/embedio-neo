@@ -196,6 +196,9 @@ namespace EmbedIO.Net.Internal
             public override Task FlushAsync(CancellationToken token) => _owner.FlushAsync(token);
             public override void Write(byte[] buffer, int offset, int count) => _owner.WriteAsync(buffer, offset, count, CancellationToken.None).GetAwaiter().GetResult();
             public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken token) => _owner.WriteAsync(buffer, offset, count, token);
+#if NET10_0_OR_GREATER
+            public override ValueTask DisposeAsync() => new(_owner.CloseAsync());
+#endif
             protected override void Dispose(bool disposing) { if (disposing && !_owner._closed) _owner.Close(); base.Dispose(disposing); }
             public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
             public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();

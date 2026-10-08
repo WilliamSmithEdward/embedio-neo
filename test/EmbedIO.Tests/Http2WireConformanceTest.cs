@@ -182,7 +182,7 @@ namespace EmbedIO.Tests
                 await Respond(exchange, body.ToArray());
             }
         }
-        private static async Task WithRawServer(byte[] settings, Func<NetworkStream, CancellationToken, Task> verify, uint? expectedConnectionError = null, Func<object, Task>? app = null)
+        private static async Task WithRawServer(byte[] settings, Func<NetworkStream, CancellationToken, Task> verify, uint? expectedConnectionError = null, Func<object, Task>? app = null, Action<object>? dispatcherReady = null, Func<Stream, Stream>? wrapTransport = null)
         {
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
@@ -190,10 +190,12 @@ namespace EmbedIO.Tests
             {
                 using var socket = await listener.AcceptTcpClientAsync(stop.Token);
                 using var stream = socket.GetStream();
-                var connection = await Result((Task)((Type("Http2Connection").GetMethod("AcceptAsync", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(null, new object[] { stream, stop.Token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")));
+                using var transport = wrapTransport?.Invoke(stream) ?? stream;
+                var connection = await Result((Task)((Type("Http2Connection").GetMethod("AcceptAsync", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(null, new object[] { transport, stop.Token }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")));
                 using var connectionLifetime = (IDisposable)connection;
                 var dispatcher = (Activator.CreateInstance(Type("Http2Dispatcher"), Flags, null, new[] { connection }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
                 using var dispatcherLifetime = (IDisposable)dispatcher;
+                dispatcherReady?.Invoke(dispatcher);
                 var argument = Expression.Parameter(Type("Http2Exchange"));
                 var delegateType = typeof(Func<,>).MakeGenericType(Type("Http2Exchange"), typeof(Task));
                 Func<object, Task> application = app ?? RawEcho;

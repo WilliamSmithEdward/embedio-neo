@@ -12,12 +12,49 @@ namespace EmbedIO.Tests
 {
     public partial class Http3ListenerTest
     {
+        private static string CombinedPrefix()
+        {
+            for (var attempt = 0; ; attempt++)
+            {
+                using var tcp4 = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                using var udp4 = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+                using var tcp6 = Socket.OSSupportsIPv6 ? new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp) : null;
+                using var udp6 = Socket.OSSupportsIPv6 ? new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp) : null;
+                try
+                {
+                    tcp4.ExclusiveAddressUse = true;
+                    // Consecutive OS-assigned TCP ports can all lie in a UDP
+                    // exclusion range. Sample outside the usual ephemeral pool,
+                    // then verify every required endpoint rather than assuming it.
+                    var port = Random.Shared.Next(10000, 30000);
+                    tcp4.Bind(new IPEndPoint(IPAddress.Loopback, port));
+                    udp4.ExclusiveAddressUse = true;
+                    udp4.Bind(new IPEndPoint(IPAddress.Loopback, port));
+                    if (tcp6 != null && udp6 != null)
+                    {
+                        tcp6.DualMode = false;
+                        udp6.DualMode = false;
+                        tcp6.ExclusiveAddressUse = true;
+                        udp6.ExclusiveAddressUse = true;
+                        tcp6.Bind(new IPEndPoint(IPAddress.IPv6Loopback, port));
+                        udp6.Bind(new IPEndPoint(IPAddress.IPv6Loopback, port));
+                    }
+                    return $"https://localhost:{port}/";
+                }
+                catch (SocketException error) when (attempt < 31 && error.SocketErrorCode is SocketError.AddressAlreadyInUse or SocketError.AccessDenied)
+                {
+                    // TCP and UDP have different allocations and excluded ranges.
+                    // Retry only port selection, never the listener operation under test.
+                }
+            }
+        }
+
         [TestCase(1)]
         [TestCase(96)]
         public async Task CombinedListenerDispatchesEveryProtocol(int perProtocol)
         {
             using var certificate = Certificate();
-            var prefix = Prefix();
+            var prefix = CombinedPrefix();
             var count = 0;
             using var server = new WebServer(HttpListenerMode.EmbedIOCombined, certificate, prefix)
                 .WithAction("/", HttpVerbs.Get, async context =>
@@ -50,7 +87,7 @@ namespace EmbedIO.Tests
         public async Task CombinedListenerCanceledConsumerDoesNotLoseNextRequest(bool quic)
         {
             using var certificate = Certificate();
-            var prefix = Prefix();
+            var prefix = CombinedPrefix();
             using var server = new WebServer(HttpListenerMode.EmbedIOCombined, certificate, prefix);
             var listener = server.Listener;
             listener.Start();
@@ -74,7 +111,7 @@ namespace EmbedIO.Tests
         public async Task CombinedListenerStopCompletesPendingAcceptAndRestarts(bool dispose)
         {
             using var certificate = Certificate();
-            var prefix = Prefix();
+            var prefix = CombinedPrefix();
             using var server = new WebServer(HttpListenerMode.EmbedIOCombined, certificate, prefix);
             var listener = server.Listener;
             listener.Start();
@@ -103,7 +140,7 @@ namespace EmbedIO.Tests
         public async Task CombinedListenerStopAbortsUndispatchedResponses(int version)
         {
             using var certificate = Certificate();
-            var prefix = Prefix();
+            var prefix = CombinedPrefix();
             using var server = new WebServer(HttpListenerMode.EmbedIOCombined, certificate, prefix);
             server.Listener.Start();
             using var client = Client(certificate);
@@ -125,10 +162,10 @@ namespace EmbedIO.Tests
             using var certificate = Certificate();
             using var occupied = new Socket(AddressFamily.InterNetwork, udp ? SocketType.Dgram : SocketType.Stream, udp ? ProtocolType.Udp : ProtocolType.Tcp);
             occupied.ExclusiveAddressUse = true;
-            occupied.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+            var prefix = CombinedPrefix();
+            var port = new Uri(prefix).Port;
+            occupied.Bind(new IPEndPoint(IPAddress.Loopback, port));
             if (!udp) occupied.Listen(1);
-            var port = ((IPEndPoint)(occupied.LocalEndPoint ?? throw new AssertionException("Missing endpoint."))).Port;
-            var prefix = $"https://localhost:{port}/";
             using var server = new WebServer(HttpListenerMode.EmbedIOCombined, certificate, prefix);
             Assert.That(() => server.Listener.Start(), Throws.Exception);
             Assert.That(server.Listener.IsListening, Is.False);

@@ -319,7 +319,10 @@ namespace EmbedIO
                         finally
                         {
                             // Completion callbacks must run even if flushing or cleanup fails.
-                            context.Close();
+                            // Multiplexed FIN writes must not block a worker waiting for I/O.
+                            if (context is Net.Internal.MultiplexedContext multiplexed)
+                                await multiplexed.CloseAsync().ConfigureAwait(false);
+                            else context.Close();
                         }
                     }
 

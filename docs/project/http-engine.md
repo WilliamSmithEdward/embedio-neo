@@ -2251,3 +2251,114 @@ the existing TCP implementation. The HTTP/3 guide documents these restrictions.
 The final full Windows suite passed 3,125 tests with five expected skips
 (3,130 total, zero failures) in `combined-full.log`. The CI discovery floor
 is 3,130. macOS and final-head CI validation remain pending.
+
+
+### HTTP/2 external drain primitive (2026-10-08)
+
+The HTTP/2 dispatcher now exposes its existing GOAWAY operation internally for
+future listener coordination. Concurrent callers receive the same task while
+GOAWAY is pending. After sending it, an empty exchange set cancels the read loop,
+so an idle connection does not wait indefinitely for a client request or close.
+Dispatcher cleanup also observes any pending drain write before disposing its
+cancellation source. The existing response-triggered drain uses this same path.
+The returned task represents GOAWAY completion, not completion of all accepted
+application responses; the dispatcher run task remains the connection lifetime.
+
+Five raw TCP cases check idle close, concurrent calls, an explicitly gated pending
+GOAWAY write, the last accepted stream identifier, preserved accepted output and
+REFUSED_STREAM for a later request. The two idle cases failed before the change;
+the gated concurrent-write case separately failed against the prior dispatcher.
+An initial corrected-production run exposed unread SETTINGS acknowledgment bytes
+in the idle fixture, which could turn its socket close into a reset. The fixture
+now completes a PING round trip before testing idle shutdown. Before/failure logs
+are retained under `TestResults/http-engine/h2-drain-*`.
+
+All 62 HTTP/2 interoperability cases passed on Windows and pinned Linux, both
+with the .NET 10 library and with the actual .NET Standard library asset loaded
+by the .NET 10 test host. This is not old-runtime validation. TCP listener-wide
+and combined drain remain unfinished: endpoint admission and routing ownership,
+HTTP/1 keep-alive completion, shared deadlines and connection completion tracking
+must still be connected and tested.
+
+A full Windows run exposed socket bind failures in the newly introduced combined
+fixtures. Their UDP-only ephemeral port selection did not check TCP availability;
+the rollback fixture also selected only the deliberately occupied transport.
+The updated helper reserves TCP and UDP on both localhost address families while
+choosing a candidate, then releases those probes before the actual test. Only
+candidate selection retries; listener startup and assertions are not retried.
+The OS-level gap between probe release and bind still exists. No production bind
+failure is silently retried or hidden.
+
+CI on the preceding combined-host commit `f6f69b4` passed Windows but failed the
+Ubuntu suite in run 37847220707, job 113550991817, with an unhandled runtime
+`System.Net.HttpListenerResponse.FormatHeaders` NullReferenceException during
+`System.Net.HttpConnection.OnRead` cleanup. The log does not identify the active
+test. It is retained as `combined-ci-linux-failed.log`; no repair or successful
+retry is claimed. This separate native-backend failure remains to investigate.
+
+
+The downloaded CI TRX artifacts provide additional evidence: both Ubuntu and
+macOS failed `CombinedListenerDispatchesEveryProtocol(96)` at the existing
+15-second client deadline. This mixed-load failure is unresolved despite focused
+local Windows/Linux passes; neither its concurrency nor its deadline has been
+weakened. Ubuntu subsequently crashed in the native runtime, while macOS ended
+with only 2,775 of the required 3,130 cases reported. The artifacts are retained
+under `combined-ci-linux-artifact` and `combined-ci-macos-artifact`. The latest
+completed test entries do not establish which operation triggered the Ubuntu
+background exception. Coverage/constrained-runner reproduction and per-protocol
+diagnostics are the next investigation for the mixed-load timeout.
+
+
+The initial all-transport probe still failed during a second full run: successive
+TCP port-0 allocations can land inside long UDP exclusion ranges. A separate
+Windows socket probe reproduced 60 exclusive UDP bind failures in 64 distinct
+TCP-assigned candidates; `netsh` confirmed UDP exclusion ranges overlapping the
+observed ports. Evidence is in `port-exclusion-observation.txt` and
+`udp-port-exclusions.txt`. The fixture now samples candidates from 10000-29999
+and checks both transports/address families before using one. The second failed
+full run remains `h2-drain-full-final.log`; no test result is overwritten and no
+network settings were changed.
+
+
+### Asynchronous short responses under mixed-protocol load (2026-10-08)
+
+The preceding CI mixed-load timeout reproduced locally with two logical
+processors in the pinned Linux container. The command enabled Coverlet, but its
+summary was N/A in the copied Windows-build container; this is constrained-host
+reproduction, not equivalent CI coverage evidence. The 96-requests-per-protocol
+case exceeded the unchanged 15-second client deadline. Changing only context
+closure to await asynchronous response completion still failed. Adding an
+explicit asynchronous writer flush made both mixed-load cases pass in 1.101
+seconds total in that run. These are fixture timings, not throughput benchmarks
+or a claimed general speedup. Logs preserve the failing baseline, failed
+close-only candidate and passing flush candidate as `combined-coverage-linux.log`,
+`combined-coverage-async-close-linux.log` and
+`combined-coverage-async-flush-linux.log`.
+
+`SendStringAsync` previously buffered short text until synchronous writer
+disposal, which could block the calling worker on multiplexed network I/O.
+A deterministic gated-header-write case now verifies that the helper returns a
+pending task while the network write remains blocked; the prior helper fails
+that case (`short-string-before.log`). The helper now explicitly flushes
+asynchronously on both assets and disposes the writer asynchronously on .NET 10.
+The multiplexed output stream supplies asynchronous disposal for that modern
+path. The server pipeline and HTTP/2/HTTP/3 adapter cleanup also await context
+closure, including response completion and close callbacks. The synchronous
+public close API remains available, with once-only callback behavior retained.
+Legacy-target disposal remains synchronous because that target lacks the modern
+asynchronous disposal API; other response helpers and compressed legacy paths
+still require performance review.
+
+All 119 selected HTTP/2 interoperability and HTTP/3 listener cases passed on
+Windows and on pinned Linux with `DOTNET_PROCESSOR_COUNT=2`, QUIC required and no
+skips. All 63 HTTP/2 interoperability cases passed with the actual .NET Standard
+library on Windows and Linux .NET 10 hosts. The unchanged compatibility audit
+passed 207 cases / 414 upstream-versus-Neo comparisons with zero errors. Both
+assets build without warnings. These results do not clear the separate native
+Linux background exception or prove macOS CI recovery.
+
+The final combined-source Windows suite passed 3,131 tests with five expected
+skips (3,136 total, zero failures) in `async-context-full.log`. Formatting and
+both source guards passed; the pinned YARA scan reported no matches for all
+changed C# files. The discovery floor is 3,136. Final-head cross-platform CI
+remains required.

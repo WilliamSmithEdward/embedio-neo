@@ -21,6 +21,7 @@ namespace EmbedIO.Net.Internal.Http2
         private Exception? _failure;
         private bool _draining;
         private bool _drainSent;
+        private Task? _drainTask;
         private int _drainLastStream;
 
         internal Http2Dispatcher(Http2Connection connection)
@@ -123,6 +124,11 @@ namespace EmbedIO.Net.Internal.Http2
                 }
                 await Task.WhenAll(applications).ConfigureAwait(false);
                 await _creditPump.ConfigureAwait(false);
+                Task? drain;
+                lock (_sync) drain = _drainTask;
+                if (drain != null)
+                    try { await drain.ConfigureAwait(false); }
+                    catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
             }
             if (_failure != null) throw new IOException("HTTP/2 connection failed.", _failure);
         }
@@ -160,18 +166,29 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
-        private async Task DrainAsync()
+        internal Task DrainAsync()
         {
             lock (_sync)
             {
-                if (_draining) return;
+                if (_drainTask != null) return _drainTask;
                 _draining = true;
                 _drainLastStream = _connection.Streams.LastStreamId;
+                return _drainTask = SendDrainAsync();
             }
+        }
+
+        private async Task SendDrainAsync()
+        {
             var payload = new byte[8];
             WriteUInt32(payload, 0, (uint)_drainLastStream);
             await _connection.SendAsync(new[] { new Http2Frame(7, 0, 0, payload) }, _stop.Token).ConfigureAwait(false);
-            lock (_sync) _drainSent = true;
+            lock (_sync)
+            {
+                _drainSent = true;
+                // An external drain can start with no applications, or the last
+                // stream can reset while GOAWAY waits for the output gate.
+                if (_exchanges.Count == 0) _stop.Cancel();
+            }
         }
 
         private async Task ResetAsync(int id, uint code, Exception error)

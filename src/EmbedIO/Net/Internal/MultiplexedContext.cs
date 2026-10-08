@@ -81,9 +81,22 @@ namespace EmbedIO.Net.Internal
         public void Dispose() => Close();
         public void Close()
         {
-            lock (_sync) { if (_closed) return; _closed = true; }
+            if (BeginClose()) CloseCoreAsync().GetAwaiter().GetResult();
+        }
+        internal Task CloseAsync() => BeginClose() ? CloseCoreAsync() : _completion.Task;
+        private bool BeginClose()
+        {
+            lock (_sync)
+            {
+                if (_closed) return false;
+                _closed = true;
+                return true;
+            }
+        }
+        private async Task CloseCoreAsync()
+        {
             Exception? failure = null;
-            try { Response.Close(); }
+            try { await ((MultiplexedResponse)Response).CloseAsync().ConfigureAwait(false); }
             catch (Exception error) { failure = error; throw; }
             finally
             {

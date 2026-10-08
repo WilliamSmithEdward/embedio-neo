@@ -297,7 +297,7 @@ namespace EmbedIO.Net.Internal.Http3
                 }
                 finally
                 {
-                    try { context.Close(); }
+                    try { await context.CloseAsync().ConfigureAwait(false); }
                     catch (Exception error) when (exchange.CancellationToken.IsCancellationRequested && ExceptionPolicy.IsRecoverable(error)) { }
                     if (context.Completion.IsFaulted) _ = context.Completion.Exception;
                 }

@@ -43,7 +43,7 @@ namespace EmbedIO.Net.Internal
                 if (listener == null)
                 {
                     context.Response.StatusCode = 404;
-                    context.Close();
+                    await context.CloseAsync().ConfigureAwait(false);
                     return;
                 }
                 lock (_connectionSync)
@@ -72,7 +72,7 @@ namespace EmbedIO.Net.Internal
                 listener?.UnregisterContext(context);
                 // Cleanup runs on application dispatch, never synchronously inside
                 // a cancellation callback holding a listener/connection lock.
-                try { context.Close(); }
+                try { await context.CloseAsync().ConfigureAwait(false); }
                 catch (Exception error) when (exchange.CancellationToken.IsCancellationRequested && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { }
                 if (context.Completion.IsFaulted) _ = context.Completion.Exception;
             }
