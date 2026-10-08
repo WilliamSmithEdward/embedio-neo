@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 ## [Unreleased]
 
@@ -7,8 +7,14 @@
   pipeline buffer adoption and reduced response-header allocations. Malformed or
   ambiguous requests previously tolerated are rejected; see the
   [migration notes](docs/compatibility/migration.md#managed-http-framing-unreleased)
-  and [protocol roadmap](docs/project/http-engine.md). HTTP/2 and HTTP/3 remain
-  planned and are not advertised by this increment.
+  and [protocol roadmap](docs/project/http-engine.md). The development branch now
+  includes HTTP/2, HPACK and RFC 8441 WebSockets; HTTP/3 remains planned.
+  See the roadmap for target restrictions and outstanding conformance work.
+
+- Reject malformed managed WebSocket frame metadata before consuming payloads,
+  enforce minimal wire-length encoding, and reject lengths that cannot fit the
+  current payload representation before integer conversion (#190). See the
+  [compatibility notes](docs/compatibility/migration.md#managed-websocket-framing-unreleased).
 
 - Add the owner-approved WithBasicAuthentication fluent helper with explicit scope, configure-before-registration and optional realm, preserving existing authentication behavior and manual registration (upstream #439).
 

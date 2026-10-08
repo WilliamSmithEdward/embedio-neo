@@ -21,6 +21,9 @@ namespace EmbedIO.WebSockets.Internal
             if (_stream == null) return null;
 
             var frame = ProcessHeader(await _stream.ReadBytesAsync(2).ConfigureAwait(false));
+            // Reject invalid mask/flags/fragment state before reading attacker-
+            // supplied lengths or waiting for/allocating a payload.
+            frame.Validate(webSocket);
 
             await ReadExtendedPayloadLengthAsync(frame).ConfigureAwait(false);
             await ReadMaskingKeyAsync(frame).ConfigureAwait(false);
@@ -28,8 +31,6 @@ namespace EmbedIO.WebSockets.Internal
 
             if (_unmask)
                 frame.Unmask();
-
-            frame.Validate(webSocket);
 
             frame.Unmask();
 
@@ -97,6 +98,14 @@ namespace EmbedIO.WebSockets.Internal
             }
 
             frame.ExtendedPayloadLength = bytes;
+            var length = frame.FullPayloadLength;
+            if ((len == 8 && (bytes[0] & 0x80) != 0)
+                || (len == 2 && length < 126) || (len == 8 && length < 65536))
+                throw new WebSocketException(CloseStatusCode.ProtocolError, "Invalid or nonminimal frame payload length.");
+            // Payloads are represented by byte[] and the stream reader accepts
+            // int lengths. Never let an unchecked cast wrap the wire length.
+            if (length > int.MaxValue)
+                throw new WebSocketException(CloseStatusCode.TooBig, "Frame payload exceeds the supported representation.");
         }
 
         private async Task ReadMaskingKeyAsync(WebSocketFrame frame)

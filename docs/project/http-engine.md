@@ -432,3 +432,24 @@ The complete Windows suite passed: 2,292 successes, five expected platform skips
 2,297 total. Existing hot-path allocation checks also passed. This is not yet a
 WebSocket throughput/latency comparison or completion of #190. Exact-head remote
 checks and broader platform/conformance validation remain required.
+
+### Managed WebSocket early frame validation (#190)
+
+Sixteen header-only tests exercise rejection without supplying a masking key or
+payload. Thirteen failed on the preceding source by attempting an additional
+read; three existing opcode/control checks already passed. The parser now
+validates masking, reserved bits and fragmentation state immediately after the
+base header, then checks minimum length encoding, the reserved high length bit
+and the byte-array/int representation bound before reading the masking key.
+Invalid wire metadata uses 1002; unrepresentable lengths use 1009.
+
+Eight valid masked-frame cases cover empty frames, 125/126/65535/65536-byte
+boundaries, continuation and interleaved ping. All 24 new cases and six HTTP/2
+WebSocket cases passed locally. The 287-case HTTP/2 plus new framing selection
+also passed with the actual netstandard2.0 assembly on .NET 10.0.11. Both targets
+build. This is an initial parser hardening increment, not completion of #190's
+UTF-8/close checks, resource policies, fuzzing or performance work.
+
+The full Windows suite passed with this frame-parser change: 2,316 successes,
+five expected skips, 2,321 total. Existing hot-path allocation checks passed.
+No throughput or latency improvement is claimed by this correctness increment.

@@ -579,3 +579,26 @@ complete. Chunk metadata lines are limited to 8192 bytes and trailers to 32768
 bytes. The native Microsoft backend is unchanged. No package version or release
 is implied; see the [engine program](../project/http-engine.md) for validation
 status and the HTTP/2 and HTTP/3 milestones.
+
+## Managed WebSocket framing (unreleased)
+
+The managed WebSocket audit in [#190](https://github.com/WilliamSmithEdward/embedio-neo/issues/190)
+now rejects invalid masking, reserved bits and fragmentation state as soon as the
+base header is available. A continuation must follow an unfinished fragmented
+message. New data messages cannot interrupt one; ping/pong control frames may
+still occur between fragments. Clients that relied on silently discarded orphan
+continuations must correct their frame sequence.
+
+Use the shortest payload-length encoding required by RFC 6455 and leave the high
+bit of a 64-bit length clear. Nonminimal or invalid encodings now fail with close
+code 1002. Lengths greater than Int32.MaxValue cannot fit the engine's current
+byte-array representation and are rejected with 1009 before any narrowing cast
+or payload read. This is a representation check, not a newly configured message
+budget or a guarantee that all smaller allocations will succeed. Resource limits
+and memory/backpressure work remain tracked in #190.
+
+These checks apply to the existing managed HTTP/1.1 WebSocket engine and its
+HTTP/2 stream integration. Valid masked frames and interleaved control frames
+remain supported. Public APIs, callback scheduling and message-size defaults
+are unchanged. The native Microsoft WebSocket backend is unchanged. These
+changes are unreleased.
