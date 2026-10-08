@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace EmbedIO.Net.Internal.Http2
 {
-    internal sealed class Http2Exchange : IDisposable
+    internal sealed class Http2Exchange : IMultiplexedExchange, IDisposable
     {
         private readonly Http2Connection _connection;
         private readonly SemaphoreSlim _response = new(1, 1);
@@ -30,8 +30,11 @@ namespace EmbedIO.Net.Internal.Http2
         public Stream InputStream => Body;
         public CancellationToken CancellationToken => _stop.Token;
         internal Http2RequestBody Body { get; }
-        internal bool Ended => _ended;
-        internal bool CloseConnectionAfterResponse { get; set; }
+        private static readonly Version Version = new(2, 0);
+        public Version ProtocolVersion => Version;
+        public bool InitialBodyComplete => State.InitialEndStream;
+        public bool Ended => _ended;
+        public bool CloseConnectionAfterResponse { get; set; }
 
         internal async Task RespondAsync(byte[] bytes, CancellationToken token)
         {
@@ -40,7 +43,7 @@ namespace EmbedIO.Net.Internal.Http2
             if (bytes.Length != 0 && Request.Method != "HEAD") await WriteAsync(bytes, 0, bytes.Length, true, token).ConfigureAwait(false);
         }
 
-        internal async Task SendHeadersAsync(HpackField[] fields, bool endStream, CancellationToken token)
+        public async Task SendHeadersAsync(HpackField[] fields, bool endStream, CancellationToken token)
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _stop.Token);
             await _response.WaitAsync(linked.Token).ConfigureAwait(false);
@@ -60,7 +63,7 @@ namespace EmbedIO.Net.Internal.Http2
             finally { _response.Release(); }
         }
 
-        internal async Task WriteAsync(byte[] bytes, int offset, int count, bool endStream, CancellationToken token)
+        public async Task WriteAsync(byte[] bytes, int offset, int count, bool endStream, CancellationToken token)
         {
             if (bytes == null) throw new ArgumentNullException(nameof(bytes));
             if (offset < 0 || count < 0 || offset > bytes.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
@@ -90,7 +93,7 @@ namespace EmbedIO.Net.Internal.Http2
             finally { _response.Release(); }
         }
 
-        internal Task CompleteAsync(CancellationToken token)
+        public Task CompleteAsync(CancellationToken token)
             => _headersSent ? WriteAsync(Array.Empty<byte>(), 0, 0, true, token) : RespondAsync(Array.Empty<byte>(), token);
 
         private void EndLocal() { _ended = true; _connection.Streams.EndLocal(Id); _connection.SendFlow.Close(Id); }

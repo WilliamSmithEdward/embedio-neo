@@ -8,13 +8,14 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Net.Internal.Http2;
 using EmbedIO.Utilities;
 
-namespace EmbedIO.Net.Internal.Http2
+namespace EmbedIO.Net.Internal
 {
-    internal sealed class Http2Response : IHttpResponse, IDisposable
+    internal sealed class MultiplexedResponse : IHttpResponse, IDisposable
     {
-        private readonly Http2Exchange _exchange;
+        private readonly IMultiplexedExchange _exchange;
         private readonly SemaphoreSlim _gate = new(1, 1);
         private readonly object _lifecycle = new();
         private int _operations;
@@ -27,7 +28,7 @@ namespace EmbedIO.Net.Internal.Http2
         private volatile bool _closed;
         private bool _chunked;
         private bool _keepAlive = true;
-        internal Http2Response(Http2Exchange exchange) { _exchange = exchange; _output = new Output(this); }
+        internal MultiplexedResponse(IMultiplexedExchange exchange) { _exchange = exchange; _output = new Output(this); }
         public WebHeaderCollection Headers { get; } = new();
         public int StatusCode
         {
@@ -50,7 +51,7 @@ namespace EmbedIO.Net.Internal.Http2
         public bool SendChunked { get => _chunked; set { EnsureHeaders(); _chunked = value; } }
         public string StatusDescription { get; set; } = "OK";
         public ICookieCollection Cookies => _cookies ??= new CookieList();
-        public Version ProtocolVersion => Http2Request.Http2Version;
+        public Version ProtocolVersion => _exchange.ProtocolVersion;
         private bool SuppressBody => _exchange.Request.Method == "HEAD" || _status == 204 || _status == 205 || _status == 304;
         public void SetCookie(Cookie cookie)
         {
@@ -62,7 +63,7 @@ namespace EmbedIO.Net.Internal.Http2
         }
         private void EnsureHeaders()
         {
-            if (_closed) throw new ObjectDisposedException(nameof(Http2Response));
+            if (_closed) throw new ObjectDisposedException(nameof(MultiplexedResponse));
             if (_headersSent) throw new InvalidOperationException("Response headers were already sent.");
         }
         private HpackField[] BuildHeaders(bool closing)
@@ -82,7 +83,7 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 if (key == null) continue;
                 var name = WireHeaderName(key);
-                // The application API preserves these legacy options; HTTP/2 uses
+                // The application API preserves these legacy options; Multiplexed HTTP uses
                 // its own framing and connection-control frames on the wire.
                 if (name == "connection" || name == "keep-alive" || name == "proxy-connection" || name == "transfer-encoding" || name == "upgrade") continue;
                 var values = Headers.GetValues(key);
@@ -101,7 +102,7 @@ namespace EmbedIO.Net.Internal.Http2
         }
         private static string WireHeaderName(string name)
         {
-            // HTTP/2 field names are ASCII tokens and must be lowercase on the wire.
+            // HTTP/2 and HTTP/3 field names are ASCII tokens and must be lowercase on the wire.
             // Unicode case folding could turn an invalid application name into a valid one.
             char[]? characters = null;
             for (var i = 0; i < name.Length; i++)
@@ -129,7 +130,7 @@ namespace EmbedIO.Net.Internal.Http2
             await EnterAsync(token, false).ConfigureAwait(false);
             try
             {
-                if (_closed) throw new ObjectDisposedException(nameof(Http2Response));
+                if (_closed) throw new ObjectDisposedException(nameof(MultiplexedResponse));
                 if (count == 0) return;
                 await EnsureSentAsync(false, token).ConfigureAwait(false);
                 if (!SuppressBody) await _exchange.WriteAsync(buffer, offset, count, false, token).ConfigureAwait(false);
@@ -163,7 +164,7 @@ namespace EmbedIO.Net.Internal.Http2
                 if (_closed)
                 {
                     if (closing) return false;
-                    throw new ObjectDisposedException(nameof(Http2Response));
+                    throw new ObjectDisposedException(nameof(MultiplexedResponse));
                 }
                 _operations++;
             }
@@ -184,8 +185,8 @@ namespace EmbedIO.Net.Internal.Http2
 
         private sealed class Output : Stream
         {
-            private readonly Http2Response _owner;
-            internal Output(Http2Response owner) { _owner = owner; }
+            private readonly MultiplexedResponse _owner;
+            internal Output(MultiplexedResponse owner) { _owner = owner; }
             public override bool CanRead => false;
             public override bool CanSeek => false;
             public override bool CanWrite => !_owner._closed;

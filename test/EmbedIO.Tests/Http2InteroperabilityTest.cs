@@ -14,7 +14,7 @@ namespace EmbedIO.Tests
 {
     public partial class Http2InteroperabilityTest
     {
-        private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
         private static Type Type(string name) => (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2." + name, true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         private static T Property<T>(object value, string name) => (T)((value.GetType().GetProperty(name) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(value) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
         private static async Task<object> Result(Task task) { await task; return ((task.GetType().GetProperty("Result") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(task) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")); }

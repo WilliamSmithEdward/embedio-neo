@@ -14,7 +14,7 @@ namespace EmbedIO.Tests
     public partial class Http2InteroperabilityTest
     {
         private static IHttpContextImpl Adapter(object exchange)
-            => (IHttpContextImpl)(Activator.CreateInstance(Type("Http2Context"), Flags, null,
+            => (IHttpContextImpl)(Activator.CreateInstance((typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.MultiplexedContext", true) ?? throw new AssertionException("Missing application context.")), Flags, null,
                 new object[] { exchange, new IPEndPoint(IPAddress.Loopback, 80), new IPEndPoint(IPAddress.Loopback, 12345), false }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
 
         private static async Task WithAdapter(Func<IHttpContextImpl, Task> application, Func<HttpClient, Task> verify)

@@ -16,6 +16,7 @@ namespace EmbedIO.Tests
     public sealed partial class Http3QuicTest
     {
         [TestCase("idle")]
+        [TestCase("idle-deadline")]
         [TestCase("blocked-qpack")]
         [TestCase("complete")]
         [TestCase("timeout")]
@@ -29,6 +30,18 @@ namespace EmbedIO.Tests
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
             { Assert.Ignore("The legacy asset has no direct QUIC transport."); return; }
             await Drain(scenario);
+        }
+        [TestCase("idle")]
+        [TestCase("complete")]
+        [TestCase("blocked-qpack")]
+        public async Task CooperativePeerCloseDoesNotBecomeACriticalStreamFailure(string scenario)
+        {
+            ArgumentNullException.ThrowIfNull(scenario);
+            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            { Assert.Ignore("The host does not provide QUIC."); return; }
+            if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
+            { Assert.Ignore("The legacy asset has no direct QUIC transport."); return; }
+            for (var iteration = 0; iteration < 5; ++iteration) await Drain(scenario);
         }
         private sealed class DrainingApplication
         {
@@ -126,7 +139,7 @@ namespace EmbedIO.Tests
                 }
                 else
                     await ((Task)(connection.GetMethod("RunWithDrainAsync", Flags)?.Invoke(null,
-                        new object[] { accepted, handler, deadline.Token, drain.Token, TimeSpan.FromSeconds(scenario == "timeout" ? 3 : 10) })
+                        new object[] { accepted, handler, deadline.Token, drain.Token, TimeSpan.FromSeconds(scenario is "timeout" or "idle-deadline" ? 3 : 10) })
                         ?? throw new AssertionException("Missing graceful runner.")));
             });
             await using var client = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
@@ -147,13 +160,14 @@ namespace EmbedIO.Tests
             QuicStream? lower = null;
             try
             {
-                if (scenario == "idle")
+                if (scenario is "idle" or "idle-deadline")
                 {
                     var idleControl = await ReadControlForDrainAsync(client, peers, deadline.Token);
                     drain.Cancel();
                     Assert.That(await ReadQuicInteger(idleControl, deadline.Token), Is.EqualTo(7));
                     Assert.That(await ReadQuicInteger(idleControl, deadline.Token), Is.EqualTo(1));
                     Assert.That(await ReadQuicInteger(idleControl, deadline.Token), Is.EqualTo(0));
+                    if (scenario == "idle") await client.CloseAsync(0x100, deadline.Token);
                     await server.WaitAsync(TimeSpan.FromSeconds(5));
                     return;
                 }
@@ -199,10 +213,13 @@ namespace EmbedIO.Tests
                     await request.CopyToAsync(response, deadline.Token);
                     var bytes = response.ToArray();
                     Assert.That(bytes.AsSpan(bytes.Length - 4).ToArray(), Is.EqualTo(new byte[] { 100, 111, 110, 101 }));
+                    // A cooperative client has consumed GOAWAY and all responses.
+                    await client.CloseAsync(0x100, deadline.Token);
                 }
                 else if (scenario == "abort") deadline.Cancel();
                 await server.WaitAsync(TimeSpan.FromSeconds(5));
                 if (scenario == "timeout" || scenario == "abort") Assert.That(application.Completed.Task.IsCompleted, Is.False);
+                if (scenario is "complete" or "late-lower-id" or "blocked-qpack") return;
                 QuicException? closure = null;
                 try
                 {

@@ -35,7 +35,8 @@ namespace EmbedIO.Net.Internal.Http3
         private int _critical;
         private int _applicationCount;
         private CancellationToken _drainToken;
-        private TimeSpan _drainTimeout;
+        private TimeSpan _drainTimeout = TimeSpan.FromSeconds(30);
+        private readonly CancellationTokenSource _applicationDrain = new();
         private bool _draining;
         private long _highestRequestId = -4;
 
@@ -134,8 +135,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private async Task WatchDrainAsync(QuicStream control)
         {
-            if (!_drainToken.CanBeCanceled) return;
-            using var requested = CancellationTokenSource.CreateLinkedTokenSource(_token, _drainToken);
+            using var requested = CancellationTokenSource.CreateLinkedTokenSource(_token, _drainToken, _applicationDrain.Token);
             try { await Task.Delay(Timeout.Infinite, requested.Token).ConfigureAwait(false); }
             catch (OperationCanceledException) when (requested.IsCancellationRequested) { }
             if (_token.IsCancellationRequested) return;
@@ -163,8 +163,14 @@ namespace EmbedIO.Net.Internal.Http3
                     await control.WriteAsync(frame.AsMemory(0, length + 2), deadline.Token).ConfigureAwait(false);
                 }
                 await Task.WhenAll(accepted).WaitAsync(deadline.Token).ConfigureAwait(false);
+                // WriteAsync releases the send buffer; it does not confirm receipt.
+                // Keep critical streams alive for peer-driven closure, bounded by
+                // the drain deadline, rather than immediately overtaking GOAWAY.
+                await Task.Delay(Timeout.Infinite, deadline.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
+            catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
+            { _stop.Cancel(); } // Connection closure is not a critical-stream reset.
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             { if (!_token.IsCancellationRequested) Fail(error); }
             finally { _stop.Cancel(); }
@@ -271,6 +277,7 @@ namespace EmbedIO.Net.Internal.Http3
                 }
                 if (!exchange.Ended) await exchange.CompleteAsync(requestToken).ConfigureAwait(false);
                 if (!exchange.Body.Ended) stream.Abort(QuicAbortDirection.Read, 0x100);
+                if (exchange.CloseConnectionAfterResponse) _applicationDrain.Cancel();
             }
             catch (OperationCanceledException) when (requestToken.IsCancellationRequested)
             { AbortStream(stream, 0x10c); }
@@ -397,6 +404,8 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
             catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
+            catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
+            { _stop.Cancel(); } // Connection closure is not a critical-stream reset.
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             { if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, error.Message)); }
         }
@@ -408,6 +417,8 @@ namespace EmbedIO.Net.Internal.Http3
                 if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, "Peer closed critical output."));
             }
             catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
+            catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
+            { _stop.Cancel(); } // Connection closure is not a critical-stream reset.
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             { if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, error.Message)); }
         }
@@ -444,7 +455,7 @@ namespace EmbedIO.Net.Internal.Http3
             try { _stop.Cancel(); }
             catch (ObjectDisposedException) { }
         }
-        public void Dispose() { _decoder.Dispose(); _feedbackReady.Dispose(); _stop.Dispose(); }
+        public void Dispose() { _decoder.Dispose(); _feedbackReady.Dispose(); _applicationDrain.Dispose(); _stop.Dispose(); }
     }
 }
 #endif

@@ -3,16 +3,16 @@ using System.Collections.Specialized;
 using System.IO;
 using System.Net;
 using System.Text;
+using EmbedIO.Net.Internal.Http2;
 using EmbedIO.Utilities;
 
-namespace EmbedIO.Net.Internal.Http2
+namespace EmbedIO.Net.Internal
 {
-    internal sealed class Http2Request : IHttpRequest
+    internal sealed class MultiplexedRequest : IHttpRequest
     {
-        internal static readonly Version Http2Version = new(2, 0);
-        private readonly Http2Exchange _exchange;
+        private readonly IMultiplexedExchange _exchange;
         private CookieList? _cookies;
-        internal Http2Request(Http2Exchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
+        internal MultiplexedRequest(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
         {
             _exchange = exchange;
             LocalEndPoint = local; RemoteEndPoint = remote; IsSecureConnection = secure;
@@ -22,7 +22,7 @@ namespace EmbedIO.Net.Internal.Http2
             RawTarget = request.Path.Length == 0 ? request.Authority : request.Path;
             var scheme = request.Scheme.Length == 0 ? (secure ? "https" : "http") : request.Scheme;
             Url = new Uri(scheme + "://" + request.Authority + (request.Path.Length == 0 || request.Path == "*" ? "/" : request.Path));
-            HasEntityBody = !exchange.State.InitialEndStream || request.ContentLength.GetValueOrDefault() > 0;
+            HasEntityBody = !exchange.InitialBodyComplete || request.ContentLength.GetValueOrDefault() > 0;
             var query = Url.Query;
             if (query.Length > 0)
             {
@@ -61,10 +61,10 @@ namespace EmbedIO.Net.Internal.Http2
         public bool IsWebSocketRequest => _exchange.Request.Protocol == "websocket";
         public IPEndPoint LocalEndPoint { get; }
         public string? ContentType => Headers[HttpHeaderNames.ContentType];
-        public long ContentLength64 => _exchange.Request.ContentLength ?? (_exchange.State.InitialEndStream ? 0 : -1);
+        public long ContentLength64 => _exchange.Request.ContentLength ?? (_exchange.InitialBodyComplete ? 0 : -1);
         public bool IsAuthenticated => false;
         public Uri? UrlReferrer { get; }
         public ICookieCollection Cookies => _cookies ??= HttpListenerRequest.ParseCookies(Headers[HttpHeaderNames.Cookie] ?? string.Empty);
-        public Version ProtocolVersion => Http2Version;
+        public Version ProtocolVersion => _exchange.ProtocolVersion;
     }
 }

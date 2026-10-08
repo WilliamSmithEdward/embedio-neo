@@ -4,6 +4,7 @@ using System.Net;
 using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Net.Internal.Http2;
 using EmbedIO.Authentication;
 using EmbedIO.Diagnostics;
 using EmbedIO.Internal;
@@ -13,25 +14,25 @@ using EmbedIO.Utilities;
 using EmbedIO.WebSockets;
 using EmbedIO.WebSockets.Internal;
 
-namespace EmbedIO.Net.Internal.Http2
+namespace EmbedIO.Net.Internal
 {
-    internal sealed class Http2Context : IHttpContextImpl, IDisposable
+    internal sealed class MultiplexedContext : IHttpContextImpl, IDisposable
     {
         private readonly object _sync = new();
         private readonly Lazy<IDictionary<object, object>> _items = new(() => new Dictionary<object, object>(), true);
         private readonly Stack<Action<IHttpContext>> _callbacks = new();
         private readonly TimeKeeper _age = new();
-        private readonly Http2Exchange _exchange;
+        private readonly IMultiplexedExchange _exchange;
         private readonly TaskCompletionSource<bool> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private CancellationTokenSource? _linked;
         private CancellationToken _cancellation;
         private bool _closed;
         private int _webSocketAccepted;
-        internal Http2Context(Http2Exchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
+        internal MultiplexedContext(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
         {
             _exchange = exchange; _cancellation = exchange.CancellationToken;
-            Request = new Http2Request(exchange, local, remote, secure);
-            Response = new Http2Response(exchange);
+            Request = new MultiplexedRequest(exchange, local, remote, secure);
+            Response = new MultiplexedResponse(exchange);
         }
         public string Id { get; } = UniqueIdGenerator.GetNext();
         public CancellationToken CancellationToken

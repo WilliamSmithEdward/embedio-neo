@@ -35,7 +35,7 @@ namespace EmbedIO.Net.Internal
 
         private async Task DispatchHttp2Async(Http2Exchange exchange)
         {
-            var context = new Http2Context(exchange, LocalEndPoint, RemoteEndPoint, IsSecure);
+            var context = new MultiplexedContext(exchange, LocalEndPoint, RemoteEndPoint, IsSecure);
             HttpListener? listener = null;
             try
             {

@@ -14,7 +14,7 @@ namespace EmbedIO.Net.Internal.Http3
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("macos")]
-    internal sealed class Http3QuicExchange : IDisposable
+    internal sealed class Http3QuicExchange : IMultiplexedExchange, IDisposable
     {
         private readonly BorrowedResource<QuicStream> _stream;
         private readonly Http3RequestStream _reader;
@@ -44,7 +44,13 @@ namespace EmbedIO.Net.Internal.Http3
         public Stream InputStream => Body;
         public CancellationToken CancellationToken { get; }
         internal Http3RequestBody Body { get; }
-        internal bool Ended => _ended;
+        private static readonly Version Version = new(3, 0);
+        public Version ProtocolVersion => Version;
+        // QUIC FIN can follow HEADERS later; no HTTP/2 END_STREAM bit exists.
+        // A declared zero-length body is known empty without reading ahead.
+        public bool InitialBodyComplete => Request.ContentLength == 0;
+        public bool Ended => _ended;
+        public bool CloseConnectionAfterResponse { get; set; }
 
         internal async Task RespondAsync(byte[] bytes, CancellationToken token)
         {
@@ -53,7 +59,7 @@ namespace EmbedIO.Net.Internal.Http3
             await SendHeadersAsync(new[] { new HpackField(":status", "200"), new HpackField("content-length", bytes.Length.ToString(CultureInfo.InvariantCulture)) }, end, token).ConfigureAwait(false);
             if (!end) await WriteAsync(bytes, 0, bytes.Length, true, token).ConfigureAwait(false);
         }
-        internal async Task SendHeadersAsync(HpackField[] fields, bool endStream, CancellationToken token)
+        public async Task SendHeadersAsync(HpackField[] fields, bool endStream, CancellationToken token)
         {
             await AcquireOutputAsync(token).ConfigureAwait(false);
             try
@@ -72,7 +78,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
             finally { ReleaseOutput(); }
         }
-        internal async Task WriteAsync(byte[] bytes, int offset, int count, bool endStream, CancellationToken token)
+        public async Task WriteAsync(byte[] bytes, int offset, int count, bool endStream, CancellationToken token)
         {
             if (bytes == null) throw new ArgumentNullException(nameof(bytes));
             if (offset < 0 || count < 0 || offset > bytes.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
@@ -110,7 +116,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
             finally { ReleaseOutput(); }
         }
-        internal Task CompleteAsync(CancellationToken token) => _headers
+        public Task CompleteAsync(CancellationToken token) => _headers
             ? WriteAsync(Array.Empty<byte>(), 0, 0, true, token) : RespondAsync(Array.Empty<byte>(), token);
         private void CheckWritable()
         {

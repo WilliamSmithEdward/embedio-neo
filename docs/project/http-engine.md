@@ -920,3 +920,67 @@ under TestResults/http-engine/http3-drain-*; the initial lower-ID failure is ret
 The discovery floor is 2,715. This is internal connection support; listener-wide
 drain/configuration, discovery, application adapters and other extension/performance
 acceptance criteria remain incomplete. Fresh exact-head CI is still required.
+
+
+### Shared application context for HTTP/2 and HTTP/3
+
+The internal MultiplexedContext, MultiplexedRequest and MultiplexedResponse now
+adapt either transport through IMultiplexedExchange. HTTP/2's listener dispatch
+uses these shared adapters; HTTP/3 can use the same application-facing request,
+response and context contracts without copying their cookie/header/callback logic.
+ProtocolVersion remains 2.0 for HTTP/2 and is 3.0 for HTTP/3. HTTP/3 has no initial
+END_STREAM bit: a declared zero-length body is known empty, while an absent length
+is exposed as unknown (-1) and potentially present. The body reader determines
+EOF from FIN. This does not buffer or pre-read the request body.
+
+Nine real-QUIC/.NET HttpClient cases exercise metadata, actual endpoints, query
+values, cookies, fixed and unknown-length uploads, empty input, HEAD, 204/205/304,
+response-field filtering, close callbacks, final flush and late cancellation-token
+assignment. An application setting KeepAlive=false requests connection drain after
+its response completes. The internal default for that drain is 30 seconds; the
+explicit connection-drain overload retains its supplied deadline. These adapters
+are not yet a public HTTP/3 listener option or proof of complete WebServer/module
+integration. HTTP/3 extended CONNECT remains disabled pending that work.
+
+Broader testing exposed an idle shutdown race on Windows and Ubuntu: completing
+WriteAsync on the control stream does not prove the peer received GOAWAY, and
+immediate connection closure could discard it. After completing admitted workers,
+the driver now keeps critical streams alive until the peer closes or the original
+drain deadline expires. This supersedes the earlier immediate-close-on-completion
+behavior. The seven drain scenarios retain strict GOAWAY/cutoff/rejection checks,
+exercise cooperative peer closure, and separately verify the idle deadline. A
+finite deadline still cannot guarantee delivery to an unreachable peer; timeout
+and explicit abort remain bounded termination paths. See
+[RFC 9114 section 5.2](https://www.rfc-editor.org/rfc/rfc9114.html#section-5.2).
+
+All 506 focused HTTP/2 and HTTP/3 cases pass on Windows; all 35 direct QUIC cases
+pass in the isolated Ubuntu 24.04/.NET 10.0.12/MsQuic 2.6.2 container. The initial
+four HTTP/2 fixture failures were fixed by including public methods in their
+fixed-target reflection lookup after the exchange implemented the internal
+interface; the production wire assertions remain unchanged. Initial idle-shutdown
+failures and subsequent deadline/peer-close validation are retained under
+TestResults/http-engine/http3-adapter-*. CI's discovery floor is now 2,728.
+
+The previous-head CI 37791977129 failed one macOS native-listener case,
+PrefixPathSelectsRequestsWithoutRewritingModulePaths(Microsoft), with a response
+connection reset. Windows and Ubuntu desktop jobs passed. An unchanged-source
+failed-job rerun was requested; no native-listener repair is claimed here. This
+failure remains part of the validation provenance, and new-head CI is required.
+
+The first full Windows run then exposed two cooperative-close races: a normal
+connection-wide QuicException could reach the critical-output observer before the
+accept loop and be misclassified as H3_CLOSED_CRITICAL_STREAM. The control-write,
+feedback-write and output-completion paths now distinguish connection termination
+from a reset confined to a critical stream. Three additional cases each repeat
+five cooperative closures (idle, completed response and QPACK-blocked sibling).
+All 38 direct QUIC cases pass in Ubuntu after this correction. Against the actual
+netstandard2.0 assembly, all 471 applicable HTTP/2/HTTP/3 tests pass; its 38 direct
+QUIC cases are explicitly skipped. The initial full-run failures remain recorded.
+
+After the connection-termination correction, the rebuilt full Windows suite passed
+2,723 cases with five expected skips (2,728 total, zero failures). A subsequent
+fixture refinement gives the empty-body case a distinct empty response and asserts
+Content-Length: 0; all nine adapter cases pass again. Solution builds are warning
+free, format verification and both suppression guards pass, and the pinned full
+YARA scan has no matches in the transport/shared-adapter files. New-head CI and
+complete listener integration remain outstanding; no performance claim is made.
