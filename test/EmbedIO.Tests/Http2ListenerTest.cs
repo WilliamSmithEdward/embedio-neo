@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
+using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Actions;
@@ -51,6 +53,57 @@ namespace EmbedIO.Tests
             }
         }
 
+        [Test]
+        public async Task ClientResetCancelsApplicationAndHealthyStreamStillCompletes()
+        {
+            var blockedPort = 0;
+            var healthyPort = 0;
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:");
+            var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var exited = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new ActionModule("/", HttpVerbs.Get, async context =>
+                {
+                    if (context.Request.Url.AbsolutePath == "/blocked")
+                    {
+                        blockedPort = context.RemoteEndPoint.Port;
+                        entered.TrySetResult(true);
+                        try { await Task.Delay(Timeout.Infinite, context.CancellationToken); }
+                        finally { exited.TrySetResult(true); }
+                    }
+                    else
+                    {
+                        healthyPort = context.RemoteEndPoint.Port;
+                        await context.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding);
+                    }
+                }));
+            using var stop = new CancellationTokenSource();
+            var running = server.RunAsync(stop.Token);
+            using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false, MaxConnectionsPerServer = 1 })
+            {
+                DefaultRequestVersion = HttpVersion.Version20,
+                DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact,
+                Timeout = TimeSpan.FromSeconds(15),
+            };
+            try
+            {
+                using var reset = new CancellationTokenSource();
+                var pending = client.GetAsync(url + "blocked", reset.Token);
+                await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                reset.Cancel();
+                await Assert.ThatAsync(async () => await pending, Throws.InstanceOf<OperationCanceledException>());
+                await exited.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.That(await client.GetStringAsync(url + "healthy"), Is.EqualTo("healthy"));
+                Assert.That(healthyPort, Is.EqualTo(blockedPort), "The healthy stream must reuse the same TCP connection.");
+                Assert.That(server.State, Is.EqualTo(WebServerState.Listening));
+            }
+            finally
+            {
+                stop.Cancel();
+                await running.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+
         [TestCase(false)]
         [TestCase(true)]
         public async Task RealWebServerMultiplexesUploadsAndRetainsHttp11(bool secure)
@@ -72,6 +125,8 @@ namespace EmbedIO.Tests
             var running = server.RunAsync(stop.Token);
             using var client = secure ? HttpsSmoke.CreateClient(certificate) : new HttpClient(new SocketsHttpHandler { UseProxy = false, MaxConnectionsPerServer = 1 });
             client.Timeout = TimeSpan.FromSeconds(15);
+            var standardAssembly = typeof(WebServer).Assembly.GetCustomAttribute<TargetFrameworkAttribute>()!.FrameworkName.StartsWith(".NETStandard", StringComparison.Ordinal);
+            var version = secure && standardAssembly ? HttpVersion.Version11 : HttpVersion.Version20;
             try
             {
                 await Task.WhenAll(Enumerable.Range(0, 12).Select(async index =>
@@ -79,12 +134,12 @@ namespace EmbedIO.Tests
                     var bytes = Enumerable.Range(0, 70000 + index).Select(i => (byte)(i + index)).ToArray();
                     using var request = new HttpRequestMessage(HttpMethod.Post, url + "echo/" + index)
                     {
-                        Version = HttpVersion.Version20,
+                        Version = version,
                         VersionPolicy = HttpVersionPolicy.RequestVersionExact,
                         Content = new ByteArrayContent(bytes),
                     };
                     using var response = await client.SendAsync(request);
-                    Assert.That(response.Version, Is.EqualTo(HttpVersion.Version20));
+                    Assert.That(response.Version, Is.EqualTo(version));
                     Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                     Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.EqualTo(bytes));
                 }));

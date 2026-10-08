@@ -376,4 +376,25 @@ HTTP/2 performance measurements and HTTP/3 remain outstanding program work.
 The complete Windows suite for this listener increment passed: 2,283 successes,
 five expected platform skips, 2,288 total. Both library targets build. This is local
 validation; exact-head remote checks and other platforms remain required.
+### Context handoff cancellation
 
+A deterministic regression reproduced an ObjectDisposedException when the server
+assigned its cancellation token after an HTTP/2 context had closed. A peer reset
+can produce this ordering between dequeue and application dispatch. Late token
+assignment now keeps the request canceled without throwing into the server's
+accept loop or creating another linked token source. The test also verifies that
+assigning an uncancelable token cannot revive the closed request.
+
+A real WebServer test resets an active HTTP/2 request, observes its application
+cancellation and completes a subsequent healthy request. All 256 HTTP/2 cases
+pass with both the modern and actual netstandard2.0 assemblies on .NET 10.0.11.
+The first standard-assembly run exposed a fixture still hardcoding HTTP/2 for TLS;
+the corrected fixture verifies HTTP/1.1 TLS on that target and HTTP/2 TLS on the
+modern target. Both exercise cleartext HTTP/2. These results do not establish
+legacy CLR or other-platform runtime coverage.
+
+The full Windows suite passed with this production change: 2,285 successes and
+five expected skips (2,290 total). A subsequently strengthened assertion verifies
+that the healthy request after reset uses the same TCP client port; all 256
+HTTP/2 cases passed again with both assemblies. Remote exact-head checks remain
+required. The complete development goal remains active.

@@ -39,7 +39,10 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 lock (_sync)
                 {
-                    if (_closed) throw new ObjectDisposedException(nameof(Http2Context));
+                    // A peer reset can close a dequeued context before WebServer
+                    // assigns its shutdown token. Keep that request canceled without
+                    // throwing into the server-wide accept loop or allocating a link.
+                    if (_closed) { _cancellation = new CancellationToken(true); return; }
                     _linked?.Dispose();
                     _linked = CancellationTokenSource.CreateLinkedTokenSource(value, _exchange.CancellationToken);
                     _cancellation = _linked.Token;

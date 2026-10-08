@@ -29,6 +29,29 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public async Task ClosedContextAcceptsLateServerTokenWithoutRevivingRequest()
+        {
+            var delivered = new TaskCompletionSource<IHttpContextImpl>(TaskCreationOptions.RunContinuationsAsynchronously);
+            await WithAdapter(context =>
+            {
+                context.Close();
+                delivered.TrySetResult(context);
+                return Task.CompletedTask;
+            }, async client =>
+            {
+                using var response = await client.GetAsync("handoff");
+                var context = await delivered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                using var serverStop = new CancellationTokenSource();
+                Assert.DoesNotThrow(() => context.CancellationToken = serverStop.Token);
+                Assert.That(context.CancellationToken.IsCancellationRequested, Is.True);
+                Assert.DoesNotThrow(() => context.CancellationToken = CancellationToken.None);
+                Assert.That(context.CancellationToken.IsCancellationRequested, Is.True);
+                using var healthy = await client.GetAsync("healthy");
+                Assert.That(healthy.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            });
+        }
+
+        [Test]
         public async Task PublicContextStringResponsePreservesQueryCookiesAndEncoding()
         {
             await WithAdapter(async context =>
