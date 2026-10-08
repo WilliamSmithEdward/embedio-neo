@@ -639,10 +639,10 @@ namespace EmbedIO.Files
                     }
                     else
                     {
-                        var skipLength = (int)partialStart;
+                        var skipLength = partialStart;
                         while (skipLength > 0)
                         {
-                            var read = await source.ReadAsync(buffer, 0, Math.Min(skipLength, buffer.Length), context.CancellationToken)
+                            var read = await source.ReadAsync(buffer, 0, (int)Math.Min(skipLength, buffer.Length), context.CancellationToken)
                                 .ConfigureAwait(false);
 
                             skipLength -= read;
