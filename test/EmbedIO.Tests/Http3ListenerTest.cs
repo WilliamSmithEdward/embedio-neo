@@ -56,8 +56,9 @@ namespace EmbedIO.Tests
             { Version = HttpVersion.Version30, VersionPolicy = HttpVersionPolicy.RequestVersionExact, Content = content };
             return request;
         }
-        [Test]
-        public async Task QueryRouteReceivesHttp3Content()
+        [TestCase(true)]
+        [TestCase(false)]
+        public async Task QueryRouteReceivesHttp3Content(bool mediaType)
         {
             using var certificate = Certificate();
             var prefix = Prefix();
@@ -74,10 +75,12 @@ namespace EmbedIO.Tests
             {
                 using var request = Request(new HttpMethod("QUERY"), prefix,
                     new StringContent("quic-query", WebServer.Utf8NoBomEncoding, "text/plain"));
+                if (!mediaType) (request.Content ?? throw new AssertionException("Missing content.")).Headers.Remove("Content-Type");
                 using var response = await client.SendAsync(request, stop.Token);
-                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                Assert.That(response.StatusCode, Is.EqualTo(mediaType ? HttpStatusCode.OK : HttpStatusCode.BadRequest));
                 Assert.That(response.Version, Is.EqualTo(HttpVersion.Version30));
-                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("quic-query"));
+                if (mediaType)
+                    Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("quic-query"));
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
         }

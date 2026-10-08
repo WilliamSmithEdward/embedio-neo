@@ -14,11 +14,13 @@ namespace EmbedIO.Tests
 {
     public class QueryRoutingTest
     {
-        [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.OK)]
-        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.OK)]
-        [TestCase(HttpListenerMode.EmbedIO, "query", HttpStatusCode.NotFound)]
-        [TestCase(HttpListenerMode.Microsoft, "query", HttpStatusCode.NotFound)]
-        public async Task RealListenerRoutesExactQuery(HttpListenerMode mode, string method, HttpStatusCode expected)
+        [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.OK, true)]
+        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.OK, true)]
+        [TestCase(HttpListenerMode.EmbedIO, "query", HttpStatusCode.NotFound, true)]
+        [TestCase(HttpListenerMode.Microsoft, "query", HttpStatusCode.NotFound, true)]
+        [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.BadRequest, false)]
+        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.BadRequest, false)]
+        public async Task RealListenerRoutesExactQuery(HttpListenerMode mode, string method, HttpStatusCode expected, bool mediaType)
         {
             var url = HttpsSmoke.GetUrl().Replace("https://", "http://", StringComparison.Ordinal);
             using var server = new WebServer(mode, url).WithAction("/", HttpVerbs.Query, async context =>
@@ -33,7 +35,8 @@ namespace EmbedIO.Tests
                 using var client = new TcpClient();
                 await client.ConnectAsync("127.0.0.1", new Uri(url).Port, stop.Token);
                 var wire = method + " / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n"
-                    + "Content-Type: text/plain\r\nContent-Length: 10\r\n\r\nquery-body";
+                    + (mediaType ? "Content-Type: text/plain\r\n" : string.Empty)
+                    + "Content-Length: 10\r\n\r\nquery-body";
                 await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(wire), stop.Token);
                 using var received = new MemoryStream();
                 await client.GetStream().CopyToAsync(received, stop.Token);
@@ -49,8 +52,9 @@ namespace EmbedIO.Tests
             }
         }
 
-        [Test]
-        public async Task Http2QueryRouteReceivesContent()
+        [TestCase(true)]
+        [TestCase(false)]
+        public async Task Http2QueryRouteReceivesContent(bool mediaType)
         {
             var url = HttpsSmoke.GetUrl().Replace("https://", "http://", StringComparison.Ordinal);
             using var server = new WebServer(HttpListenerMode.EmbedIO, url).WithAction("/", HttpVerbs.Query,
@@ -70,12 +74,41 @@ namespace EmbedIO.Tests
                     VersionPolicy = HttpVersionPolicy.RequestVersionExact,
                     Content = new StringContent("multiplexed-query", Encoding.UTF8, "text/plain"),
                 };
+                if (!mediaType) request.Content.Headers.Remove("Content-Type");
                 using var response = await client.SendAsync(request, stop.Token);
-                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                Assert.That(response.StatusCode, Is.EqualTo(mediaType ? HttpStatusCode.OK : HttpStatusCode.BadRequest));
                 Assert.That(response.Version, Is.EqualTo(HttpVersion.Version20));
-                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("multiplexed-query"));
+                if (mediaType)
+                    Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("multiplexed-query"));
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+        }
+
+        [TestCase("QUERY", null, HttpStatusCode.BadRequest)]
+        [TestCase("QUERY", "", HttpStatusCode.BadRequest)]
+        [TestCase("QUERY", " \t", HttpStatusCode.BadRequest)]
+        [TestCase("QUERY", "text/plain", HttpStatusCode.OK)]
+        [TestCase("POST", null, HttpStatusCode.OK)]
+        [TestCase("query", null, HttpStatusCode.OK)]
+        public Task QueryRequiresMediaTypeBeforeDispatch(string method, string? mediaType, HttpStatusCode expected)
+        {
+            var calls = 0;
+            return TestWebServer.UseAsync(
+                server => server.WithAction("/", HttpVerbs.Any, context =>
+                {
+                    calls++;
+                    return context.SendStringAsync("handled", "text/plain", Encoding.UTF8);
+                }),
+                async client =>
+                {
+                    using var request = new HttpRequestMessage(new HttpMethod(method), "/");
+                    request.Content = new ByteArrayContent(Encoding.UTF8.GetBytes("query"));
+                    if (mediaType != null)
+                        request.Content.Headers.TryAddWithoutValidation("Content-Type", mediaType);
+                    using var response = await client.SendAsync(request);
+                    Assert.That(response.StatusCode, Is.EqualTo(expected));
+                    Assert.That(calls, Is.EqualTo(expected == HttpStatusCode.OK ? 1 : 0));
+                });
         }
 
         [TestCase("QUERY", HttpStatusCode.OK)]

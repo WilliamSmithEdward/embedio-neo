@@ -1888,3 +1888,23 @@ applicable cases on Windows and Linux, hosted on .NET 10; this is not validation
 on every legacy runtime. Both targets build, formatting and repository source
 guards pass, and pinned YARA reports no changed-file matches. Exact-head CI is
 still required before integration.
+
+### QUERY missing media-type validation
+
+The shared server dispatch boundary now rejects exact QUERY requests whose
+Content-Type is absent, empty or whitespace-only, through the existing HTTP
+exception path before modules execute. Three in-process cases failed before the
+change. Nineteen focused cases now pass on Windows, including real HTTP/1 managed
+and Microsoft listeners and exact HTTP/2 and HTTP/3 responses. POST and lowercase
+custom methods retain their behavior. This supersedes the previous checkpoint's
+pending missing-header validation item. Content/type consistency, resource-specific
+supported formats, discovery and remaining QUERY semantics still need completion.
+
+Evidence: local `query-media-before.log` (three reproduced failures),
+`query-media-wire.log` (19 passes) and both-target build logs. The change adds ten
+test cases; the full discovery minimum is 3,013. The final Windows suite passed
+with 3,008 successes and five expected skips (`query-media-full.log`). All 19
+focused cases passed on pinned Linux with QUIC required, and all 17 applicable
+cases passed against the actual .NET Standard asset on Windows/Linux .NET 10
+hosts. Both-target build, formatting, source guards and changed-file pinned YARA
+scans passed. Exact-head repository CI remains required.

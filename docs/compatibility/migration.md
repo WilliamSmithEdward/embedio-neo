@@ -758,5 +758,8 @@ Existing wildcard handlers can still receive the method. Method names are case
 sensitive: lowercase `query` does not match a Query route. This increment provides
 routing and request-body access, not complete RFC 10008 semantics. A QUERY handler
 must perform a safe, idempotent operation and validate the request media type and
-content. Automatic media-type validation and complete QUERY support remain under
+content. QUERY requests with missing, empty or whitespace-only Content-Type now
+fail with 400 through the standard HTTP exception handler before application
+modules run. Applications must still reject unsupported media types or content
+inconsistent with their declared type. Complete QUERY support remains under
 development; do not advertise full support based on the enum alone.
