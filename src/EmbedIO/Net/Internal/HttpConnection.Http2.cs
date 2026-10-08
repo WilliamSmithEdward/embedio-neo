@@ -24,7 +24,13 @@ namespace EmbedIO.Net.Internal
                 using var connection = await Http2Connection.AcceptAsync(transport, stop.Token).ConfigureAwait(false);
                 StopRequestTimer();
                 using var dispatcher = new Http2Dispatcher(connection);
-                await dispatcher.RunAsync(DispatchHttp2Async, stop.Token).ConfigureAwait(false);
+                lock (_connectionSync)
+                {
+                    if (_sock == null || _resourcesDisposed != 0) return;
+                    _http2Dispatcher = new EmbedIO.Internal.BorrowedResource<Http2Dispatcher>(dispatcher);
+                }
+                try { await dispatcher.RunAsync(DispatchHttp2Async, stop.Token).ConfigureAwait(false); }
+                finally { lock (_connectionSync) _http2Dispatcher = null; }
             }
             finally
             {

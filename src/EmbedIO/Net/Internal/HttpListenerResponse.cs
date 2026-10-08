@@ -249,7 +249,7 @@ namespace EmbedIO.Net.Internal
                 414 => false,
                 500 => false,
                 503 => false,
-                _ => KeepAlive && reuses < 100
+                _ => !_connection.IsDraining && KeepAlive && reuses < 100
             };
 
             _keepAlive = keepAlive;

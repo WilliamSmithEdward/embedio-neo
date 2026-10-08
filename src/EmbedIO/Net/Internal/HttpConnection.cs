@@ -24,6 +24,11 @@ namespace EmbedIO.Net.Internal
         private EmbedIO.Internal.BorrowedResource<CancellationTokenSource>? _http2Stop;
         private HashSet<HttpListener>? _http2Listeners;
         private int _responseFinishing;
+        private volatile bool _draining;
+        private bool _closeFinished;
+        private Exception? _closeError;
+        private TaskCompletionSource<bool>? _closedSignal;
+        private EmbedIO.Internal.BorrowedResource<Http2Dispatcher>? _http2Dispatcher;
 
         private readonly Timer _timer;
         private readonly object _connectionSync = new();
@@ -64,6 +69,8 @@ namespace EmbedIO.Net.Internal
         }
 
         public int Reuses { get; private set; }
+
+        internal bool IsDraining => _draining;
 
         public Stream Stream { get; }
 
@@ -170,6 +177,38 @@ namespace EmbedIO.Net.Internal
 
         internal void ForceClose() => Close(true);
 
+        internal Task DrainAsync()
+        {
+            Http2Dispatcher? dispatcher;
+            Task completion;
+            bool close;
+            lock (_connectionSync)
+            {
+                if (_closeFinished) return _closeError == null ? Task.CompletedTask : Task.FromException(_closeError);
+                _closedSignal ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                completion = _closedSignal.Task;
+                if (_draining) return completion;
+                _draining = true;
+                dispatcher = _http2Dispatcher?.Value;
+                close = _http2 ? dispatcher == null : !_contextBound;
+            }
+            if (dispatcher != null) _ = DrainHttp2Async(dispatcher);
+            else if (close) CloseTransport(true);
+            return completion;
+        }
+
+        private async Task DrainHttp2Async(Http2Dispatcher dispatcher)
+        {
+            try { await dispatcher.DrainAsync().ConfigureAwait(false); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                // A concurrent peer close can dispose the borrowed dispatcher.
+                // A failed GOAWAY cannot leave this connection waiting forever.
+                CloseTransport(true);
+            }
+        }
+
+
         internal void Close(bool forceClose = false)
         {
             if (forceClose) Volatile.Write(ref _forceClosing, 1);
@@ -184,7 +223,7 @@ namespace EmbedIO.Net.Internal
             }
             if (_sock == null) return;
 
-            if (Volatile.Read(ref _forceClosing) == 0 && _context.Request.KeepAlive
+            if (!_draining && Volatile.Read(ref _forceClosing) == 0 && _context.Request.KeepAlive
                 && _context.Response.Headers["connection"] != "close")
             {
                 _ = CompleteResponseAsync();
@@ -212,7 +251,7 @@ namespace EmbedIO.Net.Internal
             var restart = false;
             lock (_connectionSync)
             {
-                if (_sock != null && _resourcesDisposed == 0 && _forceClosing == 0)
+                if (_sock != null && _resourcesDisposed == 0 && _forceClosing == 0 && !_draining)
                 {
                     var pending = _iStream != null ? _iStream.BufferedRemainder
                         : _ms != null ? new ArraySegment<byte>(_ms.GetBuffer(), _position, (int)_ms.Length - _position)
@@ -339,7 +378,12 @@ namespace EmbedIO.Net.Internal
                         _lastListener = listener;
                     }
 
-                    _contextBound = true;
+                    lock (_connectionSync)
+                    {
+                        if (_sock == null || _resourcesDisposed != 0 || _draining)
+                            throw new IOException("Connection stopped before request admission.");
+                        _contextBound = true;
+                    }
                     listener.RegisterContext(_context);
                     return;
                 }
@@ -542,10 +586,27 @@ namespace EmbedIO.Net.Internal
                 _buffer = null;
                 _currentLine = null;
             }
-            _timer.Dispose();
-            buffered?.Dispose();
-            input?.Dispose();
-            Stream.Dispose();
+            try
+            {
+                _timer.Dispose();
+                buffered?.Dispose();
+                input?.Dispose();
+                Stream.Dispose();
+            }
+            catch (Exception error)
+            {
+                lock (_connectionSync) _closeError = error;
+                throw;
+            }
+            finally
+            {
+                lock (_connectionSync)
+                {
+                    _closeFinished = true;
+                    if (_closeError == null) _closedSignal?.TrySetResult(true);
+                    else _closedSignal?.TrySetException(_closeError);
+                }
+            }
         }
 
         private void StopRequestTimer()

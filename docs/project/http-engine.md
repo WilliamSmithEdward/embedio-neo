@@ -1773,7 +1773,7 @@ measured these medians over nine samples per cell on local Windows/.NET 10:
 | 8 MiB / 1 | 386.43 | 439.85 | 44.92 | 42.48 |
 | 8 MiB / 8 | 428.19 | 458.76 | 49.32 | 47.85 |
 
-Managed allocation rose by roughly 5 KiB per 1 MiB response and 30â€“37 KiB per
+Managed allocation rose by roughly 5 KiB per 1 MiB response and 30Ã¢â‚¬â€œ37 KiB per
 8 MiB response, under 0.3% of combined client/server allocation in those cases.
 Small-response results varied: sequential 128-byte throughput fell from 0.92 to
 0.73 MiB/s in the selected run, while concurrency eight rose from 4.78 to 5.41.
@@ -2362,3 +2362,53 @@ skips (3,136 total, zero failures) in `async-context-full.log`. Formatting and
 both source guards passed; the pinned YARA scan reported no matches for all
 changed C# files. The discovery floor is 3,136. Final-head cross-platform CI
 remains required.
+
+
+### TCP connection drain checkpoint (2026-10-08)
+
+The managed TCP connection now has an internal drain operation with lazy
+completion signaling. It waits for transport resource cleanup, shares the
+pending completion between callers and records cleanup failures. Ordinary
+connections do not allocate a completion source unless drain is requested.
+HTTP/1 retains its accepted response, suppresses keep-alive restart and emits
+`Connection: close` when drain precedes response headers. Admission checks under
+the connection lock prevent a request from being newly queued after an idle
+connection starts draining. Already-buffered pipelined successors are not
+started. HTTP/2 borrows the live dispatcher's drain operation and waits for
+connection closure after its accepted streams finish. An incomplete protocol
+handshake has no accepted work to preserve and can be closed immediately.
+
+Seven new plaintext TCP cases cover HTTP/1 drain before/after headers with and
+without a pipelined successor, idle keep-alive drain, and HTTP/2 accepted output
+or explicit listener abort. An initial empty-response fixture omitted the flush
+normally performed by WebServer and failed waiting for its response; the fixture
+now flushes headers before closing. That failed log remains `tcp-drain-focused.log`.
+The corrected cases and broader selected tests pass: 126 cases on Windows and
+pinned Linux with two logical processors, plus 70 cases with the actual
+.NET Standard library on Windows/Linux .NET 10 hosts. Both assets build without
+warnings; formatting, source guards and changed-file pinned YARA scanning pass.
+Logs are under `TestResults/http-engine/tcp-drain-*`.
+
+This is a connection primitive, not listener-wide or combined drain support.
+Endpoint admission/routing ownership still needs coordination: disposing the
+current endpoint aborts its unregistered connections, and HTTP/2 connections can
+remain in that endpoint set after routing. The host must detach those ownership
+paths correctly before removing the last prefix. Shared endpoints, TLS,
+incomplete/unread bodies, slow peers, common deadlines and stop/drain races need
+integration tests before advertising TCP or combined graceful drain. Existing
+WebServer graceful drain support remains HTTP/3-only.
+
+CI for preceding commit `186c38f` passed Windows, Ubuntu and macOS test jobs in
+run 37849674374. This confirms that run of the mixed-load correction, not a repair
+of the earlier native runtime crash. Android lifecycle setup failed while
+extracting an invalid emulator ZIP; the Mac Catalyst HTTPS app did not become
+ready and its artifact contains only the package lock. Those failed-job logs
+are retained as `async-context-ci-android.log` and
+`async-context-ci-maccatalyst.log`. No successful retry or cause of the app
+startup failure is claimed; final-head platform validation remains required.
+
+The final full Windows suite passed 3,138 tests with five expected skips
+(3,143 total, zero failures) in `tcp-drain-full.log`. Hot-path, listener-queue,
+cold-start and listener allocation gates passed against the rebuilt current
+library. These budgets do not establish end-to-end performance or combined
+drain completion. The CI discovery floor is 3,143.
