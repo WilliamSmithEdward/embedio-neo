@@ -84,7 +84,7 @@ namespace EmbedIO.Net.Internal
 
         public void Dispose()
         {
-            try { Close(true); }
+            try { ForceClose(); }
             finally { DisposeTransportResources(); }
         }
         public async Task BeginReadRequest()
@@ -175,7 +175,13 @@ namespace EmbedIO.Net.Internal
 
         internal void SetError(string message) => _errorMessage = message;
 
-        internal void ForceClose() => Close(true);
+        internal void ForceClose()
+        {
+            Volatile.Write(ref _forceClosing, 1);
+            // Abort before response disposal can synthesize headers or a final chunk.
+            try { CloseTransport(true); }
+            finally { _oStream?.Dispose(); _oStream = null; }
+        }
 
         internal Task DrainAsync()
         {
@@ -547,9 +553,6 @@ namespace EmbedIO.Net.Internal
                 _http2Listeners?.Clear();
             }
             if (socket == null) return;
-            try { protocolStop?.Cancel(); } catch (ObjectDisposedException) { } catch (AggregateException) { /* Complete transport cleanup even if a cancellation callback fails. */ }
-            foreach (var listener in protocolListeners) listener.RemoveConnection(this);
-
             try
             {
                 if (shutdown)
@@ -562,6 +565,8 @@ namespace EmbedIO.Net.Internal
             finally
             {
                 socket.Dispose();
+                try { protocolStop?.Cancel(); } catch (ObjectDisposedException) { } catch (AggregateException) { /* Complete transport cleanup even if a cancellation callback fails. */ }
+                foreach (var listener in protocolListeners) listener.RemoveConnection(this);
                 try
                 {
                     Unbind();

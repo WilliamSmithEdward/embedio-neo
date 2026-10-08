@@ -49,12 +49,15 @@ Stop and disposal abort both transports and wait for the pumps to finish;
 after Stop, the listener can be restarted with a fresh session. A transport
 accept failure shuts down both transports.
 
-`DrainAsync` is not supported by this combined mode yet; it throws
-`NotSupportedException`. Combined mode still needs coordinated admission and
-one drain deadline across TCP and QUIC. Alt-Svc discovery, shared-dispatch performance
-validation and the default-engine transition also remain unfinished. This mode
-still uses the current TCP implementation and does not by itself complete the
-replacement of the Mono-derived listener.
+`DrainAsync` coordinates TCP and QUIC with one deadline when the TCP endpoints
+are exclusively owned. Both accept pumps remain active while accepted responses
+finish; completion of one transport does not abort the other. Deadline expiry or
+cancellation stops queue admission and aborts the remaining responses, including
+requests waiting in the bounded queue. Shared TCP endpoints reject drain before
+either transport changes admission. Alt-Svc discovery, shared-dispatch performance
+validation and the default-engine transition remain unfinished. This mode still
+uses the current TCP implementation and does not by itself complete replacement
+of the Mono-derived listener.
 
 ## Server
 
@@ -147,8 +150,9 @@ cancellation token; arbitrary application code cannot be forcibly terminated.
 The operation supports the modern HTTP/3 listener and managed TCP listeners
 whose endpoints are exclusively owned. TCP drain closes new connection admission,
 preserves accepted HTTP/1.1 responses and HTTP/2 streams, and uses GOAWAY for
-HTTP/2. Shared TCP endpoints and combined mode currently throw
-`NotSupportedException` before changing admission. Microsoft mode remains
+HTTP/2. Combined mode coordinates these TCP semantics with QUIC and a common
+deadline. Shared TCP endpoints currently throw `NotSupportedException` before
+changing admission. Microsoft mode remains
 unsupported. Adding prefixes or restarting a TCP listener during its drain is
 rejected; await completion before restarting.
 
@@ -164,7 +168,7 @@ has already stopped has no connections to drain. Dispose the server after its
 run task completes to release module/session resources.
 
 Priorities/datagrams, dynamic response QPACK,
-discovery and combined-protocol hosting remain under development. No throughput
+discovery and shared-endpoint graceful drain remain under development. No throughput
 or latency improvement is claimed by these interoperability tests.
 
 ## WebSockets over HTTP/3

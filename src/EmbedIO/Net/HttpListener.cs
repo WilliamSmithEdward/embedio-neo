@@ -291,7 +291,7 @@ namespace EmbedIO.Net
             _connections.Clear();
             for (var i = connections.Length - 1; i >= 0; i--)
             {
-                connections[i].Key.Close(true);
+                connections[i].Key.ForceClose();
             }
 
             while (!_ctxQueue.IsEmpty)
@@ -301,7 +301,7 @@ namespace EmbedIO.Net
                     // A previously closed connection cannot unbind its context again.
                     if (_ctxQueue.TryRemove(entry.Key, out var context))
                     {
-                        if (context is HttpListenerContext http1) http1.Connection.Close(true);
+                        if (context is HttpListenerContext http1) http1.Connection.ForceClose();
                         // HTTP/2 contexts finish via their canceled connection dispatch.
 
                     }

@@ -150,6 +150,8 @@ namespace EmbedIO.Net.Internal
 
         public void Close() => Close(false);
 
+        internal void Abort() => Close(true, true);
+
         /// <inheritdoc />
         public void SetCookie(Cookie cookie)
         {
@@ -332,14 +334,15 @@ namespace EmbedIO.Net.Internal
         private static string QuotedString(Cookie cookie, string value)
             => cookie.Version == 0 || value.IsToken() ? value : "\"" + EmbedIO.Internal.StringOperations.ReplaceOrdinal(value, "\"", "\\\"") + "\"";
 
-        private void Close(bool force)
+        private void Close(bool force, bool abort = false)
         {
             // A completed response may outlive its TCP connection's current request.
             // Its repeated close/dispose must never close that newer request.
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
 
-            _connection.Close(force);
+            if (abort) _connection.ForceClose();
+            else _connection.Close(force);
         }
 
         private MemoryStream WriteHeaders()

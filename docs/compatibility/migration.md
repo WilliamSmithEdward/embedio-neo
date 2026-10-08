@@ -846,3 +846,22 @@ HTTP/1 Host numeric ports must now fit the transport endpoint range 0 through
 Out-of-range values previously disappeared during port stripping; they now
 receive the empty 400 response and connection closure. Empty ports and decimal
 leading zeros remain accepted.
+
+
+### Canceled response cleanup and combined drain (unreleased)
+
+Closing a canceled managed HTTP context now aborts its unfinished response rather
+than synthesizing an empty successful response during cleanup. Already written
+headers or body bytes cannot be recalled; clients may see an incomplete response.
+Completion callbacks still run. Normal response close/disposal remains unchanged,
+and closing an old canceled HTTP/1.1 context does not close a successor request
+on its reused connection. Do not rely on cancellation producing an HTTP status;
+finish an intended response before canceling its context.
+
+`WebServer.DrainAsync` supports combined TCP/QUIC hosting when TCP endpoints are
+exclusively owned. It lets accepted responses finish within the shared deadline;
+expiry or cancellation aborts unfinished and queued work. Immediate Stop and
+server disposal remain abort operations. Shared TCP endpoint drain remains
+unsupported and rejects before changing admission. See the
+[HTTP/3 and combined-host guide](../guides/http3.md) for lifecycle
+limits and cancellation behavior.

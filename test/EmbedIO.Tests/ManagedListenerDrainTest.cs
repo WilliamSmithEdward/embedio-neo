@@ -166,6 +166,93 @@ namespace EmbedIO.Tests
             Assert.That(server.Listener.IsListening, Is.False);
         }
 
+        [TestCase(false, false)]
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        public async Task ClosingCanceledContextDoesNotCompleteSuccessfulResponse(bool http2, bool partial)
+        {
+            if (!http2) { await CanceledHttp1ContextClosesWire(partial); return; }
+            var prefix = Resources.GetServerAddress();
+            using var server = new WebServer(HttpListenerMode.EmbedIO, prefix);
+            server.Listener.Start();
+            using var client = Client(http2);
+            var request = client.GetAsync(prefix);
+            var context = await server.Listener.GetContextAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            var closed = 0;
+            context.OnClose(_ => Interlocked.Increment(ref closed));
+            var output = context.Response.OutputStream;
+            if (partial)
+            {
+                context.Response.ContentLength64 = 6;
+                await output.WriteAsync(Encoding.ASCII.GetBytes("abc"));
+            }
+            context.CancellationToken = new CancellationToken(true);
+            try { context.Close(); }
+            catch (OperationCanceledException) { }
+            catch (IOException) { }
+            await Assert.ThatAsync(async () => { using var response = await request; }, Throws.InstanceOf<HttpRequestException>());
+            Assert.That(closed, Is.EqualTo(1));
+        }
+
+        private static async Task CanceledHttp1ContextClosesWire(bool partial)
+        {
+            var prefix = Resources.GetServerAddress();
+            using var server = new WebServer(HttpListenerMode.EmbedIO, prefix);
+            server.Listener.Start();
+            using var client = new TcpClient();
+            var uri = new Uri(prefix);
+            await client.ConnectAsync(IPAddress.Loopback, uri.Port);
+            using var wire = client.GetStream();
+            await wire.WriteAsync(Encoding.ASCII.GetBytes($"GET / HTTP/1.1\r\nHost: {uri.Authority}\r\n\r\n"));
+            var context = await server.Listener.GetContextAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            var closed = 0;
+            context.OnClose(_ => Interlocked.Increment(ref closed));
+            var output = context.Response.OutputStream;
+            if (partial)
+            {
+                context.Response.ContentLength64 = 6;
+                await output.WriteAsync(Encoding.ASCII.GetBytes("abc"));
+            }
+            context.CancellationToken = new CancellationToken(true);
+            context.Close();
+            using var received = new MemoryStream();
+            try { await wire.CopyToAsync(received).WaitAsync(TimeSpan.FromSeconds(5)); }
+            catch (IOException) { }
+            if (partial)
+            {
+                var text = Encoding.ASCII.GetString(received.ToArray());
+                Assert.That(text, Does.Contain("Content-Length: 6\r\n"));
+                Assert.That(text, Does.EndWith("\r\n\r\nabc"));
+            }
+            else Assert.That(received.Length, Is.Zero, "Cancellation must not synthesize a successful empty response.");
+            Assert.That(closed, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task CancelingAnAlreadyClosedHttp1ContextDoesNotAbortItsSuccessor()
+        {
+            var prefix = Resources.GetServerAddress();
+            using var server = new WebServer(HttpListenerMode.EmbedIO, prefix);
+            server.Listener.Start();
+            using var client = Client(false);
+            var firstRequest = client.GetStringAsync(prefix);
+            var first = await server.Listener.GetContextAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            first.Response.ContentLength64 = 3;
+            await first.Response.OutputStream.WriteAsync(Encoding.ASCII.GetBytes("abc"));
+            first.Close();
+            Assert.That(await firstRequest, Is.EqualTo("abc"));
+            var nextRequest = client.GetStringAsync(prefix);
+            var next = await server.Listener.GetContextAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.That(next.RemoteEndPoint, Is.EqualTo(first.RemoteEndPoint));
+            first.CancellationToken = new CancellationToken(true);
+            first.Close();
+            next.Response.ContentLength64 = 3;
+            await next.Response.OutputStream.WriteAsync(Encoding.ASCII.GetBytes("def"));
+            next.Close();
+            Assert.That(await nextRequest, Is.EqualTo("def"));
+        }
+
         [Test]
         public async Task SharedEndpointDrainRejectsBeforeChangingAdmission()
         {

@@ -143,17 +143,19 @@ namespace EmbedIO.Net.Internal
             try { if (!_closed) await EnsureSentAsync(false, token).ConfigureAwait(false); }
             finally { Exit(); }
         }
-        internal Task CloseAsync() { lock (_lifecycle) return _closeTask ??= CloseCoreAsync(); }
-        private async Task CloseCoreAsync()
+        internal Task CloseAsync(CancellationToken token = default) { lock (_lifecycle) return _closeTask ??= CloseCoreAsync(token); }
+        private async Task CloseCoreAsync(CancellationToken token)
         {
             if (!await EnterAsync(CancellationToken.None, true).ConfigureAwait(false)) return;
             try
             {
                 if (_closed) return;
                 _closed = true;
+                if (!token.CanBeCanceled) token = _exchange.CancellationToken;
+                token.ThrowIfCancellationRequested();
                 _exchange.CloseConnectionAfterResponse = !_keepAlive;
-                await EnsureSentAsync(true, _exchange.CancellationToken).ConfigureAwait(false);
-                if (!_exchange.Ended) await _exchange.CompleteAsync(_exchange.CancellationToken).ConfigureAwait(false);
+                await EnsureSentAsync(true, token).ConfigureAwait(false);
+                if (!_exchange.Ended) await _exchange.CompleteAsync(token).ConfigureAwait(false);
             }
             finally { _output.Dispose(); Exit(); }
         }
@@ -181,7 +183,15 @@ namespace EmbedIO.Net.Internal
             }
         }
         public void Close() => CloseAsync().GetAwaiter().GetResult();
-        public void Dispose() => Close();
+        public void Dispose()
+        {
+            try { Close(); }
+            finally
+            {
+                lock (_lifecycle)
+                    if (_closed && _operations == 0) _gate.Dispose();
+            }
+        }
 
         private sealed class Output : Stream
         {

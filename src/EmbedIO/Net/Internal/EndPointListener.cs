@@ -71,6 +71,8 @@ namespace EmbedIO.Net.Internal
 
         internal bool Secure { get; }
 
+        internal bool AdmissionStopped => Volatile.Read(ref _acceptingStopped) != 0;
+
         public bool BindContext(HttpListenerContext context)
         {
             var req = context.Request;

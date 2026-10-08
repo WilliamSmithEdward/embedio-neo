@@ -2495,3 +2495,63 @@ Final local listener-drain validation passed 3,163 tests with five expected skip
 listener allocation gates also passed. The CI discovery floor is 3,168. These
 allocation budgets do not establish end-to-end performance; exact-head CI remains
 required before this increment can be treated as cross-platform validated.
+
+
+### Combined transport drain and canceled-response cleanup
+
+Combined TCP/QUIC hosting now coordinates graceful drain under one shared
+cancellation deadline. Both accept pumps continue moving accepted contexts while
+responses finish, and either transport may finish first without stopping its
+peer. Expiry/cancellation stops combined queue admission, aborts unfinished
+responses, joins both pumps and clears undispatched contexts. Concurrent callers
+share the first drain; pre-canceled calls have no effects. Stop, run cancellation
+and disposal can interrupt it. TCP endpoint exclusivity is checked before QUIC
+changes admission, so unsupported shared ownership leaves both transports live.
+
+Thirteen new combined cases exercise HTTP/1.1, HTTP/2 and HTTP/3 response order,
+concurrent calls, five abort paths, restart, pre-cancellation, shared-owner
+rejection and an observed full 256-context queue. Initial focused Windows/Linux
+runs passed all 24 combined-host cases. The full run then exposed two races:
+run cancellation and an undispatched HTTP/2 shutdown could return a response
+instead of aborting. That failed 3,181-case run is retained as
+`combined-drain-full.log` (two failures).
+
+Corrections separate abort from ordinary response finalization, close TCP sockets
+before invoking protocol cancellation callbacks, stop exclusive endpoint admission
+before removing routes, and avoid generating an HTTP/2 response when routing or
+registration fails during shutdown. Multiplexed context close honors its combined
+context cancellation token without adding a per-close linked cancellation source.
+Normal HTTP/1 response Dispose keeps its finalization behavior and its atomic
+once-only guard; abort uses that same guard to protect successor keep-alive work.
+
+Four direct cancellation cases fail against the pre-correction implementation
+(`combined-abort-before-final.log`), and a fifth regression protects a subsequent
+HTTP/1.1 request from stale canceled-context close. The first HTTP/1 fixture used
+HttpClient, whose automatic retry obscured socket closure with a timeout; its raw
+TCP replacement verifies the wire directly. The failed candidate fixture run is
+retained as `combined-drain-abort-focused.log` rather than claimed as a production
+fix. Final focused validation passes 175 cases on Windows and pinned Linux with
+QUIC required and two logical processors, plus 106 cases using the actual
+.NET Standard asset on each .NET 10 host. Both assets build without warnings;
+source guards and changed-source pinned YARA checks pass.
+
+Preceding commit `9c1fa32` failed Windows CI job 113570644625 in run 37853074722:
+`StopOrClientResetCancelsApplication(true)` timed out waiting for the HTTP/3 server
+callback to exit after client cancellation. The complete suite still reported all
+3,168 cases. The log is `tcp-listener-drain-ci-windows.log`. This is not claimed
+repaired by the combined drain/response-cleanup changes; independent reset and
+cancellation validation remains open, as does the earlier native listener crash.
+
+Shared TCP endpoint drain, acceptance/cleanup race coverage, broader slow-peer and
+TLS/body coverage, and exact-head platform checks remain required. The engine
+default, standards closure, WebSocket hardening and comparative performance goals
+are unchanged and incomplete.
+
+Final combined-drain/abort validation passes the complete Windows suite:
+3,181 passed, five expected skips, zero failures (3,186 total) in
+`combined-abort-full-final.log`. The unchanged compatibility comparator passes
+207 cases / 414 upstream/Neo comparisons with zero errors. Rebuilt hot-path,
+listener-queue, cold-start and listener allocation gates pass; these budgets do
+not establish a throughput or latency improvement. The discovery floor is 3,186.
+The earlier failed full run, both direct baseline runs and the initial fixture
+failure remain in the evidence. New exact-head CI is still required.

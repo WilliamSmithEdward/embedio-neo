@@ -102,6 +102,7 @@ namespace EmbedIO.Net
 
         internal static void RemoveListener(HttpListener listener)
         {
+            StopExclusiveEndpoints(listener);
             foreach (var prefix in listener.Prefixes)
             {
                 RemovePrefix(prefix, listener);

@@ -81,9 +81,10 @@ namespace EmbedIO.Net.Internal
         public void Dispose() => Close();
         public void Close()
         {
-            if (BeginClose()) CloseCoreAsync().GetAwaiter().GetResult();
+            if (BeginClose()) CloseCoreAsync(CancellationToken).GetAwaiter().GetResult();
         }
-        internal Task CloseAsync() => BeginClose() ? CloseCoreAsync() : _completion.Task;
+        internal Task CloseAsync() => BeginClose() ? CloseCoreAsync(CancellationToken) : _completion.Task;
+        internal Task AbortAsync() => BeginClose() ? CloseCoreAsync(new CancellationToken(true)) : _completion.Task;
         private bool BeginClose()
         {
             lock (_sync)
@@ -93,10 +94,10 @@ namespace EmbedIO.Net.Internal
                 return true;
             }
         }
-        private async Task CloseCoreAsync()
+        private async Task CloseCoreAsync(CancellationToken token)
         {
             Exception? failure = null;
-            try { await ((MultiplexedResponse)Response).CloseAsync().ConfigureAwait(false); }
+            try { await ((MultiplexedResponse)Response).CloseAsync(token).ConfigureAwait(false); }
             catch (Exception error) { failure = error; throw; }
             finally
             {

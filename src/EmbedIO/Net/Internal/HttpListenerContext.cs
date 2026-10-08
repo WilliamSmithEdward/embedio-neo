@@ -96,7 +96,8 @@ namespace EmbedIO.Net.Internal
             // Run completion callbacks even when the transport cannot close cleanly.
             try
             {
-                Response.Close();
+                if (CancellationToken.IsCancellationRequested) HttpListenerResponse.Abort();
+                else Response.Close();
             }
             finally
             {

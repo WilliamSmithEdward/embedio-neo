@@ -43,11 +43,13 @@ namespace EmbedIO.Net.Internal
         {
             var context = new MultiplexedContext(exchange, LocalEndPoint, RemoteEndPoint, IsSecure);
             HttpListener? listener = null;
+            var registered = false;
             try
             {
                 listener = _epl.SearchListener(context.Request.Url, out _);
                 if (listener == null)
                 {
+                    if (_epl.AdmissionStopped) throw new IOException("Endpoint stopped before request routing.");
                     context.Response.StatusCode = 404;
                     await context.CloseAsync().ConfigureAwait(false);
                     return;
@@ -60,6 +62,7 @@ namespace EmbedIO.Net.Internal
                 // Do not hold a connection lock while entering listener lifecycle
                 // synchronization: listener shutdown closes its connections.
                 listener.RegisterMultiplexedContext(context, this);
+                registered = true;
                 var closed = false;
                 lock (_connectionSync) closed = _sock == null || _resourcesDisposed != 0;
                 if (closed)
@@ -78,8 +81,14 @@ namespace EmbedIO.Net.Internal
                 listener?.UnregisterContext(context);
                 // Cleanup runs on application dispatch, never synchronously inside
                 // a cancellation callback holding a listener/connection lock.
-                try { await context.CloseAsync().ConfigureAwait(false); }
-                catch (Exception error) when (exchange.CancellationToken.IsCancellationRequested && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { }
+                try
+                {
+                    if (registered) await context.CloseAsync().ConfigureAwait(false);
+                    else await context.AbortAsync().ConfigureAwait(false);
+                }
+                catch (Exception error) when ((!registered || context.CancellationToken.IsCancellationRequested)
+                    && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                { }
                 if (context.Completion.IsFaulted) _ = context.Completion.Exception;
             }
         }
