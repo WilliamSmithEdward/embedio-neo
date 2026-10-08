@@ -47,6 +47,44 @@ jobs:
         env:
           DOTNET_PROCESSOR_COUNT: 2
         run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --filter FullyQualifiedName~Issue491_ZipConcurrency --report-trx --results-directory TestResults/zip-constrained --timeout 2m --minimum-expected-tests 27
+      - name: Stress immediate client resets on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for iteration in 1 2 3 4 5; do
+            dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
+              --filter 'FullyQualifiedName~Issue38_MacAcceptReset|FullyQualifiedName~IncompleteAndDisconnectedClientsDoNotStopHealthyRequests' \
+              --report-trx --results-directory "TestResults/mac-reset-$iteration" \
+              --timeout 2m --minimum-expected-tests 17
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: TestResults/
+          if-no-files-found: error
+
+  compatibility:
+    name: Compatibility and allocation budgets (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Create the results directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force TestResults | Out-Null
       - name: Verify JSON migration compatibility
         run: |
           dotnet restore test/JsonMigrationProbe/JsonMigrationProbe.csproj --locked-mode
@@ -104,21 +142,10 @@ jobs:
         run: dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --verify-listener-wire > TestResults/listener-wire-verification.json
       - name: Verify chunked HTTP and HTTPS response cleanup
         run: dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --verify-listener-http --chunk-bytes 1024 --payload-bytes 65536 > TestResults/listener-chunked-verification.json
-      - name: Stress immediate client resets on macOS
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          for iteration in 1 2 3 4 5; do
-            dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-              --filter 'FullyQualifiedName~Issue38_MacAcceptReset|FullyQualifiedName~IncompleteAndDisconnectedClientsDoNotStopHealthyRequests' \
-              --report-trx --results-directory "TestResults/mac-reset-$iteration" \
-              --timeout 2m --minimum-expected-tests 17
-          done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: test-results-${{ matrix.os }}
+          name: compatibility-results-${{ matrix.os }}
           path: TestResults/
           if-no-files-found: error
 
@@ -188,7 +215,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [test, static-analysis, build, mac-catalyst, android, maui-https, appcontainer]
+    needs: [test, compatibility, static-analysis, build, mac-catalyst, android, maui-https, appcontainer]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

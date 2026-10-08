@@ -114,3 +114,9 @@ Compare complete job times (including SDK setup and cache transfer), not just
 workload-install times. Cold and warm runs can differ, and hosted runner queue
 time is separate from execution time. These setup changes do not repair the
 intermittent iOS navigation/finish failures tracked in issue #185.
+
+Desktop regression/coverage jobs run alongside separate compatibility and
+allocation-budget jobs on all three desktop operating systems. Performance
+probes remain sequential within each dedicated job to avoid competing with the
+regression suite on the same host. Both job groups are required by `CI passed`;
+regression TRX/coverage and compatibility/probe reports have separate artifacts.
