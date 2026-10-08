@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Add opt-in SameSite controls for application and local session cookies, with existing defaults retained. Preserve independent raw cookie attributes and WebSocket response cookies, including mixed native typed/raw headers and long-lived expiration (upstream #479).
+- Correct inherited suffix byte ranges: select final bytes, clamp oversized suffixes, reject zero suffixes, and ignore positive suffixes for empty files. Retain Int64 skip offsets for non-seekable resources beyond 2 GiB. Existing explicit-range, HEAD and validator policies remain; see suffix-range migration guidance (issue #170).
 
 - Owner-approved compatibility change: malformed nonempty values rejected by supported controller route converters now return HTTP 400 instead of 500, before handler invocation. Preserve valid conversions, controller/configuration errors, optional/missing routes, query/body binding and transport policies; see the migration guide (issue #163, upstream #505 follow-up).
 

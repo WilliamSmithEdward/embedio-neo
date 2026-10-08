@@ -446,12 +446,24 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/file-suffix/body",
+          "upstream": "MDEyMw==",
+          "neo": "Nzg5",
+          "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
+        },
+        {
           "path": "/http/EmbedIO/file-suffix/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/file-suffix/range",
+          "upstream": "bytes 0-3/10",
+          "neo": "bytes 7-9/10",
+          "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
         },
         {
           "path": "/http/EmbedIO/healthy-after-errors/encoding",
@@ -1057,12 +1069,24 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/Microsoft/file-suffix/body",
+          "upstream": "MDEyMw==",
+          "neo": "Nzg5",
+          "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
+        },
+        {
           "path": "/http/Microsoft/file-suffix/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/Microsoft/file-suffix/range",
+          "upstream": "bytes 0-3/10",
+          "neo": "bytes 7-9/10",
+          "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
         },
         {
           "path": "/http/Microsoft/healthy-after-errors/encoding",
@@ -1817,12 +1841,24 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/file-suffix/body",
+          "upstream": "MDEyMw==",
+          "neo": "Nzg5",
+          "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
+        },
+        {
           "path": "/http/EmbedIO/file-suffix/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/file-suffix/range",
+          "upstream": "bytes 0-3/10",
+          "neo": "bytes 7-9/10",
+          "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
         },
         {
           "path": "/http/EmbedIO/healthy-after-errors/encoding",

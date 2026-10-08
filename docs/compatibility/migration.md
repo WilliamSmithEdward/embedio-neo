@@ -545,3 +545,8 @@ Application-owned string parsing remains supported for custom validation.
 Existing transport closure policies are unchanged. See
 [typed route validation](../user-reports/typed-route-validation.md) for the
 precise scope, tests and limitations. No release date/version is promised.
+
+
+## Suffix byte ranges (unreleased)
+
+The owner-requested correction in [#170](https://github.com/WilliamSmithEdward/embedio-neo/issues/170) changes `Range: bytes=-N` from an incorrect leading slice to the final N bytes, clamped to file size. `bytes=-0` now returns 416; a positive suffix on an empty file is ignored and returns 200. HEAD, If-Range validation, explicit/open-ended ranges and existing multipart handling retain their policies. Clients using explicit offsets may continue to do so; clients relying on wrong leading bytes must adopt correct suffix semantics. Published 1.0.3 retains the defect. No public API, dependency or target changes. See [suffix-range guidance](../user-reports/suffix-range-responses.md).

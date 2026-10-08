@@ -15,7 +15,7 @@ binary compatible. Findings are kept in one file per major functional area.
 | [Routing](routing.md) | Successful binding and matching agree; approved invalid-number status change |
 | [Request binding](request-binding.md) | Ordinary form/query/body behavior agrees; documented JSON input boundaries differ |
 | [Serialization](serialization.md) | Ordinary DTOs agree; fields, derived data, references, cycles and timestamps differ |
-| [Static files](static-files.md) | Tested bytes/ranges/compression agree; inherited suffix-range defect remains |
+| [Static files](static-files.md) | Tested bytes/ranges/compression agree; inherited suffix-range defect corrected in Neo (unreleased) |
 | [Authentication and CORS](authentication-cors.md) | Tested challenges, credentials and origin/preflight behavior agree |
 | [Sessions](sessions.md) | Cookie persistence and independent-client isolation agree |
 | [WebSockets](websockets.md) | Ready-then-send text/binary and fragmented messages agree |
@@ -33,16 +33,16 @@ prove the comparator rejects injected status/body/JSON-type/message/API/discover
 and a removed reviewed-difference entry. These are fixture counts, not additional
 NUnit test counts or a quantified probability of correctness.
 
-There are 152 reviewed field differences per Neo asset across 112 cases, including
+There are 156 reviewed field differences per Neo asset across 112 cases, including
 112 omissions of `Content-Encoding: identity`. The remaining differences are
-the existing approved typed-route correction and characterized serializer/input
+the requested suffix-range correction, existing approved typed-route correction and characterized serializer/input
 migration boundaries. The other 95 cases match without those differences.
 The contract stores exact old/new values and reasons; new or stale differences fail.
 
 The Unix profile has 143 cases and 286 comparisons: 72 utility cases, the full
 managed HTTP/WebSocket workload, managed HTTPS, API inventory and an explicit
 native response-lifetime probe. A pinned Linux .NET 10.0.12 container passed this
-profile with no unexplained difference. It records 80 reviewed field differences,
+profile with no unexplained difference. The current suffix-corrected contract records 82 reviewed field differences,
 including 56 identity-encoding omissions and four fields characterizing an
 existing native listener correction. The full upstream native workload cannot
 complete on the tested modern Unix runtime: after its first DTO response,
@@ -98,5 +98,4 @@ fuzzing, load/race behavior, custom providers, ZIP archives, JsonServer and CLI
 contracts are not established by this suite. Existing focused Neo regression tests
 provide additional evidence, but are not a side-by-side upstream comparison.
 Add cases and document findings in the corresponding area before expanding a
-claim. The suffix-range finding is concrete inherited work; it is not silently
-accepted as correct merely because both implementations match.
+claim. The inherited suffix-range finding is corrected in the requested follow-up; its exact old/new outcomes remain explicit.

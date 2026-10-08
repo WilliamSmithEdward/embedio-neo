@@ -25,6 +25,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## User reports
 
+- [Suffix byte ranges](user-reports/suffix-range-responses.md): corrected tail selection, boundaries and migration behavior.
+
 - [Upstream parity audit](parity-audit/README.md): findings by functional area from the pinned upstream/Neo differential suite.
 
 - [Default JSON preservation audit](user-reports/default-json-preservation-audit.md): DTO fidelity and verified upstream compatibility differences.
