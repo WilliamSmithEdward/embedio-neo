@@ -35,6 +35,9 @@ independently tested behavior, not a codec or roadmap alone.
   material regressions rather than treating isolated allocation wins as success.
 - [ ] Validate retained APIs, target assets and platform applications; finish
   migration/support documentation and green checks on every final PR head.
+- [ ] Update the README HTTP support badges when the new engine is ready, using
+  validated protocol support and documented target/platform limits. Preserve the
+  existing badges until their replacement claims are supported.
 
 Release publication, HTTP Arena submission and the contributor reply are outside
 this development goal unless separately authorized.
@@ -1323,6 +1326,92 @@ Fresh exact-head CI remains required. The full engine goal and #190 remain open.
 
 The large-frame benchmark also exposes the shared reader's geometric
 MemoryStream growth beyond a requested non-power-of-two length, followed by a
-final copy. Bounding each growth step by the advertised length while allocating
-only as bytes arrive is a concrete next performance experiment; it is not yet
-implemented or claimed measured here.
+final copy. That observation led to the bounded-growth increment below.
+
+### Bounded frame-buffer growth and native accept cancellation
+
+The shared byte reader grew MemoryStream geometrically beyond a non-power-of-two
+requested length, then copied again to return the exact result. Two allocation
+regressions measured 328,136 bytes for a 65,538-byte result and 655,840 bytes for a
+131,074-byte result before correction. Growth now occurs only after a successful
+read, remains geometric, and is capped at the requested result length. Complete
+reads can return their owned backing buffer; partial reads still return only
+received bytes. The fixed scratch-buffer policy is unchanged. Ten focused cases
+cover allocation budgets, short reads, independent result ownership, immediate
+EOF and a pending first read with an advertised int.MaxValue length. The latter
+two verify bounded initial allocation rather than eagerly reserving the payload.
+
+The benchmark retains the exact runner from the preceding UTF-8 experiment:
+A3546DD59EBA351A113B06B64FF61C94C20239DF4077A67626C18C2F0E89DA46.
+Baseline source is da9d61b. Final samples include the separate cancellation fix
+below; the earlier frame-growth-* samples are retained. Authoritative data is
+frame-growth-final-*: three alternating processes per target/version, five
+5,000-message samples per process, with runtime/OS/architecture, hashes and GC
+counts recorded. The same AMD Ryzen 7 9800X3D / Windows 10.0.26300 /
+.NET 10.0.12 x64 host uses DOTNET_TieredCompilation=0, without fixed CPU affinity
+or frequency. No other test/benchmark was intentionally run concurrently.
+Both assets execute on .NET 10; this is not an older-runtime measurement.
+
+Every timing below is the median of 15 samples. All workloads are shown; small
+control-row variations are not claimed as improvements. The byte counts include
+frame parsing/reflection/content checks. Network I/O, reassembly, application
+callbacks, retained memory and tail latency remain separate objectives.
+
+| Payload bytes | Frames | Type | .NET 10 before / after (us) | netstandard before / after (us) | .NET 10 bytes/message before / after |
+| --- | --- | --- | --- | --- | --- |
+| 16 | 1 | binary | 0.330 / 0.318 | 0.313 / 0.311 | 624.0 / 624.0 |
+| 16 | 1 | text | 0.337 / 0.327 | 0.330 / 0.328 | 624.0 / 624.0 |
+| 16 | 16 | binary | 3.162 / 3.041 | 2.948 / 3.045 | 8704.1 / 8704.1 |
+| 16 | 16 | text | 3.350 / 3.136 | 2.997 / 3.047 | 8704.1 / 8704.1 |
+| 1,024 | 1 | binary | 0.696 / 0.709 | 0.668 / 0.668 | 1736.0 / 1736.0 |
+| 1,024 | 1 | text | 0.795 / 0.802 | 0.786 / 0.788 | 1736.0 / 1736.0 |
+| 1,024 | 16 | binary | 3.694 / 3.558 | 3.466 / 3.491 | 10752.1 / 10752.1 |
+| 1,024 | 16 | text | 3.805 / 3.839 | 3.808 / 3.841 | 10752.1 / 10752.1 |
+| 65,536 | 1 | binary | 30.328 / 30.410 | 30.148 / 30.457 | 132018.7 / 132018.7 |
+| 65,536 | 1 | text | 36.483 / 36.675 | 36.248 / 36.467 | 132018.7 / 132018.7 |
+| 65,536 | 16 | binary | 31.579 / 32.770 | 31.208 / 32.264 | 76928.7 / 76928.7 |
+| 65,536 | 16 | text | 38.944 / 38.737 | 38.096 / 38.869 | 76928.7 / 76928.7 |
+| 65,538 | 1 | binary | 54.864 / 31.998 | 53.919 / 32.013 | 328755.2 / 197588.4 |
+| 65,538 | 1 | text | 54.568 / 38.157 | 52.816 / 38.291 | 328755.2 / 197588.4 |
+| 65,538 | 16 | binary | 33.280 / 32.748 | 32.186 / 32.464 | 109984.9 / 93552.7 |
+| 65,538 | 16 | text | 41.346 / 39.584 | 39.045 / 39.233 | 109984.9 / 93552.7 |
+
+Core hashes:
+
+- modern before: 5A22FD8970E354C8444B7B021CE2E8CC3446D116509B5F7D5820A1C0BFEA16D4
+- modern after: F471FB98E6B0575C421C5731BB0F3D7CB78E093D7D0CC7B8488DB989049BAF1E
+- legacy before: 0C2EC3CB3CC525C48B4082F1FC7EEAB42CC39502A759076AADD34A019332D783
+- legacy after: 9045E9FA34B98894A82E9919FFB29AFE5B7A61E6CC31688EED713E2947C54500
+
+The modern single-frame binary row records 3,126 / 3 generation-2 collections before / after across 75,000 measured messages.
+The modern single-frame text row records 3,123 / 0 generation-2 collections before / after across 75,000 measured messages.
+The legacy single-frame binary row records 3,126 / 3 generation-2 collections before / after across 75,000 measured messages.
+The legacy single-frame text row records 3,123 / 0 generation-2 collections before / after across 75,000 measured messages.
+
+CI on the preceding da9d61b head (37810710607 attempt 1) also found a native
+macOS race in the new upgrade-cancellation stress fixture: a closed native socket
+was dereferenced while SystemHttpContext captured request endpoints. The native
+adapter previously translated cancellation only around GetContextAsync, leaving
+construction outside that boundary. It now checks cancellation before accept and
+before construction, and covers construction with the same cancellation-aware
+exception translation. Recoverable errors are translated only when the supplied
+token is canceled; uncanceled and fatal errors still propagate. A separate
+pre-canceled-accept regression timed out before correction and now passes without
+stopping the listener. The macOS stress failure remains the cross-platform
+regression to verify; a local pass does not prove that schedule repaired.
+
+The same CI run's Android lifecycle job failed while unpacking the downloaded
+emulator ZIP, before application execution. Its job-only unchanged-source rerun
+passed on attempt 2. The old macOS failure remains visible; no retry success is
+being used to substitute for the cancellation correction. Logs are retained as
+da9-android-failed.log and da9-ci-failed.log.
+
+The final combined-source Windows run passed 2,826 cases with five expected
+skips (2,831 total). The focused Linux selection passed all 185 modern cases;
+the actual netstandard asset passed all 150 selected cases on Windows and Linux.
+Both core targets built without warnings or errors. Formatting, suppression and
+C# parser guards, existing allocation budgets and the pinned YARA scan of all
+four changed C# files passed. Logs use the growth-acquisition prefix under the
+ignored evidence directory. Fresh exact-head CI, particularly the reported
+macOS cancellation schedule, remains required. Discovery floor: 2,831. No release or contributor reply is included; the full
+engine program and #190 remain open.

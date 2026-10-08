@@ -27,6 +27,29 @@ namespace EmbedIO.Tests
             }
         }
 
+        [Test]
+        public async Task NativePreCanceledAcceptDoesNotWaitForAConnection()
+        {
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.Microsoft));
+            using var canceled = new CancellationTokenSource();
+            canceled.Cancel();
+            server.Listener.Start();
+            var pending = server.Listener.GetContextAsync(canceled.Token);
+            try
+            {
+                await Assert.ThatAsync(async () => await pending.WaitAsync(TimeSpan.FromSeconds(2)),
+                    Throws.InstanceOf<OperationCanceledException>());
+                Assert.That(server.Listener.IsListening, Is.True);
+            }
+            finally
+            {
+                server.Listener.Stop();
+                try { var context = await pending.WaitAsync(TimeSpan.FromSeconds(2)); context.Close(); }
+                catch (OperationCanceledException) when (canceled.IsCancellationRequested) { }
+            }
+        }
+
         [TestCase(HttpListenerMode.Microsoft)]
         [TestCase(HttpListenerMode.EmbedIO)]
         public async Task CancellationDuringUpgradeReleasesAcceptAndAllConnectedTransports(HttpListenerMode mode)
