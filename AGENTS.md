@@ -405,3 +405,17 @@ These rules are the same in every WilliamSmithEdward repository.
   Discoveryfloor2276. Next PUBLIC IHttpContext/request/response adapter inclDate,
   cookies,encoding,HEADwrites/closecallbacks; thenlistenernegotiation and platform
   tests. Still noadvertisedHTTP2/WebServer support. Goalactive; HTTP3 etcpending.
+
+- Public-interface adapter checkpoint: Http2Request/Response/Context implement
+  existing IHttp contracts; actualTCP9 new cases cover SendStringAsync Unicode,
+  query/cookies/charset,independentSetCookie,HEAD/204,callbacks/concurrentclose,
+  unknownlengthupload,andKeepAlivefalse GOAWAY/drain+refusenew/completeexisting.
+  UnknownLengthUpload test failedHasEntityBodybeforefix: nowusesInitialEndStream
+  ratherthanmutableRemoteEnded. Builderrors diagnosticsimport/Version20 netstd
+  fixedusingcached Version(2,0). All251focused passmodern+actualstd;bothtargetsbuild.
+  Discoveryfloor2285. Responseclose sharesTask,countsqueuedoperationsbeforegate
+  disposal,andstreamdisposeavoidsrecursiveclose. Contextcancellationlinksserver
+  andexchangetokens;LIFOcallbacks once. Cookie/method helpers madeinternalwithout
+  behaviorchange. Next EndPointListener/HttpListener transport/context generalization,
+  HTTP2 TLSALPN/prior-knowledge detection and actual WebServer module tests.
+  ExtendedCONNECT/WebSockets stillunadvertised/unimplemented adapter;goalactive.

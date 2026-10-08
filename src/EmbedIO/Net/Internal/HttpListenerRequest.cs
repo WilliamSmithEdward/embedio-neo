@@ -402,7 +402,7 @@ namespace EmbedIO.Net.Internal
         // Optimized for the following list of methods:
         // "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"
         // ***NOTE***: The verb parameter is NOT VALID upon exit if false is returned.
-        private static bool IsKnownHttpMethod(string method, out HttpVerbs verb)
+        internal static bool IsKnownHttpMethod(string method, out HttpVerbs verb)
         {
             switch (method.Length)
             {
@@ -471,7 +471,7 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        private static CookieList ParseCookies(string val)
+        internal static CookieList ParseCookies(string val)
         {
             var cookies = new CookieList();
 

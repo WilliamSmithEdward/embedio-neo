@@ -330,3 +330,25 @@ The prior dispatcher commit2458daa passed the full Windows suite:2,238 successes
 five skips,2,243 total. Public context/response adaptation (including automatic Date,
 cookies, encoding and callback semantics), negotiation, broader conformance and
 HTTP/2 performance measurement are still pending. The goal remains incomplete.
+
+HTTP/2 now has internal implementations of the existing IHttpRequest,
+IHttpResponse and IHttpContextImpl interfaces. Real client tests exercise the
+public string-response helper, query/cookie parsing, charset metadata, independent
+Set-Cookie fields, automatic Date/custom Server, HEAD/no-content writes, close
+callbacks and concurrent write/close completion. Shared cookie serialization is
+retained. Response shutdown disposes its synchronization only after queued
+operations finish, and repeated closes await the same completion.
+
+An unknown-length upload test reproduced a metadata race: application dispatch
+could observe remote END_STREAM before constructing the request, incorrectly
+clearing HasEntityBody. That property now uses the initial header framing state.
+KeepAlive=false maps to GOAWAY and graceful draining; existing uploads finish and
+new streams above the advertised last stream receive REFUSED_STREAM. Two wire
+cases verify this behavior. Nine new cases bring focused coverage to 251 passes
+on both assemblies under .NET10.0.11. Both targets build; initial missing diagnostics
+import/unsupported netstandard HttpVersion constant errors were corrected.
+
+The adapters have not yet been connected to EndPointListener/HttpListener routing
+or TLS negotiation. HTTP/2 extended CONNECT/WebSocket adaptation remains explicitly
+unadvertised until implemented. Those integration steps, platform validation and
+performance measurements remain part of the active program.

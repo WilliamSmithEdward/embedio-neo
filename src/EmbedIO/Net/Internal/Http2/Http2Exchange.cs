@@ -31,6 +31,7 @@ namespace EmbedIO.Net.Internal.Http2
         public CancellationToken CancellationToken => _stop.Token;
         internal Http2RequestBody Body { get; }
         internal bool Ended => _ended;
+        internal bool CloseConnectionAfterResponse { get; set; }
 
         internal async Task RespondAsync(byte[] bytes, CancellationToken token)
         {

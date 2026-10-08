@@ -19,6 +19,9 @@ namespace EmbedIO.Net.Internal.Http2
         private bool _pumping;
         private int _running;
         private Exception? _failure;
+        private bool _draining;
+        private bool _drainSent;
+        private int _drainLastStream;
 
         internal Http2Dispatcher(Http2Connection connection)
         {
@@ -50,6 +53,8 @@ namespace EmbedIO.Net.Internal.Http2
                         Http2Exchange? started = null;
                         lock (_sync)
                         {
+                            if (_draining && frame.HeaderBlock != null && frame.StreamId > _drainLastStream)
+                                throw new Http2ProtocolException(7, "Connection is draining.", frame.StreamId);
                             var state = _connection.Streams.Receive(frame);
                             _exchanges.TryGetValue(frame.StreamId, out var exchange);
                             if (state == null)
@@ -130,6 +135,7 @@ namespace EmbedIO.Net.Internal.Http2
                     {
                         await application(exchange).ConfigureAwait(false);
                         if (!exchange.Ended) await exchange.CompleteAsync(exchange.CancellationToken).ConfigureAwait(false);
+                        if (exchange.CloseConnectionAfterResponse) await DrainAsync().ConfigureAwait(false);
                         if (!exchange.State.RemoteEnded) await ResetAsync(exchange.Id, 0, new IOException("Response completed before request body.")).ConfigureAwait(false);
                     }
                     catch (Exception error)
@@ -139,13 +145,31 @@ namespace EmbedIO.Net.Internal.Http2
                     }
                     finally
                     {
-                        lock (_sync) Release(exchange, null);
+                        lock (_sync)
+                        {
+                            Release(exchange, null);
+                            if (_drainSent && _exchanges.Count == 0) _stop.Cancel();
+                        }
                         exchange.Dispose();
                     }
                 });
                 _applications.Add(task);
                 _ = task.ContinueWith(completed => { lock (_sync) _applications.Remove(completed); }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             }
+        }
+
+        private async Task DrainAsync()
+        {
+            lock (_sync)
+            {
+                if (_draining) return;
+                _draining = true;
+                _drainLastStream = _connection.Streams.LastStreamId;
+            }
+            var payload = new byte[8];
+            WriteUInt32(payload, 0, (uint)_drainLastStream);
+            await _connection.SendAsync(new[] { new Http2Frame(7, 0, 0, payload) }, _stop.Token).ConfigureAwait(false);
+            lock (_sync) _drainSent = true;
         }
 
         private async Task ResetAsync(int id, uint code, Exception error)

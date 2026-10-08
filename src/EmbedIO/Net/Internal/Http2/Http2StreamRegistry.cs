@@ -6,8 +6,9 @@ namespace EmbedIO.Net.Internal.Http2
     internal sealed class Http2StreamState
     {
         internal Http2StreamState(int id, bool remoteEnded, Http2RequestHeaders headers)
-        { Id = id; RemoteEnded = remoteEnded; RequestHeaders = headers; }
+        { Id = id; RemoteEnded = remoteEnded; InitialEndStream = remoteEnded; RequestHeaders = headers; }
         public Http2RequestHeaders RequestHeaders { get; }
+        public bool InitialEndStream { get; }
         public int Id { get; }
         internal volatile bool RemoteEnded;
         internal volatile bool LocalEnded;
