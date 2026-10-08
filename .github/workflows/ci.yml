@@ -133,6 +133,7 @@ jobs:
         run: |
           python3 scripts/test_analyzer_suppressions.py
           python3 scripts/check_analyzer_suppressions.py
+          dotnet run --project tools/EmbedIO.AnalyzerGuard -c Release --no-restore -- .
       - name: Verify formatting
         run: dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes
       - name: Run the SDK and NUnit analyzers

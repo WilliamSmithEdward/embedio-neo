@@ -57,7 +57,7 @@ namespace EmbedIO.Tests.Issues
         public void InvalidNetworkConfigurationIsRejected(string? network)
         {
             using var module = Create();
-            Assert.Throws<ArgumentException>(() => module.WithDeniedNetworks(network!));
+            Assert.Throws<ArgumentException>(() => module.WithDeniedNetworks(network));
         }
 
         [TestCase("0.0.0.0/0")]
@@ -119,22 +119,22 @@ namespace EmbedIO.Tests.Issues
         public void InvalidClientKeysAreRejected(string? key)
         {
             using var module = Create();
-            Assert.That(() => module.TryBanClient(key!, TimeSpan.FromMinutes(1)), Throws.InstanceOf<ArgumentException>());
-            Assert.That(() => module.TryUnbanClient(key!), Throws.InstanceOf<ArgumentException>());
+            Assert.That(() => module.TryBanClient(key, TimeSpan.FromMinutes(1)), Throws.InstanceOf<ArgumentException>());
+            Assert.That(() => module.TryUnbanClient(key), Throws.InstanceOf<ArgumentException>());
         }
 
         [Test]
         public void InvalidDurationsLimitsCallbacksAndLongKeysAreRejected()
         {
-            Assert.Throws<ArgumentNullException>(() => new ClientBanningModule("/", null!));
+            Assert.Throws<ArgumentNullException>(() => new ClientBanningModule("/", null));
             Assert.Throws<ArgumentOutOfRangeException>(() => new ClientBanningModule("/", _ => "key", maximumBannedClients: 0));
             using var module = Create();
             Assert.Throws<ArgumentOutOfRangeException>(() => module.TryBanClient("key", TimeSpan.Zero));
             Assert.Throws<ArgumentOutOfRangeException>(() => module.TryBanClient("key", TimeSpan.MinValue));
             Assert.Throws<ArgumentOutOfRangeException>(() => module.TryBanClient("key", TimeSpan.MaxValue));
             Assert.Throws<ArgumentException>(() => module.TryBanClient(new string('x', 1025), TimeSpan.FromSeconds(1)));
-            Assert.Throws<ArgumentNullException>(() => module.WithCriterion(null!));
-            Assert.Throws<ArgumentNullException>(() => module.WithAllowedNetworks(null!));
+            Assert.Throws<ArgumentNullException>(() => module.WithCriterion(null));
+            Assert.Throws<ArgumentNullException>(() => module.WithAllowedNetworks(null));
         }
 
         [Test]
@@ -348,9 +348,9 @@ namespace EmbedIO.Tests.Issues
         }
 
         private static ClientBanningModule Create(int capacity = 4096) => new("/", c => c.Request.Headers["X-Client"] ?? "anonymous", maximumBannedClients: capacity);
-        private static readonly Type NetworkType = typeof(ClientBanningModule).Assembly.GetType("EmbedIO.Security.Internal.ClientNetwork")!;
-        private static object Parse(string network) => NetworkType.GetMethod("Parse", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { network })!;
-        private static bool Contains(object network, IPAddress address) => (bool)NetworkType.GetMethod("Contains", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(network, new object[] { address })!;
+        private static readonly Type NetworkType = typeof(ClientBanningModule).Assembly.GetType("EmbedIO.Security.Internal.ClientNetwork") ?? throw new AssertionException("The network parser type is missing.");
+        private static object Parse(string network) => (NetworkType.GetMethod("Parse", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new AssertionException("The network parser is missing.")).Invoke(null, new object[] { network }) ?? throw new AssertionException("The network parser returned null.");
+        private static bool Contains(object network, IPAddress address) => (bool)((NetworkType.GetMethod("Contains", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new AssertionException("The network comparison is missing.")).Invoke(network, new object[] { address }) ?? throw new AssertionException("The network comparison returned null."));
 
         private sealed class Host : IAsyncDisposable
         {
@@ -364,7 +364,7 @@ namespace EmbedIO.Tests.Issues
             public int Hits;
             public Host(HttpListenerMode mode, ClientBanningModule module, bool nested = false, string? url = null)
             {
-                _url = url ?? Resources.GetServerAddress().Replace("localhost", "127.0.0.1");
+                _url = url ?? Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
                 Server = new WebServer(o => o.WithUrlPrefix(_url).WithMode(mode));
                 var handler = new ActionModule("/", HttpVerbs.Any, c => { Interlocked.Increment(ref Hits); return c.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding); });
                 if (nested) Server.WithModule(new ModuleGroup("/nested", false).WithModule(module).WithModule(handler));

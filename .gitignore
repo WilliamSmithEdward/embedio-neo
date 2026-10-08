@@ -167,7 +167,8 @@ TestResult.xml
 /.vscode
 /_site
 /_api
-/tools
+/tools/*
+!/tools/EmbedIO.AnalyzerGuard/
 
 # JetBrains Rider IDE folder
 .idea/

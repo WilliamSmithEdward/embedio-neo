@@ -16,6 +16,11 @@ before implementation. Document the approved change, its rationale, affected
 consumers, and migration steps in the release notes. A major version bump alone
 does not substitute for approval.
 
+CI uses the SDK's C# parser in `tools/EmbedIO.AnalyzerGuard` to reject every
+null-forgiving expression, including interpolation and inactive preprocessor branches.
+Logical negation and exclamation marks in literal text are permitted. The separate
+Python guard rejects compiler/analyzer directives and build configuration opt-outs.
+
 ## Development
 
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.

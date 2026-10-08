@@ -22,6 +22,11 @@ namespace System.Diagnostics.CodeAnalysis
     {
     }
 
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Parameter | AttributeTargets.Property | AttributeTargets.ReturnValue)]
+    internal sealed class NotNullAttribute : Attribute
+    {
+    }
+
     [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property | AttributeTargets.ReturnValue, AllowMultiple = true)]
     internal sealed class NotNullIfNotNullAttribute : Attribute
     {

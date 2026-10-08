@@ -17,7 +17,7 @@ namespace EmbedIO.Security.Internal
         {
             _path = Path.GetFullPath(path);
             _capacity = capacity;
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(_path) ?? throw new ArgumentException("The store path has no parent directory.", nameof(path)));
             _lease = new FileStream(_path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         }
 
@@ -39,7 +39,7 @@ namespace EmbedIO.Security.Internal
             {
                 if (key.ValueKind != JsonValueKind.String)
                     throw new InvalidDataException("Invalid permanent client key.");
-                var value = key.GetString()!;
+                var value = key.GetString() ?? throw new InvalidDataException("Invalid permanent client key.");
                 try { ClientBanningModule.ValidateKey(value); }
                 catch (ArgumentException exception) { throw new InvalidDataException("Invalid permanent client key.", exception); }
                 if (!values.Add(value))
