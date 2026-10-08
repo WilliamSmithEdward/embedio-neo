@@ -1742,3 +1742,45 @@ calls were reviewed; canonical hashes and a narrow rule/path acceptance are in
 `.github/security/http3-benchmark-yara-review.md`. Source/rules were not rewritten
 to evade detection. No matching GitHub alert exists to dismiss, leaving the
 owner's pre-merge requirement outstanding; fresh CI scans remain necessary.
+
+
+## Explicit HTTP/3 listener drain
+
+`WebServer.DrainAsync(timeout, cancellationToken)` adds an opt-in shutdown path
+for the modern HTTP/3 listener without changing `IHttpListener` or the existing
+immediate RunAsync-cancellation, Stop and disposal paths. Other modes explicitly
+throw NotSupportedException. The method exists in both target assets; it does
+not add HTTP/3 transport support to the legacy asset.
+
+A session separates accept cancellation, connection abort and drain signals.
+One shared shutdown task closes every listening endpoint, sends GOAWAY through
+the existing connection driver, waits for accepted response ownership and closes
+remaining connections at the first caller's deadline. Caller cancellation aborts
+remaining transport work; cancellation is reported after cleanup. Concurrent
+calls share the first deadline. The request loop recognizes an intentional drain
+completion without converting it into a fatal listener error. Applications still
+need to honor context cancellation, and the host disposes the server after its
+run task completes to release module/session resources. The HTTP/3 guide documents
+the public contract and explicitly preserves the one-run WebServer lifecycle.
+
+Sixteen new cases cover accepted responses, concurrent drain requests, deadline,
+caller cancellation, RunAsync cancellation, direct Stop/disposal, idle listeners,
+endpoint reuse, invalid timers, pre-cancellation and unsupported modes. Two
+independent raw QUIC connections observe GOAWAY, then receive H3_REQUEST_REJECTED
+for later streams while their accepted responses finish. A fresh client also
+fails to enter the listener during drain. All 92 focused listener/QUIC/API cases
+pass on Windows and pinned Linux MsQuic 2.6.2; all six portable API cases pass
+with the actual netstandard asset on both hosts, using .NET 10 as the test host.
+A wire regression failed before correction when an unused external timeout
+replaced the existing application-triggered close policy. Application-triggered
+drains now retain their 30-second deadline; the listener separately bounds its
+own drain through the abort token. The earlier 2,990-case full Windows run passed
+before that correction. Both targets build cleanly and formatting/analyzer checks
+pass. The final-source full Windows suite passed 2,986 cases with five expected
+skips (2,991 total; h3-drain-policy-full log). Pinned YARA scans of all changed
+files found no matches. Fresh exact-head CI remains required.
+
+Every applicable check on the preceding add4e0f checkpoint passed. This increment
+does not complete other transports' graceful shutdown, combined hosting,
+discovery, priority scheduling, datagrams, the frozen standards inventory or the
+engine program's remaining performance/conformance work.

@@ -20,7 +20,7 @@ namespace EmbedIO.Net.Internal.Http3
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("macos")]
-    internal sealed class Http3Listener : IHttpListener
+    internal sealed class Http3Listener : IHttpListener, IGracefulHttpListener
     {
         private readonly object _sync = new();
         private readonly X509Certificate2 _certificate;
@@ -75,6 +75,30 @@ namespace EmbedIO.Net.Internal.Http3
             try { session.Dispose(); }
             finally { lock (_sync) _stopping = false; }
         }
+        public Task DrainAsync(TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            Session session;
+            lock (_sync)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(Http3Listener));
+                if (_session == null) return Task.CompletedTask;
+                session = _session;
+                _stopping = true;
+            }
+            return DrainSessionAsync(session, timeout, cancellationToken);
+        }
+        private async Task DrainSessionAsync(Session session, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            try { await session.DrainAsync(timeout, cancellationToken).ConfigureAwait(false); }
+            finally
+            {
+                session.Dispose();
+                lock (_sync)
+                {
+                    if (ReferenceEquals(_session, session)) { _session = null; _stopping = false; }
+                }
+            }
+        }
         public void Dispose()
         {
             lock (_sync)
@@ -103,6 +127,7 @@ namespace EmbedIO.Net.Internal.Http3
             catch (ChannelClosedException)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (session.IsDraining) throw new ListenerDrainedException();
                 throw new HttpListenerException(995, "The listener stopped accepting requests.");
             }
         }
@@ -111,6 +136,11 @@ namespace EmbedIO.Net.Internal.Http3
             internal readonly Channel<MultiplexedContext> Contexts = Channel.CreateBounded<MultiplexedContext>(new BoundedChannelOptions(256)
             { FullMode = BoundedChannelFullMode.Wait, AllowSynchronousContinuations = false });
             private readonly CancellationTokenSource _stop = new();
+            private readonly CancellationTokenSource _acceptStop = new();
+            private readonly CancellationTokenSource _drain = new();
+            private Task? _shutdown;
+            private int _disposed;
+            internal bool IsDraining { get; private set; }
             internal bool IsRunning => !_stop.IsCancellationRequested;
             private readonly Dictionary<QuicListener, ListenerPrefix[]> _listeners = new();
             private readonly List<Task> _accepts = new();
@@ -186,8 +216,8 @@ namespace EmbedIO.Net.Internal.Http3
                     while (true)
                     {
                         QuicConnection connection;
-                        try { connection = await listener.AcceptConnectionAsync(_stop.Token).ConfigureAwait(false); }
-                        catch (Exception error) when (!_stop.IsCancellationRequested && (error is AuthenticationException
+                        try { connection = await listener.AcceptConnectionAsync(_acceptStop.Token).ConfigureAwait(false); }
+                        catch (Exception error) when (!_acceptStop.IsCancellationRequested && (error is AuthenticationException
                             || error is QuicException quic && quic.QuicError is QuicError.ConnectionAborted or QuicError.ConnectionTimeout or QuicError.ConnectionIdle or QuicError.TransportError))
                         {
                             // The BCL reports failed peer handshakes through Accept.
@@ -197,7 +227,7 @@ namespace EmbedIO.Net.Internal.Http3
                         var rejected = false;
                         lock (_gate)
                         {
-                            if (_connections.Count >= 256 || _stop.IsCancellationRequested) rejected = true;
+                            if (_connections.Count >= 256 || _acceptStop.IsCancellationRequested) rejected = true;
                             else
                             {
                                 var id = ++_next;
@@ -213,13 +243,14 @@ namespace EmbedIO.Net.Internal.Http3
                         }
                     }
                 }
-                catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
-                catch (ObjectDisposedException) when (_stop.IsCancellationRequested) { }
+                catch (OperationCanceledException) when (_acceptStop.IsCancellationRequested) { }
+                catch (ObjectDisposedException) when (_acceptStop.IsCancellationRequested) { }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
                 {
                     error.Log(NameForLog, "HTTP/3 accept loop failed.");
                     Contexts.Writer.TryComplete(error);
                     _stop.Cancel();
+                    _acceptStop.Cancel();
                 }
             }
             private const string NameForLog = "HTTP/3 listener";
@@ -227,7 +258,11 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 var local = connection.LocalEndPoint;
                 var remote = connection.RemoteEndPoint;
-                try { await Http3QuicConnection.RunAsync(connection, exchange => DispatchAsync(exchange, local, remote, prefixes), _stop.Token).ConfigureAwait(false); }
+                try
+                {
+                    await Http3QuicConnection.RunWithDrainAsync(connection, exchange => DispatchAsync(exchange, local, remote, prefixes),
+                        _stop.Token, _drain.Token, TimeSpan.FromMilliseconds(uint.MaxValue - 1)).ConfigureAwait(false);
+                }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
                 { if (!_stop.IsCancellationRequested) error.Log(NameForLog, "HTTP/3 connection ended with an error."); }
                 finally { lock (_gate) _connections.Remove(id); }
@@ -267,17 +302,53 @@ namespace EmbedIO.Net.Internal.Http3
                     if (context.Completion.IsFaulted) _ = context.Completion.Exception;
                 }
             }
+            internal async Task DrainAsync(TimeSpan timeout, CancellationToken cancellationToken)
+            {
+                using var registration = cancellationToken.Register(Abort);
+                await Shutdown(true, timeout).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            private void Abort()
+            {
+                try { _stop.Cancel(); }
+                catch (ObjectDisposedException) { }
+            }
+            private Task Shutdown(bool graceful, TimeSpan timeout)
+            {
+                lock (_gate)
+                {
+                    if (_shutdown != null) return _shutdown;
+                    IsDraining = graceful;
+                    _shutdown = Task.Run(() => ShutdownAsync(graceful, timeout));
+                    return _shutdown;
+                }
+            }
+            private async Task ShutdownAsync(bool graceful, TimeSpan timeout)
+            {
+                if (graceful) { _stop.CancelAfter(timeout); _drain.Cancel(); }
+                else _stop.Cancel();
+                _acceptStop.Cancel();
+                try
+                {
+                    foreach (var listener in _listeners.Keys) await listener.DisposeAsync().ConfigureAwait(false);
+                    await Task.WhenAll(_accepts).ConfigureAwait(false);
+                    Task[] connections;
+                    lock (_gate) connections = _connections.Values.ToArray();
+                    await Task.WhenAll(connections).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _stop.Cancel();
+                    Contexts.Writer.TryComplete();
+                    while (Contexts.Reader.TryRead(out _)) { }
+                }
+            }
             public void Dispose()
             {
-                _stop.Cancel();
-                Contexts.Writer.TryComplete();
-                foreach (var listener in _listeners.Keys) listener.DisposeAsync().AsTask().GetAwaiter().GetResult();
-                Task.WhenAll(_accepts).GetAwaiter().GetResult();
-                Task[] connections;
-                lock (_gate) connections = _connections.Values.ToArray();
-                Task.WhenAll(connections).GetAwaiter().GetResult();
-                while (Contexts.Reader.TryRead(out _)) { }
-                _stop.Dispose();
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+                Abort();
+                try { Shutdown(false, TimeSpan.Zero).GetAwaiter().GetResult(); }
+                finally { _acceptStop.Dispose(); _drain.Dispose(); _stop.Dispose(); }
             }
         }
     }

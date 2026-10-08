@@ -121,6 +121,24 @@ namespace EmbedIO
         /// </summary>
         public IHttpListener Listener { get; }
 
+        /// <summary>Stops accepting new work and lets accepted responses finish within a deadline.</summary>
+        /// <param name="timeout">The maximum drain interval before remaining connections are aborted.</param>
+        /// <param name="cancellationToken">Cancellation aborts remaining connections immediately.</param>
+        /// <returns>A task completing when listener transport cleanup finishes.</returns>
+        /// <remarks>Currently supported by the HTTP/3 listener. RunAsync cancellation and disposal remain immediate.
+        /// Concurrent calls share the first drain deadline. Await this operation outside request callbacks.</remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The timeout is nonpositive or exceeds the timer range.</exception>
+        /// <exception cref="NotSupportedException">The selected listener does not support graceful drain.</exception>
+        public Task DrainAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            if (timeout <= TimeSpan.Zero || timeout.TotalMilliseconds > uint.MaxValue - 1)
+                throw new ArgumentOutOfRangeException(nameof(timeout));
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Listener is not IGracefulHttpListener graceful)
+                throw new NotSupportedException("The selected listener does not support graceful drain.");
+            return graceful.DrainAsync(timeout, cancellationToken);
+        }
+
         /// <inheritdoc />
         protected override void Dispose(bool disposing)
         {
@@ -156,7 +174,9 @@ namespace EmbedIO
         {
             while (!cancellationToken.IsCancellationRequested && (Listener?.IsListening ?? false))
             {
-                var context = await Listener.GetContextAsync(cancellationToken).ConfigureAwait(false);
+                IHttpContextImpl context;
+                try { context = await Listener.GetContextAsync(cancellationToken).ConfigureAwait(false); }
+                catch (ListenerDrainedException) { return; }
                 context.CancellationToken = cancellationToken;
                 context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
 

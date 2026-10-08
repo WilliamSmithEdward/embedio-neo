@@ -36,7 +36,8 @@ namespace EmbedIO.Net.Internal.Http3
         private int _critical;
         private int _applicationCount;
         private CancellationToken _drainToken;
-        private TimeSpan _drainTimeout = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan ApplicationDrainTimeout = TimeSpan.FromSeconds(30);
+        private TimeSpan _drainTimeout = ApplicationDrainTimeout;
         private readonly CancellationTokenSource _applicationDrain = new();
         private bool _draining;
         private long _highestRequestId = -4;
@@ -141,7 +142,9 @@ namespace EmbedIO.Net.Internal.Http3
             catch (OperationCanceledException) when (requested.IsCancellationRequested) { }
             if (_token.IsCancellationRequested) return;
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_token);
-            deadline.CancelAfter(_drainTimeout);
+            // KeepAlive=false retains its own policy even when a listener supplies
+            // an independent external drain deadline and abort token.
+            deadline.CancelAfter(_applicationDrain.IsCancellationRequested ? ApplicationDrainTimeout : _drainTimeout);
             try
             {
                 long cutoff;

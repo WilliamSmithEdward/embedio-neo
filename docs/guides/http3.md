@@ -88,7 +88,39 @@ bindings. A directly used `IHttpListener` can restart after Stop; WebServer itse
 retains its existing one-run lifecycle. Prefix changes require a stopped listener.
 A simultaneous restart while cleanup is running is rejected explicitly.
 Application response `KeepAlive=false` initiates the connection driver's bounded
-GOAWAY drain; listener-wide graceful shutdown is not yet exposed.
+GOAWAY drain with its existing 30-second application-triggered deadline. A
+listener drain has a separate host-specified abort deadline.
+
+For an explicit listener-wide drain, call `WebServer.DrainAsync` from the host's
+shutdown path, outside a request callback. Replace the server sample's final
+`await server.RunAsync(stop.Token)` with a host-managed run task:
+
+```csharp
+// server is the HTTP/3 WebServer configured above; keep its run token active.
+var running = server.RunAsync(stop.Token);
+// When the host decides to stop accepting work:
+await server.DrainAsync(TimeSpan.FromSeconds(10));
+await running;
+```
+
+Draining stops new connections, sends GOAWAY on existing connections and lets
+accepted responses finish. Later requests are rejected with H3_REQUEST_REJECTED.
+The deadline closes connections that have not finished, including long-lived
+WebSockets; it is not an unlimited wait for application callbacks. Cooperative
+clients can close after consuming GOAWAY and their responses. Calls made together
+share the first drain deadline. A cancellation token supplied to `DrainAsync`
+aborts remaining connections and completes that call with cancellation after
+transport cleanup. A token already canceled before the call has no side effects.
+Canceling `RunAsync`, calling `Listener.Stop`, or disposing the server still stops
+immediately and can interrupt a drain. Applications must honor their context
+cancellation token; arbitrary application code cannot be forcibly terminated.
+
+The new operation is currently supported only by the modern HTTP/3 listener.
+Other listener modes throw `NotSupportedException`; they do not silently claim
+a graceful shutdown. The timeout must be positive and within the timer range
+(at most 4,294,967,294 milliseconds). An HTTP/3 listener that has not started or
+has already stopped has no connections to drain. Dispose the server after its
+run task completes to release module/session resources.
 
 Priorities/datagrams, dynamic response QPACK,
 discovery and combined-protocol hosting remain under development. No throughput

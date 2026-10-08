@@ -22,6 +22,7 @@ namespace EmbedIO.Tests
         [TestCase("timeout")]
         [TestCase("abort")]
         [TestCase("late-lower-id")]
+        [TestCase("application-deadline")]
         public async Task GoAwayDrainsAcceptedRequestsAndRejectsLaterArrivals(string scenario)
         {
             ArgumentNullException.ThrowIfNull(scenario);
@@ -49,6 +50,7 @@ namespace EmbedIO.Tests
             internal readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly TaskCompletionSource Completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal int Count;
+            internal bool CloseAfterResponse;
             internal async Task Handle<T>(T value)
             {
                 object exchange = value ?? throw new AssertionException("Missing exchange.");
@@ -56,6 +58,8 @@ namespace EmbedIO.Tests
                 try
                 {
                     await Release.Task;
+                    if (CloseAfterResponse)
+                        (exchange.GetType().GetProperty("CloseConnectionAfterResponse", Flags) ?? throw new AssertionException("Missing close policy.")).SetValue(exchange, true);
                     await ((Task)(exchange.GetType().GetMethod("RespondAsync", Flags)?.Invoke(exchange,
                         new object[] { new byte[] { 100, 111, 110, 101 }, CancellationToken.None }) ?? throw new AssertionException("Missing response.")));
                 }
@@ -97,7 +101,7 @@ namespace EmbedIO.Tests
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var drain = new CancellationTokenSource();
-            var application = new DrainingApplication();
+            var application = new DrainingApplication { CloseAfterResponse = scenario == "application-deadline" };
             using var key = RSA.Create(2048);
             var req = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             var san = new SubjectAlternativeNameBuilder(); san.AddDnsName("localhost"); san.AddIpAddress(IPAddress.Loopback); req.CertificateExtensions.Add(san.Build());
@@ -139,7 +143,7 @@ namespace EmbedIO.Tests
                 }
                 else
                     await ((Task)(connection.GetMethod("RunWithDrainAsync", Flags)?.Invoke(null,
-                        new object[] { accepted, handler, deadline.Token, drain.Token, TimeSpan.FromSeconds(scenario is "timeout" or "idle-deadline" ? 3 : 10) })
+                        new object[] { accepted, handler, deadline.Token, drain.Token, scenario == "application-deadline" ? TimeSpan.FromMilliseconds(250) : TimeSpan.FromSeconds(scenario is "timeout" or "idle-deadline" ? 3 : 10) })
                         ?? throw new AssertionException("Missing graceful runner.")));
             });
             await using var client = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
@@ -178,6 +182,21 @@ namespace EmbedIO.Tests
                 await request.WriteAsync(Convert.FromHexString("01100000D1D7C150096C6F63616C686F7374"), true, deadline.Token);
                 await application.Entered.Task.WaitAsync(deadline.Token);
                 var source = await ReadControlForDrainAsync(client, peers, deadline.Token);
+                if (scenario == "application-deadline")
+                {
+                    application.Release.TrySetResult();
+                    using var response = new MemoryStream();
+                    await request.CopyToAsync(response, deadline.Token);
+                    Assert.That(response.Length, Is.GreaterThan(4));
+                    Assert.That(await ReadQuicInteger(source, deadline.Token), Is.EqualTo(7));
+                    Assert.That(await ReadQuicInteger(source, deadline.Token), Is.EqualTo(1));
+                    Assert.That(await ReadQuicInteger(source, deadline.Token), Is.EqualTo(4));
+                    await Task.Delay(750, deadline.Token);
+                    Assert.That(server.IsCompleted, Is.False, "An unused external drain timeout must not replace the application close policy.");
+                    await client.CloseAsync(0x100, deadline.Token);
+                    await server.WaitAsync(TimeSpan.FromSeconds(5));
+                    return;
+                }
                 if (scenario == "blocked-qpack")
                 {
                     var session = await sessionReady.Task.WaitAsync(deadline.Token);
