@@ -211,3 +211,11 @@ Run `hpack_interop.py generate unused <input.jsonl>`, the .NET fuzz project with
 `hpack_interop.py verify <input.jsonl> <output.jsonl>`. Both files retain all blocks
 in connection order, and any mismatch fails the process. Logs and corpora belong
 under ignored TestResults. HTTP/2 frame/stream integration is the next increment.
+
+The asynchronous frame transport now enforces negotiated receive bounds before
+allocating payload storage, preserves unknown extension frames, and serializes
+write batches. Thirty focused frame tests cover fragmentation, cancellation,
+malformed shapes, stream/connection error scope and concurrent output. Eighty-eight
+compression/framing cases pass in total. Connection preface, SETTINGS handling,
+continuation assembly, stream state/flow control and application dispatch are still
+pending; these isolated components do not yet provide HTTP/2 service.

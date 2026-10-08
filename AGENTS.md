@@ -327,3 +327,11 @@ These rules are the same in every WilliamSmithEdward repository.
   CI Linux probe added; ordinary test floor2092. Initial probe import build error
   retained then corrected. No HTTP2 transport yet. Next: frame reader/writer and
   stream/connection ownership, followed by independent real HTTP2 clients.
+- Frame transport checkpoint:30 new cases (88 compression/framing total) pass.
+  Reader enforces maximum before payload allocation, handles partial async reads,
+  ignores the reserved stream bit and makes partial I/O failures terminal. Writer
+  serializes entire batches so HEADERS/CONTINUATION cannot interleave; rented output
+  buffers are cleared. Shape validation preserves connection versus stream errors.
+  Initial fixture compile/assertion errors retained and corrected; no weakened checks.
+  Discovery floor2122. Next: connection preface, SETTINGS/ACK, continuation assembly,
+  per-stream lifecycle/flow control and actual WebServer dispatch. No HTTP2 claim yet.
