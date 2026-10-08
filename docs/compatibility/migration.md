@@ -840,3 +840,9 @@ including an empty component marked by `@`, with an empty 400 response followed
 by connection closure. Put authentication information in the appropriate HTTP
 authentication mechanism, not the request URI. At-signs in valid path/query
 components and their percent-encoded equivalents remain accepted.
+
+HTTP/1 Host numeric ports must now fit the transport endpoint range 0 through
+65535 before the listener applies its existing local-port URL normalization.
+Out-of-range values previously disappeared during port stripping; they now
+receive the empty 400 response and connection closure. Empty ports and decimal
+leading zeros remain accepted.

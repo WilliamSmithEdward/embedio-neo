@@ -2153,3 +2153,18 @@ passed: 3,109 total, 3,104 passed and five expected skips (`userinfo-full.log`).
 Both-target build, formatting, source guards and changed-file pinned YARA scans
 passed. Exact-head CI remains required. Scheme/port semantics and remaining
 target-form handling remain open.
+
+### HTTP/1 Host port range
+
+Three raw TCP cases reproduced acceptance of ports above 65535, including integer
+overflow-sized values (`host-port-before.log`). Host validation now bounds numeric
+ports before stripping them. The accumulator is checked on each digit, so it
+cannot overflow; leading zeros, empty ports and the 0/65535 boundaries remain
+accepted. Six new cases raise discovery to 3,115. All 111 focused cases passed
+locally (`host-port-focused.log`) and on pinned Linux, plus the actual .NET
+Standard asset on Windows/Linux under .NET 10. Full Windows validation passed:
+3,115 total, 3,110 passed, five expected skips and zero failures
+(`host-port-full.log`). Both-target build, formatting, source guards and changed-file
+pinned YARA scans passed. Exact-head CI remains required.
+This does not change the existing local-port URL contract or finish absolute-target
+scheme/port semantics.

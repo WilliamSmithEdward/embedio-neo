@@ -52,6 +52,12 @@ namespace EmbedIO.Tests
         public Task PathGrammarIsValidatedBeforeUriNormalization(string target, bool valid)
             => CheckRequest("GET", target, "127.0.0.1", valid);
 
+        [TestCase("127.0.0.1:65536", false)]
+        [TestCase("127.0.0.1:2147483648", false)]
+        [TestCase("127.0.0.1:999999999999999999999999", false)]
+        [TestCase("127.0.0.1:0", true)]
+        [TestCase("127.0.0.1:65535", true)]
+        [TestCase("127.0.0.1:000000000000000000000080", true)]
         [TestCase("127.0.0.1:abc", false)]
         [TestCase("127.0.0.1:-1", false)]
         [TestCase("127.0.0.1:+80", false)]

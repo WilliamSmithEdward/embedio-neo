@@ -37,9 +37,14 @@ namespace EmbedIO.Net.Internal
             if (colon > bracket)
             {
                 if (bracket < 0 && value.IndexOf(":", StringComparison.Ordinal) != colon) return false;
-                // RFC 3986 permits an empty port; a present port contains only digits.
+                // Empty ports and leading zeros are valid; numeric ports must fit a transport endpoint.
+                var port = 0;
                 for (var i = colon + 1; i < value.Length; i++)
+                {
                     if (value[i] < '0' || value[i] > '9') return false;
+                    port = port * 10 + value[i] - '0';
+                    if (port > ushort.MaxValue) return false;
+                }
             }
             return true;
         }
