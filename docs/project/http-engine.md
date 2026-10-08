@@ -557,3 +557,20 @@ All 67 HTTP/3 cases (34 new settings/control cases) pass against both target
 assemblies hosted on .NET 10.0.11. The solution builds without warnings/errors and
 both suppression guards pass. The discovery floor is 2,541. These local tests do
 not establish QUIC interoperability or complete HTTP/3 conformance.
+
+
+### QPACK field-section prefix foundation
+
+QPACK now has a separate bounded 62-bit prefix-integer codec for counters and
+stream identifiers. HPACK's existing Int32 policy is unchanged. The section-prefix
+codec reconstructs wrapped Required Insert Counts and signed Delta Base using
+[RFC 9204 section 4.5.1](https://www.rfc-editor.org/rfc/rfc9204.html#section-4.5.1).
+It rejects truncated, impossible, negative and overflowing state with
+QPACK_DECOMPRESSION_FAILED. The integer reader does not advance its offset on
+failure. This supplies the state required for future blocked decoding; it does
+not yet decode field lines, maintain QPACK tables or enforce blocked-stream counts.
+
+All 97 HTTP/3 cases pass on both target assemblies on .NET 10.0.11, including 30
+new QPACK cases and looped wrap-boundary checks. Both builds and suppression checks
+pass; CI's discovery floor is 2,571. The full HTTP/3/QPACK integration and independent
+interop remain required. The relevant RFC code-component notice is retained.
