@@ -276,14 +276,29 @@ namespace EmbedIO.Tests.Issues
         public async Task CancellationReleasesTheActiveCallbackAndServer(HttpListenerMode mode)
         {
             using var fixture = new Fixture(mode, "gate");
-            using var client = await fixture.Connect();
-            await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hold")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
-            await fixture.Module.Entered.Task.WaitAsync(fixture.Timeout.Token);
-            await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("next")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
-            fixture.Stop.Cancel();
-            await fixture.Running.WaitAsync(fixture.Timeout.Token);
-            await fixture.Module.CallbackFinished.Task.WaitAsync(fixture.Timeout.Token);
-            Assert.That(fixture.Module.Messages.ToArray(), Does.Not.Contain("next"));
+            var phase = "connect";
+            try
+            {
+                using var client = await fixture.Connect();
+                phase = "send hold";
+                await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hold")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
+                phase = "wait callback entry";
+                await fixture.Module.Entered.Task.WaitAsync(fixture.Timeout.Token);
+                phase = "send next";
+                await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("next")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
+                phase = "cancel server";
+                fixture.Stop.Cancel();
+                phase = "wait server completion";
+                await fixture.Running.WaitAsync(fixture.Timeout.Token);
+                phase = "wait callback completion";
+                await fixture.Module.CallbackFinished.Task.WaitAsync(fixture.Timeout.Token);
+                Assert.That(fixture.Module.Messages.ToArray(), Does.Not.Contain("next"));
+            }
+            catch (Exception error)
+            {
+                TestContext.Error.WriteLine($"Cancellation failure before cleanup: mode={mode}, phase={phase}, server={fixture.Running.Status}, callback={fixture.Module.CallbackFinished.Task.Status}, canceled={fixture.Stop.IsCancellationRequested}. {error}");
+                throw;
+            }
         }
 
         private static async Task<(WebSocketMessageType Type, byte[] Data)> Read(ClientWebSocket client, CancellationToken cancellation)
