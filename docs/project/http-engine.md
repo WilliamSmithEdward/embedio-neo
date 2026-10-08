@@ -677,3 +677,13 @@ those markers are corrected, without disabling the formatting check. Its malware
 workflow 37778299872 passed with the narrow reviewed HTTP/2 fixture acceptance;
 this does not supply the absent matching GitHub alert dismissal. Fresh exact-head
 checks remain necessary, and the PR stays draft.
+
+### Mainline WebSocket and platform integration
+
+Merged main 6961de3, retaining its asynchronous managed WebSocket close
+acknowledgment completion and iOS HTTPS startup diagnostics. The combined focused
+set passed 192 cases with one platform skip, and the unchanged merged-binary full
+Windows suite passed 2,652 cases with five expected skips (2,657 total). Evidence
+is under TestResults/http-engine/main-6961-*. Both sides' changelog entries and
+interop CI steps are retained; the discovery minimum includes main's eight added
+regressions. These runs precede the next request-stream reader increment.

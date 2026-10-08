@@ -17,6 +17,15 @@ public sealed class SmokeApp : Application
     private volatile string? _error;
     private readonly ConcurrentDictionary<string, string> _checks = new();
     private bool _started;
+    private readonly Stopwatch _elapsed = Stopwatch.StartNew();
+    private readonly ConcurrentQueue<object> _events = new();
+
+    private void Record(string name, string? detail = null)
+    {
+        _events.Enqueue(new { name, detail, milliseconds = _elapsed.ElapsedMilliseconds });
+        while (_events.Count > 128) _events.TryDequeue(out _);
+        Console.WriteLine($"HTTPS smoke: {name} at {_elapsed.ElapsedMilliseconds}ms: {detail}");
+    }
 
     protected override Window CreateWindow(IActivationState? state)
     {
@@ -41,6 +50,7 @@ public sealed class SmokeApp : Application
         runtime = Environment.Version.ToString(),
         platform = DeviceInfo.Platform.ToString(),
         pid = Environment.ProcessId,
+        events = _events.ToArray(),
     };
 
     private void WriteReport()
@@ -55,6 +65,7 @@ public sealed class SmokeApp : Application
     {
         const string url = "https://127.0.0.1:59626/";
         const string marker = "EmbedIO MAUI HTTPS rendered";
+        Record("app-start");
         var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
@@ -67,11 +78,14 @@ public sealed class SmokeApp : Application
                 .WithModule(new ActionModule("/state", HttpVerbs.Get, context => context.SendDataAsync(Report())))
                 .WithModule(new ActionModule("/finish", HttpVerbs.Post, async context =>
                 {
+                    Record("finish-request");
                     if (_phase != "ready") throw new InvalidOperationException("App tests have not completed.");
                     _checks["external_https"] = "passed";
                     _phase = "passed";
                     await context.SendDataAsync(Report());
+                    Record("finish-body-written");
                     context.Response.Close();
+                    Record("finish-response-closed");
                     finish.TrySetResult();
                 }))
                 .WithModule(new ActionModule("/", HttpVerbs.Get, context =>
@@ -84,23 +98,29 @@ public sealed class SmokeApp : Application
             try
             {
                 if (server.State != WebServerState.Listening) throw new InvalidOperationException("Listener did not start.");
+                Record("listener-started");
                 _phase = "testing";
                 await PlatformTests.HttpsSmoke.RunAsync();
                 _checks["transport_and_untrusted_certificate"] = "passed";
+                Record("transport-checks-passed");
                 // Normal platform trust, without a certificate-validation callback.
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
                 if (!(await client.GetStringAsync(url)).Contains(marker, StringComparison.Ordinal))
                     throw new InvalidOperationException("Platform HTTP client did not retrieve the TLS page.");
                 _checks["platform_client_trust"] = "passed";
+                Record("native-trust-passed");
                 var navigation = new TaskCompletionSource<WebNavigationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                 var expectedUrl = new Uri(url);
+                view.Navigating += (_, e) => Record("webview-navigating", e.Url);
                 view.Navigated += (_, e) =>
                 {
+                    Record("webview-navigated", $"{e.Result}: {e.Url}");
                     // Initial about:blank navigation can finish after the view
                     // loads. Only the requested HTTPS navigation is evidence.
                     if (Uri.TryCreate(e.Url, UriKind.Absolute, out var actualUrl) && actualUrl == expectedUrl)
                         navigation.TrySetResult(e.Result);
                 };
+                Record("webview-source-assigned", url);
                 view.Source = url;
                 if (await navigation.Task.WaitAsync(TimeSpan.FromSeconds(45)) != WebNavigationResult.Success)
                     throw new InvalidOperationException("Trusted HTTPS WebView navigation failed.");
@@ -122,6 +142,7 @@ public sealed class SmokeApp : Application
                 if (!rendered)
                     throw new InvalidOperationException($"WebView did not render the HTTPS page; last DOM result: {lastDom}");
                 _checks["webview_trust_and_render"] = "passed";
+                Record("webview-render-passed", lastDom);
                 _phase = "ready";
                 await finish.Task.WaitAsync(TimeSpan.FromMinutes(3));
             }
@@ -136,8 +157,10 @@ public sealed class SmokeApp : Application
             }
             finally
             {
+                Record("listener-stopping");
                 stop.Cancel();
                 await running.WaitAsync(TimeSpan.FromSeconds(10));
+                Record("listener-stopped");
             }
             WriteReport();
             Environment.Exit(0);

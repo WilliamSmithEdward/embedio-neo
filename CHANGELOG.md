@@ -17,6 +17,8 @@
   close status codes and UTF-8 reasons before processing or echoing them (#190). See the
   [compatibility notes](docs/compatibility/migration.md#managed-websocket-framing-unreleased).
 
+- Keep the managed WebSocket receiver active during local closing so valid peer acknowledgements complete promptly. Use asynchronous receive-completion signaling while preserving close payloads, cancellation and shutdown limits (issue #184).
+
 - Remove compiler/analyzer suppressions and null-forgiving operators, correct nullable
   contracts and resource ownership, and enforce warnings as errors in ordinary and
   platform builds. CI checks formatting and rejects new suppressions. The owner-approved

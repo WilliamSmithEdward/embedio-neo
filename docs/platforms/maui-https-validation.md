@@ -120,3 +120,41 @@ allocation-budget jobs on all three desktop operating systems. Performance
 probes remain sequential within each dedicated job to avoid competing with the
 regression suite on the same host. Both job groups are required by `CI passed`;
 regression TRX/coverage and compatibility/probe reports have separate artifacts.
+
+## Investigating slow or failed smoke runs
+
+Each platform artifact includes `timings.json` with elapsed time and outcome for
+every native command, including simulator boot, app launch, report collection
+and cleanup. Numbered `command-*.log` files retain bounded command output; a
+timeout keeps its partial output and is still a failure. `probe-events.jsonl`
+and `last-probe-state.json` identify the last host request and reachable app state.
+The app report contains a bounded monotonic timeline for listener startup, native
+trust, WebView navigation/rendering, finish-response handling and shutdown.
+
+On an iOS validation failure, the harness also attempts a bounded app-process
+simulator log query before cleanup. Diagnostic capture cannot turn a failed trust
+or rendering assertion into a pass. The existing trust checks, navigation/DOM
+budgets and host request timeouts remain unchanged. This instrumentation gathers
+evidence for issue #185; it does not by itself repair an intermittent failure.
+
+Simulator report lookup, shutdown and deletion are independent cleanup attempts.
+A missing app container (for example, because boot failed before installation)
+cannot skip device cleanup; deletion is attempted even when shutdown fails.
+`cleanup-errors.json` retains any cleanup failures. Cleanup errors fail an
+otherwise successful job while preserving the original exception if validation
+already failed.
+
+The iOS job creates and starts its owned simulator immediately after checkout,
+allowing startup to overlap pinned SDK/workload setup and compilation. The
+240-second readiness budget is measured from the original boot start across
+processes; starting it early does not grant extra boot time. The app execution
+still waits for readiness and imports the generated CA before installation. An
+always-run cleanup stage removes only the recorded owned simulator if setup or
+compilation fails; it is a no-op after successful deletion by the execution stage.
+No simulator state is cached or reused between jobs.
+
+A background worker enforces the boot deadline independently of compilation and
+atomically records readiness in `boot-result.json`; `boot-timings.json`,
+`boot-command-*.log` and `boot-worker.log` retain its evidence. A slow build can
+consume an already successful result; it neither resets nor extends the boot
+deadline. Failure or a missing worker result stops app execution.

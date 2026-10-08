@@ -14,24 +14,37 @@ import urllib.request
 MARKER = 'EmbedIO MAUI HTTPS rendered'
 
 
-def validate(base, cafile, timeout=180):
+def validate(base, cafile, timeout=180, progress=None):
     parsed = urllib.parse.urlparse(base)
     if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError('Specify an HTTPS URL without credentials.')
     base = base.rstrip('/') + '/'
     trusted = ssl.create_default_context(cafile=str(cafile))
 
+    def emit(phase, **details):
+        if progress is not None:
+            progress(dict(phase=phase, **details))
+
     def request(path, data=None):
-        with urllib.request.urlopen(urllib.request.Request(base + path, data=data), context=trusted, timeout=10) as response:
-            if response.status != 200:
-                raise RuntimeError(f'Unexpected HTTP status {response.status}')
-            return response.read()
+        emit('request-start', path=path)
+        started = time.monotonic()
+        try:
+            with urllib.request.urlopen(urllib.request.Request(base + path, data=data), context=trusted, timeout=10) as response:
+                if response.status != 200:
+                    raise RuntimeError(f'Unexpected HTTP status {response.status}')
+                result = response.read()
+                emit('request-complete', path=path, seconds=time.monotonic() - started)
+                return result
+        except Exception as error:
+            emit('request-failed', path=path, seconds=time.monotonic() - started, error=str(error))
+            raise
 
     deadline = time.monotonic() + timeout
     last = None
     while time.monotonic() < deadline:
         try:
             last = json.loads(request('state'))
+            emit('app-state', state=last)
             if last.get('error') or last.get('phase') == 'failed':
                 raise RuntimeError(f'App tests failed: {last}')
             if last.get('phase') == 'ready':
@@ -54,6 +67,7 @@ def validate(base, cafile, timeout=180):
     required = ['transport_and_untrusted_certificate', 'platform_client_trust', 'webview_trust_and_render', 'external_https']
     if final.get('passed') is not True or any(final.get('checks', {}).get(name) != 'passed' for name in required):
         raise RuntimeError(f'Incomplete app validation: {final}')
+    emit('validation-passed', state=final)
     final['host_negative_trust'] = 'passed'
     final['verified_url'] = base
     return final

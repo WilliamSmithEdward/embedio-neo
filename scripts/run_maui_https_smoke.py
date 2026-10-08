@@ -1,17 +1,23 @@
 """Execute the MAUI HTTPS app using normal platform/browser trust on disposable CI hosts."""
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
 from pathlib import Path
 import plistlib
 import subprocess
+import sys
 import time
+import uuid
 from maui_https_probe import validate
 
 parser = argparse.ArgumentParser()
 parser.add_argument('platform', choices=['windows', 'ios', 'maccatalyst', 'android'])
+parser.add_argument('--ios-stage', choices=['prepare', 'wait', 'execute', 'cleanup'], default='execute')
 args = parser.parse_args()
+if args.platform != 'ios' and args.ios_stage != 'execute':
+    parser.error('Simulator staging is only available for iOS.')
 if os.environ.get('GITHUB_ACTIONS') != 'true':
     raise SystemExit('Run this trust-provisioning harness only on a disposable GitHub Actions host.')
 
@@ -21,15 +27,157 @@ CERTS = Path('TestResults/maui-https/certificates').resolve()
 PACKAGE = 'io.embedioneo.https'
 PORT = 59626
 BASE = f'https://127.0.0.1:{PORT}/'
-CA_SHA1 = hashlib.sha1((CERTS / 'https-test-root.cer').read_bytes()).hexdigest().upper()
+CA_SHA1 = None
+SIMULATOR_STATE = ROOT / 'simulator.json'
+BOOT_RESULT = ROOT / 'boot-result.json'
+TIMINGS_PATH = ROOT / ('boot-timings.json' if args.ios_stage == 'wait' else 'timings.json')
+COMMAND_PREFIX = 'boot-' if args.ios_stage == 'wait' else ''
 process = None
 simulator = None
 trust_installed = False
 process_log = None
+timings = (json.loads((ROOT / 'timings.json').read_text(encoding='utf-8'))
+           if args.platform == 'ios' and args.ios_stage not in ['prepare', 'wait'] and SIMULATOR_STATE.exists()
+           else [])
+failed = False
+
+
+def persist_timings():
+    TIMINGS_PATH.write_text(json.dumps(timings, indent=2), encoding="utf-8")
+
+
+@contextmanager
+def timed(name):
+    entry = {"phase": name, "started_unix": time.time(), "status": "running"}
+    timings.append(entry)
+    persist_timings()
+    started = time.monotonic()
+    print(f"Starting {name}", flush=True)
+    try:
+        yield entry
+        entry["status"] = "passed"
+    except Exception as error:
+        entry["status"] = "failed"
+        entry["error"] = str(error)
+        raise
+    finally:
+        entry["seconds"] = round(time.monotonic() - started, 3)
+        persist_timings()
+        print(f"Finished {name}: {entry['status']} in {entry['seconds']}s", flush=True)
+
+
+def probe_progress(event):
+    (ROOT / "last-probe-state.json").write_text(json.dumps(event, indent=2), encoding="utf-8")
+    with (ROOT / "probe-events.jsonl").open("a", encoding="utf-8") as output:
+        output.write(json.dumps(dict(event, timestamp=time.time())) + "\n")
 
 
 def invoke(*arguments, timeout=120):
-    return subprocess.check_output(arguments, text=True, stderr=subprocess.STDOUT, timeout=timeout).strip()
+    name = " ".join(arguments[:3])
+    with timed(name) as entry:
+        try:
+            output = subprocess.check_output(arguments, text=True, encoding='utf-8', errors='replace',
+                                             stderr=subprocess.STDOUT, timeout=timeout)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            output = error.output or ''
+            if isinstance(output, bytes):
+                output = output.decode('utf-8', errors='replace')
+            (ROOT / f'{COMMAND_PREFIX}command-{len(timings)}.log').write_text(output[-131072:], encoding='utf-8')
+            raise
+        (ROOT / f'{COMMAND_PREFIX}command-{len(timings)}.log').write_text(output[-131072:], encoding='utf-8')
+        entry['arguments'] = list(arguments)
+        return output.strip()
+
+
+def read_simulator_state():
+    state = json.loads(SIMULATOR_STATE.read_text(encoding='utf-8'))
+    state['id'] = str(uuid.UUID(state['id']))
+    return state
+
+
+def prepare_ios():
+    if SIMULATOR_STATE.exists() and not read_simulator_state()['deleted']:
+        raise RuntimeError('An owned simulator already exists; clean it up before preparing another.')
+    BOOT_RESULT.unlink(missing_ok=True)
+    invoke('xcrun', 'simctl', 'list', '--json')
+    device = invoke('xcrun', 'simctl', 'create', 'EmbedIO HTTPS test',
+                    'com.apple.CoreSimulator.SimDeviceType.iPhone-16',
+                    'com.apple.CoreSimulator.SimRuntime.iOS-26-5')
+    state = {'id': str(uuid.UUID(device)), 'boot_started': time.monotonic(), 'deleted': False}
+    # Record ownership before boot, so a failed prepare/build can still clean up.
+    SIMULATOR_STATE.write_text(json.dumps(state, indent=2), encoding='utf-8')
+    invoke('xcrun', 'simctl', 'boot', state['id'])
+    with (ROOT / 'boot-worker.log').open('w', encoding='utf-8') as output:
+        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), 'ios', '--ios-stage', 'wait'],
+                         stdout=output, stderr=subprocess.STDOUT)
+    return state
+
+
+def cleanup_ios(device):
+    errors = []
+    for operation in ['shutdown', 'delete']:
+        try:
+            invoke('xcrun', 'simctl', operation, device)
+            if operation == 'delete' and SIMULATOR_STATE.exists():
+                state = read_simulator_state()
+                state['deleted'] = True
+                SIMULATOR_STATE.write_text(json.dumps(state, indent=2), encoding='utf-8')
+        except (OSError, subprocess.SubprocessError) as error:
+            errors.append(str(error))
+    if errors:
+        (ROOT / 'cleanup-errors.json').write_text(json.dumps(errors, indent=2), encoding='utf-8')
+    return errors
+
+
+def supervise_ios_boot():
+    state = read_simulator_state()
+    try:
+        remaining = 240 - (time.monotonic() - state['boot_started'])
+        if remaining <= 0:
+            raise TimeoutError('Simulator readiness exceeded 240 seconds from boot start.')
+        invoke('xcrun', 'simctl', 'bootstatus', state['id'], '-b', timeout=remaining)
+        result = {'id': state['id'], 'passed': True, 'seconds': time.monotonic() - state['boot_started']}
+    except Exception as error:
+        result = {'id': state['id'], 'passed': False, 'error': str(error), 'seconds': time.monotonic() - state['boot_started']}
+    # Publish a complete result; the foreground must never read partial JSON.
+    temporary = ROOT / 'boot-result.tmp'
+    temporary.write_text(json.dumps(result, indent=2), encoding='utf-8')
+    temporary.replace(BOOT_RESULT)
+    if not result['passed']:
+        raise RuntimeError(result['error'])
+
+
+def wait_for_ios_boot(state):
+    # The worker enforces the boot deadline independently of slow builds.
+    # Ten seconds only allows its timeout termination/result file to be collected.
+    deadline = state['boot_started'] + 240 + 10
+    while not BOOT_RESULT.exists():
+        if time.monotonic() >= deadline:
+            raise RuntimeError('iOS boot worker did not publish a readiness result.')
+        time.sleep(0.1)
+    result = json.loads(BOOT_RESULT.read_text(encoding='utf-8'))
+    if result['id'] != state['id']:
+        raise RuntimeError('iOS readiness result does not belong to the owned simulator.')
+    if not result['passed']:
+        raise RuntimeError('iOS simulator boot failed: ' + result['error'])
+    print(f"Simulator ready after {result['seconds']:.3f}s from boot start", flush=True)
+
+
+if args.ios_stage == 'wait':
+    supervise_ios_boot()
+    raise SystemExit(0)
+
+if args.ios_stage == 'prepare':
+    prepare_ios()
+    raise SystemExit(0)
+if args.ios_stage == 'cleanup':
+    if SIMULATOR_STATE.exists():
+        state = read_simulator_state()
+        if not state['deleted']:
+            errors = cleanup_ios(state['id'])
+            if errors:
+                raise RuntimeError('Simulator cleanup failed: ' + '; '.join(errors))
+    raise SystemExit(0)
 
 
 def unique(pattern):
@@ -40,23 +188,21 @@ def unique(pattern):
 
 
 try:
+    CA_SHA1 = hashlib.sha1((CERTS / 'https-test-root.cer').read_bytes()).hexdigest().upper()
     if args.platform == 'windows':
         invoke('pwsh', '-NoProfile', '-Command',
                "Import-Certificate -FilePath '" + str(CERTS / 'https-test-root.cer').replace("'", "''")
                + "' -CertStoreLocation Cert:\\LocalMachine\\Root -ErrorAction Stop | Out-Null")
         trust_installed = True
         app = unique('net10.0-windows10.0.19041.0/win-x64/EmbedIO.MauiHttpsSmoke.exe')
-        process_log = (ROOT / 'app.log').open('w')
+        process_log = (ROOT / 'app.log').open('w', encoding='utf-8')
         environment = dict(os.environ, EMBEDIO_HTTPS_RESULTS=str(ROOT.resolve()))
         process = subprocess.Popen([str(app)], stdout=process_log, stderr=subprocess.STDOUT,
                                    env=environment, creationflags=subprocess.CREATE_NO_WINDOW)
     elif args.platform == 'ios':
-        invoke('xcrun', 'simctl', 'list', '--json')  # Initialize CoreSimulator services.
-        simulator = invoke('xcrun', 'simctl', 'create', 'EmbedIO HTTPS test',
-                           'com.apple.CoreSimulator.SimDeviceType.iPhone-16',
-                           'com.apple.CoreSimulator.SimRuntime.iOS-26-5')
-        invoke('xcrun', 'simctl', 'boot', simulator)
-        invoke('xcrun', 'simctl', 'bootstatus', simulator, '-b', timeout=240)
+        state = read_simulator_state() if SIMULATOR_STATE.exists() else prepare_ios()
+        simulator = state['id']
+        wait_for_ios_boot(state)
         invoke('xcrun', 'simctl', 'keychain', simulator, 'add-root-cert', str(CERTS / 'https-test-root.cer'))
         app = unique('net10.0-ios/iossimulator-arm64/*.app')
         invoke('xcrun', 'simctl', 'install', simulator, str(app))
@@ -89,7 +235,8 @@ try:
         invoke(adb, 'forward', f'tcp:{PORT}', f'tcp:{PORT}')
         invoke(adb, 'shell', 'am', 'start', '-n', PACKAGE + '/.MainActivity')
 
-    final = validate(BASE, CERTS / 'https-test-root.pem')
+    with timed('HTTPS app and host validation'):
+        final = validate(BASE, CERTS / 'https-test-root.pem', progress=probe_progress)
     final['ca_sha1'] = CA_SHA1
     final['app'] = str(app)
     if args.platform == 'ios':
@@ -97,10 +244,11 @@ try:
         final['ios_runtime'] = 'iOS-26-5'
     if args.platform == 'android':
         final['android_api'] = invoke(adb, 'shell', 'getprop', 'ro.build.version.sdk')
-    (ROOT / 'result.json').write_text(json.dumps(final, indent=2))
+    (ROOT / 'result.json').write_text(json.dumps(final, indent=2), encoding='utf-8')
     print(json.dumps(final, indent=2))
 except Exception as error:
-    (ROOT / 'result.json').write_text(json.dumps({'passed': False, 'error': str(error)}, indent=2))
+    failed = True
+    (ROOT / 'result.json').write_text(json.dumps({'passed': False, 'error': str(error)}, indent=2), encoding='utf-8')
     raise
 finally:
     if args.platform == 'maccatalyst':
@@ -110,18 +258,35 @@ finally:
                 (ROOT / 'app-result.json').write_bytes(report.read_bytes())
     if args.platform == 'android':
         try:
-            (ROOT / 'logcat.txt').write_text(invoke(adb, 'logcat', '-d'))
+            (ROOT / 'logcat.txt').write_text(invoke(adb, 'logcat', '-d'), encoding='utf-8')
         except (OSError, subprocess.SubprocessError):
             pass
     if simulator:
+        if failed:
+            try:
+                invoke('xcrun', 'simctl', 'spawn', simulator, 'log', 'show', '--style', 'compact',
+                       '--last', '5m', '--predicate', 'process == "EmbedIO.MauiHttpsSmoke"', timeout=30)
+            except (OSError, subprocess.SubprocessError):
+                # Diagnostics must not replace the original validation failure.
+                pass
         try:
             container = Path(invoke('xcrun', 'simctl', 'get_app_container', simulator, PACKAGE, 'data'))
             for report in container.rglob('https-result.json'):
                 (ROOT / 'app-result.json').write_bytes(report.read_bytes())
-            invoke('xcrun', 'simctl', 'shutdown', simulator)
-            invoke('xcrun', 'simctl', 'delete', simulator)
         except (OSError, subprocess.SubprocessError):
+            # The app may not have been installed if simulator boot failed.
             pass
+        finally:
+            cleanup_errors = cleanup_ios(simulator)
+            if cleanup_errors:
+                if not failed:
+                    # Successful trust checks cannot hide failed device cleanup.
+                    error = RuntimeError('Simulator cleanup failed: ' + '; '.join(cleanup_errors))
+                    final['passed'] = False
+                    final['phase'] = 'cleanup-failed'
+                    final['error'] = str(error)
+                    (ROOT / 'result.json').write_text(json.dumps(final, indent=2), encoding='utf-8')
+                    raise error
     if process is not None and process.poll() is None:
         try:
             process.wait(timeout=15)
