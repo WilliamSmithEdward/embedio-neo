@@ -838,3 +838,48 @@ its dylib identifier and OpenSSL load path with install_name_tool, and reapplies
 ad-hoc signature after relocation. The loaded paths and relocated hash are recorded
 as test evidence. Homebrew only supplies OpenSSL; QUIC's version and downloaded
 bytes remain pinned. This setup still needs successful macOS execution.
+
+
+### HTTP/3 application-independent transport shutdown
+
+Request dispatch now runs separately from the stream owner and is awaited with
+the request lifetime. Cancellation invalidates the exchange and closes the QUIC
+stream without waiting for a callback that ignores that token or blocks before
+returning its Task. A late application fault is observed without calling into a
+disposed connection. Late body reads and response writes are rejected. Output
+operations hold a counted semaphore lifetime so disposal cannot destroy the
+semaphore underneath a running or queued writer. Detached callbacks count toward
+a 256-callback per-connection cap until they actually finish; additional requests
+receive H3_EXCESSIVE_LOAD rather than accumulating unbounded detached work.
+
+Three controlled shutdown cases first timed out: a stalled async callback, a late
+faulting async callback, and a synchronously blocked callback. All now allow the
+transport to stop while application code remains blocked. A fourth case covers
+an in-flight flow-controlled response plus a queued writer. A fifth sends and
+resets 256 requests whose callbacks remain stalled, verifies the next request is
+rejected without dispatch, then verifies callback accounting returns to zero
+when those callbacks are released. This cannot terminate arbitrary application
+code or prevent user cancellation registrations from blocking their invoking
+thread. Server-wide admission limits, graceful drain and callback diagnostics
+still need integration. The extra dispatch scheduling also needs measurement in
+the performance phase; no throughput improvement is claimed.
+
+The four-case shutdown increment passed the full Windows suite: 2,703 passed,
+five expected skips, 2,708 total. Eighteen QUIC cases also passed in the isolated
+Ubuntu container. The subsequent callback-cap case passed locally, bringing the
+QUIC set to 19 and the discovery floor to 2,709. Logs retain the three initial
+failures under http3-shutdown-before and the passing shutdown/writer/cap runs.
+
+The revised macOS prerequisite step succeeded in CI 37789000439, but all 14 QUIC
+cases failed during TLS establishment, before engine dispatch. The test key is
+now imported with X509KeyStorageFlags.Exportable and its PKCS#12 export is checked
+before listening. The [.NET 10.0.12 OpenSSL credential path](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.Quic/src/System/Net/Quic/Internal/MsQuicConfiguration.cs)
+exports the certificate to PKCS#12. This is a candidate fixture correction and
+requires fresh macOS confirmation; neither macOS transport success nor complete
+platform conformance is claimed yet.
+
+Final focused validation passes all 227 HTTP/3 cases on Windows and all 19 direct
+QUIC cases in the isolated Ubuntu container, including the callback cap and the
+exportable test-certificate setup. Complete formatting, suppression guards and
+the pinned full YARA scan pass. This does not substitute for fresh full-source
+CI or the still-unconfirmed macOS TLS correction.

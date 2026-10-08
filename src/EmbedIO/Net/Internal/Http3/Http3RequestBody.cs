@@ -16,7 +16,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Action<Exception> _failed;
         private bool _data;
         private bool _ended;
-        private bool _disposed;
+        private volatile bool _disposed;
         private int _reading;
         internal Http3RequestBody(long streamId, Http3RequestStream reader,
             Func<byte[], CancellationToken, Task<HpackField[]>> decode, Action<Exception> failed)

@@ -31,6 +31,7 @@ namespace EmbedIO.Net.Internal.Http3
         private Http3PeerSettings _peer = Http3PeerSettings.Parse(Array.Empty<byte>());
         private Exception? _failure;
         private int _critical;
+        private int _applicationCount;
 
         private Http3QuicConnection(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token)
         {
@@ -178,7 +179,23 @@ namespace EmbedIO.Net.Internal.Http3
                     (wire, token) => DecodeRequestAsync(stream.Id, wire, token, requestToken),
                     () => (int)Math.Min(65536, Volatile.Read(ref _peer).MaximumFieldSectionSize),
                     error => RequestFailed(stream, error), requestToken);
-                await _dispatch(exchange).ConfigureAwait(false);
+                // Isolate even callbacks that block before returning their Task.
+                if (Interlocked.Increment(ref _applicationCount) > 256)
+                {
+                    Interlocked.Decrement(ref _applicationCount);
+                    throw new Http3StreamException(stream.Id, 0x107, "Too many outstanding application callbacks.");
+                }
+                var application = Task.Run(() => DispatchApplicationAsync(exchange, requestToken));
+                try { await application.WaitAsync(requestToken).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (requestToken.IsCancellationRequested)
+                {
+                    // A detached callback may fail later. Observe that failure
+                    // without retaining or accessing the disposed connection.
+                    _ = application.ContinueWith(static completed => { _ = completed.Exception; },
+                        CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
+                    throw;
+                }
                 if (!exchange.Ended) await exchange.CompleteAsync(requestToken).ConfigureAwait(false);
                 if (!exchange.Body.Ended) stream.Abort(QuicAbortDirection.Read, 0x100);
             }
@@ -189,6 +206,15 @@ namespace EmbedIO.Net.Internal.Http3
                 requestStop.Cancel();
                 await Task.WhenAll(reads, writes).ConfigureAwait(false);
             }
+        }
+        private async Task DispatchApplicationAsync(Http3QuicExchange exchange, CancellationToken token)
+        {
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                await _dispatch(exchange).ConfigureAwait(false);
+            }
+            finally { Interlocked.Decrement(ref _applicationCount); }
         }
         private static async Task WatchRequestDirectionAsync(Task completion, CancellationTokenSource requestStop)
         {
@@ -329,6 +355,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private void RequestFailed(QuicStream stream, Exception error)
         {
+            if (_token.IsCancellationRequested) return;
             if (error is Http3ProtocolException protocol) Fail(protocol);
             else AbortStream(stream, error is Http3StreamException scoped ? scoped.ErrorCode : 0x10c);
         }
@@ -339,8 +366,10 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private void Fail(Exception error)
         {
+            if (_token.IsCancellationRequested) return;
             Interlocked.CompareExchange(ref _failure, error, null);
-            _stop.Cancel();
+            try { _stop.Cancel(); }
+            catch (ObjectDisposedException) { }
         }
         public void Dispose() { _decoder.Dispose(); _feedbackReady.Dispose(); _stop.Dispose(); }
     }

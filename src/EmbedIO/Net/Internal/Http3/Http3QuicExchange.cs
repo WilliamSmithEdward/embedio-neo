@@ -21,6 +21,8 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Func<int> _peerFieldLimit;
         private readonly Action<Exception> _failed;
         private readonly SemaphoreSlim _output = new(1, 1);
+        private readonly object _outputLifetime = new();
+        private int _outputUsers;
         private readonly byte[] _frameHeader = new byte[16];
         private bool _headers;
         private bool _tunnel;
@@ -53,7 +55,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
         internal async Task SendHeadersAsync(HpackField[] fields, bool endStream, CancellationToken token)
         {
-            await _output.WaitAsync(token).ConfigureAwait(false);
+            await AcquireOutputAsync(token).ConfigureAwait(false);
             try
             {
                 CheckWritable();
@@ -68,13 +70,13 @@ namespace EmbedIO.Net.Internal.Http3
                 }
                 if (endStream) _ended = true;
             }
-            finally { _output.Release(); }
+            finally { ReleaseOutput(); }
         }
         internal async Task WriteAsync(byte[] bytes, int offset, int count, bool endStream, CancellationToken token)
         {
             if (bytes == null) throw new ArgumentNullException(nameof(bytes));
             if (offset < 0 || count < 0 || offset > bytes.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
-            await _output.WaitAsync(token).ConfigureAwait(false);
+            await AcquireOutputAsync(token).ConfigureAwait(false);
             try
             {
                 CheckWritable();
@@ -89,11 +91,11 @@ namespace EmbedIO.Net.Internal.Http3
                 if (endStream) _ended = true;
             }
             catch (Exception error) when (error is QuicException or OperationCanceledException) { _outputFailed = true; _failed(error); throw; }
-            finally { _output.Release(); }
+            finally { ReleaseOutput(); }
         }
         internal async Task SendTrailersAsync(HpackField[] fields, CancellationToken token)
         {
-            await _output.WaitAsync(token).ConfigureAwait(false);
+            await AcquireOutputAsync(token).ConfigureAwait(false);
             try
             {
                 CheckWritable();
@@ -106,13 +108,14 @@ namespace EmbedIO.Net.Internal.Http3
                 await FrameAsync(1, encoded, true, token).ConfigureAwait(false);
                 _ended = true;
             }
-            finally { _output.Release(); }
+            finally { ReleaseOutput(); }
         }
         internal Task CompleteAsync(CancellationToken token) => _headers
             ? WriteAsync(Array.Empty<byte>(), 0, 0, true, token) : RespondAsync(Array.Empty<byte>(), token);
         private void CheckWritable()
         {
-            if (_disposed != 0 || _outputFailed || _ended) throw new InvalidOperationException("HTTP/3 response is no longer writable.");
+            CancellationToken.ThrowIfCancellationRequested();
+            if (Volatile.Read(ref _disposed) != 0 || _outputFailed || _ended) throw new InvalidOperationException("HTTP/3 response is no longer writable.");
         }
         private async Task FrameAsync(long type, ReadOnlyMemory<byte> payload, bool endStream, CancellationToken token)
         {
@@ -125,10 +128,39 @@ namespace EmbedIO.Net.Internal.Http3
             }
             catch (Exception error) when (error is IOException or OperationCanceledException) { _outputFailed = true; _failed(error); throw; }
         }
+        private async Task AcquireOutputAsync(CancellationToken token)
+        {
+            lock (_outputLifetime)
+            {
+                if (_disposed != 0) throw new ObjectDisposedException(nameof(Http3QuicExchange));
+                ++_outputUsers;
+            }
+            try { await _output.WaitAsync(token).ConfigureAwait(false); }
+            catch { FinishOutputUser(); throw; }
+        }
+        private void ReleaseOutput()
+        {
+            _output.Release();
+            FinishOutputUser();
+        }
+        private void FinishOutputUser()
+        {
+            lock (_outputLifetime)
+            {
+                if (--_outputUsers == 0 && _disposed != 0) _output.Dispose();
+            }
+        }
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            Body.Dispose(); _output.Dispose();
+            lock (_outputLifetime)
+            {
+                if (_disposed != 0) return;
+                Volatile.Write(ref _disposed, 1);
+                // Already-running writers retain the semaphore until their finally
+                // blocks release it. New calls cannot enter after invalidation.
+                if (_outputUsers == 0) _output.Dispose();
+            }
+            Body.Dispose();
         }
     }
 }
