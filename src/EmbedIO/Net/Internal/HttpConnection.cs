@@ -1,4 +1,6 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
+using EmbedIO.Net.Internal.Http2;
 using System.IO;
 using System.Net;
 using System.Net.Security;
@@ -16,6 +18,9 @@ namespace EmbedIO.Net.Internal
         private const int BufferSize = 8192;
         private static readonly Encoding HeaderEncoding = Encoding.GetEncoding(28591);
         private int _headerBytes;
+        private bool _http2;
+        private CancellationTokenSource? _http2Stop;
+        private HashSet<HttpListener>? _http2Listeners;
         private int _responseFinishing;
 
         private readonly Timer _timer;
@@ -92,11 +97,47 @@ namespace EmbedIO.Net.Internal
                 // bounds a client that connects without completing its TLS handshake.
                 if (Stream is SslStream sslStream && !sslStream.IsAuthenticated)
                 {
+#if NET10_0_OR_GREATER
+                    await sslStream.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
+                    {
+                        ServerCertificate = _epl.Listener.Certificate,
+                        EnabledSslProtocols = SslProtocols.None,
+                        ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http2, SslApplicationProtocol.Http11 },
+                    }).ConfigureAwait(false);
+                    if (sslStream.NegotiatedApplicationProtocol == SslApplicationProtocol.Http2)
+                    {
+                        if (sslStream.SslProtocol != SslProtocols.Tls12 && sslStream.SslProtocol != SslProtocols.Tls13)
+                            throw new AuthenticationException("HTTP/2 requires TLS 1.2 or later.");
+                        await RunHttp2Async(Stream).ConfigureAwait(false);
+                        return;
+                    }
+#else
                     await sslStream.AuthenticateAsServerAsync(_epl.Listener.Certificate,
                         false, SslProtocols.None, false).ConfigureAwait(false);
+#endif
                 }
 
                 var data = bufferedInput ? 0 : await Stream.ReadAsync(buffer, 0, BufferSize).ConfigureAwait(false);
+                if (!IsSecure && Reuses == 0 && !bufferedInput && data > 0 && buffer[0] == (byte)'P')
+                {
+                    var preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+                    while (true)
+                    {
+                        var matches = true;
+                        for (var i = 0; i < Math.Min(data, preface.Length); i++)
+                            if (buffer[i] != preface[i]) { matches = false; break; }
+                        if (!matches) break;
+                        if (data >= preface.Length)
+                        {
+                            using var replay = new PrefixReadStream(Stream, buffer, data);
+                            await RunHttp2Async(replay).ConfigureAwait(false);
+                            return;
+                        }
+                        var more = await Stream.ReadAsync(buffer, data, BufferSize - data).ConfigureAwait(false);
+                        if (more == 0) throw new EndOfStreamException("Incomplete protocol preface.");
+                        data += more;
+                    }
+                }
                 await OnReadInternal(data, bufferedInput).ConfigureAwait(false);
             }
             catch
@@ -130,6 +171,7 @@ namespace EmbedIO.Net.Internal
         internal void Close(bool forceClose = false)
         {
             if (forceClose) Volatile.Write(ref _forceClosing, 1);
+            if (_http2) { CloseTransport(true); return; }
             if (!forceClose && Interlocked.Exchange(ref _responseFinishing, 1) != 0) return;
             if (_sock != null)
             {
@@ -430,12 +472,19 @@ namespace EmbedIO.Net.Internal
         private void CloseTransport(bool shutdown)
         {
             Socket? socket;
+            CancellationTokenSource? protocolStop;
+            HttpListener[] protocolListeners;
             lock (_connectionSync)
             {
                 socket = _sock;
                 _sock = null;
+                protocolStop = _http2Stop;
+                protocolListeners = _http2Listeners == null ? Array.Empty<HttpListener>() : new List<HttpListener>(_http2Listeners).ToArray();
+                _http2Listeners?.Clear();
             }
             if (socket == null) return;
+            try { protocolStop?.Cancel(); } catch (ObjectDisposedException) { } catch (AggregateException) { /* Complete transport cleanup even if a cancellation callback fails. */ }
+            foreach (var listener in protocolListeners) listener.RemoveConnection(this);
 
             try
             {

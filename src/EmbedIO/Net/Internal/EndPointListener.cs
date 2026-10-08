@@ -365,7 +365,7 @@ namespace EmbedIO.Net.Internal
             => first.Host == second.Host && first.Port == second.Port
                 && first.Path == second.Path && first.Secure == second.Secure;
 
-        private HttpListener? SearchListener(Uri uri, out ListenerPrefix? prefix)
+        internal HttpListener? SearchListener(Uri uri, out ListenerPrefix? prefix)
         {
             prefix = null;
             if (uri == null)

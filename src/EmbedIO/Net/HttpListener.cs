@@ -21,7 +21,7 @@ namespace EmbedIO.Net
         private readonly SemaphoreSlim _ctxQueueSem = new(0);
         private readonly object _lifecycleSync = new();
         private CancellationTokenSource _acceptStop = new();
-        private readonly ConcurrentDictionary<string, HttpListenerContext> _ctxQueue;
+        private readonly ConcurrentDictionary<string, IHttpContextImpl> _ctxQueue;
         private readonly ConcurrentDictionary<HttpConnection, object> _connections;
         private readonly HttpListenerPrefixCollection _prefixes;
         private bool _disposed;
@@ -37,7 +37,7 @@ namespace EmbedIO.Net
 
             _prefixes = new HttpListenerPrefixCollection(this);
             _connections = new ConcurrentDictionary<HttpConnection, object>();
-            _ctxQueue = new ConcurrentDictionary<string, HttpListenerContext>();
+            _ctxQueue = new ConcurrentDictionary<string, IHttpContextImpl>();
         }
 
         /// <inheritdoc />
@@ -173,7 +173,7 @@ namespace EmbedIO.Net
             _acceptStop.Dispose();
         }
 
-        internal void RegisterContext(HttpListenerContext context)
+        internal void RegisterContext(IHttpContextImpl context)
         {
             lock (_lifecycleSync)
             {
@@ -185,7 +185,18 @@ namespace EmbedIO.Net
             }
         }
 
-        internal void UnregisterContext(HttpListenerContext context) => _ctxQueue.TryRemove(context.Id, out _);
+        internal void RegisterMultiplexedContext(IHttpContextImpl context, HttpConnection connection)
+        {
+            lock (_lifecycleSync)
+            {
+                if (_disposed || !IsListening) throw new HttpListenerException(995, "The listener stopped accepting requests.");
+                _connections[connection] = connection;
+                if (!_ctxQueue.TryAdd(context.Id, context)) throw new InvalidOperationException("Unable to register context.");
+                _ = _ctxQueueSem.Release();
+            }
+        }
+
+        internal void UnregisterContext(IHttpContextImpl context) => _ctxQueue.TryRemove(context.Id, out _);
 
         internal void AddConnection(HttpConnection cnc) => _connections[cnc] = cnc;
 
@@ -209,7 +220,9 @@ namespace EmbedIO.Net
                     // A previously closed connection cannot unbind its context again.
                     if (_ctxQueue.TryRemove(entry.Key, out var context))
                     {
-                        context.Connection.Close(true);
+                        if (context is HttpListenerContext http1) http1.Connection.Close(true);
+                        // HTTP/2 contexts finish via their canceled connection dispatch.
+
                     }
                 }
             }

@@ -44,7 +44,7 @@ this development goal unless separately authorized.
 | --- | --- | --- |
 | HTTP semantics | RFC 9110; methods, status, authority, informational responses, headers and trailers | Existing application layer; full conformance audit pending |
 | HTTP/1.1 | RFC 9112; incremental parsing, fixed/chunked bodies, pipelines, persistence, bounded input and errors | First implementation under test |
-| HTTP/2 | RFC 9113; TLS/ALPN, prior knowledge, HPACK (RFC 7541), multiplexed streams, flow control, SETTINGS, GOAWAY and reset | Planned; not implemented |
+| HTTP/2 | RFC 9113; TLS/ALPN, prior knowledge, HPACK (RFC 7541), multiplexed streams, flow control, SETTINGS, GOAWAY and reset | Implemented incrementally; listener integration under validation |
 | HTTP/3 | RFC 9114; QUIC, TLS 1.3, QPACK (RFC 9204), control streams, request cancellation and graceful drain | Planned; not implemented |
 | WebSockets | Existing RFC 6455 plus extended CONNECT over HTTP/2 (RFC 8441) and HTTP/3 (RFC 9220) | HTTP/1.1 existing; multiplexed transports planned |
 | Extensions | Priorities (RFC 9218), HTTP datagrams/capsules (RFC 9297), discovery/Alt-Svc, current registered extensions and errata | Inventory and applicability review pending |
@@ -352,3 +352,28 @@ The adapters have not yet been connected to EndPointListener/HttpListener routin
 or TLS negotiation. HTTP/2 extended CONNECT/WebSocket adaptation remains explicitly
 unadvertised until implemented. Those integration steps, platform validation and
 performance measurements remain part of the active program.
+
+### Managed listener integration
+
+The managed listener now routes HTTP/2 streams through its existing public context
+queue and normal WebServer module pipeline. Cleartext prior knowledge works on
+both library targets. The net10.0 build also negotiates h2 through TLS ALPN,
+retaining HTTP/1.1 fallback. The netstandard2.0 build retains its existing TLS
+handshake API and does not advertise TLS HTTP/2. The Microsoft listener is unchanged.
+
+Connections remain owned by the endpoint and each routed listener so stop/disposal
+closes their transport and cancels active stream contexts. Prefix detection replays
+already-read bytes into HTTP/2 and retains ordinary POST/PATCH parsing on mismatch.
+Real WebServer tests pass twelve concurrent uploads larger than the initial
+flow-control window over both cleartext and HTTPS, then verify HTTP/1.1 fallback.
+A shutdown test verifies cancellation reaches an application awaiting its context
+token. The 301-case HTTP/2, HTTPS and listener lifecycle selection passes locally.
+
+This supersedes the earlier unconnected-adapter status. Extended CONNECT/WebSockets,
+additional conformance/resource limits, cross-platform negotiation validation,
+HTTP/2 performance measurements and HTTP/3 remain outstanding program work.
+
+The complete Windows suite for this listener increment passed: 2,283 successes,
+five expected platform skips, 2,288 total. Both library targets build. This is local
+validation; exact-head remote checks and other platforms remain required.
+
