@@ -1999,3 +1999,23 @@ Linux (.NET 10 hosts). The full Windows suite passed: 3,041 total, 3,036 passed,
 five expected skips, zero failures (`h1-target-full.log`). Both-target build,
 formatting, source guards and the pinned YARA scan passed. Exact-head CI, including
 macOS and mobile hosts, remains required.
+
+### HTTP/1 Host authority normalization boundary
+
+Eleven new raw TCP cases cover non-digit ports, multiple port separators, userinfo,
+path/query/fragment delimiters and valid numeric/empty ports. Eight failed before
+validation was added (`h1-host-before.log`). All 78 focused request-target, URL
+compatibility and managed-engine cases pass after correction. Validation occurs
+before stripping the supplied port, preserving the established local-port URL
+contract. RFC 3986 section 3.2 permits an empty port; this case remains accepted.
+This increment does not complete absolute-form authority precedence or the wider
+authority/URI grammar audit. All 78 focused cases also passed on pinned Linux and
+against the actual .NET Standard asset on both hosts under .NET 10. The full
+Windows suite passed: 3,052 total, 3,047 passed and five expected skips
+(`h1-host-full.log`). Both-target build, formatting, source guards and changed-file
+YARA scans passed. Exact-head CI remains required. Cross-protocol empty-port
+handling still needs reconciliation: the shared HTTP/2/3 authority validator
+currently rejects an empty port even outside CONNECT.
+
+References: [HTTP/1 Host rejection](https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2)
+and [URI port syntax](https://www.rfc-editor.org/rfc/rfc3986.html#section-3.2.3).

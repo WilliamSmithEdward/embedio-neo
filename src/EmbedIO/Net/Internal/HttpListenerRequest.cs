@@ -212,7 +212,8 @@ namespace EmbedIO.Net.Internal
             }
             _framingInitialized = true;
             var host = UserHostName;
-            if (ProtocolVersion > HttpVersion.Version10 && string.IsNullOrEmpty(host))
+            if ((ProtocolVersion > HttpVersion.Version10 && string.IsNullOrEmpty(host))
+                || (host != null && host.Length != 0 && !HttpRequestFraming.IsValidHost(host)))
             {
                 _connection.SetError("Invalid host name");
                 return;

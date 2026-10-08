@@ -786,3 +786,14 @@ targets now produce 400 before dispatch, rather than being silently normalized b
 URI parsing. Correctly escaped `%23` and `%25` remain accepted. Encode literal
 reserved characters in client paths or query values. Existing transport scheme,
 local port and valid path/query case behavior remain covered by regression tests.
+
+### HTTP/1 Host authority syntax (unreleased)
+
+The managed listener now rejects Host values containing userinfo, path/query/fragment
+delimiters, control/non-ASCII characters, or non-digit ports before constructing
+the application URL. Previously port stripping could hide malformed input, and
+URI normalization could reinterpret delimiters. Send a valid host with an optional
+decimal port; bracket IPv6 addresses. An empty port remains accepted as permitted
+by RFC 3986. Valid requests retain the existing transport scheme and local listener
+port in `Request.Url`. Rejections use the bounded empty 400 response and close the
+connection before application dispatch.

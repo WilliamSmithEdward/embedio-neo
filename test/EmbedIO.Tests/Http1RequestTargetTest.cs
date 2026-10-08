@@ -23,7 +23,24 @@ namespace EmbedIO.Tests
         [TestCase("GET", "/good%25", true)]
         [TestCase("GET", "/path%23fragment", true)]
         [TestCase("GET", "/path?x=%23fragment", true)]
-        public async Task TargetSyntaxIsValidatedBeforeDispatch(string method, string target, bool valid)
+        public Task TargetSyntaxIsValidatedBeforeDispatch(string method, string target, bool valid)
+            => CheckRequest(method, target, "127.0.0.1", valid);
+
+        [TestCase("127.0.0.1:abc", false)]
+        [TestCase("127.0.0.1:-1", false)]
+        [TestCase("127.0.0.1:+80", false)]
+        [TestCase("127.0.0.1:80x", false)]
+        [TestCase("127.0.0.1:80:90", false)]
+        [TestCase("127.0.0.1/path", false)]
+        [TestCase("127.0.0.1?query", false)]
+        [TestCase("user@127.0.0.1", false)]
+        [TestCase("127.0.0.1#fragment", false)]
+        [TestCase("127.0.0.1:80", true)]
+        [TestCase("127.0.0.1:", true)]
+        public Task HostSyntaxIsValidatedBeforeDispatch(string authority, bool valid)
+            => CheckRequest("GET", "/", authority, valid);
+
+        private static async Task CheckRequest(string method, string target, string authority, bool valid)
         {
             var url = HttpsSmoke.GetUrl().Replace("https://", "http://", StringComparison.Ordinal);
             var calls = 0;
@@ -41,7 +58,7 @@ namespace EmbedIO.Tests
                 using var client = new TcpClient();
                 await client.ConnectAsync("127.0.0.1", new Uri(url).Port, stop.Token);
                 await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(method + " " + target
-                    + " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"), stop.Token);
+                    + " HTTP/1.1\r\nHost: " + authority + "\r\nConnection: close\r\n\r\n"), stop.Token);
                 using var received = new MemoryStream();
                 await client.GetStream().CopyToAsync(received, stop.Token);
                 var response = Encoding.ASCII.GetString(received.ToArray());

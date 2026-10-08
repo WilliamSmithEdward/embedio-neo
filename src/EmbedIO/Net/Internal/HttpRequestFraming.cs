@@ -10,6 +10,24 @@ namespace EmbedIO.Net.Internal
                 || c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_'
                 || c == '`' || c == '|' || c == '~';
 
+        internal static bool IsValidHost(string value)
+        {
+            foreach (var c in value)
+                if (c <= 32 || c >= 127 || c == '/' || c == '\\' || c == '?' || c == '#' || c == '@') return false;
+
+            var colon = value.LastIndexOf(':');
+            var bracket = value.LastIndexOf(']');
+            if (bracket >= 0 && (value[0] != '[' || (bracket + 1 < value.Length && value[bracket + 1] != ':'))) return false;
+            if (colon > bracket)
+            {
+                if (bracket < 0 && value.IndexOf(":", StringComparison.Ordinal) != colon) return false;
+                // RFC 3986 permits an empty port; a present port contains only digits.
+                for (var i = colon + 1; i < value.Length; i++)
+                    if (value[i] < '0' || value[i] > '9') return false;
+            }
+            return true;
+        }
+
         internal static bool TryContentLength(string value, out long length)
         {
             length = 0;
