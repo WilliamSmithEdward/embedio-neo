@@ -158,3 +158,17 @@ atomically records readiness in `boot-result.json`; `boot-timings.json`,
 `boot-command-*.log` and `boot-worker.log` retain its evidence. A slow build can
 consume an already successful result; it neither resets nor extends the boot
 deadline. Failure or a missing worker result stops app execution.
+
+## Reusing the pinned iOS SDK
+
+The iOS job uses a private SDK directory and caches SDK 10.0.401 with runtime
+10.0.12, keyed by OS, architecture, global SDK configuration and the validation
+script. The cache is saved immediately after verified installation, before any
+workload, certificate or application build. A cache hit is validated by executing
+that SDK and checking both pins; mismatched or unusable cached tools fail the job.
+A miss uses the existing pinned setup-dotnet installer and verifies its result.
+
+NuGet package caching remains separate and lockfile-based. Workload installation,
+locked restore, compilation, certificate trust and every native/host HTTPS check
+still run. Neither simulator state, generated keys, compiled apps nor test results
+are cached. Measure complete cold and warm jobs before claiming an improvement.

@@ -56,7 +56,30 @@ jobs:
         shell: pwsh
         run: |
           "DOTNET_INSTALL_DIR=$env:RUNNER_TEMP/dotnet-https" >> $env:GITHUB_ENV
+      - name: Isolate the pinned iOS SDK
+        if: matrix.platform == 'ios'
+        shell: pwsh
+        run: '"DOTNET_INSTALL_DIR=$env:RUNNER_TEMP/dotnet-ios" >> $env:GITHUB_ENV'
+      - name: Restore the exact iOS SDK cache
+        if: matrix.platform == 'ios'
+        id: ios-sdk-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ env.DOTNET_INSTALL_DIR }}
+          key: ios-sdk-${{ runner.os }}-${{ runner.arch }}-10.0.401-10.0.12-${{ hashFiles('global.json', 'scripts/check_ios_sdk.ps1') }}
+      - name: Validate cached SDK and runtime pins
+        if: matrix.platform == 'ios'
+        id: ios-sdk-ready
+        shell: pwsh
+        run: ./scripts/check_ios_sdk.ps1
+      - name: Restore packages when reusing the SDK
+        if: matrix.platform == 'ios' && steps.ios-sdk-ready.outputs.ready == 'true'
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: dotnet-cache-${{ runner.os }}-${{ hashFiles('src/**/packages.lock.json', 'test/EmbedIO.HttpsCertificates/packages.lock.json', 'test/EmbedIO.MauiHttpsSmoke/packages.ios.lock.json') }}
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: matrix.platform != 'ios' || steps.ios-sdk-ready.outputs.ready != 'true'
         with:
           dotnet-version: 10.0.401
           cache: true
@@ -64,6 +87,17 @@ jobs:
             src/**/packages.lock.json
             test/EmbedIO.HttpsCertificates/packages.lock.json
             test/EmbedIO.MauiHttpsSmoke/packages.${{ matrix.platform }}.lock.json
+      - name: Verify a newly installed iOS SDK
+        if: matrix.platform == 'ios' && steps.ios-sdk-ready.outputs.ready != 'true'
+        shell: pwsh
+        run: ./scripts/check_ios_sdk.ps1 -Required
+      # Save before workload install: this cache cannot contain app/certificate/simulator state.
+      - name: Save only the pinned iOS SDK installation
+        if: matrix.platform == 'ios' && steps.ios-sdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ env.DOTNET_INSTALL_DIR }}
+          key: ${{ steps.ios-sdk-cache.outputs.cache-primary-key }}
       - name: Install the pinned workload
         shell: pwsh
         run: ./scripts/maui_https_ci.ps1 install
