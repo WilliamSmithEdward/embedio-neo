@@ -59,13 +59,23 @@ namespace EmbedIO.Tests
         public Task HostSyntaxIsValidatedBeforeDispatch(string authority, bool valid)
             => CheckRequest("GET", "/", authority, valid);
 
-        private static async Task CheckRequest(string method, string target, string authority, bool valid)
+        [TestCase("localhost", false)]
+        [TestCase("example.invalid", false)]
+        [TestCase("127.0.0.2", false)]
+        [TestCase("127.0.0.1", true)]
+        public Task AbsoluteTargetHostTakesPrecedenceOverHostHeader(string authority, bool unregisteredTarget)
+            => CheckRequest("GET", "/", authority, true, true, unregisteredTarget);
+
+        private static async Task CheckRequest(string method, string target, string authority, bool valid, bool absoluteAuthority = false, bool unregisteredTarget = false)
         {
             var url = HttpsSmoke.GetUrl().Replace("https://", "http://", StringComparison.Ordinal);
+            if (absoluteAuthority) target = unregisteredTarget ? url.Replace("127.0.0.1", "example.invalid", StringComparison.Ordinal) : url;
             var calls = 0;
             using var server = new WebServer(HttpListenerMode.EmbedIO, url).WithAction("/", HttpVerbs.Any, context =>
             {
                 calls++;
+                Assert.That(context.Request.Url.Host, Is.EqualTo("127.0.0.1"));
+                Assert.That(context.Request.Headers["Host"], Is.EqualTo(authority));
                 Assert.That(context.Request.RawTarget, Is.EqualTo(target));
                 if (target == "*") Assert.That(context.Request.Url.AbsolutePath, Is.EqualTo("/"));
                 return context.SendStringAsync("accepted", "text/plain", Encoding.UTF8);
@@ -81,8 +91,9 @@ namespace EmbedIO.Tests
                 using var received = new MemoryStream();
                 await client.GetStream().CopyToAsync(received, stop.Token);
                 var response = Encoding.ASCII.GetString(received.ToArray());
-                Assert.That(response, Does.StartWith(valid ? "HTTP/1.1 200 " : "HTTP/1.1 400 "));
-                Assert.That(calls, Is.EqualTo(valid ? 1 : 0));
+                if (unregisteredTarget) Assert.That(response, Is.Empty);
+                else Assert.That(response, Does.StartWith(valid ? "HTTP/1.1 200 " : "HTTP/1.1 400 "));
+                Assert.That(calls, Is.EqualTo(valid && !unregisteredTarget ? 1 : 0));
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
         }

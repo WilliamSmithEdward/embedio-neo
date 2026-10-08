@@ -820,3 +820,15 @@ percent-encoded. Valid encoded equivalents remain accepted. Invalid input receiv
 the bounded empty 400 response and closes before application dispatch. Existing
 transport scheme/local-port URL behavior is preserved; absolute-form authority
 precedence is a separate outstanding conformance item.
+
+### HTTP/1 absolute-form host precedence (unreleased)
+
+When an absolute request-target and Host header identify different hosts, the
+managed listener now uses the target URI host for `Request.Url` and prefix routing,
+as required by RFC 9112 section 3.2.2. The original Host header remains available
+through `Request.Headers`; applications should use `Request.Url.Host` for the
+effective routing host. Previously a conflicting Host could override the target.
+Host field presence and syntax validation still apply. The existing transport
+scheme/local-port URL behavior is unchanged in this increment; full absolute-URI
+scheme/port handling remains under audit. Unregistered target hosts retain the
+existing prefix-routing rejection behavior.

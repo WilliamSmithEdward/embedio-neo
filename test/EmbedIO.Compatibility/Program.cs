@@ -310,7 +310,8 @@ internal static class Program
             await Request("optional-present", HttpMethod.Get, "api/optional/7");
             await Request("base-route", HttpMethod.Get, "api/base/a/b");
             await Request("exact-extra", HttpMethod.Get, "api/dto/extra");
-            await Request("query", HttpMethod.Get, "api/query?a=one&a=two&a[]=three&blank=&flag&text=caf%C3%A9+space");
+            // Preserve decoded array-key coverage with a syntactically valid request URI.
+            await Request("query", HttpMethod.Get, "api/query?a=one&a=two&a%5B%5D=three&blank=&flag&text=caf%C3%A9+space");
             await Request("query-field", HttpMethod.Get, "api/field?id=abc%20xyz");
             await Request("query-field-missing", HttpMethod.Get, "api/field");
             await Request("post-json", HttpMethod.Post, "api/body", "{\"Id\":42,\"Name\":\"caf\u00e9\",\"Amount\":12.50}");

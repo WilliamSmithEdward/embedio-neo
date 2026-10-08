@@ -243,6 +243,7 @@ namespace EmbedIO.Net.Internal
                 return;
             }
             var path = RawTarget == "*" ? "/" : rawUri?.PathAndQuery ?? RawTarget;
+            if (rawUri != null) host = rawUri.Host;
 
             if (string.IsNullOrEmpty(host))
             {

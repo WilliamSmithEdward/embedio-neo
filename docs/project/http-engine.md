@@ -2106,3 +2106,32 @@ passed: 3,098 total, 3,093 passed, five expected skips and zero failures
 (`h1-grammar-full.log`). Both-target build, formatting, source guards and
 changed-file pinned YARA scans passed. Exact-head CI remains required.
 Discovery rises to 3,098.
+
+### HTTP/1 absolute-form host precedence
+
+Three raw TCP cases with conflicting but syntactically valid Host headers failed
+before correction (`absolute-host-before.log`). URL construction and prefix
+routing now use the absolute target host, while preserving the original header.
+A fourth case confirms that a matching local Host cannot redirect an unregistered
+absolute target into the listener. All 98 focused cases pass locally. The original
+Host syntax checks and transport/local-port URL contract remain intact.
+
+This implements the host precedence rule in
+[RFC 9112 section 3.2.2](https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2.2).
+It does not complete absolute-URI scheme/port semantics, userinfo handling,
+non-HTTP target forms or the entire authority grammar. Those items remain open.
+All 98 focused cases also passed on pinned Linux and against the actual .NET
+Standard asset on both hosts under .NET 10. The full Windows suite passed with
+3,102 total, 3,097 passed and five expected skips (`absolute-host-full.log`).
+Both-target build, formatting, source guards and changed-file pinned YARA scans
+passed. Exact-head CI remains required. Discovery rises to 3,102.
+
+CI on preceding head d8869a0 exposed a parity-fixture request containing raw `[]`
+in its query. The fixture now sends `%5B%5D`, preserving the decoded array-key
+coverage and unchanged expected results. Malformed character rejection remains
+covered by separate wire regressions; no comparator contract was relaxed.
+Initial three-platform failures in run 37843224071 are retained under
+`ci-d8869a0-*`. The corrected Windows audit passed 207 cases / 414 upstream/Neo
+comparisons with zero errors (`absolute-host-parity.log`), including the unchanged
+comparator contract and negative checks. Unix parity and all exact-head CI checks
+remain required.
