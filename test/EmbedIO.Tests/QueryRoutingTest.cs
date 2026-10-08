@@ -14,13 +14,17 @@ namespace EmbedIO.Tests
 {
     public class QueryRoutingTest
     {
-        [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.OK, true)]
-        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.OK, true)]
-        [TestCase(HttpListenerMode.EmbedIO, "query", HttpStatusCode.NotFound, true)]
-        [TestCase(HttpListenerMode.Microsoft, "query", HttpStatusCode.NotFound, true)]
-        [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.BadRequest, false)]
-        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.BadRequest, false)]
-        public async Task RealListenerRoutesExactQuery(HttpListenerMode mode, string method, HttpStatusCode expected, bool mediaType)
+        [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.OK, "text/plain")]
+        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.OK, "text/plain")]
+        [TestCase(HttpListenerMode.EmbedIO, "query", HttpStatusCode.NotFound, "text/plain")]
+        [TestCase(HttpListenerMode.Microsoft, "query", HttpStatusCode.NotFound, "text/plain")]
+        [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.BadRequest, null)]
+        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.BadRequest, null)]
+        [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.BadRequest, "text")]
+        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.BadRequest, "text")]
+        [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.BadRequest, "text/plain, application/json")]
+        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.BadRequest, "text/plain, application/json")]
+        public async Task RealListenerRoutesExactQuery(HttpListenerMode mode, string method, HttpStatusCode expected, string? mediaType)
         {
             var url = HttpsSmoke.GetUrl().Replace("https://", "http://", StringComparison.Ordinal);
             using var server = new WebServer(mode, url).WithAction("/", HttpVerbs.Query, async context =>
@@ -35,7 +39,7 @@ namespace EmbedIO.Tests
                 using var client = new TcpClient();
                 await client.ConnectAsync("127.0.0.1", new Uri(url).Port, stop.Token);
                 var wire = method + " / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n"
-                    + (mediaType ? "Content-Type: text/plain\r\n" : string.Empty)
+                    + (mediaType != null ? "Content-Type: " + mediaType + "\r\n" : string.Empty)
                     + "Content-Length: 10\r\n\r\nquery-body";
                 await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(wire), stop.Token);
                 using var received = new MemoryStream();
@@ -87,6 +91,12 @@ namespace EmbedIO.Tests
         [TestCase("QUERY", null, HttpStatusCode.BadRequest)]
         [TestCase("QUERY", "", HttpStatusCode.BadRequest)]
         [TestCase("QUERY", " \t", HttpStatusCode.BadRequest)]
+        [TestCase("QUERY", "text", HttpStatusCode.BadRequest)]
+        [TestCase("QUERY", "text/plain, application/json", HttpStatusCode.BadRequest)]
+        [TestCase("QUERY", "text/plain; charset=", HttpStatusCode.BadRequest)]
+        [TestCase("QUERY", "text/plain; note=\"unterminated", HttpStatusCode.BadRequest)]
+        [TestCase("QUERY", "application/vnd.example+json; version=2", HttpStatusCode.OK)]
+        [TestCase("QUERY", "text/plain; note=\"a,b\"", HttpStatusCode.OK)]
         [TestCase("QUERY", "text/plain", HttpStatusCode.OK)]
         [TestCase("POST", null, HttpStatusCode.OK)]
         [TestCase("query", null, HttpStatusCode.OK)]

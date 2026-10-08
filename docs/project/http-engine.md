@@ -1908,3 +1908,23 @@ focused cases passed on pinned Linux with QUIC required, and all 17 applicable
 cases passed against the actual .NET Standard asset on Windows/Linux .NET 10
 hosts. Both-target build, formatting, source guards and changed-file pinned YARA
 scans passed. Exact-head repository CI remains required.
+
+### QUERY Content-Type syntax validation
+
+The shared dispatch check now uses the existing framework media-type parser to
+reject malformed QUERY Content-Type values with 400. Four real HTTP/1 wire cases
+failed before this correction across managed and Microsoft backends. In-process
+cases already passed because the testing client's typed headers expose invalid
+values as missing; this was insufficient evidence for wire behavior. Valid vendor
+media types and quoted parameter values remain accepted. Resource-specific media
+type support and content consistency remain the handler's responsibility.
+
+All 29 focused QUERY cases passed on Windows after correction. Evidence is local
+`query-syntax-wire-before.log` and `query-syntax-focused.log`. Ten additional cases
+raise discovery to 3,023. Final Windows validation passed: 3,018 successes and
+five expected skips (`query-syntax-full.log`). All 29 focused cases passed on
+pinned Linux with QUIC required; the actual .NET Standard asset passed 27 applicable
+cases on Windows and Linux .NET 10 hosts. Both-target build, formatting, repository
+source guards and changed-file pinned YARA scans passed. Exact-head CI remains
+required. QUERY result preconditions/ranges must be evaluated against the selected
+query result, not by treating the method as a static-file GET.

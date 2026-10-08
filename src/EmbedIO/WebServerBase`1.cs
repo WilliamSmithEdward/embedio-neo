@@ -271,8 +271,9 @@ namespace EmbedIO
                     try
                     {
                         // RFC 10008 requires QUERY media-type information before processing.
-                        if (context.Request.HttpMethod == "QUERY" && string.IsNullOrWhiteSpace(context.Request.ContentType))
-                            throw HttpException.BadRequest("QUERY requires a Content-Type header.");
+                        if (context.Request.HttpMethod == "QUERY"
+                            && !System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(context.Request.ContentType, out _))
+                            throw HttpException.BadRequest("QUERY requires a valid Content-Type header.");
 
                         // Return a 404 (Not Found) response if no module handled the response.
                         await _modules.DispatchRequestAsync(context).ConfigureAwait(false);
