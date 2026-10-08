@@ -25,7 +25,7 @@ namespace EmbedIO.Tests.Issues
             var socket = (IWebSocket)(Activator.CreateInstance((type ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), flags, null, new[] { connection }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var closed = 0;
             ((type).GetField("_closeConnection", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket, new Action(() => Interlocked.Increment(ref closed)));
-            ((type).GetField("_exitReceiving", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket, new AutoResetEvent(false));
+            ((type).GetField("_exitReceiving", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket, new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
             using var cancel = new CancellationTokenSource();
             var closing = Task.Run(() => (socket).CloseAsync(cancel.Token));
             await transport.Written.Task.WaitAsync(TimeSpan.FromSeconds(5));
