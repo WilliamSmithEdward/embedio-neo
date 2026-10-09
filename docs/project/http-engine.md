@@ -4327,3 +4327,68 @@ The sanitizer subset now includes the corrected zero-config test for 100
 repetitions and records its actual process exit separately as
 `candidate-asan.exit`. A nonzero value remains a final experiment failure.
 This closes a recording gap; prior logs do not supply that separate exit value.
+
+### Native candidate experiment passes with corrected functional contract
+
+[Run 37891735617](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37891735617),
+job `113693956600`, tests head `1a14dec`. The candidate native suite reports
+38 cases: 23 passed, 15 explicit platform skips, zero failures. The corrected
+zero-config binding test passes in control and candidate; the separate datagram
+fixture also passes. The unchanged production control retains the unsupported
+map-mode and descriptor-lifetime failures. No genuine negative control is hidden.
+
+All ten candidate probes pass 4,096 cycles each. Independent inspection of five
+complete traces verifies 20,480 native closes completing before managed disposal
+and zero closes starting afterward. Full macOS coverage reports 3,423 cases:
+3,392 passed, 31 skipped, zero failed. The instrumented subset reports 100
+iterations of 12 passing cases; `candidate-asan.exit` and the final candidate
+exit both contain zero. Instrumentation changes allocation mode and leaves
+system crypto uninstrumented, so these remain scoped lifetime/datapath results.
+
+Evidence is retained in `quic-cleanup-experiment-artifact10`, its job log and
+`quic-cleanup-ordering10.json`. The native candidate library hash remains
+`428aa5e76f6a28330c031cfd87afa37eac4c1dfc269d571aeac11035cec5cdac`.
+This is the first entirely passing native candidate experiment; dependency
+integration, wider lifecycle validation and the full engine goal remain open.
+
+### Brotli single-byte allocation reduction
+
+`BrotliRequestStream.ReadByte` now uses a one-byte stack buffer through the
+existing validated span reader. It preserves coding, EOF, cancellation and
+ownership behavior while avoiding the inherited per-call array allocation.
+Two new cases verify empty input and 64 KiB fragmented binary content through
+single-byte reads and repeated EOF. All 33 focused cases pass on Windows/Linux;
+full Windows coverage passes 3,425 cases (3,420 passed, five skipped, zero failed).
+Both assets build, source/format guards and the four allocation gates pass.
+
+The unpackaged `--brotli-request-read` benchmark uses the same runner with the
+baseline/candidate core DLL, preconstructed deterministic fixtures and compiled
+constructor delegates. It validates every decoded byte and includes stream
+construction, runtime decoding and disposal. Three process pairs per platform
+alternate baseline/candidate ordering; each process records five alternating
+single-byte/bulk mode rounds with 128 warmups and 1,024 measured streams.
+Tiered compilation is disabled consistently and its previous value restored.
+
+Median-of-process-median results for 4,096-byte single-byte reads:
+
+| Platform | Before ns/stream | After ns/stream | Before managed B/stream | After managed B/stream |
+| --- | ---: | ---: | ---: | ---: |
+| Windows .NET 10.0.12 x64 | 219,886 | 209,104 | 131,281 | 176 |
+| Pinned Linux .NET 10.0.12 x64 | 239,533 | 224,179 | 131,281 | 176 |
+
+The 64-byte workload falls from 2,256 to 176 managed bytes/stream, and empty
+streams from 208 to 176. Bulk-read allocations remain 176 bytes/stream on both
+versions/platforms. Timing changes are component observations; bulk controls
+vary modestly and native allocations, transport, application work and retained
+memory are excluded. This does not establish an engine throughput improvement.
+
+The shared runner SHA-256 is
+`F4CF8D6C2F3AED8F940087D54AAE4748D0D2A4F4756BDF57322CB6AC70AB0489`.
+Before-core SHA-256 is
+`1C3735796D14BB1D44BBDDB51E1CFFDE9AD6F78B1FC5C9D695E9154BD710A532`;
+after-core SHA-256 is
+`31A4BAC4E0C149F9506E1A229BB9DB728BF195702C1963ADD5A5580ED6FA4DA6`.
+Both record base source `1a14dec`; the latter includes the then-uncommitted
+ReadByte override. Evidence, per-process metadata, fixture hashes, GC counts
+and summaries are retained under `TestResults/http-engine/brotli-read-*`.
+The discovery floor is deliberately raised to 3,425.

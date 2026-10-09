@@ -78,6 +78,19 @@ namespace EmbedIO.Tests
             Assert.That(decoder.Read(buffer), Is.Zero);
         }
 
+        [TestCase(0)]
+        [TestCase(65536)]
+        public void SingleByteReadsPreservePayloadAndRepeatedEof(int length)
+        {
+            var expected = new byte[length];
+            new Random(20261008).NextBytes(expected);
+            using var source = new FragmentedSource(Encode(expected), 113);
+            using var decoder = Decoder(source);
+            foreach (var value in expected) Assert.That(decoder.ReadByte(), Is.EqualTo((int)value));
+            Assert.That(decoder.ReadByte(), Is.EqualTo(-1));
+            Assert.That(decoder.ReadByte(), Is.EqualTo(-1));
+        }
+
         [Test]
         public async Task ZeroLengthReadsDoNotConsumeOrValidateInput()
         {

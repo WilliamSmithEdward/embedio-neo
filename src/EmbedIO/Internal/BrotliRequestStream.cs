@@ -95,6 +95,12 @@ namespace EmbedIO.Internal
             return false;
         }
 
+        public override int ReadByte()
+        {
+            Span<byte> buffer = stackalloc byte[1];
+            return Read(buffer) == 0 ? -1 : buffer[0];
+        }
+
         public override int Read(byte[] buffer, int offset, int count)
         {
             ValidateBufferArguments(buffer, offset, count);

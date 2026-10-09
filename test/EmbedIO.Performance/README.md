@@ -236,3 +236,20 @@ both hashes and every sample, use the same tiering setting, and alternate proces
 order across repeats. Do not run competing benchmarks concurrently. These
 component results do not establish server throughput, tail latency, delayed-peer
 behavior or retained connection-memory costs, and impose no elapsed-time CI gate.
+
+## Brotli request reader
+
+`--brotli-request-read` compares `ReadByte` and 256-byte bulk reads of the actual
+.NET 10 request decoder, with 0, 64 and 4,096-byte deterministic bodies. Every
+byte and final decoded length are checked. It records five alternating mode
+rounds after 128 warmup streams, with 1,024 measured streams per round. JSON
+includes input/wire/core/runner hashes, runtime, OS, architecture, JIT/GC settings,
+managed allocations, collection counts and time per stream.
+
+Use the same runner binary with baseline and candidate core assemblies. Fixture
+encoding and reflection/delegate construction occur before measurement; stream
+construction, runtime decoding, content validation and disposal are measured.
+The reusable bulk output buffer is outside measurement. Native allocations,
+transport and application work are excluded. Timings are informational and
+require repeated, controlled process comparisons; this is a codec component
+measurement and does not establish server throughput or retained-memory behavior.
