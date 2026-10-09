@@ -126,6 +126,13 @@ async def healthy(session):
 
 
 def stats(host, port):
+    try:
+        return _stats(host, port)
+    except OSError as error:  # A stopped listener is itself a recorded outcome.
+        return {"error": f"{type(error).__name__}: {error}", "activeHandlers": 0, "handles": 0, "managedBytes": 0}
+
+
+def _stats(host, port):
     with socket.create_connection((host, port), timeout=10) as sock:
         sock.sendall(f"GET /__stats HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n".encode())
         data = b""

@@ -45,7 +45,7 @@ docker run --rm --cpus=4 --memory=6g -e SOURCE_SHA=$(git rev-parse HEAD) -v "$PW
   bash -c "mkdir /src && tar -xf /runs/src.tar -C /src && bash /src/test/EmbedIO.Conformance/run-campaigns.sh /src /runs/out 20261009 1"
 ```
 
-The last argument scales fuzz iterations (1 is about six minutes on four CPUs).
+The last argument scales fuzz iterations (1 takes about fifteen minutes on four CPUs, with a fresh server per phase).
 `repro.sh` takes the same source and output arguments followed by a driver and its
 arguments, for example `h3 cases --host localhost --port 18444 --only storm`.
 
