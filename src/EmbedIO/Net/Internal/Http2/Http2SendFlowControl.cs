@@ -81,7 +81,7 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 ThrowIfFailed();
                 foreach (var frame in frames)
-                    if (frame.Type == 0 && frame.Payload.Length != 0
+                    if (frame.Type == 0 && frame.PayloadLength != 0
                         && (!_streams.TryGetValue(frame.StreamId, out var window) || window.Credit < 0))
                         return false;
                 return true;

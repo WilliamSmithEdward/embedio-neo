@@ -16,12 +16,17 @@ namespace EmbedIO.Net.Internal.Http2
         private readonly byte[] _header = new byte[9];
         private readonly SemaphoreSlim _writeGate = new(1, 1);
         private readonly int _receiveMaximum;
+        private readonly ArrayPool<byte>? _dataPool;
         private int _reading;
         private bool _readFailed;
         private bool _writeFailed;
 
         internal Http2FrameTransport(Stream stream, int receiveMaximum = 16384)
+            : this(stream, receiveMaximum, null) { }
+
+        internal Http2FrameTransport(Stream stream, int receiveMaximum, ArrayPool<byte>? dataPool)
         {
+            _dataPool = dataPool;
             _stream = new EmbedIO.Internal.BorrowedResource<Stream>(stream ?? throw new ArgumentNullException(nameof(stream)));
             ValidateMaximum(receiveMaximum);
             _receiveMaximum = receiveMaximum;
@@ -31,6 +36,7 @@ namespace EmbedIO.Net.Internal.Http2
         {
             token.ThrowIfCancellationRequested();
             if (Interlocked.Exchange(ref _reading, 1) != 0) throw new InvalidOperationException("Concurrent HTTP/2 reads.");
+            byte[]? rented = null;
             try
             {
                 if (_readFailed) throw new IOException("HTTP/2 input is no longer usable.");
@@ -40,9 +46,15 @@ namespace EmbedIO.Net.Internal.Http2
                 var length = (_header[0] << 16) | (_header[1] << 8) | _header[2];
                 if (length > _receiveMaximum) throw new Http2ProtocolException(6, "HTTP/2 frame exceeds negotiated maximum.");
                 var streamId = ((_header[5] & 127) << 24) | (_header[6] << 16) | (_header[7] << 8) | _header[8];
-                var payload = length == 0 ? Array.Empty<byte>() : new byte[length];
+                byte[] payload;
+                if (length == 0) payload = Array.Empty<byte>();
+                else if (_header[3] == 0 && _dataPool != null) payload = rented = _dataPool.Rent(length);
+                else payload = new byte[length];
                 await ReadRemaining(payload, 0, length, token).ConfigureAwait(false);
-                return new Http2Frame(_header[3], _header[4], streamId, payload);
+                if (rented == null || _dataPool == null) return new Http2Frame(_header[3], _header[4], streamId, payload);
+                var frame = Http2Frame.OwnData(_header[4], streamId, rented, length, _dataPool);
+                rented = null;
+                return frame;
             }
             catch (IOException error) when (token.IsCancellationRequested
                 && error.InnerException is SocketException socket && socket.SocketErrorCode == SocketError.OperationAborted)
@@ -53,7 +65,11 @@ namespace EmbedIO.Net.Internal.Http2
                 throw new OperationCanceledException("HTTP/2 transport read canceled.", error, token);
             }
             catch { _readFailed = true; throw; }
-            finally { Volatile.Write(ref _reading, 0); }
+            finally
+            {
+                if (rented != null) _dataPool?.Return(rented, true);
+                Volatile.Write(ref _reading, 0);
+            }
         }
 
         private async Task ReadRemaining(byte[] buffer, int offset, int end, CancellationToken token)
@@ -87,9 +103,9 @@ namespace EmbedIO.Net.Internal.Http2
             foreach (var frame in frames)
             {
                 if (frame == null) throw new ArgumentException("Missing frame.", nameof(frames));
-                if (frame.Payload.Length > peerMaximum) throw new ArgumentException("Outbound frame exceeds peer maximum.", nameof(frames));
+                if (frame.PayloadLength > peerMaximum) throw new ArgumentException("Outbound frame exceeds peer maximum.", nameof(frames));
                 frame.ValidateShape();
-                capacity = Math.Max(capacity, frame.Payload.Length + 9);
+                capacity = Math.Max(capacity, frame.PayloadLength + 9);
             }
             await _writeGate.WaitAsync(requestToken).ConfigureAwait(false);
             byte[]? buffer = null;
@@ -105,12 +121,12 @@ namespace EmbedIO.Net.Internal.Http2
                 buffer = ArrayPool<byte>.Shared.Rent(capacity);
                 foreach (var frame in frames)
                 {
-                    var length = frame.Payload.Length;
+                    var length = frame.PayloadLength;
                     buffer[0] = (byte)(length >> 16); buffer[1] = (byte)(length >> 8); buffer[2] = (byte)length;
                     buffer[3] = frame.Type; buffer[4] = frame.Flags;
                     buffer[5] = (byte)(frame.StreamId >> 24); buffer[6] = (byte)(frame.StreamId >> 16);
                     buffer[7] = (byte)(frame.StreamId >> 8); buffer[8] = (byte)frame.StreamId;
-                    Buffer.BlockCopy(frame.Payload, 0, buffer, 9, length);
+                    Buffer.BlockCopy(frame.Payload, frame.PayloadOffset, buffer, 9, length);
                     // Once any bytes of a frame batch may be on the wire, only
                     // the connection lifetime may interrupt its shared transport.
                     writeStarted = true;

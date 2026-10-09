@@ -5945,6 +5945,195 @@ These tests cover wire commitment and resumed-response behavior. The original
 independent hyper-h2 SETTINGS-shrink campaign, full suites and exact-head CI are
 still required; no all-platform conformance completion or speedup is claimed.
 
+
+### Independent F5 campaign and client-oracle limits
+
+On exact engine `bbe0148`, the unmodified raw-frame SETTINGS-shrink case passes
+40 trials over plaintext and 40 over TLS, with no negative post-ACK DATA debit.
+The original stateful driver times out at seed 20261009 / iteration 62 because
+its final restoration updates only connection credit while a live stream remains
+negative after a SETTINGS shrink. Restoring stream credit is required by RFC 9113
+Section 6.9.2. A separately reviewed driver removes the known-F4 connection-loss
+allowance and restores both flow-control levels before requiring completion.
+
+Two independent decoder probes identify additional hyper-h2 4.3.0 limitations:
+its initial ACK consumes a subsequently queued setting override, and it rejects
+a permitted unpadded zero-length END_STREAM when SETTINGS left negative stream
+credit (RFC 9113 Section 6.9.1). A labeled adapted driver awaits the startup ACK
+and uses a narrow, version-guarded empty-END_STREAM adapter that preserves the
+negative credit. The probe verifies that nonempty overrun and idle-stream errors
+still fail. Every original failed run remains retained; these results are not
+represented as unmodified hyper-h2 conformance.
+
+The adapted campaign passes 300 plaintext and 300 TLS iterations on `bbe0148`,
+1,188 streams per transport, no server resets or accepted known-F4 closures and
+no active handlers after settlement. Handle growth is +9 / +1 and managed growth
+about 1.04 MB / 0.12 MB. The empty-END_STREAM adapter was not invoked in those
+successful samples; its forced positive/negative probes pass separately.
+Exact engine/driver/binary hashes, probes, original failures and successful
+samples are under ignored `TestResults/http-engine/f5-*`. Longer, other-seed,
+other-platform and other-client campaigns remain required.
+
+### Outgoing HTTP/2 DATA buffer ownership and allocation
+
+Each DATA frame previously allocated and copied its own payload, then copied it
+again into the transport buffer. Outgoing DATA now borrows a bounded slice of the
+caller's array for the awaited write. The transport still constructs one
+contiguous pooled wire frame. Received/header/control frames keep their existing
+complete payloads. Shape checks, SETTINGS commitment, canceled-queue credit
+refund and response-byte accounting use the slice length. No public API, target,
+production dependency or default changes.
+
+Five new cases verify empty/end slices, a nonzero-offset slice of a parent larger
+than the peer frame limit, unchanged owner bytes and cancellation credit based on
+the reserved slice rather than its 1 MiB owner. All 141 affected cases pass locally.
+The expanded Windows protocol/WebSocket set passes 849 cases, Linux passes all
+385 HTTP/2 cases, and all four resource budgets pass. Both library targets build;
+formatting/parser/suppression checks pass. Discovery floors increase by five to
+4,350. Full-suite and final exact-head platform checks remain required.
+
+A separate-process comparison uses clean `9f475d7` as control, the uncommitted
+DATA-slice candidate, and installed Kestrel 10.0.12. The same #199 harness code is
+used for every engine; the private runner adds `--baseline-modern` solely to
+allow a modern-engine control on HTTP/2 (its default main-core restriction is
+unchanged). Source patch, engine and matching harness hashes are recorded.
+Three alternating rounds, 2 s warmup / 5 s measurement / 1 s idle, four connections
+by four streams over TLS, disjoint server/client CPUs 0-7 / 8-15 on the same
+Windows Ryzen 9800X3D development host. All 18 samples pass byte/status/framing
+validation with no failures and no remaining server sockets.
+
+| 1 MiB workload | Control allocated B/request | Candidate allocated B/request | Control CPU us/request | Candidate CPU us/request |
+| --- | ---: | ---: | ---: | ---: |
+| Fixed response | 1,143,800 | 93,388 | 1,894.4 | 1,666.3 |
+| Streaming, flushed every 16 KiB | 1,181,201 | 130,734 | 1,971.9 | 1,721.9 |
+
+These medians show about 92% / 89% less allocation and lower CPU for these two
+workloads. Short closed-loop samples on one shared host do not establish a
+universal throughput, latency or Kestrel ranking improvement. Other transports,
+platforms, upload/inbound pooling and long-running memory behavior remain work.
+Evidence is under ignored `TestResults/benchmark-review/data-slice-*`.
+
+### Incoming HTTP/2 DATA leases
+
+The connection reader now rents nonempty DATA payloads and returns them cleared
+once dispatch has copied request bytes into the existing bounded body queue.
+Header and control frames retain independent exact-length arrays. Logical frame
+length, rather than rental capacity, governs validation, padding and flow credit.
+Truncation, cancellation, invalid framing and dispatch failure return the lease;
+application readers never retain the returned frame buffer. Public APIs,
+receive windows, request body bounds, targets and dependencies are unchanged.
+
+Eight regressions cover oversized pool rentals, sequential/concurrent disposal,
+queued body ownership, truncated/canceled reads, invalid DATA shapes and control
+frame independence. The Windows protocol/conformance/WebSocket set passes 1,149
+cases and the pinned Linux HTTP/2 set passes 393, with no failures or skips. All
+four resource budgets pass. The full Windows suite reports 4,358 cases, 4,353
+successes and five expected local/platform skips, with zero failures. Both
+production targets build with zero warnings/errors; formatting and analyzer
+guards pass. Discovery floors increase to 4,358. Exact-head platform validation
+remains required.
+
+A frozen same-harness comparison uses clean `f0c4c7b` as control and its recorded
+uncommitted DATA-lease patch as candidate. Three alternating upload rounds use
+5 s warmup, 15 s measurement and 2 s idle, four TLS connections by four streams,
+separate server/client processes on CPUs 0-7 / 8-15, Windows Ryzen 9800X3D and
+.NET 10.0.12. All six samples pass byte/status/framing checks with no remaining
+server sockets. Median allocation for 1 MiB uploads falls from 1,184,846 to
+137,005 B/request (about 88%); median server CPU falls from 2,851.3 to 2,597.3
+us/request, and every paired round has lower candidate CPU. Retained heap growth
+is at most 131 KiB control / 78 KiB candidate, a settlement observation rather
+than a soak result.
+
+The preceding short comparison did not establish a CPU benefit: candidate
+upload CPU was higher at its median, with substantial variation in both engines.
+Longer confirmation reverses that observation, but background CPU varies from
+24.5 to 76.2 seconds per sample. Neither run establishes a stable throughput or
+latency improvement, a cross-platform result or a Kestrel ranking. Evidence,
+source patch, engine/harness hashes and original samples remain under ignored
+`TestResults/benchmark-review/inbound-*`; broader performance and soak work remain.
+### Independent conformance on fd58c90
+
+The original #197 HTTP/1.1 cases and stateful driver were run against an exact
+`git archive` snapshot of `fd58c904f881b831496d8127e5562c265a7924fe`, using
+unchanged helper source `56bbefe`, pinned container
+`d72fcf79aaddb0fd1ea0608724b73cb698ce19ba13a60ccc25d22abcf14ea181`,
+Ubuntu 24.04.5 x64 and .NET 10.0.12 with four CPUs. The built engine SHA-256 is
+`8CCC2E7479DB6476364318E8114B9EA99E22F868AEF1358CB366FC077E5BC832`.
+
+HTTP/1.1 reports 44 conforming and 13 permitted-policy cases, zero violations or
+errors. The seeded stateful campaign passes 2,000 iterations / 5,029 valid
+requests, 473 invalid requests and 211 aborts, with no malformed body becoming
+500. Active handlers return to zero; handle growth is +2 and managed growth
+357,928 bytes. This is one Linux seed, not whole-engine or cross-platform fuzz
+completion.
+
+Unmodified h2spec v2.6.0 reports 141/146 plaintext and 142/146 TLS, with no skipped
+cases. All raw failures remain evidence; the tool's aggregate result is failure.
+
+| Remaining h2spec assertion | Current-baseline assessment |
+| --- | --- |
+| 5.1/8 and 5.1/11: closed-stream DATA must trigger an error | RFC 9113 section 5.1 permits minimal processing/discard on all closed streams. HPACK and connection flow credit still apply. |
+| 5.3.1/1 and 5.3.1/2: self-dependency must reset | The server advertises NO_RFC7540_PRIORITIES=1. RFC 9218 section 2.1 permits ignoring these deprecated priority signals. Shape validation remains required. |
+| Plaintext-only 3.5/2: invalid preface reports unexpected EOF | TLS passes; plaintext protocol selection differs. Exact raw response/closure classification remains to be captured; this is not marked conforming. |
+
+References: [closed-stream rules](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1),
+[priority policy](https://www.rfc-editor.org/rfc/rfc9218.html#section-2.1) and
+[preface handling](https://www.rfc-editor.org/rfc/rfc9113.html#section-3.4).
+Two additional independent wire cases cover peer-reset and normally completed
+streams: repeated late DATA returns exactly 32,768 bytes of connection credit
+per batch, does not reset or close the connection, and a later request succeeds.
+Existing direct tests also preserve HPACK updates for ignored priority fields.
+Evidence is under ignored `TestResults/http-engine/conformance-fd58c90*` and
+`closed-stream-*`. HTTP/3, broader seeds/clients/platforms, long-running resource
+behavior and full standards coverage remain required.
+Both expanded HTTP/2 sets pass 395 cases on Windows and pinned Linux. The
+additional wire cases change no production code. Formatting/analyzer guards pass;
+discovery floors increase by two to 4,360.
+
+On `fd58c90`, CI 37978551488 has two concrete failures to investigate: the stock
+macOS raw QUIC rebind fails at cycle 28 with error 48, and the Windows resource
+job's HTTP/1 workload times out after 20 s on a fully consumed 65,536-byte upload
+with four workers and a new connection per request. Compatibility itself passes
+207 cases / 414 comparisons. The upload diagnostic reports Listening, no pending
+thread-pool work, 56 retained connections and an empty sampled live-connection
+list. This is not an allocation-budget violation or evidence of an HTTP/2 DATA
+pooling defect. Its cause remains unconfirmed; the earlier load comparison also
+recorded HTTP/1 upload timeouts. No budget or timeout has been relaxed, and both
+original logs/artifacts remain under ignored TestResults.
+### HTTP/1 upload timeout: connection-establishment evidence
+
+The failed Windows resource job on `fd58c90` waits in HttpClient's connection-pool
+path (`TaskCompletionSourceWithCancellation.WaitWithCancellationAsync`), rather
+than showing an application body-read stack. The snapshot's retained objects are
+not proof of live accepted sockets: its 32 sampled records are all disposed. The
+cause remains unconfirmed, including whether the stalled attempt reached server
+admission. The timeout and original job evidence are retained unchanged.
+
+Five fresh Windows processes running the exact 65,536-byte/full-consumption
+verification workload pass while the previously approved dotnet-trace 10.0.745401
+captures System.Net.Http, System.Net.Sockets and System.Net.NameResolution events.
+These successful traces do not reproduce or resolve the intermittent failure.
+A subsequent untraced verification also passes. Artifacts are under ignored
+`TestResults/http-engine/upload-timeout-traces` and `upload-diagnostics-*`.
+
+Failure-only snapshots now include registered and pending connection counts plus
+a nonblocking `Socket.Poll(0, SelectRead)` observation on the listening socket.
+Disposed/socket-error observations are recorded locally without dropping the
+remaining endpoint metadata. Counts and readiness are separate best-effort reads,
+not an atomic view or proof of request acceptance. Existing sample and lock bounds
+remain. No client/server timeout, successful-request loop, production source,
+public API, dependency or test discovery count changes.
+
+An isolated real-listener probe verifies a pending accepted connection (0
+registered / 1 pending), then a context with a 32-byte unread body (1 registered /
+0 pending, no queued accept work), followed by disposal. It passes on Windows and
+the pinned Linux SDK/runtime container. The performance project builds with zero
+warnings/errors; formatting, parser, suppression and whitespace checks pass.
+The first Linux launcher used the directory name instead of the assembly name;
+its missing-file failure is retained separately and the corrected `Probe.dll`
+launcher passes. Exact-head CI remains required, and the underlying upload timeout
+must still be investigated.
+
 ### macOS QUIC rebind cause on Apple Silicon and Intel
 
 `DisposedRuntimeListenerRebindsSameEndpoint(False)` keeps failing on macOS at
