@@ -4557,3 +4557,29 @@ Full Windows coverage on the final changed source passes 3,522 cases (3,517
 passed, five skipped, zero failed); the discovery floor increases by eight.
 Fresh exact-head platform/security checks remain necessary. No broad throughput,
 whole-engine completion or native macOS cleanup resolution is claimed.
+### Self-contained macOS native candidate experiment
+
+A separate opt-in quic-self-contained-experiment dispatch now builds both native
+control and candidate with QUIC_USE_SYSTEM_LIBCRYPTO=OFF. The pinned quictls
+submodule supplies static crypto; its VERSION.dat and source commit are retained.
+The existing Homebrew-linked experiment remains the default. Neither mode changes
+ordinary CI prerequisites, installed system libraries or production NuGet assets.
+
+Release-mode self-contained libraries must import only their own exact MsQuic
+install name and macOS system libraries/frameworks; any dynamic libcrypto/libssl
+or build/Homebrew dependency fails the experiment. Their exported symbols must
+match MsQuic's pinned Darwin export list exactly. The candidate is copied into an
+osx-arm64 runtime-shaped review artifact with MsQuic license/third-party notices,
+the quictls license, the production patches and a source/hash receipt. A fresh
+process must load that relocated copy and pass the existing 4,096-cycle rebind
+probe. Ordinary native control/candidate comparisons, full macOS managed tests,
+traced ordering and AddressSanitizer remain in the same experiment.
+
+Shell syntax, workflow structure, source guards and pinned offline zizmor pass
+locally. The Darwin build, import/export checks, relocation and runtime behavior
+are pending dispatched evidence. This is a reproducible source/build recipe, not
+a claim of bit-identical builds, complete crypto vulnerability review or a
+production-ready native package. Supported distribution, RID coverage, package
+selection/loader behavior, update policy and security/provenance remain required
+before adopting it as a supported dependency. No production package includes
+this artifact, and no release is published.

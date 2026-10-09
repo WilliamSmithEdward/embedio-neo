@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Test-only experiment. Never installs or packages the candidate dependency.
+# Test-only experiment. Never installs or adds the candidate to production packages.
 set -euo pipefail
 test "$(uname -s)" = Darwin
 test "$(uname -m)" = arm64
 repo="$PWD"
+self_contained="${EMBEDIO_QUIC_SELF_CONTAINED:-0}"
+case "$self_contained" in 0|1) ;; *) echo "Invalid self-contained mode." >&2; exit 2 ;; esac
 command -v jq
 results="$repo/TestResults/quic-cleanup-experiment"
 source_dir="$RUNNER_TEMP/msquic-cleanup-source"
@@ -22,10 +24,18 @@ git -C "$source_dir" submodule status > "$results/submodules.txt"
 git -C "$source_dir" rev-parse HEAD > "$results/source.txt"
 clang --version > "$results/compiler.txt"
 cmake --version > "$results/cmake.txt"
-brew list --versions openssl@3 > "$results/openssl.txt"
-openssl_root="$(brew --prefix openssl@3)"
-"$openssl_root/bin/openssl" version -a >> "$results/openssl.txt"
-shasum -a 256 "$openssl_root/lib/libcrypto.3.dylib" >> "$results/openssl.txt"
+system_crypto=ON
+openssl_root=""
+if test "$self_contained" = 1; then
+  system_crypto=OFF
+  cp "$source_dir/submodules/quictls/VERSION.dat" "$results/quictls-version.txt"
+else
+  brew list --versions openssl@3 > "$results/openssl.txt"
+  openssl_root="$(brew --prefix openssl@3)"
+  "$openssl_root/bin/openssl" version -a >> "$results/openssl.txt"
+  shasum -a 256 "$openssl_root/lib/libcrypto.3.dylib" >> "$results/openssl.txt"
+fi
+printf '%s\n' "$self_contained" > "$results/self-contained-mode.txt"
 patch_file="$repo/test/EmbedIO.RuntimeCloseProbe/msquic-kqueue-close.patch"
 cp "$patch_file" "$results/candidate.patch"
 shasum -a 256 "$patch_file" > "$results/patch.sha256"
@@ -76,7 +86,7 @@ build_native() {
   fi
   cmake -S "$source_dir" -B "$build_dir" \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$openssl_root" \
-    -DQUIC_TLS_LIB=quictls -DQUIC_USE_SYSTEM_LIBCRYPTO=ON \
+    -DQUIC_TLS_LIB=quictls "-DQUIC_USE_SYSTEM_LIBCRYPTO=$system_crypto" \
     -DQUIC_BUILD_TEST=ON -DQUIC_BUILD_TOOLS=OFF -DQUIC_BUILD_PERF=OFF \
     -DQUIC_ENABLE_LOGGING=OFF -DQUIC_ENABLE_ASAN="$asan" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
     -DQUIC_OUTPUT_DIR="$build_dir/bin" "-DCMAKE_PROJECT_INCLUDE=$project_include" 2>&1 | tee "$results/$variant-configure.log"
@@ -87,12 +97,22 @@ build_native() {
   codesign --force --sign - "$build_dir/bin/libmsquic.2.6.2.dylib"
   shasum -a 256 "$build_dir/bin/libmsquic.2.6.2.dylib" > "$results/$variant-library.sha256"
   otool -L "$build_dir/bin/libmsquic.2.6.2.dylib" > "$results/$variant-imports.txt"
+  if test "$self_contained" = 1 && test "$asan" = OFF; then
+    # A distributable candidate must not retain build/Homebrew crypto paths.
+    awk 'NR > 1 { print $1 }' "$results/$variant-imports.txt" > "$results/$variant-dependencies.txt"
+    if grep -Ev '^(@rpath/libmsquic\.2\.dylib$|/usr/lib/|/System/Library/)' "$results/$variant-dependencies.txt"; then return 2; fi
+    if grep -Ei '(libcrypto|libssl)' "$results/$variant-dependencies.txt"; then return 2; fi
+    # MsQuic's Darwin export list hides bundled crypto from other libraries.
+    nm -gjU "$build_dir/bin/libmsquic.2.6.2.dylib" | LC_ALL=C sort > "$results/$variant-exports.txt"
+    LC_ALL=C sort "$source_dir/src/bin/darwin/exports.txt" > "$results/expected-exports.txt"
+    cmp "$results/expected-exports.txt" "$results/$variant-exports.txt"
+  fi
 }
 
 run_probe() {
   local variant="$1" iteration="$2" traced="$3"
   local output="$results/$variant-$traced-$iteration"
-  local library_dir="$RUNNER_TEMP/msquic-$variant-build/bin"
+  local library_dir="${4:-$RUNNER_TEMP/msquic-$variant-build/bin}"
   mkdir -p "$output" || return 2
   local exit_code=0
   if test "$traced" = traced; then
@@ -150,6 +170,27 @@ git -C "$source_dir" diff --check
 git -C "$source_dir" diff -- src/platform/datapath_kqueue.c > "$results/combined-candidate.patch"
 build_native candidate
 candidate_failed=0
+if test "$self_contained" = 1; then
+  # Stage only the review artifact: no NuGet asset or loader override is installed.
+  stage="$results/self-contained-candidate"
+  native="$stage/runtimes/osx-arm64/native"
+  mkdir -p "$native" "$stage/licenses" "$stage/source"
+  cp "$RUNNER_TEMP/msquic-candidate-build/bin/libmsquic.2.6.2.dylib" "$native/libmsquic.2.6.2.dylib"
+  ln -s libmsquic.2.6.2.dylib "$native/libmsquic.2.dylib"
+  ln -s libmsquic.2.dylib "$native/libmsquic.dylib"
+  cp "$source_dir/LICENSE" "$stage/licenses/MsQuic-LICENSE"
+  cp "$source_dir/THIRD-PARTY-NOTICES" "$stage/licenses/MsQuic-THIRD-PARTY-NOTICES"
+  cp "$source_dir/submodules/quictls/LICENSE.txt" "$stage/licenses/quictls-LICENSE.txt"
+  cp "$patch_file" "$config_patch" "$stage/source/"
+  jq -n --arg source "$revision" --arg quictls ff36838bb69801cad56823159a036977bcbe5c75 \
+    --arg hash "$(shasum -a 256 "$native/libmsquic.2.6.2.dylib" | awk '{print $1}')" \
+    '{artifact:"test-only self-contained candidate",rid:"osx-arm64",msquicSource:$source,quictlsSource:$quictls,sha256:$hash,productionInstalled:false}' \
+    > "$stage/build-receipt.json"
+  status=0
+  run_probe candidate-relocated 1 untraced "$native" || status=$?
+  printf '%s\n' "$status" > "$results/candidate-relocated.exit"
+  if test "$status" -ne 0; then candidate_failed=1; fi
+fi
 "$RUNNER_TEMP/msquic-candidate-build/bin/msquicplatformtest" \
   --timeout 120000 --gtest_filter='*DataPath*' \
   --gtest_output="xml:$results/candidate-datapath.xml" \
