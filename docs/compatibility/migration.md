@@ -1039,3 +1039,26 @@ is aborted without a second error response or a clean chunk terminator. Completi
 callbacks still run, and a malformed request cannot dispose the listener shared
 by other clients. These changes apply to invalid/incomplete requests under the
 approved strict-framing policy; custom application error handlers remain available.
+
+### Bodyless managed responses and HTTP/2 graceful drain
+
+The managed HTTP/1 response stream now discards body writes for informational,
+204 and 304 responses, as it already did for HEAD. No payload or chunk terminator
+is emitted after these response heads. Informational and 204 responses omit
+Content-Length and Transfer-Encoding. A 304 retains an explicitly supplied
+selected-representation length rather than replacing it with zero. Callers remain
+responsible for supplying the corresponding unconditional response's length.
+See [HTTP semantics section 8.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6)
+and [HTTP/1.1 sections 6.1–6.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.1).
+Applications must not rely on writing content for a bodyless status. Ordinary
+responses and existing HEAD metadata behavior are preserved. The Microsoft
+backend is unchanged.
+
+During HTTP/2 graceful drain, an upload can already be in flight on a stream above
+the GOAWAY cutoff before its client receives GOAWAY. The engine refuses that
+request without invoking the application, processes its header compression state
+and counts/discards DATA against connection flow control, including padding.
+Accepted responses finish instead of being canceled by a spurious idle-stream
+protocol error. Invalid even client stream IDs still produce a connection error.
+See [HTTP/2 section 6.8](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.8).
+These corrections are unreleased HTTP-engine work.

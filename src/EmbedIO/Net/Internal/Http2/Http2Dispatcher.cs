@@ -55,8 +55,20 @@ namespace EmbedIO.Net.Internal.Http2
                         Http2Exchange? started = null;
                         lock (_sync)
                         {
-                            if (_draining && frame.HeaderBlock != null && frame.StreamId > _drainLastStream)
-                                throw new Http2ProtocolException(7, "Connection is draining.", frame.StreamId);
+                            if (_draining && (frame.StreamId & 1) != 0 && frame.StreamId > _drainLastStream)
+                            {
+                                // ReadFrameAsync already validates frame shape and processes
+                                // compression state. Refused streams must not enter the registry:
+                                // in-flight DATA still belongs to connection flow control.
+                                if (frame.HeaderBlock != null)
+                                    throw new Http2ProtocolException(7, "Connection is draining.", frame.StreamId);
+                                if (frame.Type == 0)
+                                {
+                                    dataAccounted = true;
+                                    QueueCredit(0, _connection.ReceiveFlow.Discard(frame.PayloadLength));
+                                }
+                                continue;
+                            }
                             var state = _connection.Streams.Receive(frame);
                             _exchanges.TryGetValue(frame.StreamId, out var exchange);
                             if (state == null)

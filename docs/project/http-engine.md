@@ -6183,3 +6183,48 @@ not establish a universal throughput/latency improvement or a Kestrel ranking.
 Longer and other-platform comparisons and resource soak remain work. Evidence is
 under ignored `TestResults/benchmark-review/http3-watch-*` and
 `TestResults/http-engine/http3-watch-*`.
+### Standards-audit bodyless response and drain-upload corrections
+
+Owner raw-wire regressions independently reproduced two source-traced audit
+findings on engine `24cb39d`. All ten initial cases failed: eight 204/304 cases
+covered synchronous/asynchronous writes and explicit/unknown representation
+lengths; two drain cases covered ordinary and padded in-flight DATA. The latter
+failed with Http2ProtocolException("Frame received on an idle stream") after
+refusing successor HEADERS, and canceled the accepted response.
+
+The dispatcher now discards receiver-initiated streams above the drain cutoff
+without entering the active registry, after existing shape/HPACK processing. DATA
+still consumes and replenishes the connection window. No set of refused IDs is
+retained. Two negative cases confirm that even client IDs still cause a connection
+protocol error. The bodyless response policy suppresses content and final chunks,
+removes prohibited informational/204 framing fields, and preserves explicit 304
+representation length. HEAD behavior remains covered by the existing cases.
+
+All twelve new cases pass, and the combined bodyless/HEAD/drain focused set reports
+57 successes, zero failures. Both targets build with zero warnings/errors, and
+changed-source formatting passes. Full Windows reports 4,377 cases, 4,372 successes/five expected local skips,
+zero failures. Focused Linux reports 129 successes, zero failures. All four
+resource budgets pass. The actual .NET Standard core (SHA-256
+410B245D1813C88AD711ADEAD45E1C32135F1DA7B8F3E73593286AC9DAACE5C0)
+passes all twelve new cases under the .NET 10 test host; this is not legacy
+runtime or full standard-asset coverage. Exact-head CI remains pending. Discovery floors include the
+twelve cases, totaling 4,377. Evidence is retained under ignored
+TestResults/http-engine/audit-regression-baseline and audit-framing-*.
+
+Other standards-audit findings remain work, including reset/idle lifetimes,
+extended CONNECT handling, target parsing, HTTP/1.0 delimitation, header-overflow
+isolation, range/conditional semantics and modern feature/interoperability gaps.
+This increment does not establish default-engine or shipping readiness.
+The first full candidate run exposed seven lifetime failures: body suppression
+also suppressed a 204 empty write's header commit before force/stop/dispose. The
+stream correction sends the head while discarding content; existing fixture
+assertions were unchanged. The 81-case lifetime/HEAD/bodyless/drain set and the
+corrected full suite pass. The original failure log remains retained.
+
+The first direct standard-asset attempt had eleven successes and one unusable
+fixed-port case: binding failed with AccessDenied and the request received 404.
+The new raw-wire fixture now uses the existing free-port helper and verifies
+listener startup before issuing traffic; all twelve standard cases and eight
+modern bodyless cases pass afterward. An initial helper-namespace build error
+was corrected and retained in the build logs. No port retry or assertion
+weakening was introduced.

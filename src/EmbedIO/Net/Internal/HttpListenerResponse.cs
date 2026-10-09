@@ -1,5 +1,4 @@
-﻿using EmbedIO.Internal;
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -7,6 +6,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
+using EmbedIO.Internal;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
@@ -144,6 +144,8 @@ namespace EmbedIO.Net.Internal
 
         internal bool HeadersSent { get; set; }
 
+        internal bool SuppressesBody => IsHeadResponse || _statusCode < 200 || _statusCode is 204 or 304;
+
         internal bool IsHeadResponse => _request.HttpVerb == HttpVerbs.Head;
 
         void IDisposable.Dispose() => Close(true);
@@ -200,7 +202,18 @@ namespace EmbedIO.Net.Internal
                 Headers.Add(HttpHeaderNames.Date, HttpDate.Format(DateTime.UtcNow));
             }
 
-            if (closing)
+            if (_statusCode < 200 || _statusCode is 204 or 304)
+            {
+                // No message body or terminating chunk follows these response heads.
+                // A 304 may retain explicit selected-representation metadata.
+                if (_statusCode < 200 || _statusCode == 204)
+                {
+                    Headers.Remove(HttpHeaderNames.ContentLength);
+                    Headers.Remove(HttpHeaderNames.TransferEncoding);
+                }
+                _chunked = false;
+            }
+            else if (closing)
             {
                 if (_request.HttpVerb != HttpVerbs.Head)
                     Headers[HttpHeaderNames.ContentLength] = "0";
