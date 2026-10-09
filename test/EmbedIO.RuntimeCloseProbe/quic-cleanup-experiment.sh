@@ -37,6 +37,10 @@ fixture="$repo/test/EmbedIO.RuntimeCloseProbe/kqueue-lifetime-test.inc"
 cp "$fixture" "$results/kqueue-lifetime-test.inc"
 shasum -a 256 "$fixture" > "$results/lifetime-fixture.sha256"
 printf '\n#include "%s"\n' "$fixture" >> "$source_dir/src/platform/unittest/DataPathTest.cpp"
+config_fixture="$repo/test/EmbedIO.RuntimeCloseProbe/kqueue-config-test.inc"
+cp "$config_fixture" "$results/kqueue-config-test.inc"
+shasum -a 256 "$config_fixture" > "$results/config-fixture.sha256"
+printf '\n#include "%s"\n' "$config_fixture" >> "$source_dir/src/platform/unittest/DataPathTest.cpp"
 
 dotnet restore test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj --locked-mode
 dotnet build test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj -c Release --no-restore

@@ -4115,3 +4115,13 @@ must not be attributed to the combined candidate. Local patch composition,
 reverse-application checks, shell syntax, suppression guard and scoped YARA scan
 pass. Native compilation and execution of the combined candidate are pending.
 This remains an isolated dependency experiment, not a shipped native change.
+
+The experiment additionally compiles the same `kqueue-config-test.inc` into
+control and candidate. It directly checks that an entirely zero-initialized
+configuration can bind an IPv4 loopback endpoint and receive one datagram with
+exact binary contents. It waits for receipt, drains socket/datapath/worker-pool
+cleanup, then verifies the packet count and payload result. This checks actual
+UDP behavior independently of optional feature advertisement. RAII cleanup also
+runs on a failed assertion. The original feature-mask assertion is retained;
+this supplemental test has not yet been compiled or executed on Darwin.
+The fixture is hashed in the artifact and included in the sanitizer repetitions.
