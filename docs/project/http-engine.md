@@ -5824,8 +5824,16 @@ The Intel job in run
 completed both coverage suites on `f23a5a5`: each reported all 4,288 cases,
 4,256 passed, 31 skipped and one failure, taking about 9.5 minutes. Increasing
 the execution budget allowed full discovery/completion; it did not clear genuine
-failures. Each failure is in the native WebSocket shutdown fixture's upgrade
-completion path. The job remains failed, and its logs are retained as
+failures. Each failure was reported by
+`CancellationDuringUpgradeReleasesAcceptAndAllConnectedTransports(Microsoft)`.
+Later Intel triage traced it to five-second own-hostname lookups during native
+listener prefix registration, exhausting that fixture's 30-second deadline;
+it did not establish an upgrade-completion defect. The correction in
+[37959455344](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37959455344)
+reduced the lookup from 5.016 seconds to 0.008 seconds and removed that failure.
+That run still failed the separate HTTP/3 cancellation test on both macOS
+architectures and an HTTP.sys case on Windows, so Intel acceptance remains open.
+The original job remains failed, and its logs are retained as
 `TestResults/http-engine/native-intel-budgeted.log`. This is older managed source
 than the F3/F4 candidates and does not validate their exact head. The ARM native
 comparison on the same revision passed. Intel remains in the support scope.
@@ -5895,3 +5903,17 @@ transport, while preserving partial-byte and subsequent healthy-listener checks.
 The low-level application responds 400. The 63-case boundary/wire set passes on
 Windows. The original failed result remains under ignored
 `TestResults/frame-boundary/combined-linux-full`; a fresh combined run is required.
+
+### HTTP/3 cancellation fixture certificate provisioning
+
+The macOS failures of `CancelledHttp3UploadsDoNotStopTheListener` in runs
+37965353933 and 37966714185 occur at the first warm-up handshake, before the
+cancellation workload. The fixture imported its certificate with default key
+storage flags, whereas the existing QUIC fixtures explicitly use `Exportable`.
+The [.NET QUIC portable credential path](https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/System.Net.Quic/src/System/Net/Quic/Internal/MsQuicConfiguration.cs)
+exports the certificate and private key as PKCS#12. The fixture now requests
+an exportable key as the other QUIC fixtures do; the 100 rounds, 400 cancelled
+uploads, fatal-callback checks and fresh-client health checks are unchanged.
+The focused Windows regression passes, as do formatting and analyzer guards.
+The provisioning mismatch is a candidate explanation; macOS validation remains
+required before claiming that the TLS `UserCanceled` failure is resolved.

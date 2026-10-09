@@ -206,7 +206,10 @@ namespace EmbedIO.Tests
         {
             if (!System.Net.Quic.QuicListener.IsSupported || !System.Net.Quic.QuicConnection.IsSupported)
                 Assert.Ignore("No native QUIC support on this host.");
-            using var certificate = EmbedIO.PlatformTests.HttpsSmoke.CreateCertificate();
+            // QUIC's portable TLS backend exports the certificate and private key
+            // to PKCS#12. Match the other QUIC fixtures' provisioning on macOS.
+            using var certificate = EmbedIO.PlatformTests.HttpsSmoke.CreateCertificate(
+                System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.Exportable);
             using var udp = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             udp.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
             var bound = udp.LocalEndPoint as System.Net.IPEndPoint ?? throw new AssertionException("Missing UDP endpoint.");
