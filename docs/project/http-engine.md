@@ -5524,3 +5524,189 @@ Whole-engine fault injection/conformance and final platform checks remain open.
 The full Windows coverage rerun passed: 4,275 total, 4,270 successes, five
 expected skips and zero failures. The test discovery floor is unchanged.
 This fixture/characterization correction changes no production engine code.
+
+### Retiring the callback TCP accept implementation
+
+Both retained assets now use the owned TCP accept actor. The unused
+SocketAsyncEventArgs accept implementation and its private callback helpers have
+been removed from EndPointListener. This changes no public API, target,
+dependency, timeout, prefix policy or production accept selection. The macOS
+IPv6 blocking workaround remains; its replacement and the wider endpoint /
+connection rewrite are still open.
+
+The former backlog regression now queues all 32 or 128 peers before starting the
+actual actor, admits them through the production endpoint, checks every distinct
+request and admits a subsequent fresh connection. Its cleanup awaits the actor.
+The obsolete fabricated event-completion cases were replaced by five late-admission
+cases (one through 128 real connected sockets) that require the stopped production
+endpoint to release each handle and close the peer. The actor's existing pending-
+accept shutdown, independent Windows handle ownership, fatal admission and
+concurrent-stop tests remain. Actor tests now fail rather than skip if either
+retained asset lacks the replacement implementation.
+
+All 100 focused accept / framing / reset / WebSocket shutdown cases pass on
+Windows, pinned Linux .NET 10.0.12 and the actual netstandard2.0 core on a Windows
+.NET 10 host, without skips. This is not a full older-runtime validation. Full
+Windows coverage passes 4,275 total / 4,270 successes / five expected skips /
+zero failures. Both assets build with no warnings or errors. Changed-source
+parser, suppression, whitespace and diff checks pass; pinned Semgrep parses all
+four changed source files completely (29 rules, zero findings). Logs and TRX
+reports are retained under ignored TestResults/http-engine/tcp-retirement-*.
+Final exact-head cross-platform checks remain required.
+
+### Owned endpoint route snapshots
+
+EndPointListener now delegates registration, removal, ownership checks and
+lookup to EndpointRoutes. Each mutation publishes one immutable generation with
+separate named, star and plus arrays. Readers borrow that complete generation
+without a registration lock. Arrays are ordered by descending path length with
+newer equal-length registrations first, so selection can stop at the first
+eligible match. Existing named/star/plus precedence, wildcard actual-path-before-
+added-slash behavior, URL decoding, ordinal path comparison, named authority
+checks, duplicate rules and wrong-owner removal semantics are retained.
+The added-slash match compares existing strings instead of allocating a suffix.
+Public APIs, prefix defaults, targets and runtime dependency groups are unchanged.
+
+Thirteen additional cases cover named authority/path boundaries and eight
+concurrent writers publishing/removing 256 independent registrations in each
+host category while preserving an anchor and rejecting wrong-owner removal.
+The 157-case Windows focused set passes. The pinned-upstream Windows audit passes
+207 cases / 414 comparisons / zero errors. All four existing allocation budgets
+and GET/full/partial/unread 64-KiB HTTP/TLS verification pass, including retained
+stream/timer cleanup.
+
+The routing component benchmark uses identical compiled harness SHA-256
+`960933a146a25eb65d1438f9826ea05f33d8657f8c42e9fa4d8ffac1a4177272`,
+frozen prior legacy core
+`88f54839d27bdf559474452a259971bccf31a5cb985c7be3cb7fa3f9044ab38d`
+and candidate legacy core
+`0400cbf3410d9de10c1df34d549e95a81b5cb9f260506124e63dd746f9bccd2e`.
+Both run on Windows .NET 10.0.12 in three alternating pairs, five rounds per
+pair, 100,000 lookups per round, with one, 64 and 256 routes. Last-route hits,
+uniform hits and misses all verify their expected owner. Registration, reflection
+and delegate compilation are outside the timed region. This measures dispatch,
+not complete HTTP requests or older-runtime performance.
+
+Initial combined-array and unsorted-partition candidates regressed larger
+wildcard lookups; those samples are retained rather than discarded. Sorted
+snapshots reduced allocation from 88–96 bytes to 40 bytes per lookup across the
+measured cases. Default-runtime uniform named 64-route timing regressed from
+304.1 to 422.6 ns, while the 256-route counterpart improved from 1,118.9 to
+300.3 ns. A separate controlled comparison disables tiered compilation for both
+benchmark processes only. Its median uniform-hit results (15 samples per cell)
+are below; production runtime settings are unchanged.
+
+| Routes / host category | Prior / candidate median ns |
+| --- | --- |
+| 1 / named | 43.8 / 38.4 |
+| 64 / named | 509.1 / 132.5 |
+| 256 / named | 1,871.3 / 407.5 |
+| 1 / star | 35.6 / 31.4 |
+| 64 / star | 224.6 / 125.4 |
+| 256 / star | 747.9 / 385.7 |
+| 1 / plus | 38.7 / 33.3 |
+| 64 / plus | 228.4 / 128.2 |
+| 256 / plus | 747.1 / 387.8 |
+
+Controlled 256-route star misses remain close (1,399.3 / 1,411.7 ns), and miss
+lookup remains linear. These results support continued development, not a
+universal improvement or extreme whole-server performance claim. Raw default,
+controlled and earlier candidate measurements are retained under ignored
+TestResults/http-engine/endpoint-routes-*.
+
+The first full sorted-source coverage run had one NoBufferSpaceAvailable failure
+in a client's ConnectAsync, before the malformed-target test reached dispatch.
+The subsequent 74-case target/routing subset passed. This does not establish the
+cause or prove that broader resource behavior is repaired. The original log is
+retained separately from the full-suite repeat.
+
+Prior commit 9345596 CI also failed the known macOS native QUIC same-port rebind
+probe and a Windows TLS 64-KiB full-body upload warmup with a 20-second client
+timeout. Those logs are preserved as endpoint-routes-prior-*. The local final
+upload verification passes; it neither reproduces nor explains the original
+CI failure. Native QUIC deployment, complete connection replacement, whole-engine
+fuzzing/conformance and end-to-end performance work remain open.
+
+The unchanged final sorted-source Windows coverage repeat passes 4,288 total /
+4,283 successes / five expected skips / zero failures. Final focused validation
+also passes all 157 cases against the actual netstandard2.0 core on a Windows
+.NET 10 host, and 155 cases on pinned Linux .NET 10.0.12 with two Windows-native
+close cases intentionally skipped. Both assets build warning-free. The final
+pinned Semgrep scan parses all four changed C# files completely (29 rules, zero
+findings, no tool diagnostics); parser, suppression, whitespace, shell syntax and
+diff guards pass. Discovery floors in ordinary CI and the native experiment are
+raised to 4,288. Exact new-head macOS/CI checks remain required; no merge or release
+readiness is claimed.
+
+Pinned YARA-X / Forge also reports no matches in all four changed C# sources.
+
+### Windows TLS upload stall investigation
+
+Six fresh verification runs of the exact 64-KiB full-body HTTP/TLS workload pass
+with DOTNET_PROCESSOR_COUNT=2. This changes the runtime's processor-count view;
+it does not impose an OS CPU quota or reproduce the Windows CI machine. The
+20-second client timeout and production transport code are unchanged. The
+previous failed warmup remains unresolved rather than being attributed to
+scheduling, socket pressure or routing without evidence.
+
+The performance harness now captures failure-only diagnostic JSON alongside the
+original exception. It samples pending admission and registered/retained
+connections, accept-worker state, thread-pool counts, TLS authentication,
+read-buffer allocation, context binding, remaining fixed-length body bytes and
+response-finalization state. Collection samples are limited to 32 entries per
+registry and 32 live connection records. A pending-registry lock attempt has a
+five-millisecond bound; busy registries are reported. These cross-thread field
+reads are best-effort observations, not one atomic transport snapshot. No
+request/header/body data is collected and successful request loops do no new
+diagnostic work. Expected reflection/race failures report unavailable metadata;
+nonrecoverable exceptions are not swallowed. Production code, public APIs,
+timeouts, targets and runtime dependencies are unchanged.
+
+An ignored standalone probe exercises actual pending admission, an admitted
+unread 32-byte body and completed listener cleanup on Windows and pinned Linux;
+the observed state matches those phases. The rebuilt upload verification also
+passes. Logs, the probe and constrained-runtime results are retained under
+TestResults/http-engine/tls-stall-*. Exact new-head CI remains required. This
+improves evidence for a future failure; it is not a claimed correction of the
+historical TLS stall or the separate native QUIC rebind defect.
+
+### Native deployment validation on both macOS architectures
+
+The optional pinned-source cleanup/OpenSSL experiment now has independent
+osx-arm64 and osx-x64 jobs with distinct artifacts. It derives the candidate RID
+from the actual host, verifies the matrix expectation and propagates that RID
+through staging, receipts, private package paths, restore and publish. The Intel
+job uses GitHub's [documented macos-15-intel runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+Normal CI native prerequisites and all production package/dependency groups
+remain unchanged. The private candidate remains 0.0.0-local and is not published.
+
+Package verification now checks each actual thin 64-bit Mach-O CPU type and dylib
+header as well as the exact RID asset set, SHA-256, notices, empty framework
+placeholder and receipt. It rejects renaming an ARM binary/receipt as Intel.
+Eight retained mutation cases use the real artifact and require rejection of
+relabelled RID, wrong CPU, invalid magic, executable type, truncation, extra RID,
+missing alias and altered notice. The expected-error checks run in each deployment
+job before consumer restore. Local validation repacks the previously verified ARM
+candidate through the parameterized project: all three native hashes/headers and
+notices match, and all eight mutations are rejected. This does not establish
+Intel native execution. Exact-source native matrix results remain pending until
+both jobs finish successfully. Wider RID support, production deployment, update
+policy and final engine conformance/performance remain open.
+
+Evidence is under ignored TestResults/http-engine/native-dual-rid-*. The pinned
+zizmor workflow audit has no findings, shell syntax checks pass and the ordinary
+solution does not acquire new targets or native runtime dependencies.
+
+The first osx-x64 experiment job 113869693050 in run 37945234080 failed before
+native compilation: fetching the pinned OpenSSL tag returned Git's "shallow file
+has changed since we read it" error. The original job log is preserved as
+native-dual-rid-intel-first.log. This is not an Intel transport result. Source
+fetches now retain each attempt and retry only that exact shallow-state error,
+up to three attempts. Invalid references and other failures return immediately;
+exhausted retries still fail. Automatic Git maintenance is disabled for these
+fetch commands, without claiming it caused the observed failure. The immutable
+source SHA, annotated tag SHA, peeled commit, signature fingerprint and crypto
+version checks remain unchanged. Controlled fixture checks verify recovery on
+the third attempt, immediate permanent failure and exhausted retry failure.
+The existing ARM job remains a distinct run; new native validation is required
+before claiming the Intel candidate works.

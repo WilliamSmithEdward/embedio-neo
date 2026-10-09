@@ -202,7 +202,7 @@ internal static class ListenerHttp
                             $"HTTP workload failed: url={url}, phase={phase}, closePerRequest={churn}, workers={workers}, "
                             + $"requestBodyBytes={bodySize}, bodyConsumption={consumption}, responseBytes={payloadSize}, "
                             + $"responseChunkBytes={chunkSize}, observedPeerPorts={ports.Count}, retainedConnections={connections.Count}, "
-                            + $"serverState={server.State}, serverTask={running.Status}.", error);
+                            + $"serverState={server.State}, serverTask={running.Status}, diagnostics={CaptureFailureState(connections)}.", error);
                     }
                     finally
                     {
@@ -220,6 +220,93 @@ internal static class ListenerHttp
             note = "Loopback client and server share this process. Allocations/memory include both. Timing is informational; optional retained connections intentionally keep diagnostic references alive.",
             results
         }, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static string CaptureFailureState(ConcurrentDictionary<object, byte> retained)
+    {
+        // Run only after failure. Never read payloads, alter timers or hold a registry
+        // lock indefinitely while diagnosing a possible stalled transport.
+        try
+        {
+            static object? Field(object value, string name)
+                => value.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(value);
+            var connections = new HashSet<object>(retained.Take(32).Select(pair => pair.Key));
+            var endpoints = new List<object>();
+            var registry = typeof(EmbedIO.Net.EndPointManager).GetField("IPToEndpoints", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
+                as System.Collections.IDictionary;
+            if (registry != null)
+                foreach (System.Collections.IDictionary ports in registry.Values)
+                    foreach (var endpoint in ports.Values)
+                    {
+                        if (endpoint == null || endpoints.Count == 32) continue;
+                        var owner = endpoint.GetType().GetProperty("Listener", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint);
+                        if (owner != null && Field(owner, "_connections") is System.Collections.IEnumerable registered)
+                        {
+                            var sampled = 0;
+                            foreach (var entry in registered)
+                            {
+                                var connection = entry?.GetType().GetProperty("Key")?.GetValue(entry);
+                                if (connection != null) connections.Add(connection);
+                                if (++sampled == 32) break;
+                            }
+                        }
+                        var pending = Field(endpoint, "_unregistered");
+                        var busy = false;
+                        if (pending != null)
+                        {
+                            var entered = false;
+                            try
+                            {
+                                entered = Monitor.TryEnter(pending, TimeSpan.FromMilliseconds(5));
+                                if (entered && pending is System.Collections.IEnumerable items)
+                                {
+                                    var sampled = 0;
+                                    foreach (var connection in items)
+                                    {
+                                        if (connection != null) connections.Add(connection);
+                                        if (++sampled == 32) break;
+                                    }
+                                }
+                                busy = !entered;
+                            }
+                            finally { if (entered) Monitor.Exit(pending); }
+                        }
+                        endpoints.Add(new
+                        {
+                            worker = (Field(endpoint, "_acceptWorker") as Task)?.Status.ToString(),
+                            admissionStopped = Field(endpoint, "_acceptingStopped"),
+                            pendingRegistryBusy = busy
+                        });
+                    }
+            var live = connections.Where(connection => Field(connection, "_resourcesDisposed") is not 1).Take(32)
+                .Select(connection =>
+                {
+                    var stream = connection.GetType().GetProperty("Stream")?.GetValue(connection) as Stream;
+                    var input = Field(connection, "_iStream");
+                    return new
+                    {
+                        resourcesDisposed = Field(connection, "_resourcesDisposed"),
+                        contextBound = Field(connection, "_contextBound"),
+                        readBufferAllocated = Field(connection, "_buffer") is byte[],
+                        reuses = connection.GetType().GetProperty("Reuses")?.GetValue(connection),
+                        tlsAuthenticated = (stream as System.Net.Security.SslStream)?.IsAuthenticated,
+                        remainingBody = input == null ? null : Field(input, "_remainingBody"),
+                        responseFinishing = Field(connection, "_responseFinishing")
+                    };
+                }).ToArray();
+            return JsonSerializer.Serialize(new
+            {
+                threadPoolThreads = ThreadPool.ThreadCount,
+                pendingWorkItems = ThreadPool.PendingWorkItemCount,
+                completedWorkItems = ThreadPool.CompletedWorkItemCount,
+                retainedConnections = retained.Count,
+                sampledConnections = connections.Count,
+                liveConnectionSample = live,
+                endpoints
+            });
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or TargetInvocationException or InvalidCastException)
+        { return $"Snapshot unavailable: {error.GetType().FullName}"; }
     }
 
     private static double Percentile(double[] values, double percentile)

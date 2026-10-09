@@ -17,7 +17,7 @@ namespace EmbedIO.Tests
         private static Task Start(Socket listener, Action<Socket> admit, Func<bool> stopped, bool startInline = false)
         {
             var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop");
-            if (type == null) { Assert.Ignore("The legacy target retains its event-based accept path."); return Task.CompletedTask; }
+            if (type == null) throw new AssertionException("Every retained asset must have the owned TCP accept loop.");
             var loop = Activator.CreateInstance(type, BindingFlags.Instance | BindingFlags.NonPublic, null,
                 new object[] { listener, admit, stopped, (Action)listener.Dispose }, null) ?? throw new AssertionException("Missing TCP actor.");
             var run = type.GetMethod("RunAsync", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new AssertionException("Missing runner.");
@@ -143,8 +143,7 @@ namespace EmbedIO.Tests
         public async Task QueuedInitializationAlreadyHasAHeaderDeadline(bool secure)
         {
             var assembly = typeof(WebServer).Assembly;
-            if (assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop") == null)
-            { Assert.Ignore("The legacy target retains synchronous connection initialization."); return; }
+            Assert.That(assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop"), Is.Not.Null, "Every retained asset must initialize accepted connections through the owned loop.");
             var endpointType = assembly.GetType("EmbedIO.Net.Internal.EndPointListener") ?? throw new AssertionException("Missing endpoint.");
             var connectionType = assembly.GetType("EmbedIO.Net.Internal.HttpConnection") ?? throw new AssertionException("Missing connection.");
             using var owner = new Net.HttpListener();
@@ -184,8 +183,7 @@ namespace EmbedIO.Tests
         [NonParallelizable]
         public async Task UnrecoverableAdmissionOrDiagnosticFailureClosesPendingAndBacklogSockets(string mode)
         {
-            if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop") == null)
-            { Assert.Ignore("The legacy asset has no owned TCP actor."); return; }
+            Assert.That(typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop"), Is.Not.Null, "Every retained asset must have the owned TCP accept loop.");
             using var listener = Listener();
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var endpoint = (IPEndPoint)(listener.LocalEndPoint ?? throw new AssertionException("Missing endpoint."));

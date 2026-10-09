@@ -2,7 +2,12 @@
 # Test-only experiment. Never installs or adds the candidate to production packages.
 set -euo pipefail
 test "$(uname -s)" = Darwin
-test "$(uname -m)" = arm64
+case "$(uname -m)" in
+  arm64) native_rid=osx-arm64 ;;
+  x86_64) native_rid=osx-x64 ;;
+  *) echo "Unsupported native architecture." >&2; exit 2 ;;
+esac
+if test -n "${EMBEDIO_EXPECT_NATIVE_RID:-}"; then test "$native_rid" = "$EMBEDIO_EXPECT_NATIVE_RID"; fi
 repo="$PWD"
 self_contained="${EMBEDIO_QUIC_SELF_CONTAINED:-0}"
 case "$self_contained" in 0|1) ;; *) echo "Invalid self-contained mode." >&2; exit 2 ;; esac
@@ -15,9 +20,25 @@ source_dir="$RUNNER_TEMP/msquic-cleanup-source"
 revision=819ab74f851ee168504cbc392ec32e7bed1d82e9
 mkdir -p "$results"
 test ! -e "$source_dir"
+fetch_reviewed_source() {
+  local directory="$1" label="$2" ref="$3" attempt status log
+  for attempt in 1 2 3; do
+    log="$results/$label-fetch-$attempt.log"
+    status=0
+    git -C "$directory" -c maintenance.auto=false -c gc.auto=0 fetch --depth 1 origin "$ref" > "$log" 2>&1 || status=$?
+    cat "$log"
+    if test "$status" -eq 0; then return 0; fi
+    # Retain every attempt and retry only the observed shallow-state race.
+    # Caller still verifies the immutable commit/tag/signature after success.
+    if ! grep -Fq 'fatal: shallow file has changed since we read it' "$log"; then return "$status"; fi
+    if test "$attempt" -lt 3; then sleep 2; fi
+  done
+  return "$status"
+}
+
 git init "$source_dir"
 git -C "$source_dir" remote add origin https://github.com/microsoft/msquic.git
-git -C "$source_dir" fetch --depth 1 origin "$revision"
+fetch_reviewed_source "$source_dir" msquic "$revision"
 git -C "$source_dir" checkout --detach FETCH_HEAD
 test "$(git -C "$source_dir" rev-parse HEAD)" = "$revision"
 git -C "$source_dir" submodule update --init --depth 1 "submodules/$tls_backend" submodules/googletest
@@ -26,7 +47,7 @@ crypto_root="$source_dir/submodules/$tls_backend"
 if test "$tls_backend" = openssl; then
   # OpenSSL 3.5.9 LTS, released 2026-09-29. Pin the peeled release commit.
   crypto_revision=45e844fa2a14ec92d146bd8f5778ac130b6625fb
-  git -C "$crypto_root" fetch --depth 1 origin refs/tags/openssl-3.5.9
+  fetch_reviewed_source "$crypto_root" openssl refs/tags/openssl-3.5.9
   test "$(git -C "$crypto_root" rev-parse FETCH_HEAD)" = d0ca66a1abe52545f14eca635c648932fcde5615
   test "$(git -C "$crypto_root" rev-parse 'FETCH_HEAD^{}')" = "$crypto_revision"
   # GnuPG probes its agent socket even during public-key import. Darwin's
@@ -213,7 +234,7 @@ if test "$self_contained" = 1; then
   fi
   # Stage only the review artifact: no NuGet asset or loader override is installed.
   stage="$results/self-contained-candidate"
-  native="$stage/runtimes/osx-arm64/native"
+  native="$stage/runtimes/$native_rid/native"
   mkdir -p "$native" "$stage/licenses" "$stage/source"
   cp "$RUNNER_TEMP/msquic-$staged_variant-build/bin/libmsquic.2.6.2.dylib" "$native/libmsquic.2.6.2.dylib"
   ln -s libmsquic.2.6.2.dylib "$native/libmsquic.2.dylib"
@@ -226,8 +247,8 @@ if test "$self_contained" = 1; then
     cp "$results/openssl-tag-signature.log" "$results/crypto-version.txt" "$stage/source/"
   fi
   jq -n --arg source "$revision" --arg crypto "$crypto_revision" --arg backend "$tls_backend" --argjson buildTests "$staged_tests" \
-    --arg hash "$(shasum -a 256 "$native/libmsquic.2.6.2.dylib" | awk '{print $1}')" \
-    '{artifact:"test-only self-contained candidate",rid:"osx-arm64",msquicSource:$source,cryptoSource:$crypto,tlsBackend:$backend,buildTests:$buildTests,sha256:$hash,productionInstalled:false}' \
+    --arg rid "$native_rid" --arg hash "$(shasum -a 256 "$native/libmsquic.2.6.2.dylib" | awk '{print $1}')" \
+    '{artifact:"test-only self-contained candidate",rid:$rid,msquicSource:$source,cryptoSource:$crypto,tlsBackend:$backend,buildTests:$buildTests,sha256:$hash,productionInstalled:false}' \
     > "$stage/build-receipt.json"
   status=0
   run_probe candidate-relocated 1 untraced "$native" || status=$?
@@ -257,7 +278,7 @@ for iteration in 1 2 3 4 5; do
     --timeout 2m --report-trx --results-directory "$results/connected-$iteration" || candidate_failed=1
 done
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-  --minimum-expected-tests 4275 --timeout 5m --report-trx --coverlet \
+  --minimum-expected-tests 4288 --timeout 5m --report-trx --coverlet \
   --results-directory "$results/full-suite" || candidate_failed=1
 if test "$self_contained" = 1 && test "$tls_backend" = openssl; then
   # Exercise actual managed protocol/application behavior on the tests-disabled library.
@@ -266,7 +287,7 @@ if test "$self_contained" = 1 && test "$tls_backend" = openssl; then
     EMBEDIO_EXPECT_QUIC_LIBRARY_SHA256="$(jq -r .sha256 "$stage/build-receipt.json")" \
     EMBEDIO_QUIC_LIBRARY_EVIDENCE="$results/production-loaded-library.json" \
     dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-    --minimum-expected-tests 4275 --timeout 5m --report-trx --coverlet \
+    --minimum-expected-tests 4288 --timeout 5m --report-trx --coverlet \
     --results-directory "$results/production-full-suite" || candidate_failed=1
   jq -e '.verified and (.sha256 | length == 64)' "$results/production-loaded-library.json" > /dev/null || candidate_failed=1
 fi

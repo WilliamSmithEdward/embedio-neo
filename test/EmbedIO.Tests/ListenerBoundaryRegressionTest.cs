@@ -183,7 +183,7 @@ namespace EmbedIO.Tests
             ((endpointType).GetField("<Listener>k__BackingField", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, fixture.Listener);
             ((endpointType).GetField("_sock", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, socket);
             ((endpointType).GetField("_endpoint", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, socket.LocalEndPoint);
-            foreach (var name in new[] { "_prefixes", "_unregistered" })
+            foreach (var name in new[] { "_routes", "_unregistered" })
             {
                 var field = endpointType.GetField(name, fields);
                 (field ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, Activator.CreateInstance(field.FieldType));
@@ -192,16 +192,16 @@ namespace EmbedIO.Tests
             ((endpointType).GetMethod("AddPrefix") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(endpoint,
                 new[] { Activator.CreateInstance((prefixType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), $"http://127.0.0.1:{port}/"), fixture.Listener });
             var clients = new List<TcpClient>();
-            using var args = new SocketAsyncEventArgs { UserToken = endpoint };
-            var completion = endpointType.GetMethod("ProcessAccept", BindingFlags.Static | BindingFlags.NonPublic);
-            var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            args.Completed += (_, completed) =>
-            {
-                var terminal = completed.SocketError != SocketError.Success;
-                (completion ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(null, new object[] { completed });
-                if (terminal) closed.TrySetResult();
-            };
-            var armed = false;
+            var actorType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop")
+                ?? throw new AssertionException("Missing owned TCP accept loop.");
+            var admission = (Action<Socket>)(endpointType.GetMethod("ProcessAcceptedSocket", fields)
+                ?? throw new AssertionException("Missing endpoint admission.")).CreateDelegate(typeof(Action<Socket>), endpoint);
+            Func<bool> stopped = () => socket.SafeHandle.IsClosed;
+            var actor = Activator.CreateInstance(actorType, fields, null,
+                new object[] { socket, admission, stopped, (Action)socket.Dispose }, null)
+                ?? throw new AssertionException("Missing accept actor instance.");
+            var run = actorType.GetMethod("RunAsync", fields) ?? throw new AssertionException("Missing actor runner.");
+            Task? running = null;
             try
             {
                 // No accept is armed until every peer is in the socket backlog.
@@ -213,9 +213,8 @@ namespace EmbedIO.Tests
                     await peer.ConnectAsync(IPAddress.Loopback, port, fixture.Token);
                     await peer.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"GET /{i} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"), fixture.Token);
                 }
-                ((endpointType).GetMethod("Accept", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
-                    .Invoke(null, new object?[] { socket, args, null });
-                armed = true;
+                running = Task.Run(() => (Task)(run.Invoke(actor, null)
+                    ?? throw new AssertionException("Missing accept task.")));
                 var paths = new HashSet<string>();
                 for (var i = 0; i < count; i++)
                 {
@@ -234,7 +233,7 @@ namespace EmbedIO.Tests
             finally
             {
                 ((IDisposable)endpoint).Dispose();
-                if (armed) await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                if (running != null) await running.WaitAsync(TimeSpan.FromSeconds(5));
                 foreach (var peer in clients) peer.Dispose();
             }
         }

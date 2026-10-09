@@ -4,10 +4,12 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <NuspecFile>NativeCandidate.nuspec</NuspecFile>
     <NuspecBasePath>$(MSBuildProjectDirectory)</NuspecBasePath>
-    <NuspecProperties>candidate=$(CandidateRoot)</NuspecProperties>
+    <CandidateRid Condition="'$(CandidateRid)' == ''">osx-arm64</CandidateRid>
+    <NuspecProperties>candidate=$(CandidateRoot);rid=$(CandidateRid)</NuspecProperties>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <Target Name="ValidateCandidate" BeforeTargets="GenerateNuspec">
+    <Error Condition="'$(CandidateRid)' != 'osx-arm64' and '$(CandidateRid)' != 'osx-x64'" Text="Only osx-arm64 and osx-x64 candidate RIDs are allowed." />
     <Error Condition="'$(CandidateRoot)' == ''" Text="CandidateRoot must identify the validated review artifact." />
     <Error Condition="!Exists('$(CandidateRoot)/build-receipt.json')" Text="Candidate build receipt is missing." />
   </Target>
