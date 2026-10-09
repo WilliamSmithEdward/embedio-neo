@@ -91,9 +91,41 @@ namespace EmbedIO.Tests
             var wire = encoder.Encode(4, ("x", "a", false), ("y", "b", false));
             Assert.That(wire[0], Is.EqualTo(2));
             Assert.That(encoder.Dequeue(), Is.Null);
-            encoder.Feedback("84");
-            encoder.Encode(8, ("y", "b", false));
+            // A second attempt passes admission but must still respect pins.
+            Assert.That(encoder.Encode(8, ("x", "a", false), ("y", "b", false))[0], Is.EqualTo(2));
+            Assert.That(encoder.Dequeue(), Is.Null);
+            encoder.Feedback("8488");
+            encoder.Encode(12, ("y", "b", false));
             Assert.That(Convert.ToHexString(encoder.Dequeue() ?? Array.Empty<byte>()), Is.EqualTo("41790162"));
+        }
+
+        [Test]
+        public void TablePressureRequiresARepeatedCandidateBeforeEviction()
+        {
+            var encoder = new ResponseEncoder();
+            encoder.Encode(0, ("x", "a", false)); encoder.Dequeue(); encoder.Feedback("01");
+            Assert.That(encoder.Encode(4, ("y", "b", false))[0], Is.Zero);
+            Assert.That(encoder.Dequeue(), Is.Null);
+            Assert.That(encoder.Encode(8, ("y", "b", false))[0], Is.Zero);
+            Assert.That(Convert.ToHexString(encoder.Dequeue() ?? Array.Empty<byte>()), Is.EqualTo("41790162"));
+            encoder.Feedback("01");
+            Assert.That(Convert.ToHexString(encoder.Encode(12, ("y", "b", false))), Is.EqualTo("030080"));
+            encoder.Feedback("8C");
+        }
+
+        [Test]
+        public void OneOffResponsesPreserveAnAcknowledgedFullTableEntry()
+        {
+            var encoder = new ResponseEncoder(capacity: 133);
+            var retained = new string('a', 100);
+            encoder.Encode(0, ("x", retained, false)); encoder.Dequeue(); encoder.Feedback("01");
+            for (var i = 0; i < 200; ++i)
+            {
+                var value = i.ToString("D100", System.Globalization.CultureInfo.InvariantCulture);
+                Assert.That(encoder.Encode(4L + i * 4, ("x", value, false))[0], Is.Zero);
+                Assert.That(encoder.Dequeue(), Is.Null);
+            }
+            Assert.That(Convert.ToHexString(encoder.Encode(804, ("x", retained, false))), Is.EqualTo("020080"));
         }
 
         [TestCase("cookie", false)]

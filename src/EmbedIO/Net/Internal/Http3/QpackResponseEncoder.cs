@@ -15,6 +15,8 @@ namespace EmbedIO.Net.Internal.Http3
         private QpackEncoderTable? _table;
         private long _peerCapacity;
         private int _pendingBytes;
+        private ulong[]? _recent;
+        private ulong _occupied;
 
         internal QpackResponseEncoder(QpackEncoderFeedback feedback, int maximumCapacity, int maximumPendingBytes)
         {
@@ -75,12 +77,37 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 var field = fields[i];
                 if ((indices != null && indices[i] >= 0) || QpackEncoder.IsStatic(field)) continue;
+                if (!Admit(field)) continue;
                 var insertion = _table.TryInsert(field, _maximumPendingBytes - _pendingBytes);
                 if (insertion == null) continue;
                 _instructions.Enqueue(insertion.Instructions);
                 _pendingBytes += insertion.Instructions.Length;
             }
             return wire;
+        }
+        private bool Admit(HpackField field)
+        {
+            var table = _table ?? throw new InvalidOperationException("Missing QPACK table.");
+            var capacity = Math.Min(_maximumCapacity, _peerCapacity);
+            var size = (long)field.Name.Length + field.Value.Length + 32;
+            if (field.NeverIndexed || QpackEncoder.Sensitive(field.Name) || size > capacity) return false;
+            if (size <= capacity - table.StoredBytes) return true;
+            if (table.Find(field.Name, field.Value) >= 0) return false;
+            // Under table pressure, require a recent repeat before paying for
+            // an eviction and insertion. Store only bounded fingerprints, never
+            // another copy of application headers. Collisions affect compression
+            // choices only; actual table lookups and wire values remain exact.
+            var fingerprint = 14695981039346656037UL;
+            foreach (var octet in field.Name) fingerprint = unchecked((fingerprint ^ octet) * 1099511628211UL);
+            fingerprint = unchecked((fingerprint ^ 65536) * 1099511628211UL);
+            foreach (var octet in field.Value) fingerprint = unchecked((fingerprint ^ octet) * 1099511628211UL);
+            var slot = (int)((fingerprint ^ (fingerprint >> 32)) & 63);
+            var bit = 1UL << slot;
+            _recent ??= new ulong[64];
+            var repeated = (_occupied & bit) != 0 && _recent[slot] == fingerprint;
+            _recent[slot] = fingerprint;
+            _occupied |= bit;
+            return repeated;
         }
         internal byte[]? DequeueInstructions()
         {
@@ -94,6 +121,8 @@ namespace EmbedIO.Net.Internal.Http3
             _instructions.Clear();
             _pendingBytes = 0;
             _table = null;
+            _recent = null;
+            _occupied = 0;
         }
     }
 }

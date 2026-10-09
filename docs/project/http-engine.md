@@ -3678,3 +3678,84 @@ runtime on Windows; this is not older-runtime validation. The preliminary
 `TestResults/http-engine/qpack-stateful-*` logs and JSON reports. No production
 source or dependency changed in this increment. Full repository checks apply
 to the eventual committed head independently of these local campaign results.
+
+
+### Bound QPACK replacement admission under table pressure
+
+Response planning still inserts eligible fields immediately when unused table
+capacity can hold them. When insertion would require eviction, a candidate must
+match a previously observed fingerprint in a fixed 64-slot history. This keeps
+one-off fields from repeatedly replacing useful entries. The history is allocated
+lazily, contains 512 bytes of fingerprint payload, retains no header strings,
+and is released with the connection encoder. Deterministic fingerprints make
+experiments repeatable; they are not cryptographic identifiers. Slot/fingerprint
+collisions can change admission decisions, but never substitute a table field:
+actual encoding and table lookup continue to compare the complete strings.
+Sensitive, never-indexed and oversized fields do not enter the history. Existing
+acknowledgment, pinning, instruction-queue and blocked-stream limits remain in
+force. This is an internal compression choice with no public API change.
+
+Two regressions fail against the preceding production assembly and pass with
+the candidate: first-time replacement is refused until the candidate repeats,
+and 200 distinct full-sized responses leave an acknowledged entry available.
+The independent campaign primes targeted entries twice so it still exercises
+pinning and the 256-section fallback budget under either admission policy
+(659 structured sections now). Workload generation uses a separate random
+source from instruction fragmentation and acknowledgment ordering. Reports
+include a SHA-256 of every input section's stream, fields and delivery order;
+matching hashes and stateless byte totals were verified before comparing bytes.
+
+Matched-input Windows runs used seed 834971 with 100,000 operations per capacity:
+
+| Table capacity | Encoder bytes before / after | Encoder + section bytes before / after |
+| --- | --- | --- |
+| 0 | 0 / 0 | 15,230,836 / 15,230,836 |
+| 220 | 893,544 / 500,535 | 31,122,493 / 30,700,378 |
+| 4096 | 5,847,933 / 2,616,003 | 321,952,826 / 319,370,605 |
+
+The 4096-capacity result reduces insertion traffic by 55.3% and combined bytes
+by 0.80%. Its stateless baseline is 317,387,901 bytes: the candidate still spends
+0.62% more combined bytes on this deliberately changing workload. More adaptive
+admission and end-to-end performance work remain open. These figures exclude
+HTTP frame overhead, transport traffic and decoder-feedback bytes; they are
+not network-throughput measurements.
+
+The existing warm microbenchmark, run with tiered compilation disabled on
+Windows .NET 10.0.12 x64, reports repeated-header medians of 781.7 ns before and
+783.6 ns after, with the same 1064 allocated bytes and 8 section bytes per
+operation. Other warm datasets also retain their allocation/section-byte totals.
+Those timings show no material warm-path improvement; they do not measure the
+new pressure-path CPU cost. All four existing allocation budgets pass unchanged.
+Baseline assembly SHA-256 is
+`A62ED41F1B5537EEE873B1F237D05EE0FD71E1F131703C2A6239CE38F543A824`;
+candidate SHA-256 is
+`45B7BDA82B4B9EEC61B88576F0653C34574294A58BD948E144741313B03754C7`.
+The baseline was retained from the preceding optimization's validated candidate;
+its embedded source version predates that uncommitted build, so the hash, not
+that version string alone, identifies the measured binary.
+
+All 250 focused QPACK/QUIC tests pass on Windows and Linux with required QUIC.
+All 186 QPACK tests pass against the netstandard2.0 assembly under .NET 10 on
+Windows. Independent decoding passes another 300,000 operations per target
+assembly (net10.0 seed 834971; netstandard2.0 seed 712839). This does not establish
+older-runtime support or whole-engine fuzzing completion. Evidence, including
+the initial priming-assumption failure, is retained under
+`TestResults/http-engine/qpack-admission-*`. Analyzer guards, formatting and the
+changed production source's YARA scan pass without suppression.
+
+The pinning check explicitly repeats the competing field while previous sections
+remain outstanding, so first-sighting admission refusal cannot mask a missing
+pin. Removing the table's reference-ownership eviction check temporarily causes
+pylsqpack `DecompressionFailed` on stream 2060. Original source bytes were
+restored in `finally`; rebuilding reproduces the candidate DLL hash above, and
+the restored focused Windows/Linux and legacy-asset checks pass. The previous
+committed head 820a619 finishes all 32 checks successfully with two intentional
+skips. This is separate from the new candidate's forthcoming exact-head gates.
+
+Final changed-source Windows coverage passes 3,400 cases (3,395 successes,
+five existing skips) in 2m26s. The discovery floor is raised to 3,400; the
+five-minute suite deadline is unchanged. The final strengthened independent
+campaign passes 100,000 operations per capacity on both target assemblies,
+and before/after input hashes still match at all three capacities. Full local
+coverage also passed before the final pinning-test reinforcement; both logs
+are retained rather than replacing the earlier evidence.
