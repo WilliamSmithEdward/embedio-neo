@@ -76,19 +76,17 @@ namespace EmbedIO.Tests
         {
             // Initialize parser state without opening a listener or a socket.
             var connection = NewConnection(Stream.Null);
-            var buffered = (MemoryStream)(Field("_ms").GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            (buffered).Capacity = 8192;
-            Array.Fill(buffered.GetBuffer(), (byte)'X');
             var bytes = Encoding.ASCII.GetBytes("POST /items?q=42 HTTP/1.1\r\nHost: localhost\r\nContent-Length: 6\r\n\r\nabcdef");
+            var storage = Enumerable.Repeat((byte)'X', 17).Concat(bytes).Concat(new byte[13]).ToArray();
             var process = ConnectionType.GetMethod("ProcessInput", BindingFlags.Instance | BindingFlags.NonPublic);
             var position = 0;
             var complete = false;
             while (position < bytes.Length && !complete)
             {
                 var count = Math.Min(chunkSize, bytes.Length - position);
-                buffered.Write(bytes, position, count);
+                var segment = new ArraySegment<byte>(storage, 17 + position, count);
                 position += count;
-                complete = (bool)((process ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, new object[] { buffered }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                complete = (bool)((process ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, new object[] { segment }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
             Assert.That(complete, Is.True);
             using var remainder = new MemoryStream(bytes, position, bytes.Length - position);

@@ -36,8 +36,7 @@ namespace EmbedIO.Tests
             var connection = NewConnection(source);
             var context = Context(connection);
             context.Request.Headers["Content-Length"] = "8192";
-            var bufferedStream = (MemoryStream)(Field("_ms").GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            (bufferedStream).Write(body, 0, buffered);
+            Field("_pendingInput").SetValue(connection, new ArraySegment<byte>(body, 0, buffered));
             var input = context.Request.InputStream;
             var destination = new byte[consumed];
             input.ReadExactly(destination);
@@ -61,7 +60,7 @@ namespace EmbedIO.Tests
             var connection = NewConnection(source);
             var context = Context(connection);
             context.Request.Headers["Content-Length"] = "4096";
-            if (failure == "getter-disposed") ((MemoryStream)(Field("_ms").GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).Dispose();
+            if (failure == "getter-disposed") Field("_resourcesDisposed").SetValue(connection, 1);
             Assert.That(Flush(context), Is.EqualTo(expected));
             foreach (var bytes in source.Buffers) Assert.That(bytes, Is.All.Zero);
         }

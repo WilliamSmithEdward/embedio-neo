@@ -37,7 +37,7 @@ namespace EmbedIO.Net.Internal
         private readonly EndPointListener _epl;
         internal EndPointListener Endpoint => _epl;
         private Socket? _sock;
-        private MemoryStream? _ms;
+        private ArraySegment<byte> _pendingInput;
         private byte[]? _buffer;
         private HttpListenerContext _context;
         private RequestStream? _iStream;
@@ -45,7 +45,6 @@ namespace EmbedIO.Net.Internal
         private bool _contextBound;
         private int _sTimeout = 90000; // 90k ms for first request, 15k ms from then on
         private HttpListener? _lastListener;
-        private int _position;
         private string? _errorMessage;
 
         public HttpConnection(Socket sock, EndPointListener epl)
@@ -95,7 +94,7 @@ namespace EmbedIO.Net.Internal
                 {
                     if (_resourcesDisposed != 0) return;
                     buffer = _buffer ??= new byte[BufferSize];
-                    bufferedInput = _ms != null && _ms.Length > 0;
+                    bufferedInput = _pendingInput.Count > 0;
                     if (Reuses == 1) _sTimeout = 15000;
                     _ = _timer.Change(_sTimeout, Timeout.Infinite);
                 }
@@ -157,13 +156,13 @@ namespace EmbedIO.Net.Internal
         {
             if (_iStream == null)
             {
-                var requestBuffer = _ms ?? throw new InvalidOperationException("The request headers have not been read.");
-                var buffer = requestBuffer.GetBuffer();
-                var length = (int)requestBuffer.Length;
-                _ms = null;
-
-                _iStream = chunked ? new ChunkedRequestStream(Stream, buffer, _position, length - _position)
-                    : new RequestStream(Stream, buffer, _position, length - _position, contentLength);
+                if (Volatile.Read(ref _resourcesDisposed) != 0)
+                    throw new ObjectDisposedException(nameof(HttpConnection));
+                var pending = _pendingInput;
+                _pendingInput = default;
+                var buffer = pending.Array ?? Array.Empty<byte>();
+                _iStream = chunked ? new ChunkedRequestStream(Stream, buffer, pending.Offset, pending.Count)
+                    : new RequestStream(Stream, buffer, pending.Offset, pending.Count, contentLength);
             }
 
             return _iStream;
@@ -261,14 +260,10 @@ namespace EmbedIO.Net.Internal
             {
                 if (_sock != null && _resourcesDisposed == 0 && _forceClosing == 0 && !_draining)
                 {
-                    var pending = _iStream != null ? _iStream.BufferedRemainder
-                        : _ms != null ? new ArraySegment<byte>(_ms.GetBuffer(), _position, (int)_ms.Length - _position)
-                        : default;
-                    var previousBuffer = _ms;
+                    var pending = _iStream != null ? _iStream.BufferedRemainder : _pendingInput;
                     Reuses++;
                     Unbind();
                     InitWithPendingInput(pending);
-                    previousBuffer?.Dispose();
                     restart = true;
                 }
             }
@@ -292,16 +287,9 @@ namespace EmbedIO.Net.Internal
             _iStream = null;
             _oStream = null;
             Prefix = null;
-            // Adopt immutable unread bytes instead of copying the tail for each pipelined request.
-            // The preceding body is complete and cannot expose this storage again.
-            if (pending.Count > 0 && pending.Array is { } bytes)
-            {
-                _ms = new MemoryStream(bytes, 0, bytes.Length, true, true);
-                _ms.SetLength(pending.Offset + pending.Count);
-                _ms.Position = _ms.Length;
-                _position = pending.Offset;
-            }
-            else { _ms = new MemoryStream(); _position = 0; }
+            // The completed body relinquishes its unread tail before this reader
+            // may reuse the connection buffer. Partial head lines are owned by the parser.
+            _pendingInput = pending;
             _headReader.Reset();
             _responseFinishing = 0;
             _errorMessage = null;
@@ -321,27 +309,9 @@ namespace EmbedIO.Net.Internal
             // because the web browser has to measure the content length first.
             while (true)
             {
-                var input = _ms;
                 var buffer = _buffer;
-                if (input == null || buffer == null) { CloseSocket(); return; }
-                try
-                {
-                    if (offset > 0)
-                    {
-                        if (input.Capacity < offset)
-                        {
-                            input.Dispose();
-                            input = new MemoryStream(Math.Max(offset, 256));
-                            _ms = input;
-                        }
-                        input.Write(buffer, 0, offset);
-                    }
-                }
-                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-                {
-                    CloseSocket();
-                    return;
-                }
+                if (buffer == null) { CloseSocket(); return; }
+                var input = bufferedInput ? _pendingInput : new ArraySegment<byte>(buffer, 0, offset);
 
                 if (offset == 0 && !bufferedInput)
                 {
@@ -414,18 +384,23 @@ namespace EmbedIO.Net.Internal
 
         // true -> done processing
         // false -> need more input
-        private bool ProcessInput(MemoryStream ms)
+        private bool ProcessInput(ArraySegment<byte> input)
         {
-            var buffer = ms.GetBuffer();
-            var length = (int)ms.Length;
-            while (_position < length)
+            var buffer = input.Array ?? Array.Empty<byte>();
+            var position = input.Offset;
+            var end = position + input.Count;
+            while (position < end)
             {
                 if (_errorMessage != null) return true;
                 try
                 {
-                    var result = _headReader.Read(buffer, _position, length - _position, out var used, out var line);
-                    _position += used;
-                    if (result == Http1HeadReadResult.Complete) return true;
+                    var result = _headReader.Read(buffer, position, end - position, out var used, out var line);
+                    position += used;
+                    if (result == Http1HeadReadResult.Complete)
+                    {
+                        _pendingInput = new ArraySegment<byte>(buffer, position, end - position);
+                        return true;
+                    }
                     if (result == Http1HeadReadResult.NeedMoreData) break;
                     var value = line ?? throw new InvalidDataException("Missing request head line.");
                     if (result == Http1HeadReadResult.RequestLine) _context.HttpListenerRequest.SetRequestLine(value);
@@ -438,11 +413,9 @@ namespace EmbedIO.Net.Internal
                 }
             }
             if (_errorMessage != null) return true;
-            // Only a partial line remains in the reader; compact the transport
-            // buffer without retaining input already consumed by framing.
-            ms.SetLength(0);
-            ms.Position = 0;
-            _position = 0;
+            // The head reader owns partial-line bytes; the next socket read can
+            // overwrite this consumed segment without copying or compaction.
+            _pendingInput = default;
             return false;
         }
 
@@ -498,15 +471,13 @@ namespace EmbedIO.Net.Internal
 
         private void DisposeTransportResources()
         {
-            MemoryStream? buffered;
             RequestStream? input;
             lock (_connectionSync)
             {
                 if (_resourcesDisposed != 0) return;
                 _resourcesDisposed = 1;
-                buffered = _ms;
                 input = _iStream;
-                _ms = null;
+                _pendingInput = default;
                 _iStream = null;
                 _buffer = null;
                 _headReader.Reset();
@@ -514,7 +485,6 @@ namespace EmbedIO.Net.Internal
             try
             {
                 _timer.Dispose();
-                buffered?.Dispose();
                 input?.Dispose();
                 Stream.Dispose();
             }

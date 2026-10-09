@@ -254,6 +254,44 @@ namespace EmbedIO.Tests
                             .SetName($"FixedLengthBodiesAndSequentialRequestsPreserveBoundaries({secure},{fragment},{name})");
         }
 
+        [TestCase(false, false, 8191)]
+        [TestCase(false, false, 8192)]
+        [TestCase(false, false, 16385)]
+        [TestCase(true, false, 8191)]
+        [TestCase(true, false, 8192)]
+        [TestCase(true, false, 16385)]
+        [TestCase(false, true, 8191)]
+        [TestCase(false, true, 8192)]
+        [TestCase(false, true, 16385)]
+        [TestCase(true, true, 8191)]
+        [TestCase(true, true, 8192)]
+        [TestCase(true, true, 16385)]
+        public async Task PipelineAfterPartiallyReadBodySurvivesTransportBufferReuse(bool secure, bool chunked, int length)
+        {
+            using var fixture = new RawListener(secure);
+            await fixture.Connect();
+            var payload = new string('b', length);
+            var framing = chunked ? "Transfer-Encoding: chunked" : $"Content-Length: {length}";
+            var body = chunked ? $"{length:x}\r\n{payload}\r\n0\r\nX-Trailer: end\r\n\r\n" : payload;
+            await fixture.Write($"POST /body HTTP/1.1\r\nHost: 127.0.0.1\r\n{framing}\r\n\r\n{body}GET /second HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Padding: {new string('p', 8200)}\r\n\r\nGET /third HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n", 8192);
+            var first = await fixture.Listener.GetContextAsync(fixture.Token);
+            Assert.That(first.Request.RawTarget, Is.EqualTo("/body"));
+            var prefix = new byte[13];
+            await first.Request.InputStream.ReadExactlyAsync(prefix, fixture.Token);
+            Assert.That(prefix, Is.All.EqualTo((byte)'b'));
+            Respond(first);
+            Assert.That(await fixture.ReadHeaders(), Does.StartWith("HTTP/1.1 204 "));
+            var second = await fixture.Listener.GetContextAsync(fixture.Token);
+            Assert.That(second.Request.RawTarget, Is.EqualTo("/second"));
+            Assert.That(second.Request.Headers["X-Padding"], Is.EqualTo(new string('p', 8200)));
+            Respond(second);
+            Assert.That(await fixture.ReadHeaders(), Does.StartWith("HTTP/1.1 204 "));
+            var third = await fixture.Listener.GetContextAsync(fixture.Token);
+            Assert.That(third.Request.RawTarget, Is.EqualTo("/third"));
+            Respond(third, false);
+            Assert.That(await fixture.ReadHeaders(), Does.StartWith("HTTP/1.1 204 "));
+        }
+
         private static void Respond(IHttpContextImpl context, bool keepAlive = true)
         {
             context.Response.StatusCode = 204;

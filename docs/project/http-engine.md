@@ -4467,3 +4467,57 @@ the pinned YARA scan of production source pass. This increment adds no productio
 dependency. Codec CPU/native memory, compression profiles, coding chains,
 Zstandard/shared dictionaries and broad comparative server performance remain
 separate completion work. Required checks on the pushed head remain necessary.
+### Direct HTTP/1 socket-buffer handoff
+
+HTTP/1 connections now feed byte segments directly into Http1HeadReader instead
+of copying each socket read into a MemoryStream. The head reader owns incomplete
+line state. After the terminating empty line, the body stream borrows the unread
+segment; after body completion, the next head reader borrows its remaining tail.
+Only consumed storage may be overwritten by the next socket read. The per-request
+MemoryStream, cursor field, compaction and disposal path are removed. Partial-head
+limits, request semantics, TLS/HTTP2 dispatch and body-drain behavior are retained.
+This replaces another inherited transport component; it is not completion of the
+whole TCP listener replacement or its default/deprecation transition.
+
+Direct parser fixtures now pass bounded segments, including nonzero offsets and
+sentinel storage outside the segment. The obsolete disposed-staging-buffer
+fixture now injects connection disposal before the request input getter, retaining
+the existing flush/disposal assertions. Twelve added TCP/TLS cases span fixed and
+chunked bodies of 8,191, 8,192 and 16,385 bytes. Each reads only 13 body bytes,
+closes the response so the listener drains the rest, and checks two pipelined
+requests, including an 8,200-byte header spanning another transport read.
+
+Both targets build with zero warnings/errors. Final Windows coverage passes
+3,514 cases (3,509 passed, five skipped, zero failed); all 207 selected parser,
+body/pipeline/lifecycle cases pass on pinned Linux .NET 10 and against the actual
+netstandard2.0 assembly on Windows .NET 10. No older-runtime execution is claimed.
+All four allocation-budget groups, source/format guards and the pinned
+production-source YARA scan pass.
+
+The parser benchmark uses one compiled runner against retained baseline and
+candidate binaries, three alternating process pairs and five measured rounds per
+process, with tiered compilation disabled on both platforms. Context construction,
+header parsing, handoff and validation are included; sockets, URI finalization,
+connection construction and application work are excluded. Reflection observes
+the old boxed cursor or the new boxed segment, so observation costs differ. The
+measured change is 3,368 to 3,312 managed bytes/request (56 fewer), not a pure
+measurement of production allocation removal. Final process-median times for
+batches 1/16/64 are 1,980/1,337/1,322 to 1,980/1,301/1,301 ns on Windows, and
+3,681/2,259/2,281 to 3,650/2,251/2,243 ns on Linux. Small timing changes do not
+establish a throughput improvement. An earlier candidate was modestly slower
+on Linux; removing repeated per-header pending-segment publication preceded the
+final comparison. All samples and that initial result remain under ignored
+TestResults/http-engine. Native allocations and retained connection memory are
+outside this measurement.
+
+Shared runner SHA-256: 22DB1D3A858BB472A32602B1637D313B260B73B2F0738354CA86CCDD100BC837.
+Baseline core: 42B163D5057EF8419B5C28CD7A64A0A2D0E8D946839BD4F0115B66F94785E3C5.
+Final candidate core: 33196B7A050D29EEB8B8632F109C4CE73139C2E88DFC34AE84E1E25D3831E1DE.
+
+CI 37896135281 on the preceding Brotli head failed outside its added cases:
+Linux reported an ObjectDisposedException from a subsequent QUIC response write
+after reset handling disposed its exchange; macOS reproduced the retained
+MsQuic immediate-rebind failure; the macOS upstream compatibility process timed
+out receiving WebSocket data and aborted. Job logs and compatibility artifacts
+are retained. These are outstanding investigations, not resolved by this input
+handoff change or by a later passing rerun. Fresh exact-head checks remain required.

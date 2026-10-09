@@ -105,8 +105,9 @@ cases check the exact raw chunk framing separately.
 
 `--engine-parser` measures context construction, header parsing and handoff for
 buffered batches of 1, 16 and 64 requests. It validates the resulting request path,
-header value and complete consumption. Reflection observations are included equally
-on both revisions; URI finalization, sockets and application work are excluded.
+header value and complete consumption. Reflection observes the old MemoryStream/cursor or the new pending byte segment;
+their boxing and field-access costs differ and are included. URI finalization,
+sockets and application work are excluded.
 Use the same runner binary against baseline and candidate core assemblies. These
 figures are parser microbenchmarks, not end-to-end server throughput.
 

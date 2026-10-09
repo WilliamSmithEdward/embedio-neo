@@ -17,9 +17,31 @@ internal static class EngineParser
         (type.GetField("_connectionSync", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value.")).SetValue(connection, new object());
         (type.GetField("<Stream>k__BackingField", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value.")).SetValue(connection, Stream.Null);
         var initialize = (type.GetMethod("InitWithPendingInput", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value.")).CreateDelegate<Action<ArraySegment<byte>>>(connection);
-        var process = (type.GetMethod("ProcessInput", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value.")).CreateDelegate<Func<MemoryStream, bool>>(connection);
-        var streamField = (type.GetField("_ms", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
-        var positionField = (type.GetField("_position", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
+        var processMethod = type.GetMethod("ProcessInput", flags) ?? throw new InvalidOperationException("Missing parser entry point.");
+        Func<ArraySegment<byte>, ArraySegment<byte>> parse;
+        if (processMethod.GetParameters()[0].ParameterType == typeof(MemoryStream))
+        {
+            var process = processMethod.CreateDelegate<Func<MemoryStream, bool>>(connection);
+            var streamField = type.GetField("_ms", flags) ?? throw new InvalidOperationException("Missing baseline staging buffer.");
+            var positionField = type.GetField("_position", flags) ?? throw new InvalidOperationException("Missing baseline cursor.");
+            parse = _ =>
+            {
+                using var stream = (MemoryStream)(streamField.GetValue(connection) ?? throw new InvalidOperationException("Missing baseline buffer."));
+                if (!process(stream)) throw new InvalidOperationException("Incomplete request.");
+                var position = (int)(positionField.GetValue(connection) ?? throw new InvalidOperationException("Missing baseline position."));
+                return new ArraySegment<byte>(stream.GetBuffer(), position, (int)stream.Length - position);
+            };
+        }
+        else
+        {
+            var process = processMethod.CreateDelegate<Func<ArraySegment<byte>, bool>>(connection);
+            var pendingField = type.GetField("_pendingInput", flags) ?? throw new InvalidOperationException("Missing candidate pending bytes.");
+            parse = input =>
+            {
+                if (!process(input)) throw new InvalidOperationException("Incomplete request.");
+                return (ArraySegment<byte>)(pendingField.GetValue(connection) ?? throw new InvalidOperationException("Missing pending segment."));
+            };
+        }
         var contextField = (type.GetField("_context", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
         var errorField = (type.GetField("_errorMessage", flags) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
         var rows = new List<object>();
@@ -33,13 +55,12 @@ internal static class EngineParser
                 for (var index = 0; index < batch; index++)
                 {
                     initialize(pending);
-                    using var stream = (MemoryStream)(streamField.GetValue(connection) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
-                    if (!process(stream) || errorField.GetValue(connection) != null) throw new InvalidOperationException("Parser failed.");
+                    var remaining = parse(pending);
+                    if (errorField.GetValue(connection) != null) throw new InvalidOperationException("Parser failed.");
                     var context = (IHttpContext)(contextField.GetValue(connection) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
                     if (context.Request.RawTarget != "/baseline11?a=13&b=42" || context.Request.Headers["X-Padding"]?.Length != 128)
                         throw new InvalidOperationException("Parsed request changed.");
-                    var position = (int)(positionField.GetValue(connection) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
-                    pending = new ArraySegment<byte>(stream.GetBuffer(), position, (int)stream.Length - position);
+                    pending = remaining;
                 }
                 if (pending.Count != 0) throw new InvalidOperationException("Pipeline was not fully consumed.");
             }
@@ -65,7 +86,7 @@ internal static class EngineParser
         {
             runtime = RuntimeInformation.FrameworkDescription,
             os = RuntimeInformation.OSDescription,
-            note = "Parser/context construction and buffered pipeline handoff, including reflection observations. No sockets or URI finalization; not end-to-end throughput.",
+            note = "Parser/context construction and pipeline handoff with one shared runner. Reflection observes baseline cursor (boxed int) or candidate segment (boxed struct); these observation costs differ and are included. No sockets or URI finalization; not end-to-end throughput.",
             rows
         },
             new JsonSerializerOptions { WriteIndented = true }));
