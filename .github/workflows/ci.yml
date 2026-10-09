@@ -11,6 +11,10 @@ on:
         description: Regenerate test-only MAUI HTTPS dependency locks for review
         type: boolean
         default: false
+      quic-rebind-probe:
+        description: Trace native macOS UDP bind/close ordering in the independent QUIC rebind probe
+        type: boolean
+        default: false
       runtime-close-probe:
         description: Run the independent .NET 10.0.12 close diagnostic on all three desktop platforms
         type: boolean
@@ -84,6 +88,28 @@ jobs:
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
         run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 3400 --coverlet
+      - name: Trace native macOS QUIC dispose and rebind ordering
+        if: always() && runner.os == 'macOS' && inputs.quic-rebind-probe == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p TestResults/quic-rebind-probe
+          dotnet restore test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj --locked-mode
+          dotnet build test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj -c Release --no-restore
+          trace_library="$RUNNER_TEMP/libembedio_quic_trace.dylib"
+          clang -std=c11 -O2 -Wall -Wextra -Werror -dynamiclib \
+            test/EmbedIO.RuntimeCloseProbe/quic_trace.c -o "$trace_library"
+          codesign --force --sign - "$trace_library"
+          clang --version > TestResults/quic-rebind-probe/compiler.txt
+          shasum -a 256 "$trace_library" > TestResults/quic-rebind-probe/tracer.sha256
+          nm -u "$RUNNER_TEMP/embedio-msquic/libmsquic/2.6.2/lib/libmsquic.2.6.2.dylib" > TestResults/quic-rebind-probe/native-imports.txt
+          DYLD_PRINT_LIBRARIES=1 \
+          DYLD_INSERT_LIBRARIES="$trace_library" \
+          EMBEDIO_QUIC_TRACE_LIBRARY="$trace_library" \
+          EMBEDIO_QUIC_TRACE_OUTPUT="$PWD/TestResults/quic-rebind-probe/native.jsonl" \
+            test/EmbedIO.RuntimeCloseProbe/bin/Release/net10.0/EmbedIO.RuntimeCloseProbe \
+              --quic-rebind 2048 TestResults/quic-rebind-probe \
+              2> TestResults/quic-rebind-probe/loader.log
       - name: Verify independent HPACK interoperability
         if: runner.os == 'Linux'
         shell: bash

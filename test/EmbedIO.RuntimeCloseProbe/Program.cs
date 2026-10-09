@@ -9,6 +9,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
+var quicResult = await QuicRebindProbe.Run(args);
+if (quicResult.HasValue) return quicResult.Value;
+
 var iterations = args.Length > 0 ? int.Parse(args[0], CultureInfo.InvariantCulture) : 1024;
 var parallelism = args.Length > 1 ? int.Parse(args[1], CultureInfo.InvariantCulture) : 16;
 var output = args.Length > 2 ? args[2] : "TestResults/runtime-close-probe/result.json";

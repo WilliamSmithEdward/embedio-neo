@@ -3818,3 +3818,47 @@ cases, 3,368 successes, 31 skips and this one failure. This uses no HTTP engine
 or QPACK code, so the log does not indicate a QPACK regression; it also does not
 establish the native failure's precise cause. The log is retained and no retry,
 suppression or resolution claim is introduced. The PR remains draft/unmerged.
+
+
+### Opt-in native QUIC rebind ordering trace
+
+The independent .NET 10.0.12 runtime probe now accepts
+`--quic-rebind 2048 TestResults/quic-rebind-probe`. It opens an unconnected
+loopback QUIC listener, awaits disposal, and immediately rebinds its endpoint,
+stopping at the first failure. It has no EmbedIO reference, certificate, client
+traffic, retry or delay between cycles. Managed events record each bind/dispose
+boundary. A 100 ms observation interval occurs only after the result, allowing
+late cleanup events to be recorded without changing that result.
+
+The CI workflow has a default-false `quic-rebind-probe` dispatch input. When
+explicitly selected, the macOS test job builds a test-only C dylib and uses the
+SDK's [dyld interposing API](https://github.com/apple-oss-distributions/dyld/blob/main/include/mach-o/dyld-interposing.h)
+to observe UDP bind/close calls in that one probe process. It records descriptor,
+port, result, errno and monotonic begin/end timestamps plus managed markers on
+the same native clock. Records stay in a fixed 131,072-entry memory buffer until
+explicit flush; no trace-file writes occur between listener operations. Failed
+binds retain their actual errno. The recorder rejects dropped/incomplete records,
+untracked descriptor ranges and absent bind/close coverage. A separate local UDP
+canary checks basic hook coverage. Artifact imports/hashes help verify which
+native symbols/library were used. This code is neither shipped nor injected
+into normal tests or application processes, and does not change the ordinary
+regression, runtime library, socket options, retry policy or security settings.
+
+MsQuic v2.6.2 resolves to commit
+`819ab74f851ee168504cbc392ec32e7bed1d82e9`; the retained kqueue source was checked
+against that exact revision. Its asynchronous cleanup path makes late descriptor
+closure a hypothesis worth testing, but a source path is not an observed event
+ordering. Native timestamps are needed to distinguish a still-open descriptor
+from a kernel bind failure after descriptor closure. Instrumentation can change
+scheduling; a passing trace run alone cannot invalidate the uninstrumented
+failures. The native trace is an observation tool, not a workaround.
+
+Local validation: the standalone managed probe passes 2,048 cycles on Windows
+and isolated Linux .NET 10.0.12/MsQuic 2.6.2. Its existing TCP-close mode still
+passes eight connections per scenario (16 total). A Linux C self-test exercises
+the recorder's successful bind, address-in-use failure, errno preservation and
+close path with no dropped or incomplete records; this tests the recorder, not
+macOS dyld interposition. The C# build/analyzers, source guards and probe-directory
+YARA scan pass. The Linux SDK image has no C compiler, so recorder validation
+uses GCC 14.2.0 in the already pinned Python build image; no Python code or runtime
+is added to the production engine. macOS trace execution remains pending.
