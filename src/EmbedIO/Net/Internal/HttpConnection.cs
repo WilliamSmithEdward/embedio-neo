@@ -173,6 +173,24 @@ namespace EmbedIO.Net.Internal
             return _iStream;
         }
 
+        internal Stream TakeUpgradeStream()
+        {
+            lock (_connectionSync)
+            {
+                if (_resourcesDisposed != 0 || _sock == null)
+                    throw new ObjectDisposedException(nameof(HttpConnection));
+                var pending = _iStream != null ? _iStream.BufferedRemainder : _pendingInput;
+                _pendingInput = default;
+                if (pending.Count == 0) return Stream;
+                // Isolate the unread protocol tail from HTTP's reusable read buffer.
+                // The connection continues to own the underlying transport.
+                var prefix = new byte[pending.Count];
+                Buffer.BlockCopy(pending.Array ?? throw new InvalidOperationException("Missing upgrade bytes."),
+                    pending.Offset, prefix, 0, prefix.Length);
+                return new Http2.PrefixReadStream(Stream, prefix, prefix.Length);
+            }
+        }
+
         public ResponseStream GetResponseStream() => _oStream ??= new ResponseStream(Stream, _context.HttpListenerResponse, _context.Listener?.IgnoreWriteExceptions ?? true);
 
         internal void SetError(string message) => _errorMessage = message;
