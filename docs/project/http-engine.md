@@ -5084,3 +5084,66 @@ assets build without warnings; four allocation-budget groups, source/parser
 guards, changed-file whitespace, shell syntax and pinned source YARA checks pass.
 The discovery floor increases by six. Fresh disposal-head CI remains required;
 the full engine goal and the native crash investigation remain incomplete.
+
+### QUERY format policy and Structured Fields discovery
+
+The additive, explicitly applied QueryFormatPolicy accepts configured HTTP media
+ranges and parameter constraints. It precomputes an immutable Accept-Query
+Structured Fields list and ordinary Accept media-range list, advertises discovery
+at the resource where it is applied and rejects unsupported exact QUERY requests
+with 415. Invalid/ambiguous actual request types yield 400. Other methods retain
+their processing behavior. Wildcards are limited to type/* and */*; parameters
+are constrained by name/value, with charset case-insensitive and other values
+exact after HTTP quoted-string decoding. Discovery uses SF String values, including
+numeric-looking parameters, ASCII-lowercase keys and correct quote/backslash
+escaping. No existing handler/default is opted into this policy automatically.
+
+The [request guide](../guides/getting-started/requests.md#advertise-and-validate-query-formats)
+explains use, representability constraints and remaining application responsibilities.
+This completes a format/discovery primitive, not all QUERY semantics: query content
+validation, safe/idempotent handling, conditional/range/cache behavior and equivalent
+resource mappings remain separate requirements.
+
+51 new cases plus the existing QUERY cases pass locally (78 selected total),
+including MIME ranges, parameter cases, configuration ownership, representability,
+GET/HEAD/OPTIONS discovery, 415 fields, healthy successor requests and exact HTTP/2
+and HTTP/3 responses. HttpClient normalized the first lowercase-method fixtures;
+raw TCP fixtures now prove exact lowercase wire methods retain their behavior.
+The policy was not weakened to accommodate client normalization. All 78 selected
+cases pass on pinned Linux with QUIC required. All 47 applicable policy cases pass
+against the actual netstandard2.0 assembly hosted by Windows .NET 10, excluding
+its unsupported HTTP/2 and HTTP/3 transports; no older-runtime execution is claimed.
+
+An independent http-sfv 0.9.9 parser with typing-extensions 4.16.0 verifies 1,000
+seeded generated fields, including every printable ASCII parameter-character
+category, quotes, backslashes, numeric-looking values, leading-digit media types
+and wildcard items. Parsed values equal the intended source values. The test-only
+peer, frozen dependency versions and records are under ignored
+TestResults/http-engine/query-format-peer and query-sf-peer; Python is absent from
+production. Full changed-source coverage and final checks remain pending here.
+
+Matching now compares media-type segments directly instead of allocating type/
+subtype substrings twice, and avoids creating an empty parameter collection for
+parameterless requests. All syntax, ambiguity and configured-parameter checks
+remain intact. In an isolated Windows paired-process comparison (three alternating
+pairs, five rounds of 100,000 matches, 10,000 warmups, tiering disabled and identical
+runner bytes c90ee4daf7e84896705ffb6b81ad47bfb1f73ab05e73f0c2299594de319cff80),
+exact matching improves from 115 ns / 264 bytes to 75 ns / 32 bytes. Wildcard
+matching is 108 to 71 ns with the same allocation reduction; parameter matching
+is 192 ns / 424 bytes to 177 ns / 296 bytes, and escaped quoted parameters are
+227 ns / 608 bytes to 197 ns / 448 bytes. These measure only policy matching,
+not complete QUERY dispatch or server throughput. The remaining allocation
+includes framework media parsing. Frozen variants and raw rounds are under
+ignored TestResults/http-engine/query-policy-before, query-policy-after and
+query-policy-summary.json. The exact request-guide fragment compiles and configures
+a server successfully; its separate text-search demonstration is not claimed as
+a complete RFC implementation. Final optimized-source coverage remains pending.
+
+Final optimized-source Windows coverage passes 4,057 cases: 4,052 passed, five
+skipped and zero failed in 2m32s. The final Linux required-QUIC set passes all 78
+cases, and the actual legacy asset passes all 47 applicable cases. Both assets
+build without warnings. Four allocation-budget groups, source/parser guards,
+changed-file whitespace, shell syntax and pinned source YARA checks pass. The
+51 added cases raise the discovery floor accordingly. No existing application
+was opted into the policy; exact-head CI and the full engine requirements remain
+outstanding.

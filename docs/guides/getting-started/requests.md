@@ -215,3 +215,53 @@ an absent compressed stream is malformed. Standards zlib selection, gzip
 envelope validation and response coding-chain support remain development work.
 Next: [Serve HTML and files](files.md) alongside this API, or
 [await an outbound HTTP request](../async-outbound-requests.md).
+
+## Advertise and validate QUERY formats
+
+The unreleased engine branch adds `QueryFormatPolicy` for resources that support
+QUERY. Create the policy once and apply it before writing response headers:
+
+```csharp
+var formats = new QueryFormatPolicy("text/plain;charset=utf-8");
+
+server.WithAction("/search", HttpVerbs.Any, async context =>
+{
+    formats.Apply(context);
+    context.Response.Headers[HttpHeaderNames.Allow] = "GET, HEAD, OPTIONS, QUERY";
+    if (context.Request.HttpMethod == "QUERY")
+    {
+        var term = await context.GetRequestBodyAsStringAsync();
+        var names = new[] { "alpha", "beta", "gamma" };
+        var matches = names.Where(name => name.IndexOf(term,
+            StringComparison.OrdinalIgnoreCase) >= 0);
+        await context.SendStringAsync(string.Join("\n", matches), "text/plain",
+            WebServer.Utf8NoBomEncoding);
+    }
+    else if (context.Request.HttpVerb is HttpVerbs.Get or HttpVerbs.Head or HttpVerbs.Options)
+        await context.SendStringAsync("Send a UTF-8 text QUERY to search.",
+            "text/plain", WebServer.Utf8NoBomEncoding);
+    else
+        throw new HttpException(405);
+});
+```
+
+This fragment uses `System` and `System.Linq` and an existing configured `server`.
+It advertises `Accept-Query: "text/plain";charset="utf-8"` on that resource's
+responses, including discovery requests. The query component of the resource URI
+does not change the policy. An unsupported QUERY Content-Type raises HTTP 415
+with both `Accept-Query` and ordinary `Accept` format information. Missing,
+wildcard or ambiguous Content-Type information is rejected with HTTP 400.
+
+Media ranges support exact types, `type/*` and `*/*`. Configured parameters are
+required constraints; extra request parameters are allowed. Names and media types
+are case insensitive; charset values are case insensitive, while other configured
+parameter values match exactly after quoted-string decoding. Discovery uses
+Structured Fields strings, including numeric-looking parameter values. Parameter
+names must fit Structured Fields keys and advertised values must be printable
+ASCII; unrepresentable or duplicate configured parameters are rejected at setup.
+
+The policy does not alter other methods' request processing, route requests,
+read content, evaluate queries or implement conditional/range/cache semantics.
+Handlers must validate query content and remain safe and idempotent. This example
+performs a read-only text search; applying a policy does not make a mutating handler
+safe. See [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-3).
