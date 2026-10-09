@@ -64,13 +64,13 @@ while ((line = Console.ReadLine()) != null)
         {
             var index = (long)(Property(added, "Index") ?? throw new Exception("Missing index"));
             var stream = root.GetProperty("stream").GetInt64();
-            if (!Convert.ToBoolean(EncoderCall(encoderFeedback, "TryRegisterSection", stream, new[] { index }))) throw new Exception("Reference admission failed");
-            using var section = new MemoryStream();
-            var write = assembly.GetType("EmbedIO.Net.Internal.Http3.QpackInteger", true)?.GetMethod("Write", BindingFlags.Static | BindingFlags.NonPublic)
-                ?? throw new Exception("Missing integer writer");
-            write.Invoke(null, new object[] { section, (index + 1) % (2L * (int.Parse(args[1]) / 32)) + 1, 8, (byte)0 });
-            section.WriteByte(0); section.WriteByte(128);
-            insertion = new { index, instructions = Convert.ToHexString((byte[])(Property(added, "Instructions") ?? throw new Exception("Missing instructions"))), wire = Convert.ToHexString(section.ToArray()) };
+            var fieldArray = Array.CreateInstance(field.GetType(), 1);
+            fieldArray.SetValue(field, 0);
+            var section = encoder.GetMethod("EncodeReferenced", BindingFlags.Static | BindingFlags.NonPublic)?.Invoke(null,
+                new object[] { fieldArray, new[] { index }, (long)int.Parse(args[1]), 65536, 65536 }) ?? throw new Exception("Missing encoded section");
+            var references = (long[])(Property(section, "References") ?? throw new Exception("Missing references"));
+            if (!Convert.ToBoolean(EncoderCall(encoderFeedback, "TryRegisterSection", stream, references))) throw new Exception("Reference admission failed");
+            insertion = new { index, instructions = Convert.ToHexString((byte[])(Property(added, "Instructions") ?? throw new Exception("Missing instructions"))), wire = Convert.ToHexString((byte[])(Property(section, "Wire") ?? throw new Exception("Missing wire"))) };
         }
     }
     else if (operation == "encoder-feedback")

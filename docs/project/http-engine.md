@@ -3305,3 +3305,50 @@ inspected; its passing macOS run does not erase the independently reproduced
 raw-runtime rebind failure on 23eddfc. Required checks must run again on the table
 increment. The production project has no Python dependency; the Python codec
 comparison remains isolated in the non-packable test tooling.
+
+
+### Dynamic QPACK field-section serialization
+
+The C# encoder now serializes caller-selected exact dynamic matches, using the
+peer's maximum table capacity for Required Insert Count wrapping and that required
+count as Base. The owner supplies absolute indices and must pin the returned
+unique reference set before publishing the section. Field order and repeated
+fields are preserved. Static exact matches remain static; sensitive names and
+explicit never-indexed fields remain literal regardless of a supplied index.
+References require capacity for at least one entry, use full 62-bit counters,
+and remain subject to encoded and decoded section limits and octet validation.
+The stateless path shares field serialization without changing its wire format.
+
+Twenty new cases exercise count wrapping, relative indices, repeated references,
+full-width arithmetic, sensitive fields, zero/small capacity, invalid indices,
+invalid octets and exact size budgets. All 160 focused QPACK cases pass on Windows,
+isolated Linux, and the netstandard2.0 assembly under a .NET 10 host. The pinned
+pylsqpack interop tool now uses this production field-section encoder instead of
+a synthetic single-reference section, and still verifies dynamic insertion,
+eviction, decoding and acknowledgments on both assets at capacities 0, 220 and
+4096. Both projects build without warnings; formatting, analyzer/suppression
+guards and all four rebuilt allocation budgets pass. The discovery floor is 3,360.
+
+This completes another codec component, not live dynamic response compression.
+The connection owner still needs to serialize table/section planning, publish
+encoder instructions, enforce blocked-stream policy and release references on
+transport failure. The live exchange still calls the stateless encoder. Evidence
+is retained under TestResults/http-engine/qpack-section-* and the independent
+interop reports; no throughput improvement or complete conformance is claimed.
+
+
+The preceding table head 2c5b648 failed Windows CI 37874035071 in
+IndependentDotNetHttp2ClientEchoesAcrossBothFlowWindows(1): a transport read
+propagated IOException wrapping SocketException/OperationAborted (995) through
+Http2Dispatcher.RunAsync during the fixture shutdown path. All 3,340 cases were
+reported (3,336 passed, three skipped, one failure). The log is retained as
+qpack-table-windows-ci.log. This is an outstanding HTTP/2 cancellation/lifecycle
+investigation, not a QPACK assertion failure or a confirmed fix. Do not treat the
+preceding head as green or suppress the failure merely because local runs pass.
+
+
+The changed-source Windows coverage run for dynamic field-section serialization
+passed: 3,360 total, 3,355 successes and five existing skips in 2m 27s. The new
+source passes the pinned YARA scan. This local pass does not resolve the captured
+HTTP/2 cancellation failure or the macOS raw QUIC rebind limitation; exact-head
+CI and the remaining development work still apply.

@@ -7,7 +7,7 @@ namespace EmbedIO.Net.Internal.Http3
 {
     // A stateless encoder is valid at any peer table capacity and cannot block a
     // peer stream. Dynamic response compression can be added independently.
-    internal static class QpackEncoder
+    internal static partial class QpackEncoder
     {
         private static readonly Dictionary<(string Name, string Value), int> Exact = new();
         private static readonly Dictionary<string, int> Names = new(StringComparer.Ordinal);
@@ -23,6 +23,15 @@ namespace EmbedIO.Net.Internal.Http3
 
         internal static byte[] Encode(HpackField[] fields, int maximumEncodedBytes, int maximumDecodedBytes)
         {
+            Validate(fields, maximumEncodedBytes, maximumDecodedBytes);
+            using var output = new MemoryStream(Math.Min(maximumEncodedBytes, 256));
+            output.WriteByte(0);
+            output.WriteByte(0);
+            foreach (var field in fields) WriteField(output, field, maximumEncodedBytes);
+            return output.ToArray();
+        }
+        private static void Validate(HpackField[] fields, int maximumEncodedBytes, int maximumDecodedBytes)
+        {
             if (fields == null) throw new ArgumentNullException(nameof(fields));
             if (maximumEncodedBytes < 0) throw new ArgumentOutOfRangeException(nameof(maximumEncodedBytes));
             if (maximumDecodedBytes < 0) throw new ArgumentOutOfRangeException(nameof(maximumDecodedBytes));
@@ -34,33 +43,29 @@ namespace EmbedIO.Net.Internal.Http3
                 total += (long)field.Name.Length + field.Value.Length + 32;
                 if (total > maximumDecodedBytes) throw Limit();
             }
-            using var output = new MemoryStream(Math.Min(maximumEncodedBytes, 256));
-            output.WriteByte(0);
-            output.WriteByte(0);
-            foreach (var field in fields)
+        }
+        private static void WriteField(MemoryStream output, HpackField field, int maximumEncodedBytes)
+        {
+            var sensitive = field.NeverIndexed || Sensitive(field.Name);
+            if (!sensitive && Exact.TryGetValue((field.Name, field.Value), out var exact))
             {
-                var sensitive = field.NeverIndexed || Sensitive(field.Name);
-                if (!sensitive && Exact.TryGetValue((field.Name, field.Value), out var exact))
-                {
-                    Ensure(output, IntegerLength(exact, 6), maximumEncodedBytes);
-                    QpackInteger.Write(output, exact, 6, 192);
-                    continue;
-                }
-                var value = new StringEncoding(field.Value);
-                if (Names.TryGetValue(field.Name, out var name))
-                {
-                    Ensure(output, IntegerLength(name, 4) + value.Size(7), maximumEncodedBytes);
-                    QpackInteger.Write(output, name, 4, (byte)(80 | (sensitive ? 32 : 0)));
-                }
-                else
-                {
-                    var literalName = new StringEncoding(field.Name);
-                    Ensure(output, literalName.Size(3) + value.Size(7), maximumEncodedBytes);
-                    literalName.Write(output, 3, 8, (byte)(32 | (sensitive ? 16 : 0)));
-                }
-                value.Write(output, 7, 128, 0);
+                Ensure(output, IntegerLength(exact, 6), maximumEncodedBytes);
+                QpackInteger.Write(output, exact, 6, 192);
+                return;
             }
-            return output.ToArray();
+            var value = new StringEncoding(field.Value);
+            if (Names.TryGetValue(field.Name, out var name))
+            {
+                Ensure(output, IntegerLength(name, 4) + value.Size(7), maximumEncodedBytes);
+                QpackInteger.Write(output, name, 4, (byte)(80 | (sensitive ? 32 : 0)));
+            }
+            else
+            {
+                var literalName = new StringEncoding(field.Name);
+                Ensure(output, literalName.Size(3) + value.Size(7), maximumEncodedBytes);
+                literalName.Write(output, 3, 8, (byte)(32 | (sensitive ? 16 : 0)));
+            }
+            value.Write(output, 7, 128, 0);
         }
         internal static bool TryWriteInsert(MemoryStream output, HpackField field, int maximum)
         {
@@ -85,7 +90,7 @@ namespace EmbedIO.Net.Internal.Http3
             || name.Equals("set-cookie", StringComparison.OrdinalIgnoreCase);
         private static void Ensure(MemoryStream output, long additional, int limit)
         { if (additional > limit - output.Length) throw Limit(); }
-        private static int IntegerLength(int value, int bits)
+        private static int IntegerLength(long value, int bits)
         {
             var mask = (1 << bits) - 1;
             if (value < mask) return 1;
