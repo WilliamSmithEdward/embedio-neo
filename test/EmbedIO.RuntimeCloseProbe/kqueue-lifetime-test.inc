@@ -2,6 +2,7 @@
 // Both control and candidate compile this identical fixture.
 #if defined(__APPLE__)
 #include <atomic>
+#include <cstring>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -35,7 +36,8 @@ struct EmbedIOReleaseReceive {
 
 struct EmbedIORawSocket {
     int Fd{-1};
-    ~EmbedIORawSocket() { if (Fd >= 0) close(Fd); }
+    ~EmbedIORawSocket() { Close(); }
+    void Close() { if (Fd >= 0) { close(Fd); Fd = -1; } }
     void Open() { Fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP); }
 };
 }
@@ -59,10 +61,27 @@ TEST_F(DataPathTest, EmbedIOKqueueDeleteReleasesPortBeforeDeferredCleanup)
         CxPlatDataPath Datapath(&Callbacks, nullptr, 0, &Config);
         VERIFY_QUIC_SUCCESS(Datapath.GetInitStatus());
         auto Local = GetNewLocalIPv4(false);
+        // Establish and verify the descriptor slot used by this idle socket.
+        // No test passes on an assumption about the descriptor allocator.
+        EmbedIORawSocket Slot;
+        Slot.Open();
+        ASSERT_GE(Slot.Fd, 0);
+        const int IdleFd = Slot.Fd;
+        Slot.Close();
         CxPlatSocket Idle(Datapath, &Local.SockAddr);
         VERIFY_QUIC_SUCCESS(Idle.GetInitStatus());
         ReboundAddress = Idle.GetLocalAddress();
         ASSERT_EQ(QUIC_ADDRESS_FAMILY_INET, QuicAddrGetFamily(&ReboundAddress));
+        // The pinned Darwin datapath binds an IPv6 socket with a mapped IPv4
+        // address. Verify that this slot belongs to the endpoint just created.
+        sockaddr_in6 SlotAddress{};
+        socklen_t SlotSize = sizeof(SlotAddress);
+        ASSERT_EQ(0, getsockname(IdleFd, reinterpret_cast<sockaddr*>(&SlotAddress), &SlotSize));
+        ASSERT_EQ(AF_INET6, SlotAddress.sin6_family);
+        ASSERT_EQ(ReboundAddress.Ipv4.sin_port, SlotAddress.sin6_port);
+        ASSERT_TRUE(IN6_IS_ADDR_V4MAPPED(&SlotAddress.sin6_addr));
+        ASSERT_EQ(0, std::memcmp(&SlotAddress.sin6_addr.s6_addr[12],
+            &ReboundAddress.Ipv4.sin_addr, sizeof(in_addr)));
         CxPlatSocket Busy(Datapath, &Local.SockAddr, nullptr, &Gate);
         VERIFY_QUIC_SUCCESS(Busy.GetInitStatus());
         EmbedIOReleaseReceive ReleaseOnExit{Gate};
@@ -74,10 +93,11 @@ TEST_F(DataPathTest, EmbedIOKqueueDeleteReleasesPortBeforeDeferredCleanup)
         CxPlatSocketDelete(Idle.Socket);
         Idle.Socket = nullptr;
 
-        // Allocate after deletion so reuse of the old descriptor is possible.
+        // Require reuse of the verified descriptor slot after deletion.
         // Deferred cleanup must never close this independently owned socket.
         Replacement.Open();
         ASSERT_GE(Replacement.Fd, 0);
+        EXPECT_EQ(IdleFd, Replacement.Fd);
         EXPECT_EQ(0, bind(Replacement.Fd,
             reinterpret_cast<const sockaddr*>(&ReboundAddress.Ipv4), sizeof(sockaddr_in)));
     }

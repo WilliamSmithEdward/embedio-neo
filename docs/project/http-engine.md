@@ -4038,3 +4038,11 @@ also ignores the XDP map configuration, whereas the second test requires
 unsupported map-mode initialization to fail. Neither behavior was changed by
 the socket cleanup patch. These remain recorded for separate resolution;
 assertions have not been removed or weakened.
+
+The lifetime fixture is now strengthened to identify the idle socket's
+descriptor slot and verify its actual mapped loopback address and port before
+deletion. After deletion it explicitly requires the replacement socket to
+receive that same slot, then checks its endpoint after worker-pool rundown.
+A descriptor-allocation mismatch fails the test; reuse is no longer inferred
+from successful rebinding. This uses ordinary socket APIs in the isolated
+native test process. Validation of the strengthened fixture remains pending.
