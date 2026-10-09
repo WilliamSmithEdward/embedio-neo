@@ -29,6 +29,69 @@ namespace EmbedIO.Tests
                 => context.WebSocket.SendAsync(buffer, result.MessageType == (int)WebSocketMessageType.Text, context.CancellationToken);
         }
 
+        private sealed class Limited : WebSocketModule
+        {
+            internal int Calls;
+            internal Limited() : base("/ws", false) => MaxMessageSize = 1024;
+            protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
+            {
+                Interlocked.Increment(ref Calls);
+                return context.WebSocket.SendAsync(buffer, false, context.CancellationToken);
+            }
+        }
+
+        // The managed limit applies inside an RFC 8441 tunnel; rejecting a message
+        // closes only that stream.
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task MaxMessageSizeClosesTheTunnelWith1009AndKeepsSiblingStreamsUsable(bool fragmented)
+        {
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
+            var module = new Limited();
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(module)
+                .WithModule(new ActionModule("/", HttpVerbs.Get, context => context.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding)));
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var running = server.RunAsync(stop.Token);
+            using var handler = new SocketsHttpHandler { UseProxy = false, MaxConnectionsPerServer = 1 };
+            using var invoker = new HttpMessageInvoker(handler, false);
+            using var client = new HttpClient(handler, false) { DefaultRequestVersion = HttpVersion.Version20, DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact };
+            using var socket = new ClientWebSocket();
+            socket.Options.HttpVersion = HttpVersion.Version20;
+            socket.Options.HttpVersionPolicy = HttpVersionPolicy.RequestVersionExact;
+            try
+            {
+                await socket.ConnectAsync(new Uri(url.Replace("http:", "ws:", StringComparison.Ordinal) + "ws"), invoker, stop.Token);
+                var accepted = new byte[1024];
+                await socket.SendAsync(accepted, WebSocketMessageType.Binary, true, stop.Token);
+                var echoed = 0;
+                WebSocketReceiveResult echo;
+                do
+                {
+                    echo = await socket.ReceiveAsync(new ArraySegment<byte>(new byte[2048]), stop.Token);
+                    echoed += echo.Count;
+                } while (!echo.EndOfMessage);
+                Assert.That(echoed, Is.EqualTo(1024));
+                var oversized = new byte[1025];
+                if (fragmented)
+                {
+                    await socket.SendAsync(new ArraySegment<byte>(oversized, 0, 600), WebSocketMessageType.Binary, false, stop.Token);
+                    await socket.SendAsync(new ArraySegment<byte>(oversized, 600, 425), WebSocketMessageType.Binary, true, stop.Token);
+                }
+                else await socket.SendAsync(oversized, WebSocketMessageType.Binary, true, stop.Token);
+                var close = await socket.ReceiveAsync(new ArraySegment<byte>(new byte[16]), stop.Token);
+                Assert.That(close.MessageType, Is.EqualTo(WebSocketMessageType.Close));
+                Assert.That(close.CloseStatus, Is.EqualTo(WebSocketCloseStatus.MessageTooBig));
+                Assert.That(await client.GetStringAsync(url + "after", stop.Token), Is.EqualTo("healthy"));
+                Assert.That(module.Calls, Is.EqualTo(1));
+            }
+            finally
+            {
+                stop.Cancel();
+                await running.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+
         [TestCase(262144, true, false, false)]
         [TestCase(262144, true, true, false)]
         [TestCase(0, true, false, false)]
