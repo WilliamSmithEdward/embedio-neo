@@ -3124,3 +3124,36 @@ claim coverage-guided fuzzing, frame-shape or connection-state conformance, HPAC
 HTTP/3/QPACK, WebSockets, or whole-engine resource/race validation. Those campaigns
 remain required before the engine is ready to ship. No production behavior or
 ordinary regression discovery count changes in this increment.
+
+
+### HTTP/3 transport mutation campaign
+
+The standalone runner now accepts `--http3-transport <seed> <iterations>` and
+compares the production frame reader with an independent batch parser. Each
+input is delivered contiguously and in random fragments, separately exercising
+streamed reads, bounded buffering and payload skipping. Generation covers all
+four QUIC integer widths, non-minimal encodings, arbitrary frame identifiers,
+concatenated frames, payload mutations, truncation, the exact buffer limit and
+62-bit declared lengths represented by small inputs. The oracle checks exact
+headers and payload bytes, consumed position, remaining payload count, clean EOF,
+H3_FRAME_ERROR versus H3_EXCESSIVE_LOAD, and terminal failure behavior. The large
+length cases must fail or stream to EOF without allocating the declared length.
+
+Windows seed 182 passed 100,000 inputs and isolated Linux seed 181 passed one
+million (six delivery/consumption combinations per input). Temporary changes
+rejecting the exact buffer limit and decrementing remaining bytes incorrectly
+were both detected. Production source was restored in a finally block, rebuilt,
+and the Windows campaign passed again. Reproducer output includes the input,
+seed, iteration, consumption mode, fragments, runtime and assembly MVID. Evidence
+is retained under TestResults/http-engine/h3-fuzz-*. The scheduled/PR fuzz job runs
+100,000 inputs and archives the log. This adds framing coverage, not QPACK,
+HTTP/3 stream-state or native QUIC fuzzing; the whole-engine campaign remains open.
+
+The certificate correction on 62df1b8 was followed by macOS CI 37871773475:
+3,306 total, 3,274 passed, 31 skipped, one failure. The failure was
+GracefulListenerDrainPreservesAcceptedResponse(True), at same-endpoint QUIC
+restart with AddressAlreadyInUse. This is the already tracked drain/rebind
+validation gap, not a passing CI run or evidence that rebind is repaired.
+The downloaded TRX confirms all eight continue-negotiation cases passed, including
+both HTTP/3 cases. The full log is retained as quic-credential-macos-ci.log,
+with the TRX under quic-credential-macos-artifacts.

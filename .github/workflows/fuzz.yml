@@ -40,6 +40,11 @@ jobs:
         run: |
           seed=$((GITHUB_RUN_ID % 2147483647))
           dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --http2-transport "$seed" 100000 2>&1 | tee TestResults/fuzz/http2-transport.log
+      - name: Compare HTTP/3 transport mutations with the batch oracle
+        shell: bash
+        run: |
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --http3-transport "$seed" 100000 2>&1 | tee TestResults/fuzz/http3-transport.log
       - name: Retain campaign metadata and failure reproducers
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
