@@ -6185,7 +6185,7 @@ under ignored `TestResults/benchmark-review/http3-watch-*` and
 `TestResults/http-engine/http3-watch-*`.
 
 
-### macOS QUIC rebind cause on Apple Silicon and Intel
+### QUIC same-endpoint rebind: deferred close and connection teardown
 
 `DisposedRuntimeListenerRebindsSameEndpoint(False)` keeps failing on macOS at
 the bind stage with AddressAlreadyInUse (48), as recorded above and again at
@@ -6222,20 +6222,80 @@ later on Intel and 25 to 55 on Apple Silicon. In eleven the close also began
 after disposal returned; in the twelfth, on Intel at cycle 231, it began 16
 microseconds before and ended 230 microseconds after.
 
-The cleanup experiment now covers this exact regression. Its Intel job reuses
-the Intel leg's host-name step, so the candidate's Intel full suite no longer
-hits five-second mDNS lookups. Both jobs run the unchanged `QuicRuntimeRebindTest`
-20 times against the unpatched control and 20 times against the candidate. Each
-test process verifies the path and SHA-256 of the MsQuic image it loaded. A
-control failure is accepted only when the raw rebind test stopped at bind with
-AddressAlreadyInUse; any other control outcome, report shape or unverified image
-fails the experiment, and every candidate run must pass. The rebind test now
-calls the existing opt-in `QuicDependencyEvidence` check, which does nothing
-unless `EMBEDIO_EXPECT_QUIC_LIBRARY_ROOT` is set. No assertion changed.
+The same window also opens on every platform for another reason. Accepted
+connections share their listener's binding, and MsQuic releases it in `QuicConnFree`
+([connection.c at v2.5.10](https://github.com/microsoft/msquic/blob/v2.5.10/src/core/connection.c),
+line 367), which runs when the connection's last reference is dropped, possibly
+after .NET's connection disposal has returned. Windows .NET 10.0.12 bundles MsQuic
+2.5.10 (`msquic.dll` 2.5.10.154561281); macOS and Linux CI use 2.6.2. With four test
+processes running in parallel on Windows, restarting an EmbedIO HTTP/3 server on the
+same endpoint right after it served a request failed with 10048 in 4 of 7,040
+restarts, and the raw test's connected case failed 4 times. One EmbedIO failure was
+on port 20423, outside the UDP dynamic range 49152-65535 and used by no other
+process, which rules out another socket being handed the port. A single local full
+Windows suite also failed the raw connected case once (cycle 20); 20 isolated runs
+did not. On pinned Linux with MsQuic 2.6.2 and four CPUs, the same contention
+produced no rebind failure in 2,560 served restarts and 5,120 raw rebinds.
 
-[Run 37975160603](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37975160603)
-tested head `0d1e095` with the pinned quictls and system-libcrypto configuration
-on .NET 10.0.12. Both experiment jobs passed:
+Kestrel (ASP.NET Core 10.0.12 `QuicConnectionListener`) and WatsonWebserver bind
+once and turn AddressAlreadyInUse into an immediate failure; their unbind only
+disposes the `QuicListener`. They have the same exposure.
+
+### EmbedIO rebind retry and CI quarantine
+
+`Http3Listener` records each endpoint when its `QuicListener` disposal returns. When
+binding that endpoint later fails with AddressAlreadyInUse within one second of the
+recorded release, it retries every millisecond until the bind succeeds or the second
+has passed, then throws the last error. Other errors, and endpoints the process did
+not release itself, fail at once; a genuine conflict fails at most about a second
+later. Every traced deferred close completed within 230 microseconds of disposal.
+The retry applies on every platform and should be removed once the required MsQuic
+releases the port before disposal completes. Five deterministic tests drive the
+policy with a manual clock and scripted binds. `StoppedListenerRebindsItsEndpointImmediately`
+stops and restarts a listener on one endpoint 64 times;
+`ServedListenerRebindsItsEndpointImmediately` serves a request before each of 32
+immediate restarts.
+
+`QuicRuntimeRebindTest` tests MsQuic rather than EmbedIO, so the regression step
+quarantines it on every OS: a failed run passes only when every failure is that test
+stopping at bind with AddressAlreadyInUse, and the step emits a warning. Any other
+failure, including EmbedIO's restart tests, fails the job. The classifier,
+`test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1`, loads the TRX with DTD
+processing prohibited and is shared with the native experiment. Its decisions were
+checked against real CI reports for all three OSes, in a pinned Linux container and
+natively in Git Bash on Windows: rebind-only failures on either Mac are tolerated;
+the run with an additional WebSocket failure and the EmbedIO drain-restart failure
+are not; a missing or duplicate report fails. Intel macOS is out of CI scope, so the
+experiment runs on Apple Silicon only; the Intel evidence above is retained. The
+discovery floor is 4,372.
+
+The native experiment runs the raw test and both EmbedIO restart tests 20 times
+against the unpatched control and 20 times against the candidate. Each test process
+verifies the path and SHA-256 of the MsQuic image it loaded. A control failure is
+accepted only when it is the raw test stopping at bind with AddressAlreadyInUse;
+any EmbedIO restart failure, other outcome, report shape or unverified image fails
+the experiment, and every candidate run must pass. The rebind test calls the
+existing opt-in `QuicDependencyEvidence` check, which does nothing unless
+`EMBEDIO_EXPECT_QUIC_LIBRARY_ROOT` is set.
+
+Runs on the unpatched control, Apple Silicon:
+
+| Run | Head | EmbedIO retry | EmbedIO restart failures | Raw test failures |
+| --- | --- | --- | --- | --- |
+| 37981961893 | `07da4d6` | none | 2 of 20 runs, at start (cycles 12, 29) | 12 of 20 |
+| 37982623556 | `9e38bc6` | macOS | 0 of 20 | 10 of 20 |
+| 37985906512 | `45b4097` | all platforms | 0 of 40 (both tests) | 8 of 20 |
+
+On Windows, the all-platform retry turned 4 failures in 7,040 contended restarts
+into none in 5,120 under the same stress, and none in 7,680 restarts on the final
+code. In every run above, the candidate passed all rebind runs and 4,096-cycle
+probes, its native datapath suite and sanitizer repetitions; its full suite passed
+on `45b4097` (4,341 passed, 31 skipped, 0 failed).
+
+Earlier, [run 37975160603](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37975160603)
+tested head `0d1e095` on both architectures with the pinned quictls and
+system-libcrypto configuration on .NET 10.0.12, and run 37978483213 repeated it on
+`38f4e7b`:
 
 | Check | Apple Silicon | Intel |
 | --- | --- | --- |
@@ -6249,22 +6309,30 @@ on .NET 10.0.12. Both experiment jobs passed:
 | Sanitizer, 12 cases x 100 | exit 0 | exit 0 |
 | Candidate full suite | 4,345: 4,314 passed, 31 skipped (3m49s) | same counts (5m21s) |
 
-The control's two native failures are the existing lifetime fixture and the
-unsupported map-mode check. Intel's host name resolved in 5.007 s before the
-hosts entry and 0.007 s after. Apple Silicon's control and candidate libraries
-(`13bb173e...`, `428aa5e7...`) are bit-identical to the earlier documented builds.
-The Intel control is `afa23605...` and the candidate `7e471d89...`. Artifacts and
+The replication run's control failed the rebind test in 1 of 20 runs on Apple
+Silicon and 2 of 20 on Intel; its candidate failed none. The control's two native
+failures are the existing lifetime fixture and the unsupported map-mode check.
+Intel's host name resolved in 5.007 s before the hosts entry and 0.007 s after. Apple
+Silicon's control and candidate libraries (`13bb173e...`, `428aa5e7...`) are
+bit-identical to the earlier documented builds; the Intel control is `afa23605...`
+and the candidate `7e471d89...`.
+
+Failures recorded along the way, none suppressed:
+
+- `Issue502_LargeMessages.OriginalDelayedLargeReplyPatternSurvivesConcurrentBroadcasts`
+  on the Microsoft backend timed out after 30 seconds on macOS twice: `(Microsoft,2)`
+  in the ordinary job of run 37975160603 and `(Microsoft,1)` in the candidate full
+  suite of run 37982623556. It does not involve QUIC and was not investigated here.
+- On base `9f475d7`, CI 37973389476 failed `GracefulListenerDrainPreservesAcceptedResponse(True)`
+  with AddressAlreadyInUse when the replacement server started; the retry covers
+  that path.
+- In run 37985906512, the macOS compatibility job's `dotnet list package --vulnerable`
+  was killed (exit 137) with an empty report before any comparison, as recorded
+  earlier for this audit; pull request CI passed the same job on the same source.
+- A Linux contention probe with an IP-literal host failed every QUIC handshake with
+  `QUIC_STATUS_TLS_ERROR`, the IP-literal limitation recorded earlier. It was an
+  uncommitted investigation probe, like its Windows fixed-port counterpart.
+
+The patched MsQuic remains a test-only build. Shipping or substituting a patched
+MsQuic and filing the upstream MsQuic report remain owner decisions. Artifacts and
 the independent verification are under ignored `TestResults/quic-rebind-macos`.
-
-The same run's ordinary Apple Silicon job, which uses the stock bottle, failed the
-rebind test at cycle 5 and
-`Issue502_LargeMessages.OriginalDelayedLargeReplyPatternSurvivesConcurrentBroadcasts(Microsoft,2)`,
-a WebSocket client receive cancelled after 30 seconds. This change does not touch
-that path; it was not investigated here and its log is retained. The pull request
-run on the same head, merged with base `f0c4c7b`, passed on macOS. That pass is
-one more intermittent outcome under the stock dependency, not evidence of a fix.
-
-The candidate remains a test-only MsQuic build. Ordinary CI keeps the stock
-dependency and its failing regression. Shipping or substituting a patched MsQuic,
-filing the upstream report and any EmbedIO-side handling of a same-endpoint
-restart remain owner decisions.
