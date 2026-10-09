@@ -23,7 +23,7 @@ SEED_RFCS = [
     9000, 9001, 9002, 9369, 9846, 8446, 7301,
     # Extensions and companion specifications
     9218, 9297, 8441, 9220, 6455, 7692, 7838, 9460, 8297, 8470, 9651,
-    9412, 8336, 9298, 9484, 10008, 9931, 9530,
+    9412, 8336, 9298, 9484, 10008, 9931, 9530, 10036,
     # Content codings
     1950, 1951, 1952, 7932, 8878, 9659, 9841, 9842,
 ]
@@ -32,8 +32,10 @@ REGISTRIES = [
     "http-parameters", "http-fields", "http-status-codes", "http-methods",
     "http2-parameters", "http3-parameters", "quic", "websocket",
     "tls-extensiontype-values", "http-upgrade-tokens", "http-alt-svc-parameters",
-    "http-priority", "masque", "http-cache-directives", "http-structured-fields",
+    "http-priority", "masque", "http-cache-directives",
 ]
+
+RECENT_GROUPS = {"httpbis", "quic", "masque", "tls", "webtrans", "httpapi", "moq"}
 
 USER_AGENT = "embedio-neo-standards-capture/1 (development audit)"
 
@@ -103,6 +105,25 @@ def main():
             })
     (out / "errata" / "selected.json").write_text(
         json.dumps(selected, indent=1, sort_keys=True, ensure_ascii=True), encoding="utf-8", newline="\n")
+
+    # Sweep the full RFC index for recent output of the relevant working groups so
+    # the seed list cannot silently miss a newly published specification.
+    index_entry = record(out, "rfc-index.xml", "https://www.rfc-editor.org/rfc-index.xml")
+    manifest["rfc_index"] = index_entry
+    import xml.etree.ElementTree as ElementTree
+    namespace = {"r": "https://www.rfc-editor.org/rfc-index"}
+    recent = []
+    for entry in ElementTree.parse(out / "rfc-index.xml").getroot().findall("r:rfc-entry", namespace):
+        group = entry.findtext("r:wg_acronym", default="", namespaces=namespace)
+        year = int(entry.findtext("r:date/r:year", default="0", namespaces=namespace))
+        if group in RECENT_GROUPS and year >= 2023:
+            number = rfc_number(entry.findtext("r:doc-id", namespaces=namespace))
+            recent.append({"rfc": number, "group": group, "year": year,
+                           "month": entry.findtext("r:date/r:month", namespaces=namespace),
+                           "title": entry.findtext("r:title", namespaces=namespace),
+                           "status": entry.findtext("r:current-status", namespaces=namespace),
+                           "in_seed_chain": number in seen})
+    manifest["recent_working_group_rfcs"] = sorted(recent, key=lambda item: item["rfc"])
 
     for registry in REGISTRIES:
         url = f"https://www.iana.org/assignments/{registry}/{registry}.xml"

@@ -236,6 +236,25 @@ async def _(s):
     return ("conforms" if ok + refused == 400 and ok > 0 else "violation", f"served {ok}; reset {refused}")
 
 
+@case("cancel-upload-storm", "RFC9114 4.1.1; 10.5", "MUST")
+async def _(s):
+    # Cancels uploads at varied points; one client's cancellation must never stop
+    # the listener for everyone. Health is checked on a fresh connection each round.
+    rng = random.Random(4441)
+    for attempt in range(1, 201):
+        async with s.open() as client:
+            sids = [client.request(b"POST", b"/echo", s.authority, b"u" * rng.choice([20000, 200000, 2000000])) for _ in range(4)]
+            await asyncio.sleep(rng.choice([0, 0.001, 0.005, 0.02, 0.05]))
+            for sid in sids:
+                client.cancel(sid)
+            await asyncio.sleep(0.01)
+        if attempt % 10 == 0:
+            health = await healthy(s)
+            if health:
+                return ("violation", f"listener unusable after {attempt} cancel rounds (4 uploads each): {health}")
+    return ("conforms", "200 rounds of 4 cancelled uploads; listener stayed healthy")
+
+
 @case("rapid-cancel", "RFC9114 10.5", "SHOULD")
 async def _(s):
     async with s.open() as client:

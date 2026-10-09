@@ -422,6 +422,58 @@ def _(e):
             f"{trials} trials; most negative stream window observed after SETTINGS ACK: {worst}")
 
 
+@case(CASES, "settings-pair-ordering", "RFC9113 6.5.3; 6.9.2", "MUST")
+def _(e):
+    # Close the stream window with one SETTINGS, reopen it with a second. DATA the
+    # server writes between the two ACKs exceeds the window the client has applied.
+    violations = 0
+    worst = 0
+    trials = 60
+    for trial in range(trials):
+        sock = raw_connection(e)
+        h = hf.HeadersFrame(1, raw_headers_block(e, b"/stream?n=4000000&chunk=16000"))
+        h.flags.add("END_HEADERS")
+        h.flags.add("END_STREAM")
+        sock.sendall(h.serialize() + hf.WindowUpdateFrame(0, window_increment=1 << 30).serialize())
+        window = 65535
+        acks = 0
+        sent = False
+        trigger = [0, 16384, 40000][trial % 3]
+        buffer = b""
+        overrun = False
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and acks < 3:
+            ready, _, _ = select.select([sock], [], [], 0.2)
+            if not ready:
+                continue
+            data = sock.recv(65536)
+            if not data:
+                break
+            buffer += data
+            while len(buffer) >= 9 and len(buffer) >= 9 + int.from_bytes(buffer[:3], "big"):
+                length = int.from_bytes(buffer[:3], "big")
+                frame_type, flags = buffer[3], buffer[4]
+                buffer = buffer[9 + length:]
+                if frame_type == 0x0:
+                    window -= length
+                    if window < 0:
+                        overrun = True
+                        worst = min(worst, window)
+                    if not sent and 65535 - window >= trigger:
+                        sock.sendall(hf.SettingsFrame(0, settings={4: 0}).serialize() + hf.SettingsFrame(0, settings={4: 65535}).serialize())
+                        sent = True
+                elif frame_type == 0x4 and flags & 1:
+                    acks += 1
+                    if acks == 2:
+                        window -= 65535  # Applied: INITIAL_WINDOW_SIZE 65535 -> 0.
+                    elif acks == 3:
+                        window += 65535  # Applied: 0 -> 65535.
+        violations += overrun
+        sock.close()
+    return ("conforms" if violations == 0 else "violation",
+            f"{violations} of {trials} trials received DATA beyond the acknowledged window (worst {worst})")
+
+
 @case(CASES, "client-goaway-drains", "RFC9113 6.8", "MUST")
 def _(e):
     client = Client(e)
