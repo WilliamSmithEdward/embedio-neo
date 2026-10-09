@@ -216,10 +216,11 @@ status=0
   > "$results/control-datapath.log" 2>&1 || status=$?
 printf '%s\n' "$status" > "$results/control-datapath.exit"
 
-# Run the raw runtime rebind test and EmbedIO's own HTTP/3 restart test unchanged
+# Run the raw runtime rebind test and EmbedIO's own HTTP/3 restart tests unchanged
 # against each native variant. Each raw case binds, disposes and rebinds one
-# loopback endpoint 32 times; the EmbedIO test stops and restarts its listener on
-# one endpoint 64 times. The test process verifies which MsQuic image it loaded.
+# loopback endpoint 32 times; one EmbedIO test stops and restarts its listener on
+# one endpoint 64 times, the other serves a request between 32 restarts. The test
+# process verifies which MsQuic image it loaded.
 rebind_repetitions=20
 rebind_columns='iteration\texit\tresults\tpassed\tfailed\tmatching\toutcome\n'
 # Prints the exit code, results, passed, failed and failures matching the defect:
@@ -235,15 +236,15 @@ run_rebind_test() {
     EMBEDIO_EXPECT_QUIC_LIBRARY_SHA256="$(awk '{ print $1 }' "$results/$variant-library.sha256")" \
     EMBEDIO_QUIC_LIBRARY_EVIDENCE="$directory/loaded-library.json" \
     dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-    --filter 'FullyQualifiedName~QuicRuntimeRebindTest|FullyQualifiedName~Http3ListenerTest.StoppedListenerRebindsItsEndpointImmediately' \
-    --minimum-expected-tests 3 \
+    --filter 'FullyQualifiedName~QuicRuntimeRebindTest|FullyQualifiedName~Http3ListenerTest.StoppedListenerRebindsItsEndpointImmediately|FullyQualifiedName~Http3ListenerTest.ServedListenerRebindsItsEndpointImmediately' \
+    --minimum-expected-tests 4 \
     --timeout 2m --report-trx --results-directory "$directory" > "$directory/console.log" 2>&1 || status=$?
   trx="$(find "$directory" -name '*.trx' -type f)"
   test -n "$trx" && test "$(printf '%s\n' "$trx" | wc -l | tr -d ' ')" = 1 || return 2
-  counts="$(bash "$repo/test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.sh" "$trx")" || return 2
+  counts="$(pwsh -NoProfile -File "$repo/test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1" "$trx")" || return 2
   read -r total passed failed matching <<< "$counts"
   printf '%s\t%s\t%s\t%s\t%s' "$status" "$total" "$passed" "$failed" "$matching"
-  test "$total" = 3 && test $((passed + failed)) = 3 || return 2
+  test "$total" = 4 && test $((passed + failed)) = 4 || return 2
   jq -e '.verified == true' "$directory/loaded-library.json" > /dev/null || return 2
   if test "$status" = 0 && test "$failed" = 0; then return 0; fi
   if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$matching"; then return 1; fi

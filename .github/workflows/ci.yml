@@ -104,15 +104,14 @@ jobs:
           set -euo pipefail
           status=0
           dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4372 --coverlet || status=$?
-          if test "$status" = 0 || test "$RUNNER_OS" != macOS; then exit "$status"; fi
-          # Quarantine: the stock MsQuic 2.6.2 closes a disposed listener's socket
-          # after disposal returns on macOS, so the raw runtime rebind test can fail
-          # there. Pass a failed run only when every failure is that test stopping
-          # at bind with AddressAlreadyInUse; docs/project/http-engine.md has the
-          # evidence. EmbedIO's own HTTP/3 restart tests are not quarantined.
-          trx="$(find TestResults -maxdepth 1 -name '*.trx' -type f)"
-          test -n "$trx" && test "$(printf '%s\n' "$trx" | wc -l | tr -d ' ')" = 1
-          counts="$(bash test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.sh "$trx")"
+          if test "$status" = 0; then exit 0; fi
+          # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
+          # disposal returns (a deferred close on macOS; accepted connections on every
+          # OS), so the raw runtime rebind test, which tests MsQuic rather than EmbedIO,
+          # can fail. Pass a failed run only when every failure is that test stopping at
+          # bind with AddressAlreadyInUse; docs/project/http-engine.md has the evidence.
+          # EmbedIO's own HTTP/3 restart tests are not quarantined.
+          counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
           read -r total passed failed defect <<< "$counts"
           if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
             echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
