@@ -12,11 +12,6 @@ namespace EmbedIO.Net.Internal
 {
     internal sealed class EndPointListener : IDisposable
     {
-        private sealed class AcceptEventArgs : SocketAsyncEventArgs
-        {
-            internal Socket? PendingSocket;
-        }
-
         private readonly HashSet<HttpConnection> _unregistered;
         private readonly IPEndPoint _endpoint;
         private readonly Socket _sock;
@@ -222,72 +217,6 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        private static void Accept(Socket socket, SocketAsyncEventArgs e, Socket? accepted = null)
-        {
-            var endpoint = (EndPointListener)(e.UserToken ?? throw new InvalidOperationException("The accept operation has no listener."));
-            while (true)
-            {
-                e.AcceptSocket = null;
-                bool acceptPending;
-                try
-                {
-                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && e is AcceptEventArgs owned)
-                    {
-                        // Retain ownership independently: Windows completion can clear
-                        // AcceptSocket if updating its accept context races listener stop.
-                        owned.PendingSocket = new Socket(socket.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                        e.AcceptSocket = owned.PendingSocket;
-                    }
-                    acceptPending = socket.AcceptAsync(e);
-                }
-                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-                {
-                    accepted?.Dispose();
-                    accepted = null;
-                    TakeAcceptedSocket(e)?.Dispose();
-                    e.Dispose();
-                    return;
-                }
-
-                // Rearm before handling the previous socket, including when the next
-                // accept completes inline. Drain inline completions without recursion.
-                if (accepted != null)
-                {
-                    endpoint.ProcessAcceptedSocket(accepted);
-                    accepted = null;
-                }
-
-                if (acceptPending)
-                    return;
-
-                accepted = TakeAcceptedSocket(e);
-            }
-        }
-
-        private static void ProcessAccept(SocketAsyncEventArgs args)
-        {
-            var accepted = TakeAcceptedSocket(args);
-            var endpoint = (EndPointListener)(args.UserToken ?? throw new InvalidOperationException("The accept operation has no listener."));
-            Accept(endpoint._sock, args, accepted);
-        }
-
-        private static Socket? TakeAcceptedSocket(SocketAsyncEventArgs args)
-        {
-            var accepted = args.AcceptSocket;
-            args.AcceptSocket = null;
-            if (args is AcceptEventArgs owned)
-            {
-                var pending = owned.PendingSocket;
-                owned.PendingSocket = null;
-                if (!ReferenceEquals(pending, accepted)) pending?.Dispose();
-            }
-            if (args.SocketError == SocketError.Success) return accepted;
-            // An aborted Windows accept can still own a connected socket. It has
-            // not entered either connection registry, so this completion owns cleanup.
-            accepted?.Dispose();
-            return null;
-        }
-
         private void AcceptOnWorker()
         {
             var reportedInvalidAddress = false;
@@ -379,8 +308,6 @@ namespace EmbedIO.Net.Internal
             else
                 conn.Dispose();
         }
-
-        private static void OnAccept(object? sender, SocketAsyncEventArgs e) => ProcessAccept(e);
 
         private static HttpListener? MatchFromList(string path, List<ListenerPrefix>? list, out ListenerPrefix? prefix)
         {

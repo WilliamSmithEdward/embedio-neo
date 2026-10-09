@@ -5524,3 +5524,32 @@ Whole-engine fault injection/conformance and final platform checks remain open.
 The full Windows coverage rerun passed: 4,275 total, 4,270 successes, five
 expected skips and zero failures. The test discovery floor is unchanged.
 This fixture/characterization correction changes no production engine code.
+
+### Retiring the callback TCP accept implementation
+
+Both retained assets now use the owned TCP accept actor. The unused
+SocketAsyncEventArgs accept implementation and its private callback helpers have
+been removed from EndPointListener. This changes no public API, target,
+dependency, timeout, prefix policy or production accept selection. The macOS
+IPv6 blocking workaround remains; its replacement and the wider endpoint /
+connection rewrite are still open.
+
+The former backlog regression now queues all 32 or 128 peers before starting the
+actual actor, admits them through the production endpoint, checks every distinct
+request and admits a subsequent fresh connection. Its cleanup awaits the actor.
+The obsolete fabricated event-completion cases were replaced by five late-admission
+cases (one through 128 real connected sockets) that require the stopped production
+endpoint to release each handle and close the peer. The actor's existing pending-
+accept shutdown, independent Windows handle ownership, fatal admission and
+concurrent-stop tests remain. Actor tests now fail rather than skip if either
+retained asset lacks the replacement implementation.
+
+All 100 focused accept / framing / reset / WebSocket shutdown cases pass on
+Windows, pinned Linux .NET 10.0.12 and the actual netstandard2.0 core on a Windows
+.NET 10 host, without skips. This is not a full older-runtime validation. Full
+Windows coverage passes 4,275 total / 4,270 successes / five expected skips /
+zero failures. Both assets build with no warnings or errors. Changed-source
+parser, suppression, whitespace and diff checks pass; pinned Semgrep parses all
+four changed source files completely (29 rules, zero findings). Logs and TRX
+reports are retained under ignored TestResults/http-engine/tcp-retirement-*.
+Final exact-head cross-platform checks remain required.
