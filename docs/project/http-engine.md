@@ -6359,3 +6359,21 @@ Final local Windows suite passes: 4,413 cases, 4,408 passed, five expected local
 skips and zero failures. Both-target analyzer builds, source guards, changed-file
 formatting and all four allocation budgets pass. Exact-head GitHub checks and
 broader independent-peer validation remain required.
+
+### Completed agent fixture integration checkpoint
+
+PR #205 merged into the engine branch as 5245b6e after every exact-head check
+passed. Hosted Windows HTTP.sys had an orphaned strong-wildcard reservation for
+port 12292; the test allocator now skips wildcard-reserved ports discovered by a
+read-only netsh query. Production behavior, assertions and timeouts are unchanged.
+PR #206 merged as 0877302 after every exact-head check passed. Issue502 broadcasts
+now wait for server registration witnesses; four controlled cases reproduce the
+old client-handshake/server-registration gap. No production WebSocket change was
+needed. Both squash messages preserve human authorship and contain no AI trailers.
+
+The combined QPACK correction and both fixture changes pass the full Windows
+suite: 4,425 cases, 4,420 passed, five expected local skips and zero failures.
+Both-target analyzer builds pass. Discovery floors are 4,425. Exact-head
+cross-platform/platform-app checks remain required before the engine is ready.
+These merges target the development engine branch; neither main nor a release
+was published, and program #181 remains open.
