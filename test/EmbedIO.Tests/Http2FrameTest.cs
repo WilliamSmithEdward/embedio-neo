@@ -10,7 +10,7 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    public class Http2FrameTest
+    public partial class Http2FrameTest
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
         private static readonly Type FrameType = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2Frame", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));

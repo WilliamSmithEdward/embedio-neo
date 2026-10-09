@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -42,6 +43,14 @@ namespace EmbedIO.Net.Internal.Http2
                 var payload = length == 0 ? Array.Empty<byte>() : new byte[length];
                 await ReadRemaining(payload, 0, length, token).ConfigureAwait(false);
                 return new Http2Frame(_header[3], _header[4], streamId, payload);
+            }
+            catch (IOException error) when (token.IsCancellationRequested
+                && error.InnerException is SocketException socket && socket.SocketErrorCode == SocketError.OperationAborted)
+            {
+                // Some socket cancellation races surface as wrapped error 995
+                // instead of OCE. Preserve the token and original transport error.
+                _readFailed = true;
+                throw new OperationCanceledException("HTTP/2 transport read canceled.", error, token);
             }
             catch { _readFailed = true; throw; }
             finally { Volatile.Write(ref _reading, 0); }

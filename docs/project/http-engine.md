@@ -3352,3 +3352,37 @@ passed: 3,360 total, 3,355 successes and five existing skips in 2m 27s. The new
 source passes the pinned YARA scan. This local pass does not resolve the captured
 HTTP/2 cancellation failure or the macOS raw QUIC rebind limitation; exact-head
 CI and the remaining development work still apply.
+
+
+### HTTP/2 aborted-read cancellation normalization
+
+The captured Windows error 995 is now covered with a controlled transport that
+returns IOException wrapping SocketException(OperationAborted) after canceling
+the read's token. Four positions (before the header, mid-header, before payload,
+and mid-payload) failed before correction, while seven control cases passed.
+Http2FrameTransport now maps only that combination to OperationCanceledException,
+retaining the exact token and original IOException as the inner exception. The
+reader remains permanently failed after the interrupted operation, so a new token
+cannot resume parsing at an unknown frame boundary.
+
+An aborted socket read without token cancellation still propagates the original
+IOException. Connection reset, timeout and a plain IOException also remain errors
+even if cancellation races them. No broad IOException suppression or test retry
+was added. The dispatcher already treats its own cancellation as normal shutdown;
+this change supplies the cancellation exception it expects for this particular
+transport result. It addresses the reproduced error classification, but the
+original CI race still needs changed-head Windows confirmation.
+
+All 109 frame/interoperability cases pass on Windows, isolated Linux, and the
+actual netstandard2.0 assembly under a .NET 10 host. The rebuilt HTTP/2 framing
+fuzzer passes 100,000 inputs with contiguous and fragmented reads. Both targets
+build, all four rebuilt allocation budgets pass, and formatting plus analyzer/
+suppression guards pass. Eleven new cases raise discovery to 3,371. Before/after
+and validation logs are retained under TestResults/http-engine/h2-abort-*.
+
+
+The final changed-source Windows coverage run passed all 3,371 reported cases:
+3,366 successes and five existing skips in 2m 28s. The pinned YARA scan of the
+changed transport is clean. Changed-head Windows/macOS/Linux checks remain
+required; neither this local pass nor a later unchanged-source retry should be
+used to erase the original failure evidence.
