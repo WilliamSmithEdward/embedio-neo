@@ -16,7 +16,10 @@
     <file src="$candidate$/licenses/MsQuic-LICENSE" target="licenses/MsQuic-LICENSE" />
     <file src="$candidate$/licenses/MsQuic-THIRD-PARTY-NOTICES" target="licenses/MsQuic-THIRD-PARTY-NOTICES" />
     <file src="$candidate$/licenses/openssl-LICENSE.txt" target="licenses/openssl-LICENSE.txt" />
-    <file src="$candidate$/source/*.*" target="source" />
+    <file src="$candidate$/source/msquic-kqueue-close.patch" target="source/msquic-kqueue-close.patch" />
+    <file src="$candidate$/source/msquic-kqueue-config.patch" target="source/msquic-kqueue-config.patch" />
+    <file src="$candidate$/source/openssl-tag-signature.log" target="source/openssl-tag-signature.log" />
+    <file src="$candidate$/source/crypto-version.txt" target="source/crypto-version.txt" />
     <file src="$candidate$/build-receipt.json" target="build-receipt.json" />
     <file src="_._" target="lib/net10.0/_._" />
     <file src="../README.md" target="README.md" />
