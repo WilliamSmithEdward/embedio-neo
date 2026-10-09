@@ -239,13 +239,11 @@ namespace EmbedIO.Tests
             Assert.That(module.Calls, Is.Zero);
         }
 
-        // Reproduces loss of frames that arrive in the same read as the upgrade
-        // request. The bytes sit in HttpConnection's input buffer, which the socket
-        // never sees; the correction belongs to the HTTP/1 transport shared with PR
-        // #182 and is held for coordination there (#190).
+        // RFC 6455 section 4.1 requires clients to wait for the handshake response.
+        // This is robustness coverage for early data, not a valid-client conformance
+        // claim: once the server accepts the upgrade, buffered bytes are retained.
         [Test]
-        [Explicit("Requires HttpConnection to hand buffered upgrade bytes to the WebSocket; pending coordination with PR #182 (#190).")]
-        public async Task FramesPipelinedWithTheUpgradeRequestAreNotLost()
+        public async Task EarlyFramesBufferedWithAnAcceptedUpgradeAreNotLost()
         {
             var module = new Limited(0);
             await WithServerAsync(module, async (url, token) =>

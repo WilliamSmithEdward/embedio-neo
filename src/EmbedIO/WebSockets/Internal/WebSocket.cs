@@ -59,7 +59,7 @@ namespace EmbedIO.WebSockets.Internal
         private EmbedIO.Internal.BorrowedResource<Stream>? _stream;
         private readonly int _maxMessageSize;
 
-        private WebSocket(HttpConnection connection) : this(connection.Stream, connection.ForceClose) { }
+        private WebSocket(HttpConnection connection) : this(connection.TakeUpgradeStream(), connection.ForceClose) { }
 
         private WebSocket(Stream stream, Action close)
         {

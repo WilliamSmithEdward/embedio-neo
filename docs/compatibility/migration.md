@@ -1006,3 +1006,16 @@ Adler-32 checksums and exact completion. It does not yet change public coding
 selection, response encoding or cached variants. The broader standards-format
 migration remains unfinished. These changes are development work and have not
 been released.
+
+### Buffered bytes at HTTP/1 WebSocket upgrade (unreleased)
+
+An accepted managed WebSocket now receives any unread bytes already buffered by
+its HTTP/1 connection. The handoff copies only that unread tail, replays it once,
+and leaves transport disposal with the connection. Ordinary clients that send
+frames after validating the handshake response retain their existing behavior.
+
+The regression deliberately sends early data with the upgrade request. RFC 6455
+section 4.1 requires clients to wait for the server response, so this is robustness
+coverage rather than valid-client conformance. Accepting an upgrade no longer
+silently discards those buffered bytes; it does not authorize clients to skip
+handshake validation.
