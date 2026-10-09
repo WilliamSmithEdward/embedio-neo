@@ -21,6 +21,7 @@ namespace EmbedIO.Tests
             var supported = QuicListener.IsSupported && QuicConnection.IsSupported;
             if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1") Assert.That(supported, Is.True);
             if (!QuicListener.IsSupported || !QuicConnection.IsSupported) { Assert.Ignore("The host does not provide QUIC."); return; }
+            QuicDependencyEvidence.VerifyIfRequested();
             await Rebind(connected);
         }
 

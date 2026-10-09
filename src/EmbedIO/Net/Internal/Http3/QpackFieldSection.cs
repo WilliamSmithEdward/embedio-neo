@@ -6,6 +6,11 @@ using EmbedIO.Net.Internal.Http2;
 
 namespace EmbedIO.Net.Internal.Http3
 {
+    internal sealed class QpackFieldSectionLimitException : Http3ProtocolException
+    {
+        internal QpackFieldSectionLimitException(string message) : base(0x107, message) { }
+    }
+
     // Owns one bounded HEADERS payload. Resolve its wrapped prefix exactly once:
     // re-reading it after inserts arrive could resolve it to a different generation.
     internal sealed class QpackFieldSection
@@ -23,7 +28,7 @@ namespace EmbedIO.Net.Internal.Http3
             if (wire == null) throw new ArgumentNullException(nameof(wire));
             if (maximumEncodedBytes < 0) throw new ArgumentOutOfRangeException(nameof(maximumEncodedBytes));
             if (maximumDecodedBytes < 0) throw new ArgumentOutOfRangeException(nameof(maximumDecodedBytes));
-            if (wire.Length > maximumEncodedBytes) throw new Http3ProtocolException(0x107, "QPACK field section exceeds encoded limit.");
+            if (wire.Length > maximumEncodedBytes) throw new QpackFieldSectionLimitException("QPACK field section exceeds encoded limit.");
             _table = table;
             _maximumDecodedBytes = maximumDecodedBytes;
             var offset = 0;
@@ -96,7 +101,7 @@ namespace EmbedIO.Net.Internal.Http3
             var length = Integer(ref cursor, bits);
             if (length > _wire.Length - cursor) throw new EndOfStreamException();
             string result;
-            if (huffman) result = HpackHuffman.Decode(_wire, cursor, (int)length, maximum);
+            if (huffman) result = HpackHuffman.DecodeBounded(_wire, cursor, (int)length, maximum, Limit);
             else
             {
                 if (length > maximum) throw Limit();
@@ -129,6 +134,6 @@ namespace EmbedIO.Net.Internal.Http3
             return QpackStaticTable.Entries[(int)index];
         }
         private static Http3ProtocolException Invalid(string message) => new(0x200, message);
-        private static Http3ProtocolException Limit() => new(0x107, "QPACK decoded field section exceeds limit.");
+        private static QpackFieldSectionLimitException Limit() => new("QPACK decoded field section exceeds limit.");
     }
 }

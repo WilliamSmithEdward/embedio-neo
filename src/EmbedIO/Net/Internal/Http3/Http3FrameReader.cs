@@ -7,7 +7,7 @@ using EmbedIO.Internal;
 
 namespace EmbedIO.Net.Internal.Http3
 {
-    internal sealed class Http3ProtocolException : IOException
+    internal class Http3ProtocolException : IOException
     {
         internal Http3ProtocolException(long errorCode, string message) : base(message) { ErrorCode = errorCode; }
         public long ErrorCode { get; }

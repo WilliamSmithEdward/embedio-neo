@@ -94,6 +94,10 @@ namespace EmbedIO.Tests
             try { await Task.WhenAll(calls); }
             finally { deadline.Cancel(); try { await server; } catch (OperationCanceledException) { } }
         }
+        [TestCase("header-limit-encoded", 0x107, false)]
+        [TestCase("header-limit-indexed", 0x107, false)]
+        [TestCase("header-limit-literal", 0x107, false)]
+        [TestCase("header-limit-huffman", 0x107, false)]
         [TestCase("dynamic-response", 0, false)]
         [TestCase("dynamic-no-credit", 0, false)]
         [TestCase("dynamic-encoder-reset", 0x104, true)]
@@ -274,6 +278,34 @@ namespace EmbedIO.Tests
                         .Concat(path).Concat(new byte[] { 0x50, 9 }).Concat(Encoding.ASCII.GetBytes("localhost")).ToArray();
                     Assert.That(payload.Length, Is.LessThan(64));
                     wire = new byte[] { 1, (byte)payload.Length }.Concat(payload).ToArray();
+                }
+                if (scenario.StartsWith("header-limit-", StringComparison.Ordinal))
+                {
+                    using var payload = new MemoryStream();
+                    payload.Write(Convert.FromHexString("0000D1D7C150096C6F63616C686F7374"));
+                    if (scenario == "header-limit-encoded")
+                        for (var i = 0; i < 70000; i++) payload.WriteByte(0xe7);
+                    else if (scenario == "header-limit-indexed")
+                        for (var i = 0; i < 2000; i++) payload.WriteByte(0xe7); // cache-control: no-cache
+                    else if (scenario == "header-limit-literal")
+                        for (var i = 0; i < 2048; i++) payload.Write(new byte[] { 0x21, (byte)'x', 0 });
+                    else
+                    {
+                        payload.Write(new byte[] { 0x21, (byte)'x', 0xff });
+                        var length = 43750 - 127;
+                        while (length >= 128) { payload.WriteByte((byte)((length & 127) | 128)); length >>= 7; }
+                        payload.WriteByte((byte)length);
+                        // RFC 7541 Huffman 'a' is 00011: eight letters occupy five bytes.
+                        var group = Convert.FromHexString("18c6318c63");
+                        for (var i = 0; i < 8750; i++) payload.Write(group); // 70,000 decoded letters
+                    }
+                    if (scenario == "header-limit-encoded") Assert.That(payload.Length, Is.GreaterThan(65536));
+                    else Assert.That(payload.Length, Is.LessThan(65536));
+                    var size = (int)payload.Length;
+                    wire = (size < 16384
+                        ? new byte[] { 1, (byte)(0x40 | (size >> 8)), (byte)size }
+                        : new byte[] { 1, (byte)(0x80 | (size >> 24)), (byte)(size >> 16), (byte)(size >> 8), (byte)size })
+                        .Concat(payload.ToArray()).ToArray();
                 }
                 QuicException? observed = null;
                 try

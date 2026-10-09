@@ -1049,6 +1049,19 @@ callbacks still run, and a malformed request cannot dispose the listener shared
 by other clients. These changes apply to invalid/incomplete requests under the
 approved strict-framing policy; custom application error handlers remain available.
 
+### Managed HTTP/1 keep-alive request cap removed
+
+The modern managed engine no longer closes an otherwise reusable connection after
+100 requests. William approved this client-visible default change for the engine
+performance work. Long-lived clients may now reuse the same TCP/TLS connection
+beyond that limit. The managed Keep-Alive header retains timeout=15 and no longer
+advertises a max request count.
+
+The 15-second keep-alive idle timeout, explicit Connection: close, response policies
+that require closure, cancellation, stop and graceful drain remain in effect.
+Applications and tests that used the old request count as an implicit connection
+rotation mechanism should request closure explicitly. The Microsoft backend is
+unchanged. This change is unreleased and is part of the HTTP-engine candidate.
 ### Bodyless managed responses and HTTP/2 graceful drain
 
 The managed HTTP/1 response stream now discards body writes for informational,
@@ -1071,6 +1084,7 @@ Accepted responses finish instead of being canceled by a spurious idle-stream
 protocol error. Invalid even client stream IDs still produce a connection error.
 See [HTTP/2 section 6.8](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.8).
 These corrections are unreleased HTTP-engine work.
+
 ## HTTP/1.0 response delimitation (unreleased)
 
 The managed listener closes an HTTP/1.0 response with an unknown-length body,
@@ -1089,3 +1103,16 @@ before application dispatch. Previously the failed socket acceptance could becom
 500. This matches the existing HTTP/3 negotiation policy. The rejection affects
 its request stream; other HTTP/2 streams remain usable. Valid version-13
 WebSocket handshakes and the public acceptance API are unchanged.
+## HTTP/3 request field-section limit isolation (unreleased)
+
+An encoded or decoded request HEADERS section over the existing size limit now
+fails its request stream with H3_EXCESSIVE_LOAD (0x107). Previously these limits
+could close the entire connection, and Huffman expansion over the decoded budget
+could be reported as QPACK_DECOMPRESSION_FAILED. Healthy sibling requests and the
+shared decoder table remain usable, including when a blocked section becomes
+oversized after encoder inserts arrive. The limits themselves are unchanged.
+
+Malformed QPACK syntax/references and encoder instructions still fail the
+connection. Aggregate blocked-storage and decoder-feedback exhaustion also retain
+their connection-wide policy. Applications should handle the rejected request
+stream independently instead of assuming all requests on the connection failed.

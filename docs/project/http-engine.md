@@ -6183,6 +6183,212 @@ not establish a universal throughput/latency improvement or a Kestrel ranking.
 Longer and other-platform comparisons and resource soak remain work. Evidence is
 under ignored `TestResults/benchmark-review/http3-watch-*` and
 `TestResults/http-engine/http3-watch-*`.
+### Listener admission integration review
+
+PR #201 (`f471cae`, based on `c8ad190`) is being reviewed on the isolated
+`codex/http-admission-integration` branch based on current engine `24cb39d`.
+The agent branch is unchanged. Registration skips the lifecycle lock only while
+running and not draining; stop/dispose/drain close the fast gate and join admitted
+registrations before snapshotting. A FIFO queue replaces dictionary enumeration
+for accept, with the dictionary remaining the once-only claim owner. Public APIs,
+targets, dependencies, the 100-request cap and HTTP/3 are unchanged.
+
+Review reproduced the documented queue-retention difference quantitatively:
+10,000 contexts registered then withdrawn with accept paused leave 10,000 queue
+references despite an empty pending map. With one live context at the head, the
+queue retains 10,001 entries. Both new paused-accept cases fail on the agent
+implementation. This is a new unbounded withdrawn-reference retention path; it
+must not be accepted merely for throughput.
+
+The integration candidate compacts only when unregistration actually withdrew
+queued work and queue entries exceed pending claims by more than 128. Normal
+accepted requests are already absent from the claim map and take no compaction
+path. Compaction closes and joins the fast admission gate under the lifecycle lock,
+copies still-pending contexts in arrival order and publishes a new queue. Racing
+accepts still remove the exact dictionary claim once; stale copied entries cannot
+produce duplicate acceptance. The prior gate state is restored; stop/drain gates
+remain closed. After withdrawals settle, excess queue references are bounded by
+128 rather than growing with the withdrawal count. Genuine pending work is not
+capped or dropped.
+
+The two paused-accept cases now pass, and an additional four-producer race keeps
+all 4,000 live registrations exactly once while accepting alongside 20,000
+withdrawals. All 13 admission cases pass on Windows. The combined Linux admission/
+lifecycle/drain set reports 160 cases, 158 successes/two platform skips, zero
+failures. Both production targets build without warnings/errors; formatting,
+parser, suppression and all four resource budgets pass. The initial budget
+launcher ran before the separate performance project was built; that missing-file
+result remains recorded and the built-project checks pass. The initial new-
+worktree build redirection also lacked its ignored TestResults directory; the
+subsequent actual restore/build passes.
+
+Discovery floors include the original ten agent cases and three owner review
+regressions, totaling 4,378. Full Windows reports 4,378 cases, 4,373 successes,
+five expected local/platform skips and zero failures. The sustained matching-
+harness comparison remains in progress; no server throughput benefit or integration
+acceptance is claimed yet. Evidence is under ignored admission TestResults in the
+review worktree. PR #201 and program #181 remain open.
+### Admission wakeup review and frozen-checkpoint comparison
+
+A second owner regression reproduced an independent wakeup backlog at integration
+checkpoint `667a3f5`. While an accept was paused during its dictionary claim,
+1,024 registrations released 1,024 semaphore permits. The requests were subsequently
+accepted exactly once, but all permits remained after the queue was empty. Empty
+accepts would consume stale wakeups unrelated to pending requests.
+
+The corrected candidate coalesces wakeups with an atomic pending flag. A successful
+semaphore wait clears it, and a successful queue claim relays a wakeup while work
+remains for other waiting accepts. Cancellation relays through the same bounded
+path. The flag and semaphore remain paired across stop/restart; restarting does
+not independently reset either while prior accepts are still completing. Public
+APIs and request admission policy are unchanged.
+
+The paused-burst regression fails with 1,024 retained permits on the old source
+and passes on the correction. Two further cases deliver every request to 32
+waiting accepts over twenty bursts, including repeated stop/restart. All sixteen
+admission cases pass. The full Windows suite reports 4,381 cases, 4,376 successes,
+five expected local/platform skips, zero failures. Both targets build without
+warnings/errors; formatting, analyzer guards and all four resource budgets pass.
+The pinned Linux admission/lifecycle/drain set reports 163 cases, 161 successes,
+two platform skips and zero failures. Sustained final-source comparison remains pending.
+
+The earlier frozen comparison measured `667a3f5` against engine `24cb39d` before
+this wakeup correction, using an identical private harness. Three alternating
+rounds used fresh client/server processes, disjoint CPUs, three seconds of warmup
+and fifteen seconds of measurement. The prefix scenario selector also included
+the close-after-100 row, producing eighteen samples, all with validated responses,
+zero request errors and zero remaining server sockets. No failed sample was retried.
+
+| Workload | Candidate/control median requests/s | Candidate/control CPU us/request |
+| --- | --- | --- |
+| HTTP/1.1 plain, 64 connections | 264,592 / 228,979 | 23.9 / 25.4 |
+| HTTP/1.1 plain, close after 100 requests | 244,542 / 265,043 | 24.3 / 24.1 |
+| HTTP/2 TLS, eight connections x 32 streams | 251,114 / 191,958 | 29.0 / 34.2 |
+
+HTTP/1.1 ranges overlap substantially, and the close-after-100 median regresses.
+HTTP/2 CPU per request improves in all three pairs, but throughput regresses by
+8.5% in one pair. These samples do not establish a consistent throughput gain.
+Separate profiled samples show aggregate Monitor.Enter_Slowpath exclusive sampled
+thread-time share falling from 12.87% to 9.60% for HTTP/1.1 and from 13.11% to
+11.28% for HTTP/2. Those frames include other locks and blocked thread time; this
+is not attribution solely to the listener lifecycle lock or a CPU percentage.
+Profiled throughput is not part of the comparison.
+
+The frozen results cannot establish performance of the later wakeup correction.
+Raw samples, hashes, traces and the corrected-source regression evidence remain
+under ignored `TestResults/admission-*` in the owner review worktree. PR #201 and
+program #181 remain open; no shipping or default-engine readiness is claimed.
+
+
+### macOS QUIC rebind cause on Apple Silicon and Intel
+
+`DisposedRuntimeListenerRebindsSameEndpoint(False)` keeps failing on macOS at
+the bind stage with AddressAlreadyInUse (48), as recorded above and again at
+cycle 5 in dispatched run 37975160603. It fails on both architectures. Run
+37961188089 attempt 1, from the Intel regression leg on `codex/pr182-intel-macos`,
+failed it at cycle 14 on Apple Silicon with the Homebrew bottle (relocated dylib
+SHA-256 `6f045def309758d760b162ab3a60239bd8afd56ff06e35cf729f5458edc8fa2e`) and at
+cycle 10 on Intel with that leg's source build of `819ab74f`
+(`787e3480def4e697733fbe35f6a3e448807282d771cb5b1e6942527fc9adbbe1`). The same
+behavior reaches EmbedIO's own HTTP/3 restart path. On `9f475d7`, CI 37973389476
+failed `GracefulListenerDrainPreservesAcceptedResponse(True)` after the drained
+server reported `Stopped`: the replacement server's `Http3Listener` start threw
+AddressAlreadyInUse from `QuicListener.ListenAsync`.
+
+The pinned sources explain why disposal can return before the port is free.
+[.NET 10.0.12 `QuicListener.DisposeAsync`](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.Quic/src/System/Net/Quic/QuicListener.cs)
+calls `ListenerStop`, waits for STOP_COMPLETE and closes the handle. In MsQuic
+`819ab74f`, `QuicListenerStopAsync` releases the listener's binding; the last
+release runs `QuicBindingUninitialize`, which calls `CxPlatSocketDelete`. On
+Darwin, `CxPlatSocketContextUninitialize` waits for upcalls, deletes the read
+filter and only queues the context's shutdown to the partition worker. The
+descriptor is closed later on that worker, in
+`CxPlatSocketContextUninitializeComplete`. Nothing in the disposal path waits for
+that close. `src/platform/datapath_kqueue.c` on MsQuic `main` (`931fdf77`,
+2026-10-09) is byte-identical to the pinned file, and no upstream report of this
+was found. No upstream issue has been filed.
+
+Traced controls now cover both architectures: three per architecture in OpenSSL
+run 37945962762 and three per architecture in the run below, all complete with
+no dropped events or untracked descriptors. In all twelve failures the failed
+bind began before the previous listener's descriptor close completed, and that
+close completed after managed disposal had returned: 69 to 230 microseconds
+later on Intel and 25 to 55 on Apple Silicon. In eleven the close also began
+after disposal returned; in the twelfth, on Intel at cycle 231, it began 16
+microseconds before and ended 230 microseconds after.
+
+The cleanup experiment now covers this exact regression. Its Intel job reuses
+the Intel leg's host-name step, so the candidate's Intel full suite no longer
+hits five-second mDNS lookups. Both jobs run the unchanged `QuicRuntimeRebindTest`
+20 times against the unpatched control and 20 times against the candidate. Each
+test process verifies the path and SHA-256 of the MsQuic image it loaded. A
+control failure is accepted only when the raw rebind test stopped at bind with
+AddressAlreadyInUse; any other control outcome, report shape or unverified image
+fails the experiment, and every candidate run must pass. The rebind test now
+calls the existing opt-in `QuicDependencyEvidence` check, which does nothing
+unless `EMBEDIO_EXPECT_QUIC_LIBRARY_ROOT` is set. No assertion changed.
+
+[Run 37975160603](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37975160603)
+tested head `0d1e095` with the pinned quictls and system-libcrypto configuration
+on .NET 10.0.12. Both experiment jobs passed:
+
+| Check | Apple Silicon | Intel |
+| --- | --- | --- |
+| Control probes, cycles completed before error 48 | 254, 91, 26; traced 25, 28, 201 | 434, 531, 501; traced 893, 494, 231 |
+| Candidate probes | 10 of 10 pass 4,096 cycles | 10 of 10 pass 4,096 cycles |
+| Candidate traced closes after disposal | 0 of 20,480 | 0 of 20,480 |
+| Rebind test, control | 5 of 20 runs failed (cycles 14, 7, 22, 18, 13) | 1 of 20 failed (cycle 7) |
+| Rebind test, candidate | 0 of 20 failed | 0 of 20 failed |
+| Native datapath, control | 38 cases, 2 failures, 15 skips | same |
+| Native datapath, candidate | 38 cases, 0 failures, 15 skips | same |
+| Sanitizer, 12 cases x 100 | exit 0 | exit 0 |
+| Candidate full suite | 4,345: 4,314 passed, 31 skipped (3m49s) | same counts (5m21s) |
+
+The control's two native failures are the existing lifetime fixture and the
+unsupported map-mode check. Intel's host name resolved in 5.007 s before the
+hosts entry and 0.007 s after. Apple Silicon's control and candidate libraries
+(`13bb173e...`, `428aa5e7...`) are bit-identical to the earlier documented builds.
+The Intel control is `afa23605...` and the candidate `7e471d89...`. Artifacts and
+the independent verification are under ignored `TestResults/quic-rebind-macos`.
+
+The same run's ordinary Apple Silicon job, which uses the stock bottle, failed the
+rebind test at cycle 5 and
+`Issue502_LargeMessages.OriginalDelayedLargeReplyPatternSurvivesConcurrentBroadcasts(Microsoft,2)`,
+a WebSocket client receive cancelled after 30 seconds. This change does not touch
+that path; it was not investigated here and its log is retained. The pull request
+run on the same head, merged with base `f0c4c7b`, passed on macOS. That pass is
+one more intermittent outcome under the stock dependency, not evidence of a fix.
+
+The candidate remains a test-only MsQuic build. Ordinary CI keeps the stock
+dependency and its failing regression. Shipping or substituting a patched MsQuic,
+filing the upstream report and any EmbedIO-side handling of a same-endpoint
+restart remain owner decisions.
+
+### Owner integration of all-platform QUIC retry
+
+The current QUIC candidate is `45b4097`; it supersedes the earlier macOS-only
+retry. William authorized moving forward with the all-platform retry and narrow
+raw-runtime quarantine. Intel CI removal remains approved; Intel runtime support
+is retained. [The QUIC lifetime guide](quic-lifetime.md) records both native
+lifetime behaviors, evidence, approval boundaries and current validation.
+[Issue #202](https://github.com/WilliamSmithEdward/embedio-neo/issues/202) is an
+actual sub-issue of program #181 for upstream reporting, native dependency policy
+and evidence-based retirement. Those questions do not imply approval to ship a
+patched MsQuic or publish an upstream report.
+
+The owner candidate combines admission checkpoint `e7c6e40` with QUIC `45b4097`.
+Its floor is 4,388, including all seven QUIC cases and sixteen admission cases.
+The quarantine matches the exact raw-runtime test method and independently checks
+that discovery floor before tolerating its known bind error. Real retained TRX
+and excluded-case checks confirm the unrelated Microsoft WebSocket timeout and
+owned restart failures remain failures. The final agent PR head is green, but its
+separate experiment retains a macOS compatibility subprocess exit-137 failure.
+No failed check is hidden by that PR result.
+
+Combined Windows: 4,388 total, 4,383 passed, five expected local/platform skips,
+zero failed. Combined focused Linux: 99 passed, zero failed. Both targets build
+without warnings/errors; guards and four resource budgets pass. Final combined
+macOS/CI/native experiments and admission performance acceptance remain pending.
 ### Standards-audit bodyless response and drain-upload corrections
 
 Owner raw-wire regressions independently reproduced two source-traced audit
@@ -6228,6 +6434,49 @@ listener startup before issuing traffic; all twelve standard cases and eight
 modern bodyless cases pass afterward. An initial helper-namespace build error
 was corrected and retained in the build logs. No port retry or assertion
 weakening was introduced.
+
+### Reconciled cap, framing and native review checkpoint
+
+William explicitly approved removing the inherited 100-request HTTP/1 keep-alive
+cap. The engine retains the 15-second idle timeout, explicit close, cancellation
+and graceful drain; its Keep-Alive header no longer advertises max. The reuse
+counter saturates rather than wrapping back to an initial-request marker on a
+long-lived connection. Plain and TLS cases now make 256 requests on one transport
+and verify final stop cleanup. Both fail at request 101 on the exact frozen
+pre-change core (14C3927746EDECE5A3D57E7F23AD9D5989CDB7FBDF01A4BD0CFF69E900CB3EFB).
+The candidate's 149-case cap/coding set and 4,388-case pre-reconciliation full run
+pass; migration impact is documented. Failure-only coding-chain diagnostics
+capture endpoint, listener/task/cancellation state and response headers without
+changing request behavior or assertions. The recurring native 503 is not claimed
+fixed by the cap change.
+
+The owner integration reconciles this with engine c25fd05, retaining all twelve
+framing regressions and all admission/QUIC work. Its floor is 4,400, including the
+independent discovery check before the narrow raw-runtime quarantine. Combined
+Windows: 4,400 total, 4,395 passed/five expected local skips, zero failures. Focused
+Linux: 230 passed, zero failures. Both targets build without warnings/errors;
+guards and all four resource budgets pass. Exact-head CI/native validation and
+performance acceptance remain pending.
+
+The completed final-admission comparison measured frozen 0dc187d before cap
+removal: eighteen samples, sixteen valid and two failures, never retried. One
+candidate close-after-100 round failed with NoBufferSpaceAvailable and about
+27,895 server-side TIME_WAIT entries afterward. One ordinary candidate round
+failed with AddressAlreadyInUse and about 13,993 server-side TIME_WAIT entries.
+Neither is a QUIC failure or a successful performance sample. Successful HTTP/1
+pairs remain mixed. HTTP/2 CPU per request improves in all three pairs, while its
+tail latency is slightly worse. This campaign does not establish performance
+acceptance or performance of the later cap change. Artifacts remain under ignored
+TestResults/admission-final-comparison, including both failures and TCP snapshots.
+
+The separate exact-0dc187d native experiment 37987974756 completed: Apple Silicon
+unpatched controls had seven known raw failures in twenty runs and no unexpected
+failures; patched candidates had none in twenty runs, with sanitizer exit zero.
+The patched full macOS suite reported 4,357 passed/31 skips, zero failures. Its
+overall workflow remains failed: Windows also observed TcpAndQuicSharePortAndStopIndependently
+with TLS UserCanceled, and the native coding-chain 503. Neither is quarantined;
+their causes remain unconfirmed. Issue #202 retains the QUIC follow-up questions.
+
 ### HTTP/1 request-target form validation correction
 
 Ten additional raw-wire cases cover missing origin-path slashes, query-only
@@ -6318,3 +6567,73 @@ TestResults/h2-negotiation-open* and h2-negotiation-tls*.
 Final expanded Windows suite: 4,405 cases, 4,400 passed, five expected local skips,
 zero failures. Analyzer builds, source guards and changed-file formatting pass.
 Cross-platform exact-head checks remain required.
+
+### HTTP/3 request field-section size isolation
+
+Four coordinator regressions fail on f2d89e0: indexed/literal sections poison the
+shared decoder, Huffman expansion produces decompression error instead of a local
+size rejection, and an oversized blocked section prevents a healthy sibling from
+resuming. A further correctly framed encoded-HEADERS case confirms a connection
+abort at the request metadata buffer limit. Logs and TRX remain under ignored
+TestResults/qpack-limit-before* and qpack-encoded-before*.
+
+A distinct internal field-section limit exception preserves resource-versus-syntax
+classification. Immediate size rejection is converted to a stream error without
+poisoning QPACK. Encoder-driven resumption returns successful and failed section
+completions separately, releases each pending payload, and lets each request owner
+cancel its references. The connection owner faults only the rejected completion.
+Huffman decoding retains its original HPACK entry point and error behavior; a
+bounded entry point lets QPACK classify only decoded-output exhaustion as a size
+failure. Request HEADERS lengths are checked before payload buffering. Shared
+storage/feedback budget failures and malformed compression remain fatal.
+
+Four independently encoded real-QUIC cases cover encoded size, repeated static
+indices, repeated literals and a 70,000-byte Huffman expansion. They assert stream
+error 0x107 and a healthy sibling response. The first Huffman peer incorrectly used
+a two-byte QUIC length for a payload requiring four bytes; that failed fixture is
+retained, corrected, and not treated as defect evidence. The existing request
+metadata test now requires a stream exception with the same code while retaining
+its no-buffering position assertion. No limit is raised and no malformed-input
+check is disabled. This uses request-local rejection for the limits described in
+[RFC 9114 section 4.2.2](https://www.rfc-editor.org/rfc/rfc9114.html#section-4.2.2)
+while preserving QPACK cancellation obligations.
+
+The initial 145 codec/coordinator cases pass. The broad 454-case set first found
+the old metadata exception-scope assertion; after correcting that assertion,
+full regression and exact-head validation remain required. Discovery floors are
+4,413, adding eight new cases. Actual standard-asset, independent-peer and
+cross-platform checks remain required for the complete engine.
+
+Final local Windows suite passes: 4,413 cases, 4,408 passed, five expected local
+skips and zero failures. Both-target analyzer builds, source guards, changed-file
+formatting and all four allocation budgets pass. Exact-head GitHub checks and
+broader independent-peer validation remain required.
+
+### Completed agent fixture integration checkpoint
+
+PR #205 merged into the engine branch as 5245b6e after every exact-head check
+passed. Hosted Windows HTTP.sys had an orphaned strong-wildcard reservation for
+port 12292; the test allocator now skips wildcard-reserved ports discovered by a
+read-only netsh query. Production behavior, assertions and timeouts are unchanged.
+PR #206 merged as 0877302 after every exact-head check passed. Issue502 broadcasts
+now wait for server registration witnesses; four controlled cases reproduce the
+old client-handshake/server-registration gap. No production WebSocket change was
+needed. Both squash messages preserve human authorship and contain no AI trailers.
+
+The combined QPACK correction and both fixture changes pass the full Windows
+suite: 4,425 cases, 4,420 passed, five expected local skips and zero failures.
+Both-target analyzer builds pass. Discovery floors are 4,425. Exact-head
+cross-platform/platform-app checks remain required before the engine is ready.
+These merges target the development engine branch; neither main nor a release
+was published, and program #181 remains open.
+
+
+### Admission, cap and QUIC reconciliation with a80251a
+
+The owner candidate retains all current protocol corrections and both accepted
+fixture fixes. Merge resolution keeps all migration/evidence sections and the
+accepted Windows diagnostics. The additive floor is 4,448, enforced independently
+inside the narrow raw-runtime quarantine as well as by test discovery. Full
+Windows: 4,443 passed/five expected local skips, zero failures. Both targets,
+analyzers, source guards and four allocation budgets pass. Exact-head CI and
+comparative throughput/platform validation remain required before integration.
