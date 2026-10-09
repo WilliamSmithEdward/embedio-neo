@@ -4700,3 +4700,41 @@ Darwin execution of that deployment proof is pending. This tests one RID and
 BCL library selection; all supported RIDs, full engine deployment/interoperability,
 update maintenance and release readiness remain separate requirements. No core
 library target, default or runtime dependency group changes.
+### Successful signature and normal package-loader proof
+
+Job 37902004523 / 113726501618 completed successfully on head edfb206. Its
+Darwin GnuPG status verifies the official OpenSSL tag under the pinned primary
+fingerprint; the shorter keyring resolves the earlier path-length failure.
+The private package hash is
+9489d87317cb77db409d89f8f64e7f8e211136d839b886d1c9082da519e56a7d,
+and all native assets match candidate hash
+a717345efa0fc215e74b890831467cde9621746ac99819c743b34cc712f75941.
+Notices match the source. Both locked consumer restores/builds complete.
+
+With DYLD search/injection overrides cleared, the portable .NET 10.0.12/Arm64
+consumer loads libmsquic.dylib under its own runtimes/osx-arm64/native directory;
+the RID-published apphost loads the copy in its publish root. Both pass all 4,096
+cycles, adding 8,192 cycles of actual package-loader proof. The existing relocated
+and build-location probes, native controls/tests and sanitizer campaign also pass;
+full macOS coverage remains 3,522 cases (3,491 passed, 31 skipped, zero failed).
+This proves one-RID normal package selection without an explicit native loader
+hook; it does not establish all required distribution/deployment properties.
+
+The native candidate used Release configuration with QUIC_BUILD_TEST=ON. The
+next recipe increment builds a separate candidate-production library with tests
+and sanitizers disabled, retains strict import/export checks, stages that library
+for the private package consumers, and runs a second full managed macOS suite
+with loader evidence identifying the tests-disabled copy. Native platform tests
+and ASAN continue against their own test builds. The receipt records buildTests,
+and the package verifier additionally checks the pinned MsQuic source and artifact
+scope. Shell/source guards and the verifier on the prior validated package pass
+locally; the new tests-disabled build/deployment/suite remain pending execution.
+No production runtime asset or installed prerequisite is changed.
+
+HTTP/1 CONNECT ownership audit identifies authority-form request initialization,
+prefix/host routing, response framing and opaque transport handoff as coupled
+implementation work. Successful replies must transfer buffered bytes and stop
+HTTP parsing/framing, while rejected optimistic transitions retain closure under
+RFC 9931. Existing multiplexed WebSocket tunnel adapters do not provide a public
+classic CONNECT tunnel API. This remains concrete implementation work, not a
+completed feature or a reason to mark the development goal achieved.

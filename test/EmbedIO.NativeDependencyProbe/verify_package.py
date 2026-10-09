@@ -9,6 +9,10 @@ import zipfile
 candidate = Path(sys.argv[1])
 package = Path(sys.argv[2])
 receipt = json.loads((candidate / "build-receipt.json").read_text())
+if receipt.get("msquicSource") != "819ab74f851ee168504cbc392ec32e7bed1d82e9":
+    raise ValueError("Unexpected MsQuic source.")
+if receipt.get("rid") != "osx-arm64" or receipt.get("productionInstalled") is not False:
+    raise ValueError("Unexpected artifact scope.")
 if receipt.get("tlsBackend") != "openssl":
     raise ValueError("The deployment fixture requires the OpenSSL candidate.")
 if receipt.get("cryptoSource") != "45e844fa2a14ec92d146bd8f5778ac130b6625fb":

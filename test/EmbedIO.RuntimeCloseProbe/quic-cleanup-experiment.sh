@@ -102,7 +102,7 @@ codesign --force --sign - "$trace_library"
 shasum -a 256 "$trace_library" > "$results/tracer.sha256"
 
 build_native() {
-  local variant="$1" asan="${2:-OFF}"
+  local variant="$1" asan="${2:-OFF}" tests="${3:-ON}"
   local build_dir="$RUNNER_TEMP/msquic-$variant-build"
   local project_include=""
   if test "$asan" = ON; then
@@ -115,11 +115,16 @@ build_native() {
   cmake -S "$source_dir" -B "$build_dir" \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$openssl_root" \
     "-DQUIC_TLS_LIB=$tls_backend" "-DQUIC_USE_SYSTEM_LIBCRYPTO=$system_crypto" \
-    -DQUIC_BUILD_TEST=ON -DQUIC_BUILD_TOOLS=OFF -DQUIC_BUILD_PERF=OFF \
+    "-DQUIC_BUILD_TEST=$tests" -DQUIC_BUILD_TOOLS=OFF -DQUIC_BUILD_PERF=OFF \
     -DQUIC_ENABLE_LOGGING=OFF -DQUIC_ENABLE_ASAN="$asan" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
     -DQUIC_OUTPUT_DIR="$build_dir/bin" "-DCMAKE_PROJECT_INCLUDE=$project_include" 2>&1 | tee "$results/$variant-configure.log"
-  cmake --build "$build_dir" --parallel 3 --target msquic msquicplatformtest \
-    2>&1 | tee "$results/$variant-build.log"
+  if test "$tests" = ON; then
+    cmake --build "$build_dir" --parallel 3 --target msquic msquicplatformtest \
+      2>&1 | tee "$results/$variant-build.log"
+  else
+    cmake --build "$build_dir" --parallel 3 --target msquic \
+      2>&1 | tee "$results/$variant-build.log"
+  fi
   cp "$build_dir/CMakeCache.txt" "$results/$variant-CMakeCache.txt"
   cp "$build_dir/compile_commands.json" "$results/$variant-compile_commands.json"
   codesign --force --sign - "$build_dir/bin/libmsquic.2.6.2.dylib"
@@ -199,11 +204,18 @@ git -C "$source_dir" diff -- src/platform/datapath_kqueue.c > "$results/combined
 build_native candidate
 candidate_failed=0
 if test "$self_contained" = 1; then
+  staged_variant=candidate
+  staged_tests=true
+  if test "$tls_backend" = openssl; then
+    build_native candidate-production OFF OFF
+    staged_variant=candidate-production
+    staged_tests=false
+  fi
   # Stage only the review artifact: no NuGet asset or loader override is installed.
   stage="$results/self-contained-candidate"
   native="$stage/runtimes/osx-arm64/native"
   mkdir -p "$native" "$stage/licenses" "$stage/source"
-  cp "$RUNNER_TEMP/msquic-candidate-build/bin/libmsquic.2.6.2.dylib" "$native/libmsquic.2.6.2.dylib"
+  cp "$RUNNER_TEMP/msquic-$staged_variant-build/bin/libmsquic.2.6.2.dylib" "$native/libmsquic.2.6.2.dylib"
   ln -s libmsquic.2.6.2.dylib "$native/libmsquic.2.dylib"
   ln -s libmsquic.2.dylib "$native/libmsquic.dylib"
   cp "$source_dir/LICENSE" "$stage/licenses/MsQuic-LICENSE"
@@ -213,9 +225,9 @@ if test "$self_contained" = 1; then
   if test "$tls_backend" = openssl; then
     cp "$results/openssl-tag-signature.log" "$results/crypto-version.txt" "$stage/source/"
   fi
-  jq -n --arg source "$revision" --arg crypto "$crypto_revision" --arg backend "$tls_backend" \
+  jq -n --arg source "$revision" --arg crypto "$crypto_revision" --arg backend "$tls_backend" --argjson buildTests "$staged_tests" \
     --arg hash "$(shasum -a 256 "$native/libmsquic.2.6.2.dylib" | awk '{print $1}')" \
-    '{artifact:"test-only self-contained candidate",rid:"osx-arm64",msquicSource:$source,cryptoSource:$crypto,tlsBackend:$backend,sha256:$hash,productionInstalled:false}' \
+    '{artifact:"test-only self-contained candidate",rid:"osx-arm64",msquicSource:$source,cryptoSource:$crypto,tlsBackend:$backend,buildTests:$buildTests,sha256:$hash,productionInstalled:false}' \
     > "$stage/build-receipt.json"
   status=0
   run_probe candidate-relocated 1 untraced "$native" || status=$?
@@ -247,6 +259,15 @@ done
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
   --minimum-expected-tests 3522 --timeout 5m --report-trx --coverlet \
   --results-directory "$results/full-suite" || candidate_failed=1
+if test "$self_contained" = 1 && test "$tls_backend" = openssl; then
+  # Exercise actual managed protocol/application behavior on the tests-disabled library.
+  env DYLD_FALLBACK_LIBRARY_PATH="$RUNNER_TEMP/msquic-candidate-production-build/bin" DYLD_PRINT_LIBRARIES=1 \
+    dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
+    --minimum-expected-tests 3522 --timeout 5m --report-trx --coverlet \
+    --results-directory "$results/production-full-suite" 2> "$results/production-full-suite-loader.log" || candidate_failed=1
+  grep -F "$RUNNER_TEMP/msquic-candidate-production-build/bin/libmsquic" "$results/production-full-suite-loader.log" \
+    > "$results/production-full-suite-loaded-library.txt" || candidate_failed=1
+fi
 # Additional memory-lifetime validation with upstream's sanitizer build.
 # The ordinary native suite above retains every genuine failure in final status.
 build_native candidate-asan ON
