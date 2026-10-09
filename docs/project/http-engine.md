@@ -6228,3 +6228,93 @@ listener startup before issuing traffic; all twelve standard cases and eight
 modern bodyless cases pass afterward. An initial helper-namespace build error
 was corrected and retained in the build logs. No port retry or assertion
 weakening was introduced.
+### HTTP/1 request-target form validation correction
+
+Ten additional raw-wire cases cover missing origin-path slashes, query-only
+requests, authority-shaped non-CONNECT targets, malformed absolute URLs, and
+valid leading-slash paths containing `@` or queries. On unchanged production at
+c25fd05, three of the 66 target cases failed: two leading-@ targets closed without
+400, and a query-only target received 200. The other 63 cases passed. The first
+attempt used an unsupported wildcard filter and executed zero tests; that log
+is retained and is not counted as validation.
+
+The listener now verifies a leading slash, OPTIONS asterisk handling, or a parsed
+absolute HTTP(S) URL with an explicit scheme separator before reconstructing the
+application URL. The existing host precedence, escaping, userinfo checks and raw
+target preservation remain covered. All 88 focused target, URL and CONNECT
+rejection cases pass. This does not implement CONNECT authority-form or tunneling;
+those remain requirements for completion of the engine. Discovery floors are
+4,387. Full regression and exact-head checks remain required.
+
+Evidence: ignored TestResults/request-target-before-corrected.log and its TRX,
+request-target-after.log and its TRX. An analyzer build attempted during the full
+suite hit the CLI plugin file held by that suite; it must be rerun after the test
+process finishes. It is not counted as a passing analyzer gate.
+Final local validation: full Windows reports 4,387 cases, 4,382 passed, five
+expected local skips and zero failures. The subsequent analyzer build passes
+both targets with zero warnings/errors; suppression checks, analyzer guard and
+changed-source formatting pass. Hot-path, cold-start, listener-queue and wire
+allocation gates pass. The earlier locked-file analyzer failure is preserved.
+Cross-platform and final-head GitHub checks are still required.
+### HTTP/1.0 close-delimited response correction
+
+Six raw-wire cases cover synchronous and asynchronous unknown-length bodies,
+fixed-length bodies and 204 responses. On unchanged production at 556022e,
+the two unknown-length cases advertised keep-alive instead of close; the four
+self-delimited controls passed. The listener now forces close for HTTP/1.0
+responses carrying content without a valid Content-Length. HEAD/bodyless responses
+and valid fixed-length persistence remain eligible for reuse. No HTTP/1.1 hot-path
+parsing is added. This follows RFC 9112 sections 6.3 and 9.3.
+
+All 36 focused HTTP/1.0, bodyless, URL and rejected-CONNECT cases pass. Analyzer
+builds for both targets and changed-source formatting pass. Full regression and
+exact-head checks remain required; discovery floors are 4,393. Original and
+candidate logs/TRX are retained under ignored TestResults/http10-*.
+Final Windows regression: 4,393 cases, 4,388 passed, five expected local skips,
+zero failures. The full suite overlapped another agent's Windows suite; neither
+that observation nor passing local cases establish CI/platform readiness.
+Source guards and all four allocation budgets pass. Full-suite logs and TRX are
+retained. Final-head GitHub checks are required before integration.
+### HTTP/2 malformed WebSocket version rejection
+
+Three real h2c wire cases submit an extended CONNECT with version 12, an empty
+version, or no version. On unchanged production at 3bf7173, each returns 500.
+The first peer attempt rejected legal repeated cache-control fields while building
+a dictionary; it is retained but does not establish the defect. The corrected
+peer groups repeated fields and confirms all three 500 responses.
+
+The HTTP/2 owner rejects these malformed negotiations before registering an
+application context, returns 400 and advertises version 13, matching HTTP/3.
+Each corrected case validates a subsequent GET and its payload on stream 3 of
+the same TCP connection. Valid version-13 echo, closure and limit cases remain
+covered by existing tests. The focused set reports 17 passed, zero failures;
+changed-source formatting and analyzer builds pass. Full regression and exact-head
+checks remain required. Discovery floors are 4,396. Evidence: ignored
+TestResults/h2-negotiation-before*, h2-negotiation-after* and their TRX files.
+
+The initial malformed-handshake wire cases used h2c and END_STREAM request headers;
+this does not establish TLS or still-open upload rejection coverage, or resolve
+unsupported extended-CONNECT protocols and remaining timeout/retention work.
+Final local Windows regression passes: 4,396 cases, 4,391 passed, five expected
+local skips, zero failures. Suppression checks and analyzer guard also pass.
+Cross-platform and exact-head GitHub validation remain required.
+### HTTP/2 rejection coverage: TLS and open request input
+
+The malformed WebSocket version matrix now covers all three version failures,
+with and without END_STREAM, over both h2c and TLS: twelve cases. TLS peers pin
+the generated leaf certificate, retain hostname validation, and require HTTP/2
+ALPN. An open rejected input is canceled with exactly one NO_ERROR RST_STREAM on
+stream 1; completed inputs must not receive that reset. Every case verifies a
+healthy GET on stream 3 and rejects connection GOAWAY or an unrelated reset.
+
+The shared raw-wire helpers now accept Stream so the same peer can run over TLS;
+framing and assertions are otherwise retained. All 26 focused negotiation/echo/
+closure cases pass. Both-target analyzer builds pass. The initial TLS build
+reported a formatting diagnostic; changed-file formatting corrected it without
+suppressions, and the failure log is retained. Discovery floors are 4,405. Full
+regression and final-head checks remain required. Evidence: ignored
+TestResults/h2-negotiation-open* and h2-negotiation-tls*.
+
+Final expanded Windows suite: 4,405 cases, 4,400 passed, five expected local skips,
+zero failures. Analyzer builds, source guards and changed-file formatting pass.
+Cross-platform exact-head checks remain required.

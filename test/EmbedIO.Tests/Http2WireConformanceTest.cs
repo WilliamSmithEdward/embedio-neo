@@ -20,7 +20,7 @@ namespace EmbedIO.Tests
             if (length.HasValue) bytes = bytes.Concat(new byte[] { 0x0f, 13, 1, (byte)('0' + length.Value) });
             return bytes.ToArray();
         }
-        private static async Task SendWire(NetworkStream stream, byte type, byte flags, int id, byte[] payload, CancellationToken token)
+        private static async Task SendWire(Stream stream, byte type, byte flags, int id, byte[] payload, CancellationToken token)
         {
             var bytes = new byte[9 + payload.Length];
             bytes[0] = (byte)(payload.Length >> 16); bytes[1] = (byte)(payload.Length >> 8); bytes[2] = (byte)payload.Length;
@@ -28,14 +28,14 @@ namespace EmbedIO.Tests
             bytes[5] = (byte)(id >> 24); bytes[6] = (byte)(id >> 16); bytes[7] = (byte)(id >> 8); bytes[8] = (byte)id;
             payload.CopyTo(bytes, 9); await stream.WriteAsync(bytes, token);
         }
-        private static async Task<(byte Type, byte Flags, int Id, byte[] Payload)> ReceiveWire(NetworkStream stream, CancellationToken token)
+        private static async Task<(byte Type, byte Flags, int Id, byte[] Payload)> ReceiveWire(Stream stream, CancellationToken token)
         {
             var header = new byte[9]; await stream.ReadExactlyAsync(header, token);
             var payload = new byte[(header[0] << 16) | (header[1] << 8) | header[2]];
             await stream.ReadExactlyAsync(payload, token);
             return (header[3], header[4], ((header[5] & 127) << 24) | (header[6] << 16) | (header[7] << 8) | header[8], payload);
         }
-        private static async Task<(byte Type, byte Flags, int Id, byte[] Payload)> Until(NetworkStream stream, byte type, int id, CancellationToken token)
+        private static async Task<(byte Type, byte Flags, int Id, byte[] Payload)> Until(Stream stream, byte type, int id, CancellationToken token)
         {
             for (var i = 0; i < 128; i++)
             {
