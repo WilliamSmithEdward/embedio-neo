@@ -88,13 +88,17 @@ namespace EmbedIO.Net.Internal.Http2
                         await _headerOutput.WaitAsync(token).ConfigureAwait(false);
                         try
                         {
-                            Peer.Apply(frame.Payload, delta =>
-                            {
-                                SendFlow.AdjustInitialWindow(delta);
-                                AdjustStreamWindows(delta);
-                            },
-                                size => _encoder.SetMaximumTableSize((int)Math.Min(size, 4096u)));
-                            await SendAsync(new[] { new Http2Frame(4, 1, 0, Array.Empty<byte>()) }, token).ConfigureAwait(false);
+                            await _transport.WriteSettingsAsync(new[] { new Http2Frame(4, 1, 0, Array.Empty<byte>()) },
+                                Peer.MaximumFrameSize, () => Peer.Apply(frame.Payload, delta =>
+                                {
+                                    SendFlow.AdjustInitialWindow(delta);
+                                    AdjustStreamWindows(delta);
+                                }, size => _encoder.SetMaximumTableSize((int)Math.Min(size, 4096u))), token).ConfigureAwait(false);
+                        }
+                        catch (Exception error) when (_transport.IsWriteFailed)
+                        {
+                            OutputFailed?.Invoke(error);
+                            throw;
                         }
                         finally { _headerOutput.Release(); }
                     }
@@ -152,22 +156,33 @@ namespace EmbedIO.Net.Internal.Http2
             _transport.Dispose();
         }
 
-        internal async Task SendStreamAsync(Http2Frame[] frames, CancellationToken token)
+        internal async Task<bool> SendStreamAsync(Http2Frame[] frames, CancellationToken token)
         {
-            try { await _transport.WriteRequestAsync(frames, Peer.MaximumFrameSize, token, _transportCancellation).ConfigureAwait(false); }
+            try
+            {
+                var committed = await _transport.WriteRequestAsync(frames, Peer.MaximumFrameSize, token,
+                    _transportCancellation, SendFlow).ConfigureAwait(false);
+                if (!committed) ReturnReservations(frames);
+                return committed;
+            }
             catch (OperationCanceledException) when (token.IsCancellationRequested && !_transport.IsWriteFailed)
             {
                 // No DATA reached the wire. A reset may already have removed its
                 // stream window; connection credit still belongs to siblings.
                 try
                 {
-                    foreach (var frame in frames)
-                        if (frame.Type == 0) SendFlow.ReturnUnusedReservation(frame.StreamId, frame.Payload.Length);
+                    ReturnReservations(frames);
                 }
                 catch (Exception error) { OutputFailed?.Invoke(error); throw; }
                 throw;
             }
             catch (Exception error) { OutputFailed?.Invoke(error); throw; }
+        }
+
+        private void ReturnReservations(Http2Frame[] frames)
+        {
+            foreach (var frame in frames)
+                if (frame.Type == 0) SendFlow.ReturnUnusedReservation(frame.StreamId, frame.Payload.Length);
         }
 
         internal async Task SendAsync(Http2Frame[] frames, CancellationToken token)

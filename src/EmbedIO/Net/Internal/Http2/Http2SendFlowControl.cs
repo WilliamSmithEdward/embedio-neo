@@ -73,6 +73,21 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
+        // Called under the shared wire gate, also used when applying SETTINGS.
+        // A stream's response gate permits only one outstanding DATA batch.
+        internal bool CanSendReserved(Http2Frame[] frames)
+        {
+            lock (_sync)
+            {
+                ThrowIfFailed();
+                foreach (var frame in frames)
+                    if (frame.Type == 0 && frame.Payload.Length != 0
+                        && (!_streams.TryGetValue(frame.StreamId, out var window) || window.Credit < 0))
+                        return false;
+                return true;
+            }
+        }
+
         internal void ReturnUnusedReservation(int streamId, int count)
         {
             if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
