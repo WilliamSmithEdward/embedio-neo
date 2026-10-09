@@ -276,6 +276,12 @@ namespace EmbedIO.Tests
                 using var request = new HttpRequestMessage(HttpMethod.Post, prefix) { Content = content };
                 if (chunked) request.Headers.TransferEncodingChunked = true;
                 using var response = await client.SendAsync(request, stop.Token);
+                if (response.StatusCode != status)
+                {
+                    TestContext.Error.WriteLine($"Request coding response failure: mode={mode}, prefix={prefix}, coding={coding}, encoded={encoded.Length}, expected={expected.Length}, enabled={enabled}, limit={limit}, text={text}, chunked={chunked}");
+                    TestContext.Error.WriteLine($"Listener: listening={server.Listener.IsListening}, running={running.Status}, canceled={stop.IsCancellationRequested}, accepted={Volatile.Read(ref accepted)}, threadPoolPending={ThreadPool.PendingWorkItemCount}");
+                    TestContext.Error.WriteLine($"Response: {(int)response.StatusCode} {response.ReasonPhrase}, version={response.Version}, headers={response.Headers}, contentHeaders={response.Content.Headers}");
+                }
                 Assert.That(response.StatusCode, Is.EqualTo(status));
                 Assert.That(accepted, Is.EqualTo(status == HttpStatusCode.OK ? 1 : 0));
                 Assert.That(await client.GetStringAsync(prefix, stop.Token), Is.EqualTo("healthy"));

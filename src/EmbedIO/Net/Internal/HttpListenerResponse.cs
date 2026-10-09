@@ -1,5 +1,4 @@
-﻿using EmbedIO.Internal;
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -7,6 +6,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
+using EmbedIO.Internal;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
@@ -241,7 +241,6 @@ namespace EmbedIO.Net.Internal
             //// HttpStatusCode.RequestUriTooLong     414
             //// HttpStatusCode.InternalServerError   500
             //// HttpStatusCode.ServiceUnavailable    503
-            var reuses = _connection.Reuses;
             var keepAlive = _statusCode switch
             {
                 400 => false,
@@ -251,7 +250,7 @@ namespace EmbedIO.Net.Internal
                 414 => false,
                 500 => false,
                 503 => false,
-                _ => !_connection.IsDraining && KeepAlive && reuses < 100
+                _ => !_connection.IsDraining && KeepAlive
             };
 
             // RFC 9931 section 8: bytes after a rejected HTTP/1.1 CONNECT
@@ -265,7 +264,7 @@ namespace EmbedIO.Net.Internal
                 Headers.Add(HttpHeaderNames.Connection, "keep-alive");
                 if (ProtocolVersion >= HttpVersion.Version11)
                 {
-                    Headers.Add(HttpHeaderNames.KeepAlive, $"timeout=15,max={100 - reuses}");
+                    Headers.Add(HttpHeaderNames.KeepAlive, "timeout=15");
                 }
             }
             else
