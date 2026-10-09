@@ -2980,3 +2980,28 @@ against the actual netstandard2.0 library on the Windows .NET 10 host
 (`mixed-drain-wire-netstandard.log`). Formatting, both source policy guards and
 the pinned changed-fixture YARA scan pass. These local results do not close the
 Windows CI timeout investigation; the new exact head must pass its checks.
+
+## Shared end-to-end fixture shutdown
+
+The macOS run for `f0d2553` reached the unchanged five-minute suite limit after
+reporting 3,229 of 3,258 cases, with no assertion failures among reported cases.
+Its retained TRX shows tests still completing near the deadline. The shared
+end-to-end fixture previously slept 500 ms before disposing each server, without
+observing its run task. It now retains that task, waits for listening at setup,
+cancels at teardown and requires run completion and stopped state within ten
+seconds before disposing the client and server. No tests or discovery gates are
+removed, and the suite deadline is unchanged. This is fixture lifecycle work,
+not an engine throughput improvement or proof of the macOS failure's full cause.
+
+An initial local Linux fixture run used a read-only assembly mount; file-serving
+fixtures need writable directories beside that assembly. Their construction
+failure also exposed unsafe managed cleanup from test-fixture finalizers. The
+fixtures now use explicit disposal, including base cleanup; the Linux validation
+copies assemblies into writable container temporary storage while keeping the
+host mount read-only. All 60 affected cases pass in that environment.
+
+The complete Windows coverage run reports 3,266 cases, 3,261 successes and five
+existing skips in 3m41s, compared with 4m14s for the preceding local run. This
+observed suite duration is not an engine benchmark. Repeating the deliberately
+read-only directory-fixture setup now produces ordinary test failures (exit 2)
+without a finalizer crash. Cross-platform exact-head CI remains required.

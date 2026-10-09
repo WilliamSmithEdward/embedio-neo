@@ -21,7 +21,8 @@ namespace EmbedIO.Tests
 
         protected override void Dispose(bool disposing)
         {
-            ServedFolder.Dispose();
+            if (disposing) ServedFolder?.Dispose();
+            base.Dispose(disposing);
         }
 
         protected override void OnSetUp()
