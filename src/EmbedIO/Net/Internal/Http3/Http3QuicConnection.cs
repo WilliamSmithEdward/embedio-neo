@@ -373,7 +373,8 @@ namespace EmbedIO.Net.Internal.Http3
                     foreach (var ready in _decoder.FeedEncoder(bytes, 0, count))
                     {
                         if (!_pending.Remove(ready.StreamId, out var pending)) throw new Http3ProtocolException(0x102, "Missing blocked field-section owner.");
-                        pending.TrySetResult(ready.Fields);
+                        if (ready.Error != null) pending.TrySetException(ready.Error);
+                        else pending.TrySetResult(ready.Fields);
                     }
                     SignalFeedback();
                 }

@@ -1089,3 +1089,16 @@ before application dispatch. Previously the failed socket acceptance could becom
 500. This matches the existing HTTP/3 negotiation policy. The rejection affects
 its request stream; other HTTP/2 streams remain usable. Valid version-13
 WebSocket handshakes and the public acceptance API are unchanged.
+## HTTP/3 request field-section limit isolation (unreleased)
+
+An encoded or decoded request HEADERS section over the existing size limit now
+fails its request stream with H3_EXCESSIVE_LOAD (0x107). Previously these limits
+could close the entire connection, and Huffman expansion over the decoded budget
+could be reported as QPACK_DECOMPRESSION_FAILED. Healthy sibling requests and the
+shared decoder table remain usable, including when a blocked section becomes
+oversized after encoder inserts arrive. The limits themselves are unchanged.
+
+Malformed QPACK syntax/references and encoder instructions still fail the
+connection. Aggregate blocked-storage and decoder-feedback exhaustion also retain
+their connection-wide policy. Applications should handle the rejected request
+stream independently instead of assuming all requests on the connection failed.

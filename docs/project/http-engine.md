@@ -6318,3 +6318,44 @@ TestResults/h2-negotiation-open* and h2-negotiation-tls*.
 Final expanded Windows suite: 4,405 cases, 4,400 passed, five expected local skips,
 zero failures. Analyzer builds, source guards and changed-file formatting pass.
 Cross-platform exact-head checks remain required.
+
+### HTTP/3 request field-section size isolation
+
+Four coordinator regressions fail on f2d89e0: indexed/literal sections poison the
+shared decoder, Huffman expansion produces decompression error instead of a local
+size rejection, and an oversized blocked section prevents a healthy sibling from
+resuming. A further correctly framed encoded-HEADERS case confirms a connection
+abort at the request metadata buffer limit. Logs and TRX remain under ignored
+TestResults/qpack-limit-before* and qpack-encoded-before*.
+
+A distinct internal field-section limit exception preserves resource-versus-syntax
+classification. Immediate size rejection is converted to a stream error without
+poisoning QPACK. Encoder-driven resumption returns successful and failed section
+completions separately, releases each pending payload, and lets each request owner
+cancel its references. The connection owner faults only the rejected completion.
+Huffman decoding retains its original HPACK entry point and error behavior; a
+bounded entry point lets QPACK classify only decoded-output exhaustion as a size
+failure. Request HEADERS lengths are checked before payload buffering. Shared
+storage/feedback budget failures and malformed compression remain fatal.
+
+Four independently encoded real-QUIC cases cover encoded size, repeated static
+indices, repeated literals and a 70,000-byte Huffman expansion. They assert stream
+error 0x107 and a healthy sibling response. The first Huffman peer incorrectly used
+a two-byte QUIC length for a payload requiring four bytes; that failed fixture is
+retained, corrected, and not treated as defect evidence. The existing request
+metadata test now requires a stream exception with the same code while retaining
+its no-buffering position assertion. No limit is raised and no malformed-input
+check is disabled. This uses request-local rejection for the limits described in
+[RFC 9114 section 4.2.2](https://www.rfc-editor.org/rfc/rfc9114.html#section-4.2.2)
+while preserving QPACK cancellation obligations.
+
+The initial 145 codec/coordinator cases pass. The broad 454-case set first found
+the old metadata exception-scope assertion; after correcting that assertion,
+full regression and exact-head validation remain required. Discovery floors are
+4,413, adding eight new cases. Actual standard-asset, independent-peer and
+cross-platform checks remain required for the complete engine.
+
+Final local Windows suite passes: 4,413 cases, 4,408 passed, five expected local
+skips and zero failures. Both-target analyzer builds, source guards, changed-file
+formatting and all four allocation budgets pass. Exact-head GitHub checks and
+broader independent-peer validation remain required.

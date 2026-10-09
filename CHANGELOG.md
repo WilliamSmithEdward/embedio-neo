@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Isolate oversized HTTP/3 request field sections to their streams, preserving
+  healthy requests and QPACK state while retaining fatal compression-error checks.
+
 - Return a stream-local 400 with the supported version for malformed HTTP/2
   WebSocket version negotiation instead of an application 500.
 

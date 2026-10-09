@@ -93,6 +93,8 @@ namespace EmbedIO.Net.Internal.Http3
                     if (type == 1)
                     {
                         if (Volatile.Read(ref _tunnel) != 0 || (_state != State.BeforeHeaders && _state != State.Body)) throw Unexpected();
+                        if (header.Value.Length > _maximumMetadata)
+                            throw StreamError(0x107, "Request HEADERS exceeds the configured metadata budget.");
                         var initial = _state == State.BeforeHeaders;
                         var encoded = await _reader.ReadBufferedPayloadAsync(_maximumMetadata, token).ConfigureAwait(false);
                         _state = initial ? State.PendingHeaders : State.PendingTrailers;

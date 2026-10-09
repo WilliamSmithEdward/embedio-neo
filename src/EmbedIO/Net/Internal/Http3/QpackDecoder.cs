@@ -70,6 +70,8 @@ namespace EmbedIO.Net.Internal.Http3
                     _blockedBytes += wire.Length;
                     return null;
                 }
+                catch (QpackFieldSectionLimitException error)
+                { throw new Http3StreamException(streamId, error.ErrorCode, error.Message); }
                 catch (Http3ProtocolException error) { Fail(error.ErrorCode); throw; }
             }
         }
@@ -85,7 +87,14 @@ namespace EmbedIO.Net.Internal.Http3
                     var completed = new List<QpackDecodedSection>();
                     foreach (var item in _pending)
                     {
-                        var fields = item.Value.Section.TryDecode();
+                        HpackField[]? fields;
+                        try { fields = item.Value.Section.TryDecode(); }
+                        catch (QpackFieldSectionLimitException error)
+                        {
+                            completed.Add(new QpackDecodedSection(item.Key,
+                                new Http3StreamException(item.Key, error.ErrorCode, error.Message)));
+                            continue;
+                        }
                         if (fields == null) continue;
                         Acknowledge(item.Key, item.Value.Section.RequiredInsertCount);
                         completed.Add(new QpackDecodedSection(item.Key, fields));
@@ -210,8 +219,11 @@ namespace EmbedIO.Net.Internal.Http3
 
     internal readonly struct QpackDecodedSection
     {
-        internal QpackDecodedSection(long streamId, HpackField[] fields) { StreamId = streamId; Fields = fields; }
+        internal QpackDecodedSection(long streamId, HpackField[] fields) { StreamId = streamId; Fields = fields; Error = null; }
         public long StreamId { get; }
+        internal QpackDecodedSection(long streamId, Http3StreamException error)
+        { StreamId = streamId; Fields = Array.Empty<HpackField>(); Error = error; }
         public HpackField[] Fields { get; }
+        public Http3StreamException? Error { get; }
     }
 }

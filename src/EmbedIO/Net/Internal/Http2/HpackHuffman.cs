@@ -130,6 +130,9 @@ namespace EmbedIO.Net.Internal.Http2
         }
 
         internal static string Decode(byte[] input, int offset, int count, int maximumDecodedLength)
+            => DecodeBounded(input, offset, count, maximumDecodedLength, null);
+
+        internal static string DecodeBounded(byte[] input, int offset, int count, int maximumDecodedLength, Func<Exception>? limitError)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
             if (offset < 0 || count < 0 || offset > input.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
@@ -152,7 +155,7 @@ namespace EmbedIO.Net.Internal.Http2
                 if (transition.Next < 0) throw new InvalidDataException("Invalid HPACK Huffman code or EOS.");
                 state = transition.Next;
                 if (transition.Symbol < 0) return;
-                if (written == output.Length) throw new InvalidDataException("Decoded HPACK string exceeds limit.");
+                if (written == output.Length) throw limitError?.Invoke() ?? new InvalidDataException("Decoded HPACK string exceeds limit.");
                 output[written++] = (char)transition.Symbol;
             }
         }
