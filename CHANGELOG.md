@@ -12,6 +12,19 @@
   lengths. Preserve accepted HTTP/2 responses during drain when a refused upload
   was already in flight, retaining connection flow credit and invalid-ID checks.
 
+- Isolate oversized HTTP/3 request field sections to their streams, preserving
+  healthy requests and QPACK state while retaining fatal compression-error checks.
+
+- Return a stream-local 400 with the supported version for malformed HTTP/2
+  WebSocket version negotiation instead of an application 500.
+
+- Close unknown-length HTTP/1.0 response bodies to delimit them by transport EOF,
+  while retaining persistence for fixed-length and bodyless responses.
+
+- Reject malformed managed HTTP/1 request-target forms before URI reconstruction,
+  including query-only and leading-@ targets. Valid origin paths, absolute HTTP(S)
+  URLs and OPTIONS asterisk-form remain supported; see the migration notes.
+
 - Reject new HTTP/2 requests that reuse a completed stream identifier or try to
   open a skipped lower identifier, while retaining minimal closed-stream
   processing and the advertised modern priority policy.

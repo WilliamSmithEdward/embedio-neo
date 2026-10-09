@@ -810,6 +810,15 @@ unchanged. This does not add CONNECT tunneling or accept authority-form targets.
 
 ## HTTP/1 request-target syntax (unreleased)
 
+Request targets without a leading slash or a valid absolute HTTP(S) URI are
+rejected with 400 before URI reconstruction. This includes query-only targets
+such as `?query=1` and targets beginning with `@`, which previously could reach
+URI normalization and either be dispatched or close without an HTTP error.
+Send `/?query=1` or a valid absolute HTTP(S) URL instead. `@` remains valid within
+an origin-form path or query, and OPTIONS retains asterisk-form support.
+This correction does not add CONNECT authority-form or tunnel support; that
+remains a separate engine implementation requirement.
+
 The managed listener accepts `OPTIONS *` for a root listener and retains `*` in
 `Request.RawTarget`; `Request.Url` uses the local root URI for dispatch. An OPTIONS
 handler can distinguish this server-wide request from `OPTIONS /` using RawTarget.
@@ -1075,3 +1084,35 @@ Accepted responses finish instead of being canceled by a spurious idle-stream
 protocol error. Invalid even client stream IDs still produce a connection error.
 See [HTTP/2 section 6.8](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.8).
 These corrections are unreleased HTTP-engine work.
+
+## HTTP/1.0 response delimitation (unreleased)
+
+The managed listener closes an HTTP/1.0 response with an unknown-length body,
+even when the client requests keep-alive or the handler sets KeepAlive. HTTP/1.0
+cannot use chunked transfer framing, so transport EOF is the body delimiter.
+Previously the listener could advertise persistence without providing a delimiter.
+Set ContentLength64 before writing to retain HTTP/1.0 persistence when the exact
+length is known. HEAD and bodyless status responses retain their existing
+persistence policy; HTTP/1.1 chunked responses are unchanged. See
+[RFC 9112 section 9.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-9.3).
+## HTTP/2 malformed WebSocket version negotiation (unreleased)
+
+An extended CONNECT request with `:protocol: websocket` and a missing, empty or
+unsupported Sec-WebSocket-Version receives 400 with Sec-WebSocket-Version: 13
+before application dispatch. Previously the failed socket acceptance could become
+500. This matches the existing HTTP/3 negotiation policy. The rejection affects
+its request stream; other HTTP/2 streams remain usable. Valid version-13
+WebSocket handshakes and the public acceptance API are unchanged.
+## HTTP/3 request field-section limit isolation (unreleased)
+
+An encoded or decoded request HEADERS section over the existing size limit now
+fails its request stream with H3_EXCESSIVE_LOAD (0x107). Previously these limits
+could close the entire connection, and Huffman expansion over the decoded budget
+could be reported as QPACK_DECOMPRESSION_FAILED. Healthy sibling requests and the
+shared decoder table remain usable, including when a blocked section becomes
+oversized after encoder inserts arrive. The limits themselves are unchanged.
+
+Malformed QPACK syntax/references and encoder instructions still fail the
+connection. Aggregate blocked-storage and decoder-feedback exhaustion also retain
+their connection-wide policy. Applications should handle the rejected request
+stream independently instead of assuming all requests on the connection failed.

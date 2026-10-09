@@ -276,18 +276,29 @@ namespace EmbedIO.Tests
                 using var request = new HttpRequestMessage(HttpMethod.Post, prefix) { Content = content };
                 if (chunked) request.Headers.TransferEncodingChunked = true;
                 using var response = await client.SendAsync(request, stop.Token);
-                if (response.StatusCode != status)
-                {
-                    TestContext.Error.WriteLine($"Request coding response failure: mode={mode}, prefix={prefix}, coding={coding}, encoded={encoded.Length}, expected={expected.Length}, enabled={enabled}, limit={limit}, text={text}, chunked={chunked}");
-                    TestContext.Error.WriteLine($"Listener: listening={server.Listener.IsListening}, running={running.Status}, canceled={stop.IsCancellationRequested}, accepted={Volatile.Read(ref accepted)}, threadPoolPending={ThreadPool.PendingWorkItemCount}");
-                    TestContext.Error.WriteLine($"Response: {(int)response.StatusCode} {response.ReasonPhrase}, version={response.Version}, headers={response.Headers}, contentHeaders={response.Content.Headers}");
-                }
-                Assert.That(response.StatusCode, Is.EqualTo(status));
+                // An unexpected status is only diagnosable with the address, the response
+                // headers and the server state; the expected-status path is unchanged.
+                var description = response.StatusCode == status ? null : await DescribeUnexpectedResponse(prefix, response, accepted, server.State);
+                Assert.That(response.StatusCode, Is.EqualTo(status), description);
                 Assert.That(accepted, Is.EqualTo(status == HttpStatusCode.OK ? 1 : 0));
                 Assert.That(await client.GetStringAsync(prefix, stop.Token), Is.EqualTo("healthy"));
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
         }
+        private static async Task<string> DescribeUnexpectedResponse(string prefix, HttpResponseMessage response, int accepted, WebServerState state)
+        {
+            var headers = new StringBuilder();
+            foreach (var header in response.Headers)
+                headers.Append(header.Key).Append('=').Append(string.Join("|", header.Value)).Append("; ");
+            foreach (var header in response.Content.Headers)
+                headers.Append(header.Key).Append('=').Append(string.Join("|", header.Value)).Append("; ");
+            var body = await response.Content.ReadAsStringAsync();
+            if (body.Length > 300) body = body[..300];
+            body = body.Replace("\r", "\\r", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal);
+            return $"Unexpected status from {prefix}: {(int)response.StatusCode} \"{response.ReasonPhrase}\" HTTP/{response.Version}; "
+                + $"handler accepted={accepted}; server state={state}; headers=[{headers}]; body=[{body}]";
+        }
+
         private static byte[] Encode(byte[] body, string coding)
         {
             foreach (var item in coding.Split(','))

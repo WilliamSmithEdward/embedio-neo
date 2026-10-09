@@ -6476,3 +6476,164 @@ The patched full macOS suite reported 4,357 passed/31 skips, zero failures. Its
 overall workflow remains failed: Windows also observed TcpAndQuicSharePortAndStopIndependently
 with TLS UserCanceled, and the native coding-chain 503. Neither is quarantined;
 their causes remain unconfirmed. Issue #202 retains the QUIC follow-up questions.
+
+### HTTP/1 request-target form validation correction
+
+Ten additional raw-wire cases cover missing origin-path slashes, query-only
+requests, authority-shaped non-CONNECT targets, malformed absolute URLs, and
+valid leading-slash paths containing `@` or queries. On unchanged production at
+c25fd05, three of the 66 target cases failed: two leading-@ targets closed without
+400, and a query-only target received 200. The other 63 cases passed. The first
+attempt used an unsupported wildcard filter and executed zero tests; that log
+is retained and is not counted as validation.
+
+The listener now verifies a leading slash, OPTIONS asterisk handling, or a parsed
+absolute HTTP(S) URL with an explicit scheme separator before reconstructing the
+application URL. The existing host precedence, escaping, userinfo checks and raw
+target preservation remain covered. All 88 focused target, URL and CONNECT
+rejection cases pass. This does not implement CONNECT authority-form or tunneling;
+those remain requirements for completion of the engine. Discovery floors are
+4,387. Full regression and exact-head checks remain required.
+
+Evidence: ignored TestResults/request-target-before-corrected.log and its TRX,
+request-target-after.log and its TRX. An analyzer build attempted during the full
+suite hit the CLI plugin file held by that suite; it must be rerun after the test
+process finishes. It is not counted as a passing analyzer gate.
+Final local validation: full Windows reports 4,387 cases, 4,382 passed, five
+expected local skips and zero failures. The subsequent analyzer build passes
+both targets with zero warnings/errors; suppression checks, analyzer guard and
+changed-source formatting pass. Hot-path, cold-start, listener-queue and wire
+allocation gates pass. The earlier locked-file analyzer failure is preserved.
+Cross-platform and final-head GitHub checks are still required.
+### HTTP/1.0 close-delimited response correction
+
+Six raw-wire cases cover synchronous and asynchronous unknown-length bodies,
+fixed-length bodies and 204 responses. On unchanged production at 556022e,
+the two unknown-length cases advertised keep-alive instead of close; the four
+self-delimited controls passed. The listener now forces close for HTTP/1.0
+responses carrying content without a valid Content-Length. HEAD/bodyless responses
+and valid fixed-length persistence remain eligible for reuse. No HTTP/1.1 hot-path
+parsing is added. This follows RFC 9112 sections 6.3 and 9.3.
+
+All 36 focused HTTP/1.0, bodyless, URL and rejected-CONNECT cases pass. Analyzer
+builds for both targets and changed-source formatting pass. Full regression and
+exact-head checks remain required; discovery floors are 4,393. Original and
+candidate logs/TRX are retained under ignored TestResults/http10-*.
+Final Windows regression: 4,393 cases, 4,388 passed, five expected local skips,
+zero failures. The full suite overlapped another agent's Windows suite; neither
+that observation nor passing local cases establish CI/platform readiness.
+Source guards and all four allocation budgets pass. Full-suite logs and TRX are
+retained. Final-head GitHub checks are required before integration.
+### HTTP/2 malformed WebSocket version rejection
+
+Three real h2c wire cases submit an extended CONNECT with version 12, an empty
+version, or no version. On unchanged production at 3bf7173, each returns 500.
+The first peer attempt rejected legal repeated cache-control fields while building
+a dictionary; it is retained but does not establish the defect. The corrected
+peer groups repeated fields and confirms all three 500 responses.
+
+The HTTP/2 owner rejects these malformed negotiations before registering an
+application context, returns 400 and advertises version 13, matching HTTP/3.
+Each corrected case validates a subsequent GET and its payload on stream 3 of
+the same TCP connection. Valid version-13 echo, closure and limit cases remain
+covered by existing tests. The focused set reports 17 passed, zero failures;
+changed-source formatting and analyzer builds pass. Full regression and exact-head
+checks remain required. Discovery floors are 4,396. Evidence: ignored
+TestResults/h2-negotiation-before*, h2-negotiation-after* and their TRX files.
+
+The initial malformed-handshake wire cases used h2c and END_STREAM request headers;
+this does not establish TLS or still-open upload rejection coverage, or resolve
+unsupported extended-CONNECT protocols and remaining timeout/retention work.
+Final local Windows regression passes: 4,396 cases, 4,391 passed, five expected
+local skips, zero failures. Suppression checks and analyzer guard also pass.
+Cross-platform and exact-head GitHub validation remain required.
+### HTTP/2 rejection coverage: TLS and open request input
+
+The malformed WebSocket version matrix now covers all three version failures,
+with and without END_STREAM, over both h2c and TLS: twelve cases. TLS peers pin
+the generated leaf certificate, retain hostname validation, and require HTTP/2
+ALPN. An open rejected input is canceled with exactly one NO_ERROR RST_STREAM on
+stream 1; completed inputs must not receive that reset. Every case verifies a
+healthy GET on stream 3 and rejects connection GOAWAY or an unrelated reset.
+
+The shared raw-wire helpers now accept Stream so the same peer can run over TLS;
+framing and assertions are otherwise retained. All 26 focused negotiation/echo/
+closure cases pass. Both-target analyzer builds pass. The initial TLS build
+reported a formatting diagnostic; changed-file formatting corrected it without
+suppressions, and the failure log is retained. Discovery floors are 4,405. Full
+regression and final-head checks remain required. Evidence: ignored
+TestResults/h2-negotiation-open* and h2-negotiation-tls*.
+
+Final expanded Windows suite: 4,405 cases, 4,400 passed, five expected local skips,
+zero failures. Analyzer builds, source guards and changed-file formatting pass.
+Cross-platform exact-head checks remain required.
+
+### HTTP/3 request field-section size isolation
+
+Four coordinator regressions fail on f2d89e0: indexed/literal sections poison the
+shared decoder, Huffman expansion produces decompression error instead of a local
+size rejection, and an oversized blocked section prevents a healthy sibling from
+resuming. A further correctly framed encoded-HEADERS case confirms a connection
+abort at the request metadata buffer limit. Logs and TRX remain under ignored
+TestResults/qpack-limit-before* and qpack-encoded-before*.
+
+A distinct internal field-section limit exception preserves resource-versus-syntax
+classification. Immediate size rejection is converted to a stream error without
+poisoning QPACK. Encoder-driven resumption returns successful and failed section
+completions separately, releases each pending payload, and lets each request owner
+cancel its references. The connection owner faults only the rejected completion.
+Huffman decoding retains its original HPACK entry point and error behavior; a
+bounded entry point lets QPACK classify only decoded-output exhaustion as a size
+failure. Request HEADERS lengths are checked before payload buffering. Shared
+storage/feedback budget failures and malformed compression remain fatal.
+
+Four independently encoded real-QUIC cases cover encoded size, repeated static
+indices, repeated literals and a 70,000-byte Huffman expansion. They assert stream
+error 0x107 and a healthy sibling response. The first Huffman peer incorrectly used
+a two-byte QUIC length for a payload requiring four bytes; that failed fixture is
+retained, corrected, and not treated as defect evidence. The existing request
+metadata test now requires a stream exception with the same code while retaining
+its no-buffering position assertion. No limit is raised and no malformed-input
+check is disabled. This uses request-local rejection for the limits described in
+[RFC 9114 section 4.2.2](https://www.rfc-editor.org/rfc/rfc9114.html#section-4.2.2)
+while preserving QPACK cancellation obligations.
+
+The initial 145 codec/coordinator cases pass. The broad 454-case set first found
+the old metadata exception-scope assertion; after correcting that assertion,
+full regression and exact-head validation remain required. Discovery floors are
+4,413, adding eight new cases. Actual standard-asset, independent-peer and
+cross-platform checks remain required for the complete engine.
+
+Final local Windows suite passes: 4,413 cases, 4,408 passed, five expected local
+skips and zero failures. Both-target analyzer builds, source guards, changed-file
+formatting and all four allocation budgets pass. Exact-head GitHub checks and
+broader independent-peer validation remain required.
+
+### Completed agent fixture integration checkpoint
+
+PR #205 merged into the engine branch as 5245b6e after every exact-head check
+passed. Hosted Windows HTTP.sys had an orphaned strong-wildcard reservation for
+port 12292; the test allocator now skips wildcard-reserved ports discovered by a
+read-only netsh query. Production behavior, assertions and timeouts are unchanged.
+PR #206 merged as 0877302 after every exact-head check passed. Issue502 broadcasts
+now wait for server registration witnesses; four controlled cases reproduce the
+old client-handshake/server-registration gap. No production WebSocket change was
+needed. Both squash messages preserve human authorship and contain no AI trailers.
+
+The combined QPACK correction and both fixture changes pass the full Windows
+suite: 4,425 cases, 4,420 passed, five expected local skips and zero failures.
+Both-target analyzer builds pass. Discovery floors are 4,425. Exact-head
+cross-platform/platform-app checks remain required before the engine is ready.
+These merges target the development engine branch; neither main nor a release
+was published, and program #181 remains open.
+
+
+### Admission, cap and QUIC reconciliation with a80251a
+
+The owner candidate retains all current protocol corrections and both accepted
+fixture fixes. Merge resolution keeps all migration/evidence sections and the
+accepted Windows diagnostics. The additive floor is 4,448, enforced independently
+inside the narrow raw-runtime quarantine as well as by test discovery. Full
+Windows: 4,443 passed/five expected local skips, zero failures. Both targets,
+analyzers, source guards and four allocation budgets pass. Exact-head CI and
+comparative throughput/platform validation remain required before integration.

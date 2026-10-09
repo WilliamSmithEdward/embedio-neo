@@ -248,6 +248,13 @@ namespace EmbedIO.Net.Internal
             }
 
             var rawUri = UriUtility.StringToAbsoluteUri(RawTarget);
+            if (RawTarget[0] != '/' && RawTarget != "*"
+                && (rawUri == null || (rawUri.Scheme != Uri.UriSchemeHttp && rawUri.Scheme != Uri.UriSchemeHttps)
+                    || RawTarget.IndexOf("://", StringComparison.Ordinal) < 0))
+            {
+                _connection.SetError("Invalid request target form.");
+                return;
+            }
             if (RawTarget == "*" && HttpVerb != HttpVerbs.Options)
             {
                 _connection.SetError("Asterisk-form requires OPTIONS.");

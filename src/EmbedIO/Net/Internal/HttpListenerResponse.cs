@@ -266,6 +266,12 @@ namespace EmbedIO.Net.Internal
                 _ => !_connection.IsDraining && KeepAlive
             };
 
+            // HTTP/1.0 has no chunked delimiter. An unknown-length body ends at
+            // transport EOF even when the client requests persistent service.
+            if (ProtocolVersion < HttpVersion.Version11 && !SuppressesBody
+                && (!long.TryParse(Headers[HttpHeaderNames.ContentLength], out var framedLength) || framedLength < 0))
+                keepAlive = false;
+
             // RFC 9931 section 8: bytes after a rejected HTTP/1.1 CONNECT
             // might already belong to the requested tunnel, never a successor.
             if (_request.ProtocolVersion == HttpVersion.Version11 && _request.HttpMethod == "CONNECT" && _statusCode >= 300)

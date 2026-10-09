@@ -119,6 +119,14 @@ namespace EmbedIO.Net.Internal
                     await context.CloseAsync().ConfigureAwait(false);
                     return;
                 }
+                if (context.Request.IsWebSocketRequest
+                    && context.Request.Headers[HttpHeaderNames.SecWebSocketVersion] != "13")
+                {
+                    context.Response.StatusCode = 400;
+                    context.Response.Headers[HttpHeaderNames.SecWebSocketVersion] = "13";
+                    await context.CloseAsync().ConfigureAwait(false);
+                    return;
+                }
                 lock (_connectionSync)
                 {
                     if (_sock == null || _resourcesDisposed != 0) throw new IOException("Connection closed before routing.");

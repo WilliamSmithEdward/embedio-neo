@@ -11,10 +11,10 @@ namespace EmbedIO.Tests
         private sealed class Coordinator : IDisposable
         {
             private readonly object _instance;
-            internal Coordinator(int capacity = 220, int streams = 2, long bytes = 65536, int feedback = 1024)
+            internal Coordinator(int capacity = 220, int streams = 2, long bytes = 65536, int feedback = 1024, int decoded = 65536)
             {
                 var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.QpackDecoder", true) ?? throw new AssertionException("Missing coordinator.");
-                _instance = Activator.CreateInstance(type, Hidden, null, new object[] { capacity, streams, 65536, 65536, bytes, feedback }, null)
+                _instance = Activator.CreateInstance(type, Hidden, null, new object[] { capacity, streams, 65536, decoded, bytes, feedback }, null)
                     ?? throw new AssertionException("Missing coordinator instance.");
             }
             private object? Call(string name, params object[] values)
@@ -36,6 +36,47 @@ namespace EmbedIO.Tests
             internal long Bytes => Convert.ToInt64(Value(_instance, "BlockedBytes"), System.Globalization.CultureInfo.InvariantCulture);
             internal long Known => Convert.ToInt64(Value(_instance, "KnownReceivedCount"), System.Globalization.CultureInfo.InvariantCulture);
             public void Dispose() => ((IDisposable)_instance).Dispose();
+        }
+
+        [TestCase("indexed", 83)]
+        [TestCase("literal", 64)]
+        [TestCase("huffman", 53)]
+        public void OversizedDecodedSectionDoesNotPoisonTheSharedDecoder(string kind, int limit)
+        {
+            using var decoder = new Coordinator(decoded: limit);
+            var wire = kind switch
+            {
+                "indexed" => "0000d1d1",
+                "literal" => "0000216120" + string.Concat(Enumerable.Repeat("61", 32)),
+                _ => "00002f0125a849e95ba97d7f8925a849e95bb8e8b4bf",
+            };
+            Error(() => decoder.Submit(0, wire), 0x107);
+            Assert.That(decoder.Submit(4, "0000d1"), Has.Length.EqualTo(1));
+            Assert.That(decoder.Blocked, Is.Zero);
+            Assert.That(decoder.Bytes, Is.Zero);
+        }
+
+        [Test]
+        public void OversizedUnblockedSectionDoesNotCancelAHealthyBlockedSibling()
+        {
+            using var decoder = new Coordinator(decoded: 64);
+            Assert.That(decoder.Submit(0, "02008080"), Is.Null);
+            Assert.That(decoder.Submit(4, "020080"), Is.Null);
+            var completed = decoder.Feed("3fbd0141610162");
+            Assert.That(completed, Has.Length.EqualTo(2));
+            var rejected = completed.Single(item => (long)Value(item, "StreamId") == 0);
+            var error = Value(rejected, "Error");
+            Assert.That(error.GetType().Name, Is.EqualTo("Http3StreamException"));
+            Assert.That(Value(error, "ErrorCode"), Is.EqualTo(0x107L));
+            var healthy = completed.Single(item => (long)Value(item, "StreamId") == 4);
+            Assert.That((Array)Value(healthy, "Fields"), Has.Length.EqualTo(1));
+            Assert.That(decoder.Blocked, Is.Zero);
+            Assert.That(decoder.Bytes, Is.Zero);
+            Assert.That(decoder.Feedback(), Is.EqualTo("84"));
+            decoder.Cancel(0);
+            Assert.That(decoder.Feedback(), Is.EqualTo("40"));
+            Assert.That(decoder.Submit(8, "020080"), Has.Length.EqualTo(1));
+            Assert.That(decoder.Feedback(), Is.EqualTo("88"));
         }
 
         [Test]

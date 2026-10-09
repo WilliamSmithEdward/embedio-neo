@@ -223,7 +223,7 @@ namespace EmbedIO.Tests
         {
             using var source = new FragmentedStream(Convert.FromHexString("01ffffffffffffffff"), 8);
             var reader = new RequestReader(source, metadata: 8);
-            RequestError(await Assert.CatchAsync<IOException>(async () => await reader.Next()), 0x107, false);
+            RequestError(await Assert.CatchAsync<IOException>(async () => await reader.Next()), 0x107, true);
             Assert.That(source.Position, Is.EqualTo(9));
         }
 
