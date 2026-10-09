@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Buffers;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,8 +14,8 @@ namespace EmbedIO.WebSockets.Internal
         internal const int InputBufferLength = 2048;
 
         // Payloads up to this length are allocated when the header arrives.
-        // Longer ones grow only as bytes arrive, so a header announcing a huge
-        // length cannot reserve memory the peer never sends.
+        // Longer ones are received into pooled chunks of this size as bytes arrive,
+        // so a header announcing a huge length cannot reserve memory never sent.
         internal const int ExactAllocationLimit = 65536;
 
         private static readonly UTF8Encoding StrictUtf8 = new(false, true);
@@ -239,30 +241,64 @@ namespace EmbedIO.WebSockets.Internal
                 Buffer.BlockCopy(_input!, _start, payload, 0, length);
                 _start += length;
             }
-            else
+            else if (length <= ExactAllocationLimit)
             {
-                payload = new byte[Math.Min(length, ExactAllocationLimit)];
+                payload = new byte[length];
                 var filled = Math.Min(_end - _start, length);
                 Buffer.BlockCopy(_input!, _start, payload, 0, filled);
                 _start += filled;
                 while (filled < length)
                 {
-                    if (filled == payload.Length)
-                    {
-                        // Grow only after the previous capacity is full and more bytes
-                        // are due, never beyond the frame's announced length.
-                        var grown = new byte[(int)Math.Min(length, (long)payload.Length * 2)];
-                        Buffer.BlockCopy(payload, 0, grown, 0, filled);
-                        payload = grown;
-                    }
-                    var read = await _stream!.ReadAsync(payload, filled, payload.Length - filled).ConfigureAwait(false);
+                    var read = await _stream!.ReadAsync(payload, filled, length - filled).ConfigureAwait(false);
                     if (read == 0) throw Truncated();
                     filled += read;
                 }
             }
+            else payload = await ReadLargePayloadAsync(length).ConfigureAwait(false);
 
             PayloadData.Mask(payload, key);
             frame.PayloadData = new PayloadData(payload);
+        }
+
+        // Receives into pooled chunks as bytes arrive, so memory tracks what the peer
+        // actually sent rather than the length it announced, then copies once into
+        // the exact array the message will own.
+        private async Task<byte[]> ReadLargePayloadAsync(int length)
+        {
+            var chunks = new List<byte[]>((length + ExactAllocationLimit - 1) / ExactAllocationLimit);
+            var filled = 0;
+            try
+            {
+                while (filled < length)
+                {
+                    var chunk = ArrayPool<byte>.Shared.Rent(ExactAllocationLimit);
+                    chunks.Add(chunk);
+                    var wanted = Math.Min(ExactAllocationLimit, length - filled);
+                    var offset = Math.Min(_end - _start, wanted);
+                    Buffer.BlockCopy(_input!, _start, chunk, 0, offset);
+                    _start += offset;
+                    while (offset < wanted)
+                    {
+                        var read = await _stream!.ReadAsync(chunk, offset, wanted - offset).ConfigureAwait(false);
+                        if (read == 0) throw Truncated();
+                        offset += read;
+                    }
+                    filled += wanted;
+                }
+                var payload = new byte[length];
+                for (var i = 0; i < chunks.Count; i++)
+                    Buffer.BlockCopy(chunks[i], 0, payload, i * ExactAllocationLimit, Math.Min(ExactAllocationLimit, length - i * ExactAllocationLimit));
+                return payload;
+            }
+            finally
+            {
+                // Peer data must not linger in a shared pool.
+                foreach (var chunk in chunks)
+                {
+                    Array.Clear(chunk, 0, ExactAllocationLimit);
+                    ArrayPool<byte>.Shared.Return(chunk);
+                }
+            }
         }
 
         private static WebSocketException Truncated()

@@ -63,7 +63,9 @@ foreach($workload in $workloads) {
                 $client.Process.StandardInput.WriteLine('start')
                 if((Line $client.Process) -ne 'DONE'){throw 'Client measurement failed.'}
                 $server.Process.StandardInput.WriteLine('stop')
-                $serverResult=(Line $server.Process) | ConvertFrom-Json
+                $serverLine=Line $server.Process
+                $serverLine | Add-Content -LiteralPath (Join-Path $OutputDirectory "server-raw.log")
+                $serverResult=$serverLine | ConvertFrom-Json
                 $client.Process.StandardInput.WriteLine('report')
                 $clientResult=(Line $client.Process) | ConvertFrom-Json
                 if((Line $client.Process) -ne 'CLOSED'){throw 'Client close handshakes failed.'}

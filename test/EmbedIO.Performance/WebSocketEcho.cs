@@ -45,9 +45,8 @@ internal static class WebSocketEcho
         var running = server.RunAsync(stop.Token);
         BenchmarkControl.Write("HOST " + url);
         if (await Console.In.ReadLineAsync(stop.Token) != "start") throw new InvalidOperationException("Expected start.");
-        // Connections are open and warm. Collect once so the window starts clean.
-        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-        var heapBefore = GC.GetTotalMemory(true);
+        // Connections are open and warm. Collect so the window starts clean.
+        var liveBefore = LiveBytes();
         using var process = Process.GetCurrentProcess();
         var cpu = process.TotalProcessorTime;
         var bytes = GC.GetTotalAllocatedBytes(true);
@@ -60,8 +59,7 @@ internal static class WebSocketEcho
         var cpuSeconds = (process.TotalProcessorTime - cpu).TotalSeconds;
         var gcs = Enumerable.Range(0, 3).Select(i => GC.CollectionCount(i) - collections[i]).ToArray();
         // Retained memory with every connection still open and idle.
-        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-        var heapOpen = GC.GetTotalMemory(true);
+        var liveOpen = LiveBytes();
         process.Refresh();
         Console.WriteLine(JsonSerializer.Serialize(new
         {
@@ -69,18 +67,27 @@ internal static class WebSocketEcho
             cpuSeconds,
             allocatedBytes = allocated,
             collections = gcs,
-            heapBeforeBytes = heapBefore,
-            heapOpenIdleBytes = heapOpen,
+            liveBeforeBytes = liveBefore,
+            liveOpenIdleBytes = liveOpen,
             workingSetBytes = process.WorkingSet64,
             coreSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(WebServer).Assembly.Location))),
         }));
         if (await Console.In.ReadLineAsync(stop.Token) != "closed") throw new InvalidOperationException("Expected closed.");
         // Retained after every client completed its close handshake.
         await Task.Delay(250).ConfigureAwait(false);
-        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-        Console.WriteLine(JsonSerializer.Serialize(new { heapAfterCloseBytes = GC.GetTotalMemory(true) }));
+        Console.WriteLine(JsonSerializer.Serialize(new { liveAfterCloseBytes = LiveBytes() }));
         stop.Cancel();
         await running.ConfigureAwait(false);
+    }
+
+    // Bytes surviving a forced, blocking, compacting full collection. GC.GetTotalMemory
+    // returned negative values in this host on .NET 10, so it is not used.
+    private static long LiveBytes()
+    {
+        GC.Collect(2, GCCollectionMode.Forced, true, true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(2, GCCollectionMode.Forced, true, true);
+        return GC.GetGCMemoryInfo(GCKind.FullBlocking).PromotedBytes;
     }
 
     private sealed class Connection : IDisposable
