@@ -68,6 +68,21 @@ not fire-and-forget close or rely on a successful earlier `State` check. For
 complete-message text/binary callbacks and UTF-8 handling, see
 [message callbacks](websocket-message-callbacks.md).
 
+## Broadcasting right after a client connects
+
+`WebSocketModule` writes the opening-handshake response before it adds the
+connection to `ActiveContexts`, the set that `BroadcastAsync` sends to, and
+then calls `OnClientConnectedAsync`. A client can therefore complete
+`ConnectAsync` before the server can broadcast to it. A broadcast issued in
+that interval does not reach the new connection. The interval is usually well
+under a millisecond, but nothing bounds it. Upstream EmbedIO 3.5.2 registers
+connections in the same order.
+
+If a client must not miss broadcasts that start right after it connects, send
+a readiness message from `OnClientConnectedAsync` and start those broadcasts
+once the client has received it. The regression below uses its `connected`
+message this way.
+
 ## Evidence and limits
 
 The adapted regression uses the sample's JSON subprotocol, 20 ms inputs,
@@ -75,7 +90,10 @@ deterministic delays spanning 50–150 ms, and 1,000 rows of ten 20-character
 columns. Sequence IDs and deterministic column contents make loss, duplication
 and corruption observable. It tests one/two clients on both listener modes,
 overlapping targeted replies with two large broadcasts, parses every complete
-JSON message and validates every row/column. All four source cases pass. The
+JSON message and validates every row/column. Broadcasts start after every
+client has received the module's `connected` message. Four further cases hold
+the server between the handshake response and registration, and confirm that
+the broadcasts still arrive. All eight source cases pass. The
 same workload against the exact published 1.0.3 assembly reproduced an aborted
 native single-client connection in one of four cases; the other three passed.
 This is an adapted .NET-client reproduction, not execution of the exact original
