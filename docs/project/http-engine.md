@@ -5364,3 +5364,43 @@ GET/64-KiB-full/partial/unread HTTP verification workloads passed, including
 retained stream/timer cleanup. The discovery floor is now 4,271. The broader
 owned endpoint/connection transition, conformance/fuzz coverage and comparative
 extreme-performance work remain incomplete.
+
+### TCP accept failure ownership
+
+The new accept actor rearms before admission, so an unrecoverable admission
+exception or a throwing diagnostic listener can occur with the next accept
+already armed. Two controlled tests failed on `d081ea3`: the worker propagated
+its exception while the listening socket stayed open. On Unix, an accept result
+could also remain unconsumed because no Windows-style preallocated socket owns
+that result. This was a discovered lifecycle gap, not an observed exploit.
+
+The actor now asks its endpoint owner to stop accepting exactly once, awaits the
+armed operation on the failing branch, and disposes any socket returned by it.
+Expected native abort/cancellation errors during that cleanup do not replace the
+original admission/diagnostic failure. The actor never directly disposes its
+borrowed listening socket. Its owner performs shutdown through the same admission
+stop path used normally. Native SocketException/ObjectDisposedException retry
+handling is explicitly excluded after an admission failure, so a diagnostic
+exception with one of those types cannot be mistaken for an accept result.
+
+Four regressions cover synthetic nonrecoverable admission failure (an explicitly
+constructed OutOfMemoryException, not real memory exhaustion), and diagnostics
+throwing I/O, disposed-object or socket exceptions. They require the original
+exception, a closed listening handle, and closure/reset of accepted/pending/backlog
+peers. Both initially failing cases and the corrected results remain under ignored
+`TestResults/http-engine/tcp-failure-*`. All 105 focused cases pass on Windows and
+pinned Linux. The actual netstandard2.0 asset passes 92 with 13 expected modern
+actor skips on a Windows .NET 10 host; no older-runtime coverage is inferred.
+
+Both targets build without warnings/errors. The pinned Semgrep source scan parses
+all three changed files fully: 29 rules, zero findings. Suppression/parser guards,
+changed-source whitespace checks and diff checks pass. The preceding `d081ea3`
+revision completed every GitHub check successfully, including Windows upload
+verification. That pass does not establish the cause of the earlier upload timeout.
+Whole-engine fault injection, fuzzing and resource validation remain required.
+
+Final Windows coverage passed: 4,275 total, 4,270 successes, five expected skips
+and zero failures. All four existing allocation-budget groups and the final
+64-KiB upload/retained stream-and-timer verification passed. Pinned YARA-X/Forge
+reported no matches. The discovery floor is 4,275; this correction does not
+complete whole-engine fault injection or the overall development goal.

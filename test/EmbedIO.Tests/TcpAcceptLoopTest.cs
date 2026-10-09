@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -17,7 +19,7 @@ namespace EmbedIO.Tests
             var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop");
             if (type == null) { Assert.Ignore("The legacy target retains its event-based accept path."); return Task.CompletedTask; }
             var loop = Activator.CreateInstance(type, BindingFlags.Instance | BindingFlags.NonPublic, null,
-                new object[] { listener, admit, stopped }, null) ?? throw new AssertionException("Missing TCP actor.");
+                new object[] { listener, admit, stopped, (Action)listener.Dispose }, null) ?? throw new AssertionException("Missing TCP actor.");
             var run = type.GetMethod("RunAsync", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new AssertionException("Missing runner.");
             if (startInline) return (Task)(run.Invoke(loop, null) ?? throw new AssertionException("Missing accept task."));
             return Task.Run(() => (Task)(run.Invoke(loop, null) ?? throw new AssertionException("Missing accept task.")));
@@ -159,6 +161,80 @@ namespace EmbedIO.Tests
             // Deliberately never begin reading/authenticating: queued work must still expire.
             Assert.That(await peer.GetStream().ReadAsync(new byte[1], stop.Token), Is.Zero);
             Assert.That(socket.SafeHandle.IsClosed, Is.True);
+        }
+        private sealed class FailingAdmissionTrace : TraceListener
+        {
+            private readonly string _mode;
+            internal FailingAdmissionTrace(string mode) { _mode = mode; }
+            public override void Write(string? message)
+            {
+                if (message?.Contains("TCP connection admission failed", StringComparison.Ordinal) == true)
+                {
+                    if (_mode == "disposed") throw new ObjectDisposedException(nameof(FailingAdmissionTrace));
+                    if (_mode == "socket") throw new SocketException(10022);
+                    throw new IOException("Controlled diagnostic failure.");
+                }
+            }
+            public override void WriteLine(string? message) => Write(message);
+        }
+        [TestCase("admission")]
+        [TestCase("io")]
+        [TestCase("disposed")]
+        [TestCase("socket")]
+        [NonParallelizable]
+        public async Task UnrecoverableAdmissionOrDiagnosticFailureClosesPendingAndBacklogSockets(string mode)
+        {
+            if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop") == null)
+            { Assert.Ignore("The legacy asset has no owned TCP actor."); return; }
+            using var listener = Listener();
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var endpoint = (IPEndPoint)(listener.LocalEndPoint ?? throw new AssertionException("Missing endpoint."));
+            var peers = new List<TcpClient>();
+            var source = EmbedIO.Diagnostics.Log.Source;
+            var previousLevel = source.Switch.Level;
+            var diagnostic = mode != "admission";
+            using var failingTrace = new FailingAdmissionTrace(mode);
+            Task? running = null;
+            try
+            {
+                for (var index = 0; index < 3; index++)
+                {
+                    var peer = new TcpClient(); peers.Add(peer);
+                    await peer.ConnectAsync(endpoint.Address, endpoint.Port, deadline.Token);
+                }
+                source.Switch.Level = SourceLevels.Warning;
+                if (diagnostic) source.Listeners.Add(failingTrace);
+                running = Start(listener, _ =>
+                {
+                    if (diagnostic) throw new InvalidOperationException("Controlled admission failure.");
+                    // Synthetic exception, not a real memory-exhaustion experiment.
+                    throw new OutOfMemoryException("Controlled nonrecoverable admission failure.");
+                }, () => listener.SafeHandle.IsClosed);
+                if (mode == "disposed") await Assert.ThrowsAsync<ObjectDisposedException>(() => running.WaitAsync(deadline.Token));
+                else if (mode == "socket") await Assert.ThrowsAsync<SocketException>(() => running.WaitAsync(deadline.Token));
+                else if (diagnostic) await Assert.ThrowsAsync<IOException>(() => running.WaitAsync(deadline.Token));
+                else await Assert.ThrowsAsync<OutOfMemoryException>(() => running.WaitAsync(deadline.Token));
+                Assert.That(listener.SafeHandle.IsClosed, Is.True, "A failed worker must request owner shutdown before completing.");
+                foreach (var peer in peers)
+                {
+                    try { Assert.That(await peer.GetStream().ReadAsync(new byte[1], deadline.Token), Is.Zero); }
+                    catch (IOException error) when (error.InnerException is SocketException) { }
+                }
+            }
+            finally
+            {
+                source.Listeners.Remove(failingTrace); source.Switch.Level = previousLevel;
+                listener.Dispose();
+                if (running != null)
+                {
+                    try { await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+                    catch (ObjectDisposedException) when (mode == "disposed") { }
+                    catch (SocketException) when (mode == "socket") { }
+                    catch (IOException) when (mode == "io") { }
+                    catch (OutOfMemoryException) when (!diagnostic) { }
+                }
+                foreach (var peer in peers) peer.Dispose();
+            }
         }
     }
 }

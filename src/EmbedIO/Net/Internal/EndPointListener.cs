@@ -62,7 +62,7 @@ namespace EmbedIO.Net.Internal
             else
             {
 #if NET10_0_OR_GREATER
-                var acceptLoop = new TcpAcceptLoop(_sock, ProcessAcceptedSocket, () => AdmissionStopped);
+                var acceptLoop = new TcpAcceptLoop(_sock, ProcessAcceptedSocket, () => AdmissionStopped, StopAccepting);
                 _acceptWorker = Task.Run(acceptLoop.RunAsync);
                 _ = _acceptWorker.ContinueWith(static completed =>
                 {
