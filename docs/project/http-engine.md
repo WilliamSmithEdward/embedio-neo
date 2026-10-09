@@ -6133,3 +6133,53 @@ The first Linux launcher used the directory name instead of the assembly name;
 its missing-file failure is retained separately and the corrected `Probe.dll`
 launcher passes. Exact-head CI remains required, and the underlying upload timeout
 must still be investigated.
+### HTTP/3 request-direction observation without normal cancellation throws
+
+The two request-direction watchers previously used `Task.WaitAsync(requestToken)`.
+Finishing a request cancels that token even while QUIC is still acknowledging the
+response FIN, producing roughly one caught TaskCanceledException per ordinary
+request. A shared, asynchronously completed stop signal now ends observation
+through `Task.WhenAny`. Successful direction completion still does not cancel the
+request. QUIC direction faults still cancel it; unexpected faults remain visible.
+Both watchers are joined before their cancellation registration/source is disposed.
+The transport completion tasks are neither canceled nor completed by the watcher.
+No public API, protocol, target, default or runtime dependency changes.
+
+An isolated watcher-only process performs 100 observer stops. The unchanged
+engine throws 100 cancellation exceptions; the candidate throws zero. The first
+probe filtered by a method name in the first-chance throw-site stack and falsely
+reported zero on the control. Its result is retained but is not evidence; the
+corrected process counts every cancellation exception with no other workload.
+
+Five new cases cover pending/already-completed successful FIN, pending/already-
+stopped observation and propagation of unexpected direction faults. The expanded
+real HTTP/3/conformance set passes 444 cases on Windows and pinned Linux, including
+request resets, blocked QPACK cancellation, upload cancellation, shutdown and
+drain. All four resource budgets and source guards pass. Discovery floors increase
+by five to 4,365. The full Windows suite reports 4,365 cases, 4,360 successes,
+five expected local/platform skips and zero failures. Both targets build with
+zero warnings/errors. Final exact-head CI remains required.
+
+The frozen #199 harness compares clean `9ce5af2` with its uncommitted watcher patch,
+using matching harness DLLs and recording engine/source hashes. Three alternating
+rounds of HTTP/3 small responses use eight connections by 32 streams, fresh
+server/client processes, CPUs 0-7 / 8-15, 2 s warmup / 5 s measurement / 1 s idle,
+Windows Ryzen 9800X3D and .NET 10.0.12. All six samples validate every response,
+have zero failures and leave no server sockets.
+
+| Metric (median unless stated) | Control | Candidate |
+| --- | ---: | ---: |
+| Requests/s | 106,948 | 138,950 |
+| Server CPU us/request | 60.4 | 53.4 |
+| Allocated B/request | 16,442 | 16,282 |
+| TaskCanceledException count per sample | 478,182-593,884 | 20-23 |
+| Retained heap growth, maximum | 365,080 B | 186,880 B |
+
+CPU per request is lower in every paired round (about 10-27% in this workload).
+The candidate removes the exception count that scales with requests; it does not
+claim zero cancellation exceptions across shutdown or other protocol paths.
+Short samples on one shared host, with background CPU 5.9-15.6 s per sample, do
+not establish a universal throughput/latency improvement or a Kestrel ranking.
+Longer and other-platform comparisons and resource soak remain work. Evidence is
+under ignored `TestResults/benchmark-review/http3-watch-*` and
+`TestResults/http-engine/http3-watch-*`.

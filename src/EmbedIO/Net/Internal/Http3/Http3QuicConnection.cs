@@ -254,8 +254,10 @@ namespace EmbedIO.Net.Internal.Http3
             var requestToken = requestStop.Token;
             // FIN is a successful half-close. Only faulted direction completion
             // cancels the request; this observes resets even while QPACK is blocked.
-            var reads = WatchRequestDirectionAsync(stream.ReadsClosed, requestStop);
-            var writes = WatchRequestDirectionAsync(stream.WritesClosed, requestStop);
+            var directionsStopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var directionStopRegistration = requestToken.Register(() => directionsStopped.TrySetResult());
+            var reads = WatchRequestDirectionAsync(stream.ReadsClosed, requestStop, directionsStopped.Task);
+            var writes = WatchRequestDirectionAsync(stream.WritesClosed, requestStop, directionsStopped.Task);
             try
             {
                 var reader = new Http3RequestStream(stream.Id, stream, 65536, long.MaxValue);
@@ -315,9 +317,12 @@ namespace EmbedIO.Net.Internal.Http3
             }
             finally { Interlocked.Decrement(ref _applicationCount); }
         }
-        private static async Task WatchRequestDirectionAsync(Task completion, CancellationTokenSource requestStop)
+        private static async Task WatchRequestDirectionAsync(Task completion, CancellationTokenSource requestStop, Task stopped)
         {
-            try { await completion.WaitAsync(requestStop.Token).ConfigureAwait(false); }
+            // Stopping observation is a normal request-lifetime transition. It
+            // must not throw merely because the peer has not acknowledged FIN.
+            if (!completion.IsCompleted && await Task.WhenAny(completion, stopped).ConfigureAwait(false) != completion) return;
+            try { await completion.ConfigureAwait(false); }
             catch (OperationCanceledException) when (requestStop.IsCancellationRequested) { }
             catch (QuicException) { CancelRequests(requestStop); }
         }
