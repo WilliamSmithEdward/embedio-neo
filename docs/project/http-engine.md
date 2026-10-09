@@ -6100,3 +6100,36 @@ list. This is not an allocation-budget violation or evidence of an HTTP/2 DATA
 pooling defect. Its cause remains unconfirmed; the earlier load comparison also
 recorded HTTP/1 upload timeouts. No budget or timeout has been relaxed, and both
 original logs/artifacts remain under ignored TestResults.
+### HTTP/1 upload timeout: connection-establishment evidence
+
+The failed Windows resource job on `fd58c90` waits in HttpClient's connection-pool
+path (`TaskCompletionSourceWithCancellation.WaitWithCancellationAsync`), rather
+than showing an application body-read stack. The snapshot's retained objects are
+not proof of live accepted sockets: its 32 sampled records are all disposed. The
+cause remains unconfirmed, including whether the stalled attempt reached server
+admission. The timeout and original job evidence are retained unchanged.
+
+Five fresh Windows processes running the exact 65,536-byte/full-consumption
+verification workload pass while the previously approved dotnet-trace 10.0.745401
+captures System.Net.Http, System.Net.Sockets and System.Net.NameResolution events.
+These successful traces do not reproduce or resolve the intermittent failure.
+A subsequent untraced verification also passes. Artifacts are under ignored
+`TestResults/http-engine/upload-timeout-traces` and `upload-diagnostics-*`.
+
+Failure-only snapshots now include registered and pending connection counts plus
+a nonblocking `Socket.Poll(0, SelectRead)` observation on the listening socket.
+Disposed/socket-error observations are recorded locally without dropping the
+remaining endpoint metadata. Counts and readiness are separate best-effort reads,
+not an atomic view or proof of request acceptance. Existing sample and lock bounds
+remain. No client/server timeout, successful-request loop, production source,
+public API, dependency or test discovery count changes.
+
+An isolated real-listener probe verifies a pending accepted connection (0
+registered / 1 pending), then a context with a 32-byte unread body (1 registered /
+0 pending, no queued accept work), followed by disposal. It passes on Windows and
+the pinned Linux SDK/runtime container. The performance project builds with zero
+warnings/errors; formatting, parser, suppression and whitespace checks pass.
+The first Linux launcher used the directory name instead of the assembly name;
+its missing-file failure is retained separately and the corrected `Probe.dll`
+launcher passes. Exact-head CI remains required, and the underlying upload timeout
+must still be investigated.

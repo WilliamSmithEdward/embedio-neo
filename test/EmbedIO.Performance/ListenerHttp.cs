@@ -239,9 +239,20 @@ internal static class ListenerHttp
                     foreach (var endpoint in ports.Values)
                     {
                         if (endpoint == null || endpoints.Count == 32) continue;
+                        int? registeredCount = null, pendingCount = null;
+                        bool? listenerReadable = null;
+                        string? listenerSocketError = null;
+                        try
+                        {
+                            if (Field(endpoint, "_sock") is System.Net.Sockets.Socket socket)
+                                listenerReadable = socket.Poll(0, System.Net.Sockets.SelectMode.SelectRead);
+                        }
+                        catch (Exception error) when (error is System.Net.Sockets.SocketException or ObjectDisposedException)
+                        { listenerSocketError = error.GetType().Name; }
                         var owner = endpoint.GetType().GetProperty("Listener", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint);
                         if (owner != null && Field(owner, "_connections") is System.Collections.IEnumerable registered)
                         {
+                            registeredCount = (int?)registered.GetType().GetProperty("Count")?.GetValue(registered);
                             var sampled = 0;
                             foreach (var entry in registered)
                             {
@@ -260,6 +271,7 @@ internal static class ListenerHttp
                                 entered = Monitor.TryEnter(pending, TimeSpan.FromMilliseconds(5));
                                 if (entered && pending is System.Collections.IEnumerable items)
                                 {
+                                    pendingCount = (int?)items.GetType().GetProperty("Count")?.GetValue(items);
                                     var sampled = 0;
                                     foreach (var connection in items)
                                     {
@@ -275,7 +287,11 @@ internal static class ListenerHttp
                         {
                             worker = (Field(endpoint, "_acceptWorker") as Task)?.Status.ToString(),
                             admissionStopped = Field(endpoint, "_acceptingStopped"),
-                            pendingRegistryBusy = busy
+                            pendingRegistryBusy = busy,
+                            registeredConnections = registeredCount,
+                            pendingConnections = pendingCount,
+                            listenerReadable,
+                            listenerSocketError
                         });
                     }
             var live = connections.Where(connection => Field(connection, "_resourcesDisposed") is not 1).Take(32)
