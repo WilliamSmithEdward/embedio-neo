@@ -18,8 +18,7 @@ namespace EmbedIO.Net.Internal
         private const int BufferSize = 8192;
         private static readonly byte[] BadRequestResponse = Encoding.ASCII.GetBytes(
             "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-        private static readonly Encoding HeaderEncoding = Encoding.GetEncoding(28591);
-        private int _headerBytes;
+        private Http1HeadReader _headReader;
         private bool _http2;
         private EmbedIO.Internal.BorrowedResource<CancellationTokenSource>? _http2Stop;
         private Dictionary<HttpListener, Dictionary<Http2Exchange, MultiplexedContext>>? _http2Listeners;
@@ -40,14 +39,11 @@ namespace EmbedIO.Net.Internal
         private MemoryStream? _ms;
         private byte[]? _buffer;
         private HttpListenerContext _context;
-        private StringBuilder? _currentLine;
         private RequestStream? _iStream;
         private ResponseStream? _oStream;
         private bool _contextBound;
         private int _sTimeout = 90000; // 90k ms for first request, 15k ms from then on
         private HttpListener? _lastListener;
-        private InputState _inputState = InputState.RequestLine;
-        private LineState _lineState = LineState.None;
         private int _position;
         private string? _errorMessage;
 
@@ -305,11 +301,9 @@ namespace EmbedIO.Net.Internal
                 _position = pending.Offset;
             }
             else { _ms = new MemoryStream(); _position = 0; }
-            _headerBytes = 0;
+            _headReader.Reset();
             _responseFinishing = 0;
             _errorMessage = null;
-            _inputState = InputState.RequestLine;
-            _lineState = LineState.None;
             _context = new HttpListenerContext(this);
         }
 
@@ -419,115 +413,33 @@ namespace EmbedIO.Net.Internal
         private bool ProcessInput(MemoryStream ms)
         {
             var buffer = ms.GetBuffer();
-            var len = (int)ms.Length;
-            var used = 0;
-
-            while (true)
+            var length = (int)ms.Length;
+            while (_position < length)
             {
-                if (_errorMessage != null)
-                {
-                    return true;
-                }
-
-                if (_position >= len)
-                {
-                    break;
-                }
-
-                string? line;
+                if (_errorMessage != null) return true;
                 try
                 {
-                    line = ReadLine(buffer, _position, len - _position, out used);
+                    var result = _headReader.Read(buffer, _position, length - _position, out var used, out var line);
                     _position += used;
-                    _headerBytes += used;
-                    if (_headerBytes > 32768) throw new InvalidDataException("Request headers exceed 32768 bytes.");
+                    if (result == Http1HeadReadResult.Complete) return true;
+                    if (result == Http1HeadReadResult.NeedMoreData) break;
+                    var value = line ?? throw new InvalidDataException("Missing request head line.");
+                    if (result == Http1HeadReadResult.RequestLine) _context.HttpListenerRequest.SetRequestLine(value);
+                    else _context.HttpListenerRequest.AddHeader(value);
                 }
                 catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
                 {
-                    _errorMessage = "Bad request";
+                    _errorMessage = error.Message;
                     return true;
-                }
-
-                if (line == null)
-                {
-                    break;
-                }
-
-                if (string.IsNullOrEmpty(line))
-                {
-                    if (_inputState == InputState.RequestLine)
-                    {
-                        continue;
-                    }
-
-                    _currentLine = null;
-
-                    return true;
-                }
-
-                if (_inputState == InputState.RequestLine)
-                {
-                    _context.HttpListenerRequest.SetRequestLine(line);
-                    _inputState = InputState.Headers;
-                }
-                else
-                {
-                    try
-                    {
-                        _context.HttpListenerRequest.AddHeader(line);
-                    }
-                    catch (Exception e) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(e))
-                    {
-                        _errorMessage = e.Message;
-                        return true;
-                    }
                 }
             }
-
-            // Incomplete input has been fully consumed into the partial line.
-            // Reuse its storage; the next read must not grow with fragmentation.
+            if (_errorMessage != null) return true;
+            // Only a partial line remains in the reader; compact the transport
+            // buffer without retaining input already consumed by framing.
             ms.SetLength(0);
             ms.Position = 0;
             _position = 0;
-
             return false;
-        }
-
-        private string? ReadLine(byte[] buffer, int offset, int len, out int used)
-        {
-            used = 0;
-            // A complete line in the receive buffer requires only its final string,
-            // not an intermediate char buffer and a per-byte append loop.
-            if (_currentLine == null && _lineState == LineState.None)
-            {
-                var end = Array.IndexOf(buffer, (byte)13, offset, len);
-                var lf = Array.IndexOf(buffer, (byte)10, offset, len);
-                if (lf >= 0 && (end < 0 || lf < end)) throw new InvalidDataException("Bare LF in request headers.");
-                if (end >= 0 && end + 1 < offset + len)
-                {
-                    if (buffer[end + 1] != 10) throw new InvalidDataException("Invalid request line ending.");
-                    used = end - offset + 2;
-                    return HeaderEncoding.GetString(buffer, offset, end - offset);
-                }
-            }
-            _currentLine ??= new StringBuilder(128);
-            for (var i = offset; i < offset + len; i++)
-            {
-                used++;
-                var value = buffer[i];
-                if (_lineState == LineState.Cr)
-                {
-                    if (value != 10) throw new InvalidDataException("Invalid request line ending.");
-                    _lineState = LineState.None;
-                    var result = _currentLine.ToString();
-                    _currentLine = null;
-                    return result;
-                }
-                if (value == 10) throw new InvalidDataException("Bare LF in request headers.");
-                if (value == 13) _lineState = LineState.Cr;
-                else _currentLine.Append((char)value);
-            }
-            return null;
         }
 
         private void Unbind()
@@ -593,7 +505,7 @@ namespace EmbedIO.Net.Internal
                 _ms = null;
                 _iStream = null;
                 _buffer = null;
-                _currentLine = null;
+                _headReader.Reset();
             }
             try
             {

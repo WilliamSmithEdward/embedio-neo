@@ -71,6 +71,43 @@ be assumed to expose identical protocol capabilities. Target removal, hidden
 fallback, and a new native dependency in the legacy asset are not implied by this
 plan. The Microsoft listener remains available.
 
+## Incremental HTTP/1 head reader
+
+`Http1HeadReader` separates incremental request-head framing from connection
+ownership and request semantics. It consumes through the terminating empty line,
+leaves body and pipelined bytes untouched, and enforces the existing 32,768-byte
+head budget before constructing complete-line strings. Fragmented lines retain
+only partial-line state; failures require an explicit reset. This is one component
+of the replacement, not completion of the inherited transport replacement.
+
+Direct tests cover Latin-1 bytes, CRLF splits, invalid line endings, reset and
+budget boundaries with a large unconsumed body. Three recorded random seeds
+produce 6,000 insertion/deletion/replacement mutations. Each input is compared
+under contiguous, one-byte, two-byte and another fragmented delivery. This
+metamorphic check detects fragmentation-dependent outcomes; it is not an
+independent semantics oracle or a coverage-guided fuzz campaign.
+
+The parser/context microbenchmark measures buffered pipeline handoff, including
+reflection observations, without sockets or URI finalization. The initial local
+before/after allocation result is unchanged. Timing samples do not establish a
+performance improvement; end-to-end comparisons remain a completion requirement.
+
+## Whole-engine fuzzing gate
+
+Fuzz individual codecs and parsers during implementation, then run integrated
+stateful campaigns after protocol and lifecycle integration. Include HTTP/1 head
+and body framing, HTTP/2 frames and HPACK, HTTP/3 streams and QPACK, WebSocket
+handshakes/frames/compression, upgrades, multiplexing, disconnects, cancellation
+and shutdown. Exercise resource limits, stalled peers and compression expansion.
+Use independent implementations for differential evidence and resolve differences
+against the applicable specification rather than assuming either implementation
+is correct. Preserve reproducer inputs, seeds, source revisions, platform/runtime
+versions and campaign settings; minimize defects into regression cases.
+
+The existing URL/query fuzz workflow and the head-reader mutation tests do not
+satisfy this gate. Sustained integrated campaigns, coverage review, cross-platform
+stress and investigation of every reproducible finding remain outstanding.
+
 ## Default listener transition
 
 The owner confirmed on 2026-10-08 that the completed replacement must become the

@@ -12,15 +12,15 @@ namespace EmbedIO.Tests
     public class ListenerParserRegressionTest
     {
         private static readonly Type ConnectionType = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-        private static readonly MethodInfo ReadLine = ((ConnectionType).GetMethod("ReadLine", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static readonly Type HeadReaderType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http1HeadReader", true) ?? throw new AssertionException("Missing HTTP/1 head reader.");
+        private static readonly MethodInfo ReadLine = ((HeadReaderType).GetMethod("ReadLine", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         [TestCaseSource(nameof(LineCases))]
         public void LinesPreserveByteMappingAndFragmentBoundaries(byte[] bytes, int fragmentSize, string[] expectedLines, string expectedPartial)
         {
             if (bytes is null) throw new System.NullReferenceException();
             // Exercise the real line parser without creating sockets or changing listener timing.
-            var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
-            ((ConnectionType).GetField("_connectionSync", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, new object());
+            var reader = Activator.CreateInstance(HeadReaderType) ?? throw new AssertionException("Missing reader instance.");
             var lines = new List<string>();
             for (var start = 0; start < bytes.Length; start += fragmentSize)
             {
@@ -30,7 +30,7 @@ namespace EmbedIO.Tests
                 {
                     var args = new object[] { bytes, start + offset, count - offset, 0 };
                     string? line;
-                    try { line = (string?)ReadLine.Invoke(connection, args); }
+                    try { line = (string?)ReadLine.Invoke(reader, args); }
                     catch (TargetInvocationException exception) when (exception.InnerException is InvalidDataException)
                     {
                         Assert.That(expectedPartial, Is.EqualTo("INVALID"));
@@ -45,7 +45,7 @@ namespace EmbedIO.Tests
 
             Assert.That(expectedPartial, Is.Not.EqualTo("INVALID"), "Malformed line must be rejected.");
             Assert.That(lines, Is.EqualTo(expectedLines));
-            var partial = ((ConnectionType).GetField("_currentLine", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)?.ToString() ?? string.Empty;
+            var partial = ((HeadReaderType).GetField("_partial", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(reader)?.ToString() ?? string.Empty;
             Assert.That(partial, Is.EqualTo(expectedPartial));
         }
 
