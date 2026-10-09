@@ -12,7 +12,13 @@ using EmbedIO;
 var mode = args.Length > 0 ? args[0] : "self";
 string? Option(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
 int IntOption(string name, int fallback) => Option(name) is { } text ? int.Parse(text, System.Globalization.CultureInfo.InvariantCulture) : fallback;
-EmbedIO.Diagnostics.Log.Source.Switch.Level = System.Diagnostics.SourceLevels.Off;
+// --log forwards engine warnings and errors to stderr; otherwise engine logging is off.
+if (args.Contains("--log"))
+{
+    EmbedIO.Diagnostics.Log.Source.Switch.Level = System.Diagnostics.SourceLevels.Warning;
+    EmbedIO.Diagnostics.Log.Source.Listeners.Add(new System.Diagnostics.ConsoleTraceListener(true));
+}
+else EmbedIO.Diagnostics.Log.Source.Switch.Level = System.Diagnostics.SourceLevels.Off;
 
 static int FreePort()
 {

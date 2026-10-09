@@ -21,7 +21,7 @@ dotnet build "$src/test/EmbedIO.Conformance" -c Release -o /tmp/conformance > "$
 sha256sum /tmp/conformance/EmbedIO.dll | tee -a "$out/summary.txt"
 
 http=18080; https=18443; h3=18444
-coproc SERVER { cd "$out" && exec dotnet /tmp/conformance/EmbedIO.Conformance.dll serve --http $http --https $https --h3 $h3 2> "$out/server-stderr.log"; }
+coproc SERVER { cd "$out" && exec dotnet /tmp/conformance/EmbedIO.Conformance.dll serve --http $http --https $https --h3 $h3 --log 2> "$out/server-stderr.log"; }
 exec 3>&"${SERVER[1]}"
 ready=""
 while read -r -t 60 line <&"${SERVER[0]}"; do

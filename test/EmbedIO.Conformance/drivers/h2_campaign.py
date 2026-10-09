@@ -278,6 +278,7 @@ def case(cases, identifier, reference, level):
 
 
 CASES = []
+ONLY = None
 
 
 @case(CASES, "multiplexed-echo", "RFC9113 5; 6.9", "MUST")
@@ -299,7 +300,6 @@ def _(e):
 def _(e):
     # Initial window 1 byte: the server must respect it and resume after WINDOW_UPDATE.
     client = Client(e, settings={h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: 1})
-    client.conn.increment_flow_control_window(0)  # Keep connection window default.
     sid = client.request(b"GET", b"/stream?n=50000&chunk=7000")
     client.wait([sid], 30)
     body = bytes(client.streams[sid]["body"])
@@ -371,12 +371,64 @@ def _(e):
     return ("conforms" if bytes(client.streams[sid]["body"]) == b"abc" else "violation", detail)
 
 
+@case(CASES, "settings-shrink-ordering", "RFC9113 6.5.3; 6.9.2", "MUST")
+def _(e):
+    # Independent window accounting with raw frames: once the server ACKs a smaller
+    # SETTINGS_INITIAL_WINDOW_SIZE, its later DATA must fit the adjusted window.
+    worst = 0
+    trials = 40
+    for trial in range(trials):
+        sock = raw_connection(e)
+        h = hf.HeadersFrame(1, raw_headers_block(e, b"/stream?n=4000000&chunk=16000"))
+        h.flags.add("END_HEADERS")
+        h.flags.add("END_STREAM")
+        # Large connection window so only the stream window governs.
+        sock.sendall(h.serialize() + hf.WindowUpdateFrame(0, window_increment=1 << 30).serialize())
+        window = 65535
+        acked = False
+        acks = 0  # ACKs arrive in SETTINGS order; the second answers the shrink.
+        sent_shrink = False
+        new_size = [0, 1, 1000, 8000][trial % 4]
+        buffer = b""
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([sock], [], [], 0.2)
+            if not ready:
+                if acked:
+                    break
+                continue
+            data = sock.recv(65536)
+            if not data:
+                break
+            buffer += data
+            while len(buffer) >= 9 and len(buffer) >= 9 + int.from_bytes(buffer[:3], "big"):
+                length = int.from_bytes(buffer[:3], "big")
+                frame_type, flags = buffer[3], buffer[4]
+                buffer = buffer[9 + length:]
+                if frame_type == 0x0:
+                    window -= length
+                    if acked and window < worst:
+                        worst = window
+                    if not sent_shrink and window < 65535 - 16000 * (trial % 3):
+                        sock.sendall(hf.SettingsFrame(0, settings={4: new_size}).serialize())
+                        sent_shrink = True
+                elif frame_type == 0x4 and flags & 1:
+                    acks += 1
+                    if acks == 2:
+                        acked = True
+                        window += new_size - 65535
+        sock.close()
+    return ("conforms" if worst >= 0 else "violation",
+            f"{trials} trials; most negative stream window observed after SETTINGS ACK: {worst}")
+
+
 @case(CASES, "client-goaway-drains", "RFC9113 6.8", "MUST")
 def _(e):
     client = Client(e)
     sid = client.request(b"GET", b"/slow?ms=300")
-    client.conn.close_connection(error_code=0, last_stream_id=sid)
-    client.flush()
+    # Raw GOAWAY: h2 would otherwise refuse the server frames that legitimately follow.
+    # Last-Stream-ID 0 refers to server-initiated streams; the request stays in flight.
+    client.sock.sendall(hf.GoAwayFrame(0, last_stream_id=0, error_code=0).serialize())
     client.wait([sid], 10)
     ok = bytes(client.streams[sid]["body"]) == b"slow"
     client.sock.close()
@@ -592,6 +644,8 @@ def run_cases(endpoint, stats_port):
     results = []
     before = stats(endpoint.host, stats_port) if stats_port else None
     for identifier, reference, level, function in CASES:
+        if ONLY and ONLY not in identifier:
+            continue
         started = time.monotonic()
         try:
             result, detail = function(endpoint)
@@ -734,7 +788,10 @@ def main():
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--iterations", type=int, default=200)
     parser.add_argument("--out")
+    parser.add_argument("--only", help="run only cases whose id contains this text")
     args = parser.parse_args()
+    global ONLY
+    ONLY = args.only
     endpoint = Endpoint(args.host, args.port, args.tls, (args.authority or f"{args.host}:{args.port}").encode())
     import h2 as h2_package
     identity = {"h2": h2_package.__version__, "python": sys.version, "target": f"{args.host}:{args.port}", "tls": args.tls}

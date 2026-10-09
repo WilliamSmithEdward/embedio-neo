@@ -146,6 +146,7 @@ def stats(host, port):
 
 
 CASES = []
+ONLY = None
 
 
 def case(identifier, reference, level):
@@ -253,6 +254,8 @@ async def run_cases(session, stats_port):
     results = []
     before = stats(session.host, stats_port) if stats_port else None
     for identifier, reference, level, function in CASES:
+        if ONLY and ONLY not in identifier:
+            continue
         started = time.monotonic()
         try:
             result, detail = await function(session)
@@ -360,7 +363,10 @@ def main():
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--iterations", type=int, default=100)
     parser.add_argument("--out")
+    parser.add_argument("--only", help="run only cases whose id contains this text")
     args = parser.parse_args()
+    global ONLY
+    ONLY = args.only
     session = Session(args.host, args.port)
     import aioquic
     identity = {"aioquic": aioquic.__version__, "python": sys.version, "target": f"{args.host}:{args.port}"}
