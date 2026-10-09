@@ -1,6 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+- Remove the approved managed HTTP/1 keep-alive cap of 100 requests. Connections
+  can remain reusable beyond that count; the 15-second idle timeout, explicit
+  close, cancellation and graceful drain remain. The Keep-Alive header no longer
+  advertises max. Clients relying on count-based rotation should request closure
+  explicitly; see the [migration notes](docs/compatibility/migration.md#managed-http1-keep-alive-request-cap-removed).
+
+- Prevent bodyless managed HTTP/1 responses from leaking payloads or chunk
+  terminators, while preserving header commitment and explicit 304 representation
+  lengths. Preserve accepted HTTP/2 responses during drain when a refused upload
+  was already in flight, retaining connection flow credit and invalid-ID checks.
 
 - Reject new HTTP/2 requests that reuse a completed stream identifier or try to
   open a skipped lower identifier, while retaining minimal closed-stream
