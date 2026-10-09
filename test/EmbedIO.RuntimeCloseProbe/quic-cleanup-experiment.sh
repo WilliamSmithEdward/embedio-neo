@@ -26,8 +26,20 @@ crypto_root="$source_dir/submodules/$tls_backend"
 if test "$tls_backend" = openssl; then
   # OpenSSL 3.5.9 LTS, released 2026-09-29. Pin the peeled release commit.
   crypto_revision=45e844fa2a14ec92d146bd8f5778ac130b6625fb
-  git -C "$crypto_root" fetch --depth 1 origin "$crypto_revision"
-  git -C "$crypto_root" checkout --detach FETCH_HEAD
+  git -C "$crypto_root" fetch --depth 1 origin refs/tags/openssl-3.5.9
+  test "$(git -C "$crypto_root" rev-parse FETCH_HEAD)" = d0ca66a1abe52545f14eca635c648932fcde5615
+  test "$(git -C "$crypto_root" rev-parse 'FETCH_HEAD^{}')" = "$crypto_revision"
+  key_root="$results/openssl-keyring"
+  mkdir -m 700 "$key_root"
+  curl --fail --location --retry 3 https://www.openssl-library.org/source/pubkeys.asc -o "$results/openssl-pubkeys.asc"
+  gpg --version > "$results/gpg-version.txt"
+  gpg --no-options --no-autostart --homedir "$key_root" --batch --import "$results/openssl-pubkeys.asc" \
+    > "$results/openssl-key-import.log" 2>&1
+  printf 'no-autostart\n' > "$key_root/gpg.conf"
+  GNUPGHOME="$key_root" git -C "$crypto_root" verify-tag --raw FETCH_HEAD \
+    > "$results/openssl-tag-signature.log" 2>&1
+  grep -E '^\[GNUPG:\] VALIDSIG .* B146647E45A7B33947AB226B2A2C87D161692D40$' "$results/openssl-tag-signature.log"
+  git -C "$crypto_root" checkout --detach "$crypto_revision"
   grep -Fx 'MAJOR=3' "$crypto_root/VERSION.dat"
   grep -Fx 'MINOR=5' "$crypto_root/VERSION.dat"
   grep -Fx 'PATCH=9' "$crypto_root/VERSION.dat"
@@ -196,6 +208,9 @@ if test "$self_contained" = 1; then
   cp "$source_dir/THIRD-PARTY-NOTICES" "$stage/licenses/MsQuic-THIRD-PARTY-NOTICES"
   cp "$crypto_root/LICENSE.txt" "$stage/licenses/$tls_backend-LICENSE.txt"
   cp "$patch_file" "$config_patch" "$stage/source/"
+  if test "$tls_backend" = openssl; then
+    cp "$results/openssl-tag-signature.log" "$results/crypto-version.txt" "$stage/source/"
+  fi
   jq -n --arg source "$revision" --arg crypto "$crypto_revision" --arg backend "$tls_backend" \
     --arg hash "$(shasum -a 256 "$native/libmsquic.2.6.2.dylib" | awk '{print $1}')" \
     '{artifact:"test-only self-contained candidate",rid:"osx-arm64",msquicSource:$source,cryptoSource:$crypto,tlsBackend:$backend,sha256:$hash,productionInstalled:false}' \

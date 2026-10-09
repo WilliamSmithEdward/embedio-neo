@@ -187,7 +187,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Prepare native build tools
-        run: brew install cmake openssl@3
+        run: brew install cmake openssl@3 gnupg
       - name: Compare pinned source with the test-only cleanup patch
         run: bash test/EmbedIO.RuntimeCloseProbe/quic-cleanup-experiment.sh
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

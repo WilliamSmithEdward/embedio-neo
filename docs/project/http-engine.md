@@ -4600,3 +4600,44 @@ remain required before distribution; no signature verification is claimed.
 The quictls isolation job 37898720873 / 113716018625 is still running at this
 checkpoint. The supported-LTS experiment is a distinct dependency candidate,
 not a restart of that live job or a claim that a change passed without execution.
+### Native isolation result and OpenSSL release authentication
+
+The quictls isolation job 37898720873 / 113716018625 completed successfully on
+head e8b7961. The staged dylib imports only its exact MsQuic install name,
+CoreFoundation, Security and libSystem, with no dynamic crypto/Homebrew/build
+imports. Its only exports are MsQuicOpenVersion and MsQuicClose. The relocated
+process loader identifies the staged copy, which passes 4,096 dispose/rebind
+cycles; the ten build-location runs pass another 40,960. Five complete native
+traces inspect 20,480 cycles, all with descriptor close completed before managed
+disposal and none started afterward. The unchanged native control retains its
+two failures. Candidate native tests report zero failures; platform-specific
+skips remain explicit. Full macOS coverage passes 3,522 cases (3,491 passed,
+31 skipped, zero failed). ASAN reports 100 successful repetitions of 12 selected
+native cases and its separate exit is zero. This does not prove coverage of every
+crypto allocation or whole-engine memory/concurrency behavior.
+
+Staged dylib SHA-256:
+61b7f6d8d806d0ad22cc57bf273ce18ed38774a0dc1e4ac93cc217c492373768.
+This uses the old pinned quictls snapshot and proves isolation/lifetime mechanics;
+it is not the approved shipping crypto baseline. The independent OpenSSL 3.5.9
+candidate job 37899089793 / 113717193257 remains live at this checkpoint.
+
+The official OpenSSL 3.5.9 release archive matches its published SHA-256
+603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a.
+Its detached archive signature and signed Git tag both verify locally with
+signing subkey C46ED3F2CBEFDA1FDAADA44264ED7B1DCCE71CB2 under the primary
+fingerprint B146647E45A7B33947AB226B2A2C87D161692D40 published by the
+[authoritative OpenSSL download page](https://www.openssl-library.org/source/).
+The tag object and peeled commit match the existing pins. The isolated keyring
+has no Web-of-Trust owner trust configured; acceptance requires successful
+cryptographic verification and the exact authoritative primary fingerprint.
+GitHub's unknown_key display does not substitute for this verification.
+
+The OpenSSL experiment now enforces that signed-tag/pinned-commit verification
+before checkout/build and includes its signature status with the staged source
+receipt. The keyring is job-local; no user keyring or trust database is changed.
+Local shell/workflow/source/zizmor guards pass. Executing this added verification
+on Darwin remains pending. OpenSSL's [3.5 release notes](https://www.openssl-library.org/news/openssl-3.5-notes/)
+identify 3.5.9 as a security patch release; this version selection and signature
+verification do not replace native vulnerability, binary, deployment and update
+reviews. Production packages and installed prerequisites remain unchanged.
