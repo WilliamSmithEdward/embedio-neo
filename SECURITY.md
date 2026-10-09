@@ -89,6 +89,25 @@ cooldown, except security updates and the owner's Python packages. The Update YA
 rules workflow proposes pin updates weekly. Minor and patch updates and YARA
 updates merge once the three gates pass; third-party major versions wait for review.
 
+### Semgrep installation
+
+Semgrep remains a containerized CI tool running as the checkout's user. Its base
+image is pinned by digest from GHCR, and the scanner release and complete Python
+wheel dependency closure are pinned by SHA-256 in
+`.github/security/semgrep/requirements.txt`. This avoids Docker Hub's anonymous
+pull quota without changing the scan rules, target paths, timeout policy,
+`--disable-nosem`, SARIF checks or required gate. Semgrep and Python are not runtime
+dependencies of shipped EmbedIO packages.
+
+The wheel lock targets the Ubuntu x86_64 / Python 3.12 scanner job. To update it,
+resolve the intended Semgrep release and all dependencies on that platform,
+verify wheel metadata and hashes, install using `--require-hashes` and
+`--only-binary=:all:`, run `pip check`, verify the reported Semgrep version, and
+run the existing complete scan and report validation. Keep installation failures
+and scan warnings failing. Dependabot follows the Docker base and both pip-lock
+directories; a version change requires regenerating the complete lock and updating
+the Dockerfile's version assertion together.
+
 ## Releases
 
 A pushed version tag runs Publish: it checks the shared version against the tag,
