@@ -1071,3 +1071,13 @@ Accepted responses finish instead of being canceled by a spurious idle-stream
 protocol error. Invalid even client stream IDs still produce a connection error.
 See [HTTP/2 section 6.8](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.8).
 These corrections are unreleased HTTP-engine work.
+## HTTP/1.0 response delimitation (unreleased)
+
+The managed listener closes an HTTP/1.0 response with an unknown-length body,
+even when the client requests keep-alive or the handler sets KeepAlive. HTTP/1.0
+cannot use chunked transfer framing, so transport EOF is the body delimiter.
+Previously the listener could advertise persistence without providing a delimiter.
+Set ContentLength64 before writing to retain HTTP/1.0 persistence when the exact
+length is known. HEAD and bodyless status responses retain their existing
+persistence policy; HTTP/1.1 chunked responses are unchanged. See
+[RFC 9112 section 9.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-9.3).

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Close unknown-length HTTP/1.0 response bodies to delimit them by transport EOF,
+  while retaining persistence for fixed-length and bodyless responses.
+
 - Reject malformed managed HTTP/1 request-target forms before URI reconstruction,
   including query-only and leading-@ targets. Valid origin paths, absolute HTTP(S)
   URLs and OPTIONS asterisk-form remain supported; see the migration notes.

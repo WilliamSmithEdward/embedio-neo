@@ -6256,3 +6256,22 @@ both targets with zero warnings/errors; suppression checks, analyzer guard and
 changed-source formatting pass. Hot-path, cold-start, listener-queue and wire
 allocation gates pass. The earlier locked-file analyzer failure is preserved.
 Cross-platform and final-head GitHub checks are still required.
+### HTTP/1.0 close-delimited response correction
+
+Six raw-wire cases cover synchronous and asynchronous unknown-length bodies,
+fixed-length bodies and 204 responses. On unchanged production at 556022e,
+the two unknown-length cases advertised keep-alive instead of close; the four
+self-delimited controls passed. The listener now forces close for HTTP/1.0
+responses carrying content without a valid Content-Length. HEAD/bodyless responses
+and valid fixed-length persistence remain eligible for reuse. No HTTP/1.1 hot-path
+parsing is added. This follows RFC 9112 sections 6.3 and 9.3.
+
+All 36 focused HTTP/1.0, bodyless, URL and rejected-CONNECT cases pass. Analyzer
+builds for both targets and changed-source formatting pass. Full regression and
+exact-head checks remain required; discovery floors are 4,393. Original and
+candidate logs/TRX are retained under ignored TestResults/http10-*.
+Final Windows regression: 4,393 cases, 4,388 passed, five expected local skips,
+zero failures. The full suite overlapped another agent's Windows suite; neither
+that observation nor passing local cases establish CI/platform readiness.
+Source guards and all four allocation budgets pass. Full-suite logs and TRX are
+retained. Final-head GitHub checks are required before integration.
