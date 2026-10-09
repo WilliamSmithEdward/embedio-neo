@@ -71,10 +71,15 @@ namespace EmbedIO.Net.Internal.Http2
         internal Task WriteAsync(Http2Frame[] frames, int peerMaximum, CancellationToken token)
             => WriteCoreAsync(frames, peerMaximum, token, token);
 
-        internal Task WriteRequestAsync(Http2Frame[] frames, int peerMaximum, CancellationToken requestToken, CancellationToken connectionToken)
-            => WriteCoreAsync(frames, peerMaximum, requestToken, connectionToken);
+        internal Task<bool> WriteRequestAsync(Http2Frame[] frames, int peerMaximum, CancellationToken requestToken,
+            CancellationToken connectionToken, Http2SendFlowControl flow)
+            => WriteCoreAsync(frames, peerMaximum, requestToken, connectionToken, flow);
 
-        private async Task WriteCoreAsync(Http2Frame[] frames, int peerMaximum, CancellationToken requestToken, CancellationToken connectionToken)
+        internal Task WriteSettingsAsync(Http2Frame[] frames, int peerMaximum, Action apply, CancellationToken token)
+            => WriteCoreAsync(frames, peerMaximum, token, token, apply: apply);
+
+        private async Task<bool> WriteCoreAsync(Http2Frame[] frames, int peerMaximum, CancellationToken requestToken,
+            CancellationToken connectionToken, Http2SendFlowControl? flow = null, Action? apply = null)
         {
             if (frames == null) throw new ArgumentNullException(nameof(frames));
             ValidateMaximum(peerMaximum);
@@ -93,6 +98,10 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 requestToken.ThrowIfCancellationRequested();
                 if (_writeFailed) throw new IOException("HTTP/2 output is no longer usable.");
+                // SETTINGS and its ACK form one wire-order transaction. DATA
+                // reserved before that transaction must still fit at commitment.
+                apply?.Invoke();
+                if (flow != null && !flow.CanSendReserved(frames)) return false;
                 buffer = ArrayPool<byte>.Shared.Rent(capacity);
                 foreach (var frame in frames)
                 {
@@ -107,6 +116,7 @@ namespace EmbedIO.Net.Internal.Http2
                     writeStarted = true;
                     await _stream.Value.WriteAsync(buffer, 0, length + 9, connectionToken).ConfigureAwait(false);
                 }
+                return true;
             }
             catch { if (writeStarted) _writeFailed = true; throw; }
             finally

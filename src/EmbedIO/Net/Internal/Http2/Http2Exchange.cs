@@ -84,8 +84,10 @@ namespace EmbedIO.Net.Internal.Http2
                     var reserved = await _connection.SendFlow.ReserveAsync(Id, Math.Min(16384, count), linked.Token).ConfigureAwait(false);
                     var payload = new byte[reserved];
                     Buffer.BlockCopy(bytes, offset, payload, 0, reserved);
+                    if (!await _connection.SendStreamAsync(new[] { new Http2Frame(0,
+                        endStream && count == reserved ? (byte)1 : (byte)0, Id, payload) }, linked.Token).ConfigureAwait(false))
+                        continue;
                     count -= reserved; offset += reserved;
-                    await _connection.SendStreamAsync(new[] { new Http2Frame(0, endStream && count == 0 ? (byte)1 : (byte)0, Id, payload) }, linked.Token).ConfigureAwait(false);
                     _responseBytes += reserved;
                 }
                 if (endStream) EndLocal();

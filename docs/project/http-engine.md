@@ -5915,5 +5915,32 @@ exports the certificate and private key as PKCS#12. The fixture now requests
 an exportable key as the other QUIC fixtures do; the 100 rounds, 400 cancelled
 uploads, fatal-callback checks and fresh-client health checks are unchanged.
 The focused Windows regression passes, as do formatting and analyzer guards.
-The provisioning mismatch is a candidate explanation; macOS validation remains
-required before claiming that the TLS `UserCanceled` failure is resolved.
+The first changed-source macOS run, [37970375501](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37970375501),
+passed all 4,312 cases (4,281 passed, 31 expected skips), the 27 constrained ZIP
+cases and five 17-case reset-stress repetitions on `c367d25`. This supports the
+fixture-provisioning diagnosis; it does not establish that the separate native
+QUIC rebind failure is resolved.
+
+### Conformance finding F5: SETTINGS and queued DATA ordering
+
+Two controlled tests reproduce DATA sent after the SETTINGS ACK using credit
+reserved under the old initial stream window. On `c367d25`, shrinking the window
+to zero or 1,024 bytes still puts the reserved 16 KiB frame after the ACK.
+The candidate applies SETTINGS and writes its ACK under the shared wire gate.
+Queued DATA rechecks its reservation under that same gate before any bytes are
+written. An invalidated reservation is returned and the response reserves fresh
+credit outside the gate; body offsets and END_STREAM advance only on commitment.
+The existing reset/partial-write and HPACK synchronization rules are retained.
+
+Both reproductions now pass. An independent raw-client case checks every byte
+of a 16,400-byte response after a zero-window change, 1,024-byte WINDOW_UPDATEs,
+the final short DATA frame and END_STREAM, and PING while output is flow-blocked.
+The Windows protocol set passes 814 cases; the later three-case ordering/body
+set also passes. Linux passes all 378 HTTP/2 cases. Both targets build with no
+warnings; formatting/parser/suppression checks and all four allocation budgets
+pass. Test discovery floors increase by three to 4,315. Logs and TRX are retained
+under ignored `TestResults/http-engine/f5-*`.
+
+These tests cover wire commitment and resumed-response behavior. The original
+independent hyper-h2 SETTINGS-shrink campaign, full suites and exact-head CI are
+still required; no all-platform conformance completion or speedup is claimed.
