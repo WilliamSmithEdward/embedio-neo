@@ -153,3 +153,24 @@ passed 4,357 cases with 31 skips. Overall workflow failure is retained because
 Windows saw the coding-chain 503 and a TcpAndQuicSharePortAndStopIndependently TLS
 UserCanceled failure. The latter requires QUIC/handshake triage and is not within
 the raw-bind quarantine. No cause or correction for either is claimed here.
+## Exact a33785f native experiment outcome
+
+[Run 37994255459](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37994255459)
+tested a33785f on Apple Silicon. The native comparison passed. Four of twenty
+unpatched NUnit control runs contained failures, all classified as the established
+raw MsQuic bind defect; no unrelated failures were classified as that defect.
+The native probe ledger records six failing control probes and ten passing
+candidate probes. Each candidate completed all 4,096 cycles. Candidate native
+and AddressSanitizer exit codes are zero. These are test-only patched-MsQuic
+results, not evidence that the shipped upstream runtime has been repaired.
+
+The patched full macOS regression reports 4,400 cases, 4,369 passed, 31 skipped,
+zero failures. The complete workflow remains failed because the Windows coding
+chain test received the HTTP.sys 503 response. The prior shared TCP/QUIC TLS
+failure did not occur in this run; its absence does not establish a correction.
+No upstream report or native release was published. Retry and quarantine retirement
+still requires the runtime evidence and gates listed above.
+
+Artifacts and classification receipts are retained under ignored
+TestResults/a337-quic-experiment. The control failures and failed overall workflow
+remain part of the evidence.
