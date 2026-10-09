@@ -5696,3 +5696,17 @@ policy and final engine conformance/performance remain open.
 Evidence is under ignored TestResults/http-engine/native-dual-rid-*. The pinned
 zizmor workflow audit has no findings, shell syntax checks pass and the ordinary
 solution does not acquire new targets or native runtime dependencies.
+
+The first osx-x64 experiment job 113869693050 in run 37945234080 failed before
+native compilation: fetching the pinned OpenSSL tag returned Git's "shallow file
+has changed since we read it" error. The original job log is preserved as
+native-dual-rid-intel-first.log. This is not an Intel transport result. Source
+fetches now retain each attempt and retry only that exact shallow-state error,
+up to three attempts. Invalid references and other failures return immediately;
+exhausted retries still fail. Automatic Git maintenance is disabled for these
+fetch commands, without claiming it caused the observed failure. The immutable
+source SHA, annotated tag SHA, peeled commit, signature fingerprint and crypto
+version checks remain unchanged. Controlled fixture checks verify recovery on
+the third attempt, immediate permanent failure and exhausted retry failure.
+The existing ARM job remains a distinct run; new native validation is required
+before claiming the Intel candidate works.

@@ -20,9 +20,25 @@ source_dir="$RUNNER_TEMP/msquic-cleanup-source"
 revision=819ab74f851ee168504cbc392ec32e7bed1d82e9
 mkdir -p "$results"
 test ! -e "$source_dir"
+fetch_reviewed_source() {
+  local directory="$1" label="$2" ref="$3" attempt status log
+  for attempt in 1 2 3; do
+    log="$results/$label-fetch-$attempt.log"
+    status=0
+    git -C "$directory" -c maintenance.auto=false -c gc.auto=0 fetch --depth 1 origin "$ref" > "$log" 2>&1 || status=$?
+    cat "$log"
+    if test "$status" -eq 0; then return 0; fi
+    # Retain every attempt and retry only the observed shallow-state race.
+    # Caller still verifies the immutable commit/tag/signature after success.
+    if ! grep -Fq 'fatal: shallow file has changed since we read it' "$log"; then return "$status"; fi
+    if test "$attempt" -lt 3; then sleep 2; fi
+  done
+  return "$status"
+}
+
 git init "$source_dir"
 git -C "$source_dir" remote add origin https://github.com/microsoft/msquic.git
-git -C "$source_dir" fetch --depth 1 origin "$revision"
+fetch_reviewed_source "$source_dir" msquic "$revision"
 git -C "$source_dir" checkout --detach FETCH_HEAD
 test "$(git -C "$source_dir" rev-parse HEAD)" = "$revision"
 git -C "$source_dir" submodule update --init --depth 1 "submodules/$tls_backend" submodules/googletest
@@ -31,7 +47,7 @@ crypto_root="$source_dir/submodules/$tls_backend"
 if test "$tls_backend" = openssl; then
   # OpenSSL 3.5.9 LTS, released 2026-09-29. Pin the peeled release commit.
   crypto_revision=45e844fa2a14ec92d146bd8f5778ac130b6625fb
-  git -C "$crypto_root" fetch --depth 1 origin refs/tags/openssl-3.5.9
+  fetch_reviewed_source "$crypto_root" openssl refs/tags/openssl-3.5.9
   test "$(git -C "$crypto_root" rev-parse FETCH_HEAD)" = d0ca66a1abe52545f14eca635c648932fcde5615
   test "$(git -C "$crypto_root" rev-parse 'FETCH_HEAD^{}')" = "$crypto_revision"
   # GnuPG probes its agent socket even during public-key import. Darwin's
