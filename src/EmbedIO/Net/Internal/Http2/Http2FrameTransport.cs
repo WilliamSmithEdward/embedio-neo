@@ -66,7 +66,15 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
-        internal async Task WriteAsync(Http2Frame[] frames, int peerMaximum, CancellationToken token)
+        internal bool IsWriteFailed => Volatile.Read(ref _writeFailed);
+
+        internal Task WriteAsync(Http2Frame[] frames, int peerMaximum, CancellationToken token)
+            => WriteCoreAsync(frames, peerMaximum, token, token);
+
+        internal Task WriteRequestAsync(Http2Frame[] frames, int peerMaximum, CancellationToken requestToken, CancellationToken connectionToken)
+            => WriteCoreAsync(frames, peerMaximum, requestToken, connectionToken);
+
+        private async Task WriteCoreAsync(Http2Frame[] frames, int peerMaximum, CancellationToken requestToken, CancellationToken connectionToken)
         {
             if (frames == null) throw new ArgumentNullException(nameof(frames));
             ValidateMaximum(peerMaximum);
@@ -78,10 +86,12 @@ namespace EmbedIO.Net.Internal.Http2
                 frame.ValidateShape();
                 capacity = Math.Max(capacity, frame.Payload.Length + 9);
             }
-            await _writeGate.WaitAsync(token).ConfigureAwait(false);
+            await _writeGate.WaitAsync(requestToken).ConfigureAwait(false);
             byte[]? buffer = null;
+            var writeStarted = false;
             try
             {
+                requestToken.ThrowIfCancellationRequested();
                 if (_writeFailed) throw new IOException("HTTP/2 output is no longer usable.");
                 buffer = ArrayPool<byte>.Shared.Rent(capacity);
                 foreach (var frame in frames)
@@ -92,10 +102,13 @@ namespace EmbedIO.Net.Internal.Http2
                     buffer[5] = (byte)(frame.StreamId >> 24); buffer[6] = (byte)(frame.StreamId >> 16);
                     buffer[7] = (byte)(frame.StreamId >> 8); buffer[8] = (byte)frame.StreamId;
                     Buffer.BlockCopy(frame.Payload, 0, buffer, 9, length);
-                    await _stream.Value.WriteAsync(buffer, 0, length + 9, token).ConfigureAwait(false);
+                    // Once any bytes of a frame batch may be on the wire, only
+                    // the connection lifetime may interrupt its shared transport.
+                    writeStarted = true;
+                    await _stream.Value.WriteAsync(buffer, 0, length + 9, connectionToken).ConfigureAwait(false);
                 }
             }
-            catch { _writeFailed = true; throw; }
+            catch { if (writeStarted) _writeFailed = true; throw; }
             finally
             {
                 if (buffer != null) ArrayPool<byte>.Shared.Return(buffer, true);

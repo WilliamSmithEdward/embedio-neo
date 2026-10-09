@@ -176,7 +176,6 @@ namespace EmbedIO.Tests
         // must keep working. Http2Exchange writes with a token linked to the stream reset and
         // Http2FrameTransport marks its output failed on any exception, cancellation included,
         // so a reset that lands during a shared write closes the connection without GOAWAY.
-        [Explicit("Finding F4: a client RST_STREAM during a response write can close the HTTP/2 connection without GOAWAY.")]
         [Test]
         public async Task ClientResetDoesNotCloseTheHttp2Connection()
         {

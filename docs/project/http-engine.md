@@ -5788,3 +5788,44 @@ and exact-head repository gates are still required. The other eight supplied rep
 cases remain Explicit for unresolved F1/F2/F4 work; enabling F3 is not a claim
 that the full conformance campaign passes. Evidence is under ignored
 `TestResults/http-engine/f3-*`.
+
+### Conformance finding F4: shared HTTP/2 write cancellation
+
+Two controlled writer cases fail on `2e579ec`: cancellation after a partial frame
+interrupts the shared transport, and cancellation while waiting for its gate
+reports a connection-wide output failure despite writing no bytes. The candidate
+separates cancellation while queued from cancellation of committed I/O. DATA
+uses its request token until writing starts, then the owning connection's token
+for the complete frame batch. Connection shutdown and genuine partial I/O failures
+still terminate unusable output.
+
+An unstarted canceled DATA frame returns its reserved flow-control credit. The
+connection credit is returned even if RST_STREAM already removed the stream's
+window, allowing a blocked sibling to proceed without a peer WINDOW_UPDATE.
+HPACK encoding mutates a connection-wide table, so a header block that has been
+encoded is committed with connection cancellation; a reset cannot leave the
+peer missing table entries referenced by the next response.
+
+Five controlled regressions cover partial and queued reset, credit return after
+stream removal, decoding successive HPACK blocks and connection cancellation.
+The supplied 500-trial wire reproduction is enabled. Three Linux wire repeats
+pass (1,500 trials), and the broader HTTP/2, HTTP/3, cleanup and fatal-propagation
+set passes all 812 cases on Windows and Linux. Hot-path, listener-queue,
+cold-start and listener-allocation budgets pass. Both library targets build;
+parser/suppression guards pass. Full-suite and final exact-head checks are still
+required. Settings-shrink ordering (F5), stream-state errors (F6), truncated
+fixed bodies (F1) and malformed-body status handling (F2) remain separate work.
+Evidence is retained under ignored `TestResults/http-engine/f4-*`.
+
+### Budgeted Intel native experiment result
+
+The Intel job in run
+[37952457798](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37952457798)
+completed both coverage suites on `f23a5a5`: each reported all 4,288 cases,
+4,256 passed, 31 skipped and one failure, taking about 9.5 minutes. Increasing
+the execution budget allowed full discovery/completion; it did not clear genuine
+failures. Each failure is in the native WebSocket shutdown fixture's upgrade
+completion path. The job remains failed, and its logs are retained as
+`TestResults/http-engine/native-intel-budgeted.log`. This is older managed source
+than the F3/F4 candidates and does not validate their exact head. The ARM native
+comparison on the same revision passed. Intel remains in the support scope.

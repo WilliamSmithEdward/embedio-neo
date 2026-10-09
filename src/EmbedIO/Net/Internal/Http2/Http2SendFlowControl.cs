@@ -7,8 +7,8 @@ using System.Threading.Tasks;
 namespace EmbedIO.Net.Internal.Http2
 {
     // Reserves both connection and stream credit atomically before DATA is queued.
-    // The send owner must abort on a failure after reservation; credit cannot be
-    // refunded after an ambiguous partial transport write.
+    // Unstarted DATA can return its reservation. An ambiguous partial transport
+    // write still requires connection termination rather than a credit refund.
     internal sealed class Http2SendFlowControl
     {
         private readonly object _sync = new();
@@ -70,6 +70,28 @@ namespace EmbedIO.Net.Internal.Http2
                 if (!_streams.TryGetValue(streamId, out var window)) return;
                 if (window.Waiting != null) FailWaiter(window.Waiting, new IOException("HTTP/2 stream is closed."));
                 _streams.Remove(streamId);
+            }
+        }
+
+        internal void ReturnUnusedReservation(int streamId, int count)
+        {
+            if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+            if (count == 0) return;
+            lock (_sync)
+            {
+                if (_failure != null) return;
+                var connection = (long)_connection + count;
+                _streams.TryGetValue(streamId, out var window);
+                var stream = window == null ? 0 : (long)window.Credit + count;
+                if (connection > int.MaxValue || stream > int.MaxValue)
+                    throw new Http2ProtocolException(3, "Returning unsent DATA overflows flow-control credit.");
+                _connection = (int)connection;
+                if (window != null)
+                {
+                    window.Credit = (int)stream;
+                    UpdateReady(window);
+                }
+                Grant();
             }
         }
 

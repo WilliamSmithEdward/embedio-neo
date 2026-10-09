@@ -78,14 +78,14 @@ namespace EmbedIO.Net.Internal.Http2
                 if (_bodyAllowed && endStream && _responseLength.HasValue && _responseBytes + count != _responseLength.Value)
                     throw new InvalidDataException("Response does not match Content-Length.");
                 if (count == 0 && endStream)
-                    await _connection.SendAsync(new[] { new Http2Frame(0, 1, Id, Array.Empty<byte>()) }, linked.Token).ConfigureAwait(false);
+                    await _connection.SendStreamAsync(new[] { new Http2Frame(0, 1, Id, Array.Empty<byte>()) }, linked.Token).ConfigureAwait(false);
                 while (count > 0)
                 {
                     var reserved = await _connection.SendFlow.ReserveAsync(Id, Math.Min(16384, count), linked.Token).ConfigureAwait(false);
                     var payload = new byte[reserved];
                     Buffer.BlockCopy(bytes, offset, payload, 0, reserved);
                     count -= reserved; offset += reserved;
-                    await _connection.SendAsync(new[] { new Http2Frame(0, endStream && count == 0 ? (byte)1 : (byte)0, Id, payload) }, linked.Token).ConfigureAwait(false);
+                    await _connection.SendStreamAsync(new[] { new Http2Frame(0, endStream && count == 0 ? (byte)1 : (byte)0, Id, payload) }, linked.Token).ConfigureAwait(false);
                     _responseBytes += reserved;
                 }
                 if (endStream) EndLocal();
