@@ -6278,3 +6278,114 @@ The frozen results cannot establish performance of the later wakeup correction.
 Raw samples, hashes, traces and the corrected-source regression evidence remain
 under ignored `TestResults/admission-*` in the owner review worktree. PR #201 and
 program #181 remain open; no shipping or default-engine readiness is claimed.
+
+
+### macOS QUIC rebind cause on Apple Silicon and Intel
+
+`DisposedRuntimeListenerRebindsSameEndpoint(False)` keeps failing on macOS at
+the bind stage with AddressAlreadyInUse (48), as recorded above and again at
+cycle 5 in dispatched run 37975160603. It fails on both architectures. Run
+37961188089 attempt 1, from the Intel regression leg on `codex/pr182-intel-macos`,
+failed it at cycle 14 on Apple Silicon with the Homebrew bottle (relocated dylib
+SHA-256 `6f045def309758d760b162ab3a60239bd8afd56ff06e35cf729f5458edc8fa2e`) and at
+cycle 10 on Intel with that leg's source build of `819ab74f`
+(`787e3480def4e697733fbe35f6a3e448807282d771cb5b1e6942527fc9adbbe1`). The same
+behavior reaches EmbedIO's own HTTP/3 restart path. On `9f475d7`, CI 37973389476
+failed `GracefulListenerDrainPreservesAcceptedResponse(True)` after the drained
+server reported `Stopped`: the replacement server's `Http3Listener` start threw
+AddressAlreadyInUse from `QuicListener.ListenAsync`.
+
+The pinned sources explain why disposal can return before the port is free.
+[.NET 10.0.12 `QuicListener.DisposeAsync`](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.Quic/src/System/Net/Quic/QuicListener.cs)
+calls `ListenerStop`, waits for STOP_COMPLETE and closes the handle. In MsQuic
+`819ab74f`, `QuicListenerStopAsync` releases the listener's binding; the last
+release runs `QuicBindingUninitialize`, which calls `CxPlatSocketDelete`. On
+Darwin, `CxPlatSocketContextUninitialize` waits for upcalls, deletes the read
+filter and only queues the context's shutdown to the partition worker. The
+descriptor is closed later on that worker, in
+`CxPlatSocketContextUninitializeComplete`. Nothing in the disposal path waits for
+that close. `src/platform/datapath_kqueue.c` on MsQuic `main` (`931fdf77`,
+2026-10-09) is byte-identical to the pinned file, and no upstream report of this
+was found. No upstream issue has been filed.
+
+Traced controls now cover both architectures: three per architecture in OpenSSL
+run 37945962762 and three per architecture in the run below, all complete with
+no dropped events or untracked descriptors. In all twelve failures the failed
+bind began before the previous listener's descriptor close completed, and that
+close completed after managed disposal had returned: 69 to 230 microseconds
+later on Intel and 25 to 55 on Apple Silicon. In eleven the close also began
+after disposal returned; in the twelfth, on Intel at cycle 231, it began 16
+microseconds before and ended 230 microseconds after.
+
+The cleanup experiment now covers this exact regression. Its Intel job reuses
+the Intel leg's host-name step, so the candidate's Intel full suite no longer
+hits five-second mDNS lookups. Both jobs run the unchanged `QuicRuntimeRebindTest`
+20 times against the unpatched control and 20 times against the candidate. Each
+test process verifies the path and SHA-256 of the MsQuic image it loaded. A
+control failure is accepted only when the raw rebind test stopped at bind with
+AddressAlreadyInUse; any other control outcome, report shape or unverified image
+fails the experiment, and every candidate run must pass. The rebind test now
+calls the existing opt-in `QuicDependencyEvidence` check, which does nothing
+unless `EMBEDIO_EXPECT_QUIC_LIBRARY_ROOT` is set. No assertion changed.
+
+[Run 37975160603](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37975160603)
+tested head `0d1e095` with the pinned quictls and system-libcrypto configuration
+on .NET 10.0.12. Both experiment jobs passed:
+
+| Check | Apple Silicon | Intel |
+| --- | --- | --- |
+| Control probes, cycles completed before error 48 | 254, 91, 26; traced 25, 28, 201 | 434, 531, 501; traced 893, 494, 231 |
+| Candidate probes | 10 of 10 pass 4,096 cycles | 10 of 10 pass 4,096 cycles |
+| Candidate traced closes after disposal | 0 of 20,480 | 0 of 20,480 |
+| Rebind test, control | 5 of 20 runs failed (cycles 14, 7, 22, 18, 13) | 1 of 20 failed (cycle 7) |
+| Rebind test, candidate | 0 of 20 failed | 0 of 20 failed |
+| Native datapath, control | 38 cases, 2 failures, 15 skips | same |
+| Native datapath, candidate | 38 cases, 0 failures, 15 skips | same |
+| Sanitizer, 12 cases x 100 | exit 0 | exit 0 |
+| Candidate full suite | 4,345: 4,314 passed, 31 skipped (3m49s) | same counts (5m21s) |
+
+The control's two native failures are the existing lifetime fixture and the
+unsupported map-mode check. Intel's host name resolved in 5.007 s before the
+hosts entry and 0.007 s after. Apple Silicon's control and candidate libraries
+(`13bb173e...`, `428aa5e7...`) are bit-identical to the earlier documented builds.
+The Intel control is `afa23605...` and the candidate `7e471d89...`. Artifacts and
+the independent verification are under ignored `TestResults/quic-rebind-macos`.
+
+The same run's ordinary Apple Silicon job, which uses the stock bottle, failed the
+rebind test at cycle 5 and
+`Issue502_LargeMessages.OriginalDelayedLargeReplyPatternSurvivesConcurrentBroadcasts(Microsoft,2)`,
+a WebSocket client receive cancelled after 30 seconds. This change does not touch
+that path; it was not investigated here and its log is retained. The pull request
+run on the same head, merged with base `f0c4c7b`, passed on macOS. That pass is
+one more intermittent outcome under the stock dependency, not evidence of a fix.
+
+The candidate remains a test-only MsQuic build. Ordinary CI keeps the stock
+dependency and its failing regression. Shipping or substituting a patched MsQuic,
+filing the upstream report and any EmbedIO-side handling of a same-endpoint
+restart remain owner decisions.
+
+### Owner integration of all-platform QUIC retry
+
+The current QUIC candidate is `45b4097`; it supersedes the earlier macOS-only
+retry. William authorized moving forward with the all-platform retry and narrow
+raw-runtime quarantine. Intel CI removal remains approved; Intel runtime support
+is retained. [The QUIC lifetime guide](quic-lifetime.md) records both native
+lifetime behaviors, evidence, approval boundaries and current validation.
+[Issue #202](https://github.com/WilliamSmithEdward/embedio-neo/issues/202) is an
+actual sub-issue of program #181 for upstream reporting, native dependency policy
+and evidence-based retirement. Those questions do not imply approval to ship a
+patched MsQuic or publish an upstream report.
+
+The owner candidate combines admission checkpoint `e7c6e40` with QUIC `45b4097`.
+Its floor is 4,388, including all seven QUIC cases and sixteen admission cases.
+The quarantine matches the exact raw-runtime test method and independently checks
+that discovery floor before tolerating its known bind error. Real retained TRX
+and excluded-case checks confirm the unrelated Microsoft WebSocket timeout and
+owned restart failures remain failures. The final agent PR head is green, but its
+separate experiment retains a macOS compatibility subprocess exit-137 failure.
+No failed check is hidden by that PR result.
+
+Combined Windows: 4,388 total, 4,383 passed, five expected local/platform skips,
+zero failed. Combined focused Linux: 99 passed, zero failed. Both targets build
+without warnings/errors; guards and four resource budgets pass. Final combined
+macOS/CI/native experiments and admission performance acceptance remain pending.
