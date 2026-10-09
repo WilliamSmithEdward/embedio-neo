@@ -56,20 +56,20 @@ shasum -a 256 "$trace_library" > "$results/tracer.sha256"
 build_native() {
   local variant="$1" asan="${2:-OFF}"
   local build_dir="$RUNNER_TEMP/msquic-$variant-build"
-  local extra_cmake_args=()
+  local project_include=""
   if test "$asan" = ON; then
     # The pinned source's sanitizer branch uses this command without loading
     # its module. Load the standard module after project() enables C, without
     # changing upstream source or substituting the compiler-flag probe result.
     printf 'include(CheckCCompilerFlag)\n' > "$results/sanitizer-project-include.cmake"
-    extra_cmake_args+=("-DCMAKE_PROJECT_INCLUDE=$results/sanitizer-project-include.cmake")
+    project_include="$results/sanitizer-project-include.cmake"
   fi
   cmake -S "$source_dir" -B "$build_dir" \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$openssl_root" \
     -DQUIC_TLS_LIB=quictls -DQUIC_USE_SYSTEM_LIBCRYPTO=ON \
     -DQUIC_BUILD_TEST=ON -DQUIC_BUILD_TOOLS=OFF -DQUIC_BUILD_PERF=OFF \
     -DQUIC_ENABLE_LOGGING=OFF -DQUIC_ENABLE_ASAN="$asan" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
-    -DQUIC_OUTPUT_DIR="$build_dir/bin" "${extra_cmake_args[@]}" 2>&1 | tee "$results/$variant-configure.log"
+    -DQUIC_OUTPUT_DIR="$build_dir/bin" "-DCMAKE_PROJECT_INCLUDE=$project_include" 2>&1 | tee "$results/$variant-configure.log"
   cmake --build "$build_dir" --parallel 3 --target msquic msquicplatformtest \
     2>&1 | tee "$results/$variant-build.log"
   cp "$build_dir/CMakeCache.txt" "$results/$variant-CMakeCache.txt"

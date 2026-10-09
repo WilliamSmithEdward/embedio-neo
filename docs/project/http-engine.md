@@ -4224,3 +4224,26 @@ The combined native candidate hash is
 Evidence is retained in `TestResults/http-engine/quic-cleanup-experiment-artifact6`,
 `quic-cleanup-experiment-job6.log` and `quic-cleanup-ordering6.json`.
 Its measurements are separate from the earlier cleanup-only candidate.
+
+### Zero-config functional result and Bash compatibility correction
+
+[Run 37887537789](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37887537789),
+job `113680798458`, tests head `745dcdc`. The zero-config UDP-delivery fixture
+passes in both unchanged control and combined candidate. It directly receives
+and verifies its datagram despite Darwin's empty optional-feature mask. The
+candidate retains its unsupported-map-mode and descriptor-reuse passes and
+passes all ten 4,096-cycle probes. The original feature-mask assertion remains
+the sole native candidate failure. Sanitizer configuration fails at the original
+missing CMake module, before instrumented compilation. Evidence is retained in
+`quic-cleanup-experiment-artifact7`, its job log and `quic-cleanup-ordering7.json`.
+
+[Run 37887939602](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37887939602),
+job `113682050871`, tests head `fd79b44`. It fails before any native configuration:
+Darwin's Bash 3.2 treats expansion of the empty optional-arguments array as an
+unbound variable under `set -u`. The earlier local Bash syntax/CMake tests did
+not exercise that shell-version behavior. The corrected harness uses one
+quoted, initialized `CMAKE_PROJECT_INCLUDE` argument for both modes: empty in
+ordinary builds and the module file path in the instrumented build. It does
+not relax `set -u`. This run supplies no native or sanitizer execution evidence;
+its log and partial artifact are retained under suffix `8`. Corrected Darwin
+validation remains pending.
