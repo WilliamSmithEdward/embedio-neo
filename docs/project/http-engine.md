@@ -5669,3 +5669,30 @@ passes. Logs, the probe and constrained-runtime results are retained under
 TestResults/http-engine/tls-stall-*. Exact new-head CI remains required. This
 improves evidence for a future failure; it is not a claimed correction of the
 historical TLS stall or the separate native QUIC rebind defect.
+
+### Native deployment validation on both macOS architectures
+
+The optional pinned-source cleanup/OpenSSL experiment now has independent
+osx-arm64 and osx-x64 jobs with distinct artifacts. It derives the candidate RID
+from the actual host, verifies the matrix expectation and propagates that RID
+through staging, receipts, private package paths, restore and publish. The Intel
+job uses GitHub's [documented macos-15-intel runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+Normal CI native prerequisites and all production package/dependency groups
+remain unchanged. The private candidate remains 0.0.0-local and is not published.
+
+Package verification now checks each actual thin 64-bit Mach-O CPU type and dylib
+header as well as the exact RID asset set, SHA-256, notices, empty framework
+placeholder and receipt. It rejects renaming an ARM binary/receipt as Intel.
+Eight retained mutation cases use the real artifact and require rejection of
+relabelled RID, wrong CPU, invalid magic, executable type, truncation, extra RID,
+missing alias and altered notice. The expected-error checks run in each deployment
+job before consumer restore. Local validation repacks the previously verified ARM
+candidate through the parameterized project: all three native hashes/headers and
+notices match, and all eight mutations are rejected. This does not establish
+Intel native execution. Exact-source native matrix results remain pending until
+both jobs finish successfully. Wider RID support, production deployment, update
+policy and final engine conformance/performance remain open.
+
+Evidence is under ignored TestResults/http-engine/native-dual-rid-*. The pinned
+zizmor workflow audit has no findings, shell syntax checks pass and the ordinary
+solution does not acquire new targets or native runtime dependencies.

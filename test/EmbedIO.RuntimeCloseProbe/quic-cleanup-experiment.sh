@@ -2,7 +2,12 @@
 # Test-only experiment. Never installs or adds the candidate to production packages.
 set -euo pipefail
 test "$(uname -s)" = Darwin
-test "$(uname -m)" = arm64
+case "$(uname -m)" in
+  arm64) native_rid=osx-arm64 ;;
+  x86_64) native_rid=osx-x64 ;;
+  *) echo "Unsupported native architecture." >&2; exit 2 ;;
+esac
+if test -n "${EMBEDIO_EXPECT_NATIVE_RID:-}"; then test "$native_rid" = "$EMBEDIO_EXPECT_NATIVE_RID"; fi
 repo="$PWD"
 self_contained="${EMBEDIO_QUIC_SELF_CONTAINED:-0}"
 case "$self_contained" in 0|1) ;; *) echo "Invalid self-contained mode." >&2; exit 2 ;; esac
@@ -213,7 +218,7 @@ if test "$self_contained" = 1; then
   fi
   # Stage only the review artifact: no NuGet asset or loader override is installed.
   stage="$results/self-contained-candidate"
-  native="$stage/runtimes/osx-arm64/native"
+  native="$stage/runtimes/$native_rid/native"
   mkdir -p "$native" "$stage/licenses" "$stage/source"
   cp "$RUNNER_TEMP/msquic-$staged_variant-build/bin/libmsquic.2.6.2.dylib" "$native/libmsquic.2.6.2.dylib"
   ln -s libmsquic.2.6.2.dylib "$native/libmsquic.2.dylib"
@@ -226,8 +231,8 @@ if test "$self_contained" = 1; then
     cp "$results/openssl-tag-signature.log" "$results/crypto-version.txt" "$stage/source/"
   fi
   jq -n --arg source "$revision" --arg crypto "$crypto_revision" --arg backend "$tls_backend" --argjson buildTests "$staged_tests" \
-    --arg hash "$(shasum -a 256 "$native/libmsquic.2.6.2.dylib" | awk '{print $1}')" \
-    '{artifact:"test-only self-contained candidate",rid:"osx-arm64",msquicSource:$source,cryptoSource:$crypto,tlsBackend:$backend,buildTests:$buildTests,sha256:$hash,productionInstalled:false}' \
+    --arg rid "$native_rid" --arg hash "$(shasum -a 256 "$native/libmsquic.2.6.2.dylib" | awk '{print $1}')" \
+    '{artifact:"test-only self-contained candidate",rid:$rid,msquicSource:$source,cryptoSource:$crypto,tlsBackend:$backend,buildTests:$buildTests,sha256:$hash,productionInstalled:false}' \
     > "$stage/build-receipt.json"
   status=0
   run_probe candidate-relocated 1 untraced "$native" || status=$?
