@@ -257,16 +257,18 @@ for iteration in 1 2 3 4 5; do
     --timeout 2m --report-trx --results-directory "$results/connected-$iteration" || candidate_failed=1
 done
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-  --minimum-expected-tests 3522 --timeout 5m --report-trx --coverlet \
+  --minimum-expected-tests 3661 --timeout 5m --report-trx --coverlet \
   --results-directory "$results/full-suite" || candidate_failed=1
 if test "$self_contained" = 1 && test "$tls_backend" = openssl; then
   # Exercise actual managed protocol/application behavior on the tests-disabled library.
-  env DYLD_FALLBACK_LIBRARY_PATH="$RUNNER_TEMP/msquic-candidate-production-build/bin" DYLD_PRINT_LIBRARIES=1 \
+  env DYLD_FALLBACK_LIBRARY_PATH="$RUNNER_TEMP/msquic-candidate-production-build/bin" \
+    EMBEDIO_EXPECT_QUIC_LIBRARY_ROOT="$RUNNER_TEMP/msquic-candidate-production-build/bin" \
+    EMBEDIO_EXPECT_QUIC_LIBRARY_SHA256="$(jq -r .sha256 "$stage/build-receipt.json")" \
+    EMBEDIO_QUIC_LIBRARY_EVIDENCE="$results/production-loaded-library.json" \
     dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-    --minimum-expected-tests 3522 --timeout 5m --report-trx --coverlet \
-    --results-directory "$results/production-full-suite" 2> "$results/production-full-suite-loader.log" || candidate_failed=1
-  grep -F "$RUNNER_TEMP/msquic-candidate-production-build/bin/libmsquic" "$results/production-full-suite-loader.log" \
-    > "$results/production-full-suite-loaded-library.txt" || candidate_failed=1
+    --minimum-expected-tests 3661 --timeout 5m --report-trx --coverlet \
+    --results-directory "$results/production-full-suite" || candidate_failed=1
+  jq -e '.verified and (.sha256 | length == 64)' "$results/production-loaded-library.json" > /dev/null || candidate_failed=1
 fi
 # Additional memory-lifetime validation with upstream's sanitizer build.
 # The ordinary native suite above retains every genuine failure in final status.

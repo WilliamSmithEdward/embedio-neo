@@ -27,6 +27,7 @@ namespace EmbedIO.Tests
                 "This CI job requires QUIC; missing native prerequisites must not become skipped coverage.");
             Assert.That(typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection"), Is.Not.Null,
                 "Required transport coverage must use the modern asset.");
+            QuicDependencyEvidence.VerifyIfRequested();
         }
         [TestCase(0, 1, false)]
         [TestCase(100003, 8, false)]

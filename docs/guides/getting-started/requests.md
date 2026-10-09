@@ -187,5 +187,29 @@ data read before a later limit error may already have reached application code.
 The limit does not bound native codec memory or replace transport/slow-peer
 limits. These APIs are unreleased development work.
 
+## Decode content-coding chains
+
+The unreleased modern-engine branch accepts recognized Content-Encoding lists
+when `SupportCompressedRequests` is enabled. For `Content-Encoding: gzip, br`,
+the sender applies gzip first and Brotli second; the helpers undo Brotli and then
+gzip. Up to eight compression layers are supported. Excess depth, unsupported
+names and coding parameters are rejected with the existing HTTP 400 behavior.
+
+The .NET 10 asset supports gzip, deflate and Brotli layers; the .NET Standard
+asset supports gzip/deflate chains and explicitly rejects any Brotli layer.
+Case-insensitive coding names and optional whitespace are accepted. Empty list
+members are ignored; an empty field or identity-only list leaves the body raw.
+These untransformed bodies retain the existing decoded-limit exclusion.
+
+`MaximumDecompressedRequestBodyBytes` applies once to the final application
+bytes, so compression-envelope overhead does not reject an empty body at limit
+zero. It does not bound intermediate expansion CPU or native codec memory.
+Streaming applications must read through EOF before treating the complete body
+as accepted. The chain wrapper drives outer layers to EOF, preserves cancellation,
+closes its owned source once and makes malformed-data failures sticky.
+
+This increment preserves existing raw-deflate behavior; the zlib envelope
+conformance work remains separate. Gzip/deflate runtime buffering/validation and
+response coding-chain support are not claimed complete by these request tests.
 Next: [Serve HTML and files](files.md) alongside this API, or
 [await an outbound HTTP request](../async-outbound-requests.md).

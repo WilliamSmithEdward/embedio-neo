@@ -4738,3 +4738,67 @@ HTTP parsing/framing, while rejected optimistic transitions retain closure under
 RFC 9931. Existing multiplexed WebSocket tunnel adapters do not provide a public
 classic CONNECT tunnel API. This remains concrete implementation work, not a
 completed feature or a reason to mark the development goal achieved.
+### Request content-coding chains
+
+Request helpers now recognize comma-separated coding lists, validate every
+nonempty token before opening decoders, and undo coding application order.
+Gzip/deflate chains work on both retained assets; Brotli layers require .NET 10.
+Eight compression layers bound nesting/codec allocation. Empty list members and
+identity entries cause no transform; an empty field is uncompressed. Disabled
+compressed-request support, unsupported tokens/parameters and excess depth
+retain HTTP 400. The byte-limit wrapper is applied once after all decoding and
+therefore counts final application bytes, including multibyte UTF-8, rather than
+intermediate compression envelopes. Source interfaces and the opt-in default
+are unchanged.
+
+The owned chain wrapper drives its outer decoders to EOF after the final stream
+ends, normalizes InvalidDataException from chain decoding to HTTP 400 and retains
+sticky malformed-data failure. Top-stream disposal releases the source once.
+Byte/span/memory overloads avoid inherited per-byte/per-call wrapper arrays.
+Single-coding dispatch stays direct, and ASCII whitespace trimming returns the
+same string when possible without allocating a params array. This does not claim
+native codec allocation, intermediate expansion CPU or Gzip/Deflate internal
+prefetch/validation are fully bounded. Legacy raw-deflate behavior is preserved;
+standards zlib framing, response chains, Zstandard and shared dictionaries remain
+conformance/development work.
+
+139 added cases cover recognized/mixed/repeated codings, two listeners, byte/text
+readers, decoded boundaries, empty bodies, disabled decoding, invalid tokens,
+depth 8/9, malformed Brotli at inner/outer layers, chunked framing, all stream read
+variants, source ownership, cancellation and sticky malformed-data failure.
+The preceding helper fails 96 of the initial 126 HTTP cases; the candidate passes
+them and the controls. Pinned Linux passes all 197 selected chain/limit/Brotli
+cases. The actual netstandard2.0 assembly hosted by Windows .NET 10 passes all
+185 selected public/helper cases, including explicit Brotli rejection; no older
+runtime execution is claimed. Both assets build, four allocation-budget groups
+and final source/format/YARA guards pass. An initially negated framework directive
+was flagged by the source guard and replaced by equivalent supported if/else
+structure; no check was weakened. Final changed-source coverage remains pending
+at this checkpoint.
+
+### Tests-disabled native build: evidence-capture correction
+
+Native job 37903712236 / 113732004846 failed its additional loader-evidence gate.
+The tests-disabled candidate builds and its package consumers pass, as do both
+3,522-case managed suites and the selected native ASAN campaign. Its staged native
+hash is a401925c352ec9358d3583e35a34972e497dc1cbda421c57df0db8c4a6fcca00.
+However the redirected dotnet-test CLI stderr did not identify MsQuic, so the
+experiment correctly retains a failing aggregate exit. Passing suites alone do
+not prove which dependency the test process loaded.
+
+The required check now runs inside the existing required-QUIC fixture setup. A
+test-only macOS dyld image enumeration identifies the actual loaded MsQuic module,
+requires one image under the expected build directory and compares its file hash
+with the staged receipt. It writes process/runtime/path/hash evidence once per
+process. No loader override is added by this inspection and no new test count is
+claimed. The CLI-log grep is replaced by this stronger process-local check, whose
+Darwin execution remains required. This does not resolve a loader mismatch by
+assumption or manufacture a passing result. The test-off CMake mode and current
+backend compile definitions are retained for review; private version provenance
+is not represented as an official upstream binary.
+Final Windows coverage on the changed source passes 3,661 cases (3,656 passed,
+five skipped, zero failed in 2m27s). The discovery floor increases by the 139
+added cases. The final guard-approved target conditional structure and native
+inspection helper are included in that build; the optional Darwin inspection
+requires its dedicated environment and remains unexecuted locally. Fresh
+exact-head CI and the native deployment experiment remain required.
