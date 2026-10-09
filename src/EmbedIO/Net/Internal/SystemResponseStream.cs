@@ -13,7 +13,7 @@ namespace EmbedIO.Net.Internal
         private readonly Stream _stream;
         private readonly Action _prepareHeaders;
         private readonly bool _suppressBody;
-        private bool _disposed;
+        private int _disposed;
 
         public SystemResponseStream(Stream stream, Action prepareHeaders, bool suppressBody = false)
         {
@@ -82,7 +82,7 @@ namespace EmbedIO.Net.Internal
 
         private void ValidateWrite(byte[] buffer, int offset, int count)
         {
-            if (_disposed || (_suppressBody && !_stream.CanWrite))
+            if (Volatile.Read(ref _disposed) != 0 || (_suppressBody && !_stream.CanWrite))
                 throw new ObjectDisposedException(nameof(SystemResponseStream));
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
@@ -95,11 +95,10 @@ namespace EmbedIO.Net.Internal
         }
         protected override void Dispose(bool disposing)
         {
-            if (disposing)
+            if (disposing && Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                _prepareHeaders();
-                _stream.Dispose();
-                _disposed = true;
+                try { if (_stream.CanWrite) _prepareHeaders(); }
+                finally { _stream.Dispose(); }
             }
             base.Dispose(disposing);
         }

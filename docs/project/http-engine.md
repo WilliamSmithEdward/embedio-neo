@@ -5041,3 +5041,46 @@ last completed cases concern routing and transport framing, not causal proof.
 This crash requires investigation and remains a compatibility/CI blocker. No
 check was weakened or rerun characterized as a fix. Fresh checksum-head checks
 remain required and the full engine goal is incomplete.
+
+### Native header-crash investigation and owned disposal correction
+
+Exact-head checks for 39bdbabf678f8217e83f866ca112259f774d7a28 all pass, including
+CI/Security/Malware aggregates; no failed/cancelled/action-required/active result
+was present at inspection. The preceding Linux native formatter abort and stock
+Darwin rebind failure did not recur in that run. This is passing evidence for
+that head, not proof that either intermittent runtime failure is repaired.
+The native macOS Arm64 TRX reports 4,000 cases, 3,969 passed and 31 skipped;
+all 121 checksum cases passed. This adds native Arm64 functional evidence to the
+checksum checkpoint, without claiming Arm64 comparative performance.
+
+The [.NET 10.0.12 formatter source](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.HttpListener/src/System/Net/Managed/HttpListenerResponse.Managed.cs)
+uses indexed reads of mutable headers. Its
+[native response-stream source](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.HttpListener/src/System/Net/Managed/HttpResponseStream.Managed.cs)
+already serializes native header sends with its own header lock. A test-only
+Linux reflection probe under ignored TestResults/http-engine/native-header-audit
+observes direct/inherited null values serializing successfully. Concurrent
+clear/add mutation produces ArgumentOutOfRangeException in 200,000 formatting
+operations; the synchronized control has zero errors. Repeated common-header
+setting produces no errors in the selected campaign. The probe does not reproduce
+the CI NullReferenceException, identify its triggering application operation or
+prove a production fix. No private runtime synchronization shim is introduced.
+
+An independently reproduced wrapper ownership defect is corrected:
+SystemResponseStream previously repeated header preparation and underlying
+disposal on every call, allowed disposal reentry and failed to release the owned
+stream when preparation threw. Disposal now claims ownership atomically before
+callbacks, attempts underlying cleanup in finally and skips header preparation
+when the transport is already nonwritable. Repeat/concurrent/reentrant calls do
+not prepare or close again. This prevents our wrapper from repeating these
+operations; it does not establish that all native header concurrency is safe or
+that the observed CI crash is resolved.
+
+Five initial disposal cases fail on the preceding wrapper; the closed-transport
+case independently fails before its guard. All six and 100 existing adapter,
+cookie and binary-response cases pass on Windows, pinned Linux and the actual
+netstandard2.0 core hosted by .NET 10. Final changed-source Windows coverage
+passes 4,006 cases: 4,001 passed, five skipped and zero failed in 2m32s. Both
+assets build without warnings; four allocation-budget groups, source/parser
+guards, changed-file whitespace, shell syntax and pinned source YARA checks pass.
+The discovery floor increases by six. Fresh disposal-head CI remains required;
+the full engine goal and the native crash investigation remain incomplete.
