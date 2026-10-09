@@ -2829,3 +2829,37 @@ the final 31 shared-owner cases on both Windows and Linux .NET 10 hosts
 have no matches under the pinned YARA rules (`shared-owner-cleanup-yara.log`).
 Cross-platform exact-head CI remains required, and the earlier Windows combined
 Dispose and macOS QUIC same-port rebind failures remain under investigation.
+
+A subsequent QUIC cleanup probe installs an application cancellation callback
+that throws, keeps the application pending, and triggers either ordinary peer
+closure or an invalid critical-stream FIN. It verifies the callback ran once,
+transport shutdown does not wait for the application, late reads/writes reject,
+and critical closure preserves H3_CLOSED_CRITICAL_STREAM. Both probes initially
+passed on Windows; the ordinary peer-close case failed in the full 61-case
+Linux direct-QUIC set with AggregateException escaping RunCoreAsync cancellation
+(`quic-callback-linux.log`). This is a reproduced cancellation-boundary defect,
+not evidence that the macOS same-port failure shares its cause.
+
+QUIC transport cancellation now logs recoverable callback failures and continues
+cleanup. Critical output streams are disposed through nested finally blocks
+even if worker cleanup faults. All 61 direct QUIC cases pass on Linux afterward
+(`quic-callback-fixed-linux.log`); the build, formatting and both source policy
+guards pass. The discovery floor is 3,224; broad Windows and final full-source
+validation are still pending. Initial passing probes and the failing Linux run
+are retained; a native handle leak was not measured by this reproduction.
+
+The corrected QUIC source also passes all 130 direct-transport/public-listener
+cases on Windows (`quic-callback-fixed-windows.log`). Full coverage follows;
+these focused results do not replace final exact-head CI.
+
+The QUIC callback correction passes full Windows coverage with 3,224 reported
+cases (3,219 successes and five existing skips), zero failures, in 4m31s
+(`quic-callback-fixed-coverage.log`). The comparator passes 207 cases / 414
+comparisons with zero errors (`quic-callback-fixed-parity.log`); changed-source
+pinned YARA scan has no matches (`quic-callback-fixed-yara.log`).
+
+At this checkpoint, pushed shared-drain head 3e7ddc4 has 30 successful checks,
+two intentional skips, and the iOS HTTPS check still running
+(`shared-drain-checks-final.json`). Windows/Linux/macOS desktop checks passed;
+that does not explain the earlier b86a174 Windows combined-drain or macOS QUIC
+rebind failures. Overall CI completion is not yet claimed.

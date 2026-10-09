@@ -885,3 +885,9 @@ and scoped shutdown decisions now share a synchronization boundary.
 A reset HTTP/2 context remains part of its owner's drain set until response
 cleanup and close callbacks finish. A concurrent drain no longer reports
 completion merely because request dispatch has started cleanup.
+
+The opt-in HTTP/3 transport logs recoverable application cancellation callback
+exceptions during its own shutdown and continues resource cleanup. Such callback
+failures no longer replace the connection shutdown outcome with an aggregate
+exception. This does not change exceptions raised when application code directly
+cancels a token source it owns.

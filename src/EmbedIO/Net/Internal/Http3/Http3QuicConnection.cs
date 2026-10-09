@@ -8,6 +8,7 @@ using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Internal;
+using EmbedIO.Diagnostics;
 using EmbedIO.Net.Internal.Http2;
 
 namespace EmbedIO.Net.Internal.Http3
@@ -113,25 +114,33 @@ namespace EmbedIO.Net.Internal.Http3
             }
             catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
             catch (OperationCanceledException) { Fail(new Http3ProtocolException(0x103, "Peer did not provide critical-stream credit before startup deadline.")); }
-            catch (QuicException) { _stop.Cancel(); }
+            catch (QuicException) { CancelRequests(_stop); }
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { Fail(error); }
             finally
             {
-                _stop.Cancel();
-                lock (_sync)
+                try
                 {
-                    foreach (var pending in _pending.Values) pending.TrySetCanceled(_token);
-                    _pending.Clear();
+                    CancelRequests(_stop);
+                    lock (_sync)
+                    {
+                        foreach (var pending in _pending.Values) pending.TrySetCanceled(_token);
+                        _pending.Clear();
+                    }
+                    using var closeDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    var code = _failure is Http3ProtocolException protocol ? protocol.ErrorCode : _failure == null ? 0x100 : 0x102;
+                    try { await _connection.Value.CloseAsync(code, closeDeadline.Token).ConfigureAwait(false); }
+                    catch (Exception error) when (error is QuicException or OperationCanceledException) { }
+                    Task[] workers;
+                    lock (_sync) workers = _workers.Values.ToArray();
+                    await Task.WhenAll(workers.Concat(background)).ConfigureAwait(false);
                 }
-                using var closeDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                var code = _failure is Http3ProtocolException protocol ? protocol.ErrorCode : _failure == null ? 0x100 : 0x102;
-                try { await _connection.Value.CloseAsync(code, closeDeadline.Token).ConfigureAwait(false); }
-                catch (Exception error) when (error is QuicException or OperationCanceledException) { }
-                Task[] workers;
-                lock (_sync) workers = _workers.Values.ToArray();
-                await Task.WhenAll(workers.Concat(background)).ConfigureAwait(false);
-                if (feedback != null) await feedback.DisposeAsync().ConfigureAwait(false);
-                if (control != null) await control.DisposeAsync().ConfigureAwait(false);
+                finally
+                {
+                    // A failed worker or callback must not retain either critical
+                    // stream's native reference after connection shutdown.
+                    try { if (feedback != null) await feedback.DisposeAsync().ConfigureAwait(false); }
+                    finally { if (control != null) await control.DisposeAsync().ConfigureAwait(false); }
+                }
             }
             if (_failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(_failure).Throw();
         }
@@ -174,10 +183,10 @@ namespace EmbedIO.Net.Internal.Http3
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
             catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
-            { _stop.Cancel(); } // Connection closure is not a critical-stream reset.
+            { CancelRequests(_stop); } // Connection closure is not a critical-stream reset.
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             { if (!_token.IsCancellationRequested) Fail(error); }
-            finally { _stop.Cancel(); }
+            finally { CancelRequests(_stop); }
         }
         private async Task ProcessStreamAsync(QuicStream stream)
         {
@@ -215,7 +224,7 @@ namespace EmbedIO.Net.Internal.Http3
                     {
                         if (critical) Fail(new Http3ProtocolException(0x104, "Peer aborted a critical stream."));
                     }
-                    else _stop.Cancel();
+                    else CancelRequests(_stop);
                 }
             }
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
@@ -289,7 +298,7 @@ namespace EmbedIO.Net.Internal.Http3
             { AbortStream(stream, 0x10c); }
             finally
             {
-                requestStop.Cancel();
+                CancelRequests(requestStop);
                 await Task.WhenAll(reads, writes).ConfigureAwait(false);
             }
         }
@@ -306,7 +315,7 @@ namespace EmbedIO.Net.Internal.Http3
         {
             try { await completion.WaitAsync(requestStop.Token).ConfigureAwait(false); }
             catch (OperationCanceledException) when (requestStop.IsCancellationRequested) { }
-            catch (QuicException) { requestStop.Cancel(); }
+            catch (QuicException) { CancelRequests(requestStop); }
         }
         private async Task<HpackField[]> DecodeRequestAsync(long streamId, byte[] wire, CancellationToken caller, CancellationToken lifetime)
         {
@@ -414,7 +423,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
             catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
             catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
-            { _stop.Cancel(); } // Connection closure is not a critical-stream reset.
+            { CancelRequests(_stop); } // Connection closure is not a critical-stream reset.
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             { if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, error.Message)); }
         }
@@ -427,7 +436,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
             catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
             catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
-            { _stop.Cancel(); } // Connection closure is not a critical-stream reset.
+            { CancelRequests(_stop); } // Connection closure is not a critical-stream reset.
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             { if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, error.Message)); }
         }
@@ -457,12 +466,19 @@ namespace EmbedIO.Net.Internal.Http3
             try { stream.Abort(QuicAbortDirection.Both, code); }
             catch (ObjectDisposedException) { }
         }
+        private static void CancelRequests(CancellationTokenSource source)
+        {
+            try { source.Cancel(); }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+            {
+                error.Log("HTTP/3 connection", "Exception thrown by a request cancellation callback.");
+            }
+        }
         private void Fail(Exception error)
         {
             if (_token.IsCancellationRequested) return;
             Interlocked.CompareExchange(ref _failure, error, null);
-            try { _stop.Cancel(); }
-            catch (ObjectDisposedException) { }
+            CancelRequests(_stop);
         }
         public void Dispose() { _priorities.Clear(); _decoder.Dispose(); _feedbackReady.Dispose(); _applicationDrain.Dispose(); _stop.Dispose(); }
     }

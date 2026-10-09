@@ -36,11 +36,23 @@ namespace EmbedIO.Tests
             { Assert.Ignore("The legacy asset has no direct QUIC transport."); return; }
             await Shutdown(false, false, false, true);
         }
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task PeerClosureCompletesWhenAnApplicationCancellationCallbackThrows(bool criticalFault)
+        {
+            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            { Assert.Ignore("The host does not provide QUIC."); return; }
+            if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
+            { Assert.Ignore("The legacy asset has no direct QUIC transport."); return; }
+            await Shutdown(false, false, false, cancellationFault: true, criticalFault: criticalFault);
+        }
         private sealed class StalledApplication
         {
             internal readonly TaskCompletionSource Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly TaskCompletionSource Completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal int CancellationFaultCount;
+            internal bool CancellationFault;
             internal bool Synchronous;
             internal bool Fault;
             internal bool PendingOutput;
@@ -51,6 +63,15 @@ namespace EmbedIO.Tests
             internal async Task Handle<T>(T value)
             {
                 object exchange = value ?? throw new AssertionException("Missing exchange.");
+                var token = (CancellationToken)(exchange.GetType().GetProperty("CancellationToken", Flags)?.GetValue(exchange)
+                    ?? throw new AssertionException("Missing exchange cancellation."));
+                using var cancellation = CancellationFault
+                    ? token.Register(() =>
+                    {
+                        Interlocked.Increment(ref CancellationFaultCount);
+                        throw new InvalidOperationException("Deliberate application cancellation callback fault.");
+                    })
+                    : default;
                 var output = Array.Empty<Task>();
                 if (PendingOutput)
                 {
@@ -98,10 +119,10 @@ namespace EmbedIO.Tests
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task Shutdown(bool synchronous, bool fault, bool pendingOutput, bool exhaust = false)
+        private static async Task Shutdown(bool synchronous, bool fault, bool pendingOutput, bool exhaust = false, bool cancellationFault = false, bool criticalFault = false)
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var application = new StalledApplication { Synchronous = synchronous, Fault = fault, PendingOutput = pendingOutput };
+            var application = new StalledApplication { Synchronous = synchronous, Fault = fault, PendingOutput = pendingOutput, CancellationFault = cancellationFault };
             using var key = RSA.Create(2048);
             var req = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             var san = new SubjectAlternativeNameBuilder(); san.AddDnsName("localhost"); san.AddIpAddress(IPAddress.Loopback); req.CertificateExtensions.Add(san.Build());
@@ -134,7 +155,11 @@ namespace EmbedIO.Tests
                     ?? throw new AssertionException("Missing connection owner.");
                 using var owner = (IDisposable)session;
                 sessionReady.SetResult(session);
-                await ((Task)(connection.GetMethod("RunCoreAsync", Flags)?.Invoke(session, null) ?? throw new AssertionException("Missing runner.")));
+                try { await ((Task)(connection.GetMethod("RunCoreAsync", Flags)?.Invoke(session, null) ?? throw new AssertionException("Missing runner."))); }
+                catch (Exception error) when (criticalFault && error.GetType().Name == "Http3ProtocolException")
+                {
+                    Assert.That(error.GetType().GetProperty("ErrorCode", Flags)?.GetValue(error), Is.EqualTo(0x104));
+                }
             });
             await using var client = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
             {
@@ -183,9 +208,25 @@ namespace EmbedIO.Tests
                     await using var request = await client.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, deadline.Token);
                     await request.WriteAsync(Convert.FromHexString("01100000D1D7C150096C6F63616C686F7374"), true, deadline.Token);
                     await application.Entered.Task.WaitAsync(deadline.Token);
+                    if (cancellationFault)
+                    {
+                        if (criticalFault)
+                        {
+                            await using var control = await client.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, deadline.Token);
+                            // Valid empty SETTINGS followed by forbidden critical-stream FIN.
+                            await control.WriteAsync(new byte[] { 0, 4, 0 }, true, deadline.Token);
+                            await server.WaitAsync(TimeSpan.FromSeconds(5));
+                        }
+                        else
+                        {
+                            await client.CloseAsync(0x100, deadline.Token);
+                            await server.WaitAsync(TimeSpan.FromSeconds(5));
+                        }
+                    }
                 }
                 deadline.Cancel();
                 await server.WaitAsync(TimeSpan.FromSeconds(5));
+                if (cancellationFault) Assert.That(application.CancellationFaultCount, Is.EqualTo(1));
                 Assert.That(application.Completed.Task.IsCompleted, Is.False, "The test callback must still be blocked when transport shutdown finishes.");
                 application.Release.TrySetResult();
                 await application.Completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
