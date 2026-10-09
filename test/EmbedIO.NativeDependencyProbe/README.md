@@ -31,3 +31,14 @@ invalid magic, executable rather than dylib, truncated header, extra RID, missin
 alias and altered notice must all be rejected for the expected reason. Temporary
 mutants stay inside the named evidence directory and are removed; rejection
 receipts remain. These are package-boundary checks, not Intel execution evidence.
+
+The archive contract also requires all four source-evidence files explicitly,
+compares the two patches with the checked-out reviewed source (normalizing only
+CRLF/LF), checks the package identity/version and empty .NET 10 dependency group,
+and rejects extra payloads or duplicate metadata. Build/managed assets and
+missing/changed review evidence are covered by the mutation suite. Manifest
+parsing uses [defusedxml 0.7.1](https://pypi.org/project/defusedxml/0.7.1/) with DTD,
+entity and external-reference handling prohibited. The deployment script installs
+its hash-pinned universal wheel into the test results directory; standalone
+verifier use needs that dependency on PYTHONPATH. The parser and all Python files
+remain development/CI tools and are absent from the native NuGet payload.

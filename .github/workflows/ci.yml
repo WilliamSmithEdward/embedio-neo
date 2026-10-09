@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, codex/managed-http-engine]
   workflow_dispatch:
     inputs:
       update-https-locks:
@@ -181,7 +181,7 @@ jobs:
           - os: macos-15-intel
             rid: osx-x64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ matrix.rid == 'osx-x64' && 75 || 45 }}
     env:
       EMBEDIO_EXPECT_NATIVE_RID: ${{ matrix.rid }}
       EMBEDIO_QUIC_SELF_CONTAINED: ${{ (inputs.quic-self-contained-experiment || inputs.quic-openssl-experiment) && '1' || '0' }}
