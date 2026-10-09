@@ -4521,3 +4521,39 @@ MsQuic immediate-rebind failure; the macOS upstream compatibility process timed
 out receiving WebSocket data and aborted. Job logs and compatibility artifacts
 are retained. These are outstanding investigations, not resolved by this input
 handoff change or by a later passing rerun. Fresh exact-head checks remain required.
+### Preserve QUIC output cancellation after request disposal
+
+The Linux CI 37896135281 failure occurs when a reset cancels a request and its
+owner disposes Http3QuicExchange while a detached application callback attempts
+another response write. AcquireOutputAsync previously checked disposal before
+cancellation, leaking ObjectDisposedException instead of the request's cancelled
+operation. The owner already cancels requestStop before disposing the exchange.
+
+Output admission now checks the caller token and exchange token while holding
+the output-lifetime lock, before checking disposal or incrementing output users.
+Caller cancellation retains its exact token; otherwise exchange cancellation
+retains the request token. Uncancelled use after disposal still throws
+ObjectDisposedException. Existing pending operations retain their semaphore user
+until their finally blocks run; the last user disposes the gate. The fix adds no
+linked-token source or per-write allocation and changes no legacy asset code.
+
+Eight deterministic managed tests exercise cancellation of the caller, exchange
+or both before/after disposal, uncancelled disposal, and a queued caller whose
+cancellation releases its user while the final owner still holds the gate. Four
+fail on the preceding production implementation and all eight pass with the
+correction. The output fixture seeds lifetime fields and invokes real exchange
+and body disposal; it does not require native QUIC or validate the whole exchange.
+The four independent live backpressure/reset cases also pass on Windows, including
+healthy sibling/subsequent streams. A broader pinned Linux .NET 10/MsQuic 2.6.2
+run with QUIC required passes all 72 selected exchange/QUIC cases without skips.
+Both targets build; changed-file formatting, source guards, all four allocation
+budgets and the pinned production-source YARA scan pass.
+
+The preceding direct-input head's CI 37897442361 again reports a macOS
+AddressAlreadyInUse failure. That native dependency lifetime problem remains
+separate and is not resolved by cancellation-order checks. The retained native
+candidate evidence and its eventual supported deployment still require work.
+Full Windows coverage on the final changed source passes 3,522 cases (3,517
+passed, five skipped, zero failed); the discovery floor increases by eight.
+Fresh exact-head platform/security checks remain necessary. No broad throughput,
+whole-engine completion or native macOS cleanup resolution is claimed.

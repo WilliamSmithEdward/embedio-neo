@@ -152,6 +152,10 @@ namespace EmbedIO.Net.Internal.Http3
         {
             lock (_outputLifetime)
             {
+                // A reset cancels the request before its owner disposes the exchange.
+                // Detached callbacks must retain that cancellation when attempting another write.
+                token.ThrowIfCancellationRequested();
+                CancellationToken.ThrowIfCancellationRequested();
                 if (_disposed != 0) throw new ObjectDisposedException(nameof(Http3QuicExchange));
                 ++_outputUsers;
             }
