@@ -6292,9 +6292,29 @@ changed-source formatting and analyzer builds pass. Full regression and exact-he
 checks remain required. Discovery floors are 4,396. Evidence: ignored
 TestResults/h2-negotiation-before*, h2-negotiation-after* and their TRX files.
 
-The new malformed-handshake wire cases use h2c and END_STREAM request headers;
+The initial malformed-handshake wire cases used h2c and END_STREAM request headers;
 this does not establish TLS or still-open upload rejection coverage, or resolve
 unsupported extended-CONNECT protocols and remaining timeout/retention work.
 Final local Windows regression passes: 4,396 cases, 4,391 passed, five expected
 local skips, zero failures. Suppression checks and analyzer guard also pass.
 Cross-platform and exact-head GitHub validation remain required.
+### HTTP/2 rejection coverage: TLS and open request input
+
+The malformed WebSocket version matrix now covers all three version failures,
+with and without END_STREAM, over both h2c and TLS: twelve cases. TLS peers pin
+the generated leaf certificate, retain hostname validation, and require HTTP/2
+ALPN. An open rejected input is canceled with exactly one NO_ERROR RST_STREAM on
+stream 1; completed inputs must not receive that reset. Every case verifies a
+healthy GET on stream 3 and rejects connection GOAWAY or an unrelated reset.
+
+The shared raw-wire helpers now accept Stream so the same peer can run over TLS;
+framing and assertions are otherwise retained. All 26 focused negotiation/echo/
+closure cases pass. Both-target analyzer builds pass. The initial TLS build
+reported a formatting diagnostic; changed-file formatting corrected it without
+suppressions, and the failure log is retained. Discovery floors are 4,405. Full
+regression and final-head checks remain required. Evidence: ignored
+TestResults/h2-negotiation-open* and h2-negotiation-tls*.
+
+Final expanded Windows suite: 4,405 cases, 4,400 passed, five expected local skips,
+zero failures. Analyzer builds, source guards and changed-file formatting pass.
+Cross-platform exact-head checks remain required.
