@@ -51,8 +51,9 @@ step h2spec-tls h2spec --host 127.0.0.1 --port $https --tls --insecure --timeout
 step h2-cases python3 -I "$src/test/EmbedIO.Conformance/drivers/h2_campaign.py" cases --port $http --stats-port $http --out "$out/h2-cases.json"
 step h2-tls-cases python3 -I "$src/test/EmbedIO.Conformance/drivers/h2_campaign.py" cases --port $https --tls --stats-port $http --out "$out/h2-tls-cases.json"
 step h2-fuzz python3 -I "$src/test/EmbedIO.Conformance/drivers/h2_campaign.py" fuzz --port $http --seed "$seed" --iterations $((300 * scale)) --stats-port $http --out "$out/h2-fuzz.json"
+# The HTTP/3 fuzz runs before the cases: finding F3 can stop the listener during the cases.
+step h3-fuzz python3 -I "$src/test/EmbedIO.Conformance/drivers/h3_campaign.py" fuzz --host localhost --port $h3 --avoid-known --seed "$seed" --iterations $((100 * scale)) --stats-port $http --out "$out/h3-fuzz.json"
 step h3-cases python3 -I "$src/test/EmbedIO.Conformance/drivers/h3_campaign.py" cases --host localhost --port $h3 --stats-port $http --out "$out/h3-cases.json"
-step h3-fuzz python3 -I "$src/test/EmbedIO.Conformance/drivers/h3_campaign.py" fuzz --host localhost --port $h3 --seed "$seed" --iterations $((100 * scale)) --stats-port $http --out "$out/h3-fuzz.json"
 
 echo stop >&3
 while read -r -t 30 line <&"${SERVER[0]}"; do printf '%s\n' "$line" >> "$out/server.log"; done

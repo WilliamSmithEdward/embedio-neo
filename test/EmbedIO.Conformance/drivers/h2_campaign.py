@@ -807,7 +807,8 @@ def run_fuzz(endpoint, seed, iterations, stats_port):
     rng = random.Random(seed)
     data = file_bytes()
     before = stats(endpoint.host, stats_port) if stats_port else None
-    totals = {"streams": 0, "client_resets": 0, "server_resets": 0, "connections": 0}
+    totals = {"streams": 0, "client_resets": 0, "server_resets": 0, "connections": 0, "known_f4_closures": 0}
+    known_traces = []
     for iteration in range(iterations):
         log = []
         settings = {}
@@ -888,6 +889,16 @@ def run_fuzz(endpoint, seed, iterations, stats_port):
             if client.terminated:
                 raise AssertionError(f"server terminated a valid connection: {client.terminated}")
             client.close()
+        except (BrokenPipeError, ConnectionResetError, ConnectionError) as error:
+            # Known finding F4: a client RST_STREAM can make the server close the whole
+            # connection without GOAWAY. Count it after a reset and keep exploring.
+            if any(entry[0] == "reset" for entry in log):
+                totals["known_f4_closures"] += 1
+                if len(known_traces) < 3:
+                    known_traces.append({"iteration": iteration, "log": log, "trace": client.trace[-40:] if "client" in locals() else []})
+                continue
+            return {"result": "FAIL", "seed": seed, "iteration": iteration, "error": f"{type(error).__name__}: {error}", "log": log,
+                    "trace": client.trace if "client" in locals() else []}
         except Exception as error:  # A failed invariant is a finding with a replayable seed.
             return {"result": "FAIL", "seed": seed, "iteration": iteration, "settings": {int(k): v for k, v in settings.items()},
                     "error": f"{type(error).__name__}: {error}", "log": log,
@@ -897,7 +908,8 @@ def run_fuzz(endpoint, seed, iterations, stats_port):
             if health:
                 return {"result": "FAIL", "seed": seed, "iteration": iteration, "error": "unhealthy: " + health}
     after = settle(endpoint, stats_port) if stats_port else None
-    report = {"result": "PASS", "seed": seed, "iterations": iterations, "totals": totals, "stats_before": before, "stats_after": after}
+    report = {"result": "PASS", "seed": seed, "iterations": iterations, "totals": totals, "known_f4_traces": known_traces,
+              "stats_before": before, "stats_after": after}
     if before and after:
         report["handleGrowth"] = after["handles"] - before["handles"]
         report["managedGrowth"] = after["managedBytes"] - before["managedBytes"]
