@@ -4826,3 +4826,60 @@ Current helpers and defaults remain unchanged. Probe observations and binary
 inputs are retained under ignored TestResults/http-engine/content-coding-probe
 and content-coding-probe-linux. Locked restore, probe execution on both platforms
 and source guards pass; the ordinary test discovery floor is unchanged.
+
+### Verified tests-disabled Darwin dependency (October 9)
+
+[Native experiment 37907158871](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37907158871/job/113743283321)
+passes on exact source 2246d4151fc0e2e0bd17b23789e767ff91fa47c5. The in-process
+Darwin image evidence confirms one loaded MsQuic image from the tests-disabled
+candidate build, SHA-256 a401925c352ec9358d3583e35a34972e497dc1cbda421c57df0db8c4a6fcca00,
+on macOS 15.7.9 / Arm64 / .NET 10.0.12. Both full suites report 3,661 total,
+3,630 passed and 31 skipped, with zero failures. This resolves the preceding
+loader-evidence validation gap for this exact experiment, not by inferring a
+provider from passing tests.
+
+The private package verifies three native assets and exact notices; its hash is
+fa7e68049064e61d2e0e65a0537f034eab23af0f93ec20b661b182cd763ca9e6.
+Portable and published consumers each complete 4,096 rebind cycles. Independent
+trace inspection confirms all 20,480 candidate traced cycles close the bound
+socket before managed disposal returns; controls retain late-close/rebind failures.
+The separate ASAN campaign passes 100 repetitions of 12 native cases, exit zero.
+Artifacts and independent inspection are under ignored
+TestResults/http-engine/quic-loader-evidence-artifact and quic-loader-ordering.json.
+
+Ordinary CI on that same head still fails its macOS rebind test with
+AddressAlreadyInUse under the stock dependency. No normal prerequisite, production
+package or loader policy was changed to obtain this experimental result. Supported
+native deployment, maintenance/provenance policy and final exact-head checks
+remain release blockers.
+
+### Incremental DEFLATE boundary validation
+
+The internal DeflateFramingValidator locates the exact RFC 1951 end before any
+following envelope checksum or HTTP-framed trailer bytes. It parses stored,
+fixed-Huffman and dynamic-Huffman blocks with incremental bit state, validates
+canonical trees/repeats/reserved symbols and rejects distances before output
+history. It counts decoded bytes without retaining or generating their contents.
+Stored payload bytes are counted in batches; input and output bodies are never
+buffered wholesale. Tree sizes are bounded by the format. This is a framing
+component, not a replacement decompressor or complete zlib/gzip envelope validator;
+no existing request/response helper or default has been switched to it yet.
+
+71 focused cases pass on Windows, pinned Linux and the actual netstandard2.0
+assembly hosted by Windows .NET 10. They cover three runtime compression levels,
+random/repeated data, empty bodies, multiple blocks, one-byte input boundaries,
+exact separation of appended bytes, every proper prefix of selected streams,
+malformed trees/repeats/lengths/distances and sticky failure. A seeded 1,000-sample
+corpus compares framing counts with independently decoded runtime output. Initial
+empty-body fixtures used a runtime encoder that emitted no stream; these were
+corrected to the valid empty fixed block 03 00. No production rejection was relaxed.
+This does not claim all-runtime conformance, checksum integrity or measured
+performance. Full changed-source coverage remains pending at this checkpoint.
+
+Final changed-source Windows coverage passes 3,732 cases: 3,727 passed, five
+skipped and zero failed in 2m30s. Both library assets build without warnings.
+All four existing allocation-budget groups, source/parser guards, changed-file
+whitespace checks, shell syntax and pinned YARA checks pass. The discovery floor
+increases by these 71 cases. Envelope integration, complete checksum validation,
+codec migration and comparative codec performance remain subsequent development;
+this component alone does not establish those requirements.
