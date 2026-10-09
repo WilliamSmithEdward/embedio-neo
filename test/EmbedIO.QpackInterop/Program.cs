@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
-using System.Text.Json;
 using System.Runtime.ExceptionServices;
+using System.Text.Json;
 var assembly = Assembly.LoadFrom(Path.GetFullPath(args[0]));
 var encoder = assembly.GetType("EmbedIO.Net.Internal.Http3.QpackEncoder", true) ?? throw new Exception("Missing encoder");
 var encode = encoder.GetMethod("Encode", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new Exception("Missing encoding method");
@@ -69,7 +69,7 @@ while ((line = Console.ReadLine()) != null)
             var section = encoder.GetMethod("EncodeReferenced", BindingFlags.Static | BindingFlags.NonPublic)?.Invoke(null,
                 new object[] { fieldArray, new[] { index }, (long)int.Parse(args[1]), 65536, 65536 }) ?? throw new Exception("Missing encoded section");
             var references = (long[])(Property(section, "References") ?? throw new Exception("Missing references"));
-            if (!Convert.ToBoolean(EncoderCall(encoderFeedback, "TryRegisterSection", stream, references))) throw new Exception("Reference admission failed");
+            if (!Convert.ToBoolean(EncoderCall(encoderFeedback, "TryRegisterSection", stream, references, 16L))) throw new Exception("Reference admission failed");
             insertion = new { index, instructions = Convert.ToHexString((byte[])(Property(added, "Instructions") ?? throw new Exception("Missing instructions"))), wire = Convert.ToHexString((byte[])(Property(section, "Wire") ?? throw new Exception("Missing wire"))) };
         }
     }

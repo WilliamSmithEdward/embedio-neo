@@ -6,7 +6,7 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    public class QpackEncoderFeedbackTest
+    public partial class QpackEncoderFeedbackTest
     {
         private sealed class Feedback(int sections = 8, int references = 16)
         {
@@ -21,7 +21,9 @@ namespace EmbedIO.Tests
                 catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture(error.InnerException ?? error).Throw(); throw; }
             }
             internal long Insert() => Convert.ToInt64(Call("RegisterInsert"));
-            internal bool Section(long stream, params long[] entries) => Convert.ToBoolean(Call("TryRegisterSection", stream, entries));
+            internal bool Section(long stream, params long[] entries) => Convert.ToBoolean(Call("TryRegisterSection", stream, entries, 8L));
+            internal bool LimitedSection(long stream, long limit, params long[] entries) => Convert.ToBoolean(Call("TryRegisterSection", stream, entries, limit));
+            internal int Blocked => Convert.ToInt32(_value.GetType().GetProperty("PotentiallyBlockedStreams", Hidden)?.GetValue(_value));
             internal bool Referenced(long index) => Convert.ToBoolean(Call("IsReferenced", index));
             internal long Known => Convert.ToInt64(_value.GetType().GetProperty("KnownReceivedCount", Hidden)?.GetValue(_value));
             internal int Pending => Convert.ToInt32(_value.GetType().GetProperty("PendingSections", Hidden)?.GetValue(_value));

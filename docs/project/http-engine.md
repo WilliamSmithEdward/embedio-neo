@@ -3386,3 +3386,50 @@ The final changed-source Windows coverage run passed all 3,371 reported cases:
 changed transport is clean. Changed-head Windows/macOS/Linux checks remain
 required; neither this local pass nor a later unchanged-source retry should be
 used to erase the original failure evidence.
+
+
+### Encoder admission against peer QPACK blocked-stream limits
+
+The encoder feedback owner now requires the peer's blocked-stream limit when
+registering a dynamic field section. Admission, reference pinning and the
+potentially blocked stream count change atomically under the existing gate.
+Multiple outstanding sections on one stream consume one blocked-stream slot.
+Sections using only known-received entries can still be admitted when the limit
+is zero or full. A refusal changes neither ownership nor local section budgets.
+
+Each stream retains the highest Required Insert Count among its outstanding
+sections. Section acknowledgment and Insert Count Increment advance the shared
+known-received count, releasing blocked-stream slots across all affected streams
+without releasing their references. Stream Cancellation releases only that
+stream's references and slot; it does not acknowledge inserts. Feedback errors
+clear all ownership and permanently fail the owner. The admission check uses a
+counter; advancing the known frontier scans the locally bounded stream set
+without allocating a temporary collection. These rules implement the ownership
+requirements of RFC 9204 sections 2.1.2 and 2.1.4; they do not yet enable live
+response compression.
+
+Fourteen new cases cover limits zero/one/two, multiple sections per stream,
+acknowledgment ordering, insert progress, cancellation, transactional refusal,
+invalid limits and concurrent admission by 64 callers. Three seeded model tests
+compare 6,000 feedback/admission steps against a separate pending-section model.
+All 174 QPACK cases pass on Windows and the actual netstandard2.0 assembly under
+a .NET 10 host. The pinned Linux run passes 235 QPACK/QUIC cases with QUIC required.
+Both production assets also pass the pinned pylsqpack interoperability campaign
+at capacities 0, 220 and 4096. Both-target builds, formatting, source guards and
+the production-source YARA scan pass. Evidence is under
+TestResults/http-engine/qpack-blocked-*; discovery is now 3,385 cases.
+
+The preceding head ef509a9 passed its Windows CI test job, but macOS CI
+37875045956 / job 113641584962 failed the raw runtime rebind diagnostic at cycle
+23, connected=False, bind 127.0.0.1:62794, .NET 10.0.12, AddressAlreadyInUse.
+The log remains qpack-blocked-parent-macos.log. This independently repeats the
+known listener-disposal/rebind limitation before HTTP or client traffic; it is
+not suppressed or claimed repaired. Dynamic encoder instruction transport,
+connection-owned table/section serialization and live response integration are
+still outstanding, along with the broader engine program.
+
+
+The changed-source Windows coverage run passed: 3,385 reported cases, 3,380
+successes and five existing skips in 2m 28s. No timeout, discovery or security
+checks were relaxed. The independent interop host's import ordering was also
+corrected after its separate formatting check reported the pre-existing order.

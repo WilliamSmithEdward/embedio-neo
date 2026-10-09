@@ -36,7 +36,7 @@ namespace EmbedIO.Tests
             internal long Find(string name, string value) => Convert.ToInt64(Call(_table, "Find", name, value));
             internal int Bytes => Convert.ToInt32(_table.GetType().GetProperty("StoredBytes", Hidden)?.GetValue(_table));
             internal void Feedback(string hex) { var bytes = Convert.FromHexString(hex); Call(_feedback, "Feed", bytes, 0, bytes.Length); }
-            internal void Section(long stream, params long[] indices) => Assert.That(Call(_feedback, "TryRegisterSection", stream, indices), Is.True);
+            internal void Section(long stream, params long[] indices) => Assert.That(Call(_feedback, "TryRegisterSection", stream, indices, 16L), Is.True);
             internal static byte[] Wire(object? insertion) => (byte[])Value(insertion ?? throw new AssertionException("Insertion refused."), "Instructions");
             internal static long Index(object? insertion) => (long)Value(insertion ?? throw new AssertionException("Insertion refused."), "Index");
         }
