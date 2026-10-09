@@ -21,7 +21,17 @@ namespace EmbedIO.Net
         private readonly SemaphoreSlim _ctxQueueSem = new(0);
         private readonly object _lifecycleSync = new();
         private CancellationTokenSource _acceptStop = new();
+        // Pending contexts by ID; removing an entry claims it for accept, unregistration or Close.
         private readonly ConcurrentDictionary<string, IHttpContextImpl> _ctxQueue;
+        // Arrival order for accept. Entries already claimed elsewhere are skipped.
+        private readonly ConcurrentQueue<IHttpContextImpl> _ctxOrder = new();
+        // 1 while running and not draining: registration may then skip _lifecycleSync.
+        // Lifecycle changes clear it and wait for _admissionsInFlight to reach zero
+        // before they snapshot or close, so no lock-free registration overlaps them.
+        private int _fastAdmission;
+        private int _admissionsInFlight;
+        // Accepts about to wait on _ctxQueueSem. Its permits are wake-ups, not a context count.
+        private int _waitingAccepts;
         private readonly ConcurrentDictionary<HttpConnection, object> _connections;
         private readonly HttpListenerPrefixCollection _prefixes;
         private bool _disposed;
@@ -83,6 +93,7 @@ namespace EmbedIO.Net
 
                 EndPointManager.AddListener(this);
                 IsListening = true;
+                Volatile.Write(ref _fastAdmission, 1);
             }
         }
 
@@ -97,6 +108,8 @@ namespace EmbedIO.Net
                 if (_drainTask == null)
                 {
                     if (!IsListening) return Task.CompletedTask;
+                    // The snapshot below must include every HTTP/2 connection admitted so far.
+                    CloseFastAdmission();
                     var connections = EndPointManager.BeginDrain(this, out var exclusiveEndpoints);
                     connections.UnionWith(_connections.Keys);
                     _drainConnections = connections;
@@ -156,6 +169,7 @@ namespace EmbedIO.Net
             {
                 if (_disposed) return;
                 IsListening = false;
+                CloseFastAdmission();
                 _acceptStop.Cancel();
                 Close();
             }
@@ -180,6 +194,7 @@ namespace EmbedIO.Net
                 if (_disposed) return;
                 _disposed = true;
                 IsListening = false;
+                CloseFastAdmission();
                 // Disposing SemaphoreSlim alone does not complete its pending waits.
                 _acceptStop.Cancel();
                 try { Close(); }
@@ -193,36 +208,45 @@ namespace EmbedIO.Net
         /// <inheritdoc />
         public async Task<IHttpContextImpl> GetContextAsync(CancellationToken cancellationToken)
         {
-            CancellationTokenSource linked;
+            CancellationToken acceptStop;
             lock (_lifecycleSync)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(HttpListener));
-                linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _acceptStop.Token);
+                acceptStop = _acceptStop.Token;
                 _pendingAccepts++;
             }
 
             try
             {
-                using (linked)
+                // Under load a context is usually queued already; take it without linking tokens.
+                if (!cancellationToken.IsCancellationRequested && !acceptStop.IsCancellationRequested
+                    && TryTakeQueuedContext(out var queued))
+                    return queued;
+
+                // While this accept is pending, Dispose leaves the semaphore and token source alive.
+                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, acceptStop))
                 {
                     try
                     {
                         while (true)
                         {
-                            await _ctxQueueSem.WaitAsync(linked.Token).ConfigureAwait(false);
-                            lock (_lifecycleSync)
+                            linked.Token.ThrowIfCancellationRequested();
+                            // Announce the wait before checking the queue again. Interlocked
+                            // increment is a full fence: a registration either is seen by this
+                            // check or sees the count and releases the semaphore.
+                            _ = Interlocked.Increment(ref _waitingAccepts);
+                            try
                             {
-                                if (linked.IsCancellationRequested)
-                                {
-                                    // A canceled accept must not consume another waiter's queue signal.
-                                    if (!_disposed) _ = _ctxQueueSem.Release();
-                                    linked.Token.ThrowIfCancellationRequested();
-                                }
+                                if (TryTakeQueuedContext(out var context)) return context;
+                                await _ctxQueueSem.WaitAsync(linked.Token).ConfigureAwait(false);
+                            }
+                            finally { _ = Interlocked.Decrement(ref _waitingAccepts); }
 
-                                foreach (var entry in _ctxQueue)
-                                {
-                                    if (_ctxQueue.TryRemove(entry.Key, out var context)) return context;
-                                }
+                            if (linked.IsCancellationRequested)
+                            {
+                                // A canceled accept must not consume another waiter's queue signal.
+                                _ = _ctxQueueSem.Release();
+                                linked.Token.ThrowIfCancellationRequested();
                             }
                         }
                     }
@@ -253,31 +277,84 @@ namespace EmbedIO.Net
             _acceptStop.Dispose();
         }
 
+        private bool TryTakeQueuedContext([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IHttpContextImpl? context)
+        {
+            while (_ctxOrder.TryDequeue(out var candidate))
+            {
+                // Unregistration and Close remove their contexts from _ctxQueue first.
+                if (((ICollection<KeyValuePair<string, IHttpContextImpl>>)_ctxQueue).Remove(new KeyValuePair<string, IHttpContextImpl>(candidate.Id, candidate)))
+                {
+                    context = candidate;
+                    return true;
+                }
+            }
+
+            context = null;
+            return false;
+        }
+
         internal void RegisterContext(IHttpContextImpl context)
         {
+            if (TryAdmitWithoutLock(context, null, "Unable to register context")) return;
             lock (_lifecycleSync)
             {
                 if (_disposed || !IsListening)
                     throw new HttpListenerException(995, "The listener stopped accepting requests.");
                 if (_drainConnections != null && (context is not HttpListenerContext http1 || _drainAdmissionConnections?.Contains(http1.Connection) != true))
                     throw new HttpListenerException(995, "The listener is draining.");
-                if (!_ctxQueue.TryAdd(context.Id, context))
-                    throw new InvalidOperationException("Unable to register context");
-                _ = _ctxQueueSem.Release();
+                Enqueue(context, "Unable to register context");
             }
         }
 
         internal void RegisterMultiplexedContext(IHttpContextImpl context, HttpConnection connection)
         {
+            if (TryAdmitWithoutLock(context, connection, "Unable to register context.")) return;
             lock (_lifecycleSync)
             {
                 if (_disposed || !IsListening) throw new HttpListenerException(995, "The listener stopped accepting requests.");
                 if (_drainConnections != null && _drainAdmissionConnections?.Contains(connection) != true)
                     throw new HttpListenerException(995, "The listener is draining.");
                 _connections[connection] = connection;
-                if (!_ctxQueue.TryAdd(context.Id, context)) throw new InvalidOperationException("Unable to register context.");
-                _ = _ctxQueueSem.Release();
+                Enqueue(context, "Unable to register context.");
             }
+        }
+
+        // Admits a context while running and not draining. Returns false when the
+        // caller must take the locked path, which applies the stop and drain rules.
+        private bool TryAdmitWithoutLock(IHttpContextImpl context, HttpConnection? multiplexed, string duplicateMessage)
+        {
+            // Interlocked increment is a full fence: either this read sees a closed
+            // gate, or CloseFastAdmission sees this admission and waits for it.
+            _ = Interlocked.Increment(ref _admissionsInFlight);
+            try
+            {
+                if (Volatile.Read(ref _fastAdmission) == 0) return false;
+                if (multiplexed != null && !_connections.ContainsKey(multiplexed)) _connections[multiplexed] = multiplexed;
+                Enqueue(context, duplicateMessage);
+                return true;
+            }
+            finally { _ = Interlocked.Decrement(ref _admissionsInFlight); }
+        }
+
+        private void Enqueue(IHttpContextImpl context, string duplicateMessage)
+        {
+            if (!_ctxQueue.TryAdd(context.Id, context)) throw new InvalidOperationException(duplicateMessage);
+            _ctxOrder.Enqueue(context);
+            // The semaphore only wakes accepts that announced a wait. A busy accept loop
+            // finds the context on its next check, so registrations skip the semaphore lock.
+            // The queue publishes the item with a release write; the fence keeps this read
+            // after it, pairing with the increment in GetContextAsync.
+            Interlocked.MemoryBarrier();
+            if (Volatile.Read(ref _waitingAccepts) != 0) _ = _ctxQueueSem.Release();
+        }
+
+        // Callers hold _lifecycleSync. Admissions without the lock never block or
+        // run application code, so this wait is short.
+        private void CloseFastAdmission()
+        {
+            _ = Interlocked.Exchange(ref _fastAdmission, 0);
+            var spin = default(SpinWait);
+            while (Volatile.Read(ref _admissionsInFlight) != 0) spin.SpinOnce();
         }
 
         internal void UnregisterContext(IHttpContextImpl context) => _ctxQueue.TryRemove(context.Id, out _);
@@ -310,6 +387,9 @@ namespace EmbedIO.Net
                     }
                 }
             }
+
+            // Every entry left in arrival order is now claimed; release the references.
+            while (_ctxOrder.TryDequeue(out _)) { }
         }
     }
 }
