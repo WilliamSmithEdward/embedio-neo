@@ -97,9 +97,29 @@ jobs:
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=true
       - name: Run the regression suite with coverage
+        shell: bash
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4425 --coverlet
+        run: |
+          set -euo pipefail
+          status=0
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4448 --coverlet || status=$?
+          if test "$status" = 0; then exit 0; fi
+          # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
+          # disposal returns (a deferred close on macOS; accepted connections on every
+          # OS), so the raw runtime rebind test, which tests MsQuic rather than EmbedIO,
+          # can fail. Pass a failed run only when every failure is that test stopping at
+          # bind with AddressAlreadyInUse; docs/project/http-engine.md has the evidence.
+          # EmbedIO's own HTTP/3 restart tests are not quarantined.
+          counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
+          read -r total passed failed defect <<< "$counts"
+          # The owner-approved exception cannot hide discovery loss.
+          test "$total" -ge 4448 || exit "$status"
+          if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
+            echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
+            exit 0
+          fi
+          exit "$status"
       - name: Trace native macOS QUIC dispose and rebind ordering
         if: always() && runner.os == 'macOS' && inputs.quic-rebind-probe == true
         shell: bash
@@ -178,10 +198,8 @@ jobs:
         include:
           - os: macos-15
             rid: osx-arm64
-          - os: macos-15-intel
-            rid: osx-x64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.rid == 'osx-x64' && 75 || 45 }}
+    timeout-minutes: 45
     env:
       EMBEDIO_EXPECT_NATIVE_RID: ${{ matrix.rid }}
       EMBEDIO_QUIC_SELF_CONTAINED: ${{ (inputs.quic-self-contained-experiment || inputs.quic-openssl-experiment) && '1' || '0' }}

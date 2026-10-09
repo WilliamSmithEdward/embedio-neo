@@ -142,7 +142,7 @@ namespace EmbedIO.Net.Internal.Http3
             private int _disposed;
             internal bool IsDraining { get; private set; }
             internal bool IsRunning => !_stop.IsCancellationRequested;
-            private readonly Dictionary<QuicListener, ListenerPrefix[]> _listeners = new();
+            private readonly Dictionary<QuicListener, (ListenerPrefix[] Prefixes, IPEndPoint EndPoint)> _listeners = new();
             private readonly List<Task> _accepts = new();
             private readonly object _gate = new();
             private readonly Dictionary<long, Task> _connections = new();
@@ -166,7 +166,7 @@ namespace EmbedIO.Net.Internal.Http3
                     }
                     foreach (var binding in endpoints)
                     {
-                        var listener = QuicListener.ListenAsync(new QuicListenerOptions
+                        var options = new QuicListenerOptions
                         {
                             ListenEndPoint = binding.Key,
                             ListenBacklog = 128,
@@ -182,12 +182,14 @@ namespace EmbedIO.Net.Internal.Http3
                                 ServerAuthenticationOptions = new SslServerAuthenticationOptions
                                 { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = certificate }
                             })
-                        }).AsTask().GetAwaiter().GetResult();
-                        session._listeners.Add(listener, binding.Value.ToArray());
+                        };
+                        var listener = QuicEndpointReleases.Shared.Bind(binding.Key,
+                            () => QuicListener.ListenAsync(options).AsTask().GetAwaiter().GetResult());
+                        session._listeners.Add(listener, (binding.Value.ToArray(), binding.Key));
                     }
                     // Publish accept loops only after all bindings succeeded.
                     foreach (var listener in session._listeners)
-                        session._accepts.Add(Task.Run(() => session.AcceptAsync(listener.Key, listener.Value)));
+                        session._accepts.Add(Task.Run(() => session.AcceptAsync(listener.Key, listener.Value.Prefixes)));
                     return session;
                 }
                 catch { session.Dispose(); throw; }
@@ -331,7 +333,11 @@ namespace EmbedIO.Net.Internal.Http3
                 _acceptStop.Cancel();
                 try
                 {
-                    foreach (var listener in _listeners.Keys) await listener.DisposeAsync().ConfigureAwait(false);
+                    foreach (var listener in _listeners)
+                    {
+                        await listener.Key.DisposeAsync().ConfigureAwait(false);
+                        QuicEndpointReleases.Shared.Record(listener.Value.EndPoint);
+                    }
                     await Task.WhenAll(_accepts).ConfigureAwait(false);
                     Task[] connections;
                     lock (_gate) connections = _connections.Values.ToArray();

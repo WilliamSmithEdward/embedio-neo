@@ -1,18 +1,18 @@
 ﻿using System;
-using System.IO;
 using System.Collections;
+using System.Collections.Concurrent;
+using System.IO;
 using System.Linq;
-using System.Net.Sockets;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Net.WebSockets;
-using System.Collections.Concurrent;
-using System.Text;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using EmbedIO.PlatformTests;
 using EmbedIO.Actions;
+using EmbedIO.PlatformTests;
 using EmbedIO.WebSockets;
 using NUnit.Framework;
 
@@ -118,11 +118,14 @@ namespace EmbedIO.Tests
             using var client = secure ? HttpsSmoke.CreateClient((certificate ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))) : new HttpClient();
             try
             {
-                for (var index = 0; index < 40; index++)
+                // Exceed the removed legacy cap on the same plain/TLS transport.
+                for (var index = 0; index < 256; index++)
                 {
                     using var body = new ByteArrayContent(new byte[8192]);
                     using var response = await client.PostAsync(url, body);
                     Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("ok"));
+                    Assert.That(response.Headers.ConnectionClose, Is.Not.True, $"Request {index + 1} must not reach a fixed reuse limit.");
+                    if (index == 255) Assert.That(string.Join(",", response.Headers.GetValues("Keep-Alive")), Does.Not.Contain("max="));
                 }
                 Assert.That(connections.Count, Is.EqualTo(1), "Sequential requests should reuse the existing live transport.");
                 var connection = System.Linq.Enumerable.Single(connections.Keys);

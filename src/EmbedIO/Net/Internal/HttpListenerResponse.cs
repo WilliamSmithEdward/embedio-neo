@@ -254,7 +254,6 @@ namespace EmbedIO.Net.Internal
             //// HttpStatusCode.RequestUriTooLong     414
             //// HttpStatusCode.InternalServerError   500
             //// HttpStatusCode.ServiceUnavailable    503
-            var reuses = _connection.Reuses;
             var keepAlive = _statusCode switch
             {
                 400 => false,
@@ -264,7 +263,7 @@ namespace EmbedIO.Net.Internal
                 414 => false,
                 500 => false,
                 503 => false,
-                _ => !_connection.IsDraining && KeepAlive && reuses < 100
+                _ => !_connection.IsDraining && KeepAlive
             };
 
             // HTTP/1.0 has no chunked delimiter. An unknown-length body ends at
@@ -284,7 +283,7 @@ namespace EmbedIO.Net.Internal
                 Headers.Add(HttpHeaderNames.Connection, "keep-alive");
                 if (ProtocolVersion >= HttpVersion.Version11)
                 {
-                    Headers.Add(HttpHeaderNames.KeepAlive, $"timeout=15,max={100 - reuses}");
+                    Headers.Add(HttpHeaderNames.KeepAlive, "timeout=15");
                 }
             }
             else

@@ -216,6 +216,51 @@ status=0
   > "$results/control-datapath.log" 2>&1 || status=$?
 printf '%s\n' "$status" > "$results/control-datapath.exit"
 
+# Run the raw runtime rebind test and EmbedIO's own HTTP/3 restart tests unchanged
+# against each native variant. Each raw case binds, disposes and rebinds one
+# loopback endpoint 32 times; one EmbedIO test stops and restarts its listener on
+# one endpoint 64 times, the other serves a request between 32 restarts. The test
+# process verifies which MsQuic image it loaded.
+rebind_repetitions=20
+rebind_columns='iteration\texit\tresults\tpassed\tfailed\tmatching\toutcome\n'
+# Prints the exit code, results, passed, failed and failures matching the defect:
+# the raw rebind test stopping at bind with AddressAlreadyInUse. Returns 0 for a
+# pass, 1 when every failure matches the defect, and 2 for anything else,
+# including any EmbedIO restart failure, a missing report or an unverified image.
+run_rebind_test() {
+  local variant="$1" directory="$2" library_dir="$RUNNER_TEMP/msquic-$1-build/bin"
+  local status=0 trx counts total passed failed matching
+  mkdir -p "$directory" || return 2
+  env DYLD_FALLBACK_LIBRARY_PATH="$library_dir" EMBEDIO_REQUIRE_QUIC=1 \
+    EMBEDIO_EXPECT_QUIC_LIBRARY_ROOT="$library_dir" \
+    EMBEDIO_EXPECT_QUIC_LIBRARY_SHA256="$(awk '{ print $1 }' "$results/$variant-library.sha256")" \
+    EMBEDIO_QUIC_LIBRARY_EVIDENCE="$directory/loaded-library.json" \
+    dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
+    --filter 'FullyQualifiedName~QuicRuntimeRebindTest|FullyQualifiedName~Http3ListenerTest.StoppedListenerRebindsItsEndpointImmediately|FullyQualifiedName~Http3ListenerTest.ServedListenerRebindsItsEndpointImmediately' \
+    --minimum-expected-tests 4 \
+    --timeout 2m --report-trx --results-directory "$directory" > "$directory/console.log" 2>&1 || status=$?
+  trx="$(find "$directory" -name '*.trx' -type f)"
+  test -n "$trx" && test "$(printf '%s\n' "$trx" | wc -l | tr -d ' ')" = 1 || return 2
+  counts="$(pwsh -NoProfile -File "$repo/test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1" "$trx")" || return 2
+  read -r total passed failed matching <<< "$counts"
+  printf '%s\t%s\t%s\t%s\t%s' "$status" "$total" "$passed" "$failed" "$matching"
+  test "$total" = 4 && test $((passed + failed)) = 4 || return 2
+  jq -e '.verified == true' "$directory/loaded-library.json" > /dev/null || return 2
+  if test "$status" = 0 && test "$failed" = 0; then return 0; fi
+  if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$matching"; then return 1; fi
+  return 2
+}
+# Control failures are data only when they match the defect under investigation.
+control_unexpected=0
+printf '%b' "$rebind_columns" > "$results/control-rebind-test.tsv"
+for iteration in $(seq 1 "$rebind_repetitions"); do
+  outcome=0
+  row="$(run_rebind_test control "$results/control-rebind-test-$iteration")" || outcome=$?
+  printf '%s\t%s\t%s\n' "$iteration" "$row" "$outcome" | tee -a "$results/control-rebind-test.tsv"
+  if test "$outcome" -gt 1; then control_unexpected=1; fi
+done
+printf '%s\n' "$control_unexpected" > "$results/control-rebind-test.exit"
+
 git -C "$source_dir" apply --check "$patch_file"
 git -C "$source_dir" apply "$patch_file"
 git -C "$source_dir" diff --check
@@ -278,13 +323,16 @@ for traced in untraced traced; do
 done
 export DYLD_FALLBACK_LIBRARY_PATH="$RUNNER_TEMP/msquic-candidate-build/bin"
 export EMBEDIO_REQUIRE_QUIC=1
-for iteration in 1 2 3 4 5; do
-  dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-    --filter 'FullyQualifiedName~QuicRuntimeRebindTest' --minimum-expected-tests 2 \
-    --timeout 2m --report-trx --results-directory "$results/connected-$iteration" || candidate_failed=1
+# The candidate must pass every repetition the control ran.
+printf '%b' "$rebind_columns" > "$results/candidate-rebind-test.tsv"
+for iteration in $(seq 1 "$rebind_repetitions"); do
+  outcome=0
+  row="$(run_rebind_test candidate "$results/connected-$iteration")" || outcome=$?
+  printf '%s\t%s\t%s\n' "$iteration" "$row" "$outcome" | tee -a "$results/candidate-rebind-test.tsv"
+  if test "$outcome" -ne 0; then candidate_failed=1; fi
 done
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-  --minimum-expected-tests 4425 --timeout "$full_suite_timeout" --report-trx --coverlet \
+  --minimum-expected-tests 4448 --timeout "$full_suite_timeout" --report-trx --coverlet \
   --results-directory "$results/full-suite" || candidate_failed=1
 if test "$self_contained" = 1 && test "$tls_backend" = openssl; then
   # Exercise actual managed protocol/application behavior on the tests-disabled library.
@@ -293,7 +341,7 @@ if test "$self_contained" = 1 && test "$tls_backend" = openssl; then
     EMBEDIO_EXPECT_QUIC_LIBRARY_SHA256="$(jq -r .sha256 "$stage/build-receipt.json")" \
     EMBEDIO_QUIC_LIBRARY_EVIDENCE="$results/production-loaded-library.json" \
     dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-    --minimum-expected-tests 4425 --timeout "$full_suite_timeout" --report-trx --coverlet \
+    --minimum-expected-tests 4448 --timeout "$full_suite_timeout" --report-trx --coverlet \
     --results-directory "$results/production-full-suite" || candidate_failed=1
   jq -e '.verified and (.sha256 | length == 64)' "$results/production-loaded-library.json" > /dev/null || candidate_failed=1
 fi
@@ -312,4 +360,4 @@ env DYLD_FALLBACK_LIBRARY_PATH="$asan_bin" DYLD_PRINT_LIBRARIES=1 \
 printf '%s\n' "$asan_status" > "$results/candidate-asan.exit"
 if test "$asan_status" -ne 0; then candidate_failed=1; fi
 printf '%s\n' "$candidate_failed" > "$results/candidate.exit"
-exit "$candidate_failed"
+exit $((candidate_failed | control_unexpected))

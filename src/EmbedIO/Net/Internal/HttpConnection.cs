@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using EmbedIO.Net.Internal.Http2;
 using System.IO;
 using System.Net;
 using System.Net.Security;
@@ -10,6 +9,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Net.Internal.Http2;
 
 namespace EmbedIO.Net.Internal
 {
@@ -284,7 +284,8 @@ namespace EmbedIO.Net.Internal
                 if (_sock != null && _resourcesDisposed == 0 && _forceClosing == 0 && !_draining)
                 {
                     var pending = _iStream != null ? _iStream.BufferedRemainder : _pendingInput;
-                    Reuses++;
+                    // Keep the initial-request marker distinct even on long-lived connections.
+                    if (Reuses < int.MaxValue) Reuses++;
                     Unbind();
                     InitWithPendingInput(pending);
                     restart = true;

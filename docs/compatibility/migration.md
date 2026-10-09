@@ -1049,6 +1049,19 @@ callbacks still run, and a malformed request cannot dispose the listener shared
 by other clients. These changes apply to invalid/incomplete requests under the
 approved strict-framing policy; custom application error handlers remain available.
 
+### Managed HTTP/1 keep-alive request cap removed
+
+The modern managed engine no longer closes an otherwise reusable connection after
+100 requests. William approved this client-visible default change for the engine
+performance work. Long-lived clients may now reuse the same TCP/TLS connection
+beyond that limit. The managed Keep-Alive header retains timeout=15 and no longer
+advertises a max request count.
+
+The 15-second keep-alive idle timeout, explicit Connection: close, response policies
+that require closure, cancellation, stop and graceful drain remain in effect.
+Applications and tests that used the old request count as an implicit connection
+rotation mechanism should request closure explicitly. The Microsoft backend is
+unchanged. This change is unreleased and is part of the HTTP-engine candidate.
 ### Bodyless managed responses and HTTP/2 graceful drain
 
 The managed HTTP/1 response stream now discards body writes for informational,
@@ -1071,6 +1084,7 @@ Accepted responses finish instead of being canceled by a spurious idle-stream
 protocol error. Invalid even client stream IDs still produce a connection error.
 See [HTTP/2 section 6.8](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.8).
 These corrections are unreleased HTTP-engine work.
+
 ## HTTP/1.0 response delimitation (unreleased)
 
 The managed listener closes an HTTP/1.0 response with an unknown-length body,
