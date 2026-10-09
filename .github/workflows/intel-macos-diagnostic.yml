@@ -1,0 +1,206 @@
+name: Intel macOS diagnostic (temporary)
+
+# Temporary measurement workflow for the Intel macOS validation branch only.
+# It is removed before the branch is offered for review.
+on:
+  push:
+    branches: [codex/pr182-intel-macos]
+
+permissions:
+  contents: read
+
+env:
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  DisableImplicitNuGetFallbackFolder: true
+
+jobs:
+  resolver:
+    name: Resolver and deadline evidence (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Record host identity and system resolver latency
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=TestResults/resolver
+          mkdir -p "$out"
+          {
+            uname -a; sw_vers; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
+            printf 'hostname=%s\n' "$(hostname)"
+            for key in HostName LocalHostName ComputerName; do printf '%s=%s\n' "$key" "$(scutil --get "$key" 2>&1 || true)"; done
+            echo '--- /etc/hosts'; cat /etc/hosts
+            echo '--- scutil --dns'; scutil --dns
+          } > "$out/host.txt" 2>&1
+          for name in "$(hostname)" localhost; do
+            for attempt in 1 2 3; do
+              start=$(python3 -c 'import time; print(time.monotonic())')
+              dscacheutil -q host -a name "$name" > "$out/dscacheutil-$attempt.txt" 2>&1 || true
+              python3 -c 'import sys, time; print("dscacheutil %s attempt %s: %.3f s" % (sys.argv[1], sys.argv[2], time.monotonic() - float(sys.argv[3])))' "$name" "$attempt" "$start" | tee -a "$out/system-resolver.txt"
+            done
+          done
+          python3 - "$out/python-resolver.txt" <<'PY'
+          import socket, sys, time
+          with open(sys.argv[1], "w") as log:
+              for attempt in range(3):
+                  for name in (socket.gethostname(), "localhost"):
+                      start = time.monotonic()
+                      try:
+                          result = socket.getaddrinfo(name, None)
+                          outcome = sorted({item[4][0] for item in result})
+                      except OSError as error:
+                          outcome = repr(error)
+                      line = f"getaddrinfo({name!r}) attempt {attempt + 1}: {time.monotonic() - start:.3f} s {outcome}"
+                      print(line)
+                      log.write(line + "\n")
+          PY
+      - name: Time the .NET calls made while registering HttpListener prefixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Run the file-based probe outside the repository's build configuration.
+          probe="$RUNNER_TEMP/resolver-probe"
+          mkdir -p "$probe"
+          cp test/IntelMacDiagnostic/ResolverProbe.cs "$probe/"
+          (cd "$probe" && dotnet run ResolverProbe.cs "$GITHUB_WORKSPACE/TestResults/resolver/probe.json")
+      - name: Restore and build the tests
+        run: |
+          dotnet restore EmbedIO.sln --locked-mode
+          dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore
+      - name: Observe the test host after a deliberate execution deadline
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$GITHUB_WORKSPACE/TestResults/deadline"
+          mkdir -p "$out"
+          ( while true; do date -u +%FT%TZ; ps -axo pid,ppid,etime,stat,pcpu,rss,command | grep -E 'EmbedIO\.Tests|dotnet' | grep -v grep || true; sleep 5; done ) > "$out/ps.log" 2>&1 &
+          monitor=$!
+          started=$(date +%s)
+          test/EmbedIO.Tests/bin/Release/net10.0/EmbedIO.Tests --timeout 90s --report-trx --coverlet \
+            --results-directory "$out/results" --diagnostic --diagnostic-verbosity Trace \
+            --diagnostic-output-directory "$out/diagnostic" > "$out/console.log" 2>&1 &
+          app=$!
+          sampled_a=0
+          sampled_b=0
+          status=running
+          while true; do
+            if ! kill -0 "$app" 2> /dev/null; then
+              set +e; wait "$app"; status=$?; set -e
+              break
+            fi
+            elapsed=$(( $(date +%s) - started ))
+            if [ "$elapsed" -ge 130 ] && [ "$sampled_a" = 0 ]; then
+              sampled_a=1
+              for pid in $(pgrep -f 'EmbedIO\.Tests' || true); do sample "$pid" 5 -file "$out/sample-a-$pid.txt" > /dev/null 2>&1 || true; done
+            fi
+            if [ "$elapsed" -ge 300 ] && [ "$sampled_b" = 0 ]; then
+              sampled_b=1
+              for pid in $(pgrep -f 'EmbedIO\.Tests' || true); do sample "$pid" 5 -file "$out/sample-b-$pid.txt" > /dev/null 2>&1 || true; done
+            fi
+            if [ "$elapsed" -ge 1200 ]; then
+              status=still-running-after-1200s
+              pkill -9 -f 'EmbedIO\.Tests' || true
+              break
+            fi
+            sleep 2
+          done
+          kill "$monitor" || true
+          printf 'exit=%s elapsed=%s\n' "$status" "$(( $(date +%s) - started ))" | tee "$out/summary.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: intel-diagnostic-resolver-${{ matrix.os }}
+          path: TestResults/
+          if-no-files-found: error
+
+  intel-suite:
+    name: Intel regression job measurement
+    runs-on: macos-15-intel
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Build pinned Intel macOS QUIC prerequisite
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_INSTALL_CLEANUP: '1'
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          revision=819ab74f851ee168504cbc392ec32e7bed1d82e9
+          quictls=ff36838bb69801cad56823159a036977bcbe5c75
+          source_dir="$RUNNER_TEMP/msquic-2.6.2-source"
+          build_dir="$RUNNER_TEMP/msquic-2.6.2-build"
+          quic_lib="$RUNNER_TEMP/embedio-msquic/libmsquic/2.6.2/lib"
+          brew install cmake openssl@3
+          git init --quiet "$source_dir"
+          git -C "$source_dir" remote add origin https://github.com/microsoft/msquic.git
+          git -C "$source_dir" fetch --depth 1 origin "$revision"
+          git -C "$source_dir" checkout --quiet --detach FETCH_HEAD
+          test "$(git -C "$source_dir" rev-parse HEAD)" = "$revision"
+          test "$(git -C "$source_dir" rev-parse HEAD:submodules/quictls)" = "$quictls"
+          git -C "$source_dir" submodule update --init --depth 1 submodules/quictls
+          test "$(git -C "$source_dir/submodules/quictls" rev-parse HEAD)" = "$quictls"
+          cmake -S "$source_dir" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${quic_lib%/lib}" -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3)" \
+            -DQUIC_USE_SYSTEM_LIBCRYPTO=true -DQUIC_BUILD_PERF=OFF -DQUIC_BUILD_TOOLS=OFF \
+            -DFETCHCONTENT_FULLY_DISCONNECTED=ON -DFETCHCONTENT_TRY_FIND_PACKAGE_MODE=ALWAYS
+          cmake --build "$build_dir" --parallel "$(sysctl -n hw.ncpu)"
+          cmake --install "$build_dir"
+          mkdir -p TestResults
+          install_name_tool -id "$quic_lib/libmsquic.2.dylib" "$quic_lib/libmsquic.2.6.2.dylib"
+          codesign --force --sign - "$quic_lib/libmsquic.2.6.2.dylib"
+          test "$(lipo -archs "$quic_lib/libmsquic.2.6.2.dylib")" = x86_64
+          { printf 'msquic %s quictls %s\n' "$revision" "$quictls"; brew list --versions cmake openssl@3; } > TestResults/quic-native-macos.log
+          otool -L "$quic_lib/libmsquic.2.6.2.dylib" | tee -a TestResults/quic-native-macos.log
+          shasum -a 256 "$quic_lib/libmsquic.2.6.2.dylib" >> TestResults/quic-native-macos.log
+          ls -la "$quic_lib" >> TestResults/quic-native-macos.log
+          printf 'DYLD_FALLBACK_LIBRARY_PATH=%s\n' "$quic_lib" >> "$GITHUB_ENV"
+      - name: Restore from the lock files
+        run: dotnet restore EmbedIO.sln --locked-mode
+      - name: Build the tests
+        run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=true
+      - name: Run the regression suite with coverage
+        env:
+          EMBEDIO_REQUIRE_QUIC: '1'
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 40m --minimum-expected-tests 4288 --coverlet
+      - name: Verify ZIP concurrency with a constrained worker pool
+        if: always()
+        env:
+          DOTNET_PROCESSOR_COUNT: 2
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --filter FullyQualifiedName~Issue491_ZipConcurrency --report-trx --results-directory TestResults/zip-constrained --timeout 10m --minimum-expected-tests 27
+      - name: Stress immediate client resets on macOS
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for iteration in 1 2 3 4 5; do
+            dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
+              --filter 'FullyQualifiedName~Issue38_MacAcceptReset|FullyQualifiedName~IncompleteAndDisconnectedClientsDoNotStopHealthyRequests' \
+              --report-trx --results-directory "TestResults/mac-reset-$iteration" \
+              --timeout 10m --minimum-expected-tests 17
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: intel-diagnostic-suite
+          path: TestResults/
+          if-no-files-found: error
