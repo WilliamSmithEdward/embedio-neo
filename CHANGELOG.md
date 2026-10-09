@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Reject malformed managed HTTP/1 request-target forms before URI reconstruction,
+  including query-only and leading-@ targets. Valid origin paths, absolute HTTP(S)
+  URLs and OPTIONS asterisk-form remain supported; see the migration notes.
+
 - Reject new HTTP/2 requests that reuse a completed stream identifier or try to
   open a skipped lower identifier, while retaining minimal closed-stream
   processing and the advertised modern priority policy.

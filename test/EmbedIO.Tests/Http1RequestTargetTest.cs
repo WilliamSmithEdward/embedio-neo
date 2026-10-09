@@ -11,6 +11,16 @@ namespace EmbedIO.Tests
 {
     public class Http1RequestTargetTest
     {
+        [TestCase("GET", "@127.0.0.1/path", false)]
+        [TestCase("GET", "@example.invalid/path", false)]
+        [TestCase("GET", "path", false)]
+        [TestCase("GET", "path/next", false)]
+        [TestCase("GET", "?query=1", false)]
+        [TestCase("GET", "127.0.0.1:80", false)]
+        [TestCase("GET", "http:/127.0.0.1/path", false)]
+        [TestCase("GET", "https:127.0.0.1/path", false)]
+        [TestCase("GET", "/@127.0.0.1/path", true)]
+        [TestCase("GET", "/?query=1", true)]
         [TestCase("OPTIONS", "*", true)]
         [TestCase("GET", "*", false)]
         [TestCase("OPTIONS", "*?x=1", false)]

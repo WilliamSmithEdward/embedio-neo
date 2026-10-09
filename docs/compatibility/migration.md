@@ -810,6 +810,15 @@ unchanged. This does not add CONNECT tunneling or accept authority-form targets.
 
 ## HTTP/1 request-target syntax (unreleased)
 
+Request targets without a leading slash or a valid absolute HTTP(S) URI are
+rejected with 400 before URI reconstruction. This includes query-only targets
+such as `?query=1` and targets beginning with `@`, which previously could reach
+URI normalization and either be dispatched or close without an HTTP error.
+Send `/?query=1` or a valid absolute HTTP(S) URL instead. `@` remains valid within
+an origin-form path or query, and OPTIONS retains asterisk-form support.
+This correction does not add CONNECT authority-form or tunnel support; that
+remains a separate engine implementation requirement.
+
 The managed listener accepts `OPTIONS *` for a root listener and retains `*` in
 `Request.RawTarget`; `Request.Url` uses the local root URI for dispatch. An OPTIONS
 handler can distinguish this server-wide request from `OPTIONS /` using RawTarget.

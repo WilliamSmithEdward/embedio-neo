@@ -6228,3 +6228,31 @@ listener startup before issuing traffic; all twelve standard cases and eight
 modern bodyless cases pass afterward. An initial helper-namespace build error
 was corrected and retained in the build logs. No port retry or assertion
 weakening was introduced.
+### HTTP/1 request-target form validation correction
+
+Ten additional raw-wire cases cover missing origin-path slashes, query-only
+requests, authority-shaped non-CONNECT targets, malformed absolute URLs, and
+valid leading-slash paths containing `@` or queries. On unchanged production at
+c25fd05, three of the 66 target cases failed: two leading-@ targets closed without
+400, and a query-only target received 200. The other 63 cases passed. The first
+attempt used an unsupported wildcard filter and executed zero tests; that log
+is retained and is not counted as validation.
+
+The listener now verifies a leading slash, OPTIONS asterisk handling, or a parsed
+absolute HTTP(S) URL with an explicit scheme separator before reconstructing the
+application URL. The existing host precedence, escaping, userinfo checks and raw
+target preservation remain covered. All 88 focused target, URL and CONNECT
+rejection cases pass. This does not implement CONNECT authority-form or tunneling;
+those remain requirements for completion of the engine. Discovery floors are
+4,387. Full regression and exact-head checks remain required.
+
+Evidence: ignored TestResults/request-target-before-corrected.log and its TRX,
+request-target-after.log and its TRX. An analyzer build attempted during the full
+suite hit the CLI plugin file held by that suite; it must be rerun after the test
+process finishes. It is not counted as a passing analyzer gate.
+Final local validation: full Windows reports 4,387 cases, 4,382 passed, five
+expected local skips and zero failures. The subsequent analyzer build passes
+both targets with zero warnings/errors; suppression checks, analyzer guard and
+changed-source formatting pass. Hot-path, cold-start, listener-queue and wire
+allocation gates pass. The earlier locked-file analyzer failure is preserved.
+Cross-platform and final-head GitHub checks are still required.
