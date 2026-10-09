@@ -20,6 +20,15 @@ object Completed(long stream, Array fields)
     var wire = (byte[]?)encode.Invoke(null, new object[] { fields, 65536, 65536 }) ?? throw new Exception("Missing encoded output");
     return new { stream, fields = Headers(fields), wire = Convert.ToHexString(wire) };
 }
+var encoderFeedbackType = assembly.GetType("EmbedIO.Net.Internal.Http3.QpackEncoderFeedback", true) ?? throw new Exception("Missing encoder feedback");
+var encoderFeedback = Activator.CreateInstance(encoderFeedbackType, hidden, null, new object[] { 16, 64 }, null) ?? throw new Exception("Missing feedback instance");
+var encoderTableType = assembly.GetType("EmbedIO.Net.Internal.Http3.QpackEncoderTable", true) ?? throw new Exception("Missing encoder table");
+var encoderTable = Activator.CreateInstance(encoderTableType, hidden, null, new object[] { int.Parse(args[1]), encoderFeedback }, null) ?? throw new Exception("Missing encoder table instance");
+object? EncoderCall(object target, string method, params object[] values)
+{
+    try { return (target.GetType().GetMethod(method, hidden) ?? throw new Exception(method)).Invoke(target, values); }
+    catch (TargetInvocationException ex) { ExceptionDispatchInfo.Capture(ex.InnerException ?? ex).Throw(); throw; }
+}
 string? line;
 while ((line = Console.ReadLine()) != null)
 {
@@ -28,6 +37,7 @@ while ((line = Console.ReadLine()) != null)
     var operation = root.GetProperty("op").GetString();
     var ready = new List<object>();
     var blocked = false;
+    object? insertion = null;
     if (operation == "submit")
     {
         var stream = root.GetProperty("stream").GetInt64();
@@ -43,7 +53,32 @@ while ((line = Console.ReadLine()) != null)
             ready.Add(Completed((long)(Property(completion, "StreamId") ?? throw new Exception("Missing stream ID")), (Array)(Property(completion, "Fields") ?? throw new Exception("Missing fields"))));
     }
     else if (operation == "cancel") Invoke("Cancel", root.GetProperty("stream").GetInt64());
+    else if (operation == "insert")
+    {
+        var name = root.GetProperty("name").GetString() ?? throw new Exception("Missing name");
+        var value = root.GetProperty("value").GetString() ?? throw new Exception("Missing value");
+        var field = Activator.CreateInstance(assembly.GetType("EmbedIO.Net.Internal.Http2.HpackField", true) ?? throw new Exception("Missing field"),
+            hidden, null, new object[] { name, value, false }, null) ?? throw new Exception("Missing field instance");
+        var added = EncoderCall(encoderTable, "TryInsert", field, 65536);
+        if (added != null)
+        {
+            var index = (long)(Property(added, "Index") ?? throw new Exception("Missing index"));
+            var stream = root.GetProperty("stream").GetInt64();
+            if (!Convert.ToBoolean(EncoderCall(encoderFeedback, "TryRegisterSection", stream, new[] { index }))) throw new Exception("Reference admission failed");
+            using var section = new MemoryStream();
+            var write = assembly.GetType("EmbedIO.Net.Internal.Http3.QpackInteger", true)?.GetMethod("Write", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new Exception("Missing integer writer");
+            write.Invoke(null, new object[] { section, (index + 1) % (2L * (int.Parse(args[1]) / 32)) + 1, 8, (byte)0 });
+            section.WriteByte(0); section.WriteByte(128);
+            insertion = new { index, instructions = Convert.ToHexString((byte[])(Property(added, "Instructions") ?? throw new Exception("Missing instructions"))), wire = Convert.ToHexString(section.ToArray()) };
+        }
+    }
+    else if (operation == "encoder-feedback")
+    {
+        var bytes = Convert.FromHexString(root.GetProperty("wire").GetString() ?? "");
+        EncoderCall(encoderFeedback, "Feed", bytes, 0, bytes.Length);
+    }
     else throw new Exception("Unknown operation");
     var feedback = (byte[]?)Invoke("DrainFeedback") ?? throw new Exception("Missing feedback");
-    Console.WriteLine(JsonSerializer.Serialize(new { ready, blocked, feedback = Convert.ToHexString(feedback) }));
+    Console.WriteLine(JsonSerializer.Serialize(new { ready, blocked, feedback = Convert.ToHexString(feedback), insertion }));
 }

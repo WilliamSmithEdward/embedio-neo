@@ -3257,3 +3257,51 @@ budgets, and the compatibility audit (207 cases / 414 comparisons / zero errors)
 Both library targets build without warnings; formatting, suppression/analyzer
 guards and the pinned YARA scan of the new state pass. This is not evidence of
 old-runtime execution or completed dynamic compression. Exact-head CI still applies.
+
+
+### QPACK encoder table and insertion instructions
+
+QpackEncoderTable now prepares dynamic insertions with absolute indices, exact
+lookup, bounded storage and FIFO eviction. An entry is eligible for eviction only
+when its index is below the encoder feedback's known-received count and it has no
+outstanding section references. Admission first checks every eviction needed for
+space; encountering a pinned entry leaves the whole table untouched. The encoder
+owner must serialize table operations and section registration under one gate;
+concurrent feedback only advances acknowledgment or releases references.
+
+Insertion encodes the initial capacity update and the new field before committing
+ownership. Static-name references and Huffman literals reuse the existing codec.
+Instruction budget rejection does not evict, initialize capacity or consume an
+absolute index; size checks precede payload-buffer growth. Sensitive names and
+explicit never-indexed fields are refused, exact duplicates reuse lookup, and
+entry accounting includes the required 32-byte overhead. Seventeen new cases
+cover round trips, byte budgets, invalid octets, exact capacity, duplicates,
+reference/acknowledgment protection and all-or-nothing eviction.
+
+The independent QPACK tool now passes these generated instructions, fragmented
+byte by byte, to pinned pylsqpack 0.3.24. It also sends a one-reference dynamic
+field section and feeds the peer's fragmented acknowledgment through our encoder
+feedback state. Both assets pass 100 insertions at capacities 220 and 4096,
+including repeated eviction and required-count wrapping, while capacity zero
+refuses insertion. Existing independent decode/cancel/stateless-response checks
+remain intact. Reports now include dynamic_insertions and exact assembly hashes.
+This test-only field-section construction does not mean live response integration
+is complete: the encoder-stream writer, response section planner and connection
+serialization remain outstanding, and live responses still use stateless QPACK.
+
+All 140 focused QPACK cases pass on Windows, isolated Linux, and the actual
+netstandard2.0 assembly hosted on .NET 10. Both targets and the independent tool
+build without warnings; suppression/analyzer and formatting guards pass. The
+ordinary discovery floor rises to 3,340. Evidence is retained under
+TestResults/http-engine/qpack-table-* and TestResults/qpack-interop. The independent
+checks do not establish old-runtime execution, complete encoder conformance or
+an end-to-end performance gain.
+
+
+The final Windows coverage run for the encoder-table increment passed all 3,340
+reported cases: 3,335 successes and five existing skips, in 2m 26s. The preceding
+feedback head c21cc5f had 32 successful and two intentionally skipped checks when
+inspected; its passing macOS run does not erase the independently reproduced
+raw-runtime rebind failure on 23eddfc. Required checks must run again on the table
+increment. The production project has no Python dependency; the Python codec
+comparison remains isolated in the non-packable test tooling.

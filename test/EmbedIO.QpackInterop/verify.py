@@ -112,6 +112,27 @@ def run(capacity, assembly):
             assert delivered + cancelled == 400
             if capacity:
                 assert blocked > 0 and feedback_batches > 0
+            dynamic_insertions = 0
+            dynamic_peer = pylsqpack.Decoder(capacity, 16)
+            for index in range(100):
+                name = "x-insert-" + str(index % 5)
+                value = "value-" + str(index)
+                stream = index * 4
+                reply = command(op="insert", name=name, value=value, stream=stream)
+                inserted = reply["insertion"]
+                if not capacity:
+                    assert inserted is None
+                    continue
+                assert inserted is not None and inserted["index"] == index
+                dynamic_insertions += 1
+                instructions = bytes.fromhex(inserted["instructions"])
+                for octet in instructions:
+                    assert not dynamic_peer.feed_encoder(bytes([octet]))
+                acknowledgment, fields = dynamic_peer.feed_header(stream, bytes.fromhex(inserted["wire"]))
+                assert fields == [(name.encode(), value.encode())]
+                assert acknowledgment
+                for octet in acknowledgment:
+                    command(op="encoder-feedback", wire=bytes([octet]).hex())
             process.stdin.close()
             process.wait(timeout=10)
             assert process.returncode == 0, log_path
@@ -125,6 +146,7 @@ def run(capacity, assembly):
             process.stdout.close()
         result = {
             "capacity": capacity,
+            "dynamic_insertions": dynamic_insertions,
             "bidirectional_sections": delivered,
             "blocked": blocked,
             "canceled": cancelled,

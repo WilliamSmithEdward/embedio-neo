@@ -62,7 +62,24 @@ namespace EmbedIO.Net.Internal.Http3
             }
             return output.ToArray();
         }
-        private static bool Sensitive(string name) => name.Equals("authorization", StringComparison.OrdinalIgnoreCase)
+        internal static bool TryWriteInsert(MemoryStream output, HpackField field, int maximum)
+        {
+            var value = new StringEncoding(field.Value);
+            if (Names.TryGetValue(field.Name, out var name))
+            {
+                if (IntegerLength(name, 6) + value.Size(7) > maximum - output.Length) return false;
+                QpackInteger.Write(output, name, 6, 192);
+            }
+            else
+            {
+                var literal = new StringEncoding(field.Name);
+                if (literal.Size(5) + value.Size(7) > maximum - output.Length) return false;
+                literal.Write(output, 5, 32, 64);
+            }
+            value.Write(output, 7, 128, 0);
+            return true;
+        }
+        internal static bool Sensitive(string name) => name.Equals("authorization", StringComparison.OrdinalIgnoreCase)
             || name.Equals("proxy-authorization", StringComparison.OrdinalIgnoreCase)
             || name.Equals("cookie", StringComparison.OrdinalIgnoreCase)
             || name.Equals("set-cookie", StringComparison.OrdinalIgnoreCase);
