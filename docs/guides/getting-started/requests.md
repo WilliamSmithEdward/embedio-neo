@@ -315,3 +315,48 @@ having a timestamp does not establish this. An unequal or unavailable validator
 causes the range to be ignored. Existing `IsRangeRequest` behavior is unchanged.
 Windows native HTTP.sys can reject oversized Range numerals with 400 before the
 application handler; the managed transports exercise the extended numeral path.
+
+## Stream a selected representation with multiple ranges
+
+The unreleased `Context.SendRepresentationAsync(content, contentType, entityTag,
+lastModified, leaveOpen: false, lastModifiedIsStrong: false, maximumRanges: 16)`
+helper streams an already selected readable, seekable representation. Call it
+before committing response headers, after authorization and content negotiation.
+The source represents the entire result from byte zero; its initial position is
+ignored when content is sent. QUERY validators must identify the selected query
+results, including relevant request content and negotiated representation metadata.
+
+The helper evaluates preconditions first, advertises byte-range support, and
+selects GET/QUERY ranges using strong If-Range validation. Multiple disjoint
+satisfiable ranges produce 206 `multipart/byteranges`, with per-part Content-Type
+and Content-Range and an exact total Content-Length. Overlapping/adjacent ranges
+are combined while retaining the first requested position. A single remaining
+range uses an ordinary 206 response. Unsatisfiable members are omitted when other
+members are satisfiable; all unsatisfiable members raise 416 with the total length.
+Invalid ranges, unknown units, empty representations or more than `maximumRanges`
+received specifications cause Range to be ignored and the full representation to
+be sent. The configurable budget is 1–128; unsatisfiable specifications count.
+
+HEAD sends full-representation metadata without reading the source. Matching
+preconditions return 304 or 412 without source reads or seeking. The optional 304
+Content-Length is omitted for native-listener compatibility; ETag/Last-Modified
+remain available. A 412 or 416 does not retain Content-Encoding from the selected
+source, since any error content represents a different response.
+
+The source closes on completion, cancellation or failure unless `leaveOpen` is
+true. Invalid basic arguments do not transfer ownership. Do not modify/share the
+source concurrently. Writes await transport backpressure, use the request's
+cancellation token and copy through a bounded pooled 64 KiB buffer. Premature
+source EOF fails the transfer instead of silently completing a truncated response.
+The helper does not close the response stream or buffer the whole representation.
+
+For an already encoded representation, set its Content-Encoding beforehand.
+Ranges address encoded bytes; this helper applies no compression. A range-aware
+consumer must reassemble those bytes before decoding the selected representation.
+The wire tests disable automatic decompression so it cannot try to decode isolated
+encoded fragments. Use validators and other metadata for those same encoded bytes;
+content digests must describe the actual transmitted content when used. Full cache
+integration, automatic compression and FileModule adoption are separate work.
+
+See [RFC 9110 multiple parts](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.7.2)
+and [encoded representation metadata](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4).

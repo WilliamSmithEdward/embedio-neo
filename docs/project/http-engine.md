@@ -5241,3 +5241,47 @@ Evidence is under ignored `TestResults/http-engine/reset-lifetime-*`.
 The full Windows coverage run passed: 4,229 total, 4,224 successes, five expected
 skips and zero failures. Both library targets built without warnings or errors;
 source suppression/parser guards and changed-source whitespace verification passed.
+
+### Bounded multipart representation streaming
+
+The additive `SendRepresentationAsync` helper selects GET/exact-QUERY ranges after
+preconditions and streams readable/seekable source content. It combines adjacent
+or overlapping intervals, keeps first-request order, omits unsatisfiable members
+when others succeed, and frames multiple remaining ranges as multipart/byteranges.
+Declared response length includes every boundary, part header and separator.
+A received-specification budget (default 16, maximum 128) bounds parser/coalescing
+work; excess or malformed/unknown ranges falls back to the full representation.
+No existing FileModule/range helper or automatic-compression behavior changes.
+
+Twenty-five component cases cover framing/order/coalescing, mixed satisfiability,
+range budgets, precondition precedence, HEAD/no reads/no seeks, source ownership,
+blocked-output backpressure, request cancellation and premature source EOF.
+Eight live cases cover managed/native HTTP/1.1, HTTP/2 and HTTP/3, identity/gzip
+encoded bytes, multipart length, matching preconditions and healthy successor
+requests. The selected Windows run passed all 33 with zero skips. The pinned
+Semgrep source scan parsed all four added files fully: 29 rules, zero findings;
+source parser/suppression and whitespace guards pass.
+
+A positive optional Content-Length on native Windows 304 responses caused resets
+and listener disposal in these live fixtures; omitting that field avoids the
+failure and is permitted by HTTP semantics. The original failing run is retained
+in `multipart-wire-2` through `multipart-wire-4`; the corrected run is
+`multipart-wire-5`. Metadata for 412/416 no longer retains selected-source
+Content-Encoding when the error response uses different content. Encoded-range
+clients reassemble selected representation bytes before decoding; the fixtures
+disable automatic decompression to inspect the raw encoded byte ranges.
+
+The first local Linux attempt ran while Windows coverage temporarily instrumented
+the shared binaries. Its 33 assertions passed, but the coverage tracker failed
+on a Windows mutex path during Linux process exit (134). This attempt is invalid
+validation, retained as `multipart-linux`; clean binaries require a separate
+post-coverage run. No test or process-exit failure is accepted as success.
+
+Final increment validation: Windows coverage passed 4,262 total / 4,257 successes /
+five expected skips / zero failures. The clean post-coverage Linux run passed all
+33 cases, required QUIC, zero skips and process exit zero. The actual netstandard2.0
+asset passed 31 cases on the Windows .NET 10 host, with two expected HTTP/3 skips;
+this does not prove compatibility on older runtime versions. Both targets built
+without warnings/errors and all four existing allocation-budget groups passed.
+The discovery floor is now 4,262. Broad range/cache/coding integration, native
+QUIC packaging and the full engine completion program remain outstanding.
