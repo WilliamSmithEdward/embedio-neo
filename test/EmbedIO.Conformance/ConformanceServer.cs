@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -41,11 +41,11 @@ internal sealed class ConformanceServer : IDisposable
 
     internal WebServer Add(string prefix, HttpListenerMode mode, bool tls)
     {
-        if (tls && Certificate == null) Certificate = HttpsSmoke.CreateCertificate();
+        var certificate = tls ? Certificate ??= HttpsSmoke.CreateCertificate() : null;
         var server = new WebServer(options =>
         {
             options.WithUrlPrefix(prefix).WithMode(mode);
-            if (tls) options.WithCertificate(Certificate!);
+            if (certificate != null) options.WithCertificate(certificate);
         });
         Configure(server);
         _servers.Add(server);

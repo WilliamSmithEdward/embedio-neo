@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -65,8 +65,13 @@ switch (mode)
                 Console.Out.Flush();
             }
             stop.Cancel();
-            try { await Task.WhenAll(running); }
-            catch (OperationCanceledException) { }
+            // An endpoint whose listener stopped early is evidence, not a host failure.
+            for (var i = 0; i < running.Count; i++)
+            {
+                try { await running[i]; }
+                catch (OperationCanceledException) { }
+                catch (System.Net.HttpListenerException error) { Console.WriteLine($"ENDPOINT-STOPPED {endpoints[i].Name}: {error.Message}"); }
+            }
             Console.WriteLine("STATS " + ConformanceServer.Snapshot());
             return 0;
         }

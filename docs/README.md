@@ -134,6 +134,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Modern HTTP engine program](project/http-engine.md): protocol roadmap, compatibility changes and performance acceptance.
 
+- [HTTP conformance audit](project/http-conformance.md): October 2026 standards baseline, black-box conformance and stateful campaigns, and prioritized findings.
+
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
 
 ## Compatibility
