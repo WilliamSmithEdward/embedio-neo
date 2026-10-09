@@ -4305,3 +4305,25 @@ Evidence is retained in `quic-cleanup-experiment-artifact9`, its job log and
 `quic-cleanup-ordering9.json`. Source configuration, compiler commands, native
 imports, loader logs, XML and all repetition output are included. The native
 candidate remains test-only and is not shipped.
+
+### Zero-config test contract correction
+
+The next experiment applies `msquic-zero-config-test.patch` identically before
+building either control or candidate. It replaces the upstream test's assumption
+that ordinary UDP requires a nonzero optional-feature mask with an actual socket
+binding, canonical IPv4 endpoint and nonzero assigned port check. The separate
+zero-config datagram fixture continues to verify exact receive contents and
+cleanup. Both behaviors have already been verified with an empty feature mask.
+No production capability bit, test skip or scanner suppression is introduced.
+
+The corrected original test also owns worker/datapath/socket cleanup through a
+local scope guard, including assertion failures. Its patch and applied diff are
+retained and compared exactly. Earlier assertion failures remain in their
+original artifacts. Native compilation and execution of this corrected test
+remain pending. The genuine control failures for delayed endpoint release and
+unsupported XDP configuration remain before/after regressions.
+
+The sanitizer subset now includes the corrected zero-config test for 100
+repetitions and records its actual process exit separately as
+`candidate-asan.exit`. A nonzero value remains a final experiment failure.
+This closes a recording gap; prior logs do not supply that separate exit value.

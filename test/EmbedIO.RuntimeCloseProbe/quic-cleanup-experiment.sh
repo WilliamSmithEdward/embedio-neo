@@ -32,6 +32,16 @@ shasum -a 256 "$patch_file" > "$results/patch.sha256"
 config_patch="$repo/test/EmbedIO.RuntimeCloseProbe/msquic-kqueue-config.patch"
 cp "$config_patch" "$results/config-candidate.patch"
 shasum -a 256 "$config_patch" > "$results/config-patch.sha256"
+# Correct the optional-feature heuristic identically in both variants. The
+# separately verified datagram fixture continues to check actual receive data.
+zero_test_patch="$repo/test/EmbedIO.RuntimeCloseProbe/msquic-zero-config-test.patch"
+cp "$zero_test_patch" "$results/zero-config-test.patch"
+shasum -a 256 "$zero_test_patch" > "$results/zero-config-test.sha256"
+git -C "$source_dir" apply --check "$zero_test_patch"
+git -C "$source_dir" apply "$zero_test_patch"
+git -C "$source_dir" diff --check
+git -C "$source_dir" diff -- src/platform/unittest/DataPathTest.cpp > "$results/applied-zero-config-test.patch"
+cmp "$zero_test_patch" "$results/applied-zero-config-test.patch"
 # Compile the same deterministic lifetime fixture into both variants.
 fixture="$repo/test/EmbedIO.RuntimeCloseProbe/kqueue-lifetime-test.inc"
 cp "$fixture" "$results/kqueue-lifetime-test.inc"
@@ -132,7 +142,7 @@ git -C "$source_dir" diff --check
 git -C "$source_dir" diff -- src/platform/datapath_kqueue.c > "$results/applied.patch"
 cmp "$patch_file" "$results/applied.patch"
 # Separate correction for explicitly requested, unsupported raw/XDP map mode.
-# The control and every original native assertion remain unchanged.
+# Production control source remains unchanged; both variants use the same tests.
 git -C "$source_dir" apply --check "$config_patch"
 git -C "$source_dir" apply "$config_patch"
 git -C "$source_dir" apply --reverse --check "$config_patch"
@@ -163,15 +173,18 @@ dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-bu
   --minimum-expected-tests 3423 --timeout 5m --report-trx --coverlet \
   --results-directory "$results/full-suite" || candidate_failed=1
 # Additional memory-lifetime validation with upstream's sanitizer build.
-# The ordinary native suite and its real failures above remain unchanged.
+# The ordinary native suite above retains every genuine failure in final status.
 build_native candidate-asan ON
 asan_bin="$RUNNER_TEMP/msquic-candidate-asan-build/bin"
 otool -L "$asan_bin/msquicplatformtest" > "$results/candidate-asan-test-imports.txt"
+asan_status=0
 env DYLD_FALLBACK_LIBRARY_PATH="$asan_bin" DYLD_PRINT_LIBRARIES=1 \
   "$asan_bin/msquicplatformtest" --timeout 120000 \
-    --gtest_filter='*EmbedIOKqueue*:*UdpData*:*XdpMapMode_InitFailsWithoutRawDatapath' --gtest_repeat=100 \
+    --gtest_filter='*EmbedIOKqueue*:*UdpData*:*XdpMapMode_InitFailsWithoutRawDatapath:*XdpMapMode_ZeroConfigUsesNormalPath' --gtest_repeat=100 \
     --gtest_shuffle --gtest_random_seed=40591 \
     --gtest_output="xml:$results/candidate-asan-lifetime.xml" \
-    > "$results/candidate-asan-lifetime.log" 2> "$results/candidate-asan-loader.log" || candidate_failed=1
+    > "$results/candidate-asan-lifetime.log" 2> "$results/candidate-asan-loader.log" || asan_status=$?
+printf '%s\n' "$asan_status" > "$results/candidate-asan.exit"
+if test "$asan_status" -ne 0; then candidate_failed=1; fi
 printf '%s\n' "$candidate_failed" > "$results/candidate.exit"
 exit "$candidate_failed"
