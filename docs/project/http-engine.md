@@ -4045,7 +4045,7 @@ deletion. After deletion it explicitly requires the replacement socket to
 receive that same slot, then checks its endpoint after worker-pool rundown.
 A descriptor-allocation mismatch fails the test; reuse is no longer inferred
 from successful rebinding. This uses ordinary socket APIs in the isolated
-native test process. Validation of the strengthened fixture remains pending.
+native test process. Its first verified result is recorded below.
 
 The optional cleanup experiment also prepares a separate AddressSanitizer build
 using the pinned upstream `QUIC_ENABLE_ASAN` option. It repeats the deterministic
@@ -4057,3 +4057,37 @@ Upstream sanitizer mode changes allocation instrumentation, including disabling
 its normal pool allocator, so this supplements the ordinary build and cannot
 establish production performance or replace its lifecycle checks. Instrumented
 build and execution results remain pending.
+
+### Explicit descriptor reuse validation
+
+[Run 37886035017](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37886035017),
+job `113676146594`, tested head
+`51655b1377c4ffeba4de2b781ce2c433847cae8e`. The strengthened deterministic
+fixture passes on the candidate: the replacement obtains the verified idle
+socket descriptor, binds its former endpoint immediately, and remains bound
+through worker-pool rundown. The unchanged control fails the descriptor check
+(idle descriptor 10, replacement 12), immediate binding and final endpoint
+check. This closes the earlier fixture's explicit descriptor-reuse evidence gap;
+it does not prove all concurrent lifetime behavior.
+
+All ten candidate probes pass 4,096 cycles each (40,960 total). Independent
+inspection of the five native traces verifies 20,480 complete cycles with native
+close completion before the managed disposed marker, with no incomplete events,
+dropped events or untracked descriptors. All three control traces contain late
+native closes and fail immediate rebinding. All five repetitions of the two
+managed rebind cases pass. Full macOS coverage reports 3,400 cases: 3,369 passed,
+31 skipped, zero failed.
+
+The candidate library hash is unchanged from the two preceding controlled runs.
+The strengthened fixture SHA-256 is
+`1f71e152f4b5a9979a16af6c5d2a7b0fd4c4de06ea942359ef5670c292eb363e`.
+Evidence is retained in `TestResults/http-engine/quic-cleanup-experiment-artifact4`,
+`quic-cleanup-experiment-job4.log` and `quic-cleanup-ordering4.json`.
+Across these three runs, the candidate passes 122,880 rebind cycles, including
+61,440 traced cycles with the required close ordering. These are repeated
+observations of the same native candidate, not independent implementations.
+
+The native suite still reports the same two XDP-related failures in both
+variants, plus the lifetime regression failure in the control. The job remains
+failed. No native dependency has been shipped, no assertions were suppressed,
+and sanitizer validation on head `5025bb8` remains pending.
