@@ -5285,3 +5285,82 @@ this does not prove compatibility on older runtime versions. Both targets built
 without warnings/errors and all four existing allocation-budget groups passed.
 The discovery floor is now 4,262. Broad range/cache/coding integration, native
 QUIC packaging and the full engine completion program remain outstanding.
+
+### Owned modern TCP accept loop and admission staging
+
+The .NET 10 endpoint now uses a new owned `TcpAcceptLoop` over the platform's
+ValueTask accept API. It retains Windows preallocated accept sockets independently
+of runtime completion state, rearms before delivering the previous socket, cleans
+up failed/stopped admission, retries transient socket errors with bounded backoff
+and yields after 64 inline completions. Accepted sockets transfer only after the
+synchronous admission callback returns. A tracked worker task makes shutdown
+completion observable. The existing macOS IPv6 blocking-accept workaround and
+.NET Standard event-based compatibility path remain in place; this does not
+complete endpoint/connection replacement or the default/deprecation requirement.
+
+Connection initialization is queued separately with execution context preserved,
+after registration transfers ownership to the connection registry. This prevents
+TLS authentication's work before its first await from serializing the accept
+actor. Queueing failure disposes the registered connection. The modern initial
+header/TLS deadline starts at construction, before queued initialization, while
+reused-request deadlines retain their existing behavior and timeout values.
+An internal constructor accepts a shorter initial timeout for transport-policy
+validation; the retained two-argument constructor keeps the 90-second default.
+
+Nine new cases cover queued and late sockets, failed admission/healthy successors,
+pending accept cancellation, connect/stop races and plain/TLS queued initialization
+that expires without any read being started. Zero-peer shutdown executes through
+the first pending await before stopping, so it actually exercises an armed accept.
+The worker-lifetime fixture now requires a modern actor or the macOS IPv6 worker,
+and awaits whichever exists; its four previous failures were obsolete platform
+expectations, preserved under `tcp-actor-full`. No shutdown assertion was removed.
+The final focused set passes 101 cases on Windows and pinned Linux; the actual
+netstandard2.0 asset passes 92 with nine expected modern-path skips on a .NET 10
+Windows host. Older runtime compatibility is not inferred from that host.
+
+Performance work rejected the first candidate's substantial concurrent TLS
+slowdown. Rearming alone did not fix it; separating connection initialization
+recovered that throughput. All preliminary logs are retained. The final comparison
+uses the identical harness SHA-256
+`5577de0c33d7d9ea52144b36c9182bc34121c7bde19dcfd3e570d8ac6fe27279`
+with frozen `42b1af7` baseline core
+`330136ebfb15ac10f827b69a6f06d4ed1df183a96108fed91be84d8db524bff2`
+and candidate core
+`9ee47aba00f3e1e03c49fd615570ba69c0b399ae887910c7dfdebf59b1345d5c`.
+The Windows .NET 10.0.12 loopback client/server share one process, use 16 workers,
+1 KiB responses, close each connection, and run three alternating pairs with six
+rounds of 32 requests per worker (18 samples per variant/protocol, zero errors).
+
+| Workload | Baseline mean requests/s | Candidate mean requests/s | Baseline/candidate mean p99 ms | Baseline/candidate median p99 ms | Baseline/candidate process bytes/request |
+| --- | ---: | ---: | --- | --- | --- |
+| HTTP churn | 14,710 | 14,618 | 1.76 / 1.75 | 1.52 / 1.55 | 37,604 / 37,635 |
+| TLS churn | 3,977 | 3,904 | 7.17 / 8.42 | 5.89 / 5.90 | 43,263 / 43,123 |
+
+These are limited local comparisons, not an extreme-performance or tail-parity
+claim. TLS mean p99 remains higher and needs broader, longer isolated workloads.
+Earlier candidate tail spikes coincided with Gen-0 collections absent from that
+short baseline sample; that correlation does not prove the complete cause.
+The final identical harness binary was copied into the ignored baseline build;
+only its core remained frozen, and source/archive/hashes/raw samples are retained
+under `TestResults/http-engine/tcp-actor-*`. Allocation measurements include both
+client and server, and must not be presented as server-only allocation results.
+
+[Multipart-head CI 37927174272](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37927174272)
+passed the desktop suites but failed Windows HTTP upload verification with a
+20-second client timeout (64 KiB fully consumed upload, four workers, connection
+churn). It did not fail an allocation ceiling. Six local verification runs each
+against the baseline and staged candidate passed, including retained stream/timer
+cleanup. No original CI cause or repair is claimed from those local passes.
+The failed job log is retained as `multipart-ci-windows-budget.log`.
+
+The final changed-source Semgrep scan parsed all five relevant files completely
+with 29 rules and zero findings; pinned YARA-X/Forge reported no matches. Source
+suppression/parser guards pass. No scanner acceptance or check weakening was added.
+
+Final changed-source validation passed: 4,271 Windows coverage cases, 4,266
+successes, five expected skips and zero failures. Both retained library targets
+build without warnings/errors. All four allocation-budget groups and final
+GET/64-KiB-full/partial/unread HTTP verification workloads passed, including
+retained stream/timer cleanup. The discovery floor is now 4,271. The broader
+owned endpoint/connection transition, conformance/fuzz coverage and comparative
+extreme-performance work remain incomplete.

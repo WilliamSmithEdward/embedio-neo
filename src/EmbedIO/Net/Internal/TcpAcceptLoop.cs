@@ -1,0 +1,93 @@
+﻿#if NET10_0_OR_GREATER
+using System;
+using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
+using EmbedIO.Internal;
+
+namespace EmbedIO.Net.Internal
+{
+    // The endpoint owns the listening socket. This loop owns each pending/accepted
+    // socket until its synchronous admission callback returns successfully.
+    internal sealed class TcpAcceptLoop
+    {
+        private readonly BorrowedResource<Socket> _listener;
+        private readonly Action<Socket> _admit;
+        private readonly Func<bool> _stopped;
+        private const int InlineBudget = 64;
+        internal TcpAcceptLoop(Socket listener, Action<Socket> admit, Func<bool> stopped)
+        {
+            _listener = new BorrowedResource<Socket>(listener ?? throw new ArgumentNullException(nameof(listener)));
+            _admit = admit ?? throw new ArgumentNullException(nameof(admit));
+            _stopped = stopped ?? throw new ArgumentNullException(nameof(stopped));
+        }
+        internal async Task RunAsync()
+        {
+            var inline = 0;
+            var reportedError = false;
+            Socket? ready = null;
+            try
+            {
+                while (!_stopped())
+                {
+                    Socket? pending = null;
+                    try
+                    {
+                        var listener = _listener.Value;
+                        // Independently retain the Windows AcceptEx handle even when
+                        // the runtime clears its completion state after failure.
+                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                            pending = new Socket(listener.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                        var operation = listener.AcceptAsync(pending, CancellationToken.None);
+                        if (!operation.IsCompleted) inline = 0;
+                        // Rearm before admission starts request parsing or a TLS handshake.
+                        // The next socket remains owned until its accept is awaited.
+                        AdmitReady(ref ready, ref reportedError);
+                        ready = await operation.ConfigureAwait(false);
+                        if (!ReferenceEquals(pending, ready)) pending?.Dispose();
+                        pending = null;
+                        if (++inline == InlineBudget)
+                        {
+                            inline = 0;
+                            // The endpoint starts this actor on TaskScheduler.Default.
+                            // A full backlog must not monopolize one completion worker.
+                            await Task.Yield();
+                        }
+                    }
+                    catch (ObjectDisposedException) { return; }
+                    catch (SocketException)
+                    {
+                        AdmitReady(ref ready, ref reportedError);
+                        if (_stopped()) return;
+                        await Task.Delay(100).ConfigureAwait(false);
+                    }
+                    finally { pending?.Dispose(); }
+                }
+            }
+            finally { ready?.Dispose(); }
+        }
+        private void AdmitReady(ref Socket? ready, ref bool reportedError)
+        {
+            var accepted = ready; ready = null;
+            if (accepted == null) return;
+            try
+            {
+                if (_stopped()) return;
+                _admit(accepted);
+                accepted = null;
+            }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+            {
+                if (!reportedError)
+                {
+                    "TCP connection admission failed; the accepted socket was released.".Warn();
+                    reportedError = true;
+                }
+            }
+            finally { accepted?.Dispose(); }
+        }
+    }
+}
+#endif

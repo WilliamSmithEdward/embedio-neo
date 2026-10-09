@@ -61,9 +61,18 @@ namespace EmbedIO.Net.Internal
             }
             else
             {
+#if NET10_0_OR_GREATER
+                var acceptLoop = new TcpAcceptLoop(_sock, ProcessAcceptedSocket, () => AdmissionStopped);
+                _acceptWorker = Task.Run(acceptLoop.RunAsync);
+                _ = _acceptWorker.ContinueWith(static completed =>
+                {
+                    if (completed.Exception != null) "TCP accept worker failed.".Warn();
+                }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+#else
                 var args = new AcceptEventArgs { UserToken = this };
                 args.Completed += OnAccept;
                 Accept(_sock, args);
+#endif
             }
         }
 
@@ -354,7 +363,20 @@ namespace EmbedIO.Net.Internal
             }
 
             if (registered)
+            {
+#if NET10_0_OR_GREATER
+                // TLS authentication can perform CPU work before its first await.
+                // Preserve execution context, but keep that work off the accept actor.
+                try
+                {
+                    if (!ThreadPool.QueueUserWorkItem(static connection => { _ = connection.BeginReadRequest(); }, conn, false))
+                        conn.Dispose();
+                }
+                catch { conn.Dispose(); throw; }
+#else
                 _ = conn.BeginReadRequest();
+#endif
+            }
             else
                 conn.Dispose();
         }

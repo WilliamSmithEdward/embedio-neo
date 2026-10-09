@@ -82,7 +82,8 @@ namespace EmbedIO.Tests.Issues
             var ports = (IDictionary)((endpoints)[ipv6 ? IPAddress.IPv6Loopback : IPAddress.Loopback] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var endpoint = (ports)[new Uri(url).Port];
             var worker = (Task?)((endpoint ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetField("_acceptWorker", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(endpoint);
-            Assert.That(worker != null, Is.EqualTo(ipv6 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)));
+            var ownedLoop = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop") != null;
+            Assert.That(worker != null, Is.EqualTo(ownedLoop || ipv6 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)));
             if (dispose)
                 listener.Dispose();
             else
