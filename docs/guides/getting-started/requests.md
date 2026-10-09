@@ -158,5 +158,34 @@ set `HttpContext.Response.StatusCode = 201` before returning its representation.
 For a missing item, throw `HttpException.NotFound()`. For a response with no body,
 set status 204 and use a method that returns `void` or `Task`.
 
+## Limit compressed request bodies
+
+The modern-engine development branch adds a decoded-byte limit to the existing
+opt-in request decompression setting. Configure it while creating the server:
+
+```csharp
+using var server = new WebServer(options => options
+    .WithUrlPrefix("http://localhost:9696/")
+    .WithMode(HttpListenerMode.EmbedIO)
+    .WithSupportCompressedRequests(true)
+    .WithMaximumDecompressedRequestBodyBytes(1_048_576));
+```
+
+The request-stream helpers, including JSON/form/body readers, raise HTTP 413
+when decoded content exceeds one MiB. The limit counts bytes, including all
+bytes of UTF-8 characters; an exactly sized body is accepted after checking EOF.
+Zero accepts only an empty decoded body. Null preserves the existing unlimited
+behavior, and negative values are rejected during configuration. Request
+compression remains disabled unless explicitly enabled.
+
+The .NET 10 asset handles gzip, deflate and Brotli. The .NET Standard 2.0 asset
+handles gzip/deflate and rejects Brotli explicitly. This setting applies when a
+helper decodes a recognized compressed coding. Uncompressed/identity bodies and
+direct reads of `Request.InputStream` need separate policies. For streaming
+processing, read through EOF before treating the whole request as accepted;
+data read before a later limit error may already have reached application code.
+The limit does not bound native codec memory or replace transport/slow-peer
+limits. These APIs are unreleased development work.
+
 Next: [Serve HTML and files](files.md) alongside this API, or
 [await an outbound HTTP request](../async-outbound-requests.md).

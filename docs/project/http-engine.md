@@ -4392,3 +4392,36 @@ Both record base source `1a14dec`; the latter includes the then-uncommitted
 ReadByte override. Evidence, per-process metadata, fixture hashes, GC counts
 and summaries are retained under `TestResults/http-engine/brotli-read-*`.
 The discovery floor is deliberately raised to 3,425.
+
+### Configurable decoded request-body budget
+
+`WebServerOptionsBase.MaximumDecompressedRequestBodyBytes` and its fluent
+extension configure a limit on bytes read through recognized compressed request
+helpers. Null preserves existing unlimited behavior; zero accepts only an empty
+decoded body, and negative values are rejected. The configured wrapper probes
+EOF at an exact boundary and raises HTTP 413 for excess decoded content. It
+applies to gzip/deflate on both assets and Brotli on .NET 10. Public context
+interfaces and uncompressed/direct raw-input behavior are unchanged.
+
+A lazily allocated weak context association supplies the immutable policy
+without adding required public interface members, per-context fields or strong
+context retention. Unconfigured default processing does not allocate that table.
+The limit stream owns its source, rejects overlapping reads and retains a
+limit-exceeded state. It handles byte, array, span and async read variants.
+
+All 71 focused cases pass, including 38 new limit cases, exact/under/over limits,
+UTF-8 byte accounting, valid empty compressed content, 128 KiB highly compressed
+content, option validation/locking, sticky failure and server health afterward.
+A temporary integration bypass fails nine over-limit HTTP cases; the restored
+candidate passes them. Windows full coverage passes 3,463 cases: 3,458 passed,
+five skipped, zero failed. All 71 focused cases pass on pinned Linux .NET 10.
+The actual netstandard2.0 assembly passes 59 public request/limit cases on a
+Windows .NET 10 host; this does not prove older-runtime execution. Both assets
+build and the four allocation gates, source/format guards and scoped YARA pass.
+Evidence is retained under `TestResults/http-engine/decompression-limit-*`.
+The discovery minimum is raised to 3,463. The existing request guide documents
+configuration, target capability, streaming acceptance and scope.
+
+This budget covers bytes delivered through helper decoding. Native codec window
+memory, wire-body limits, aggregate admission and slow-peer policies remain
+separate requirements; this increment does not close the resource-control gate.

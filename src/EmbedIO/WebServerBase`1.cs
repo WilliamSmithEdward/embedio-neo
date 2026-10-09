@@ -253,6 +253,7 @@ namespace EmbedIO
         {
             if (context is null) throw new System.NullReferenceException();
             context.SupportCompressedRequests = Options.SupportCompressedRequests;
+            RequestDecompressionPolicy.Associate(context, Options.DecompressionPolicy);
             context.MimeTypeProviders.Push(this);
 
             try

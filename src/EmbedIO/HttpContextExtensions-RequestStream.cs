@@ -30,12 +30,12 @@ namespace EmbedIO
             if (@this.SupportCompressedRequests)
             {
                 if (encoding.Equals(CompressionMethodNames.Gzip, System.StringComparison.OrdinalIgnoreCase))
-                    return new GZipStream(stream, CompressionMode.Decompress);
+                    return RequestDecompressionPolicy.Apply(@this, new GZipStream(stream, CompressionMode.Decompress));
                 if (encoding.Equals(CompressionMethodNames.Deflate, System.StringComparison.OrdinalIgnoreCase))
-                    return new DeflateStream(stream, CompressionMode.Decompress);
+                    return RequestDecompressionPolicy.Apply(@this, new DeflateStream(stream, CompressionMode.Decompress));
 #if NET10_0_OR_GREATER
                 if (encoding.Equals(CompressionMethodNames.Brotli, System.StringComparison.OrdinalIgnoreCase))
-                    return new BrotliRequestStream(stream);
+                    return RequestDecompressionPolicy.Apply(@this, new BrotliRequestStream(stream));
 #endif
             }
 

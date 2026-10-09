@@ -8,6 +8,24 @@ namespace EmbedIO
     public static class WebServerOptionsBaseExtensions
     {
         /// <summary>
+        /// Sets the decoded byte limit for compressed request-stream helpers.
+        /// </summary>
+        /// <typeparam name="TOptions">The options type.</typeparam>
+        /// <param name="this">The options instance.</param>
+        /// <param name="value">The maximum decoded bytes, or null for existing unlimited behavior.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The limit is negative.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static TOptions WithMaximumDecompressedRequestBodyBytes<TOptions>(this TOptions @this, long? value)
+            where TOptions : WebServerOptionsBase
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.MaximumDecompressedRequestBodyBytes = value;
+            return @this;
+        }
+
+        /// <summary>
         /// Adds a URL prefix.
         /// </summary>
         /// <typeparam name="TOptions">The type of the object on which this method is called.</typeparam>
