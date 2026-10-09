@@ -4940,3 +4940,51 @@ also adds managed checksum cost. These are exploratory component observations,
 not end-to-end server measurements or a performance acceptance claim. Optimize
 Huffman decoding/tree storage and checksum throughput, then repeat controlled
 comparisons and final validation before the engine can meet its performance goal.
+
+### DEFLATE validation hot-path optimization
+
+The bounded bit reservoir now fills up to 64 bits at once, batches literal counts
+and returns unused prefetched bytes at the exact final-block boundary. Buffered
+stored-block bytes are consumed before direct input batches. Huffman decoding
+uses compact prefix lookups with the checked tree fallback for longer codes;
+dynamic tables cap their lookup width at six bits, while the shared fixed literal
+tree uses nine. Dynamic tree construction references the already parsed length
+slices instead of allocating copies. The .NET 10 asset uses stack scratch for
+canonical counts/codes; the legacy asset retains supported array scratch. No
+framing, reserved-symbol, repeat, window, checksum or completion check is removed.
+
+Six added cases exercise every input split of stored/fixed candidate
+streams, appended bytes, exact consumed counts and repeated post-completion feeds.
+All 416 selected cases pass on Windows, pinned Linux and the actual netstandard2.0
+asset hosted by .NET 10; full changed-source coverage remains pending here.
+
+Frozen strict-decoder builds are compared with identical runner bytes (SHA-256
+69d1592e685c7c2af187d418649932cccddeeb6641a64f449c94a97a1a76f69d), alternating
+before/after order across three process pairs, five rounds of 1,000 operations,
+100 warmups, tiering disabled and the same 64 KiB payloads/8 KiB output buffer.
+The baseline core hash is 5fbfa531adac48dbdba8c61dc4920ed2293ee06fa56a305e9117f684e055be36;
+the candidate is e084c0e71ab1e37fb790d2d7bf6fdd4b11ea499cb58e4d7878c2e24683c27cec.
+Initially rebuilt runners had different hashes; the retained final pairs use the
+same runner DLL for both variants. All preliminary data is retained separately.
+
+Windows raw low-entropy median is 452 us to 250 us (4,936 to 4,456 allocated
+bytes); Linux is 481 us to 270 us with the same allocation change. Raw random/
+stored timing is essentially unchanged (Windows 3.07 to 3.09 us, Linux 3.28 to
+3.24 us). Raw repeated timing is also essentially unchanged, while allocation
+falls from 3,656 to 2,616 bytes. Zlib low-entropy improves from 475 to 270 us on
+Windows and 495 to 295 us on Linux. Windows other zlib samples are essentially
+unchanged; Linux random and repeated zlib samples regress from 22.6 to 28.4 us
+and 26.9 to 32.7 us respectively. That counterevidence is retained as unresolved;
+no universal speedup or final codec-performance acceptance is claimed. Checksums,
+remaining parser cost and Linux repeatability require further investigation.
+These are strict-component comparisons, not end-to-end engine benchmarks.
+Artifacts are under ignored TestResults/http-engine/deflate-performance-before,
+deflate-performance-after, deflate-performance-shared-summary.json and
+deflate-fast-linux-performance.
+
+Final changed-source Windows coverage passes 3,879 cases: 3,874 passed, five
+skipped and zero failed in 2m30s. Both assets build without warnings. All four
+existing allocation-budget groups, source/parser guards, changed-file whitespace,
+shell syntax and pinned YARA scans pass. The discovery floor increases by the
+six boundary cases. The retained Linux zlib timing regressions and remaining
+runtime-only gap remain performance work; these passing gates do not close them.

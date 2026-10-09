@@ -24,6 +24,7 @@ namespace EmbedIO.Internal
         private Phase _phase;
         private ulong _bits;
         private int _bitCount;
+        private int _trailingBytes;
         private bool _final;
         private bool _failed;
         private int _remaining;
@@ -48,6 +49,7 @@ namespace EmbedIO.Internal
             if (data is null) throw new ArgumentNullException(nameof(data));
             if (offset < 0 || count < 0 || offset > data.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
             if (_failed) throw new InvalidDataException("DEFLATE framing validation has failed.");
+            _trailingBytes = 0;
             var end = offset + count;
             var start = offset;
             try
@@ -66,13 +68,17 @@ namespace EmbedIO.Internal
                     }
                     else
                     {
-                        _bits |= (ulong)data[offset++] << _bitCount;
-                        _bitCount += 8;
+                        var take = Math.Min((64 - _bitCount) / 8, end - offset);
+                        while (take-- != 0)
+                        {
+                            _bits |= (ulong)data[offset++] << _bitCount;
+                            _bitCount += 8;
+                        }
                     }
                 }
             }
             catch (InvalidDataException) { _failed = true; throw; }
-            return offset - start;
+            return offset - start - _trailingBytes;
         }
 
         internal void Complete()
@@ -98,7 +104,7 @@ namespace EmbedIO.Internal
         private void EndBlock()
         {
             _phase = _final ? Phase.Done : Phase.Header;
-            if (_final) { _bits = 0; _bitCount = 0; }
+            if (_final) { _trailingBytes = _bitCount / 8; _bits = 0; _bitCount = 0; }
         }
 
         private bool Advance()
@@ -129,7 +135,15 @@ namespace EmbedIO.Internal
                     _phase = Phase.StoredData;
                     if (_remaining == 0) EndBlock();
                     return true;
-                case Phase.StoredData: return false;
+                case Phase.StoredData:
+                    var buffered = Math.Min(_remaining, _bitCount / 8);
+                    if (buffered == 0) return false;
+                    _bits = buffered == 8 ? 0 : _bits >> (buffered * 8);
+                    _bitCount -= buffered * 8;
+                    _remaining -= buffered;
+                    AddOutput(buffered);
+                    if (_remaining == 0) EndBlock();
+                    return true;
                 case Phase.DynamicHeader:
                     if (!ReadBits(14, out value)) return false;
                     _literalCount = 257 + (value & 31);
@@ -180,16 +194,22 @@ namespace EmbedIO.Internal
                     return true;
                 case Phase.Symbol:
                     var literals = _literals ?? throw new InvalidOperationException("Missing literal tree.");
-                    if (!literals.Read(ref _bits, ref _bitCount, out value)) return false;
-                    if (value < 256) AddOutput(1);
-                    else if (value == 256) EndBlock();
-                    else
+                    var literalBytes = 0;
+                    while (literals.Read(ref _bits, ref _bitCount, out value))
                     {
-                        if (value > 285) throw new InvalidDataException("Reserved DEFLATE length symbol.");
-                        _lengthIndex = value - 257;
-                        _phase = Phase.Length;
+                        if (value < 256) { literalBytes++; continue; }
+                        AddOutput(literalBytes);
+                        if (value == 256) EndBlock();
+                        else
+                        {
+                            if (value > 285) throw new InvalidDataException("Reserved DEFLATE length symbol.");
+                            _lengthIndex = value - 257;
+                            _phase = Phase.Length;
+                        }
+                        return true;
                     }
-                    return true;
+                    AddOutput(literalBytes);
+                    return false;
                 case Phase.Length:
                     if (!ReadBits(LengthBits[_lengthIndex], out value)) return false;
                     _length = LengthBase[_lengthIndex] + value;
@@ -218,12 +238,8 @@ namespace EmbedIO.Internal
             var lengths = _treeLengths ?? throw new InvalidOperationException("Missing tree lengths.");
             if (_index != lengths.Length) return;
             if (lengths[256] == 0) throw new InvalidDataException("DEFLATE literal tree lacks end-of-block.");
-            var literalLengths = new int[_literalCount];
-            var distanceLengths = new int[_distanceCount];
-            Array.Copy(lengths, literalLengths, literalLengths.Length);
-            Array.Copy(lengths, _literalCount, distanceLengths, 0, distanceLengths.Length);
-            _literals = new Huffman(literalLengths, false, false);
-            _distances = new Huffman(distanceLengths, true, false);
+            _literals = new Huffman(lengths, false, false, 0, _literalCount);
+            _distances = new Huffman(lengths, true, false, _literalCount, _distanceCount);
             _phase = Phase.Symbol;
         }
 
@@ -237,7 +253,7 @@ namespace EmbedIO.Internal
         {
             var lengths = new int[288];
             for (var i = 0; i < lengths.Length; i++) lengths[i] = i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8;
-            return new Huffman(lengths, false, false);
+            return new Huffman(lengths, false, false, lookupWidth: 9);
         }
 
         private sealed class Huffman
@@ -245,13 +261,22 @@ namespace EmbedIO.Internal
             private readonly int[] _left;
             private readonly int[] _right;
             private readonly int[] _symbols;
-            internal Huffman(int[] lengths, bool allowEmpty, bool requireComplete)
+            private readonly int[] _lookup;
+            private readonly int _lookupMask;
+            internal Huffman(int[] lengths, bool allowEmpty, bool requireComplete, int offset = 0, int count = -1, int lookupWidth = 6)
             {
+                if (count < 0) count = lengths.Length;
+#if NET10_0_OR_GREATER
+                Span<int> counts = stackalloc int[16];
+                counts.Clear();
+#else
                 var counts = new int[16];
+#endif
                 var nonzero = 0;
                 var maximum = 0;
-                foreach (var length in lengths)
+                for (var index = offset; index < offset + count; index++)
                 {
+                    var length = lengths[index];
                     if (length == 0) continue;
                     counts[length]++;
                     nonzero++;
@@ -270,15 +295,30 @@ namespace EmbedIO.Internal
                 _left = new int[capacity];
                 _right = new int[capacity];
                 _symbols = Filled(capacity, -1);
+                var lookupBits = Math.Min(lookupWidth, maximum);
+                _lookup = new int[1 << lookupBits];
+                _lookupMask = _lookup.Length - 1;
+#if NET10_0_OR_GREATER
+                Span<int> next = stackalloc int[16];
+                next.Clear();
+#else
                 var next = new int[16];
+#endif
                 var code = 0;
                 for (var length = 1; length <= 15; length++) next[length] = code = (code + counts[length - 1]) << 1;
                 var nodes = 1;
-                for (var symbol = 0; symbol < lengths.Length; symbol++)
+                for (var symbol = 0; symbol < count; symbol++)
                 {
-                    var length = lengths[symbol];
+                    var length = lengths[offset + symbol];
                     if (length == 0) continue;
                     code = next[length]++;
+                    if (length <= lookupBits)
+                    {
+                        var reversed = 0;
+                        for (var bit = 0; bit < length; bit++) reversed = (reversed << 1) | ((code >> bit) & 1);
+                        for (var slot = reversed; slot < _lookup.Length; slot += 1 << length)
+                            _lookup[slot] = (length << 16) | symbol;
+                    }
                     var node = 0;
                     for (var bit = length - 1; bit >= 0; bit--)
                     {
@@ -291,6 +331,15 @@ namespace EmbedIO.Internal
             }
             internal bool Read(ref ulong bits, ref int count, out int symbol)
             {
+                var entry = _lookup[(int)bits & _lookupMask];
+                var length = entry >> 16;
+                if (length != 0 && length <= count)
+                {
+                    bits >>= length;
+                    count -= length;
+                    symbol = entry & 65535;
+                    return true;
+                }
                 var node = 0;
                 for (var used = 0; used < count; used++)
                 {

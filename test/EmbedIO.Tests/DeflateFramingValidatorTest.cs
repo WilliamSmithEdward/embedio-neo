@@ -111,6 +111,31 @@ namespace EmbedIO.Tests
                 return _bytes.ToArray();
             }
         }
+        [TestCase(CompressionLevel.NoCompression, false)]
+        [TestCase(CompressionLevel.NoCompression, true)]
+        [TestCase(CompressionLevel.Fastest, false)]
+        [TestCase(CompressionLevel.Fastest, true)]
+        [TestCase(CompressionLevel.SmallestSize, false)]
+        [TestCase(CompressionLevel.SmallestSize, true)]
+        public void EveryInputSplitReturnsPrefetchedTrailingBytes(CompressionLevel level, bool repeated)
+        {
+            var body = new byte[257];
+            if (repeated) Array.Fill(body, (byte)0x41);
+            else new Random(20261009).NextBytes(body);
+            var raw = Encode(body, level);
+            var wire = new byte[raw.Length + 32];
+            raw.CopyTo(wire, 0);
+            Array.Fill(wire, (byte)0x42, raw.Length, 32);
+            for (var split = 0; split <= raw.Length; split++)
+            {
+                var validator = new Validator();
+                Assert.That(validator.Feed(wire, 0, split), Is.EqualTo(split));
+                Assert.That(validator.Feed(wire, split, wire.Length - split), Is.EqualTo(raw.Length - split));
+                validator.Complete();
+                Assert.That(validator.Output, Is.EqualTo((ulong)body.Length));
+                Assert.That(validator.Feed(wire, raw.Length, 32), Is.Zero);
+            }
+        }
         public static IEnumerable InvalidCases()
         {
             yield return new object[] { "reserved-block", new byte[] { 7 } };
