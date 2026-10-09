@@ -178,6 +178,8 @@ jobs:
         include:
           - os: macos-15
             rid: osx-arm64
+          - os: macos-15-intel
+            rid: osx-x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env:

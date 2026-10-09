@@ -5744,23 +5744,3 @@ scan fully parses both verifier files (79 rules, zero findings, no diagnostics).
 Shell syntax and suppression/diff guards pass. Evidence is under ignored
 TestResults/http-engine/native-complete-contract-*. Native execution results and
 final exact-head checks remain required; no release or deployment is claimed.
-
-### macOS native support scope
-
-William approved excluding Intel macOS from the new native QUIC support scope.
-The optional native candidate CI now targets Apple Silicon only. No Intel
-candidate has shipped, and this scope decision does not change the public APIs,
-.NET target frameworks or existing portable managed library assets. The fixture
-can still identify an Intel architecture for retained diagnostic evidence; that
-is not a support commitment.
-
-Run [37945962762](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37945962762)
-validated the candidate's Intel native datapath suite, ten rebind probes, five
-connected QUIC repeats, relocated/package consumers and 100 sanitizer repeats.
-The unchanged control reproduced both expected native defects. The two full
-coverage runs stopped below the mandatory 4,288-test floor: 2,192 and 2,188
-results, with no completed assertion failures. Their last completed tests were
-near the five-minute execution deadline; cleanup extended the process lifetime.
-The Intel run remains failed, its logs and artifacts are retained, and Intel
-macOS is not supported by the new native package. Apple Silicon still requires
-all final exact-source gates before adoption; no native release is claimed.
