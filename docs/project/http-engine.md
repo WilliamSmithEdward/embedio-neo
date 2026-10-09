@@ -3157,3 +3157,48 @@ validation gap, not a passing CI run or evidence that rebind is repaired.
 The downloaded TRX confirms all eight continue-negotiation cases passed, including
 both HTTP/3 cases. The full log is retained as quic-credential-macos-ci.log,
 with the TRX under quic-credential-macos-artifacts.
+
+
+### Independent QUIC endpoint-reuse diagnostic
+
+The macOS same-endpoint restart failure remains open. Inspection shows listener
+shutdown awaits QuicListener.DisposeAsync, accept-loop completion and tracked
+connection tasks; connection tasks await native connection disposal. The
+[.NET 10.0.12 listener implementation](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.Quic/src/System/Net/Quic/QuicListener.cs)
+waits for STOP_COMPLETE before closing the native listener and disposing queued
+connections. This inspection does not prove the absence of a race elsewhere.
+
+QuicRuntimeRebindTest now exercises the raw runtime independently of EmbedIO HTTP
+classes: 32 bind/dispose/rebind cycles on the same IPv4 loopback endpoint, both
+without traffic and with an authenticated accepted connection. The connected
+case ceases acceptance before closing and disposing the peers, matching the
+listener drain ordering. Certificates remain pinned with hostname validation;
+the synthetic private key is exportable for the non-Schannel backend. Failures
+retain cycle, stage, endpoint and runtime diagnostics. There are no retry loops,
+sleeps, assertion relaxations or production workarounds.
+
+Both raw cases and the two existing graceful-response/drain cases pass on Windows
+and isolated Linux (.NET 10.0.12, Linux MsQuic 2.6.2). This is baseline evidence,
+not a macOS reproduction or fix. The raw cases intentionally remain part of the
+platform suite so macOS can distinguish a basic runtime rebind failure from the
+richer HTTP/3 lifecycle. The ordinary discovery floor rises to 3,308. Logs are
+retained under TestResults/http-engine/quic-rebind-*; the macOS CI result and the
+full engine lifecycle investigation remain outstanding.
+
+
+A native-source hypothesis is now recorded for that gap: the
+[MsQuic 2.6.2 kqueue datapath](https://github.com/microsoft/msquic/blob/v2.6.2/src/platform/datapath_kqueue.c)
+queues ShutdownSqe from CxPlatSocketContextUninitialize when I/O has started;
+CxPlatSocketContextUninitializeComplete closes the socket file descriptor.
+CxPlatSocketDelete requests this cleanup for each socket context without waiting
+there for those queued shutdown events. This could explain an immediate rebind
+racing native descriptor closure, but source inspection alone does not prove
+that this path caused the captured macOS failure. The raw runtime tests are
+intended to discriminate that hypothesis before changing production behavior.
+
+
+The full Windows coverage suite with the raw rebind diagnostics passed: 3,308
+total, 3,303 successes and five existing platform/environment skips, in 2m 28s.
+The source builds for both library targets; analyzer/suppression guards,
+formatting and the pinned YARA scan of the new fixture pass. These results do not
+replace the pending macOS comparison or the final exact-head checks.
