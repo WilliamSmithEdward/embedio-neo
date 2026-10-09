@@ -5669,3 +5669,78 @@ passes. Logs, the probe and constrained-runtime results are retained under
 TestResults/http-engine/tls-stall-*. Exact new-head CI remains required. This
 improves evidence for a future failure; it is not a claimed correction of the
 historical TLS stall or the separate native QUIC rebind defect.
+
+### Native deployment validation on both macOS architectures
+
+The optional pinned-source cleanup/OpenSSL experiment now has independent
+osx-arm64 and osx-x64 jobs with distinct artifacts. It derives the candidate RID
+from the actual host, verifies the matrix expectation and propagates that RID
+through staging, receipts, private package paths, restore and publish. The Intel
+job uses GitHub's [documented macos-15-intel runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+Normal CI native prerequisites and all production package/dependency groups
+remain unchanged. The private candidate remains 0.0.0-local and is not published.
+
+Package verification now checks each actual thin 64-bit Mach-O CPU type and dylib
+header as well as the exact RID asset set, SHA-256, notices, empty framework
+placeholder and receipt. It rejects renaming an ARM binary/receipt as Intel.
+Eight retained mutation cases use the real artifact and require rejection of
+relabelled RID, wrong CPU, invalid magic, executable type, truncation, extra RID,
+missing alias and altered notice. The expected-error checks run in each deployment
+job before consumer restore. Local validation repacks the previously verified ARM
+candidate through the parameterized project: all three native hashes/headers and
+notices match, and all eight mutations are rejected. This does not establish
+Intel native execution. Exact-source native matrix results remain pending until
+both jobs finish successfully. Wider RID support, production deployment, update
+policy and final engine conformance/performance remain open.
+
+Evidence is under ignored TestResults/http-engine/native-dual-rid-*. The pinned
+zizmor workflow audit has no findings, shell syntax checks pass and the ordinary
+solution does not acquire new targets or native runtime dependencies.
+
+The first osx-x64 experiment job 113869693050 in run 37945234080 failed before
+native compilation: fetching the pinned OpenSSL tag returned Git's "shallow file
+has changed since we read it" error. The original job log is preserved as
+native-dual-rid-intel-first.log. This is not an Intel transport result. Source
+fetches now retain each attempt and retry only that exact shallow-state error,
+up to three attempts. Invalid references and other failures return immediately;
+exhausted retries still fail. Automatic Git maintenance is disabled for these
+fetch commands, without claiming it caused the observed failure. The immutable
+source SHA, annotated tag SHA, peeled commit, signature fingerprint and crypto
+version checks remain unchanged. Controlled fixture checks verify recovery on
+the third attempt, immediate permanent failure and exhausted retry failure.
+The existing ARM job remains a distinct run; new native validation is required
+before claiming the Intel candidate works.
+
+### Complete native candidate archive contract
+
+A Windows repack omitted the source wildcard even though the four evidence files
+were present; the original macOS-built package included them. The nuspec now
+lists those files explicitly, and a fresh local pack includes all four. This
+identifies a packaging discrepancy, without claiming its precise SDK/globbing
+cause. The verifier requires the complete archive entry set, one NuGet core-
+properties entry, exact private identity/version, the empty .NET 10 dependency
+group, notice/readme metadata and unambiguous manifest structure. Unexpected
+build targets or managed assemblies cannot pass the contract. Each packaged
+source file must match the candidate; the two patches also match the checked-out
+reviewed patches with only CRLF/LF normalization. Native architecture/hash and
+license checks remain mandatory.
+
+Seventeen mutations now cover the original eight native/notice cases plus
+missing source, injected build or managed assets, changed package evidence,
+a jointly altered candidate/package patch, an added dependency, duplicate
+metadata and internal/external DTD declarations. All are rejected for their
+expected reason on Windows and a pinned isolated Linux interpreter. The real
+ARM candidate is repacked and accepted by the full contract. This does not
+establish Intel native execution or prove native binary provenance from XML
+metadata alone; native source/build/loaded-image checks remain separate gates.
+
+The first local source scan identified standard-library XML parsing. It was
+corrected using [defusedxml 0.7.1](https://pypi.org/project/defusedxml/0.7.1/), whose
+universal wheel is pinned by SHA-256 in the fixture's requirements. DTD, entity
+and external-reference processing are explicitly forbidden. The dependency is
+installed only under test results for verification and is not a production or
+NuGet dependency. The original finding is preserved; the final pinned Semgrep
+scan fully parses both verifier files (79 rules, zero findings, no diagnostics).
+Shell syntax and suppression/diff guards pass. Evidence is under ignored
+TestResults/http-engine/native-complete-contract-*. Native execution results and
+final exact-head checks remain required; no release or deployment is claimed.

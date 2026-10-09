@@ -2,12 +2,21 @@
 # Private local-feed deployment proof; never publishes or installs system libraries.
 set -euo pipefail
 test "$(uname -s)" = Darwin
-test "$(uname -m)" = arm64
+case "$(uname -m)" in
+  arm64) native_rid=osx-arm64 ;;
+  x86_64) native_rid=osx-x64 ;;
+  *) echo "Unsupported native architecture." >&2; exit 2 ;;
+esac
+if test -n "${EMBEDIO_EXPECT_NATIVE_RID:-}"; then test "$native_rid" = "$EMBEDIO_EXPECT_NATIVE_RID"; fi
 repo="$PWD"
 candidate="$1"
 results="$2"
 fixture="$repo/test/EmbedIO.NativeDependencyProbe"
+test "$(jq -r .rid "$candidate/build-receipt.json")" = "$native_rid"
 mkdir -p "$results/feed" "$results/consumer"
+python_tools="$results/python-tools"
+python3 -m pip install --target "$python_tools" --only-binary=:all: --require-hashes -r "$fixture/requirements.txt" > "$results/python-tools-install.log" 2>&1
+export PYTHONPATH="$python_tools${PYTHONPATH:+:$PYTHONPATH}"
 feed="$results/feed"
 project="$results/consumer/EmbedIO.NativeDependencyProbe.csproj"
 cp "$fixture/Probe/EmbedIO.NativeDependencyProbe.csproj.template" "$project"
@@ -17,9 +26,10 @@ cat > "$results/NuGet.Config" <<EOF
 EOF
 dotnet restore "$fixture/Package/NativeCandidate.csproj" --locked-mode > "$results/pack-restore.log" 2>&1
 dotnet pack "$fixture/Package/NativeCandidate.csproj" -c Release --no-restore \
-  "-p:CandidateRoot=$candidate" -o "$feed" > "$results/pack.log" 2>&1
+  "-p:CandidateRoot=$candidate" "-p:CandidateRid=$native_rid" -o "$feed" > "$results/pack.log" 2>&1
 package="$feed/EmbedIO-Neo.Native.MsQuic.Candidate.0.0.0-local.nupkg"
-python3 "$fixture/verify_package.py" "$candidate" "$package" > "$results/package-verification.json"
+python3 "$fixture/verify_package.py" "$candidate" "$package" "$native_rid" > "$results/package-verification.json"
+python3 "$fixture/test_verify_package.py" "$candidate" "$package" "$native_rid" "$results/package-mutations" > "$results/package-mutation-verification.json"
 dotnet restore "$project" --configfile "$results/NuGet.Config" --packages "$RUNNER_TEMP/native-probe-packages" \
   --force-evaluate "-p:ProbeSourceRoot=$repo" > "$results/portable-restore.log" 2>&1
 dotnet restore "$project" --configfile "$results/NuGet.Config" --packages "$RUNNER_TEMP/native-probe-packages" \
@@ -47,12 +57,12 @@ run_consumer() {
   expected="$(jq -r .sha256 "$candidate/build-receipt.json")"
   test "$(awk '{print $1}' "$output/native-assets.sha256" | sort -u)" = "$expected"
 }
-run_consumer portable "$portable/EmbedIO.NativeDependencyProbe.dll" "$portable/runtimes/osx-arm64/native"
-dotnet restore "$project" -r osx-arm64 --configfile "$results/NuGet.Config" --packages "$RUNNER_TEMP/native-probe-packages" \
+run_consumer portable "$portable/EmbedIO.NativeDependencyProbe.dll" "$portable/runtimes/$native_rid/native"
+dotnet restore "$project" -r "$native_rid" --configfile "$results/NuGet.Config" --packages "$RUNNER_TEMP/native-probe-packages" \
   --force-evaluate "-p:ProbeSourceRoot=$repo" > "$results/publish-restore.log" 2>&1
-dotnet restore "$project" -r osx-arm64 --configfile "$results/NuGet.Config" --packages "$RUNNER_TEMP/native-probe-packages" \
+dotnet restore "$project" -r "$native_rid" --configfile "$results/NuGet.Config" --packages "$RUNNER_TEMP/native-probe-packages" \
   --locked-mode "-p:ProbeSourceRoot=$repo" > "$results/publish-locked-restore.log" 2>&1
 cp "$results/consumer/packages.lock.json" "$results/publish.lock.json"
-dotnet publish "$project" -c Release -r osx-arm64 --self-contained false --no-restore \
+dotnet publish "$project" -c Release -r "$native_rid" --self-contained false --no-restore \
   "-p:ProbeSourceRoot=$repo" -o "$results/publish" > "$results/publish.log" 2>&1
 run_consumer published "$results/publish/EmbedIO.NativeDependencyProbe" "$results/publish"
