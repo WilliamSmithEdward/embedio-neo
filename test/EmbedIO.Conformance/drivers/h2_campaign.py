@@ -526,7 +526,8 @@ def _(e):
         encoder = hpack.Encoder()
         path = rng.choice([b"/plain", b"/stream?n=100000&chunk=700", b"/files/data.bin", b"/slow?ms=5"])
         first = hf.HeadersFrame(1, encoder.encode([(b":method", b"GET"), (b":scheme", b"http"), (b":authority", e.authority), (b":path", path)]))
-        first.flags.update(["END_HEADERS", "END_STREAM"])
+        first.flags.add("END_HEADERS")
+        first.flags.add("END_STREAM")
         second = hf.HeadersFrame(3, encoder.encode([(b":method", b"POST"), (b":scheme", b"http"), (b":authority", e.authority),
                                                     (b":path", b"/echo"), (b"content-length", b"100")]))
         second.flags.add("END_HEADERS")
