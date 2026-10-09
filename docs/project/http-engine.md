@@ -6389,3 +6389,90 @@ Combined Windows: 4,388 total, 4,383 passed, five expected local/platform skips,
 zero failed. Combined focused Linux: 99 passed, zero failed. Both targets build
 without warnings/errors; guards and four resource budgets pass. Final combined
 macOS/CI/native experiments and admission performance acceptance remain pending.
+### Standards-audit bodyless response and drain-upload corrections
+
+Owner raw-wire regressions independently reproduced two source-traced audit
+findings on engine `24cb39d`. All ten initial cases failed: eight 204/304 cases
+covered synchronous/asynchronous writes and explicit/unknown representation
+lengths; two drain cases covered ordinary and padded in-flight DATA. The latter
+failed with Http2ProtocolException("Frame received on an idle stream") after
+refusing successor HEADERS, and canceled the accepted response.
+
+The dispatcher now discards receiver-initiated streams above the drain cutoff
+without entering the active registry, after existing shape/HPACK processing. DATA
+still consumes and replenishes the connection window. No set of refused IDs is
+retained. Two negative cases confirm that even client IDs still cause a connection
+protocol error. The bodyless response policy suppresses content and final chunks,
+removes prohibited informational/204 framing fields, and preserves explicit 304
+representation length. HEAD behavior remains covered by the existing cases.
+
+All twelve new cases pass, and the combined bodyless/HEAD/drain focused set reports
+57 successes, zero failures. Both targets build with zero warnings/errors, and
+changed-source formatting passes. Full Windows reports 4,377 cases, 4,372 successes/five expected local skips,
+zero failures. Focused Linux reports 129 successes, zero failures. All four
+resource budgets pass. The actual .NET Standard core (SHA-256
+410B245D1813C88AD711ADEAD45E1C32135F1DA7B8F3E73593286AC9DAACE5C0)
+passes all twelve new cases under the .NET 10 test host; this is not legacy
+runtime or full standard-asset coverage. Exact-head CI remains pending. Discovery floors include the
+twelve cases, totaling 4,377. Evidence is retained under ignored
+TestResults/http-engine/audit-regression-baseline and audit-framing-*.
+
+Other standards-audit findings remain work, including reset/idle lifetimes,
+extended CONNECT handling, target parsing, HTTP/1.0 delimitation, header-overflow
+isolation, range/conditional semantics and modern feature/interoperability gaps.
+This increment does not establish default-engine or shipping readiness.
+The first full candidate run exposed seven lifetime failures: body suppression
+also suppressed a 204 empty write's header commit before force/stop/dispose. The
+stream correction sends the head while discarding content; existing fixture
+assertions were unchanged. The 81-case lifetime/HEAD/bodyless/drain set and the
+corrected full suite pass. The original failure log remains retained.
+
+The first direct standard-asset attempt had eleven successes and one unusable
+fixed-port case: binding failed with AccessDenied and the request received 404.
+The new raw-wire fixture now uses the existing free-port helper and verifies
+listener startup before issuing traffic; all twelve standard cases and eight
+modern bodyless cases pass afterward. An initial helper-namespace build error
+was corrected and retained in the build logs. No port retry or assertion
+weakening was introduced.
+
+### Reconciled cap, framing and native review checkpoint
+
+William explicitly approved removing the inherited 100-request HTTP/1 keep-alive
+cap. The engine retains the 15-second idle timeout, explicit close, cancellation
+and graceful drain; its Keep-Alive header no longer advertises max. The reuse
+counter saturates rather than wrapping back to an initial-request marker on a
+long-lived connection. Plain and TLS cases now make 256 requests on one transport
+and verify final stop cleanup. Both fail at request 101 on the exact frozen
+pre-change core (14C3927746EDECE5A3D57E7F23AD9D5989CDB7FBDF01A4BD0CFF69E900CB3EFB).
+The candidate's 149-case cap/coding set and 4,388-case pre-reconciliation full run
+pass; migration impact is documented. Failure-only coding-chain diagnostics
+capture endpoint, listener/task/cancellation state and response headers without
+changing request behavior or assertions. The recurring native 503 is not claimed
+fixed by the cap change.
+
+The owner integration reconciles this with engine c25fd05, retaining all twelve
+framing regressions and all admission/QUIC work. Its floor is 4,400, including the
+independent discovery check before the narrow raw-runtime quarantine. Combined
+Windows: 4,400 total, 4,395 passed/five expected local skips, zero failures. Focused
+Linux: 230 passed, zero failures. Both targets build without warnings/errors;
+guards and all four resource budgets pass. Exact-head CI/native validation and
+performance acceptance remain pending.
+
+The completed final-admission comparison measured frozen 0dc187d before cap
+removal: eighteen samples, sixteen valid and two failures, never retried. One
+candidate close-after-100 round failed with NoBufferSpaceAvailable and about
+27,895 server-side TIME_WAIT entries afterward. One ordinary candidate round
+failed with AddressAlreadyInUse and about 13,993 server-side TIME_WAIT entries.
+Neither is a QUIC failure or a successful performance sample. Successful HTTP/1
+pairs remain mixed. HTTP/2 CPU per request improves in all three pairs, while its
+tail latency is slightly worse. This campaign does not establish performance
+acceptance or performance of the later cap change. Artifacts remain under ignored
+TestResults/admission-final-comparison, including both failures and TCP snapshots.
+
+The separate exact-0dc187d native experiment 37987974756 completed: Apple Silicon
+unpatched controls had seven known raw failures in twenty runs and no unexpected
+failures; patched candidates had none in twenty runs, with sanitizer exit zero.
+The patched full macOS suite reported 4,357 passed/31 skips, zero failures. Its
+overall workflow remains failed: Windows also observed TcpAndQuicSharePortAndStopIndependently
+with TLS UserCanceled, and the native coding-chain 503. Neither is quarantined;
+their causes remain unconfirmed. Issue #202 retains the QUIC follow-up questions.

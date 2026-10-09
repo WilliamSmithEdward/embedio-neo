@@ -77,8 +77,12 @@ namespace EmbedIO.Net.Internal
 
         private async Task WriteAsyncLocked(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
+            if (_response.SuppressesBody)
+            {
+                buffer = Array.Empty<byte>(); offset = 0; count = 0;
+            }
             using var headers = GetHeaders(false);
-            var chunked = _response.SendChunked;
+            var chunked = _response.SendChunked && !_response.SuppressesBody;
             var hasBody = count > 0;
             if (headers != null)
             {
@@ -115,10 +119,17 @@ namespace EmbedIO.Net.Internal
             ValidateWrite(buffer, offset, count);
             if (_response.IsHeadResponse)
                 return;
+            if (_response.SuppressesBody)
+            {
+                // Bodyless writes still commit the response head, including an
+                // empty write used before transport shutdown. HEAD keeps its
+                // existing deferred-metadata behavior.
+                buffer = Array.Empty<byte>(); offset = 0; count = 0;
+            }
 
             byte[] bytes;
             var ms = GetHeaders(false);
-            var chunked = _response.SendChunked;
+            var chunked = _response.SendChunked && !_response.SuppressesBody;
             var hasBody = count > 0;
 
             if (ms != null)
@@ -230,7 +241,7 @@ namespace EmbedIO.Net.Internal
 
             _asyncWriteLock.Dispose();
             using var ms = GetHeaders(true);
-            var chunked = _response.SendChunked;
+            var chunked = _response.SendChunked && !_response.SuppressesBody;
 
             if (_stream.CanWrite)
             {

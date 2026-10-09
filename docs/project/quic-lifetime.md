@@ -137,3 +137,19 @@ Issue #202 keeps the following work visible:
 No upstream issue has been posted, no patched native dependency is shipping, and
 no release is authorized by this investigation. Other protocol conformance,
 performance and default-engine work remains in program #181.
+## Subsequent owner checkpoint
+
+The owner reconciled the candidate with engine c25fd05 and the explicitly approved
+HTTP/1 keep-alive cap removal. The combined floor is now 4,400, including its
+independent quarantine discovery check. Full Windows reports 4,395 passed/five
+expected local skips, zero failed; focused Linux reports 230 passed. Exact-head
+CI remains required. Prior validation tables above retain their original source
+revisions and must not be read as testing this later checkpoint.
+
+The exact-0dc187d native experiment 37987974756 has completed. Seven of twenty
+unpatched runs contained only the established raw bind defect; patched runs had
+no failures in twenty runs and sanitizer exit zero. The patched full macOS suite
+passed 4,357 cases with 31 skips. Overall workflow failure is retained because
+Windows saw the coding-chain 503 and a TcpAndQuicSharePortAndStopIndependently TLS
+UserCanceled failure. The latter requires QUIC/handshake triage and is not within
+the raw-bind quarantine. No cause or correction for either is claimed here.
