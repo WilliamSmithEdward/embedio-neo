@@ -5475,3 +5475,52 @@ ShutdownDoesNotWaitForAnUncooperativeApplication(False,False,True) after the
 retained as tcp-failure-ci-macos.log. This is a specific outstanding HTTP/3
 shutdown validation failure; it is not attributed to TCP acceptance or claimed
 repaired by this common-asset increment. Final exact-head checks remain required.
+
+### Deterministic QUIC shutdown preparation and baseline observation
+
+macOS job 113828349062 in CI 37933084461 timed out waiting for the stalled
+application's Entered signal, before invoking transport shutdown. The old fixture
+started two final responses, polled a transient output-user count and left the
+client receive window at its runtime/native default. Those choices did not prove
+that one DATA write was blocked while another waited for the output semaphore.
+This identifies fixture weaknesses; it does not establish the precise timing or
+native behavior in that failed run.
+
+The fixture now sends one final header section, starts a bounded large DATA write
+and a queued final empty DATA write, and gives the client explicit 64 KiB stream /
+1 MiB connection receive windows. It requires two active writers and rejects
+premature writer completion. Preparation failures fault Entered immediately and
+observe output-task faults; phase/task diagnostics distinguish preparation from
+shutdown failure. Existing blocked-application, late-read/write rejection,
+semaphore-lifetime and callback-cleanup assertions remain. No production HTTP/3
+code, receive-window default or timeout was changed. Eleven shutdown/backpressure
+cases pass locally, and four shutdown variants pass 20 consecutive required-QUIC
+Linux runs (80 successes, no skips). macOS exact-source validation remains required.
+
+A separate macOS job 113837440034 in CI 37935808167 failed compatibility audit
+because pinned upstream's native Unix listener completed RunAsync successfully
+but prematurely, rather than faulting it with ObjectDisposedException. It still
+served only the first correct DTO, had no successor response, stopped and threw
+AggregateException on cancellation. Both Neo assets produced the required two
+DTOs and clean cancellation. Original downloaded reports remain under
+`tcp-common-ci-macos-budget-original`; local reviewed rechecks are separate.
+
+The characterization contract now records that complete upstream alternative and
+allows its distinct runError marker at exactly one reviewed difference. It never
+rewrites the observed report or changes Neo's required healthy outcomes. Exact
+manifest, API, payload/status and all other differences remain mandatory. New
+negative checks reject unknown baseline errors, wrong DTOs, premature Neo
+completion and missing Neo successors; additional checks reject mixed baseline
+combinations. Both reviewed upstream markers pass the same negative guards.
+The original Mac report rechecks as 143 cases / 286 comparisons with zero errors;
+a fresh Windows audit passes 207 cases / 414 comparisons with zero errors.
+
+Evidence is under ignored `TestResults/http-engine/quic-shutdown-*`. Both assets
+build warning-free; changed-source parser/suppression/whitespace guards pass. The
+pinned Semgrep scan parses both changed source files fully (106 rules, no findings),
+and pinned YARA-X/Forge reports no matches. No scanner acceptance was added.
+Whole-engine fault injection/conformance and final platform checks remain open.
+
+The full Windows coverage rerun passed: 4,275 total, 4,270 successes, five
+expected skips and zero failures. The test discovery floor is unchanged.
+This fixture/characterization correction changes no production engine code.

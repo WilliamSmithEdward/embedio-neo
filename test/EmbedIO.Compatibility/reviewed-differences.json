@@ -2477,7 +2477,10 @@
           "path": "/native/unix-response-lifetime/runError",
           "upstream": "System.ObjectDisposedException",
           "neo": null,
-          "reason": "Verified historical native response-stream disposal failure on modern Unix: upstream serves one DTO then faults the accept loop and cancellation; Neo caches the stream and serves a second DTO before clean cancellation. docs/parity-audit/lifecycle.md. This is a characterized existing correction, not a new production change or a passing upstream native workload."
+          "reason": "Verified historical native response-stream disposal failure on modern Unix: upstream serves one DTO then faults the accept loop and cancellation; Neo caches the stream and serves a second DTO before clean cancellation. docs/parity-audit/lifecycle.md. This is a characterized existing correction, not a new production change or a passing upstream native workload. macOS CI 37935808167 also records successful premature RunAsync completion with the same first DTO, absent successor, AggregateException cancellation and Stopped state. Only this complete baseline failure alternative is accepted; Neo must retain healthy successor and clean cancellation.",
+          "upstreamAlternatives": [
+            "UnexpectedCompletion"
+          ]
         },
         {
           "path": "/native/unix-response-lifetime/secondBody",
@@ -2551,5 +2554,22 @@
         }
       ]
     }
+  },
+  "upstreamOutcomeAlternatives": {
+    "native/unix-response-lifetime": [
+      {
+        "secondStatus": null,
+        "runError": "UnexpectedCompletion",
+        "secondBody": null,
+        "status": 200,
+        "state": "Stopped",
+        "body": {
+          "Amount": 12.5,
+          "Name": "ordinary",
+          "Id": 42
+        },
+        "cancelError": "System.AggregateException"
+      }
+    ]
   }
 }

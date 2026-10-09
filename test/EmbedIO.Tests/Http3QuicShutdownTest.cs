@@ -73,20 +73,35 @@ namespace EmbedIO.Tests
                     })
                     : default;
                 var output = Array.Empty<Task>();
-                if (PendingOutput)
+                try
                 {
-                    output = new[] { Respond(exchange, new byte[8 * 1024 * 1024]), Respond(exchange, Array.Empty<byte>()) };
-                    var gate = exchange.GetType().GetField("_outputLifetime", Flags)?.GetValue(exchange) ?? throw new AssertionException("Missing output lifetime.");
-                    var users = exchange.GetType().GetField("_outputUsers", Flags) ?? throw new AssertionException("Missing output count.");
-                    using var ready = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                    while (true)
+                    if (PendingOutput)
                     {
-                        lock (gate) { if ((int)(users.GetValue(exchange) ?? 0) >= 2) break; }
-                        await Task.Delay(1, ready.Token);
+                        await SendOutputHeaders(exchange);
+                        output = new[] { WriteOutput(exchange, new byte[8 * 1024 * 1024], false), WriteOutput(exchange, Array.Empty<byte>(), true) };
+                        var gate = exchange.GetType().GetField("_outputLifetime", Flags)?.GetValue(exchange) ?? throw new AssertionException("Missing output lifetime.");
+                        var users = exchange.GetType().GetField("_outputUsers", Flags) ?? throw new AssertionException("Missing output count.");
+                        using var ready = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        while (true)
+                        {
+                            lock (gate) { if ((int)(users.GetValue(exchange) ?? 0) >= 2) break; }
+                            if (Array.Exists(output, task => task.IsCompleted))
+                                throw new AssertionException("The shutdown fixture requires a blocked DATA writer and a queued final write.");
+                            await Task.Delay(1, ready.Token);
+                        }
                     }
+                    Interlocked.Increment(ref EnteredCount);
+                    Entered.TrySetResult();
                 }
-                Interlocked.Increment(ref EnteredCount);
-                Entered.TrySetResult();
+                catch (Exception error)
+                {
+                    foreach (var task in output)
+                        _ = task.ContinueWith(static failed => { _ = failed.Exception; }, CancellationToken.None,
+                            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                    Entered.TrySetException(error);
+                    Completed.TrySetResult();
+                    throw;
+                }
                 try
                 {
                     if (Synchronous) Release.Task.GetAwaiter().GetResult();
@@ -112,9 +127,19 @@ namespace EmbedIO.Tests
                 }
                 finally { Completed.TrySetResult(); }
             }
-            private static Task Respond(object exchange, byte[] bytes) =>
-                (Task)(exchange.GetType().GetMethod("RespondAsync", Flags)?.Invoke(exchange,
-                    new object[] { bytes, CancellationToken.None }) ?? throw new AssertionException("Missing response."));
+            private static Task SendOutputHeaders(object exchange)
+            {
+                var fieldType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.HpackField", true)
+                    ?? throw new AssertionException("Missing field type.");
+                var fields = Array.CreateInstance(fieldType, 2);
+                fields.SetValue(Activator.CreateInstance(fieldType, Flags, null, new object[] { ":status", "200", false }, null), 0);
+                fields.SetValue(Activator.CreateInstance(fieldType, Flags, null, new object[] { "content-length", "8388608", false }, null), 1);
+                return (Task)(exchange.GetType().GetMethod("SendHeadersAsync", Flags)?.Invoke(exchange,
+                    new object[] { fields, false, CancellationToken.None }) ?? throw new AssertionException("Missing headers."));
+            }
+            private static Task WriteOutput(object exchange, byte[] bytes, bool endStream) =>
+                (Task)(exchange.GetType().GetMethod("WriteAsync", Flags)?.Invoke(exchange,
+                    new object[] { bytes, 0, bytes.Length, endStream, CancellationToken.None }) ?? throw new AssertionException("Missing output."));
         }
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
@@ -164,6 +189,13 @@ namespace EmbedIO.Tests
             await using var client = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
             {
                 RemoteEndPoint = listener.LocalEndPoint,
+                InitialReceiveWindowSizes = new QuicReceiveWindowSizes
+                {
+                    Connection = 1024 * 1024,
+                    LocallyInitiatedBidirectionalStream = 65536,
+                    RemotelyInitiatedBidirectionalStream = 65536,
+                    UnidirectionalStream = 65536
+                },
                 DefaultCloseErrorCode = 0x100,
                 DefaultStreamErrorCode = 0x10c,
                 MaxInboundUnidirectionalStreams = 8,
@@ -175,6 +207,7 @@ namespace EmbedIO.Tests
                     RemoteCertificateValidationCallback = (_, peer, _, _) => peer?.GetCertHashString() == cert.GetCertHashString()
                 }
             }, deadline.Token);
+            var phase = "request admission";
             try
             {
                 if (exhaust)
@@ -224,6 +257,7 @@ namespace EmbedIO.Tests
                         }
                     }
                 }
+                phase = "transport shutdown";
                 deadline.Cancel();
                 await server.WaitAsync(TimeSpan.FromSeconds(5));
                 if (cancellationFault) Assert.That(application.CancellationFaultCount, Is.EqualTo(1));
@@ -237,6 +271,11 @@ namespace EmbedIO.Tests
                 Assert.That(application.LateReadRejected, Is.True);
                 Assert.That(application.LateWriteRejected, Is.True);
                 if (pendingOutput) Assert.That(application.OutputReleasedSafely, Is.True, "In-flight and queued writes must terminate without disposing an in-use semaphore.");
+            }
+            catch (Exception error)
+            {
+                TestContext.Error.WriteLine($"QUIC shutdown failed: phase={phase}, server={server.Status}, entered={application.Entered.Task.Status}, completed={application.Completed.Task.Status}, pendingOutput={pendingOutput}, synchronous={synchronous}, fault={fault}. {error}");
+                throw;
             }
             finally
             {

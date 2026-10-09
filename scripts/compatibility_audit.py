@@ -38,7 +38,7 @@ def differences(old, new, path=""):
     return [] if equal else [{"path": path, "upstream": old, "neo": new}]
 
 
-def validate_outcomes(report, upstream):
+def validate_outcomes(report, upstream, contract):
     cases = report["cases"]
     errors = []
     statuses = {
@@ -89,8 +89,9 @@ def validate_outcomes(report, upstream):
                     "secondStatus": None if upstream else 200,
                     "secondBody": None if upstream else {"Id": 42, "Name": "ordinary", "Amount": 12.5},
                     "state": "Stopped"}
-        if cases["native/unix-response-lifetime"] != expected:
-            errors.append("Unix native listener did not exhibit the exact characterized response-lifetime outcome")
+        alternatives = contract.get("upstreamOutcomeAlternatives", {}).get("native/unix-response-lifetime", []) if upstream else []
+        if cases["native/unix-response-lifetime"] != expected and cases["native/unix-response-lifetime"] not in alternatives:
+            errors.append("Unix native listener did not exhibit an exact reviewed response-lifetime outcome")
     return errors
 
 
@@ -103,12 +104,18 @@ def compare(reports, contract):
         if set(report["cases"]) != expected_names:
             errors.append(f"{variant}: case manifest changed; review additions/removals explicitly")
         else:
-            errors.extend(f"{variant}: {error}" for error in validate_outcomes(report, variant == "Upstream"))
+            errors.extend(f"{variant}: {error}" for error in validate_outcomes(report, variant == "Upstream", contract))
     for variant in ("Neo", "NeoStandard"):
         report = reports[variant]
         observed = differences(normalized(upstream["cases"]), normalized(report["cases"]))
-        expected = [{key: entry[key] for key in ("path", "upstream", "neo")} for entry in contract["differences"]]
-        if observed != expected:
+        expected = contract["differences"]
+        matches = len(observed) == len(expected) and all(
+            actual["path"] == entry["path"] and not differences(actual["neo"], entry["neo"])
+            and (not differences(actual["upstream"], entry["upstream"])
+                 or any(not differences(actual["upstream"], alternative) for alternative in entry.get("upstreamAlternatives", [])))
+            for actual, entry in zip(observed, expected)
+        )
+        if not matches:
             errors.append(f"{variant}: unexpected or stale behavioral difference")
         removed = {name: sorted(set(entries) - set(report["api"].get(name, [])))
                    for name, entries in upstream["api"].items()
@@ -145,6 +152,15 @@ def verify_guards(reports, contract):
         mutation(sample)
         if not compare(sample, contract)["errors"]:
             raise RuntimeError("Comparator accepted a deliberately introduced regression")
+    if "native/unix-response-lifetime" in reports["Upstream"]["cases"]:
+        for variant, field, value in (("Upstream", "runError", "UnreviewedFailure"),
+                                      ("Upstream", "body", {"Id": 0}),
+                                      ("Neo", "runError", "UnexpectedCompletion"),
+                                      ("NeoStandard", "secondStatus", None)):
+            sample = copy.deepcopy(reports)
+            sample[variant]["cases"]["native/unix-response-lifetime"][field] = value
+            if not compare(sample, contract)["errors"]:
+                raise RuntimeError("Comparator accepted unreviewed native lifetime behavior")
     stale = copy.deepcopy(contract)
     stale["differences"].pop()
     if not compare(reports, stale)["errors"]:
