@@ -29,7 +29,9 @@ if test "$tls_backend" = openssl; then
   git -C "$crypto_root" fetch --depth 1 origin refs/tags/openssl-3.5.9
   test "$(git -C "$crypto_root" rev-parse FETCH_HEAD)" = d0ca66a1abe52545f14eca635c648932fcde5615
   test "$(git -C "$crypto_root" rev-parse 'FETCH_HEAD^{}')" = "$crypto_revision"
-  key_root="$results/openssl-keyring"
+  # GnuPG probes its agent socket even during public-key import. Darwin's
+  # Unix-socket path limit requires a short job-local keyring directory.
+  key_root="$RUNNER_TEMP/openssl-keyring"
   mkdir -m 700 "$key_root"
   curl --fail --location --retry 3 https://www.openssl-library.org/source/pubkeys.asc -o "$results/openssl-pubkeys.asc"
   gpg --version > "$results/gpg-version.txt"
@@ -219,6 +221,9 @@ if test "$self_contained" = 1; then
   run_probe candidate-relocated 1 untraced "$native" || status=$?
   printf '%s\n' "$status" > "$results/candidate-relocated.exit"
   if test "$status" -ne 0; then candidate_failed=1; fi
+  if test "$tls_backend" = openssl; then
+    bash "$repo/test/EmbedIO.NativeDependencyProbe/deployment-probe.sh" "$stage" "$results/native-deployment" || candidate_failed=1
+  fi
 fi
 "$RUNNER_TEMP/msquic-candidate-build/bin/msquicplatformtest" \
   --timeout 120000 --gtest_filter='*DataPath*' \

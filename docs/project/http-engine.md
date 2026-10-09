@@ -4641,3 +4641,62 @@ on Darwin remains pending. OpenSSL's [3.5 release notes](https://www.openssl-lib
 identify 3.5.9 as a security patch release; this version selection and signature
 verification do not replace native vulnerability, binary, deployment and update
 reviews. Production packages and installed prerequisites remain unchanged.
+### Supported-LTS native candidate result
+
+OpenSSL candidate job 37899089793 / 113717193257 completed successfully on head
+96bf35a. Its receipt pins the MsQuic source and OpenSSL 3.5.9 commit, and the
+compiled source VERSION.dat matches 3.5.9. The downloaded artifact's SHA-256
+matches a717345efa0fc215e74b890831467cde9621746ac99819c743b34cc712f75941.
+Its imports are limited to the exact MsQuic install name and macOS system
+libraries/frameworks; only the two expected MsQuic API symbols are exported.
+The relocated process loader identifies this staged library. All 4,096 relocated
+and 40,960 build-location cycles pass. Five complete ordering traces inspect
+20,480 closes, all completed before managed disposal with none started afterward.
+Native results are 23 passing cases, 15 explicit platform skips and zero failures;
+the unchanged control retains two native failures. Full macOS coverage passes
+3,522 cases (3,491 passed, 31 skipped, zero failed). The selected native ASAN
+campaign passes 100 repetitions of 12 cases with a separate zero exit. The
+pinned full-rule YARA scan of the downloaded candidate reports no matches.
+
+The subsequent signature-enforcing native job 37900021388 / 113720140282 is
+queued at this checkpoint; the prior signed-tag verification is independently
+proven locally against the same crypto commit. These results do not establish
+whole-engine completion, broad crypto sanitizer coverage, supported package
+selection/deployment on all RIDs, third-party TLS/QUIC interoperability,
+comparative performance or release provenance. The candidate remains a review
+artifact outside production packages and ordinary installed prerequisites.
+### Private-package deployment validation candidate
+
+Signature job 37900021388 / 113720140282 failed before native compilation during
+public-key import: the repository-length GnuPG home exceeded Darwin's Unix socket
+path limit. Its logs are retained. The job-local keyring now uses the shorter
+RUNNER_TEMP/openssl-keyring path; signature verification and the exact primary
+fingerprint check remain mandatory. The correction still needs Darwin execution.
+
+The test-only EmbedIO.NativeDependencyProbe fixture builds a private local-feed
+0.0.0-local package from an already validated OpenSSL candidate. It remains
+outside the ordinary solution, production packages and public registries. The
+package restricts its framework placeholder/dependency group to .NET 10 and
+contains only osx-arm64 native assets, the unchanged notices, source evidence and
+candidate receipt. The generated consumer project and per-artifact locks live
+under ignored TestResults; the empty package-build project lock is committed.
+The consumer pins the exact local version and reuses the independent BCL rebind
+probe rather than adding a loader override.
+
+Local SDK pack succeeds with warnings treated as errors. All three native aliases
+match the candidate receipt, notices match source bytes and the portable/RID
+consumer manifests select native osx-arm64 assets. A deliberately altered native
+byte is rejected by the package verifier. Generated-project locked restore and
+build pass with zero warnings/errors. Initial packaging errors (extensionless
+notice destinations and a missing framework dependency group) are corrected;
+NuGet validation is retained. The final local package hash is
+fac928e62dc80aeba635f5e7be86a58d1a43b7a895e92fdc1cf93158e3d8df2d.
+
+The native experiment now runs framework-dependent and RID-published macOS
+consumers with DYLD library-search/injection overrides cleared. Each must pass
+4,096 rebind cycles, load the package's own expected native path and match its
+receipt hash. Locks, dependency manifests and loader evidence are retained.
+Darwin execution of that deployment proof is pending. This tests one RID and
+BCL library selection; all supported RIDs, full engine deployment/interoperability,
+update maintenance and release readiness remain separate requirements. No core
+library target, default or runtime dependency group changes.

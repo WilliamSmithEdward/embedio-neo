@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>EmbedIO-Neo.Native.MsQuic.Candidate</id>
+    <version>0.0.0-local</version>
+    <authors>William Smith; Microsoft; OpenSSL contributors</authors>
+    <description>Private local-feed deployment fixture. Not a published or supported runtime package.</description>
+    <license type="file">licenses/MsQuic-LICENSE</license>
+    <readme>README.md</readme>
+    <dependencies><group targetFramework="net10.0" /></dependencies>
+  </metadata>
+  <files>
+    <file src="$candidate$/runtimes/osx-arm64/native/libmsquic.2.6.2.dylib" target="runtimes/osx-arm64/native/libmsquic.2.6.2.dylib" />
+    <file src="$candidate$/runtimes/osx-arm64/native/libmsquic.2.dylib" target="runtimes/osx-arm64/native/libmsquic.2.dylib" />
+    <file src="$candidate$/runtimes/osx-arm64/native/libmsquic.dylib" target="runtimes/osx-arm64/native/libmsquic.dylib" />
+    <file src="$candidate$/licenses/MsQuic-LICENSE" target="licenses/MsQuic-LICENSE" />
+    <file src="$candidate$/licenses/MsQuic-THIRD-PARTY-NOTICES" target="licenses/MsQuic-THIRD-PARTY-NOTICES" />
+    <file src="$candidate$/licenses/openssl-LICENSE.txt" target="licenses/openssl-LICENSE.txt" />
+    <file src="$candidate$/source/*.*" target="source" />
+    <file src="$candidate$/build-receipt.json" target="build-receipt.json" />
+    <file src="_._" target="lib/net10.0/_._" />
+    <file src="../README.md" target="README.md" />
+  </files>
+</package>
