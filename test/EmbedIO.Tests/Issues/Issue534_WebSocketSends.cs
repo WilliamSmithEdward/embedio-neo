@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Net.WebSockets;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -267,15 +266,11 @@ namespace EmbedIO.Tests.Issues
         private static IWebSocket CreateSocket(Stream stream)
         {
             var assembly = typeof(WebServer).Assembly;
-            var connectionType = assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true);
-            var connection = RuntimeHelpers.GetUninitializedObject((connectionType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
-            GC.SuppressFinalize(connection);
-            ((connectionType).GetField("<Stream>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, stream);
             var socketType = assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true);
-            var socket = (IWebSocket)(Activator.CreateInstance((socketType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), BindingFlags.Instance | BindingFlags.NonPublic,
-                null, new[] { connection }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            ((socketType).GetField("_closeConnection", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket,
-                new Action(() => ((ControlledStream)stream).RecordClose()));
+            var socket = (IWebSocket)(Activator.CreateInstance((socketType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
+                BindingFlags.Instance | BindingFlags.NonPublic, null,
+                new object[] { stream, (Action)(() => ((ControlledStream)stream).RecordClose()) }, null)
+                ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             return (socket);
         }
 
