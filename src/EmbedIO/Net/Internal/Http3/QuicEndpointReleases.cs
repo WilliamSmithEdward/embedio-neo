@@ -9,11 +9,13 @@ using System.Threading;
 
 namespace EmbedIO.Net.Internal.Http3
 {
-    // MsQuic 2.6.2 on macOS queues each UDP socket's close to a worker thread, so
-    // QuicListener disposal can return while the port is still bound, and binding the
-    // same endpoint at once fails with AddressAlreadyInUse. Bridge only that window:
+    // MsQuic can keep a UDP port bound briefly after QuicListener disposal returns: on
+    // macOS its kqueue datapath closes the socket later on a worker thread, and on every
+    // platform an accepted connection keeps the listener's binding until MsQuic frees
+    // the connection. Binding the same endpoint at once can then fail with
+    // AddressAlreadyInUse even though the server has stopped. Bridge only that window:
     // retry a rebind of an endpoint this process released moments ago. Remove this once
-    // the required MsQuic closes the socket before disposal completes; see
+    // the required MsQuic releases the port before disposal completes; see
     // docs/project/http-engine.md.
     internal sealed class QuicEndpointReleases
     {
@@ -45,14 +47,14 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
 
-        // Retries only AddressAlreadyInUse, only where the platform defers the close, and
-        // only while the endpoint's recorded release is recent; anything else propagates.
-        internal T Bind<T>(IPEndPoint endpoint, bool deferredClose, Func<T> bind)
+        // Retries only AddressAlreadyInUse, and only while the endpoint's recorded release
+        // is recent; anything else propagates. A genuine conflict fails once the window ends.
+        internal T Bind<T>(IPEndPoint endpoint, Func<T> bind)
         {
             while (true)
             {
                 try { return bind(); }
-                catch (SocketException error) when (deferredClose && error.SocketErrorCode == SocketError.AddressAlreadyInUse && IsRecent(endpoint))
+                catch (SocketException error) when (error.SocketErrorCode == SocketError.AddressAlreadyInUse && IsRecent(endpoint))
                 {
                     Thread.Sleep(1);
                 }

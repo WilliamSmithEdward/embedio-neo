@@ -183,7 +183,7 @@ namespace EmbedIO.Net.Internal.Http3
                                 { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = certificate }
                             })
                         };
-                        var listener = QuicEndpointReleases.Shared.Bind(binding.Key, DeferredClose,
+                        var listener = QuicEndpointReleases.Shared.Bind(binding.Key,
                             () => QuicListener.ListenAsync(options).AsTask().GetAwaiter().GetResult());
                         session._listeners.Add(listener, (binding.Value.ToArray(), binding.Key));
                     }
@@ -194,8 +194,6 @@ namespace EmbedIO.Net.Internal.Http3
                 }
                 catch { session.Dispose(); throw; }
             }
-            // MsQuic's macOS datapath closes a disposed listener's socket later, on a worker.
-            private static bool DeferredClose => OperatingSystem.IsMacOS();
             private static IEnumerable<IPAddress> Resolve(string host)
             {
                 if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
@@ -338,7 +336,7 @@ namespace EmbedIO.Net.Internal.Http3
                     foreach (var listener in _listeners)
                     {
                         await listener.Key.DisposeAsync().ConfigureAwait(false);
-                        if (DeferredClose) QuicEndpointReleases.Shared.Record(listener.Value.EndPoint);
+                        QuicEndpointReleases.Shared.Record(listener.Value.EndPoint);
                     }
                     await Task.WhenAll(_accepts).ConfigureAwait(false);
                     Task[] connections;

@@ -8,7 +8,7 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    // The macOS rebind retry policy, driven by a manual clock and a scripted bind.
+    // The HTTP/3 rebind retry policy, driven by a manual clock and a scripted bind.
     public class QuicEndpointReleaseTest
     {
         private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -41,7 +41,7 @@ namespace EmbedIO.Tests
 
         // Fails with each error in turn, advancing the clock after every failure, then binds.
         private int _attempts;
-        private void Bind(IPEndPoint endpoint, bool deferredClose, double advance, params SocketError[] failures)
+        private void Bind(IPEndPoint endpoint, double advance, params SocketError[] failures)
         {
             _attempts = 0;
             Func<int> bind = () =>
@@ -50,12 +50,12 @@ namespace EmbedIO.Tests
                 _now += Seconds(advance);
                 throw new SocketException((int)failures[_attempts - 1]);
             };
-            Assert.That(Call("Bind", new[] { typeof(int) }, endpoint, deferredClose, bind), Is.EqualTo(_attempts));
+            Assert.That(Call("Bind", new[] { typeof(int) }, endpoint, bind), Is.EqualTo(_attempts));
         }
 
-        private void Rejects(SocketError expected, int attempts, IPEndPoint endpoint, bool deferredClose, double advance, params SocketError[] failures)
+        private void Rejects(SocketError expected, int attempts, IPEndPoint endpoint, double advance, params SocketError[] failures)
         {
-            var error = Assert.Throws<SocketException>(() => Bind(endpoint, deferredClose, advance, failures));
+            var error = Assert.Throws<SocketException>(() => Bind(endpoint, advance, failures));
             Assert.That(error?.SocketErrorCode, Is.EqualTo(expected));
             Assert.That(_attempts, Is.EqualTo(attempts));
         }
@@ -64,15 +64,8 @@ namespace EmbedIO.Tests
         public void RetriesImmediateRebindOfReleasedEndpoint()
         {
             Record(Released);
-            Bind(Released, true, 0.001, SocketError.AddressAlreadyInUse, SocketError.AddressAlreadyInUse, SocketError.AddressAlreadyInUse);
+            Bind(Released, 0.001, SocketError.AddressAlreadyInUse, SocketError.AddressAlreadyInUse, SocketError.AddressAlreadyInUse);
             Assert.That(_attempts, Is.EqualTo(4));
-        }
-
-        [Test]
-        public void DoesNotRetryWhereTheCloseIsNotDeferred()
-        {
-            Record(Released);
-            Rejects(SocketError.AddressAlreadyInUse, 1, Released, false, 0.001, SocketError.AddressAlreadyInUse);
         }
 
         [Test]
@@ -80,14 +73,14 @@ namespace EmbedIO.Tests
         {
             Record(Released);
             var other = new IPEndPoint(IPAddress.Loopback, Released.Port + 1);
-            Rejects(SocketError.AddressAlreadyInUse, 1, other, true, 0.001, SocketError.AddressAlreadyInUse);
+            Rejects(SocketError.AddressAlreadyInUse, 1, other, 0.001, SocketError.AddressAlreadyInUse);
         }
 
         [Test]
         public void DoesNotRetryOtherSocketErrors()
         {
             Record(Released);
-            Rejects(SocketError.AccessDenied, 1, Released, true, 0.001, SocketError.AccessDenied);
+            Rejects(SocketError.AccessDenied, 1, Released, 0.001, SocketError.AccessDenied);
         }
 
         [Test]
@@ -95,7 +88,7 @@ namespace EmbedIO.Tests
         {
             Record(Released);
             // Failures at 0.4, 0.8 and 1.2 seconds after the release: the third is outside the window.
-            Rejects(SocketError.AddressAlreadyInUse, 3, Released, true, 0.4,
+            Rejects(SocketError.AddressAlreadyInUse, 3, Released, 0.4,
                 SocketError.AddressAlreadyInUse, SocketError.AddressAlreadyInUse, SocketError.AddressAlreadyInUse, SocketError.AddressAlreadyInUse);
         }
 
@@ -104,9 +97,9 @@ namespace EmbedIO.Tests
         {
             Record(Released);
             _now += Seconds(5);
-            Rejects(SocketError.AddressAlreadyInUse, 1, Released, true, 0.001, SocketError.AddressAlreadyInUse);
+            Rejects(SocketError.AddressAlreadyInUse, 1, Released, 0.001, SocketError.AddressAlreadyInUse);
             Record(Released);
-            Bind(Released, true, 0.001, SocketError.AddressAlreadyInUse);
+            Bind(Released, 0.001, SocketError.AddressAlreadyInUse);
             Assert.That(_attempts, Is.EqualTo(2));
         }
     }
