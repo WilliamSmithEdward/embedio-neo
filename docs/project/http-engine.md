@@ -5217,3 +5217,27 @@ allocation-budget groups, source/parser guards, changed-file whitespace, shell
 syntax and pinned source YARA checks pass. The discovery floor increases by the
 74 added cases. Fresh exact-head CI and the full engine program remain required;
 this increment does not claim multipart generation or complete range integration.
+### Scanner parsing and canceled QUIC response writes
+
+The exact `272ab41` head failed Linux response-backpressure/reset coverage and
+macOS runtime rebind coverage in [CI 37924383408](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37924383408).
+The Linux exception came from `Http3QuicExchange.FrameAsync`: a detached writer
+can encounter a disposed native QUIC handle after its request has been canceled.
+Response DATA/framing now translates that disposal to `OperationCanceledException`
+only when the request token is canceled, preserving unrelated disposal failures.
+The existing four flow-control/reset cases passed ten consecutive pinned Linux
+QUIC runs (40 successes, no skips), and 113 policy/QUIC cases passed on Windows.
+This is a cancellation-normalization correction, not proof that every lifecycle
+race is eliminated. The macOS stock-MsQuic rebinding race remains outstanding.
+
+[Security 37924383325](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37924383325)
+reported a Semgrep syntax error at the nested QueryFormatPolicy primary constructor.
+It is now an ordinary constructor with the same immutable fields and behavior.
+The pinned 1.178.0 scanner parsed both changed files fully with 29 source rules and
+zero findings locally. No accepted finding, rule exclusion or scanner gate was
+added. Local selected-file scanning does not replace the full exact-head CI scan.
+Evidence is under ignored `TestResults/http-engine/reset-lifetime-*`.
+
+The full Windows coverage run passed: 4,229 total, 4,224 successes, five expected
+skips and zero failures. Both library targets built without warnings or errors;
+source suppression/parser guards and changed-source whitespace verification passed.

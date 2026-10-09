@@ -177,11 +177,17 @@ namespace EmbedIO
             }
             output.Append('"');
         }
-        private sealed class Format(string type, string subtype, KeyValuePair<string, string>[] parameters)
+        private sealed class Format
         {
-            internal string Type { get; } = type;
-            internal string Subtype { get; } = subtype;
-            internal KeyValuePair<string, string>[] Parameters { get; } = parameters;
+            internal Format(string type, string subtype, KeyValuePair<string, string>[] parameters)
+            {
+                Type = type;
+                Subtype = subtype;
+                Parameters = parameters;
+            }
+            internal string Type { get; }
+            internal string Subtype { get; }
+            internal KeyValuePair<string, string>[] Parameters { get; }
         }
     }
 }

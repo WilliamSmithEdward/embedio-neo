@@ -110,6 +110,8 @@ namespace EmbedIO.Net.Internal.Http3
                 _sent += count;
                 if (endStream) _ended = true;
             }
+            catch (ObjectDisposedException error) when (CancellationToken.IsCancellationRequested)
+            { throw new OperationCanceledException("The HTTP/3 request was canceled during transport disposal.", error, CancellationToken); }
             catch (Exception error) when (error is QuicException or OperationCanceledException) { _outputFailed = true; _failed(error); throw; }
             finally { ReleaseOutput(); }
         }
@@ -146,6 +148,8 @@ namespace EmbedIO.Net.Internal.Http3
                 await _stream.Value.WriteAsync(_frameHeader.AsMemory(0, size), false, token).ConfigureAwait(false);
                 await _stream.Value.WriteAsync(payload, endStream, token).ConfigureAwait(false);
             }
+            catch (ObjectDisposedException error) when (CancellationToken.IsCancellationRequested)
+            { throw new OperationCanceledException("The HTTP/3 request was canceled during transport disposal.", error, CancellationToken); }
             catch (Exception error) when (error is IOException or OperationCanceledException) { _outputFailed = true; _failed(error); throw; }
         }
         private async Task AcquireOutputAsync(CancellationToken token)
