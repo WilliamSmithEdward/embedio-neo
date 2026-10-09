@@ -23,5 +23,10 @@
         /// </summary>
         /// <see cref="CompressionMethod.Gzip"/>
         public const string Gzip = "gzip";
+        /// <summary>
+        /// Specifies the Brotli content coding.
+        /// </summary>
+        /// <remarks>Request decompression is supported by the .NET 10 asset when enabled.</remarks>
+        public const string Brotli = "br";
     }
 }

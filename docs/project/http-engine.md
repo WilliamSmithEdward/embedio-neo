@@ -4175,3 +4175,52 @@ updates and subsequent control-frame consumption map to
 rejects updates for unpromised pushes. This is a source/requirement mapping,
 not new runtime validation, proof of complete scheduling, or closure of the
 remaining extension conformance work.
+
+### Initial Brotli request content coding
+
+The .NET 10 asset now recognizes the `br` request content coding in
+`OpenRequestStream` when `SupportCompressedRequests` is enabled. It delegates
+streaming decompression to the runtime's `BrotliStream`; no production package
+or native dependency is added. Coding names are compared case-insensitively,
+as required by RFC 9110 section 8.4.1, including existing gzip/deflate/identity.
+The default remains disabled. The .NET Standard 2.0 asset retains explicit
+unsupported-coding rejection for Brotli, and response negotiation is unchanged.
+`CompressionMethodNames.Brotli` exposes the registered coding name without
+claiming WebSocket compression or response support.
+
+The existing Brotli case now sends a valid Brotli body and verifies opt-in
+decoding. Five additional cases cover uppercase Brotli, disabled Brotli,
+mixed-case gzip, uppercase deflate and an unknown coding. Valid compressed payloads traverse
+real HTTP and are checked after decoding. The prior request helper fails four
+cases (Brotli and mixed-case existing codings); the candidate passes the focused
+21-case body set. The test expectations also explicitly verify unsupported
+Brotli on the actual legacy asset. Windows full coverage passes 3,405 cases (3,400 passed, five skipped, zero
+failed). All 13 request-body cases pass on pinned Linux .NET 10 and on the
+actual netstandard2.0 assembly hosted by Windows .NET 10, including explicit
+Brotli rejection in that asset. This does not establish older-runtime execution.
+All four allocation gates, source guards and formatting checks pass. Evidence
+is retained under `TestResults/http-engine/brotli-request-*`.
+The discovery floor is deliberately raised to 3,405.
+
+This is an incremental content-coding integration. Brotli response/cache
+variants, coding chains, Zstandard, shared dictionaries, bounded decompression,
+malformed/truncated-stream policy and wider independent interoperability remain
+required work. It does not complete the modern coding or resource-control gate.
+
+### Unsupported map-mode candidate validation
+
+[Run 37887357544](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37887357544),
+job `113680246408`, tests combined-candidate head `3360e17`. The unchanged
+`XdpMapMode_InitFailsWithoutRawDatapath` regression now passes on the candidate;
+the control still fails it. The candidate retains the descriptor-reuse pass,
+passes all ten 4,096-cycle rebind probes, and full macOS coverage reports 3,369
+passes, 31 skips and zero failures. The remaining native failure is the
+zero-config optional-feature-mask assertion. The sanitizer configuration still
+fails before compilation at the original missing-module call; this head
+precedes the harness correction.
+
+The combined native candidate hash is
+`428aa5e76f6a28330c031cfd87afa37eac4c1dfc269d571aeac11035cec5cdac`.
+Evidence is retained in `TestResults/http-engine/quic-cleanup-experiment-artifact6`,
+`quic-cleanup-experiment-job6.log` and `quic-cleanup-ordering6.json`.
+Its measurements are separate from the earlier cleanup-only candidate.

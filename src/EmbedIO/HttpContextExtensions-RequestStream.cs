@@ -24,19 +24,18 @@ namespace EmbedIO
             var stream = @this.Request.InputStream ?? Stream.Null;
 
             var encoding = @this.Request.Headers[HttpHeaderNames.ContentEncoding]?.Trim();
-            switch (encoding)
+            if (encoding == null || encoding.Equals(CompressionMethodNames.None, System.StringComparison.OrdinalIgnoreCase))
+                return stream;
+            if (@this.SupportCompressedRequests)
             {
-                case CompressionMethodNames.Gzip:
-                    if (@this.SupportCompressedRequests)
-                        return new GZipStream(stream, CompressionMode.Decompress);
-                    break;
-                case CompressionMethodNames.Deflate:
-                    if (@this.SupportCompressedRequests)
-                        return new DeflateStream(stream, CompressionMode.Decompress);
-                    break;
-                case CompressionMethodNames.None:
-                case null:
-                    return stream;
+                if (encoding.Equals(CompressionMethodNames.Gzip, System.StringComparison.OrdinalIgnoreCase))
+                    return new GZipStream(stream, CompressionMode.Decompress);
+                if (encoding.Equals(CompressionMethodNames.Deflate, System.StringComparison.OrdinalIgnoreCase))
+                    return new DeflateStream(stream, CompressionMode.Decompress);
+#if NET10_0_OR_GREATER
+                if (encoding.Equals(CompressionMethodNames.Brotli, System.StringComparison.OrdinalIgnoreCase))
+                    return new BrotliStream(stream, CompressionMode.Decompress);
+#endif
             }
 
             $"[{@this.Id}] Unsupported request content encoding \"{encoding}\", sending 400 Bad Request..."
