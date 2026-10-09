@@ -66,10 +66,8 @@ namespace EmbedIO.Net.Internal
 
             _timer = new Timer(OnTimeout, null, Timeout.Infinite, Timeout.Infinite);
             Init();
-#if NET10_0_OR_GREATER
             // Admission can queue initialization. Bound that wait as well as head/TLS reads.
             _ = _timer.Change(_sTimeout, Timeout.Infinite);
-#endif
         }
 
         public int Reuses { get; private set; }
@@ -103,11 +101,7 @@ namespace EmbedIO.Net.Internal
                     buffer = _buffer ??= new byte[BufferSize];
                     bufferedInput = _pendingInput.Count > 0;
                     if (Reuses == 1) _sTimeout = 15000;
-#if NET10_0_OR_GREATER
                     if (Reuses != 0) _ = _timer.Change(_sTimeout, Timeout.Infinite);
-#else
-                    _ = _timer.Change(_sTimeout, Timeout.Infinite);
-#endif
                 }
                 // Authenticate outside the socket accept callback. The request timer also
                 // bounds a client that connects without completing its TLS handshake.

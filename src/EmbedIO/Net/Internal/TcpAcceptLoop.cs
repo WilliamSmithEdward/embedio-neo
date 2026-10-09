@@ -1,5 +1,4 @@
-﻿#if NET10_0_OR_GREATER
-using System;
+﻿using System;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -44,7 +43,11 @@ namespace EmbedIO.Net.Internal
                         // the runtime clears its completion state after failure.
                         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                             pending = new Socket(listener.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+#if NET10_0_OR_GREATER
                         var operation = listener.AcceptAsync(pending, CancellationToken.None);
+#else
+                        var operation = listener.AcceptAsync(pending);
+#endif
                         if (!operation.IsCompleted) inline = 0;
                         // Rearm before admission starts request parsing or a TLS handshake.
                         // The next socket remains owned until its accept is awaited.
@@ -112,4 +115,3 @@ namespace EmbedIO.Net.Internal
         }
     }
 }
-#endif

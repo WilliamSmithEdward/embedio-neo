@@ -5404,3 +5404,74 @@ and zero failures. All four existing allocation-budget groups and the final
 64-KiB upload/retained stream-and-timer verification passed. Pinned YARA-X/Forge
 reported no matches. The discovery floor is 4,275; this correction does not
 complete whole-engine fault injection or the overall development goal.
+
+### Owned accept loop in both retained assets
+
+The retained netstandard2.0 asset now selects the same owned TCP accept actor,
+using its available Task-based Socket.AcceptAsync overload. The .NET 10 asset
+keeps the ValueTask overload. Both retain independently owned Windows pending
+sockets, failure cleanup, admission staging with execution-context flow, bounded
+inline processing and deadlines before queued initialization. The macOS IPv6
+blocking-accept workaround remains. No target, public entry point, enum value,
+runtime dependency group or native prerequisite changes. The inherited callback
+helpers remain for existing white-box regression fixtures; they are no longer the
+default accept path. Their removal and the wider owned connection/endpoint
+transition remain required before claiming complete Mono deprecation.
+
+All 105 actor/boundary/ownership/WebSocket/reset cases pass on Windows and pinned
+Linux against both actual target assets, without modern-actor skips. These runs
+use .NET 10.0.12 hosts; an older-runtime probe is separate evidence. A standalone
+C# program compiled with the installed framework compiler loads the actual
+netstandard2.0 DLL on CLR 4.0.30319.42000 / Framework Release 533509 and passes
+32 fresh plain plus 32 TLS HTTP/1.1 connections. It verifies response bytes,
+closes every source/client stream and stops the real listener. This does not
+prove all legacy runtimes or all protocols on that runtime.
+
+The first framework TLS harness lacked a target-framework declaration. It failed
+TLS on both the frozen baseline and candidate while plain HTTP passed. Declaring
+the program's actual .NET Framework 4.8 target and startup compatibility metadata
+made both plain and encrypted candidate runs pass. Only the ignored harness was
+retargeted; no TLS protocol policy, trust store or machine setting changed.
+[Microsoft's framework TLS guidance](https://learn.microsoft.com/en-us/dotnet/framework/network-programming/tls)
+explains that default protocol behavior depends on the application's target, not
+just the installed runtime. Original failing and corrected logs/program/config
+are retained under `TestResults/http-engine/tcp-common-netfx*`.
+
+The hosted legacy-asset comparison uses identical harness SHA-256
+`638d0b7f8e117e8cb699c5d34fabac47586096f2880b3d0a912f2efdc999af66`,
+frozen `a093a77` legacy core
+`330fec288d98e46f28a45afe15bb18d44c65da80aad6ec9fa7d5c6c3c940709a`
+and candidate legacy core
+`88f54839d27bdf559474452a259971bccf31a5cb985c7be3cb7fa3f9044ab38d`.
+Three alternating Windows .NET 10.0.12 pairs use 16 workers, 1 KiB responses,
+per-request connections, six rounds of 32 requests per worker: 18 samples per
+variant/protocol and zero request errors. Allocations include client and server.
+
+| Workload | Baseline/candidate mean requests/s | Baseline/candidate mean p99 ms | Baseline/candidate median p99 ms | Baseline/candidate process bytes/request |
+| --- | --- | --- | --- | --- |
+| HTTP churn | 15,519 / 15,245 | 1.78 / 1.70 | 1.67 / 1.49 | 37,930 / 38,044 |
+| TLS churn | 3,954 / 3,967 | 7.33 / 5.85 | 5.64 / 6.01 | 43,547 / 43,491 |
+
+This limited loopback comparison supports continued development; it is not a
+server-only allocation measurement, older-runtime performance measurement or
+an extreme-performance claim. The Task-based path adds modest allocation in the
+plain case, while TLS tail statistics remain mixed. Comprehensive load/tail
+comparisons remain open. Raw samples, hashes and frozen binaries are under ignored
+`TestResults/http-engine/tcp-common-*`. Both assets build without warnings/errors;
+changed-source suppression/parser/format guards pass and the pinned Semgrep scan
+parses all three changed files completely (29 rules, zero findings).
+
+Final modern-asset Windows coverage passed 4,275 total / 4,270 successes / five
+expected skips / zero failures. The actual netstandard2.0 candidate also passes
+all four allocation-budget groups and GET/full/partial/unread 64-KiB request-body
+verification, including retained stream/timer cleanup, on the .NET 10 Windows
+host. Pinned YARA-X/Forge reports no matches in changed production sources.
+The wider endpoint/connection replacement and final default/deprecation audit
+remain incomplete.
+
+The preceding a093a77 macOS job 113828349062 in CI 37933084461 failed
+ShutdownDoesNotWaitForAnUncooperativeApplication(False,False,True) after the
+30-second fixture deadline at Http3QuicShutdownTest.cs:210. The full job log is
+retained as tcp-failure-ci-macos.log. This is a specific outstanding HTTP/3
+shutdown validation failure; it is not attributed to TCP acceptance or claimed
+repaired by this common-asset increment. Final exact-head checks remain required.
