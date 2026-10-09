@@ -3987,3 +3987,54 @@ The fixture is appended to the pinned upstream test translation unit; the
 control's production source remains unchanged. Its bytes/hash are retained
 separately from the cleanup patch. Native compilation and control/candidate
 outcomes for this new deterministic fixture remain pending.
+
+### Native cleanup candidate results
+
+Dispatches 37884341997 (job 113670860940, commit 113cf99) and 37884899155
+(job 113672595736, commit dc12741) complete candidate validation on macOS
+15.7.9 arm64 / .NET 10.0.12. Each runs five untraced and five traced processes
+with 4,096 immediate rebinds: all 81,920 candidate cycles across the two runs
+succeed. In both runs, all six unmodified control processes fail with socket
+error 48. In the second run, their completed cycles are 124/436/5 untraced
+and 48/62/200 traced.
+
+Independent post-run trace analysis matches successful binds to descriptor
+closes and managed lifecycle markers, checks event counts, process identity
+and complete capture. All 40,960 traced candidate cycles show close completion
+before the managed disposed marker; none show close beginning afterward.
+The control traces retain violations of that ordering. Instrumentation can
+affect scheduling; the untraced results and deterministic fixture provide
+separate evidence.
+
+The deterministic test compiles and fails on the unchanged control at immediate
+port rebinding while another socket holds the I/O worker. It passes on the
+candidate, including the replacement socket remaining bound after worker-pool
+rundown. This fixture currently permits descriptor reuse; it does not separately
+prove which descriptor number the replacement obtained.
+
+Both runs pass all five repetitions of the two raw managed rebind cases.
+Both full coverage suites report 3,400 cases: 3,369 successes, 31 skips and zero
+failures. The native candidate datapath suite with the added fixture reports
+37 cases, 20 passes, 15 skips and the same two XDP-related failures; its control
+has the additional failing lifetime regression. The experiment correctly exits
+with failure for the remaining native failures. No green experiment status,
+unqualified native-suite pass, shipping integration or overall completion is
+claimed.
+
+Both runs produce the same native library hashes:
+control `13bb173e30f621f22ed6b797c5cdbc5e1fb0dbecf100c3d14928dba340772c73`,
+candidate `d9f7d872bd242ac63a5b919faecb2aa85e2c7c54a42b981bfd5c1c7c93d383c9`.
+The lifetime fixture SHA-256 is
+`74cd8cd82070bd444e0cd3f9fe130aab0565cbd465093442a6270a48413aa087`.
+Evidence is retained in
+`TestResults/http-engine/quic-cleanup-experiment-artifact2` and
+`quic-cleanup-experiment-artifact3`, their corresponding job logs and
+`quic-cleanup-ordering2.json` / `quic-cleanup-ordering3.json`.
+
+Source review explains the two other failures separately: Darwin initializes
+its optional feature mask to zero, contradicting the zero-config test's
+assumption that every ordinary datapath advertises a feature bit. Its initializer
+also ignores the XDP map configuration, whereas the second test requires
+unsupported map-mode initialization to fail. Neither behavior was changed by
+the socket cleanup patch. These remain recorded for separate resolution;
+assertions have not been removed or weakened.
