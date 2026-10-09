@@ -3973,3 +3973,17 @@ candidate results before returning failure if any candidate check fails.
 It does not remove either failing test, change assertions or turn this
 native result green. The first artifacts are retained under
 `TestResults/http-engine/quic-cleanup-experiment-artifact`.
+
+The next experiment also compiles an identical test-only lifetime fixture into
+both native variants. It blocks the configured I/O worker inside a different
+socket's receive callback, deletes an idle socket, then binds an independently
+owned UDP socket to the released endpoint without retries. After releasing the
+callback and draining the datapath, it checks that the replacement remains
+bound. This is intended to expose both deferred endpoint release and accidental
+closure of a reused descriptor. Callback waits have explicit failure deadlines,
+and a scope guard releases the callback on assertion exits.
+
+The fixture is appended to the pinned upstream test translation unit; the
+control's production source remains unchanged. Its bytes/hash are retained
+separately from the cleanup patch. Native compilation and control/candidate
+outcomes for this new deterministic fixture remain pending.

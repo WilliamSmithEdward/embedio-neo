@@ -29,6 +29,11 @@ shasum -a 256 "$openssl_root/lib/libcrypto.3.dylib" >> "$results/openssl.txt"
 patch_file="$repo/test/EmbedIO.RuntimeCloseProbe/msquic-kqueue-close.patch"
 cp "$patch_file" "$results/candidate.patch"
 shasum -a 256 "$patch_file" > "$results/patch.sha256"
+# Compile the same deterministic lifetime fixture into both variants.
+fixture="$repo/test/EmbedIO.RuntimeCloseProbe/kqueue-lifetime-test.inc"
+cp "$fixture" "$results/kqueue-lifetime-test.inc"
+shasum -a 256 "$fixture" > "$results/lifetime-fixture.sha256"
+printf '\n#include "%s"\n' "$fixture" >> "$source_dir/src/platform/unittest/DataPathTest.cpp"
 
 dotnet restore test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj --locked-mode
 dotnet build test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj -c Release --no-restore
@@ -108,7 +113,7 @@ printf '%s\n' "$status" > "$results/control-datapath.exit"
 git -C "$source_dir" apply --check "$patch_file"
 git -C "$source_dir" apply "$patch_file"
 git -C "$source_dir" diff --check
-git -C "$source_dir" diff > "$results/applied.patch"
+git -C "$source_dir" diff -- src/platform/datapath_kqueue.c > "$results/applied.patch"
 cmp "$patch_file" "$results/applied.patch"
 build_native candidate
 candidate_failed=0
