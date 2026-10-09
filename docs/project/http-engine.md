@@ -3202,3 +3202,58 @@ total, 3,303 successes and five existing platform/environment skips, in 2m 28s.
 The source builds for both library targets; analyzer/suppression guards,
 formatting and the pinned YARA scan of the new fixture pass. These results do not
 replace the pending macOS comparison or the final exact-head checks.
+
+
+### QPACK encoder acknowledgment state
+
+QpackEncoderFeedback introduces bounded encoder-side ownership for dynamic
+response compression: registered inserts, per-stream FIFO section references,
+known-received count, shared reference counts, cancellation release and bounded
+section/reference admission. The caller must register inserts and sections before
+publishing bytes. Rejected admission changes no ownership, allowing a stateless
+fallback. The state takes its own deduplicated reference arrays so callers cannot
+change eviction protection after registration. Peer protocol failures release
+tracked ownership and permanently invalidate the state.
+
+The incremental decoder-stream parser accepts fragmented/coalesced instructions,
+full 62-bit stream identifiers and non-minimal integers. Following
+[RFC 9204 sections 2.1.4 and 4.4](https://www.rfc-editor.org/rfc/rfc9204.html#section-4.4),
+section acknowledgments release the oldest outstanding section on that stream
+and may advance known-received count; cancellation releases every section on its
+stream without acknowledging insertions; zero or excessive insert-count updates
+and acknowledgments without an outstanding section fail with 0x202. The existing
+live QUIC decoder-stream reader now uses this state and batches input rather than
+reading one byte per stream read. With current stateless responses, there are no
+registered inserts or sections, so only cancellation remains valid peer feedback.
+Dynamic table insertion, eviction policy, encoder-stream output and dynamic field
+section integration are still outstanding; this increment does not enable or
+claim dynamic response compression or a measured throughput improvement.
+
+Fifteen new focused cases cover ordering, shared references, cancellation,
+fragmentation, bounds, mutation isolation and failure cleanup. The combined 184
+QPACK/QUIC cases pass on Windows and isolated Linux with required native QUIC.
+An initial test run failed six assertions because Assert.Throws requires an exact
+exception type; corrected tests use Assert.Catch for the IOException-derived
+protocol exception and additionally assert its exact 0x202 error code. Initial
+and corrected logs are retained under TestResults/http-engine/qpack-feedback-*.
+The ordinary discovery floor is 3,323; public APIs and asset targets are unchanged.
+
+### Raw macOS rebind failure reproduced
+
+CI 37872817493 on head 23eddfc reproduces AddressAlreadyInUse in the new raw
+DisposedRuntimeListenerRebindsSameEndpoint(False) diagnostic, at cycle 14 during
+bind on 127.0.0.1:61422, .NET 10.0.12. This case uses no EmbedIO HTTP listener,
+application callbacks or client connection. All 3,308 cases were reported:
+3,276 passed, 31 skipped and this one failure. The native async-cleanup hypothesis
+now has an independent runtime reproduction, though no native event trace yet
+proves the exact file-descriptor closure ordering. The limitation remains open;
+no retries or suppressions were added. Evidence is quic-runtime-rebind-macos.log.
+
+
+Encoder-feedback validation also passed the full Windows coverage suite (3,323
+total, 3,318 successes, five existing skips, 2m 26s), 123 focused QPACK cases using
+the actual netstandard2.0 assembly hosted on .NET 10, all four rebuilt allocation
+budgets, and the compatibility audit (207 cases / 414 comparisons / zero errors).
+Both library targets build without warnings; formatting, suppression/analyzer
+guards and the pinned YARA scan of the new state pass. This is not evidence of
+old-runtime execution or completed dynamic compression. Exact-head CI still applies.

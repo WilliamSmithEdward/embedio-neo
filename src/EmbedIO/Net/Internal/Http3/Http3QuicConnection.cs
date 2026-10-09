@@ -31,6 +31,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Http3PriorityState _priorities = new(256);
         private readonly Dictionary<long, TaskCompletionSource<HpackField[]>> _pending = new();
         private readonly QpackDecoder _decoder = new(4096, 16, 65536, 65536, 1048576, 65536);
+        private readonly QpackEncoderFeedback _encoderFeedback = new(256, 4096);
         private readonly SemaphoreSlim _feedbackReady = new(0, 1);
         private Http3PeerSettings _peer = Http3PeerSettings.Parse(Array.Empty<byte>());
         private Exception? _failure;
@@ -372,27 +373,14 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private async Task ReadDecoderAsync(QuicStream stream)
         {
-            // This direction currently emits stateless field sections: cancellation
-            // is valid, but no dynamic insert or section can be acknowledged.
-            var bytes = new byte[10];
+            // Until dynamic output is enabled there are no registered inserts or
+            // sections, so only stream cancellation is valid feedback.
+            var bytes = new byte[1024];
             while (true)
             {
-                var count = await stream.ReadAsync(bytes.AsMemory(0, 1), _token).ConfigureAwait(false);
+                var count = await stream.ReadAsync(bytes, _token).ConfigureAwait(false);
                 if (count == 0) throw new Http3ProtocolException(0x104, "QPACK decoder stream closed.");
-                if ((bytes[0] & 192) != 64) throw new Http3ProtocolException(0x202, "Unexpected acknowledgment of stateless QPACK output.");
-                while (true)
-                {
-                    var offset = 0;
-                    try { QpackInteger.Read(bytes, ref offset, count, 6); break; }
-                    catch (EndOfStreamException)
-                    {
-                        if (count == bytes.Length) throw new Http3ProtocolException(0x202, "Overlong QPACK cancellation.");
-                        var read = await stream.ReadAsync(bytes.AsMemory(count, 1), _token).ConfigureAwait(false);
-                        if (read == 0) throw new Http3ProtocolException(0x104, "QPACK decoder stream closed.");
-                        count += read;
-                    }
-                    catch (InvalidDataException) { throw new Http3ProtocolException(0x202, "Invalid QPACK cancellation integer."); }
-                }
+                _encoderFeedback.Feed(bytes, 0, count);
             }
         }
         private async Task ReadControlAsync(QuicStream stream)
