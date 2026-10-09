@@ -188,6 +188,9 @@ namespace EmbedIO.WebSockets
 
             var contextImpl = context.GetImplementation();
             $"{BaseRoute} - Accepting WebSocket connection with subprotocol \"{acceptedProtocol}\"".Debug(nameof(WebSocketModule));
+            // The managed socket enforces the limit from its first frame; the system
+            // socket path below checks it while assembling messages.
+            Internal.WebSocket.SetAcceptedMaxMessageSize(_maxMessageSize);
             var webSocketContext = await contextImpl.AcceptWebSocketAsync(
                     requestedProtocols,
                     acceptedProtocol,

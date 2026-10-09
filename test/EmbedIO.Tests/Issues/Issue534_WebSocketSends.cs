@@ -18,14 +18,21 @@ namespace EmbedIO.Tests.Issues
     {
         private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
+        // Payload bytes per outgoing data frame. Sizes below are whole multiples plus
+        // one, so each message spans a known number of frames.
+        private static readonly int Fragment = (int)((typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true)
+            ?.GetField("SendFragmentLength", BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new NUnit.Framework.AssertionException("Missing send fragment length.")).GetValue(null)
+            ?? throw new NUnit.Framework.AssertionException("Missing send fragment length."));
+
         [Test]
         public async Task CancelledCloseDrainsPendingSendsAndDisposesGatesAfterTheirRelease()
         {
             using var transport = new ControlledStream();
             var socket = CreateSocket(transport);
-            var data = socket.SendAsync(new byte[2033], false);
+            var data = socket.SendAsync(new byte[2 * Fragment + 1], false);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var queued = socket.SendAsync(new byte[1017], true);
+            var queued = socket.SendAsync(new byte[Fragment + 1], true);
             using var cancelled = new CancellationTokenSource();
             var closing = socket.CloseAsync(cancelled.Token);
             cancelled.Cancel();
@@ -47,7 +54,7 @@ namespace EmbedIO.Tests.Issues
         {
             using var transport = new ControlledStream();
             var socket = CreateSocket(transport);
-            var data = socket.SendAsync(new byte[2033], false);
+            var data = socket.SendAsync(new byte[2 * Fragment + 1], false);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var disposing = Task.Run(socket.Dispose);
             try
@@ -70,7 +77,7 @@ namespace EmbedIO.Tests.Issues
             using var transport = new ControlledStream { AfterFirstWrite = cancelled.Cancel };
             transport.Release.TrySetResult(true);
             var socket = CreateSocket(transport);
-            await Assert.ThatAsync(async () => await socket.SendAsync(new byte[2033], false, cancelled.Token),
+            await Assert.ThatAsync(async () => await socket.SendAsync(new byte[2 * Fragment + 1], false, cancelled.Token),
                 Throws.InstanceOf<OperationCanceledException>());
             Assert.That(socket.State, Is.EqualTo(WebSocketState.Closed));
             Assert.That(transport.FrameHeaders.ToArray(), Is.EqualTo(new byte[] { 2 }));
@@ -111,7 +118,7 @@ namespace EmbedIO.Tests.Issues
         {
             using var transport = new ControlledStream();
             var socket = CreateSocket(transport);
-            var data = socket.SendAsync(new byte[2033], false);
+            var data = socket.SendAsync(new byte[2 * Fragment + 1], false);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var type = socket.GetType();
             Task control;
@@ -144,9 +151,9 @@ namespace EmbedIO.Tests.Issues
             using var transport = new ControlledStream { FailWrite = failWrite };
             var socket = CreateSocket(transport);
             using var cancelled = new CancellationTokenSource();
-            var active = socket.SendAsync(new byte[2033], false, cancelled.Token);
+            var active = socket.SendAsync(new byte[2 * Fragment + 1], false, cancelled.Token);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var queued = socket.SendAsync(new byte[1017], true);
+            var queued = socket.SendAsync(new byte[Fragment + 1], true);
             if (failWrite) transport.Release.TrySetResult(true);
             else cancelled.Cancel();
             if (failWrite) await Assert.ThatAsync(async () => await active, Throws.TypeOf<IOException>());
@@ -207,9 +214,9 @@ namespace EmbedIO.Tests.Issues
         {
             using var transport = new ControlledStream();
             var socket = CreateSocket(transport);
-            var first = socket.SendAsync(new byte[3049], false);
+            var first = socket.SendAsync(new byte[3 * Fragment + 1], false);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var second = socket.SendAsync(new byte[2033], true);
+            var second = socket.SendAsync(new byte[2 * Fragment + 1], true);
             transport.Release.TrySetResult(true);
             await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(transport.MaximumConcurrentWrites, Is.EqualTo(1));
@@ -226,7 +233,7 @@ namespace EmbedIO.Tests.Issues
             var socket = CreateSocket(transport);
             using var cancelled = new CancellationTokenSource();
             cancelled.Cancel();
-            await Assert.ThatAsync(async () => await socket.SendAsync(new byte[2033], false, cancelled.Token),
+            await Assert.ThatAsync(async () => await socket.SendAsync(new byte[2 * Fragment + 1], false, cancelled.Token),
                 Throws.InstanceOf<OperationCanceledException>());
             Assert.That(transport.FrameHeaders, Is.Empty);
         }
@@ -236,10 +243,10 @@ namespace EmbedIO.Tests.Issues
         {
             using var transport = new ControlledStream();
             var socket = CreateSocket(transport);
-            var first = socket.SendAsync(new byte[2033], false);
+            var first = socket.SendAsync(new byte[2 * Fragment + 1], false);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
             using var cancelled = new CancellationTokenSource();
-            var queued = socket.SendAsync(new byte[1017], true, cancelled.Token);
+            var queued = socket.SendAsync(new byte[Fragment + 1], true, cancelled.Token);
             cancelled.Cancel();
             try
             {
