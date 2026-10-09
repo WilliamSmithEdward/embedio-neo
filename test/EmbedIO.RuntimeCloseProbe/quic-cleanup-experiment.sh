@@ -111,13 +111,17 @@ git -C "$source_dir" diff --check
 git -C "$source_dir" diff > "$results/applied.patch"
 cmp "$patch_file" "$results/applied.patch"
 build_native candidate
+candidate_failed=0
 "$RUNNER_TEMP/msquic-candidate-build/bin/msquicplatformtest" \
   --timeout 120000 --gtest_filter='*DataPath*' \
   --gtest_output="xml:$results/candidate-datapath.xml" \
-  2>&1 | tee "$results/candidate-datapath.log"
+  2>&1 | tee "$results/candidate-datapath.log" || candidate_failed=1
 for traced in untraced traced; do
   for iteration in 1 2 3 4 5; do
-    run_probe candidate "$iteration" "$traced"
+    status=0
+    run_probe candidate "$iteration" "$traced" || status=$?
+    printf '%s\t%s\t%s\n' "$traced" "$iteration" "$status" >> "$results/candidate-exits.tsv"
+    if test "$status" -ne 0; then candidate_failed=1; fi
   done
 done
 export DYLD_FALLBACK_LIBRARY_PATH="$RUNNER_TEMP/msquic-candidate-build/bin"
@@ -125,8 +129,10 @@ export EMBEDIO_REQUIRE_QUIC=1
 for iteration in 1 2 3 4 5; do
   dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
     --filter 'FullyQualifiedName~QuicRuntimeRebindTest' --minimum-expected-tests 2 \
-    --timeout 2m --report-trx --results-directory "$results/connected-$iteration"
+    --timeout 2m --report-trx --results-directory "$results/connected-$iteration" || candidate_failed=1
 done
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
   --minimum-expected-tests 3400 --timeout 5m --report-trx --coverlet \
-  --results-directory "$results/full-suite"
+  --results-directory "$results/full-suite" || candidate_failed=1
+printf '%s\n' "$candidate_failed" > "$results/candidate.exit"
+exit "$candidate_failed"

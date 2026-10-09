@@ -3913,7 +3913,7 @@ context cleanup, where it closes the descriptor. The
 performs the event-removal kevent synchronously. A candidate investigation is to
 release the descriptor after that rundown/removal boundary while preserving
 deferred context reclamation and protection against stale events/descriptor
-reuse. No such native patch is implemented, validated, shipped or substituted
+reuse. At the time of that capture, no native patch had been implemented, validated, shipped or substituted
 for the pinned dependency yet. No retry, suppression, security relaxation or
 HTTP production change is used to make this diagnostic pass.
 
@@ -3955,3 +3955,21 @@ are uploaded together.
 Local preparation verifies patch application against the exact pinned source,
 shell syntax and the workflow security audit. Native macOS builds and outcomes
 remain pending; no cleanup repair or shipping readiness is claimed.
+
+The first candidate dispatch (37883971270, job 113669720483, commit 2e40f00)
+builds both native variants successfully. All six unmodified control processes
+fail with socket error 48: untraced after 173/392/373 completed cycles and traced
+after 523/397/359. Every trace reports complete capture. Both native datapath
+runs report the same two failures:
+`XdpMapMode_ZeroConfigUsesNormalPath` expects a nonzero feature mask, and
+`XdpMapMode_InitFailsWithoutRawDatapath` expects initialization failure.
+Each reports 36 cases, 19 passes, 15 skips and these two failures; several
+upstream tests also print unsupported-feature messages while reporting a pass.
+These are not evidence that those unsupported features were exercised.
+
+The candidate datapath exit stopped that initial script before candidate
+rebind or managed tests ran. The revised diagnostic collects all remaining
+candidate results before returning failure if any candidate check fails.
+It does not remove either failing test, change assertions or turn this
+native result green. The first artifacts are retained under
+`TestResults/http-engine/quic-cleanup-experiment-artifact`.
