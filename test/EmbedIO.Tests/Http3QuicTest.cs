@@ -1,10 +1,7 @@
 ﻿using System;
-using System.IO;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using NUnit.Framework;
 using System.Net;
 using System.Net.Http;
 using System.Net.Quic;
@@ -14,6 +11,9 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
@@ -93,6 +93,9 @@ namespace EmbedIO.Tests
             try { await Task.WhenAll(calls); }
             finally { deadline.Cancel(); try { await server; } catch (OperationCanceledException) { } }
         }
+        [TestCase("dynamic-response", 0, false)]
+        [TestCase("dynamic-no-credit", 0, false)]
+        [TestCase("dynamic-encoder-reset", 0x104, true)]
         [TestCase("blocked-trailer-reset", 0x10c, false)]
         [TestCase("blocked-fin", 0, false)]
         [TestCase("blocked-read-reset", 0x10c, false)]
@@ -220,7 +223,7 @@ namespace EmbedIO.Tests
                 RemoteEndPoint = listener.LocalEndPoint,
                 DefaultCloseErrorCode = 0x100,
                 DefaultStreamErrorCode = 0x10c,
-                MaxInboundUnidirectionalStreams = 8,
+                MaxInboundUnidirectionalStreams = scenario == "dynamic-no-credit" ? 2 : 8,
                 MaxInboundBidirectionalStreams = 0,
                 ClientAuthenticationOptions = new SslClientAuthenticationOptions
                 {
@@ -233,7 +236,13 @@ namespace EmbedIO.Tests
             var peerStreams = new List<QuicStream>();
             try
             {
-                await control.WriteAsync(new byte[] { 0, 4, 0 }, scenario == "closed-control", deadline.Token);
+                await control.WriteAsync(scenario.StartsWith("dynamic-", StringComparison.Ordinal)
+                    ? Convert.FromHexString("0004050150000700") : new byte[] { 0, 4, 0 }, scenario == "closed-control", deadline.Token);
+                if (scenario.StartsWith("dynamic-", StringComparison.Ordinal))
+                {
+                    await ExerciseDynamicResponse(client, await sessionReady.Task.WaitAsync(deadline.Token), scenario, peerStreams, deadline.Token);
+                    return;
+                }
                 if (scenario == "priority-state")
                 {
                     await ExercisePriorityState(client, control, await sessionReady.Task.WaitAsync(deadline.Token), deadline.Token);

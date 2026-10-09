@@ -3433,3 +3433,67 @@ The changed-source Windows coverage run passed: 3,385 reported cases, 3,380
 successes and five existing skips in 2m 28s. No timeout, discovery or security
 checks were relaxed. The independent interop host's import ordering was also
 corrected after its separate formatting check reported the pre-existing order.
+
+
+### Live acknowledged QPACK response encoding
+
+HTTP/3 response headers and trailers now use a connection-owned encoder. A
+nonzero peer table capacity enables a table capped locally at 4,096 bytes;
+zero capacity retains stateless output. The owner serializes table lookup,
+field-section creation and reference pinning under the connection gate before
+considering any insertion that could evict the selected entries. Sensitive,
+never-indexed and exact static-table fields are not inserted. Validation happens
+before queuing insertion instructions. If local section/reference budgets are
+full, the response uses stateless encoding without adding ownership.
+
+A lazy unidirectional encoder stream carries type 2 and ordered insertion
+instructions. Queued instructions are bounded to 65,536 bytes, plus one in-flight
+instruction bounded by the table and queue budgets. The writer, its critical
+output watcher and stream disposal participate in connection shutdown. Encoder
+stream reset terminates the connection with H3_CLOSED_CRITICAL_STREAM. Final
+connection disposal drops the table/queue and permanently aborts feedback
+ownership, releasing references and rejecting late feedback.
+
+This first live policy references only entries already acknowledged by the
+peer. Inserts are speculative for later responses. A peer that withholds a
+third outgoing unidirectional stream does not block response encoding or require
+responses to wait for encoder progress. This is not the final compression or
+performance policy: speculative references, admission/eviction heuristics,
+transport-credit visibility and comparative performance remain open. The RFC
+9204 flow-control recommendations still need their complete transport-level
+audit. No throughput or allocation improvement is claimed for this increment.
+
+Thirteen new cases cover cold/warm encoding, disabled capacity, exact instruction
+budgets, pinning before eviction, sensitive data, invalid fields, final ownership
+cleanup and three raw QUIC scenarios. The wire fixture independently checks the
+capacity/insertion bytes for content-length: 37 and the later indexed response,
+then exercises Section Acknowledgment and Stream Cancellation. Separate cases
+withhold encoder-stream credit and reset the encoder stream. Its first run
+failed because the fixture disposed its critical decoder stream before ending
+the connection; the fixture now retains that stream until teardown. Both logs
+are preserved. The final focused Linux run passes 248 QPACK/QUIC cases with QUIC
+required. The actual netstandard2.0 assembly passes 184 codec cases on a .NET 10
+host; QUIC transport remains unavailable in that asset.
+
+Both assets pass the independent pylsqpack codec campaign, both targets build,
+all four rebuilt allocation budgets pass, and formatting/source guards plus the
+HTTP/3 production-directory YARA scan pass. Evidence is under
+TestResults/http-engine/qpack-live-*. The discovery floor is now 3,398.
+
+The preceding head 660fcd2's Security report failed on an obsolete accepted
+finding, not an active security result. Downloaded CodeQL C#/Actions and Semgrep
+SARIF from run 37875827618 contain zero findings and successful invocations; the
+report identified the accepted ZipFileProvider cs/zipslip entry as no longer
+found. That stale acceptance is removed. The unchanged report script passes on
+those downloaded artifacts with zero accepted findings. The original failed
+report and SARIF are retained; this recheck is not a fresh scan of the new source.
+No rule or warning gate was disabled. Fresh exact-head security checks remain
+required, as do the unresolved raw macOS QUIC rebind investigation and the rest
+of program #181.
+
+
+The final Windows coverage run for live QPACK integration passes all 3,398
+reported cases: 3,393 successes and five existing skips in 2m 27s. The preceding
+head 660fcd2 finished every check except the two Security report/aggregate checks
+that reported the stale acceptance described above. A passing macOS test on
+that head does not establish a fix for the retained native rebind failure.

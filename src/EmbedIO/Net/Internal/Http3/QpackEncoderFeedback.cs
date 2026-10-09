@@ -110,11 +110,18 @@ namespace EmbedIO.Net.Internal.Http3
                 }
                 catch (Http3ProtocolException)
                 {
-                    _failed = true;
-                    _sections.Clear(); _references.Clear();
-                    _sectionCount = _referenceCount = _count = _blockedStreamCount = 0;
+                    Abort();
                     throw;
                 }
+            }
+        }
+        internal void Abort()
+        {
+            lock (_sync)
+            {
+                _failed = true;
+                _sections.Clear(); _references.Clear();
+                _sectionCount = _referenceCount = _count = _blockedStreamCount = 0;
             }
         }
         private void Apply(byte instruction, long value)

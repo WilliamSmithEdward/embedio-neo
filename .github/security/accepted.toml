@@ -8,21 +8,3 @@
 #
 # Add an entry only with a reason a reviewer can check. Fixing the code
 # is the better answer wherever there is one.
-
-[[finding]]
-tool = "CodeQL"
-rule = "cs/zipslip"
-reason = """
-ZipFileProvider never extracts entries or opens entry names as local filesystem
-paths. MappedResourceInfo.ForFile stores a provider-specific archive key, and
-OpenFile resolves that key only with ZipArchive.GetEntry(...).Open(). The flagged
-entry.FullName is an archive lookup key, not a filesystem destination. No archive entry
-can make this provider write outside the archive; this extraction warning is a
-false positive. The metadata snapshot now assigns fullName before calling ForFile;
-this does not change the provider-specific key. The reviewed SARIF crosses the
-IFileProvider dispatch to FileSystemProvider/CliFileProvider, but FileModule uses
-the same immutable Provider for mapping and opening, so ZIP keys reach this
-ZipFileProvider's GetEntry lookup rather than a filesystem provider. Re-review if
-the provider gains filesystem extraction or the module mixes provider keys.
-"""
-where = [{ path = "src/EmbedIO/Files/ZipFileProvider.cs", line = "fullName = entry.FullName;" }]

@@ -20,6 +20,7 @@ namespace EmbedIO.Tests
                 try { return (_value.GetType().GetMethod(method, Hidden) ?? throw new AssertionException("Missing method.")).Invoke(_value, values); }
                 catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture(error.InnerException ?? error).Throw(); throw; }
             }
+            internal void Abort() => Call("Abort");
             internal long Insert() => Convert.ToInt64(Call("RegisterInsert"));
             internal bool Section(long stream, params long[] entries) => Convert.ToBoolean(Call("TryRegisterSection", stream, entries, 8L));
             internal bool LimitedSection(long stream, long limit, params long[] entries) => Convert.ToBoolean(Call("TryRegisterSection", stream, entries, limit));
@@ -120,6 +121,19 @@ namespace EmbedIO.Tests
             Assert.That(() => state.Feed("03"), Throws.InstanceOf<IOException>());
             Assert.That(state.Pending, Is.Zero);
             Assert.That(state.Referenced(0), Is.False);
+        }
+
+        [Test]
+        public void ConnectionShutdownReleasesOwnershipAndRejectsLateFeedback()
+        {
+            var state = new Feedback(); state.Insert(); state.Section(0, 0);
+            state.Abort(); state.Abort();
+            Assert.That(state.Pending, Is.Zero);
+            Assert.That(state.Blocked, Is.Zero);
+            Assert.That(state.Referenced(0), Is.False);
+            Assert.That(() => state.Feed("01"), Throws.InstanceOf<IOException>());
+            Assert.That(() => state.Section(4, 0), Throws.InstanceOf<IOException>());
+            Assert.That(() => state.Insert(), Throws.InstanceOf<IOException>());
         }
 
         [Test]

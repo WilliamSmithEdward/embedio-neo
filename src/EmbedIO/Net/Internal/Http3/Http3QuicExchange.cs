@@ -19,7 +19,7 @@ namespace EmbedIO.Net.Internal.Http3
         private const int MaximumDataPayload = 256 * 1024;
         private readonly BorrowedResource<QuicStream> _stream;
         private readonly Http3RequestStream _reader;
-        private readonly Func<int> _peerFieldLimit;
+        private readonly Func<HpackField[], byte[]> _encode;
         private readonly Action<Exception> _failed;
         private readonly SemaphoreSlim _output = new(1, 1);
         private readonly object _outputLifetime = new();
@@ -34,10 +34,10 @@ namespace EmbedIO.Net.Internal.Http3
         private long _sent;
         private int _disposed;
         internal Http3QuicExchange(QuicStream stream, Http3RequestStream reader, Http2RequestHeaders request,
-            Func<byte[], CancellationToken, Task<HpackField[]>> decode, Func<int> peerFieldLimit, Action<Exception> failed, CancellationToken token)
+            Func<byte[], CancellationToken, Task<HpackField[]>> decode, Func<HpackField[], byte[]> encode, Action<Exception> failed, CancellationToken token)
         {
             _stream = new BorrowedResource<QuicStream>(stream); _reader = reader; Request = request;
-            _peerFieldLimit = peerFieldLimit; _failed = failed; CancellationToken = token;
+            _encode = encode; _failed = failed; CancellationToken = token;
             Body = new Http3RequestBody(stream.Id, reader, decode, failed);
         }
         internal Http3PriorityState.Entry? PriorityState { get; set; }
@@ -70,7 +70,7 @@ namespace EmbedIO.Net.Internal.Http3
                 CheckWritable();
                 if (_headers) throw new InvalidOperationException("Final response headers already sent.");
                 var response = Http2ResponseHeaders.Validate(fields, Request.Method, endStream);
-                var encoded = QpackEncoder.Encode(fields, 65536, _peerFieldLimit());
+                var encoded = _encode(fields);
                 await FrameAsync(1, encoded, endStream, token).ConfigureAwait(false);
                 if (response.Status >= 200)
                 {
@@ -124,7 +124,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_length.HasValue && _sent != _length.Value) throw new InvalidDataException("Response does not match Content-Length.");
                 try { Http2RequestHeaders.ValidateTrailers(new Http2HeaderBlock(0, true, fields, 0)); }
                 catch (Http2ProtocolException error) { throw new InvalidDataException(error.Message, error); }
-                var encoded = QpackEncoder.Encode(fields, 65536, _peerFieldLimit());
+                var encoded = _encode(fields);
                 await FrameAsync(1, encoded, true, token).ConfigureAwait(false);
                 _ended = true;
             }

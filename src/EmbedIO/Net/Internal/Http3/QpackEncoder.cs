@@ -5,8 +5,7 @@ using EmbedIO.Net.Internal.Http2;
 
 namespace EmbedIO.Net.Internal.Http3
 {
-    // A stateless encoder is valid at any peer table capacity and cannot block a
-    // peer stream. Dynamic response compression can be added independently.
+    // Stateless and dynamic field serialization share literal/static encoding.
     internal static partial class QpackEncoder
     {
         private static readonly Dictionary<(string Name, string Value), int> Exact = new();
@@ -84,6 +83,7 @@ namespace EmbedIO.Net.Internal.Http3
             value.Write(output, 7, 128, 0);
             return true;
         }
+        internal static bool IsStatic(HpackField field) => Exact.ContainsKey((field.Name, field.Value));
         internal static bool Sensitive(string name) => name.Equals("authorization", StringComparison.OrdinalIgnoreCase)
             || name.Equals("proxy-authorization", StringComparison.OrdinalIgnoreCase)
             || name.Equals("cookie", StringComparison.OrdinalIgnoreCase)

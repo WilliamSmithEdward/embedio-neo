@@ -32,6 +32,8 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Dictionary<long, TaskCompletionSource<HpackField[]>> _pending = new();
         private readonly QpackDecoder _decoder = new(4096, 16, 65536, 65536, 1048576, 65536);
         private readonly QpackEncoderFeedback _encoderFeedback = new(256, 4096);
+        private readonly QpackResponseEncoder _responseEncoder;
+        private readonly SemaphoreSlim _encoderReady = new(0, 1);
         private readonly SemaphoreSlim _feedbackReady = new(0, 1);
         private Http3PeerSettings _peer = Http3PeerSettings.Parse(Array.Empty<byte>());
         private Exception? _failure;
@@ -48,6 +50,7 @@ namespace EmbedIO.Net.Internal.Http3
         {
             _connection = new BorrowedResource<QuicConnection>(connection);
             _dispatch = dispatch;
+            _responseEncoder = new QpackResponseEncoder(_encoderFeedback, 4096, 65536);
             _stop = CancellationTokenSource.CreateLinkedTokenSource(token);
             _token = _stop.Token;
         }
@@ -88,7 +91,7 @@ namespace EmbedIO.Net.Internal.Http3
                 await control.WriteAsync(new byte[] { 0, 4, 12, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1 }, startup.Token).ConfigureAwait(false);
                 feedback = await _connection.Value.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, startup.Token).ConfigureAwait(false);
                 await feedback.WriteAsync(new byte[] { 3 }, startup.Token).ConfigureAwait(false);
-                background = new[] { WriteFeedbackAsync(feedback), WatchCriticalOutputAsync(control), WatchCriticalOutputAsync(feedback), WatchDrainAsync(control) };
+                background = new[] { WriteEncoderAsync(), WriteFeedbackAsync(feedback), WatchCriticalOutputAsync(control), WatchCriticalOutputAsync(feedback), WatchDrainAsync(control) };
                 while (!_token.IsCancellationRequested)
                 {
                     var stream = await _connection.Value.AcceptInboundStreamAsync(_token).ConfigureAwait(false);
@@ -265,7 +268,7 @@ namespace EmbedIO.Net.Internal.Http3
                 _priorities.Headers(stream.Id, request.Headers["priority"]);
                 using var exchange = new Http3QuicExchange(stream, reader, request,
                     (wire, token) => DecodeRequestAsync(stream.Id, wire, token, requestToken),
-                    () => (int)Math.Min(65536, Volatile.Read(ref _peer).MaximumFieldSectionSize),
+                    fields => EncodeResponse(stream.Id, fields),
                     error => RequestFailed(stream, error), requestToken)
                 { PriorityState = _priorities.Get(stream.Id) };
                 lock (_sync)
@@ -373,8 +376,6 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private async Task ReadDecoderAsync(QuicStream stream)
         {
-            // Until dynamic output is enabled there are no registered inserts or
-            // sections, so only stream cancellation is valid feedback.
             var bytes = new byte[1024];
             while (true)
             {
@@ -395,6 +396,52 @@ namespace EmbedIO.Net.Internal.Http3
                 // No push IDs have been promised by this server yet.
                 if (received.Type == 3 || received.Type == 0xf0701)
                     throw new Http3ProtocolException(0x108, "Control frame refers to an unpromised push.");
+            }
+        }
+        private byte[] EncodeResponse(long streamId, HpackField[] fields)
+        {
+            lock (_sync)
+            {
+                _token.ThrowIfCancellationRequested();
+                var peer = Volatile.Read(ref _peer);
+                var wire = _responseEncoder.Encode(streamId, fields, peer, 65536, (int)Math.Min(65536, peer.MaximumFieldSectionSize));
+                if (_responseEncoder.PendingBytes != 0 && _encoderReady.CurrentCount == 0) _encoderReady.Release();
+                return wire;
+            }
+        }
+        private async Task WriteEncoderAsync()
+        {
+            QuicStream? stream = null;
+            var watch = Task.CompletedTask;
+            try
+            {
+                while (true)
+                {
+                    await _encoderReady.WaitAsync(_token).ConfigureAwait(false);
+                    if (stream == null)
+                    {
+                        stream = await _connection.Value.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, _token).ConfigureAwait(false);
+                        await stream.WriteAsync(new byte[] { 2 }, _token).ConfigureAwait(false);
+                        watch = WatchCriticalOutputAsync(stream);
+                    }
+                    while (true)
+                    {
+                        byte[]? bytes;
+                        lock (_sync) bytes = _responseEncoder.DequeueInstructions();
+                        if (bytes == null) break;
+                        await stream.WriteAsync(bytes, _token).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
+            catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
+            { CancelRequests(_stop); }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+            { if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, error.Message)); }
+            finally
+            {
+                try { if (stream != null) await stream.DisposeAsync().ConfigureAwait(false); }
+                finally { await watch.ConfigureAwait(false); }
             }
         }
         private async Task WriteFeedbackAsync(QuicStream stream)
@@ -468,7 +515,7 @@ namespace EmbedIO.Net.Internal.Http3
             Interlocked.CompareExchange(ref _failure, error, null);
             CancelRequests(_stop);
         }
-        public void Dispose() { _priorities.Clear(); _decoder.Dispose(); _feedbackReady.Dispose(); _applicationDrain.Dispose(); _stop.Dispose(); }
+        public void Dispose() { lock (_sync) { _responseEncoder.Clear(); _encoderFeedback.Abort(); } _encoderReady.Dispose(); _priorities.Clear(); _decoder.Dispose(); _feedbackReady.Dispose(); _applicationDrain.Dispose(); _stop.Dispose(); }
     }
 }
 #endif
