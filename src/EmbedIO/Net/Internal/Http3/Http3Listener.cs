@@ -292,6 +292,7 @@ namespace EmbedIO.Net.Internal.Http3
                             return;
                         }
                     }
+                    await context.SendContinueAsync().ConfigureAwait(false);
                     await Contexts.Writer.WriteAsync(context, exchange.CancellationToken).ConfigureAwait(false);
                     await context.Completion.WaitAsync(exchange.CancellationToken).ConfigureAwait(false);
                 }

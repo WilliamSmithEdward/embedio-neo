@@ -929,3 +929,22 @@ arrive sooner after a completed close. Public callback signatures and asynchrono
 message/disconnection dispatch are unchanged; notification does not promise that
 all asynchronous application message callbacks have finished. Close handshakes,
 close deadlines and the native Microsoft backend are unchanged.
+
+### Continue expectations across HTTP versions (unreleased)
+
+HTTP/1.1, HTTP/2 and HTTP/3 now recognize a bare `100-continue` member in an
+Expect list, including repeated members, case differences and optional whitespace.
+Quoted extension values do not create synthetic members when they contain commas
+or escaped quotes. Unknown expectations retain their existing ignored behavior;
+this is recognition of the supported expectation, not full extension validation.
+HTTP/1.0 still ignores the expectation and known-empty requests omit the interim
+response.
+
+HTTP/2 and HTTP/3 listener dispatch sends the informational headers before handing
+an applicable request to the application, without consuming the request body or
+ending the stream. A body-consuming handler can therefore receive a client that
+waits for `100 Continue` before uploading. Earlier implementations could leave
+both ends waiting until the client's fallback timer expired. Final response APIs
+are unchanged. Multiplexed CONNECT tunnels are excluded from automatic continue handling.
+The .NET Standard asset's existing cleartext HTTP/2 support and lack of TLS ALPN
+and QUIC are unchanged.

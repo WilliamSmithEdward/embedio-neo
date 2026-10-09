@@ -68,6 +68,13 @@ namespace EmbedIO.Net.Internal
         public bool IsHandled { get; private set; }
         public MimeTypeProviderStack MimeTypeProviders { get; } = new();
         internal Task Completion => _completion.Task;
+        private static readonly HpackField[] ContinueFields = { new(":status", "100") };
+        internal Task SendContinueAsync()
+            => Request.HttpMethod != "CONNECT" && Request.HasEntityBody && Request.ContentLength64 != 0
+                && HttpExpectations.ContainsContinue(Request.Headers["Expect"])
+                ? _exchange.SendHeadersAsync(ContinueFields, false, _exchange.CancellationToken)
+                : Task.CompletedTask;
+
         public void SetHandled() => IsHandled = true;
         public string? GetMimeType(string extension) => MimeTypeProviders.GetMimeType(extension);
         public bool TryDetermineCompression(string mimeType, out bool preferCompression) => MimeTypeProviders.TryDetermineCompression(mimeType, out preferCompression);

@@ -41,14 +41,20 @@ namespace EmbedIO.Tests
             }
         }
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task ExpectContinuePrecedesBodyAndAllowsNextRequest(bool secure)
+        [TestCase(false, "100-continue")]
+        [TestCase(true, "100-continue")]
+        [TestCase(false, "100-continue, 100-continue")]
+        [TestCase(true, "100-continue, 100-continue")]
+        [TestCase(false, " , 100-CoNtInUe , ")]
+        [TestCase(true, " , 100-CoNtInUe , ")]
+        [TestCase(false, "custom=\"x,100-continue,y\", 100-continue")]
+        [TestCase(true, "custom=\"x,100-continue,y\", 100-continue")]
+        public async Task ExpectContinuePrecedesBodyAndAllowsNextRequest(bool secure, string expectation)
         {
             using var fixture = new RawListener(secure);
             await fixture.Connect();
             var accept = fixture.Listener.GetContextAsync(fixture.Token);
-            await fixture.Write("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 6\r\nExpect: 100-continue\r\n\r\n", 7);
+            await fixture.Write("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 6\r\nExpect: " + expectation + "\r\n\r\n", 7);
             Assert.That(await fixture.ReadHeaders(), Is.EqualTo("HTTP/1.1 100 Continue\r\n\r\n"));
             await fixture.Write("abcdef", 1);
             var context = await accept;

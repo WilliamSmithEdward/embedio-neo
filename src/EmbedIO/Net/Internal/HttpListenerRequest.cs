@@ -158,7 +158,7 @@ namespace EmbedIO.Net.Internal
             && Headers.Contains(HttpHeaderNames.Connection, "Upgrade", StringComparison.OrdinalIgnoreCase);
 
         internal bool RequiresContinue => ProtocolVersion == HttpVersion.Version11 && HasEntityBody
-            && string.Equals(Headers["Expect"], "100-continue", StringComparison.OrdinalIgnoreCase);
+            && HttpExpectations.ContainsContinue(Headers["Expect"]);
 
         internal void SetRequestLine(string req)
         {

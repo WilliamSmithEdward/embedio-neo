@@ -3030,3 +3030,37 @@ closure stayed about 0.034s. These are local regression-test timings, not a
 throughput benchmark. The compatibility audit passes 207 cases / 414 comparisons,
 and the rebuilt four allocation-budget groups pass. Representative WebSocket
 throughput, tail latency and retained-memory campaigns remain required.
+
+## Continue expectation integration
+
+A shared quote-aware reader recognizes bare `100-continue` list members without
+allocating substrings. The HTTP/1 listener and multiplexed dispatch use it;
+HTTP/2 and HTTP/3 send informational headers before application delivery when
+request framing indicates content, without ending the stream or affecting final
+response state. Unknown expectations remain ignored and multiplexed CONNECT is excluded.
+Twenty direct cases cover list boundaries, whitespace, case, quoted commas,
+escapes and lookalikes. Expanded raw HTTP/TLS cases wait for the interim response
+before sending content and then verify a subsequent request.
+
+An independent HttpClient with a 30-second continue fallback and a 10-second
+request deadline initially failed on HTTP/2 and HTTP/3 while HTTP/1.1 passed.
+With the correction, two sequential requests succeed for single/repeated
+expectations over HTTP/1.1 TLS, HTTP/2 TLS/prior knowledge and HTTP/3. The 78-case
+focused set passes on pinned Linux with QUIC required. The legacy asset passes
+74 cases on Windows with four explicit skips for TLS HTTP/2 and QUIC, while
+cleartext HTTP/2 is exercised rather than skipped.
+
+The new QUIC fixture initially selected a TCP port, exposing bind conflicts;
+it now probes UDP. An IP-literal QUIC URL also failed Linux TLS negotiation before
+HTTP, whereas `localhost` passes with the same exact-leaf pin and hostname check.
+The IP-literal failure log is retained as `expect-linux.log`; its cause and the
+engine/runtime IP-literal capability remain an unresolved validation item. The
+hostname fixture does not establish that IP-literal behavior is fixed.
+
+Final Windows coverage passes 3,306 cases (3,301 successes and five existing
+skips) in 2m28s. The final Linux focused set passes all 78 cases with QUIC
+required. The actual legacy asset passes 74 cases with four documented capability
+skips on both Windows and Linux .NET 10 hosts. Compatibility remains 207 cases /
+414 comparisons with no errors, and all four rebuilt allocation-budget groups
+pass. The preceding `2c1f56e` has 32 successful checks and two intentional skips;
+this increment requires fresh exact-head checks.
