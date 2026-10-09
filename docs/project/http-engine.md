@@ -5639,3 +5639,33 @@ raised to 4,288. Exact new-head macOS/CI checks remain required; no merge or rel
 readiness is claimed.
 
 Pinned YARA-X / Forge also reports no matches in all four changed C# sources.
+
+### Windows TLS upload stall investigation
+
+Six fresh verification runs of the exact 64-KiB full-body HTTP/TLS workload pass
+with DOTNET_PROCESSOR_COUNT=2. This changes the runtime's processor-count view;
+it does not impose an OS CPU quota or reproduce the Windows CI machine. The
+20-second client timeout and production transport code are unchanged. The
+previous failed warmup remains unresolved rather than being attributed to
+scheduling, socket pressure or routing without evidence.
+
+The performance harness now captures failure-only diagnostic JSON alongside the
+original exception. It samples pending admission and registered/retained
+connections, accept-worker state, thread-pool counts, TLS authentication,
+read-buffer allocation, context binding, remaining fixed-length body bytes and
+response-finalization state. Collection samples are limited to 32 entries per
+registry and 32 live connection records. A pending-registry lock attempt has a
+five-millisecond bound; busy registries are reported. These cross-thread field
+reads are best-effort observations, not one atomic transport snapshot. No
+request/header/body data is collected and successful request loops do no new
+diagnostic work. Expected reflection/race failures report unavailable metadata;
+nonrecoverable exceptions are not swallowed. Production code, public APIs,
+timeouts, targets and runtime dependencies are unchanged.
+
+An ignored standalone probe exercises actual pending admission, an admitted
+unread 32-byte body and completed listener cleanup on Windows and pinned Linux;
+the observed state matches those phases. The rebuilt upload verification also
+passes. Logs, the probe and constrained-runtime results are retained under
+TestResults/http-engine/tls-stall-*. Exact new-head CI remains required. This
+improves evidence for a future failure; it is not a claimed correction of the
+historical TLS stall or the separate native QUIC rebind defect.
