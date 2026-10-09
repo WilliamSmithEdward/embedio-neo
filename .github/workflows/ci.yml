@@ -176,7 +176,7 @@ jobs:
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
           SUITE_TIMEOUT: ${{ matrix.suite-timeout || '5m' }}
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$SUITE_TIMEOUT" --minimum-expected-tests 4288 --coverlet
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$SUITE_TIMEOUT" --minimum-expected-tests 4302 --coverlet
       - name: Trace native macOS QUIC dispose and rebind ordering
         if: always() && runner.os == 'macOS' && inputs.quic-rebind-probe == true
         shell: bash

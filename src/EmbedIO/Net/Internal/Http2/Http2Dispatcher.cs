@@ -28,6 +28,7 @@ namespace EmbedIO.Net.Internal.Http2
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             _connection.OutputFailed = Abort;
+            _connection.UseTransportCancellation(_stop.Token);
         }
 
         internal async Task RunAsync(Func<Http2Exchange, Task> application, CancellationToken token)

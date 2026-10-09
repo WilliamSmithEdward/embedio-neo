@@ -5763,12 +5763,80 @@ image verification, source pins and sanitizer checks are unchanged. Intel stays
 in scope following William's correction; a fresh run must complete every gate
 before the Intel candidate can be accepted.
 
+### Conformance finding F3: request failure isolation
+
+The conformance helper's HTTP/3 upload-cancellation reproduction failed against
+`f1bbe41` in a pinned Linux container. A monitored server observed one fatal
+callback and `Listener.IsListening == false` while its public state still read
+`Listening`. Earlier failure logs are retained separately. This confirms a
+listener-wide consequence rather than inferring one from a closed client connection.
+
+The candidate request boundary handles recoverable errors from multiplexed
+contexts as stream failures. The existing response flush, completion callbacks
+and asynchronous context close still run; a faulted context completion remains
+faulted for its protocol owner. Process/resource-corruption exceptions continue
+to propagate through the existing exception policy. Public APIs and library
+targets do not change.
+
+The enabled F3 regression cancels 400 uploads, checks that fatal cleanup was
+never called, checks the actual listener and probes fresh client connections.
+Five monitored Linux repeats passed (2,000 cancelled uploads), and the monitored
+Windows regression also passed. The HTTP/2, HTTP/3, cleanup and fatal-propagation
+set passed all 806 cases on each of Windows and Linux. Existing hot-path,
+listener-queue, cold-start and listener-allocation budgets passed. Final full-suite
+and exact-head repository gates are still required. The other eight supplied reproduction
+cases remain Explicit for unresolved F1/F2/F4 work; enabling F3 is not a claim
+that the full conformance campaign passes. Evidence is under ignored
+`TestResults/http-engine/f3-*`.
+
+### Conformance finding F4: shared HTTP/2 write cancellation
+
+Two controlled writer cases fail on `2e579ec`: cancellation after a partial frame
+interrupts the shared transport, and cancellation while waiting for its gate
+reports a connection-wide output failure despite writing no bytes. The candidate
+separates cancellation while queued from cancellation of committed I/O. DATA
+uses its request token until writing starts, then the owning connection's token
+for the complete frame batch. Connection shutdown and genuine partial I/O failures
+still terminate unusable output.
+
+An unstarted canceled DATA frame returns its reserved flow-control credit. The
+connection credit is returned even if RST_STREAM already removed the stream's
+window, allowing a blocked sibling to proceed without a peer WINDOW_UPDATE.
+HPACK encoding mutates a connection-wide table, so a header block that has been
+encoded is committed with connection cancellation; a reset cannot leave the
+peer missing table entries referenced by the next response.
+
+Five controlled regressions cover partial and queued reset, credit return after
+stream removal, decoding successive HPACK blocks and connection cancellation.
+The supplied 500-trial wire reproduction is enabled. Three Linux wire repeats
+pass (1,500 trials), and the broader HTTP/2, HTTP/3, cleanup and fatal-propagation
+set passes all 812 cases on Windows and Linux. Hot-path, listener-queue,
+cold-start and listener-allocation budgets pass. Both library targets build;
+parser/suppression guards pass. Full-suite and final exact-head checks are still
+required. Settings-shrink ordering (F5), stream-state errors (F6), truncated
+fixed bodies (F1) and malformed-body status handling (F2) remain separate work.
+Evidence is retained under ignored `TestResults/http-engine/f4-*`.
+
+### Budgeted Intel native experiment result
+
+The Intel job in run
+[37952457798](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37952457798)
+completed both coverage suites on `f23a5a5`: each reported all 4,288 cases,
+4,256 passed, 31 skipped and one failure, taking about 9.5 minutes. Increasing
+the execution budget allowed full discovery/completion; it did not clear genuine
+failures. Each failure is in the native WebSocket shutdown fixture's upgrade
+completion path. The job remains failed, and its logs are retained as
+`TestResults/http-engine/native-intel-budgeted.log`. This is older managed source
+than the F3/F4 candidates and does not validate their exact head. The ARM native
+comparison on the same revision passed. Intel remains in the support scope.
+
 ### Intel macOS regression coverage
 
-Ordinary CI ran the 4,288-test regression suite only on macos-15 (Apple Silicon);
-Intel ran only inside the optional native experiment. The test matrix now adds
+Ordinary CI ran the regression suite only on macos-15 (Apple Silicon); Intel ran
+only inside the optional native experiment. The test matrix now adds
 macos-15-intel with the same floor, assertions, constrained ZIP run and reset
-stress.
+stress. The measurements below predate the 4,302-test floor and use the
+4,288-test suite of `f23a5a5`.
 
 Homebrew publishes no Intel macOS bottle for libmsquic 2.6.2: its formula and the
 GHCR index list only arm64 and Linux bottles, and the last Intel macOS bottle,
@@ -5829,7 +5897,9 @@ One deterministic Intel failure follows from it.
 constructs up to 32 Microsoft-mode servers on 127.0.0.1 within one 30-second
 deadline. The deadline expired while constructing the sixth server in both
 suites of run 37952457798 and the seventh in run 37955797744; the test takes
-0.28 seconds on ARM.
+0.28 seconds on ARM. This is the failure recorded above for the budgeted Intel
+experiment: it comes from the runner's host-name lookup, not from the upgrade
+completion path, and it does not depend on the native QUIC candidate.
 
 The Intel leg therefore maps the runner's own name to `::1` in /etc/hosts, the
 IPv6 answer the ARM image already returns, flushes the resolver caches and fails

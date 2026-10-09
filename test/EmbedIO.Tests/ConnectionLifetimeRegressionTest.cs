@@ -247,9 +247,12 @@ namespace EmbedIO.Tests
             Assert.That(connection, Is.Not.Null);
             if (shutdown) listener.Stop();
             else client.Dispose();
+            // The buffer is cleared before the timer and streams are disposed, so only the
+            // close-finished flag proves terminal cleanup has completed.
             deadline = DateTime.UtcNow.AddSeconds(2);
-            while (((connection ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetField("_buffer", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection) != null
+            while (!CloseFinished(connection ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
                 && DateTime.UtcNow < deadline) await Task.Delay(10);
+            Assert.That(CloseFinished(connection), Is.True, "Terminal cleanup must finish.");
             Assert.That(TimerDisposed(RequestTimer(connection)), Is.True);
             Assert.That(Transport(connection).CanRead, Is.False);
             Assert.That(listener.IsListening, Is.EqualTo(!shutdown));
@@ -258,6 +261,13 @@ namespace EmbedIO.Tests
             => ((((context).GetType().GetProperty("Connection", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(context)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         private static Stream Transport(object connection)
             => (Stream)((((connection).GetType().GetProperty("Stream") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static bool CloseFinished(object connection)
+        {
+            var type = connection.GetType();
+            var sync = ((type.GetField("_connectionSync", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
+            var finished = type.GetField("_closeFinished", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
+            lock (sync) return (bool)(finished.GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        }
         private static Timer RequestTimer(object connection)
             => (Timer)((((connection).GetType().GetField("_timer", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 

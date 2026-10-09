@@ -39,7 +39,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4275
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4302
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -53,11 +53,14 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 4275 executed/reported test cases to catch accidental discovery loss; update
+least 4302 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The five-minute suite
-budget allows the full coverage-enabled Windows run to finish; the discovery
-minimum remains enforced. NUnit 5 async assertions
-must be awaited.
+budget allows the full coverage-enabled Windows run to finish; the Intel macOS
+leg runs the same suite more slowly and has 12 minutes. The discovery minimum
+remains enforced. With NUnit3TestAdapter 6.3.0 and NUnit 5.0.0, an expired budget
+does not stop the run: the remaining tests still execute, their results are
+discarded and the test host is reported as crashed (exit code 7). NUnit 5 async
+assertions must be awaited.
 
 CI also runs test-only MAUI Mac Catalyst and Android apps outside the ordinary
 solution and shipped packages. The Android fixture uses the pinned .NET 10 SDK,
