@@ -5762,3 +5762,29 @@ The selected budget is retained in the artifact. Test floors, assertions, native
 image verification, source pins and sanitizer checks are unchanged. Intel stays
 in scope following William's correction; a fresh run must complete every gate
 before the Intel candidate can be accepted.
+
+### Conformance finding F3: request failure isolation
+
+The conformance helper's HTTP/3 upload-cancellation reproduction failed against
+`f1bbe41` in a pinned Linux container. A monitored server observed one fatal
+callback and `Listener.IsListening == false` while its public state still read
+`Listening`. Earlier failure logs are retained separately. This confirms a
+listener-wide consequence rather than inferring one from a closed client connection.
+
+The candidate request boundary handles recoverable errors from multiplexed
+contexts as stream failures. The existing response flush, completion callbacks
+and asynchronous context close still run; a faulted context completion remains
+faulted for its protocol owner. Process/resource-corruption exceptions continue
+to propagate through the existing exception policy. Public APIs and library
+targets do not change.
+
+The enabled F3 regression cancels 400 uploads, checks that fatal cleanup was
+never called, checks the actual listener and probes fresh client connections.
+Five monitored Linux repeats passed (2,000 cancelled uploads), and the monitored
+Windows regression also passed. The HTTP/2, HTTP/3, cleanup and fatal-propagation
+set passed all 806 cases on each of Windows and Linux. Existing hot-path,
+listener-queue, cold-start and listener-allocation budgets passed. Final full-suite
+and exact-head repository gates are still required. The other eight supplied reproduction
+cases remain Explicit for unresolved F1/F2/F4 work; enabling F3 is not a claim
+that the full conformance campaign passes. Evidence is under ignored
+`TestResults/http-engine/f3-*`.

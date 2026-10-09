@@ -343,6 +343,13 @@ namespace EmbedIO
             {
                 ex.Log(LogSource, $"[{context.Id}] Listener exception.");
             }
+            catch (Exception ex) when (context is Net.Internal.MultiplexedContext && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                // A failed or reset request stream must not dispose the listener
+                // shared by unrelated HTTP/2 and HTTP/3 connections. Terminal
+                // context cleanup above still closes and completes that stream.
+                ex.Log(LogSource, $"[{context.Id}] Multiplexed request stream failed.");
+            }
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 ex.Log(LogSource, $"[{context.Id}] Fatal exception.");
