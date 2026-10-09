@@ -29,6 +29,9 @@ shasum -a 256 "$openssl_root/lib/libcrypto.3.dylib" >> "$results/openssl.txt"
 patch_file="$repo/test/EmbedIO.RuntimeCloseProbe/msquic-kqueue-close.patch"
 cp "$patch_file" "$results/candidate.patch"
 shasum -a 256 "$patch_file" > "$results/patch.sha256"
+config_patch="$repo/test/EmbedIO.RuntimeCloseProbe/msquic-kqueue-config.patch"
+cp "$config_patch" "$results/config-candidate.patch"
+shasum -a 256 "$config_patch" > "$results/config-patch.sha256"
 # Compile the same deterministic lifetime fixture into both variants.
 fixture="$repo/test/EmbedIO.RuntimeCloseProbe/kqueue-lifetime-test.inc"
 cp "$fixture" "$results/kqueue-lifetime-test.inc"
@@ -116,6 +119,13 @@ git -C "$source_dir" apply "$patch_file"
 git -C "$source_dir" diff --check
 git -C "$source_dir" diff -- src/platform/datapath_kqueue.c > "$results/applied.patch"
 cmp "$patch_file" "$results/applied.patch"
+# Separate correction for explicitly requested, unsupported raw/XDP map mode.
+# The control and every original native assertion remain unchanged.
+git -C "$source_dir" apply --check "$config_patch"
+git -C "$source_dir" apply "$config_patch"
+git -C "$source_dir" apply --reverse --check "$config_patch"
+git -C "$source_dir" diff --check
+git -C "$source_dir" diff -- src/platform/datapath_kqueue.c > "$results/combined-candidate.patch"
 build_native candidate
 candidate_failed=0
 "$RUNNER_TEMP/msquic-candidate-build/bin/msquicplatformtest" \
@@ -147,7 +157,7 @@ asan_bin="$RUNNER_TEMP/msquic-candidate-asan-build/bin"
 otool -L "$asan_bin/msquicplatformtest" > "$results/candidate-asan-test-imports.txt"
 env DYLD_FALLBACK_LIBRARY_PATH="$asan_bin" DYLD_PRINT_LIBRARIES=1 \
   "$asan_bin/msquicplatformtest" --timeout 120000 \
-    --gtest_filter='*EmbedIOKqueue*:*UdpData*' --gtest_repeat=100 \
+    --gtest_filter='*EmbedIOKqueue*:*UdpData*:*XdpMapMode_InitFailsWithoutRawDatapath' --gtest_repeat=100 \
     --gtest_shuffle --gtest_random_seed=40591 \
     --gtest_output="xml:$results/candidate-asan-lifetime.xml" \
     > "$results/candidate-asan-lifetime.log" 2> "$results/candidate-asan-loader.log" || candidate_failed=1

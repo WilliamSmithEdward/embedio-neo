@@ -4091,3 +4091,27 @@ The native suite still reports the same two XDP-related failures in both
 variants, plus the lifetime regression failure in the control. The job remains
 failed. No native dependency has been shipped, no assertions were suppressed,
 and sanitizer validation on head `5025bb8` remains pending.
+
+### Unsupported Darwin map-mode initialization candidate
+
+The optional native experiment now carries a separate
+`msquic-kqueue-config.patch` alongside the endpoint-cleanup patch. The pinned
+Darwin initializer ignores `XdpMapConfigCount`; the cross-platform initializer
+instead treats a nonzero count as an explicit request for a raw datapath and
+returns `QUIC_STATUS_NOT_SUPPORTED` when it cannot provide one. The Darwin
+candidate rejects that unsupported request before allocation and clears the
+output pointer. Ordinary zero-count initialization is unchanged.
+
+The existing `XdpMapMode_InitFailsWithoutRawDatapath` test has failed in every
+recorded control and cleanup-only candidate. It remains unchanged and is the
+before/after regression for this correction. The sanitizer subset also includes
+this case for 100 repetitions. The separate zero-config optional-feature-mask
+assertion remains unchanged and failing in the recorded evidence; this candidate
+does not manufacture feature bits or suppress that result.
+
+Both patches are retained and hashed separately; the experiment records their
+combined source diff and new native library hash. Prior cleanup-only measurements
+must not be attributed to the combined candidate. Local patch composition,
+reverse-application checks, shell syntax, suppression guard and scoped YARA scan
+pass. Native compilation and execution of the combined candidate are pending.
+This remains an isolated dependency experiment, not a shipped native change.
