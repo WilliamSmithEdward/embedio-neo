@@ -10,7 +10,7 @@ namespace EmbedIO
     /// <summary>
     /// Provides extension methods for types implementing <see cref="IHttpRequest"/>.
     /// </summary>
-    public static class HttpRequestExtensions
+    public static partial class HttpRequestExtensions
     {
         /// <summary>
         /// <para>Returns a string representing the remote IP address and port of an <see cref="IHttpRequest"/> interface.</para>

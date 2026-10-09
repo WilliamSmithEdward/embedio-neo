@@ -5112,7 +5112,7 @@ raw TCP fixtures now prove exact lowercase wire methods retain their behavior.
 The policy was not weakened to accommodate client normalization. All 78 selected
 cases pass on pinned Linux with QUIC required. All 47 applicable policy cases pass
 against the actual netstandard2.0 assembly hosted by Windows .NET 10, excluding
-its unsupported HTTP/2 and HTTP/3 transports; no older-runtime execution is claimed.
+HTTP/2 and HTTP/3 in that selected subset; later expanded legacy-host validation below corrects the HTTP/2 assumption. No older-runtime execution is claimed.
 
 An independent http-sfv 0.9.9 parser with typing-extensions 4.16.0 verifies 1,000
 seeded generated fields, including every printable ASCII parameter-character
@@ -5147,3 +5147,36 @@ changed-file whitespace, shell syntax and pinned source YARA checks pass. The
 51 added cases raise the discovery floor accordingly. No existing application
 was opted into the policy; exact-head CI and the full engine requirements remain
 outstanding.
+
+### Selected-representation precondition evaluator
+
+The additive EvaluatePreconditions request helper applies entity-tag/date
+conditions to caller-supplied selected-representation metadata, with RFC ordering,
+strong If-Match, weak If-None-Match, existence wildcards, quoted-comma-aware lists
+and HTTP-date second precision. It returns 304/412 or null and raises 400 for
+malformed entity-tag conditions; invalid conditional dates are ignored. Exact
+QUERY follows retrieval validation semantics. CONNECT/OPTIONS/TRACE conditions
+are ignored. Caller authorization, ordinary error/redirect decisions, validator
+selection, response metadata and safe query processing remain prerequisites.
+The helper is explicitly applied; existing conditional/range APIs and default
+file-module behavior are unchanged. Range selection, caching, equivalent-resource
+assignment and verified replay exceptions remain distinct development requirements.
+
+94 focused cases and four wire cases pass on Windows and pinned required-QUIC
+Linux. Real HTTP/1 managed/native, exact HTTP/2 and HTTP/3 tests use validators
+that include query content and negotiated output: matching weak validators yield
+bodyless 304, different content/negotiation yields 200, failed If-Match takes
+precedence with 412 and healthy following requests succeed. The actual legacy
+asset hosted by Windows .NET 10 passes 97 cases with one HTTP/3 skip, including
+cleartext HTTP/2. Expanded legacy QUERY format-policy validation also passes all
+49 cases. This corrects the preceding checkpoint's assumption that this asset
+lacked HTTP/2; its earlier 47-case report was a filtered subset, not proof of
+unsupported cleartext HTTP/2. Older-runtime and legacy TLS-ALPN execution are not
+claimed by these host tests. Full changed-source coverage remains pending here.
+
+Final changed-source Windows coverage passes 4,155 cases: 4,150 passed, five
+skipped and zero failed in 2m33s. Both assets build without warnings; four existing
+allocation-budget groups, source/parser guards, changed-file whitespace, shell
+syntax and pinned source YARA scans pass. The 98 added cases raise the discovery
+floor. These gates do not claim complete QUERY caching/ranges or overall engine
+completion; fresh exact-head CI and remaining program requirements still apply.

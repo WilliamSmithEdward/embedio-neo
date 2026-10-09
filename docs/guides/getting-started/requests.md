@@ -265,3 +265,29 @@ read content, evaluate queries or implement conditional/range/cache semantics.
 Handlers must validate query content and remain safe and idempotent. This example
 performs a read-only text search; applying a policy does not make a mutating handler
 safe. See [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-3).
+
+## Evaluate selected-representation preconditions
+
+The unreleased `Request.EvaluatePreconditions(entityTag, lastModified,
+representationExists)` helper evaluates entity-tag and date conditions in HTTP
+order. It returns null to continue, 304 for unchanged GET/HEAD/QUERY results, or
+412 when a condition fails. Strong comparison is used for If-Match; weak comparison
+is used for If-None-Match. Invalid dates are ignored, malformed entity-tag lists
+raise HTTP 400, and server-supplied invalid tags raise an argument error.
+
+Call it after authorization and ordinary validation, for a request that would
+otherwise succeed. Supply validators for the selected representation. For QUERY,
+that means the query results including request content, relevant metadata and
+response content negotiation. A target-URI-only tag can incorrectly produce 304
+for different queries. The helper neither reads the request nor derives validators.
+
+Set the response's ETag/Last-Modified and other appropriate representation/cache
+headers yourself. If the helper returns a status, set `Response.StatusCode` and
+finish without writing content. Otherwise send the selected representation.
+CONNECT, OPTIONS and TRACE conditions are ignored. The helper does not implement
+range selection, caching, equivalent-resource URI assignment or automatic replay
+of a previously successful state-changing operation. Existing conditional and
+range helper behavior is preserved; adopting this evaluator is explicit.
+
+See [RFC 9110 precondition ordering](https://www.rfc-editor.org/rfc/rfc9110.html#section-13.2.2)
+and [QUERY conditional requests](https://www.rfc-editor.org/rfc/rfc10008.html#section-2.6).
