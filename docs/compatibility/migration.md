@@ -1081,3 +1081,11 @@ Set ContentLength64 before writing to retain HTTP/1.0 persistence when the exact
 length is known. HEAD and bodyless status responses retain their existing
 persistence policy; HTTP/1.1 chunked responses are unchanged. See
 [RFC 9112 section 9.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-9.3).
+## HTTP/2 malformed WebSocket version negotiation (unreleased)
+
+An extended CONNECT request with `:protocol: websocket` and a missing, empty or
+unsupported Sec-WebSocket-Version receives 400 with Sec-WebSocket-Version: 13
+before application dispatch. Previously the failed socket acceptance could become
+500. This matches the existing HTTP/3 negotiation policy. The rejection affects
+its request stream; other HTTP/2 streams remain usable. Valid version-13
+WebSocket handshakes and the public acceptance API are unchanged.

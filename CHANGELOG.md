@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Return a stream-local 400 with the supported version for malformed HTTP/2
+  WebSocket version negotiation instead of an application 500.
+
 - Close unknown-length HTTP/1.0 response bodies to delimit them by transport EOF,
   while retaining persistence for fixed-length and bodyless responses.
 

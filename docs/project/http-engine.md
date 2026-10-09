@@ -6275,3 +6275,26 @@ zero failures. The full suite overlapped another agent's Windows suite; neither
 that observation nor passing local cases establish CI/platform readiness.
 Source guards and all four allocation budgets pass. Full-suite logs and TRX are
 retained. Final-head GitHub checks are required before integration.
+### HTTP/2 malformed WebSocket version rejection
+
+Three real h2c wire cases submit an extended CONNECT with version 12, an empty
+version, or no version. On unchanged production at 3bf7173, each returns 500.
+The first peer attempt rejected legal repeated cache-control fields while building
+a dictionary; it is retained but does not establish the defect. The corrected
+peer groups repeated fields and confirms all three 500 responses.
+
+The HTTP/2 owner rejects these malformed negotiations before registering an
+application context, returns 400 and advertises version 13, matching HTTP/3.
+Each corrected case validates a subsequent GET and its payload on stream 3 of
+the same TCP connection. Valid version-13 echo, closure and limit cases remain
+covered by existing tests. The focused set reports 17 passed, zero failures;
+changed-source formatting and analyzer builds pass. Full regression and exact-head
+checks remain required. Discovery floors are 4,396. Evidence: ignored
+TestResults/h2-negotiation-before*, h2-negotiation-after* and their TRX files.
+
+The new malformed-handshake wire cases use h2c and END_STREAM request headers;
+this does not establish TLS or still-open upload rejection coverage, or resolve
+unsupported extended-CONNECT protocols and remaining timeout/retention work.
+Final local Windows regression passes: 4,396 cases, 4,391 passed, five expected
+local skips, zero failures. Suppression checks and analyzer guard also pass.
+Cross-platform and exact-head GitHub validation remain required.
