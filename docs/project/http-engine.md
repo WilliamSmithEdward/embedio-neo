@@ -3095,3 +3095,32 @@ configures reference identity and SNI from that string and returns TLS_ERROR if
 those operations fail. The independent reproduction narrows this limitation to
 the underlying stack; it does not establish a server-side remedy or complete
 IP-address interoperability. Do not weaken certificate validation to mask it.
+
+
+### HTTP/2 transport mutation campaign
+
+The standalone fuzz runner accepts `--http2-transport <seed> <iterations>` (up to
+one million inputs). It compares the production HTTP/2 transport with an
+independent batch parser using big-endian integer decoding. Generated sequences
+contain one to four frames with arbitrary types, flags, stream identifiers and
+payload bytes; mutations insert, delete or replace bytes, truncate sequences,
+and exercise the 16,384-byte receive limit. Each input runs with contiguous and
+randomly fragmented delivery. The oracle checks exact frames, payload bytes,
+consumed position, clean EOF versus truncation versus FRAME_SIZE_ERROR, terminal
+failure behavior, and preservation of the borrowed source stream.
+
+Windows seed 182 passed 100,000 inputs; isolated Linux seed 181 passed one million,
+each with both delivery strategies. Two temporary production fault injections
+(removing reserved-bit masking and rejecting the exact maximum length) were both
+detected. Source was restored in a finally block, rebuilt, and the 100,000-input
+Windows campaign passed again. Evidence is under TestResults/http-engine/h2-fuzz-*.
+Failures print the seed, iteration, exact input bytes, read fragments, runtime
+and assembly MVID. Replaying the seed and iteration range requires the same source
+and runtime. The existing scheduled/PR fuzz job now also runs 100,000 HTTP/2
+transport inputs and retains its log alongside the HTTP/1 framing campaign.
+
+This is deterministic mutation/property testing of transport framing. It does not
+claim coverage-guided fuzzing, frame-shape or connection-state conformance, HPACK,
+HTTP/3/QPACK, WebSockets, or whole-engine resource/race validation. Those campaigns
+remain required before the engine is ready to ship. No production behavior or
+ordinary regression discovery count changes in this increment.

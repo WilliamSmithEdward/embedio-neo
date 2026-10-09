@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   fuzz:
-    name: Fuzz URL data and HTTP/1 head framing
+    name: Fuzz URL data and HTTP transport framing
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -35,10 +35,15 @@ jobs:
           seed=$((GITHUB_RUN_ID % 2147483647))
           printf '%s\n' "$GITHUB_SHA" > TestResults/fuzz/source.txt
           dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --http1-head "$seed" 100000 2>&1 | tee TestResults/fuzz/http1-head.log
+      - name: Compare HTTP/2 transport mutations with the batch oracle
+        shell: bash
+        run: |
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --http2-transport "$seed" 100000 2>&1 | tee TestResults/fuzz/http2-transport.log
       - name: Retain campaign metadata and failure reproducers
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: http1-head-fuzz
+          name: http-transport-fuzz
           path: TestResults/fuzz
           if-no-files-found: ignore
