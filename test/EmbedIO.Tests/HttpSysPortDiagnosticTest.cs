@@ -223,12 +223,18 @@ namespace EmbedIO.Tests
             if (relevant) foreach (var kept in block) yield return kept;
         }
 
+        // Keeps matching lines plus the lines that follow them, which for a URL
+        // reservation name the account, listen/delegate flags and SDDL.
         private static IEnumerable<string> FilterLinesMentioningPorts(string text)
         {
+            var remaining = 0;
             foreach (var raw in text.Split('\n'))
             {
                 var line = raw.TrimEnd('\r');
-                if (MentionsPort(line)) yield return line;
+                if (MentionsPort(line)) remaining = 5;
+                if (remaining == 0) continue;
+                remaining--;
+                yield return line;
             }
         }
 
