@@ -110,6 +110,8 @@ jobs:
           # Homebrew publishes no Intel macOS bottle for libmsquic 2.6.2 and
           # Microsoft publishes no macOS binary. Build the formula's tagged
           # commit with its CMake options, against Homebrew's OpenSSL libcrypto.
+          # Name the architecture, as MsQuic's own build script does, so the
+          # bundled TLS layer is configured for x86_64 rather than auto-detected.
           revision=819ab74f851ee168504cbc392ec32e7bed1d82e9
           quictls=ff36838bb69801cad56823159a036977bcbe5c75
           source_dir="$RUNNER_TEMP/msquic-2.6.2-source"
@@ -124,7 +126,7 @@ jobs:
           test "$(git -C "$source_dir" rev-parse HEAD:submodules/quictls)" = "$quictls"
           git -C "$source_dir" submodule update --init --depth 1 submodules/quictls
           test "$(git -C "$source_dir/submodules/quictls" rev-parse HEAD)" = "$quictls"
-          cmake -S "$source_dir" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release \
+          cmake -S "$source_dir" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64 \
             -DCMAKE_INSTALL_PREFIX="${quic_lib%/lib}" -DCMAKE_INSTALL_LIBDIR=lib \
             -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3)" \
             -DQUIC_USE_SYSTEM_LIBCRYPTO=true -DQUIC_BUILD_PERF=OFF -DQUIC_BUILD_TOOLS=OFF \
