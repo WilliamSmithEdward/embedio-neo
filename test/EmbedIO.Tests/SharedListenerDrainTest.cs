@@ -67,7 +67,11 @@ namespace EmbedIO.Tests
                 Timeout = TimeSpan.FromSeconds(10),
             };
             var request = client.GetStringAsync(prefix + "owner/", lifetime.Token);
-            var exclusiveRequest = mixedEndpoints ? client.GetStringAsync(exclusivePrefix, lifetime.Token) : Task.FromResult("owner");
+            // On abort, inspect the original HTTP/1 transport directly. HttpClient
+            // may retry a reset connection before reporting the already completed stop.
+            var rawExclusiveAbort = mixedEndpoints && !http2 && ending != "complete";
+            var exclusiveRequest = mixedEndpoints && !rawExclusiveAbort ? client.GetStringAsync(exclusivePrefix, lifetime.Token) : Task.FromResult("owner");
+            var exclusiveAbort = rawExclusiveAbort ? Http1AbortProbe.AssertClosedWithoutResponseAsync(exclusivePrefix) : Task.CompletedTask;
             try
             {
                 if (mixedEndpoints) await exclusiveEntered.Task.WaitAsync(lifetime.Token);
@@ -93,7 +97,8 @@ namespace EmbedIO.Tests
                     if (ending == "stop") owner.Listener.Stop();
                     if (ending == "dispose") owner.Dispose();
                     await Assert.ThatAsync(async () => await request, Throws.InstanceOf<HttpRequestException>());
-                    if (mixedEndpoints)
+                    if (rawExclusiveAbort) await exclusiveAbort.WaitAsync(lifetime.Token);
+                    else if (mixedEndpoints)
                         await Assert.ThatAsync(async () => await exclusiveRequest, Throws.InstanceOf<HttpRequestException>());
                 }
                 if (ending == "cancel")
@@ -114,6 +119,7 @@ namespace EmbedIO.Tests
                 release.TrySetResult(); siblingRelease.TrySetResult(); lifetime.Cancel();
                 try { await request; } catch (HttpRequestException) { } catch (OperationCanceledException) { }
                 try { await exclusiveRequest; } catch (HttpRequestException) { } catch (OperationCanceledException) { }
+                await exclusiveAbort.WaitAsync(TimeSpan.FromSeconds(5));
                 await Task.WhenAll(running, otherRunning).WaitAsync(TimeSpan.FromSeconds(5));
             }
         }

@@ -2904,3 +2904,22 @@ checks passed or intentionally skipped; the CI aggregate failed. Four new mixed
 endpoint HTTP/1 abort cases take about four seconds each on Windows, similar
 to the previously identified HttpClient retry delay. This is an investigation
 lead; the suite limit and discovery requirement remain unchanged.
+
+Windows CI TRX confirms approximately four seconds in each of the mixed-endpoint
+HTTP/1 abort cases. Those four exclusive-endpoint clients now use the existing
+Http1AbortProbe: it checks EOF/reset on the original TCP connection and fails if
+any response byte arrives. Completion cases and HTTP/2 retain their independent
+HttpClient checks; shared sibling responses and connection identity assertions
+remain intact. All 20 shared/mixed cases pass in 1.6s locally on Windows (previous
+run about 18s) and 1.9s on Linux (`mixed-drain-wire-focused.log`,
+`mixed-drain-wire-linux.log`). This removes client retry delay from the fixture;
+it is not an engine speedup. The full 3,235-case suite and five-minute budget
+remain unchanged, and CI timeout resolution still needs exact-head evidence.
+
+With the direct abort clients, full Windows coverage passes the same 3,235 cases
+(3,230 successes, five existing skips) in 4m13s
+(`mixed-drain-wire-coverage.log`). The 20 revised shared/mixed cases also pass
+against the actual netstandard2.0 library on the Windows .NET 10 host
+(`mixed-drain-wire-netstandard.log`). Formatting, both source policy guards and
+the pinned changed-fixture YARA scan pass. These local results do not close the
+Windows CI timeout investigation; the new exact head must pass its checks.
