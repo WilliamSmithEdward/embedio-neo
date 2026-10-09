@@ -513,6 +513,43 @@ def _(e):
             f"{violations} of {trials} trials received DATA beyond the acknowledged window (worst {worst})")
 
 
+@case(CASES, "reset-while-responding", "RFC9113 5.4.2; 6.4", "MUST")
+def _(e):
+    # Minimized from h2 fuzz seed 20261009: RST_STREAM on a request whose response may be
+    # in progress is a stream-level event; the connection must survive and answer PING.
+    import hpack
+    rng = random.Random(1309)
+    dropped = []
+    trials = 300
+    for trial in range(trials):
+        sock = raw_connection(e)
+        encoder = hpack.Encoder()
+        path = rng.choice([b"/plain", b"/stream?n=100000&chunk=700", b"/files/data.bin", b"/slow?ms=5"])
+        first = hf.HeadersFrame(1, encoder.encode([(b":method", b"GET"), (b":scheme", b"http"), (b":authority", e.authority), (b":path", path)]))
+        first.flags.update(["END_HEADERS", "END_STREAM"])
+        second = hf.HeadersFrame(3, encoder.encode([(b":method", b"POST"), (b":scheme", b"http"), (b":authority", e.authority),
+                                                    (b":path", b"/echo"), (b"content-length", b"100")]))
+        second.flags.add("END_HEADERS")
+        body = hf.DataFrame(3, b"b" * 100)
+        body.flags.add("END_STREAM")
+        sock.sendall(first.serialize() + second.serialize() + body.serialize())
+        time.sleep(rng.choice([0, 0, 0.0005, 0.001, 0.003]))
+        code = rng.choice([0, 8])
+        try:
+            sock.sendall(hf.RstStreamFrame(1, code).serialize() + hf.PingFrame(0, opaque_data=b"embedio!").serialize())
+        except OSError:
+            dropped.append((trial, path.decode(), code, "send failed"))
+            sock.close()
+            continue
+        frames, closed = raw_frames(sock, 1.5)
+        acked = any(isinstance(f, hf.PingFrame) and "ACK" in f.flags for f in frames)
+        if not acked:
+            dropped.append((trial, path.decode(), code, f"closed={closed} goaway={goaway_code(frames)}"))
+        sock.close()
+    return ("conforms" if not dropped else "violation",
+            f"{len(dropped)} of {trials} connections lost after RST_STREAM; first: {dropped[:5]}")
+
+
 @case(CASES, "client-goaway-drains", "RFC9113 6.8", "MUST")
 def _(e):
     client = Client(e)
