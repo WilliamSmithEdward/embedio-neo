@@ -82,9 +82,14 @@ static int traced_close(int fd)
 // dyld does not interpose calls originating in this image, so the wrappers
 // above call the original libc functions without dlsym or recursive hooks.
 #if defined(__APPLE__)
-#include <mach-o/dyld-interposing.h>
-DYLD_INTERPOSE(traced_bind, bind)
-DYLD_INTERPOSE(traced_close, close)
+#if defined(__arm64e__)
+#error This test tracer does not implement the arm64e authenticated interpose layout.
+#endif
+__attribute__((used, section("__DATA,__interpose,interposing")))
+static const struct { const void *replacement; const void *original; } interpose[] = {
+    {(const void *)(uintptr_t)&traced_bind, (const void *)(uintptr_t)&bind},
+    {(const void *)(uintptr_t)&traced_close, (const void *)(uintptr_t)&close}
+};
 #endif
 
 __attribute__((visibility("default")))

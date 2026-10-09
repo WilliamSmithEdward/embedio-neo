@@ -3832,7 +3832,7 @@ late cleanup events to be recorded without changing that result.
 
 The CI workflow has a default-false `quic-rebind-probe` dispatch input. When
 explicitly selected, the macOS test job builds a test-only C dylib and uses the
-SDK's [dyld interposing API](https://github.com/apple-oss-distributions/dyld/blob/main/include/mach-o/dyld-interposing.h)
+[dyld interposing section ABI](https://github.com/apple-oss-distributions/dyld/blob/main/include/mach-o/dyld-interposing.h)
 to observe UDP bind/close calls in that one probe process. It records descriptor,
 port, result, errno and monotonic begin/end timestamps plus managed markers on
 the same native clock. Records stay in a fixed 131,072-entry memory buffer until
@@ -3862,3 +3862,14 @@ macOS dyld interposition. The C# build/analyzers, source guards and probe-direct
 YARA scan pass. The Linux SDK image has no C compiler, so recorder validation
 uses GCC 14.2.0 in the already pinned Python build image; no Python code or runtime
 is added to the production engine. macOS trace execution remains pending.
+
+The first dispatched trace run (37882226360, macOS job 113664238465) reproduces
+the uninstrumented raw failure at cycle 2 on 127.0.0.1:58448. The diagnostic
+itself does not run: that runner SDK does not ship `mach-o/dyld-interposing.h`.
+The tracer now declares only the two interpose pointer pairs in the Mach-O
+section directly, with no private SDK-header dependency; unsupported arm64e
+pointer-authentication layout is rejected at compilation. The supported runner
+is ordinary arm64. No native event-ordering conclusion follows from the first
+run. Its failure log and artifacts remain retained. Entries in successful
+native captures may appear out of timestamp order across threads; compare
+recorded intervals rather than file order.
