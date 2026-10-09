@@ -267,7 +267,7 @@ namespace EmbedIO.WebSockets.Internal
         // the exact array the message will own.
         private async Task<byte[]> ReadLargePayloadAsync(int length)
         {
-            var chunks = new List<byte[]>((length + ExactAllocationLimit - 1) / ExactAllocationLimit);
+            var chunks = new List<byte[]>();
             var filled = 0;
             try
             {
