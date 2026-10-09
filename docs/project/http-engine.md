@@ -5878,3 +5878,20 @@ The original h2spec failures remain recorded; no aggregate tool result has been
 converted to success or its tests disabled. Fresh independent wire validation
 and exact-head CI remain required. F5 settings/queued-DATA ordering is still open.
 Evidence is under ignored `TestResults/http-engine/f6-*`.
+
+### Independent lower-stream-ID wire regression and combined validation
+
+A raw client opens HTTP/2 stream 3, waits for its response headers and then sends
+an initial request on stream 1. The regression verifies GOAWAY on stream zero,
+PROTOCOL_ERROR and last-stream-ID 3, then checks a new independent HTTP client
+still succeeds. It passes on Windows and pinned Linux without using the engine's
+frame decoder in the client. The discovery floor now includes the extra case.
+
+The first local full combined WebSocket/engine run on `dad10ff` reports all 4,341
+cases: 4,311 pass, 29 skip and one fails. The failure is the old plain-HTTP
+truncated-body fixture, which expected successful EOF. Its assertion now requires
+IOException for truncation, specifically EndOfStreamException on the plain
+transport, while preserving partial-byte and subsequent healthy-listener checks.
+The low-level application responds 400. The 63-case boundary/wire set passes on
+Windows. The original failed result remains under ignored
+`TestResults/frame-boundary/combined-linux-full`; a fresh combined run is required.
