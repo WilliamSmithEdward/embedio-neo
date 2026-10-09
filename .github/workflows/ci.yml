@@ -178,10 +178,8 @@ jobs:
         include:
           - os: macos-15
             rid: osx-arm64
-          - os: macos-15-intel
-            rid: osx-x64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.rid == 'osx-x64' && 75 || 45 }}
+    timeout-minutes: 45
     env:
       EMBEDIO_EXPECT_NATIVE_RID: ${{ matrix.rid }}
       EMBEDIO_QUIC_SELF_CONTAINED: ${{ (inputs.quic-self-contained-experiment || inputs.quic-openssl-experiment) && '1' || '0' }}
@@ -197,33 +195,6 @@ jobs:
           global-json-file: global.json
       - name: Prepare native build tools
         run: brew install cmake openssl@3 gnupg
-      - name: Resolve the Intel runner's own host name without mDNS
-        if: runner.os == 'macOS' && runner.arch == 'X64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          # The image lists its .local host name for IPv4 only, so each lookup of
-          # it waits five seconds for the unreachable mDNS resolver to answer the
-          # IPv6 query. HttpListener performs that lookup for every IP-literal or
-          # wildcard prefix. Add the IPv6 entry and require a prompt lookup;
-          # docs/project/http-engine.md has the measurements. Same step as the
-          # Intel regression leg, so the candidate's full suite is not cut short.
-          name="$(hostname)"
-          resolve() {
-            perl -MTime::HiRes=time -MSocket=:addrinfo,SOCK_STREAM -e '$t = time; ($e) = getaddrinfo($ARGV[0], undef, {flags => AI_CANONNAME, socktype => SOCK_STREAM}); printf "%.3f %s\n", time - $t, $e ? "unresolved" : "resolved"' "$name"
-          }
-          before="$(resolve)"
-          printf '::1 %s %s\n' "$name" "${name%.local}" | sudo tee -a /etc/hosts > /dev/null
-          sudo dscacheutil -flushcache
-          sudo killall -HUP mDNSResponder
-          after="$(resolve)"
-          mkdir -p TestResults/quic-cleanup-experiment
-          printf '%s before: %s after: %s\n' "$name" "$before" "$after" | tee TestResults/quic-cleanup-experiment/host-name-resolution.log
-          read -r seconds outcome <<< "$after"
-          if ! perl -e 'exit($ARGV[0] < 1 && $ARGV[1] eq "resolved" ? 0 : 1)' "$seconds" "$outcome"; then
-            echo "::error::The runner's own host name still does not resolve promptly ($after)."
-            exit 1
-          fi
       - name: Compare pinned source with the test-only cleanup patch
         run: bash test/EmbedIO.RuntimeCloseProbe/quic-cleanup-experiment.sh
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
