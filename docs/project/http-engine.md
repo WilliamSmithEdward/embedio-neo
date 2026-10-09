@@ -2863,3 +2863,44 @@ two intentional skips, and the iOS HTTPS check still running
 (`shared-drain-checks-final.json`). Windows/Linux/macOS desktop checks passed;
 that does not explain the earlier b86a174 Windows combined-drain or macOS QUIC
 rebind failures. Overall CI completion is not yet claimed.
+
+### HTTP/1 CONNECT rejection and committed persistence
+
+The RFC 9931 section 8 audit reproduced successor dispatch after six rejected
+CONNECT responses (401, 403, 407, 307, 404 and 501) on the existing origin-form
+application path. The wire fixture sends both requests in one write; before the
+correction all six invoked the successor handler (`connect-reject-before.log`).
+Two rejected WebSocket-upgrade GET controls and a lowercase `connect` method
+control preserve ordinary persistence. This is a controlled legacy dispatch-path
+reproduction, not complete CONNECT authority-form or tunneling validation.
+
+HTTP/1.1 exact-uppercase CONNECT rejection now commits Connection: close. A
+second controlled case showed post-flush mutation of the public Connection
+header could otherwise reopen the connection (`connect-late-header-raw-before.log`).
+Reuse now also checks the response's committed KeepAlive value. The first
+mutation fixture used SendStringAsync, which closed the response too early;
+it was replaced with raw output/flush and an assertion that mutation happened.
+All 11 final new cases and the broader 114-case target/ownership/drain set pass
+on Windows and Linux (`connect-reject-final-focused.log`,
+`connect-reject-final-linux.log`). The full discovery floor is 3,235. Full-source
+coverage, retained-target checks and exact-head CI remain required.
+
+The prior shared-drain CI run 37861689011 completed successfully on 3e7ddc4
+(`shared-drain-ci-completion.json`). Earlier platform failure causes remain
+unconfirmed; the later QUIC correction 90467e6 has its own checks in progress.
+
+CONNECT persistence full Windows coverage passes 3,235 cases: 3,230 successes
+and five existing skips, zero failures, 4m29s (`connect-reject-coverage.log`).
+The actual netstandard2.0 assembly passes 67 CONNECT/target cases on both
+Windows and Linux .NET 10 hosts. The comparator passes 207 cases / 414
+comparisons with zero errors, all four existing allocation budgets pass, and
+the changed-source pinned YARA scan has no matches (`connect-reject-*` logs).
+
+Pushed QUIC checkpoint 90467e6 failed Windows CI 37862628495 on the unchanged
+five-minute suite budget, with 3,211/3,224 reported cases, 3,208 successes and
+three skips, no assertion failures. Logs and TRX are retained as
+`quic-callback-ci-windows.log` and `quic-callback-ci-windows-artifacts/`. All other
+checks passed or intentionally skipped; the CI aggregate failed. Four new mixed
+endpoint HTTP/1 abort cases take about four seconds each on Windows, similar
+to the previously identified HttpClient retry delay. This is an investigation
+lead; the suite limit and discovery requirement remain unchanged.

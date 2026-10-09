@@ -235,7 +235,7 @@ namespace EmbedIO.Net.Internal
             if (_sock == null) return;
 
             if (!_draining && Volatile.Read(ref _forceClosing) == 0 && _context.Request.KeepAlive
-                && _context.Response.Headers["connection"] != "close")
+                && _context.Response.KeepAlive && _context.Response.Headers["connection"] != "close")
             {
                 _ = CompleteResponseAsync();
                 return;

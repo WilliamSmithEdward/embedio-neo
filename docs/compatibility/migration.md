@@ -891,3 +891,17 @@ exceptions during its own shutdown and continues resource cleanup. Such callback
 failures no longer replace the connection shutdown outcome with an aggregate
 exception. This does not change exceptions raised when application code directly
 cancels a token source it owns.
+
+### Rejected HTTP/1.1 CONNECT persistence (unreleased)
+
+A managed HTTP/1.1 response with status 300 or greater to the exact `CONNECT`
+method now closes the connection even when application code requests keep-alive.
+Bytes already sent after that request are not dispatched as another request.
+This follows the rejection mitigation in [RFC 9931 section 8](https://www.rfc-editor.org/rfc/rfc9931.html#section-8).
+After a rejection, send any subsequent request on a new connection. Rejected
+WebSocket upgrades using GET retain their existing persistence behavior.
+
+Connection reuse also honors the response's committed keep-alive decision after
+headers have been sent. Mutating the public header collection afterward cannot
+reopen a response that committed connection closure. This does not add a CONNECT
+tunnel API or complete authority-form handling.

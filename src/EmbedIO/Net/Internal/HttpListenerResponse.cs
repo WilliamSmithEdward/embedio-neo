@@ -254,6 +254,11 @@ namespace EmbedIO.Net.Internal
                 _ => !_connection.IsDraining && KeepAlive && reuses < 100
             };
 
+            // RFC 9931 section 8: bytes after a rejected HTTP/1.1 CONNECT
+            // might already belong to the requested tunnel, never a successor.
+            if (_request.ProtocolVersion == HttpVersion.Version11 && _request.HttpMethod == "CONNECT" && _statusCode >= 300)
+                keepAlive = false;
+
             _keepAlive = keepAlive;
             if (keepAlive)
             {
