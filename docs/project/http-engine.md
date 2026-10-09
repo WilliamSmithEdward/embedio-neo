@@ -4125,3 +4125,32 @@ UDP behavior independently of optional feature advertisement. RAII cleanup also
 runs on a failed assertion. The original feature-mask assertion is retained;
 this supplemental test has not yet been compiled or executed on Darwin.
 The fixture is hashed in the artifact and included in the sanitizer repetitions.
+
+### Sanitizer configuration failure and harness correction
+
+[Run 37886228567](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37886228567),
+job `113676736861`, tests cleanup-only head `5025bb8`. Its ordinary candidate
+passes all ten 4,096-cycle probes, the strengthened descriptor-reuse fixture,
+five paired managed rebind repetitions and full macOS coverage (3,369 passed,
+31 skipped, zero failed). Inspection of all five complete native traces verifies
+20,480 closes completing before managed disposal. The candidate library hash
+matches the preceding runs. The same two XDP-related native assertions fail.
+
+The subsequent AddressSanitizer configure step fails before compilation:
+upstream `CMakeLists.txt:744` calls `check_c_compiler_flag` without loading
+`CheckCCompilerFlag`. No instrumented executable or sanitizer repetition ran,
+and no sanitizer pass is claimed. Evidence is retained in
+`TestResults/http-engine/quic-cleanup-experiment-artifact5`,
+`quic-cleanup-experiment-job5.log` and `quic-cleanup-ordering5.json`.
+Across four completed ordinary runs, the cleanup-only candidate passes 163,840
+rebind cycles, including 81,920 traced cycles with the required close ordering.
+
+The harness now loads the standard module through
+[CMake's project include hook](https://cmake.org/cmake/help/latest/variable/CMAKE_PROJECT_INCLUDE.html)
+for the instrumented build. It retains the compiler's actual flag probe and
+upstream sanitizer settings. A local CMake/GCC reproduction fails with the same
+unknown command without the hook and configures successfully with it; logs and
+source are retained in `TestResults/http-engine/cmake-sanitizer-module-probe`.
+This validates module loading only. Full Darwin instrumented compilation and
+execution remain pending. The earlier queued combined-candidate runs use their
+original source and cannot validate this later harness correction.
