@@ -24,9 +24,9 @@ def integer(value, bits, flags=0):
     return bytes(result)
 
 
-def verify_responses(command, capacity):
+def verify_responses(command, capacity, seed=9204003, iterations=2000):
     peer = pylsqpack.Decoder(capacity, 0)
-    rng = random.Random(9204003 + capacity)
+    rng = random.Random(seed + capacity)
     received = known = 0
     pending = {}
     metrics = dict(sections=0, dynamic_sections=0, encoder_bytes=0,
@@ -93,6 +93,8 @@ def verify_responses(command, capacity):
             pending.setdefault(stream, []).append(acknowledgment)
         if headers_first:
             deliver_instructions()
+        assert reply["pending"] == sum(map(len, pending.values())), (stream, reply, pending)
+        assert 0 <= known <= received, (known, received)
         return reply
 
     for index in range(256):
@@ -152,6 +154,43 @@ def verify_responses(command, capacity):
             progress()
     flush()
     progress()
+    # A reproducible stateful campaign on the same long-lived connection.
+    # Reuse streams to exercise multiple outstanding sections and FIFO ACKs;
+    # vary fields around table entry sizes, retain pins, and delay insert credit.
+    history = []
+    for iteration in range(iterations):
+        try:
+            action = rng.randrange(10)
+            if action == 0:
+                progress()
+            elif action == 1:
+                flush(cancel=bool(rng.getrandbits(1)))
+            else:
+                stream = 16384 + rng.randrange(64) * 4
+                if history and rng.randrange(3) == 0:
+                    fields = rng.choice(history)
+                else:
+                    fields = [[":status", rng.choice(["200", "204", "404", "503"]), False]]
+                    for _ in range(rng.randrange(1, 9)):
+                        name = rng.choice(["x-a", "x-b", "x-c", "set-cookie", "authorization"])
+                        size = rng.choice([0, 1, 7, 31, 63, 127, 128,
+                                           max(0, min(capacity, 4096) - 32 - len(name)),
+                                           min(capacity, 4096) + 1])
+                        value = chr(rng.randrange(32, 256)) * size
+                        fields.append([name, value, rng.randrange(8) == 0])
+                    history.append(fields)
+                    if len(history) > 32:
+                        history.pop(0)
+                exchange(stream, fields, bool(rng.getrandbits(1)))
+        except Exception as error:
+            raise RuntimeError(
+                f"Response fuzz seed={seed} capacity={capacity} iteration={iteration} "
+                f"action={action} received={received} known={known}"
+            ) from error
+    flush()
+    progress()
+    metrics["fuzz_seed"] = seed
+    metrics["fuzz_iterations"] = iterations
     final = command(op="response-feedback", wire="")
     assert final["pending"] == 0
     assert final["known"] == received

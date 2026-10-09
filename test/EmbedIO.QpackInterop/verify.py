@@ -1,5 +1,6 @@
 """Independent QPACK codec/feedback checks; run from the repository root."""
 
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -14,7 +15,7 @@ import pylsqpack
 from response_campaign import verify_responses
 
 
-def run(capacity, assembly):
+def run(capacity, assembly, seed, iterations):
     rng = random.Random(9204002 + capacity)
     log_dir = Path("TestResults/qpack-interop")
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -135,7 +136,7 @@ def run(capacity, assembly):
                 assert acknowledgment
                 for octet in acknowledgment:
                     command(op="encoder-feedback", wire=bytes([octet]).hex())
-            response_planner = verify_responses(command, capacity)
+            response_planner = verify_responses(command, capacity, seed, iterations)
             process.stdin.close()
             process.wait(timeout=10)
             assert process.returncode == 0, log_path
@@ -161,18 +162,23 @@ def run(capacity, assembly):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: verify.py <compiled EmbedIO.dll path>")
-    print(f"Independent QPACK interop: pylsqpack {pylsqpack.__version__}; {sys.argv[1]}")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("assembly")
+    parser.add_argument("--seed", type=int, default=9204003)
+    parser.add_argument("--iterations", type=int, default=2000)
+    args = parser.parse_args()
+    if args.iterations < 1:
+        parser.error("--iterations must be positive")
+    print(f"Independent QPACK interop: pylsqpack {pylsqpack.__version__}; {args.assembly}")
     if pylsqpack.__version__ != "0.3.24":
         raise SystemExit("Install the pinned QPACK requirements before running this probe.")
-    results = [run(capacity, sys.argv[1]) for capacity in (0, 220, 4096)]
+    results = [run(capacity, args.assembly, args.seed, args.iterations) for capacity in (0, 220, 4096)]
     report = {
-        "assembly": sys.argv[1],
-        "assembly_sha256": hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest(),
+        "assembly": args.assembly,
+        "assembly_sha256": hashlib.sha256(Path(args.assembly).read_bytes()).hexdigest(),
         "python": sys.version,
         "pylsqpack": pylsqpack.__version__,
         "results": results,
     }
-    report_path = Path("TestResults/qpack-interop") / f"{Path(sys.argv[1]).parent.name}-report.json"
+    report_path = Path("TestResults/qpack-interop") / f"{Path(args.assembly).parent.name}-report.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf8")

@@ -3635,3 +3635,46 @@ Final changed-source Windows coverage passes: 3,398 reported cases, 3,393
 successes and five existing skips in 2m 26s. No discovery, timeout, security or
 allocation gate was weakened. The PR remains draft while the larger engine
 program and fresh exact-head checks continue.
+
+
+### Seeded response-planner state campaigns
+
+The independent QPACK probe now appends 2,000 seeded operations per table
+capacity (0, 220 and 4096) to its 656-section structured campaign. Override
+`--seed` and `--iterations` on `test/EmbedIO.QpackInterop/verify.py` to replay or
+extend a campaign. Each connection retains table and feedback state throughout;
+operations vary fields, reuse recent field lists, delay insert credit, retain
+section acknowledgments, cancel sections, and send multiple sections per stream.
+Values include Latin-1 octets and sizes at/around entry-capacity boundaries.
+These are codec inputs, not a claim that every generated field is a valid HTTP
+application header. Synthetic stream identifiers are reused after cancellation;
+this exercises codec ownership rather than a complete HTTP/3 stream lifecycle.
+
+Pinned pylsqpack 0.3.24 decodes every emitted section and encoder instruction.
+The driver compares exact decoded fields, outstanding-section counts against
+its own acknowledgment queues, and known insertion counts against independently
+accepted instructions. Final draining must release all pending sections and
+account for every insertion. Section acknowledgments come from pylsqpack;
+standalone insertion increments and cancellations remain driver-generated.
+A failure reports seed, capacity, iteration, action and insertion progress;
+replay uses the same assembly and probe source. JSON reports include assembly
+SHA-256 and seed/iteration counts. Existing CI invocations execute the default
+campaign against both target assemblies without adding production dependencies.
+
+This is seeded stateful differential testing, not coverage-guided fuzzing or
+proof of whole-engine safety. Malformed feedback, transport concurrency and
+native QUIC remain separate validation surfaces. Randomized changing-header
+traffic also measures encoder-stream bytes: the 100,000-operation .NET 10 run
+with seed 834971 produced 327,670,735 encoder-plus-section bytes at capacity
+4096 versus 322,996,894 stateless section bytes. Thus the present eager insertion
+policy can increase wire traffic despite smaller field sections; admission
+heuristics and end-to-end performance work remain necessary.
+
+Validation: 100,000 random operations per capacity passed on each target
+assembly (600,000 operations total), using seed 834971 for net10.0 and seed
+712839 for netstandard2.0. Both assemblies ran under the installed .NET 10
+runtime on Windows; this is not older-runtime validation. The preliminary
+10,000-operation-per-capacity net10.0 run also passed. Evidence is retained in
+`TestResults/http-engine/qpack-stateful-*` logs and JSON reports. No production
+source or dependency changed in this increment. Full repository checks apply
+to the eventual committed head independently of these local campaign results.
