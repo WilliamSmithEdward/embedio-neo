@@ -3064,3 +3064,34 @@ skips on both Windows and Linux .NET 10 hosts. Compatibility remains 207 cases /
 414 comparisons with no errors, and all four rebuilt allocation-budget groups
 pass. The preceding `2c1f56e` has 32 successful checks and two intentional skips;
 this increment requires fresh exact-head checks.
+
+
+### QUIC credential and IP-address handshake investigation
+
+Head 318466a completed all 3,306 macOS cases in CI 37871262043, with two
+failures in the new HTTP/3 continue fixture (3,273 passed, 31 skipped). Both
+failed during TLS authentication with UserCanceled, before HTTP negotiation.
+The fixture now imports its generated QUIC certificate with Exportable, matching
+existing QUIC fixtures; other protocol cases retain DefaultKeySet. The shared
+test helper keeps its existing default. The [.NET 10.0.12 credential loader](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.Quic/src/System/Net/Quic/Internal/MsQuicConfiguration.cs)
+exports credentials to PKCS#12 for the non-Schannel backend. This is a fixture
+correction; macOS confirmation on the changed head remains required. All 78
+focused cases pass on Windows and isolated Linux with QUIC required.
+
+A separate raw System.Net.Quic probe, containing no EmbedIO references, reproduces
+the Linux IP-address handshake failure with .NET 10.0.12 and MsQuic 2.6.2. With
+TargetHost 127.0.0.1 and a certificate containing that IP SAN, connection fails
+before the server options callback or client certificate validator runs. With
+TargetHost localhost, both callbacks run and connection succeeds. Windows passes
+both cases. The validator retains hostname checks and pins the generated leaf,
+allowing only its expected self-signed chain error. Source and logs are retained
+under TestResults/http-engine/quic-ip-probe and quic-ip-probe-{linux,windows}.log.
+
+Source inspection identifies a likely interaction, not a confirmed native trace:
+[.NET omits IP literals from SNI](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.Quic/src/System/Net/Quic/QuicConnection.cs),
+passing an empty string for an IP endpoint, while the
+[MsQuic 2.6.2 OpenSSL initializer](https://github.com/microsoft/msquic/blob/v2.6.2/src/platform/tls_openssl.c)
+configures reference identity and SNI from that string and returns TLS_ERROR if
+those operations fail. The independent reproduction narrows this limitation to
+the underlying stack; it does not establish a server-side remedy or complete
+IP-address interoperability. Do not weaken certificate validation to mask it.

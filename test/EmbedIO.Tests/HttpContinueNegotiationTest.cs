@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.PlatformTests;
@@ -37,7 +38,10 @@ namespace EmbedIO.Tests
                 if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1") Assert.That(supported, Is.True);
                 if (!supported) Assert.Ignore("The selected asset or host has no HTTP/3 transport.");
             }
-            using var certificate = HttpsSmoke.CreateCertificate();
+            // The non-Schannel QUIC backend exports the server credential to PKCS#12.
+            using var certificate = HttpsSmoke.CreateCertificate(major == 3
+                ? X509KeyStorageFlags.Exportable
+                : X509KeyStorageFlags.DefaultKeySet);
             var url = HttpsSmoke.GetUrl();
             if (major == 3)
             {
