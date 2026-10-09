@@ -6183,3 +6183,48 @@ not establish a universal throughput/latency improvement or a Kestrel ranking.
 Longer and other-platform comparisons and resource soak remain work. Evidence is
 under ignored `TestResults/benchmark-review/http3-watch-*` and
 `TestResults/http-engine/http3-watch-*`.
+### Listener admission integration review
+
+PR #201 (`f471cae`, based on `c8ad190`) is being reviewed on the isolated
+`codex/http-admission-integration` branch based on current engine `24cb39d`.
+The agent branch is unchanged. Registration skips the lifecycle lock only while
+running and not draining; stop/dispose/drain close the fast gate and join admitted
+registrations before snapshotting. A FIFO queue replaces dictionary enumeration
+for accept, with the dictionary remaining the once-only claim owner. Public APIs,
+targets, dependencies, the 100-request cap and HTTP/3 are unchanged.
+
+Review reproduced the documented queue-retention difference quantitatively:
+10,000 contexts registered then withdrawn with accept paused leave 10,000 queue
+references despite an empty pending map. With one live context at the head, the
+queue retains 10,001 entries. Both new paused-accept cases fail on the agent
+implementation. This is a new unbounded withdrawn-reference retention path; it
+must not be accepted merely for throughput.
+
+The integration candidate compacts only when unregistration actually withdrew
+queued work and queue entries exceed pending claims by more than 128. Normal
+accepted requests are already absent from the claim map and take no compaction
+path. Compaction closes and joins the fast admission gate under the lifecycle lock,
+copies still-pending contexts in arrival order and publishes a new queue. Racing
+accepts still remove the exact dictionary claim once; stale copied entries cannot
+produce duplicate acceptance. The prior gate state is restored; stop/drain gates
+remain closed. After withdrawals settle, excess queue references are bounded by
+128 rather than growing with the withdrawal count. Genuine pending work is not
+capped or dropped.
+
+The two paused-accept cases now pass, and an additional four-producer race keeps
+all 4,000 live registrations exactly once while accepting alongside 20,000
+withdrawals. All 13 admission cases pass on Windows. The combined Linux admission/
+lifecycle/drain set reports 160 cases, 158 successes/two platform skips, zero
+failures. Both production targets build without warnings/errors; formatting,
+parser, suppression and all four resource budgets pass. The initial budget
+launcher ran before the separate performance project was built; that missing-file
+result remains recorded and the built-project checks pass. The initial new-
+worktree build redirection also lacked its ignored TestResults directory; the
+subsequent actual restore/build passes.
+
+Discovery floors include the original ten agent cases and three owner review
+regressions, totaling 4,378. Full Windows reports 4,378 cases, 4,373 successes,
+five expected local/platform skips and zero failures. The sustained matching-
+harness comparison remains in progress; no server throughput benefit or integration
+acceptance is claimed yet. Evidence is under ignored admission TestResults in the
+review worktree. PR #201 and program #181 remain open.
