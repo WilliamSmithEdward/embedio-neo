@@ -5180,3 +5180,40 @@ allocation-budget groups, source/parser guards, changed-file whitespace, shell
 syntax and pinned source YARA scans pass. The 98 added cases raise the discovery
 floor. These gates do not claim complete QUERY caching/ranges or overall engine
 completion; fresh exact-head CI and remaining program requirements still apply.
+
+### Selected encoded byte-range helper
+
+The additive TryGetByteRange helper selects one GET/exact-QUERY range against the
+caller's encoded representation. It clamps open/oversized ends, handles suffixes,
+checks exact strong If-Range entity tags, requires explicit strong-date evidence
+for date If-Range and preserves precondition-first ordering through the documented
+caller flow. Invalid/unknown/multiple ranges and empty representations are ignored;
+supported unsatisfiable ranges carry 416 total-length metadata. Legacy IsRangeRequest
+and default file serving are unchanged. Multipart generation, automatic encoding/
+range integration and the broader engine program remain unfinished.
+
+The scanner avoids integer overflow by saturating arithmetic while preserving
+normalized decimal spans for exact endpoint ordering. Thus two oversized endpoint
+numbers are not incorrectly considered equal merely because both saturate. No
+BigInteger, substring or framework RangeHeaderValue allocation is needed. A review
+caught a weekday-prefix error: only W/ marks a weak tag, not the W in Wed. Three
+date regressions accompany that correction.
+
+66 arithmetic/validator cases and eight wire cases pass on Windows and pinned
+required-QUIC Linux. The actual legacy core hosted by Windows .NET 10 passes 72
+with two HTTP/3 skips, including cleartext HTTP/2. A seeded 1,000-range arithmetic
+corpus checks clamping. Real managed/native HTTP/1 and exact HTTP/2/HTTP/3 cases
+verify selected bytes, suffixes, 206/304/416 ordering, strong/weak validators and
+gzip encoded-byte ranges. Windows native mode returns 400 without application
+representation headers for beyond-Int64 Range numerals; bounded overshoot still
+must return the correct clamped 206 there. The owned transports must handle the
+oversized-numeral path. This platform limitation is recorded rather than describing
+the helper as overriding native parsing or weakening managed expectations.
+Full changed-source coverage remains pending at this checkpoint.
+
+Final changed-source Windows coverage passes 4,229 cases: 4,224 passed, five
+skipped and zero failed in 2m34s. Both assets build without warnings; four existing
+allocation-budget groups, source/parser guards, changed-file whitespace, shell
+syntax and pinned source YARA checks pass. The discovery floor increases by the
+74 added cases. Fresh exact-head CI and the full engine program remain required;
+this increment does not claim multipart generation or complete range integration.

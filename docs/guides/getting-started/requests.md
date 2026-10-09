@@ -291,3 +291,27 @@ range helper behavior is preserved; adopting this evaluator is explicit.
 
 See [RFC 9110 precondition ordering](https://www.rfc-editor.org/rfc/rfc9110.html#section-13.2.2)
 and [QUERY conditional requests](https://www.rfc-editor.org/rfc/rfc10008.html#section-2.6).
+
+## Select a single GET or QUERY byte range
+
+The unreleased `Request.TryGetByteRange(contentLength, entityTag, lastModified,
+out start, out length, lastModifiedIsStrong: false)` helper selects one applicable
+range for exact GET or QUERY. Supply the selected encoded representation's byte
+length and validators after evaluating preconditions. QUERY metadata must describe
+its results after content negotiation. A range of compressed content selects
+compressed bytes, not the decoded text.
+
+A true result gives the start offset and byte count; send those bytes with 206,
+appropriate representation metadata and `Content-Range`. False means the range is
+ignored; the output values describe the full representation. Clamped ends and
+positive suffixes are supported, including decimal numerals larger than Int64.
+Unsatisfiable supported ranges raise `HttpRangeNotSatisfiableException` with the
+total length for a 416 response. Unknown units, invalid syntax, multiple ranges
+and empty representations are ignored. Multipart generation remains separate.
+
+If-Range entity tags must be strong and match exactly. Date If-Range requires the
+caller to explicitly assert that its Last-Modified is a strong validator; merely
+having a timestamp does not establish this. An unequal or unavailable validator
+causes the range to be ignored. Existing `IsRangeRequest` behavior is unchanged.
+Windows native HTTP.sys can reject oversized Range numerals with 400 before the
+application handler; the managed transports exercise the extended numeral path.
