@@ -19,6 +19,10 @@ on:
         description: Validate a review-only macOS MsQuic candidate with pinned bundled crypto and relocation
         type: boolean
         default: false
+      quic-openssl-experiment:
+        description: Validate the self-contained macOS candidate with pinned OpenSSL 3.5.9 LTS
+        type: boolean
+        default: false
       quic-rebind-probe:
         description: Trace native macOS UDP bind/close ordering in the independent QUIC rebind probe
         type: boolean
@@ -167,11 +171,12 @@ jobs:
 
   quic-cleanup-experiment:
     name: Compare macOS native socket cleanup
-    if: inputs.quic-cleanup-experiment == true || inputs.quic-self-contained-experiment == true
+    if: inputs.quic-cleanup-experiment == true || inputs.quic-self-contained-experiment == true || inputs.quic-openssl-experiment == true
     runs-on: macos-15
     timeout-minutes: 45
     env:
-      EMBEDIO_QUIC_SELF_CONTAINED: ${{ inputs.quic-self-contained-experiment && '1' || '0' }}
+      EMBEDIO_QUIC_SELF_CONTAINED: ${{ (inputs.quic-self-contained-experiment || inputs.quic-openssl-experiment) && '1' || '0' }}
+      EMBEDIO_QUIC_TLS_BACKEND: ${{ inputs.quic-openssl-experiment && 'openssl' || 'quictls' }}
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_INSTALL_CLEANUP: '1'
     steps:

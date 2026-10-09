@@ -6,6 +6,9 @@ test "$(uname -m)" = arm64
 repo="$PWD"
 self_contained="${EMBEDIO_QUIC_SELF_CONTAINED:-0}"
 case "$self_contained" in 0|1) ;; *) echo "Invalid self-contained mode." >&2; exit 2 ;; esac
+tls_backend="${EMBEDIO_QUIC_TLS_BACKEND:-quictls}"
+case "$tls_backend" in quictls|openssl) ;; *) echo "Invalid TLS backend." >&2; exit 2 ;; esac
+if test "$tls_backend" = openssl; then test "$self_contained" = 1; fi
 command -v jq
 results="$repo/TestResults/quic-cleanup-experiment"
 source_dir="$RUNNER_TEMP/msquic-cleanup-source"
@@ -17,8 +20,19 @@ git -C "$source_dir" remote add origin https://github.com/microsoft/msquic.git
 git -C "$source_dir" fetch --depth 1 origin "$revision"
 git -C "$source_dir" checkout --detach FETCH_HEAD
 test "$(git -C "$source_dir" rev-parse HEAD)" = "$revision"
-git -C "$source_dir" submodule update --init --depth 1 submodules/quictls submodules/googletest
-test "$(git -C "$source_dir/submodules/quictls" rev-parse HEAD)" = ff36838bb69801cad56823159a036977bcbe5c75
+git -C "$source_dir" submodule update --init --depth 1 "submodules/$tls_backend" submodules/googletest
+crypto_revision=ff36838bb69801cad56823159a036977bcbe5c75
+crypto_root="$source_dir/submodules/$tls_backend"
+if test "$tls_backend" = openssl; then
+  # OpenSSL 3.5.9 LTS, released 2026-09-29. Pin the peeled release commit.
+  crypto_revision=45e844fa2a14ec92d146bd8f5778ac130b6625fb
+  git -C "$crypto_root" fetch --depth 1 origin "$crypto_revision"
+  git -C "$crypto_root" checkout --detach FETCH_HEAD
+  grep -Fx 'MAJOR=3' "$crypto_root/VERSION.dat"
+  grep -Fx 'MINOR=5' "$crypto_root/VERSION.dat"
+  grep -Fx 'PATCH=9' "$crypto_root/VERSION.dat"
+fi
+test "$(git -C "$crypto_root" rev-parse HEAD)" = "$crypto_revision"
 test "$(git -C "$source_dir/submodules/googletest" rev-parse HEAD)" = fa005b296f90faec4f352d7ab382287bf6548c8d
 git -C "$source_dir" submodule status > "$results/submodules.txt"
 git -C "$source_dir" rev-parse HEAD > "$results/source.txt"
@@ -28,7 +42,7 @@ system_crypto=ON
 openssl_root=""
 if test "$self_contained" = 1; then
   system_crypto=OFF
-  cp "$source_dir/submodules/quictls/VERSION.dat" "$results/quictls-version.txt"
+  cp "$crypto_root/VERSION.dat" "$results/crypto-version.txt"
 else
   brew list --versions openssl@3 > "$results/openssl.txt"
   openssl_root="$(brew --prefix openssl@3)"
@@ -86,7 +100,7 @@ build_native() {
   fi
   cmake -S "$source_dir" -B "$build_dir" \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$openssl_root" \
-    -DQUIC_TLS_LIB=quictls "-DQUIC_USE_SYSTEM_LIBCRYPTO=$system_crypto" \
+    "-DQUIC_TLS_LIB=$tls_backend" "-DQUIC_USE_SYSTEM_LIBCRYPTO=$system_crypto" \
     -DQUIC_BUILD_TEST=ON -DQUIC_BUILD_TOOLS=OFF -DQUIC_BUILD_PERF=OFF \
     -DQUIC_ENABLE_LOGGING=OFF -DQUIC_ENABLE_ASAN="$asan" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
     -DQUIC_OUTPUT_DIR="$build_dir/bin" "-DCMAKE_PROJECT_INCLUDE=$project_include" 2>&1 | tee "$results/$variant-configure.log"
@@ -180,11 +194,11 @@ if test "$self_contained" = 1; then
   ln -s libmsquic.2.dylib "$native/libmsquic.dylib"
   cp "$source_dir/LICENSE" "$stage/licenses/MsQuic-LICENSE"
   cp "$source_dir/THIRD-PARTY-NOTICES" "$stage/licenses/MsQuic-THIRD-PARTY-NOTICES"
-  cp "$source_dir/submodules/quictls/LICENSE.txt" "$stage/licenses/quictls-LICENSE.txt"
+  cp "$crypto_root/LICENSE.txt" "$stage/licenses/$tls_backend-LICENSE.txt"
   cp "$patch_file" "$config_patch" "$stage/source/"
-  jq -n --arg source "$revision" --arg quictls ff36838bb69801cad56823159a036977bcbe5c75 \
+  jq -n --arg source "$revision" --arg crypto "$crypto_revision" --arg backend "$tls_backend" \
     --arg hash "$(shasum -a 256 "$native/libmsquic.2.6.2.dylib" | awk '{print $1}')" \
-    '{artifact:"test-only self-contained candidate",rid:"osx-arm64",msquicSource:$source,quictlsSource:$quictls,sha256:$hash,productionInstalled:false}' \
+    '{artifact:"test-only self-contained candidate",rid:"osx-arm64",msquicSource:$source,cryptoSource:$crypto,tlsBackend:$backend,sha256:$hash,productionInstalled:false}' \
     > "$stage/build-receipt.json"
   status=0
   run_probe candidate-relocated 1 untraced "$native" || status=$?

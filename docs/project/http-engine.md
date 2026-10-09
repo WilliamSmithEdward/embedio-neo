@@ -4583,3 +4583,20 @@ production-ready native package. Supported distribution, RID coverage, package
 selection/loader behavior, update policy and security/provenance remain required
 before adopting it as a supported dependency. No production package includes
 this artifact, and no release is published.
+The pinned quictls control identifies as 3.1.7 (release date 2024-09-03), and its
+commit ff36838bb69801cad56823159a036977bcbe5c75 dates to 2024-09-24. It remains an
+isolation experiment, not an approved production crypto baseline. The OpenSSL
+[release table](https://www.openssl-library.org/source/) lists 3.5.9 as the current
+3.5 LTS release on 2026-10-09 (released 2026-09-29; support through 2030-04-08).
+A separate quic-openssl-experiment selects MsQuic's existing openssl TLS backend
+and pins that release's peeled commit 45e844fa2a14ec92d146bd8f5778ac130b6625fb.
+It verifies VERSION.dat, builds static crypto, preserves its license and records
+the backend/source in the receipt, while retaining the same native patches and
+control/candidate validation. The official annotated release tag is
+ d0ca66a1abe52545f14eca635c648932fcde5615; GitHub reports unknown_key for its
+signature. Independent release-signature/provenance and vulnerability review
+remain required before distribution; no signature verification is claimed.
+
+The quictls isolation job 37898720873 / 113716018625 is still running at this
+checkpoint. The supported-LTS experiment is a distinct dependency candidate,
+not a restart of that live job or a claim that a change passed without execution.
