@@ -18,9 +18,7 @@ namespace EmbedIO.Net.Internal
         private readonly Task? _acceptWorker;
         private int _disposed;
         private int _acceptingStopped;
-        private Dictionary<ListenerPrefix, HttpListener> _prefixes;
-        private List<ListenerPrefix>? _unhandled; // unhandled; host = '*'
-        private List<ListenerPrefix>? _all; //  all;  host = '+
+        private readonly EndpointRoutes _routes = new();
 
         public EndPointListener(HttpListener listener, IPAddress address, int port, bool secure)
         {
@@ -44,7 +42,6 @@ namespace EmbedIO.Net.Internal
                 _sock.Dispose();
                 throw;
             }
-            _prefixes = new Dictionary<ListenerPrefix, HttpListener>();
             _unregistered = new HashSet<HttpConnection>();
             if (address.AddressFamily == AddressFamily.InterNetworkV6
                 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -90,10 +87,7 @@ namespace EmbedIO.Net.Internal
         public void UnbindContext(HttpListenerContext context) => context.Listener?.UnregisterContext(context);
 
         // Called under the endpoint manager's registration lock.
-        internal bool IsExclusiveTo(HttpListener owner)
-            => !_prefixes.Values.Any(listener => listener != owner)
-                && (_unhandled == null || !_unhandled.Any(prefix => prefix.Listener != owner))
-                && (_all == null || !_all.Any(prefix => prefix.Listener != owner));
+        internal bool IsExclusiveTo(HttpListener owner) => _routes.IsExclusiveTo(owner);
 
         internal void StopAcceptingIfExclusive(HttpListener owner)
         {
@@ -138,75 +132,13 @@ namespace EmbedIO.Net.Internal
         {
             if (Volatile.Read(ref _acceptingStopped) != 0)
                 throw new HttpListenerException(995, "The endpoint stopped accepting connections.");
-            if (prefix.Host == "*")
-            {
-                AddSpecial(ref _unhandled, prefix, listener);
-                return true;
-            }
-
-            if (prefix.Host == "+")
-            {
-                AddSpecial(ref _all, prefix, listener);
-                return true;
-            }
-
-            Dictionary<ListenerPrefix, HttpListener> prefs, p2;
-
-            do
-            {
-                prefs = _prefixes;
-                var existing = prefs.Keys.FirstOrDefault(p => SamePrefix(p, prefix));
-                if (existing != null)
-                {
-                    if (prefs[existing] != listener)
-                    {
-                        throw new HttpListenerException(400, $"There is another listener for {prefix}");
-                    }
-
-                    return false;
-                }
-
-                p2 = new Dictionary<ListenerPrefix, HttpListener>(prefs);
-                p2[prefix] = listener;
-            }
-            while (Interlocked.CompareExchange(ref _prefixes, p2, prefs) != prefs);
-            return true;
+            return _routes.Add(prefix, listener);
         }
 
         public void RemovePrefix(ListenerPrefix prefix, HttpListener listener)
         {
-            if (prefix.Host == "*")
-            {
-                RemoveSpecial(ref _unhandled, prefix, listener);
-                CheckIfRemove();
-                return;
-            }
-
-            if (prefix.Host == "+")
-            {
-                RemoveSpecial(ref _all, prefix, listener);
-                CheckIfRemove();
-                return;
-            }
-
-            Dictionary<ListenerPrefix, HttpListener> prefs, p2;
-
-            do
-            {
-                prefs = _prefixes;
-                var prefixKey = prefs.Keys.FirstOrDefault(p => SamePrefix(p, prefix) && prefs[p] == listener);
-
-                if (prefixKey is null)
-                {
-                    break;
-                }
-
-                p2 = new Dictionary<ListenerPrefix, HttpListener>(prefs);
-                _ = p2.Remove(prefixKey);
-            }
-            while (Interlocked.CompareExchange(ref _prefixes, p2, prefs) != prefs);
-
-            CheckIfRemove();
+            _routes.Remove(prefix, listener);
+            if (_routes.IsEmpty) EndPointManager.RemoveEndPoint(this, _endpoint);
         }
 
         internal void RemoveConnection(HttpConnection conn)
@@ -309,159 +241,6 @@ namespace EmbedIO.Net.Internal
                 conn.Dispose();
         }
 
-        private static HttpListener? MatchFromList(string path, List<ListenerPrefix>? list, out ListenerPrefix? prefix)
-        {
-            prefix = null;
-            if (list == null)
-            {
-                return null;
-            }
-
-            HttpListener? bestMatch = null;
-            var bestLength = -1;
-
-            foreach (var p in list)
-            {
-                if (p.Path.Length < bestLength || !path.StartsWith(p.Path, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                bestLength = p.Path.Length;
-                bestMatch = p.Listener;
-                prefix = p;
-            }
-
-            return bestMatch;
-        }
-
-        private static void AddSpecial(ref List<ListenerPrefix>? prefixes, ListenerPrefix prefix, HttpListener listener)
-        {
-            prefix.Listener = listener;
-            List<ListenerPrefix>? current;
-            List<ListenerPrefix> future;
-            do
-            {
-                current = prefixes;
-                future = current == null ? new List<ListenerPrefix>() : new List<ListenerPrefix>(current);
-                if (future.Any(p => p.Path == prefix.Path))
-                    throw new HttpListenerException(400, "Prefix already in use.");
-                future.Add(prefix);
-            }
-            while (Interlocked.CompareExchange(ref prefixes, future, current) != current);
-        }
-
-        private static void RemoveSpecial(ref List<ListenerPrefix>? prefixes, ListenerPrefix prefix, HttpListener listener)
-        {
-            List<ListenerPrefix>? current;
-            List<ListenerPrefix> future;
-            do
-            {
-                current = prefixes;
-                if (current == null) return;
-                var index = current.FindIndex(p => p.Path == prefix.Path && p.Listener == listener);
-                if (index < 0)
-                    return;
-                future = new List<ListenerPrefix>(current);
-                future.RemoveAt(index);
-            }
-            while (Interlocked.CompareExchange(ref prefixes, future, current) != current);
-        }
-
-        private static bool SamePrefix(ListenerPrefix first, ListenerPrefix second)
-            => first.Host == second.Host && first.Port == second.Port
-                && first.Path == second.Path && first.Secure == second.Secure;
-
-        internal HttpListener? SearchListener(Uri uri, out ListenerPrefix? prefix)
-        {
-            prefix = null;
-            if (uri == null)
-            {
-                return null;
-            }
-
-            var host = uri.Host;
-            var port = uri.Port;
-            var path = WebUtility.UrlDecode(uri.AbsolutePath);
-            var pathSlash = path[path.Length - 1] == '/' ? path : path + "/";
-
-            HttpListener? bestMatch = null;
-            var bestLength = -1;
-
-            if (!string.IsNullOrEmpty(host))
-            {
-                var result = _prefixes;
-
-                foreach (var p in result.Keys)
-                {
-                    if (p.Path.Length < bestLength)
-                    {
-                        continue;
-                    }
-
-                    if (p.Host != host || p.Port != port)
-                    {
-                        continue;
-                    }
-
-                    if (!path.StartsWith(p.Path, StringComparison.Ordinal) && !pathSlash.StartsWith(p.Path, StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    bestLength = p.Path.Length;
-                    bestMatch = result[p];
-                    prefix = p;
-                }
-
-                if (bestLength != -1)
-                {
-                    return bestMatch;
-                }
-            }
-
-            var list = _unhandled;
-            bestMatch = MatchFromList(path, list, out prefix);
-            if (path != pathSlash && bestMatch == null)
-            {
-                bestMatch = MatchFromList(pathSlash, list, out prefix);
-            }
-
-            if (bestMatch != null)
-            {
-                return bestMatch;
-            }
-
-            list = _all;
-            bestMatch = MatchFromList(path, list, out prefix);
-            if (path != pathSlash && bestMatch == null)
-            {
-                bestMatch = MatchFromList(pathSlash, list, out prefix);
-            }
-
-            return bestMatch;
-        }
-
-        private void CheckIfRemove()
-        {
-            if (_prefixes.Count > 0)
-            {
-                return;
-            }
-
-            var list = _unhandled;
-            if (list != null && list.Count > 0)
-            {
-                return;
-            }
-
-            list = _all;
-            if (list != null && list.Count > 0)
-            {
-                return;
-            }
-
-            EndPointManager.RemoveEndPoint(this, _endpoint);
-        }
+        internal HttpListener? SearchListener(Uri uri, out ListenerPrefix? prefix) => _routes.Find(uri, out prefix);
     }
 }

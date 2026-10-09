@@ -5553,3 +5553,89 @@ parser, suppression, whitespace and diff checks pass; pinned Semgrep parses all
 four changed source files completely (29 rules, zero findings). Logs and TRX
 reports are retained under ignored TestResults/http-engine/tcp-retirement-*.
 Final exact-head cross-platform checks remain required.
+
+### Owned endpoint route snapshots
+
+EndPointListener now delegates registration, removal, ownership checks and
+lookup to EndpointRoutes. Each mutation publishes one immutable generation with
+separate named, star and plus arrays. Readers borrow that complete generation
+without a registration lock. Arrays are ordered by descending path length with
+newer equal-length registrations first, so selection can stop at the first
+eligible match. Existing named/star/plus precedence, wildcard actual-path-before-
+added-slash behavior, URL decoding, ordinal path comparison, named authority
+checks, duplicate rules and wrong-owner removal semantics are retained.
+The added-slash match compares existing strings instead of allocating a suffix.
+Public APIs, prefix defaults, targets and runtime dependency groups are unchanged.
+
+Thirteen additional cases cover named authority/path boundaries and eight
+concurrent writers publishing/removing 256 independent registrations in each
+host category while preserving an anchor and rejecting wrong-owner removal.
+The 157-case Windows focused set passes. The pinned-upstream Windows audit passes
+207 cases / 414 comparisons / zero errors. All four existing allocation budgets
+and GET/full/partial/unread 64-KiB HTTP/TLS verification pass, including retained
+stream/timer cleanup.
+
+The routing component benchmark uses identical compiled harness SHA-256
+`960933a146a25eb65d1438f9826ea05f33d8657f8c42e9fa4d8ffac1a4177272`,
+frozen prior legacy core
+`88f54839d27bdf559474452a259971bccf31a5cb985c7be3cb7fa3f9044ab38d`
+and candidate legacy core
+`0400cbf3410d9de10c1df34d549e95a81b5cb9f260506124e63dd746f9bccd2e`.
+Both run on Windows .NET 10.0.12 in three alternating pairs, five rounds per
+pair, 100,000 lookups per round, with one, 64 and 256 routes. Last-route hits,
+uniform hits and misses all verify their expected owner. Registration, reflection
+and delegate compilation are outside the timed region. This measures dispatch,
+not complete HTTP requests or older-runtime performance.
+
+Initial combined-array and unsorted-partition candidates regressed larger
+wildcard lookups; those samples are retained rather than discarded. Sorted
+snapshots reduced allocation from 88–96 bytes to 40 bytes per lookup across the
+measured cases. Default-runtime uniform named 64-route timing regressed from
+304.1 to 422.6 ns, while the 256-route counterpart improved from 1,118.9 to
+300.3 ns. A separate controlled comparison disables tiered compilation for both
+benchmark processes only. Its median uniform-hit results (15 samples per cell)
+are below; production runtime settings are unchanged.
+
+| Routes / host category | Prior / candidate median ns |
+| --- | --- |
+| 1 / named | 43.8 / 38.4 |
+| 64 / named | 509.1 / 132.5 |
+| 256 / named | 1,871.3 / 407.5 |
+| 1 / star | 35.6 / 31.4 |
+| 64 / star | 224.6 / 125.4 |
+| 256 / star | 747.9 / 385.7 |
+| 1 / plus | 38.7 / 33.3 |
+| 64 / plus | 228.4 / 128.2 |
+| 256 / plus | 747.1 / 387.8 |
+
+Controlled 256-route star misses remain close (1,399.3 / 1,411.7 ns), and miss
+lookup remains linear. These results support continued development, not a
+universal improvement or extreme whole-server performance claim. Raw default,
+controlled and earlier candidate measurements are retained under ignored
+TestResults/http-engine/endpoint-routes-*.
+
+The first full sorted-source coverage run had one NoBufferSpaceAvailable failure
+in a client's ConnectAsync, before the malformed-target test reached dispatch.
+The subsequent 74-case target/routing subset passed. This does not establish the
+cause or prove that broader resource behavior is repaired. The original log is
+retained separately from the full-suite repeat.
+
+Prior commit 9345596 CI also failed the known macOS native QUIC same-port rebind
+probe and a Windows TLS 64-KiB full-body upload warmup with a 20-second client
+timeout. Those logs are preserved as endpoint-routes-prior-*. The local final
+upload verification passes; it neither reproduces nor explains the original
+CI failure. Native QUIC deployment, complete connection replacement, whole-engine
+fuzzing/conformance and end-to-end performance work remain open.
+
+The unchanged final sorted-source Windows coverage repeat passes 4,288 total /
+4,283 successes / five expected skips / zero failures. Final focused validation
+also passes all 157 cases against the actual netstandard2.0 core on a Windows
+.NET 10 host, and 155 cases on pinned Linux .NET 10.0.12 with two Windows-native
+close cases intentionally skipped. Both assets build warning-free. The final
+pinned Semgrep scan parses all four changed C# files completely (29 rules, zero
+findings, no tool diagnostics); parser, suppression, whitespace, shell syntax and
+diff guards pass. Discovery floors in ordinary CI and the native experiment are
+raised to 4,288. Exact new-head macOS/CI checks remain required; no merge or release
+readiness is claimed.
+
+Pinned YARA-X / Forge also reports no matches in all four changed C# sources.
