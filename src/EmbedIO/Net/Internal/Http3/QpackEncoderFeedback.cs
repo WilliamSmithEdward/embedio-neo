@@ -49,7 +49,13 @@ namespace EmbedIO.Net.Internal.Http3
                 return _insertCount++;
             }
         }
-        internal bool TryRegisterSection(long streamId, long[] references, long maximumBlockedStreams)
+        internal bool TryRegisterSection(long streamId, long[] references, long maximumBlockedStreams) =>
+            TryRegisterSectionCore(streamId, references, maximumBlockedStreams, false);
+        // Only a private encoder result may transfer ownership. Other callers
+        // retain the defensive copy made by TryRegisterSection.
+        internal bool TryRegisterOwnedSection(long streamId, long[] references, long maximumBlockedStreams) =>
+            TryRegisterSectionCore(streamId, references, maximumBlockedStreams, true);
+        private bool TryRegisterSectionCore(long streamId, long[] references, long maximumBlockedStreams, bool ownedReferences)
         {
             if (streamId < 0 || streamId > QuicInteger.Maximum) throw new ArgumentOutOfRangeException(nameof(streamId));
             if (references == null) throw new ArgumentNullException(nameof(references));
@@ -71,7 +77,7 @@ namespace EmbedIO.Net.Internal.Http3
                 // No ownership mutation on admission failure. The caller can emit
                 // a stateless section instead without waiting for the peer.
                 if (_sectionCount == _maximumSections || references.Length > _maximumReferences - _referenceCount) return false;
-                var owned = references.Distinct().ToArray();
+                var owned = ownedReferences ? references : references.Distinct().ToArray();
                 if (stream == null) _sections.Add(streamId, stream = new StreamSections());
                 stream.Pending.Enqueue((owned, required));
                 stream.Required = Math.Max(stream.Required, required);

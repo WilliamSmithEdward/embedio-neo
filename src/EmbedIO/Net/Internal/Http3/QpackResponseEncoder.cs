@@ -37,23 +37,44 @@ namespace EmbedIO.Net.Internal.Http3
             }
             if (_peerCapacity != peer.MaximumTableCapacity) throw new InvalidOperationException("QPACK peer capacity changed.");
             if (fields == null) throw new ArgumentNullException(nameof(fields));
-            var indices = new long[fields.Length];
+            long[]? indices = null;
             var known = _feedback.KnownReceivedCount;
-            for (var i = 0; i < fields.Length; ++i)
+            if (known != 0)
             {
-                var index = _table.Find(fields[i].Name, fields[i].Value);
-                // Pending encoder bytes never hold a response hostage to encoder
-                // stream credit. Speculative insertions benefit later responses.
-                indices[i] = index < known ? index : -1;
+                for (var i = 0; i < fields.Length; ++i)
+                {
+                    var field = fields[i];
+                    // Serialization below still validates every field and limit.
+                    // Static and sensitive fields are never stored in this table.
+                    if (field.Name == null || field.Value == null || field.NeverIndexed) continue;
+                    var index = _table.Find(field.Name, field.Value);
+                    // Pending encoder bytes never hold a response hostage to
+                    // encoder-stream credit. Inserts benefit later responses.
+                    if (index < 0 || index >= known) continue;
+                    if (indices == null)
+                    {
+                        indices = new long[fields.Length];
+                        for (var j = 0; j < indices.Length; ++j) indices[j] = -1;
+                    }
+                    indices[i] = index;
+                }
             }
-            var section = QpackEncoder.EncodeReferenced(fields, indices, _peerCapacity, maximumEncodedBytes, maximumDecodedBytes);
-            var wire = _feedback.TryRegisterSection(streamId, section.References, peer.BlockedStreams)
-                ? section.Wire : QpackEncoder.Encode(fields, maximumEncodedBytes, maximumDecodedBytes);
+            byte[] wire;
+            if (indices == null) wire = QpackEncoder.Encode(fields, maximumEncodedBytes, maximumDecodedBytes);
+            else
+            {
+                var section = QpackEncoder.EncodeReferenced(fields, indices, _peerCapacity, maximumEncodedBytes, maximumDecodedBytes);
+                // This private serializer result is never exposed to callers.
+                // Transfer its reference array rather than copying it again.
+                wire = _feedback.TryRegisterOwnedSection(streamId, section.References, peer.BlockedStreams)
+                    ? section.Wire : QpackEncoder.Encode(fields, maximumEncodedBytes, maximumDecodedBytes);
+            }
             // Pin selected entries before considering an insertion that could
             // otherwise evict an entry referenced by this very response.
-            foreach (var field in fields)
+            for (var i = 0; i < fields.Length; ++i)
             {
-                if (QpackEncoder.IsStatic(field)) continue;
+                var field = fields[i];
+                if ((indices != null && indices[i] >= 0) || QpackEncoder.IsStatic(field)) continue;
                 var insertion = _table.TryInsert(field, _maximumPendingBytes - _pendingBytes);
                 if (insertion == null) continue;
                 _instructions.Enqueue(insertion.Instructions);

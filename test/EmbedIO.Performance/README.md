@@ -182,3 +182,28 @@ blocked batches include opening streams, queueing one-byte reservations and
 releasing shared connection credit with a cancellable token. Allocation totals
 include asynchronous workers. These are .NET 10 component comparisons, not whole
 server throughput, fairness under arbitrary workloads or tail-latency evidence.
+
+
+## QPACK response planner
+
+```sh
+dotnet build test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-restore
+dotnet test/EmbedIO.Performance/bin/Release/net10.0/EmbedIO.Performance.dll --qpack-response
+```
+
+This mode writes JSON lines: runtime/OS/architecture, GC and tiering settings,
+assembly SHA-256/source revision, then all seven rounds of CPU time, allocated
+bytes and field-section bytes. Each mode warms up for 5,000 calls and measures
+25,000 operations per round; mode order rotates. Inputs cover status-only,
+static-table, repeated dynamic and sensitive fields. Reflection and compiled
+delegate setup are outside measurement. The warmed planner includes immediate
+Section Acknowledgment processing; stateless encoding needs no acknowledgment.
+
+Compare the same runner/input/settings on the same host. For comparisons without
+tier transitions, set `DOTNET_TieredCompilation=0` for the process; retain the
+recorded setting with the results. There is no elapsed-time CI gate. This
+single-thread component benchmark excludes field construction, the connection
+gate, HTTP/QUIC/TLS, application work and cold-table instruction traffic. It does
+not establish request throughput or tail latency. See
+[the engine record](../../docs/project/http-engine.md) for measured changes and
+independent decoder validation.

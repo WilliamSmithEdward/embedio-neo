@@ -3566,3 +3566,72 @@ are unchanged. Security report and Security passed are green on the preceding
 630eeb5 head after removal of the obsolete acceptance. Its CI aggregate remains
 failed because of the retained macOS handshake result; new-head checks are
 required independently.
+
+
+### Measured QPACK planner allocation and lookup reduction
+
+The new C# performance mode `--qpack-response` compares stateless encoding,
+zero-capacity planning and warmed 4,096-byte planning over four fixed datasets.
+It compiles delegates before measurement, warms each mode for 5,000 calls and
+records seven rotating rounds of 25,000 operations. JSON retains every sample,
+assembly SHA-256/source revision, runtime, OS, architecture, GC mode and tiering
+setting. Dynamic planning includes immediate Section Acknowledgment processing.
+Field construction, the connection gate, transport, application work and
+cold-table encoder instructions are outside this component measurement.
+
+The first default-tiering capture showed substantial tier-transition differences,
+so the before/final comparison uses DOTNET_TieredCompilation=0 consistently. This
+is a recorded benchmark condition, not a production setting change. The initial
+unbuilt command output is also retained separately; it is not benchmark evidence.
+Final median nanoseconds per warmed-planner operation and allocated bytes are:
+
+| Dataset | Windows before / after ns | Linux before / after ns | Bytes before / after |
+| --- | --- | --- | --- |
+| Status only | 118.5 / 89.9 | 119.2 / 88.7 | 528 / 376 |
+| Static-table fields | 278.8 / 236.0 | 261.8 / 219.3 | 544 / 376 |
+| Repeated dynamic fields | 1127.1 / 777.6 | 1038.3 / 765.7 | 1472 / 1064 |
+| Sensitive fields | 413.2 / 369.7 | 420.0 / 365.7 | 608 / 440 |
+
+Windows used .NET 10.0.12 x64 on Windows 10.0.26300; Linux used the pinned SDK
+container on the same host with two reported processors. Both baseline and
+candidate binary hosts are retained under TestResults/http-engine. The Linux
+baseline assembly carries 630eeb5 provenance and the Windows baseline 4480dc0;
+those commits have identical production source, verified by Git diff. Candidate
+hashes identify the measured changed binaries; source revision text alone is not
+a claim that an uncommitted candidate equals its parent. Results, intermediate
+captures and build logs are qpack-perf-* artifacts.
+
+The planner now allocates its index array only when it finds an acknowledged,
+usable dynamic entry. A section without references uses stateless serialization
+instead of constructing empty dynamic tracking objects. The privately produced
+reference array transfers directly to feedback ownership; other registration
+callers retain defensive copying. Already-selected entries also avoid duplicate
+insertion lookups. Admission budgets, sensitivity rules, decoder feedback,
+reference lifetimes and eviction ordering are unchanged.
+
+The repeated-field case allocates 27.7% fewer bytes per operation and has lower
+component times on both measured platforms. It still costs more CPU/allocation
+than stateless encoding in this dataset; the tradeoff buys a smaller field
+section. These measurements do not establish end-to-end throughput, tail latency,
+contention or cold-start improvements, and no wall-clock CI gate was added.
+Representative engine-level comparative performance remains unfinished.
+
+All 248 focused QPACK/QUIC cases pass on Windows and pinned Linux with QUIC
+required; 184 codec cases pass against the actual netstandard2.0 assembly in a
+.NET 10 host. Both assets pass the expanded independent planner/codec campaign,
+with unchanged encoded-byte counts. All four existing rebuilt allocation budgets,
+source guards and the production/benchmark YARA scans pass. The discovery floor
+remains 3,398. Reproduction commands and scope are in the performance README.
+
+
+The preceding head 4480dc0 completed with 32 successful and two intentionally
+skipped checks, including macOS regression coverage and all three aggregates.
+This confirms the callback-synchronized fixture on that changed head; it does
+not resolve the separately documented intermittent native QUIC rebind issue.
+The optimization requires fresh checks on its own head before any merge.
+
+
+Final changed-source Windows coverage passes: 3,398 reported cases, 3,393
+successes and five existing skips in 2m 26s. No discovery, timeout, security or
+allocation gate was weakened. The PR remains draft while the larger engine
+program and fresh exact-head checks continue.
