@@ -311,6 +311,60 @@ namespace EmbedIO.Tests
             }
         }
 
+        [Test]
+        public async Task NewLowerHttp2RequestReceivesProtocolErrorGoAway()
+        {
+            var url = Resources.GetServerAddress();
+            var port = new Uri(url).Port;
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new ActionModule("/", HttpVerbs.Get, context => context.SendStringAsync("hello", "text/plain", Encoding.UTF8)));
+            using var stop = new CancellationTokenSource();
+            var running = server.RunAsync(stop.Token);
+            try
+            {
+                using var client = new TcpClient();
+                await client.ConnectAsync("localhost", port);
+                var stream = client.GetStream();
+                byte[] Request(int id) => Http2Frame(1, 5, id, Literal(":method", "GET"), Literal(":scheme", "http"),
+                    Literal(":authority", $"localhost:{port}"), Literal(":path", "/"));
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                async Task<(byte Type, int Id, byte[] Payload)> Read()
+                {
+                    var header = new byte[9];
+                    await stream.ReadExactlyAsync(header, deadline.Token);
+                    var length = (header[0] << 16) | (header[1] << 8) | header[2];
+                    Assert.That(length, Is.LessThanOrEqualTo(16384));
+                    var payload = new byte[length];
+                    await stream.ReadExactlyAsync(payload, deadline.Token);
+                    var id = ((header[5] & 127) << 24) | (header[6] << 16) | (header[7] << 8) | header[8];
+                    return (header[3], id, payload);
+                }
+                await stream.WriteAsync(Combine(Encoding.ASCII.GetBytes("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"), Http2Frame(4, 0, 0), Request(3)));
+                for (var count = 0; ; count++)
+                {
+                    Assert.That(count, Is.LessThan(16));
+                    var frame = await Read();
+                    if (frame.Type == 1 && frame.Id == 3) break;
+                }
+                await stream.WriteAsync(Request(1));
+                for (var count = 0; ; count++)
+                {
+                    Assert.That(count, Is.LessThan(16));
+                    var frame = await Read();
+                    if (frame.Type != 7) continue;
+                    Assert.That(frame.Id, Is.Zero);
+                    Assert.That(frame.Payload.Length, Is.GreaterThanOrEqualTo(8));
+                    Assert.That(frame.Payload[4..8], Is.EqualTo(new byte[] { 0, 0, 0, 1 }));
+                    Assert.That(frame.Payload[0..4], Is.EqualTo(new byte[] { 0, 0, 0, 3 }));
+                    break;
+                }
+                Assert.That(server.Listener.IsListening, Is.True);
+                using var health = new System.Net.Http.HttpClient();
+                Assert.That(await health.GetStringAsync(url), Is.EqualTo("hello"));
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
+        }
+
         // HPACK literal header field without indexing, new name, no Huffman (RFC 7541 6.2.2).
         private static byte[] Literal(string name, string value)
         {

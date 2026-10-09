@@ -107,10 +107,12 @@ namespace EmbedIO.Tests
             var context = await accept;
             fixture.Client.Client.Shutdown(SocketShutdown.Send);
             using var body = new MemoryStream();
-            try { await context.Request.InputStream.CopyToAsync(body, fixture.Token); }
-            catch (IOException) when (secure) { }
+            var failure = await Assert.CatchAsync<IOException>(async () => await context.Request.InputStream.CopyToAsync(body, fixture.Token));
+            if (!secure) Assert.That(failure, Is.TypeOf<EndOfStreamException>());
             Assert.That(Encoding.ASCII.GetString(body.ToArray()), Is.EqualTo("ab"));
-            // An application can observe EOF before Content-Length and close the response.
+            // Partial bytes remain observable, but cannot represent a completed body.
+            context.Response.StatusCode = 400;
+            context.Response.ContentLength64 = 0;
             context.Response.KeepAlive = false;
             context.Close();
             await fixture.AssertHealthy();
