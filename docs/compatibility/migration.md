@@ -972,3 +972,23 @@ Adler-32 checksums and exact completion. It does not yet change public coding
 selection, response encoding or cached variants. The broader standards-format
 migration remains unfinished. These changes are development work and have not
 been released.
+
+### Incomplete and malformed HTTP/1 request bodies (unreleased)
+
+A managed fixed-length request body that ends before its declared Content-Length
+now throws `EndOfStreamException` rather than returning normal EOF. Applications
+must not treat a partial body as a complete upload. Subsequent positive reads
+remain failed; empty reads, argument validation and cancellation retain their
+existing behavior. Valid fixed-length and unknown-length stream reads are unchanged.
+
+The server recognizes its own body-framing failures, including wrappers that
+retain the original exception as their inner cause. Before response headers are
+sent, the default request boundary sends 400 with a generic body-error message
+and closes the connection. Existing chunk parser exception types remain intact.
+Unrelated application `InvalidDataException` errors retain server-error handling.
+
+If a response has already started, its status cannot be replaced: the connection
+is aborted without a second error response or a clean chunk terminator. Completion
+callbacks still run, and a malformed request cannot dispose the listener shared
+by other clients. These changes apply to invalid/incomplete requests under the
+approved strict-framing policy; custom application error handlers remain available.

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Reject incomplete managed Content-Length bodies as errors rather than successful
+  short uploads. Map body-framing failures to generic 400 responses before headers
+  commit, and abort that connection after response commitment. Preserve ordinary
+  application error handling and keep other clients' listener available.
+
 - Preserve sibling HTTP/2 streams when a request is reset during response output.
   Cancel queued writes without poisoning the shared connection, return unsent
   DATA credit, and finish encoded HPACK blocks to keep peer tables synchronized.

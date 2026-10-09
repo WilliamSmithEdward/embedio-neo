@@ -30,7 +30,6 @@ namespace EmbedIO.Tests
 
         // F1: RFC 9112 Section 8. A Content-Length body cut short by EOF is incomplete;
         // the application must not observe it as a complete, shorter body.
-        [Explicit("Finding F1: RequestStream reports EOF instead of an error when the peer closes before Content-Length bytes arrive.")]
         [TestCase(ReadPath.CopyToAsync)]
         [TestCase(ReadPath.ArrayReadAsync)]
         [TestCase(ReadPath.MemoryReadAsync)]
@@ -77,7 +76,6 @@ namespace EmbedIO.Tests
 
         // F2: RFC 9112 Sections 2.2 and 7.1. Invalid chunk framing is a client error.
         // Before correction this reaches the application as an exception and becomes 500.
-        [Explicit("Finding F2: malformed chunked bodies detected during application reads produce 500 instead of 400.")]
         [TestCase("FFFFFFFFFFFFFFFFFF\r\nabc\r\n0\r\n\r\n")]
         [TestCase("3\r\nabcX0\r\n\r\n")]
         [TestCase(" 3\r\nabc\r\n0\r\n\r\n")]
@@ -110,6 +108,93 @@ namespace EmbedIO.Tests
                 stop.Cancel();
                 await running.WaitAsync(TimeSpan.FromSeconds(10));
             }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task MalformedBodyAfterResponseCommitAbortsOnlyItsConnection(bool chunked)
+        {
+            var url = Resources.GetServerAddress();
+            using var monitored = new FatalObservedWebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO));
+            var server = monitored.WithModule(new ActionModule("/echo", HttpVerbs.Post, async context =>
+                {
+                    context.Response.SendChunked = true;
+                    await context.Response.OutputStream.WriteAsync(Encoding.ASCII.GetBytes("before"), context.CancellationToken);
+                    await context.Response.OutputStream.FlushAsync(context.CancellationToken);
+                    await context.Request.InputStream.CopyToAsync(Stream.Null, context.CancellationToken);
+                }))
+                .WithModule(new ActionModule("/plain", HttpVerbs.Get, context => context.SendStringAsync("healthy", "text/plain", Encoding.UTF8)));
+            using var stop = new CancellationTokenSource();
+            var running = server.RunAsync(stop.Token);
+            try
+            {
+                var port = new Uri(url).Port;
+                using var client = new TcpClient();
+                await client.ConnectAsync("localhost", port);
+                var stream = client.GetStream();
+                var framing = chunked ? "Transfer-Encoding: chunked" : "Content-Length: 10";
+                var body = chunked ? "3\r\nabcX0\r\n\r\n" : "abc";
+                await stream.WriteAsync(Encoding.ASCII.GetBytes($"POST /echo HTTP/1.1\r\nHost: localhost:{port}\r\n{framing}\r\n\r\n{body}"));
+                client.Client.Shutdown(SocketShutdown.Send);
+                using var wire = new MemoryStream();
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await stream.CopyToAsync(wire, deadline.Token);
+                var response = Encoding.ASCII.GetString(wire.ToArray());
+                Assert.That(response, Does.StartWith("HTTP/1.1 200 "));
+                Assert.That(response, Does.Contain("before"));
+                Assert.That(response, Does.Not.Contain("HTTP/1.1 400"));
+                Assert.That(response, Does.Not.EndWith("0\r\n\r\n"), "An incomplete response cannot claim a clean chunk terminator.");
+                Assert.That(monitored.FatalCalls, Is.Zero);
+                Assert.That(server.Listener.IsListening, Is.True);
+                using var healthClient = new System.Net.Http.HttpClient();
+                Assert.That(await healthClient.GetStringAsync(url + "plain"), Is.EqualTo("healthy"));
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
+        }
+
+        [Test]
+        public async Task ApplicationInvalidDataExceptionRetainsServerErrorHandling()
+        {
+            var url = Resources.GetServerAddress();
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new ActionModule("/", HttpVerbs.Get, _ => throw new InvalidDataException("Application data failed validation.")));
+            using var stop = new CancellationTokenSource();
+            var running = server.RunAsync(stop.Token);
+            try
+            {
+                using var client = new System.Net.Http.HttpClient();
+                using var response = await client.GetAsync(url);
+                Assert.That(response.StatusCode, Is.EqualTo(System.Net.HttpStatusCode.InternalServerError));
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
+        }
+
+        [Test]
+        public async Task WrappedBodyFramingFailureStillProducesAClientError()
+        {
+            var url = Resources.GetServerAddress();
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new ActionModule("/", HttpVerbs.Post, async context =>
+                {
+                    try { await context.Request.InputStream.CopyToAsync(Stream.Null, context.CancellationToken); }
+                    catch (InvalidDataException error) { throw new InvalidOperationException("Application parser wrapper.", error); }
+                }));
+            using var stop = new CancellationTokenSource();
+            var running = server.RunAsync(stop.Token);
+            try
+            {
+                // Supply the malformed frame directly so a client library cannot normalize it.
+                using var wireClient = new TcpClient();
+                var port = new Uri(url).Port;
+                await wireClient.ConnectAsync("localhost", port);
+                var stream = wireClient.GetStream();
+                await stream.WriteAsync(Encoding.ASCII.GetBytes($"POST / HTTP/1.1\r\nHost: localhost:{port}\r\nTransfer-Encoding: chunked\r\n\r\n 3\r\nabc\r\n0\r\n\r\n"));
+                var bytes = new byte[256];
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                var length = await stream.ReadAsync(bytes, deadline.Token);
+                Assert.That(Encoding.ASCII.GetString(bytes, 0, length), Does.StartWith("HTTP/1.1 400 Bad Request"));
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
         }
 
         // F3: RFC 9114 Section 4.1.1. A client cancelling its own upload must not stop

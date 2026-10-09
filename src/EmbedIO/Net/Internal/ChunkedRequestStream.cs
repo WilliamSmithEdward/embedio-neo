@@ -73,7 +73,12 @@ namespace EmbedIO.Net.Internal
 
         private async Task<int> ReadCoreAsync(byte[] destination, int offset, int count, bool asynchronous, CancellationToken token)
         {
-            if (_phase == Phase.Failed) throw new InvalidDataException("Invalid chunked request body.");
+            if (_phase == Phase.Failed)
+            {
+                var error = new InvalidDataException("Invalid chunked request body.");
+                if (HasFramingFailure) RememberFramingError(error);
+                throw error;
+            }
             if (count == 0 || IsBodyConsumed) return 0;
             try
             {
@@ -147,6 +152,12 @@ namespace EmbedIO.Net.Internal
                 }
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception error) when (error is InvalidDataException || error is EndOfStreamException)
+            {
+                RememberFramingError(error);
+                _phase = Phase.Failed;
+                throw;
+            }
             catch { _phase = Phase.Failed; throw; }
         }
 

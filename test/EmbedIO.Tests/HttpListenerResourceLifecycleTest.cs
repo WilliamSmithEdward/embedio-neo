@@ -132,6 +132,49 @@ namespace EmbedIO.Tests
             Assert.That(source.ReadCalls, Is.Zero);
         }
 
+        [TestCase("sync")]
+        [TestCase("array")]
+        [TestCase("memory")]
+        public async Task TruncationIsTerminalButEmptyReadsAndCancellationRetainTheirSemantics(string path)
+        {
+            using var source = new DataAfterEofStream();
+            using var input = NewRequestStream(source, Array.Empty<byte>(), 0, 0, 1);
+            var destination = new byte[1];
+            Task<int> Read()
+            {
+                if (path == "sync") return Task.FromResult(input.Read(destination, 0, 1));
+                if (path == "array") return input.ReadAsync(destination, 0, 1);
+                return input.ReadAsync(destination.AsMemory()).AsTask();
+            }
+            var first = await Assert.ThrowsAsync<EndOfStreamException>(async () => await Read());
+            Assert.That(input.Read(Array.Empty<byte>(), 0, 0), Is.Zero);
+            Assert.That(await input.ReadAsync(Array.Empty<byte>(), 0, 0), Is.Zero);
+            Assert.That(await input.ReadAsync(Memory<byte>.Empty), Is.Zero);
+            using var stop = new CancellationTokenSource();
+            stop.Cancel();
+            await Assert.ThatAsync(async () => await input.ReadAsync(destination, 0, 1, stop.Token), Throws.InstanceOf<OperationCanceledException>());
+            await Assert.ThatAsync(async () => await input.ReadAsync(destination.AsMemory(), stop.Token), Throws.InstanceOf<OperationCanceledException>());
+            var repeated = await Assert.ThrowsAsync<EndOfStreamException>(async () => await Read());
+            Assert.That(repeated, Is.SameAs(first));
+            Assert.That(source.ReadCalls, Is.EqualTo(1), "A truncated body must not read subsequent transport data.");
+        }
+
+        private sealed class DataAfterEofStream : MemoryStream
+        {
+            internal int ReadCalls { get; private set; }
+            private int Next(Span<byte> buffer)
+            {
+                if (++ReadCalls == 1) return 0;
+                buffer[0] = 42;
+                return 1;
+            }
+            public override int Read(byte[] buffer, int offset, int count) => Next(buffer.AsSpan(offset, count));
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken token)
+                => Task.FromResult(Next(buffer.AsSpan(offset, count)));
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken token = default)
+                => new(Next(buffer.Span));
+        }
+
         private static Stream NewRequestStream(Stream source, byte[] buffer, int offset, int length, long contentLength)
             => (Stream)(Activator.CreateInstance((Core.GetType("EmbedIO.Net.Internal.RequestStream", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
                 PrivateInstance, null, new object[] { source, buffer, offset, length, contentLength }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));

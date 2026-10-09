@@ -5829,3 +5829,25 @@ completion path. The job remains failed, and its logs are retained as
 `TestResults/http-engine/native-intel-budgeted.log`. This is older managed source
 than the F3/F4 candidates and does not validate their exact head. The ARM native
 comparison on the same revision passed. Intel remains in the support scope.
+
+### Conformance findings F1/F2: HTTP/1 body completion and status
+
+All seven supplied F1/F2 cases fail on `998fe15`: four read paths treat a 3-of-10
+byte fixed body as complete, and three malformed chunk cases return 500. The
+candidate detects truncated fixed bodies in synchronous, array-async and
+memory-async transport reads, retains terminal failure and preserves unknown-
+length EOF. It records the actual framing exception so the request boundary
+can distinguish parser failures from ordinary application data errors, including
+wrappers retaining the original cause.
+
+Uncommitted responses become generic 400 and do not reuse the connection.
+Committed responses are aborted without rewriting headers or emitting a valid
+chunk terminator. Seven additional cases cover both committed-body failures,
+server-error preservation, wrapped framing errors and sticky failure/empty-read/
+cancellation behavior across three read paths. The enabled supplied cases pass.
+The Linux body, resource, fatal-policy and decompression set passes 286 cases;
+Windows expanded validation also passes all 286 cases. Hot-path, listener-queue,
+cold-start and listener-allocation guards pass. Both
+library targets build. Full-suite and exact-head gates remain required, along
+with the remaining HTTP/2 settings ordering and stream-state findings. Evidence
+is retained under ignored `TestResults/http-engine/f1-f2-*`.
