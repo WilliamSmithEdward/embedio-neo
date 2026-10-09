@@ -65,7 +65,16 @@ namespace EmbedIO.Net.Internal.Http2
                     if ((block.StreamId & 1) == 0) throw new Http2ProtocolException(1, "Client stream ID must be odd.");
                     if (!_active.TryGetValue(block.StreamId, out var stream))
                     {
-                        if (block.StreamId <= _highest) return null;
+                        if (block.StreamId <= _highest)
+                        {
+                            // Closed-stream trailers can be discarded after HPACK
+                            // processing. A new request cannot reuse or open an
+                            // identifier below the established high-water mark.
+                            foreach (var field in block.Fields)
+                                if (field.Name == ":method")
+                                    throw new Http2ProtocolException(1, "A new request requires a higher stream identifier.");
+                            return null;
+                        }
                         _highest = block.StreamId;
                         var prioritized = _priorities.TryGetValue(block.StreamId, out var priority);
                         // Opening a higher client stream implicitly closes lower

@@ -292,6 +292,18 @@ namespace EmbedIO
                     {
                         throw; // Let outer catch block handle it
                     }
+                    catch (Exception exception) when (context.Request is Net.Internal.HttpListenerRequest request && request.IsBodyFramingError(exception) && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
+                    {
+                        if (context is Net.Internal.HttpListenerContext owned && owned.HttpListenerResponse.HeadersSent)
+                            owned.HttpListenerResponse.Abort();
+                        else
+                        {
+                            context.Response.KeepAlive = false;
+                            context.Response.StatusCode = 400;
+                            await HttpExceptionHandler.Handle(LogSource, context,
+                                HttpException.BadRequest("Invalid or incomplete request body."), _onHttpException).ConfigureAwait(false);
+                        }
+                    }
                     catch (Exception exception) when (exception is IHttpException && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                     {
                         await HttpExceptionHandler.Handle(LogSource, context, exception, _onHttpException)
@@ -342,6 +354,19 @@ namespace EmbedIO
             catch (HttpListenerException ex)
             {
                 ex.Log(LogSource, $"[{context.Id}] Listener exception.");
+            }
+            catch (Exception ex) when (context.Request is Net.Internal.HttpListenerRequest request && request.HasBodyFramingFailure && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                // Completing an invalid body can encounter the aborted connection.
+                // That request cannot take down the listener shared by other clients.
+                ex.Log(LogSource, $"[{context.Id}] Invalid request body connection closed.");
+            }
+            catch (Exception ex) when (context is Net.Internal.MultiplexedContext && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                // A failed or reset request stream must not dispose the listener
+                // shared by unrelated HTTP/2 and HTTP/3 connections. Terminal
+                // context cleanup above still closes and completes that stream.
+                ex.Log(LogSource, $"[{context.Id}] Multiplexed request stream failed.");
             }
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {

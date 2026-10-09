@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +15,33 @@ namespace EmbedIO.Net.Internal
         private int _offset;
         private int _length;
         private long _remainingBody;
+        private Exception? _framingFailure;
+
+        internal bool IsFramingError(Exception error)
+        {
+            if (_framingFailure == null) return false;
+            for (Exception? current = error; current != null; current = current.InnerException)
+                if (ReferenceEquals(current, _framingFailure)) return true;
+            return false;
+        }
+        internal bool HasBodyFramingFailure => _framingFailure != null;
+        protected bool HasFramingFailure => HasBodyFramingFailure;
+        protected void RememberFramingError(Exception error) => _framingFailure = error;
+        private void ThrowIfFramingFailed()
+        {
+            if (_framingFailure != null) ExceptionDispatchInfo.Capture(_framingFailure).Throw();
+        }
+        private int CompleteRead(int read)
+        {
+            if (read == 0 && _remainingBody > 0)
+            {
+                var error = new EndOfStreamException("Incomplete fixed-length request body.");
+                RememberFramingError(error);
+                throw error;
+            }
+            if (read > 0 && _remainingBody > 0) _remainingBody -= read;
+            return read;
+        }
 
         internal RequestStream(Stream stream, byte[] buffer, int offset, int length, long contentLength = -1)
         {
@@ -71,12 +99,7 @@ namespace EmbedIO.Net.Internal
 
             nread = Transport.Read(buffer, offset, count);
 
-            if (nread > 0 && _remainingBody > 0)
-            {
-                _remainingBody -= nread;
-            }
-
-            return nread;
+            return CompleteRead(nread);
         }
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -93,8 +116,7 @@ namespace EmbedIO.Net.Internal
         {
             if (_remainingBody > 0) count = (int)Math.Min(count, _remainingBody);
             var read = await Transport.ReadAsync(buffer, offset, count, token).ConfigureAwait(false);
-            if (read > 0 && _remainingBody > 0) _remainingBody -= read;
-            return read;
+            return CompleteRead(read);
         }
 
 #if NET10_0_OR_GREATER
@@ -102,6 +124,7 @@ namespace EmbedIO.Net.Internal
         {
             if (cancellationToken.IsCancellationRequested) return ValueTask.FromCanceled<int>(cancellationToken);
             if (_remainingBody == 0 || buffer.Length == 0) return new ValueTask<int>(0);
+            ThrowIfFramingFailed();
             if (_length > 0)
             {
                 var count = Math.Min(buffer.Length, _length);
@@ -119,8 +142,7 @@ namespace EmbedIO.Net.Internal
         {
             if (_remainingBody > 0 && buffer.Length > _remainingBody) buffer = buffer.Slice(0, (int)_remainingBody);
             var read = await Transport.ReadAsync(buffer, token).ConfigureAwait(false);
-            if (read > 0 && _remainingBody > 0) _remainingBody -= read;
-            return read;
+            return CompleteRead(read);
         }
 #endif
 
@@ -167,6 +189,7 @@ namespace EmbedIO.Net.Internal
         private int FillFromBuffer(byte[] buffer, int off, int count)
         {
             ValidateDestination(buffer, off, count);
+            if (count > 0) ThrowIfFramingFailed();
             if (_remainingBody == 0)
             {
                 return -1;

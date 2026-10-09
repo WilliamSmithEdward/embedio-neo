@@ -12,6 +12,7 @@ namespace EmbedIO.Net.Internal.Http2
     {
         private static readonly byte[] Preface = Encoding.ASCII.GetBytes("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
         private readonly Http2FrameTransport _transport;
+        private CancellationToken _transportCancellation;
         private readonly HpackEncoder _encoder = new();
         private readonly Http2HeaderBlocks _headers = new();
         private int _pendingSettings = 1;
@@ -24,6 +25,7 @@ namespace EmbedIO.Net.Internal.Http2
         public int PeerLastStreamId { get; private set; }
         public uint PeerErrorCode { get; private set; }
         internal Action<Exception>? OutputFailed { get; set; }
+        internal void UseTransportCancellation(CancellationToken token) => _transportCancellation = token;
         internal Action<int> AdjustStreamWindows { get; set; } = _ => { };
 
         private Http2Connection(Stream stream) { _transport = new Http2FrameTransport(stream); }
@@ -41,7 +43,7 @@ namespace EmbedIO.Net.Internal.Http2
                     if (received[offset + i] != Preface[offset + i]) throw new Http2ProtocolException(1, "Invalid HTTP/2 connection preface.");
                 offset += count;
             }
-            var connection = new Http2Connection(stream);
+            var connection = new Http2Connection(stream) { _transportCancellation = token };
             try
             {
                 // Bound incoming streams/headers, advertise RFC 8441 tunnels and RFC 9218 priorities.
@@ -115,6 +117,7 @@ namespace EmbedIO.Net.Internal.Http2
             await _headerOutput.WaitAsync(token).ConfigureAwait(false);
             try
             {
+                token.ThrowIfCancellationRequested();
                 long size = 0;
                 foreach (var field in fields) size += field.Size;
                 if (size > Peer.MaximumHeaderListSize) throw new IOException("Response headers exceed peer limit.");
@@ -129,8 +132,10 @@ namespace EmbedIO.Net.Internal.Http2
                     var flags = (byte)((i == frames.Length - 1 ? 4 : 0) | (i == 0 && endStream ? 1 : 0));
                     frames[i] = new Http2Frame(i == 0 ? (byte)1 : (byte)9, flags, streamId, fragment);
                 }
-                try { await SendAsync(frames, token).ConfigureAwait(false); }
-                catch (Exception error) { OutputFailed?.Invoke(error); throw; }
+                // Encoding mutates the shared HPACK table. Commit the entire
+                // block even if this stream resets, or the next block may refer
+                // to table entries the peer never received.
+                await SendAsync(frames, _transportCancellation).ConfigureAwait(false);
             }
             finally { _headerOutput.Release(); }
         }
@@ -145,6 +150,24 @@ namespace EmbedIO.Net.Internal.Http2
             Streams.Abort();
             _headerOutput.Dispose();
             _transport.Dispose();
+        }
+
+        internal async Task SendStreamAsync(Http2Frame[] frames, CancellationToken token)
+        {
+            try { await _transport.WriteRequestAsync(frames, Peer.MaximumFrameSize, token, _transportCancellation).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (token.IsCancellationRequested && !_transport.IsWriteFailed)
+            {
+                // No DATA reached the wire. A reset may already have removed its
+                // stream window; connection credit still belongs to siblings.
+                try
+                {
+                    foreach (var frame in frames)
+                        if (frame.Type == 0) SendFlow.ReturnUnusedReservation(frame.StreamId, frame.Payload.Length);
+                }
+                catch (Exception error) { OutputFailed?.Invoke(error); throw; }
+                throw;
+            }
+            catch (Exception error) { OutputFailed?.Invoke(error); throw; }
         }
 
         internal async Task SendAsync(Http2Frame[] frames, CancellationToken token)

@@ -24,13 +24,13 @@ namespace EmbedIO.Tests
                 try { return (_instance.GetType().GetMethod(name, Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(_instance, args); }
                 catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture((error.InnerException ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."))).Throw(); throw; }
             }
-            internal object? Frame(byte type, int id, byte flags = 0, byte[]? payload = null, bool pseudo = false, string? priority = null)
+            internal object? Frame(byte type, int id, byte flags = 0, byte[]? payload = null, bool pseudo = false, string? priority = null, bool opening = false)
             {
                 payload ??= type == 3 || type == 8 ? new byte[4] : type == 2 ? new byte[5] : Array.Empty<byte>();
                 var frame = (Activator.CreateInstance(Type("Http2Frame"), Flags, null, new object[] { type, flags, id, payload }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
                 if (type == 1)
                 {
-                    var pairs = pseudo ? new[] { ":path", "/" } : _seen.Add(id)
+                    var pairs = pseudo ? new[] { ":path", "/" } : opening || _seen.Add(id)
                         ? new[] { ":method", "GET", ":scheme", "https", ":authority", "example.com", ":path", "/" } : Array.Empty<string>();
                     if (priority != null) pairs = new List<string>(pairs) { "priority", priority }.ToArray();
                     var fields = Array.CreateInstance(Type("HpackField"), pairs.Length / 2);
@@ -127,6 +127,25 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public void NewRequestOnSkippedLowerIdentifierIsAConnectionError()
+        {
+            var registry = new Registry();
+            registry.Frame(1, 3);
+            Error(() => registry.Frame(1, 1, opening: true), 1, 0);
+            Assert.That(registry.Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ReopeningCompletedIdentifierIsAConnectionError()
+        {
+            var registry = new Registry();
+            registry.Frame(1, 1, 1);
+            registry.Call("EndLocal", 1);
+            Error(() => registry.Frame(1, 1, 1, opening: true), 1, 0);
+            Assert.That(registry.Count, Is.Zero);
+        }
+
+        [Test]
         public void HalfClosedStreamsCountUntilBothDirectionsEnd()
         {
             var registry = new Registry(1);
@@ -209,7 +228,7 @@ namespace EmbedIO.Tests
                 registry.Call("Reset", id);
                 Assert.That(registry.Frame(0, id), Is.Null);
                 Assert.That(registry.Frame(1, id), Is.Null);
-                if (id > 1) Assert.That(registry.Frame(1, id - 2), Is.Null);
+                if (id > 1) Error(() => registry.Frame(1, id - 2), 1, 0);
                 Assert.That(registry.Count, Is.Zero);
             }
         }

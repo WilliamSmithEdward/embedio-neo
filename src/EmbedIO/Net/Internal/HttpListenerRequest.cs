@@ -24,6 +24,8 @@ namespace EmbedIO.Net.Internal
         private readonly HttpConnection _connection;
         private CookieList? _cookies;
         private Stream? _inputStream;
+        internal bool HasBodyFramingFailure => _inputStream is RequestStream body && body.HasBodyFramingFailure;
+        internal bool IsBodyFramingError(Exception error) => _inputStream is RequestStream body && body.IsFramingError(error);
         private bool _kaSet;
         private bool _keepAlive;
         private bool _chunked;

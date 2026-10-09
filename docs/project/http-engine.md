@@ -5762,3 +5762,119 @@ The selected budget is retained in the artifact. Test floors, assertions, native
 image verification, source pins and sanitizer checks are unchanged. Intel stays
 in scope following William's correction; a fresh run must complete every gate
 before the Intel candidate can be accepted.
+
+### Conformance finding F3: request failure isolation
+
+The conformance helper's HTTP/3 upload-cancellation reproduction failed against
+`f1bbe41` in a pinned Linux container. A monitored server observed one fatal
+callback and `Listener.IsListening == false` while its public state still read
+`Listening`. Earlier failure logs are retained separately. This confirms a
+listener-wide consequence rather than inferring one from a closed client connection.
+
+The candidate request boundary handles recoverable errors from multiplexed
+contexts as stream failures. The existing response flush, completion callbacks
+and asynchronous context close still run; a faulted context completion remains
+faulted for its protocol owner. Process/resource-corruption exceptions continue
+to propagate through the existing exception policy. Public APIs and library
+targets do not change.
+
+The enabled F3 regression cancels 400 uploads, checks that fatal cleanup was
+never called, checks the actual listener and probes fresh client connections.
+Five monitored Linux repeats passed (2,000 cancelled uploads), and the monitored
+Windows regression also passed. The HTTP/2, HTTP/3, cleanup and fatal-propagation
+set passed all 806 cases on each of Windows and Linux. Existing hot-path,
+listener-queue, cold-start and listener-allocation budgets passed. Final full-suite
+and exact-head repository gates are still required. The other eight supplied reproduction
+cases remain Explicit for unresolved F1/F2/F4 work; enabling F3 is not a claim
+that the full conformance campaign passes. Evidence is under ignored
+`TestResults/http-engine/f3-*`.
+
+### Conformance finding F4: shared HTTP/2 write cancellation
+
+Two controlled writer cases fail on `2e579ec`: cancellation after a partial frame
+interrupts the shared transport, and cancellation while waiting for its gate
+reports a connection-wide output failure despite writing no bytes. The candidate
+separates cancellation while queued from cancellation of committed I/O. DATA
+uses its request token until writing starts, then the owning connection's token
+for the complete frame batch. Connection shutdown and genuine partial I/O failures
+still terminate unusable output.
+
+An unstarted canceled DATA frame returns its reserved flow-control credit. The
+connection credit is returned even if RST_STREAM already removed the stream's
+window, allowing a blocked sibling to proceed without a peer WINDOW_UPDATE.
+HPACK encoding mutates a connection-wide table, so a header block that has been
+encoded is committed with connection cancellation; a reset cannot leave the
+peer missing table entries referenced by the next response.
+
+Five controlled regressions cover partial and queued reset, credit return after
+stream removal, decoding successive HPACK blocks and connection cancellation.
+The supplied 500-trial wire reproduction is enabled. Three Linux wire repeats
+pass (1,500 trials), and the broader HTTP/2, HTTP/3, cleanup and fatal-propagation
+set passes all 812 cases on Windows and Linux. Hot-path, listener-queue,
+cold-start and listener-allocation budgets pass. Both library targets build;
+parser/suppression guards pass. Full-suite and final exact-head checks are still
+required. Settings-shrink ordering (F5), stream-state errors (F6), truncated
+fixed bodies (F1) and malformed-body status handling (F2) remain separate work.
+Evidence is retained under ignored `TestResults/http-engine/f4-*`.
+
+### Budgeted Intel native experiment result
+
+The Intel job in run
+[37952457798](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37952457798)
+completed both coverage suites on `f23a5a5`: each reported all 4,288 cases,
+4,256 passed, 31 skipped and one failure, taking about 9.5 minutes. Increasing
+the execution budget allowed full discovery/completion; it did not clear genuine
+failures. Each failure is in the native WebSocket shutdown fixture's upgrade
+completion path. The job remains failed, and its logs are retained as
+`TestResults/http-engine/native-intel-budgeted.log`. This is older managed source
+than the F3/F4 candidates and does not validate their exact head. The ARM native
+comparison on the same revision passed. Intel remains in the support scope.
+
+### Conformance findings F1/F2: HTTP/1 body completion and status
+
+All seven supplied F1/F2 cases fail on `998fe15`: four read paths treat a 3-of-10
+byte fixed body as complete, and three malformed chunk cases return 500. The
+candidate detects truncated fixed bodies in synchronous, array-async and
+memory-async transport reads, retains terminal failure and preserves unknown-
+length EOF. It records the actual framing exception so the request boundary
+can distinguish parser failures from ordinary application data errors, including
+wrappers retaining the original cause.
+
+Uncommitted responses become generic 400 and do not reuse the connection.
+Committed responses are aborted without rewriting headers or emitting a valid
+chunk terminator. Seven additional cases cover both committed-body failures,
+server-error preservation, wrapped framing errors and sticky failure/empty-read/
+cancellation behavior across three read paths. The enabled supplied cases pass.
+The Linux body, resource, fatal-policy and decompression set passes 286 cases;
+Windows expanded validation also passes all 286 cases. Hot-path, listener-queue,
+cold-start and listener-allocation guards pass. Both
+library targets build. Full-suite and exact-head gates remain required, along
+with the remaining HTTP/2 settings ordering and stream-state findings. Evidence
+is retained under ignored `TestResults/http-engine/f1-f2-*`.
+
+### F6 stream-state review against the modern baseline
+
+The engine now distinguishes a new request (`:method`) using a closed or skipped
+identifier from closed-stream trailing traffic. Two controlled cases fail on
+`b4e725f` and pass with the candidate: opening a lower skipped ID and reopening
+an already completed ID. The rejected request raises connection PROTOCOL_ERROR
+without creating another active object. The existing 2,500-iteration registry
+check retains its bounded-state assertions and now expects that error for new
+requests on skipped IDs. All 65 registry/header/HPACK/dispatcher cases pass on
+Windows and pinned Linux; both library targets build and source guards pass.
+
+The legacy h2spec findings need individual classification against the modern
+baseline. [RFC 9113 section 5.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1)
+permits minimal processing and discard on fully closed streams, while requiring
+STREAM_CLOSED for prohibited frames on half-closed-remote streams. Header blocks
+still update HPACK state and discarded DATA still consumes connection credit.
+[RFC 9218 section 2.1](https://www.rfc-editor.org/rfc/rfc9218.html#section-2.1)
+permits ignoring legacy priority signals when the server advertises that policy.
+Those behaviors must not be removed solely to satisfy older h2spec expectations.
+The new-request identifier guard follows
+[RFC 9113 section 5.1.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1.1).
+
+The original h2spec failures remain recorded; no aggregate tool result has been
+converted to success or its tests disabled. Fresh independent wire validation
+and exact-head CI remain required. F5 settings/queued-DATA ordering is still open.
+Evidence is under ignored `TestResults/http-engine/f6-*`.

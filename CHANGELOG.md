@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+- Reject new HTTP/2 requests that reuse a completed stream identifier or try to
+  open a skipped lower identifier, while retaining minimal closed-stream
+  processing and the advertised modern priority policy.
+
+- Reject incomplete managed Content-Length bodies as errors rather than successful
+  short uploads. Map body-framing failures to generic 400 responses before headers
+  commit, and abort that connection after response commitment. Preserve ordinary
+  application error handling and keep other clients' listener available.
+
+- Preserve sibling HTTP/2 streams when a request is reset during response output.
+  Cancel queued writes without poisoning the shared connection, return unsent
+  DATA credit, and finish encoded HPACK blocks to keep peer tables synchronized.
+
+- Keep recoverable HTTP/2 and HTTP/3 request-stream failures from disposing the
+  listener shared by other clients. Response completion and context cleanup
+  still run after cancellation or output failure; nonrecoverable errors retain
+  their existing propagation behavior (engine program #181).
+
 - Begin the owner-approved modern HTTP engine replacement: managed chunked request
   decoding, asynchronous body reads and draining, strict framing validation,
   pipeline buffer adoption and reduced response-header allocations. Malformed or
