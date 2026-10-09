@@ -211,7 +211,9 @@ The Windows job also runs `test/EmbedIO.LegacyRouteValidationSmoke` outside the 
 The modern .NET target uses System.Net.Quic. Local hosts without its native
 prerequisites explicitly skip direct QUIC cases while still running the portable
 framing/QPACK tests. Desktop CI installs version/hash-pinned MsQuic 2.6.2 packages
-on Linux and macOS, and uses the runtime-bundled Windows library. It sets
+on Linux and Apple Silicon macOS, builds the same pinned MsQuic 2.6.2 commit on
+Intel macOS, where no 2.6.2 binary is published, and uses the runtime-bundled
+Windows library. It sets
 `EMBEDIO_REQUIRE_QUIC=1` to reject absent capability rather than silently lose
 coverage. After preparing the native library, use that environment variable with
 `dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --filter FullyQualifiedName~Http3QuicTest`.

@@ -5762,3 +5762,83 @@ The selected budget is retained in the artifact. Test floors, assertions, native
 image verification, source pins and sanitizer checks are unchanged. Intel stays
 in scope following William's correction; a fresh run must complete every gate
 before the Intel candidate can be accepted.
+
+### Intel macOS regression coverage
+
+Ordinary CI ran the 4,288-test regression suite only on macos-15 (Apple Silicon);
+Intel ran only inside the optional native experiment. The test matrix now adds
+macos-15-intel with the same floor, assertions, constrained ZIP run and reset
+stress.
+
+Homebrew publishes no Intel macOS bottle for libmsquic 2.6.2: its formula and the
+GHCR index list only arm64 and Linux bottles, and the last Intel macOS bottle,
+`sonoma`, belonged to 2.6.0 (2026-08-14). The v2.6.2 GitHub release has no
+assets, and Microsoft.Native.Quic.MsQuic.OpenSSL 2.6.2 contains only Windows
+libraries. The Intel leg therefore builds the formula's tagged commit
+819ab74f851ee168504cbc392ec32e7bed1d82e9 with the formula's CMake options, x86_64
+named explicitly, against Homebrew OpenSSL libcrypto. It verifies the commit and
+the quictls gitlink ff36838bb69801cad56823159a036977bcbe5c75, requires a thin
+x86_64 Mach-O and records versions, load commands and the built hash. As on ARM,
+Homebrew's OpenSSL and CMake stay runner-managed. The build is not
+byte-reproducible, so its hash is evidence rather than a pin. The ARM bottle
+step is unchanged apart from its architecture guard.
+
+The retained Intel failures were compared test by test with complete ARM suites.
+Both full-coverage runs in run 37945962762 recorded 2,192 and 2,188 results, each
+an exact prefix of the ARM execution order. Recorded progress was continuous up
+to the five-minute deadline: no gap between results exceeded two seconds, and
+summed durations matched elapsed time. The deadline expired during
+Issue457_ProxyDisconnects(Microsoft, ...).
+
+The rest of each suite still ran. At the deadline, NUnit3TestAdapter 6.3.0's
+engine calls the framework's `StopRun` with a `force` argument, but NUnit 5.0.0's
+`FrameworkController.StopRun()` takes none. The reflection call fails with
+`TargetParameterCountException`, and execution continues while the platform
+discards further results. A deliberate 90-second deadline in diagnostic run
+[37955797744](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37955797744)
+reproduced this on both runners. The Intel test host kept executing for seven
+minutes, with new accept-loop threads, JIT and GC activity in process samples,
+then exited with code 0. The controller reported it as crashed (exit code 7)
+with only the pre-deadline results; ARM behaved the same way. Coverage of the
+retained runs confirms it: 12,029 and 12,031 covered lines, the same as a complete
+Intel run (12,031), including ZIP and WebSocket message code whose fixtures have
+no recorded results. The interval after each deadline was the rest of the suite,
+not cleanup or a hang, and no hang was found. A `--timeout` deadline therefore
+discards results rather than stopping tests; job timeouts remain the effective
+bound for a genuine hang. No newer adapter release than 6.3.0 exists.
+
+Each complete Intel suite in run [37952457798](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37952457798)
+contains 49 tests that take whole multiples of five seconds (270 of about 566
+seconds) but milliseconds on ARM. Forty-eight register `System.Net.HttpListener`
+prefixes with IP-literal or wildcard hosts. For those hosts, .NET 10.0.12's
+`ServiceNameStore.BuildServiceNames` resolves the machine's own name with
+`Dns.GetHostEntry(string.Empty)`. The remaining one, an `IPParser` case for an
+empty address, resolves the same name directly. Prefixes using `localhost` are
+unaffected. Excluding these stalls, Intel tests run at a median 1.33 times their
+ARM duration, with no other outliers.
+
+The cause is in the runner image. Both images list their `.local` host name in
+/etc/hosts for IPv4 only and route `.local` to an mDNS resolver with a
+five-second timeout. On ARM the own-name lookup returns in 1 to 31 ms, with IPv6
+answers led by `::1`. On Intel nothing answers the IPv6 query, so
+`Dns.GetHostEntry(string.Empty)`, `dscacheutil` and every such `Prefixes.Add`
+take about five seconds, while a `localhost` prefix takes about 2 ms.
+
+One deterministic Intel failure follows from it.
+`NativeWebSocketShutdownTest.CancellationDuringUpgradeReleasesAcceptAndAllConnectedTransports(Microsoft)`
+constructs up to 32 Microsoft-mode servers on 127.0.0.1 within one 30-second
+deadline. The deadline expired while constructing the sixth server in both
+suites of run 37952457798 and the seventh in run 37955797744; the test takes
+0.28 seconds on ARM.
+
+The Intel leg therefore maps the runner's own name to `::1` in /etc/hosts, the
+IPv6 answer the ARM image already returns, flushes the resolver caches and fails
+unless the lookup then completes within one second. The before and after timings
+are kept with the test results. Tests, floors and assertions are unchanged. The
+uncorrected Intel job measured about 15.3 minutes, including a 2.2-minute MsQuic
+build and a 10.2-minute suite; without the stalls the suite should take about
+5.5 minutes. The Intel suite budget is 12 minutes and its job budget 30 minutes,
+both above the uncorrected measurement. In that measurement the source-built
+library passed every QUIC test with `EMBEDIO_REQUIRE_QUIC=1`, 27 constrained ZIP
+cases and five reset-stress passes. The optional native experiment's own Intel
+suites do not receive this correction and will keep failing on that test.
