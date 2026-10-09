@@ -4154,3 +4154,24 @@ source are retained in `TestResults/http-engine/cmake-sanitizer-module-probe`.
 This validates module loading only. Full Darwin instrumented compilation and
 execution remain pending. The earlier queued combined-candidate runs use their
 original source and cannot validate this later harness correction.
+
+### Priority-update rejection policy audit
+
+[RFC 9218 section 7](https://www.rfc-editor.org/rfc/rfc9218.html#section-7)
+permits a parse failure in a PRIORITY_UPDATE field value to become an HTTP/2
+`PROTOCOL_ERROR` or HTTP/3 `H3_GENERAL_PROTOCOL_ERROR`. The current
+`Http2StreamRegistry.UpdatePriority` and `Http3ControlStream.ReadAsync` use those
+errors for non-ASCII or malformed Structured Field dictionaries. This policy
+is permitted; no parser change is needed merely to ignore malformed updates.
+The ordinary Priority header path instead falls back to default priority through
+`HttpPriority.TryParse`.
+
+The HTTP/3 control reader also maps non-request stream identifiers to
+`H3_ID_ERROR`, server-originated updates to `H3_FRAME_UNEXPECTED`, and truncated
+identifiers to `H3_FRAME_ERROR`. These paths map to
+`Http3ControlTest.InvalidPriorityUpdateRejectsBeforeFollowingFrame`; accepted
+updates and subsequent control-frame consumption map to
+`PriorityUpdatePreservesFieldAndFollowingControlFrame`. Live connection handling
+rejects updates for unpromised pushes. This is a source/requirement mapping,
+not new runtime validation, proof of complete scheduling, or closure of the
+remaining extension conformance work.
