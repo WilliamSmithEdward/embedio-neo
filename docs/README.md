@@ -133,6 +133,7 @@ for a complete app you can run, then choose files or controllers as needed.
 ## Architecture
 
 - [Modern HTTP engine program](project/http-engine.md): protocol roadmap, compatibility changes and performance acceptance.
+- [Managed engine load comparison](project/http-engine-load-comparison.md): separate-process HTTP/1.1, HTTP/2 and HTTP/3 measurements against main and Kestrel, profiled bottlenecks and prioritized improvements.
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
 
