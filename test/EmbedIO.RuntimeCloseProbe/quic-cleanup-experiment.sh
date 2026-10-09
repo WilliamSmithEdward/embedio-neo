@@ -47,17 +47,18 @@ codesign --force --sign - "$trace_library"
 shasum -a 256 "$trace_library" > "$results/tracer.sha256"
 
 build_native() {
-  local variant="$1"
+  local variant="$1" asan="${2:-OFF}"
   local build_dir="$RUNNER_TEMP/msquic-$variant-build"
   cmake -S "$source_dir" -B "$build_dir" \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$openssl_root" \
     -DQUIC_TLS_LIB=quictls -DQUIC_USE_SYSTEM_LIBCRYPTO=ON \
     -DQUIC_BUILD_TEST=ON -DQUIC_BUILD_TOOLS=OFF -DQUIC_BUILD_PERF=OFF \
-    -DQUIC_ENABLE_LOGGING=OFF -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+    -DQUIC_ENABLE_LOGGING=OFF -DQUIC_ENABLE_ASAN="$asan" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
     -DQUIC_OUTPUT_DIR="$build_dir/bin" 2>&1 | tee "$results/$variant-configure.log"
   cmake --build "$build_dir" --parallel 3 --target msquic msquicplatformtest \
     2>&1 | tee "$results/$variant-build.log"
   cp "$build_dir/CMakeCache.txt" "$results/$variant-CMakeCache.txt"
+  cp "$build_dir/compile_commands.json" "$results/$variant-compile_commands.json"
   codesign --force --sign - "$build_dir/bin/libmsquic.2.6.2.dylib"
   shasum -a 256 "$build_dir/bin/libmsquic.2.6.2.dylib" > "$results/$variant-library.sha256"
   otool -L "$build_dir/bin/libmsquic.2.6.2.dylib" > "$results/$variant-imports.txt"
@@ -139,5 +140,16 @@ done
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
   --minimum-expected-tests 3400 --timeout 5m --report-trx --coverlet \
   --results-directory "$results/full-suite" || candidate_failed=1
+# Additional memory-lifetime validation with upstream's sanitizer build.
+# The ordinary native suite and its real failures above remain unchanged.
+build_native candidate-asan ON
+asan_bin="$RUNNER_TEMP/msquic-candidate-asan-build/bin"
+otool -L "$asan_bin/msquicplatformtest" > "$results/candidate-asan-test-imports.txt"
+env DYLD_FALLBACK_LIBRARY_PATH="$asan_bin" DYLD_PRINT_LIBRARIES=1 \
+  "$asan_bin/msquicplatformtest" --timeout 120000 \
+    --gtest_filter='*EmbedIOKqueue*:*UdpData*' --gtest_repeat=100 \
+    --gtest_shuffle --gtest_random_seed=40591 \
+    --gtest_output="xml:$results/candidate-asan-lifetime.xml" \
+    > "$results/candidate-asan-lifetime.log" 2> "$results/candidate-asan-loader.log" || candidate_failed=1
 printf '%s\n' "$candidate_failed" > "$results/candidate.exit"
 exit "$candidate_failed"

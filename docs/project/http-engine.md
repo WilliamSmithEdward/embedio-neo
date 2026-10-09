@@ -4046,3 +4046,14 @@ receive that same slot, then checks its endpoint after worker-pool rundown.
 A descriptor-allocation mismatch fails the test; reuse is no longer inferred
 from successful rebinding. This uses ordinary socket APIs in the isolated
 native test process. Validation of the strengthened fixture remains pending.
+
+The optional cleanup experiment also prepares a separate AddressSanitizer build
+using the pinned upstream `QUIC_ENABLE_ASAN` option. It repeats the deterministic
+lifetime and existing UDP data cases 100 times with recorded shuffle seed
+40591, while retaining the unchanged full native-suite result. Compiler
+commands, CMake options, executable/library imports and loader/diagnostic logs
+are collected. No sanitizer suppression or relaxation is configured.
+Upstream sanitizer mode changes allocation instrumentation, including disabling
+its normal pool allocator, so this supplements the ordinary build and cannot
+establish production performance or replace its lifecycle checks. Instrumented
+build and execution results remain pending.
