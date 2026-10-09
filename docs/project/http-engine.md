@@ -6012,3 +6012,42 @@ workloads. Short closed-loop samples on one shared host do not establish a
 universal throughput, latency or Kestrel ranking improvement. Other transports,
 platforms, upload/inbound pooling and long-running memory behavior remain work.
 Evidence is under ignored `TestResults/benchmark-review/data-slice-*`.
+
+### Incoming HTTP/2 DATA leases
+
+The connection reader now rents nonempty DATA payloads and returns them cleared
+once dispatch has copied request bytes into the existing bounded body queue.
+Header and control frames retain independent exact-length arrays. Logical frame
+length, rather than rental capacity, governs validation, padding and flow credit.
+Truncation, cancellation, invalid framing and dispatch failure return the lease;
+application readers never retain the returned frame buffer. Public APIs,
+receive windows, request body bounds, targets and dependencies are unchanged.
+
+Eight regressions cover oversized pool rentals, sequential/concurrent disposal,
+queued body ownership, truncated/canceled reads, invalid DATA shapes and control
+frame independence. The Windows protocol/conformance/WebSocket set passes 1,149
+cases and the pinned Linux HTTP/2 set passes 393, with no failures or skips. All
+four resource budgets pass. The full Windows suite reports 4,358 cases, 4,353
+successes and five expected local/platform skips, with zero failures. Both
+production targets build with zero warnings/errors; formatting and analyzer
+guards pass. Discovery floors increase to 4,358. Exact-head platform validation
+remains required.
+
+A frozen same-harness comparison uses clean `f0c4c7b` as control and its recorded
+uncommitted DATA-lease patch as candidate. Three alternating upload rounds use
+5 s warmup, 15 s measurement and 2 s idle, four TLS connections by four streams,
+separate server/client processes on CPUs 0-7 / 8-15, Windows Ryzen 9800X3D and
+.NET 10.0.12. All six samples pass byte/status/framing checks with no remaining
+server sockets. Median allocation for 1 MiB uploads falls from 1,184,846 to
+137,005 B/request (about 88%); median server CPU falls from 2,851.3 to 2,597.3
+us/request, and every paired round has lower candidate CPU. Retained heap growth
+is at most 131 KiB control / 78 KiB candidate, a settlement observation rather
+than a soak result.
+
+The preceding short comparison did not establish a CPU benefit: candidate
+upload CPU was higher at its median, with substantial variation in both engines.
+Longer confirmation reverses that observation, but background CPU varies from
+24.5 to 76.2 seconds per sample. Neither run establishes a stable throughput or
+latency improvement, a cross-platform result or a Kestrel ranking. Evidence,
+source patch, engine/harness hashes and original samples remain under ignored
+`TestResults/benchmark-review/inbound-*`; broader performance and soak work remain.

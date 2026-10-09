@@ -61,7 +61,7 @@ namespace EmbedIO.Net.Internal.Http2
                             _exchanges.TryGetValue(frame.StreamId, out var exchange);
                             if (state == null)
                             {
-                                if (frame.Type == 0) QueueCredit(0, _connection.ReceiveFlow.Discard(frame.Payload.Length));
+                                if (frame.Type == 0) QueueCredit(0, _connection.ReceiveFlow.Discard(frame.PayloadLength));
                                 continue;
                             }
                             if (frame.Type == 16) _connection.SendFlow.SetPriority(state.Id, state.Priority);
@@ -80,11 +80,11 @@ namespace EmbedIO.Net.Internal.Http2
                             else if (frame.Type == 0 && exchange != null)
                             {
                                 dataAccounted = true;
-                                _connection.ReceiveFlow.Receive(state.Id, frame.Payload.Length);
+                                _connection.ReceiveFlow.Receive(state.Id, frame.PayloadLength);
                                 var offset = (frame.Flags & 8) != 0 ? 1 : 0;
-                                var padding = offset == 0 ? 0 : frame.Payload[0] + 1;
+                                var padding = offset == 0 ? 0 : frame.Payload[frame.PayloadOffset] + 1;
                                 if (padding != 0) Consumed(state.Id, padding);
-                                exchange.Body.Append(frame.Payload, offset, frame.Payload.Length - padding, (frame.Flags & 1) != 0);
+                                exchange.Body.Append(frame.Payload, frame.PayloadOffset + offset, frame.PayloadLength - padding, (frame.Flags & 1) != 0);
                             }
                             else if (frame.Type == 3 && exchange != null)
                             {
@@ -97,9 +97,10 @@ namespace EmbedIO.Net.Internal.Http2
                     }
                     catch (Http2ProtocolException error) when (error.StreamId != 0)
                     {
-                        if (frame?.Type == 0 && !dataAccounted) QueueCredit(0, _connection.ReceiveFlow.Discard(frame.Payload.Length));
+                        if (frame?.Type == 0 && !dataAccounted) QueueCredit(0, _connection.ReceiveFlow.Discard(frame.PayloadLength));
                         await ResetAsync(error.StreamId, error.ErrorCode, error).ConfigureAwait(false);
                     }
+                    finally { frame?.Dispose(); }
                 }
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }

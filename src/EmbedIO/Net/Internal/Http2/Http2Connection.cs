@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -28,7 +29,9 @@ namespace EmbedIO.Net.Internal.Http2
         internal void UseTransportCancellation(CancellationToken token) => _transportCancellation = token;
         internal Action<int> AdjustStreamWindows { get; set; } = _ => { };
 
-        private Http2Connection(Stream stream) { _transport = new Http2FrameTransport(stream); }
+        private Http2Connection(Stream stream) : this(stream, ArrayPool<byte>.Shared) { }
+        private Http2Connection(Stream stream, ArrayPool<byte> dataPool)
+        { _transport = new Http2FrameTransport(stream, 16384, dataPool ?? throw new ArgumentNullException(nameof(dataPool))); }
 
         internal static async Task<Http2Connection> AcceptAsync(Stream stream, CancellationToken token)
         {
@@ -49,7 +52,7 @@ namespace EmbedIO.Net.Internal.Http2
                 // Bound incoming streams/headers, advertise RFC 8441 tunnels and RFC 9218 priorities.
                 var settings = new byte[] { 0, 3, 0, 0, 0, 128, 0, 6, 0, 0, 128, 0, 0, 8, 0, 0, 0, 1, 0, 9, 0, 0, 0, 1 };
                 await connection.SendAsync(new[] { new Http2Frame(4, 0, 0, settings) }, token).ConfigureAwait(false);
-                var first = await connection.ReadFrameAsync(token).ConfigureAwait(false);
+                using var first = await connection.ReadFrameAsync(token).ConfigureAwait(false);
                 if (first == null || first.Type != 4 || (first.Flags & 1) != 0)
                     throw new Http2ProtocolException(1, "Client preface must start with non-ACK SETTINGS.");
                 await connection.ProcessControlAsync(first, token).ConfigureAwait(false);
@@ -61,13 +64,17 @@ namespace EmbedIO.Net.Internal.Http2
         internal async Task<Http2Frame?> ReadFrameAsync(CancellationToken token)
         {
             var frame = await _transport.ReadAsync(token).ConfigureAwait(false);
-            if (frame == null) _headers.CompleteInput();
-            else
+            try
             {
-                frame.HeaderBlock = _headers.Process(frame);
-                frame.ValidateShape();
+                if (frame == null) _headers.CompleteInput();
+                else
+                {
+                    frame.HeaderBlock = _headers.Process(frame);
+                    frame.ValidateShape();
+                }
+                return frame;
             }
-            return frame;
+            catch { frame?.Dispose(); throw; }
         }
 
         // The stream layer must enforce an outstanding CONTINUATION sequence

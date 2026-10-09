@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Buffers;
 using System.IO;
+using System.Threading;
 
 namespace EmbedIO.Net.Internal.Http2
 {
@@ -11,13 +13,15 @@ namespace EmbedIO.Net.Internal.Http2
         public int StreamId { get; }
     }
 
-    internal sealed class Http2Frame
+    internal sealed class Http2Frame : IDisposable
     {
+        private byte[]? _payload;
+        private readonly ArrayPool<byte>? _payloadPool;
         internal Http2Frame(byte type, byte flags, int streamId, byte[] payload)
         {
             if (streamId < 0) throw new ArgumentOutOfRangeException(nameof(streamId));
             Type = type; Flags = flags; StreamId = streamId;
-            Payload = payload ?? throw new ArgumentNullException(nameof(payload));
+            _payload = payload ?? throw new ArgumentNullException(nameof(payload));
             PayloadLength = payload.Length;
         }
         private Http2Frame(byte flags, int streamId, byte[] payload, int offset, int count)
@@ -28,14 +32,26 @@ namespace EmbedIO.Net.Internal.Http2
             PayloadOffset = offset;
             PayloadLength = count;
         }
+        private Http2Frame(byte flags, int streamId, byte[] payload, int count, ArrayPool<byte> pool)
+            : this(flags, streamId, payload, 0, count)
+        { _payloadPool = pool ?? throw new ArgumentNullException(nameof(pool)); }
         // Outgoing DATA borrows this slice only until its awaited write completes.
-        // Received frames and every control/header frame retain complete payloads.
+        // Received DATA leases are disposed after dispatch copies their content.
+        // Header/control frames retain their independent complete payloads.
         internal static Http2Frame BorrowData(byte flags, int streamId, byte[] payload, int offset, int count)
             => new(flags, streamId, payload, offset, count);
+        internal static Http2Frame OwnData(byte flags, int streamId, byte[] payload, int count, ArrayPool<byte> pool)
+            => new(flags, streamId, payload, count, pool);
+        public void Dispose()
+        {
+            if (_payloadPool == null) return;
+            var payload = Interlocked.Exchange(ref _payload, null);
+            if (payload != null) _payloadPool.Return(payload, true);
+        }
         public byte Type { get; }
         public byte Flags { get; }
         public int StreamId { get; }
-        public byte[] Payload { get; }
+        public byte[] Payload => _payload ?? throw new ObjectDisposedException(nameof(Http2Frame));
         internal int PayloadOffset { get; }
         internal int PayloadLength { get; }
         public Http2HeaderBlock? HeaderBlock { get; internal set; }
