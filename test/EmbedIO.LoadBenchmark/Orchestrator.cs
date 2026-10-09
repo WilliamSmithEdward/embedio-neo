@@ -69,7 +69,7 @@ internal static class Orchestrator
                     {
                         var sample = await RunSampleAsync(new SampleContext(scenario, target, round, output, certificatePath, password, thumbprint,
                             warmup, duration, idle, serverCpus, clientCpus, profile, options.Optional("--reference-bytes"),
-                            options.Integer("--time-wait-limit", 4000))).ConfigureAwait(false);
+                            options.Integer("--time-wait-limit", 4000), options.Optional("--trace-tool") is { } tool ? Path.GetFullPath(tool) : null)).ConfigureAwait(false);
                         samples.Add(sample);
                         if (sample["error"] is not null) failures++;
                         Console.Out.WriteLine(Describe(sample));
@@ -102,7 +102,7 @@ internal static class Orchestrator
 
     private sealed record SampleContext(Scenario Scenario, EngineTarget Target, int Round, string Output, string CertificatePath, string Password,
         string Thumbprint, double Warmup, double Duration, double Idle, string? ServerCpus, string? ClientCpus, bool Profile, string? ReferenceBytes,
-        int TimeWaitLimit);
+        int TimeWaitLimit, string? TraceTool);
 
     private static async Task<JsonObject> RunSampleAsync(SampleContext context)
     {
@@ -123,7 +123,9 @@ internal static class Orchestrator
         // OS limits stay untouched; the sample waits for the backlog to drain instead.
         var gate = Stopwatch.StartNew();
         int timeWait;
-        while ((timeWait = TimeWaitCount()) > context.TimeWaitLimit && gate.Elapsed < TimeSpan.FromMinutes(5))
+        // Server-side entries also exhaust the host's TCP table at tens of thousands.
+        while (((timeWait = TimeWaitCount()) > context.TimeWaitLimit || TimeWaitCount(clientSide: false) > context.TimeWaitLimit * 5)
+            && gate.Elapsed < TimeSpan.FromMinutes(5))
             await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         sample["clientTimeWaitAtStart"] = timeWait;
         sample["machineTimeWaitAtStart"] = TimeWaitCount(clientSide: false);
@@ -177,12 +179,14 @@ internal static class Orchestrator
             sample["serverSocketsBefore"] = ServerSockets(port);
             sample["serverBefore"] = await server.RequestJsonAsync("snapshot", timeout).ConfigureAwait(false);
             var busyBefore = SystemCpu.BusyTime();
+            using var trace = context.TraceTool is null ? null : StartTrace(context, sample, stem);
             if (await server.RequestAsync("start", timeout).ConfigureAwait(false) != "MEASURING") throw new InvalidOperationException("Server measurement handshake failed.");
             var done = await client.RequestAsync("start", timeout).ConfigureAwait(false);
             var window = await server.RequestJsonAsync("stop", timeout).ConfigureAwait(false);
             var busyAfter = SystemCpu.BusyTime();
             if (done != "DONE") throw new InvalidOperationException("Client measurement did not complete: " + done);
             sample["serverWindow"] = window;
+            if (trace is not null) sample["trace"] = await FinishTraceAsync(context, trace, stem).ConfigureAwait(false);
             sample["client"] = await client.RequestJsonAsync("report", timeout).ConfigureAwait(false);
             sample["clientExitCode"] = await client.WaitForExitAsync(timeout).ConfigureAwait(false);
             sample["machineBusyCpuSeconds"] = (busyAfter - busyBefore).TotalSeconds;
@@ -225,6 +229,37 @@ internal static class Orchestrator
             sample["error"] = "A child process exited unsuccessfully.";
         await File.WriteAllTextAsync(stem + ".json", sample.ToJsonString(Indented)).ConfigureAwait(false);
         return sample;
+    }
+
+    // Optional stack sampling of the server during the measurement window, through a
+    // separately installed dotnet-trace. Profiled samples are never comparison samples.
+    private static Process StartTrace(SampleContext context, JsonObject sample, string stem)
+    {
+        var pid = sample["server"]?["processId"]?.GetValue<int>() ?? throw new InvalidOperationException("Server did not report its process ID.");
+        var seconds = (int)Math.Max(1, Math.Min(context.Duration, context.Scenario.MaxSeconds) - 1);
+        var info = new ProcessStartInfo(context.TraceTool ?? string.Empty) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in new[] { "collect", "-p", pid.ToString(CultureInfo.InvariantCulture), "--profile", "dotnet-sampled-thread-time",
+            "--duration", "00:00:00:" + seconds.ToString("D2", CultureInfo.InvariantCulture), "-o", stem + ".nettrace" })
+            info.ArgumentList.Add(argument);
+        return Process.Start(info) ?? throw new InvalidOperationException("dotnet-trace did not start.");
+    }
+
+    private static async Task<JsonObject> FinishTraceAsync(SampleContext context, Process trace, string stem)
+    {
+        var collected = await trace.StandardOutput.ReadToEndAsync().ConfigureAwait(false) + await trace.StandardError.ReadToEndAsync().ConfigureAwait(false);
+        await trace.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(2)).ConfigureAwait(false);
+        await File.WriteAllTextAsync(stem + ".trace-collect.log", collected).ConfigureAwait(false);
+        foreach (var (name, extra) in new[] { ("exclusive", Array.Empty<string>()), ("inclusive", ["--inclusive"]) })
+        {
+            var info = new ProcessStartInfo(context.TraceTool ?? string.Empty) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (var argument in new[] { "report", stem + ".nettrace", "topN", "-n", "60" }.Concat(extra)) info.ArgumentList.Add(argument);
+            using var report = Process.Start(info) ?? throw new InvalidOperationException("dotnet-trace report did not start.");
+            var text = await report.StandardOutput.ReadToEndAsync().ConfigureAwait(false) + await report.StandardError.ReadToEndAsync().ConfigureAwait(false);
+            await report.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+            await File.WriteAllTextAsync($"{stem}.top-{name}.txt", text).ConfigureAwait(false);
+        }
+
+        return new JsonObject { ["collectExitCode"] = trace.ExitCode, ["file"] = Path.GetFileName(stem + ".nettrace") };
     }
 
     private static void Derive(JsonObject sample, SampleContext context)

@@ -16,13 +16,37 @@ The prepare script builds this runner from the checkout, builds the baseline cor
 from a pinned revision exported with `git archive` (default `1445c23`, the main
 commit PR #182 last merged), and copies the runner twice, swapping only
 `EmbedIO.dll` in the baseline copy. Builds use `ContinuousIntegrationBuild` so
-hashes do not depend on the build directory. `runners.json` records revisions,
-uncommitted paths and SHA-256 hashes.
+hashes do not depend on the build directory. The core's informational version
+embeds the current commit, so its hash changes with every commit even when the
+source does not. `runners.json` records revisions, uncommitted paths and SHA-256
+hashes.
 
 `run` options: `--scenarios all|<prefix>,...`, `--engines candidate,baseline,kestrel`,
 `--rounds 3`, `--warmup 5`, `--duration 15`, `--idle 2`, `--server-cpus`/`--client-cpus`
-(for example `0-7`), `--time-wait-limit 4000`, `--profile`. The output directory must
-be new or empty, so earlier evidence is never overwritten.
+(for example `0-7`), `--time-wait-limit 4000`, `--profile`, `--trace-tool <dotnet-trace>`.
+The output directory must be new or empty, so earlier evidence is never overwritten.
+
+Scenarios ending in `-close100` are controls: the client closes every connection
+after 100 requests, matching the managed listener's per-connection cap, so all
+engines pay the same reconnect cost. Churn scenarios are capped (5 s for HTTP/1.1,
+1.5 s for HTTP/2) to stay within the host's TIME_WAIT and ephemeral-port capacity.
+
+## Profiling
+
+Profile separately from comparisons. `--profile` aggregates runtime events in the
+server (sampled allocation by type, exceptions, contention). `--trace-tool` runs
+dotnet-trace (`dotnet-sampled-thread-time`) against the server during the
+measurement window and writes the `.nettrace` plus top-60 exclusive and inclusive
+method reports next to each sample. The tool is not a project dependency; install a
+pinned version yourself, for example
+`dotnet tool install dotnet-trace --version 10.0.745401 --tool-path TestResults/tools/dotnet-trace`.
+To see which EmbedIO callers account for a runtime frame, convert the trace and
+attribute it:
+
+```sh
+TestResults/tools/dotnet-trace/dotnet-trace convert <sample>.nettrace --format Speedscope -o <sample>
+python scripts/attribute_trace_frames.py <sample>.speedscope.json --target Monitor.Enter_Slowpath --caller "EmbedIO!"
+```
 
 ## Method
 
