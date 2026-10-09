@@ -103,7 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           status=0
-          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4361 --coverlet || status=$?
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4367 --coverlet || status=$?
           if test "$status" = 0 || test "$RUNNER_OS" != macOS; then exit "$status"; fi
           # Quarantine: the stock MsQuic 2.6.2 closes a disposed listener's socket
           # after disposal returns on macOS, so the raw runtime rebind test can fail
