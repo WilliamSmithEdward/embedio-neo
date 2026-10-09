@@ -12,7 +12,7 @@ mkdir -p "$out"
 status=0
 record() { printf '%s\n' "$*" | tee -a "$out/summary.txt"; }
 
-record "source=$(git -C "$src" rev-parse HEAD 2>/dev/null || echo unknown) dirty=$(git -C "$src" status --porcelain 2>/dev/null | wc -l)"
+record "source=${SOURCE_SHA:-unknown} (git archive snapshot)"
 record "seed=$seed scale=$scale cpus=$(nproc) kernel=$(uname -r)"
 record "dotnet=$(dotnet --version) msquic=$(dpkg-query --show --showformat='${Version}' libmsquic 2>/dev/null || echo missing)"
 record "h2spec=$(h2spec --version 2>&1 | head -1) python=$(python3 --version)"
