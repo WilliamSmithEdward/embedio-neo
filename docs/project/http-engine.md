@@ -3005,3 +3005,28 @@ existing skips in 3m41s, compared with 4m14s for the preceding local run. This
 observed suite duration is not an engine benchmark. Repeating the deliberately
 read-only directory-fixture setup now produces ordinary test failures (exit 2)
 without a finalizer crash. Cross-platform exact-head CI remains required.
+
+## Managed WebSocket close completion
+
+The managed module waits for an internal terminal-close signal instead of polling
+socket state every 500 ms. The signal is allocated only when observed and is
+published after transport/resource cleanup, including when the transport-close
+callback throws. Canceling one observer does not cancel the shared signal or
+another observer. Repeated disposal retains once-only transport closure.
+
+Six direct cases cover normal close, abort, disposal, blocked cleanup, late
+observers, cancellation before/after registration and transport-close failure.
+The retained-transport assertion failed before adding the cleanup `finally`.
+The broader 55-case set passes on Windows and pinned Linux with QUIC required,
+including HTTP/2 and HTTP/3 WebSockets. The actual .NET Standard asset passes 39
+close/startup cases on both Windows and Linux .NET 10 hosts. The existing 64-round
+close-acknowledgement tests retain all rounds and their original deadlines.
+This advances #190 but does not complete its hardening or performance scope.
+
+Full Windows coverage passes 3,272 cases (3,267 successes and five existing skips)
+in 2m28s. In the retained before/after coverage TRX, the unchanged 64-round
+message-originated close test took 32.69s before and 0.034s after; connected-origin
+closure stayed about 0.034s. These are local regression-test timings, not a
+throughput benchmark. The compatibility audit passes 207 cases / 414 comparisons,
+and the rebuilt four allocation-budget groups pass. Representative WebSocket
+throughput, tail latency and retained-memory campaigns remain required.

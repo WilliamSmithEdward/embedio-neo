@@ -33,6 +33,8 @@ namespace EmbedIO.WebSockets.Internal
         private int _sendOperations;
         private int _resourcesReleased;
         private bool _sendGatesDisposed;
+        private bool _closeCompleted;
+        private TaskCompletionSource<bool>? _closedSignal;
 
         private volatile WebSocketState _readyState;
         private TaskCompletionSource<bool>? _exitReceiving;
@@ -81,6 +83,25 @@ namespace EmbedIO.WebSockets.Internal
 
         /// <inheritdoc />
         public WebSocketState State => _readyState;
+
+        internal Task WaitForCloseAsync(CancellationToken cancellationToken)
+        {
+            Task closed;
+            lock (_stateSyncRoot)
+            {
+                if (_closeCompleted) return Task.CompletedTask;
+                if (cancellationToken.IsCancellationRequested) return Task.FromCanceled(cancellationToken);
+                closed = (_closedSignal ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            }
+            return cancellationToken.CanBeCanceled ? WaitForCloseOrCancellationAsync(closed, cancellationToken) : closed;
+        }
+
+        private static async Task WaitForCloseOrCancellationAsync(Task closed, CancellationToken token)
+        {
+            var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (token.Register(() => canceled.TrySetCanceled(token)))
+                await (await Task.WhenAny(closed, canceled.Task).ConfigureAwait(false)).ConfigureAwait(false);
+        }
 
         internal bool EmitOnPing { get; set; }
 
@@ -515,31 +536,43 @@ namespace EmbedIO.WebSockets.Internal
         {
             if (Interlocked.Exchange(ref _resourcesReleased, 1) != 0)
                 return;
-            DisposeSendGatesIfIdle();
-            _closeConnection();
-            _stream = null;
-            while (_messageEventQueue.TryDequeue(out _)) { }
-
-            if (_fragmentsBuffer != null)
+            try
             {
-                _fragmentsBuffer.Dispose();
-                _fragmentsBuffer = null;
-                InContinuation = false;
-            }
+                DisposeSendGatesIfIdle();
+                try { _closeConnection(); }
+                finally
+                {
+                    _stream = null;
+                    while (_messageEventQueue.TryDequeue(out _)) { }
 
-            if (_receivePong != null)
+                    if (_fragmentsBuffer != null)
+                    {
+                        _fragmentsBuffer.Dispose();
+                        _fragmentsBuffer = null;
+                        InContinuation = false;
+                    }
+
+                    if (_receivePong != null)
+                    {
+                        _receivePong.Dispose();
+                        _receivePong = null;
+                    }
+
+                    _exitReceiving?.TrySetResult(true);
+                    _exitReceiving = null;
+                }
+            }
+            finally
             {
-                _receivePong.Dispose();
-                _receivePong = null;
+                TaskCompletionSource<bool>? closed;
+                lock (_stateSyncRoot)
+                {
+                    _closeCompleted = true;
+                    closed = _closedSignal;
+                    _closedSignal = null;
+                }
+                closed?.TrySetResult(true);
             }
-
-            if (_exitReceiving == null)
-            {
-                return;
-            }
-
-            _exitReceiving.TrySetResult(true);
-            _exitReceiving = null;
         }
 
         private Task Send(WebSocketFrame frame)

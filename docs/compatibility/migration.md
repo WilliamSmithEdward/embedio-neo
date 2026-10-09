@@ -920,3 +920,12 @@ The interim transport write is now asynchronous and remains covered by the
 request-header deadline until it completes. This change does not yet implement
 all expectation-list syntax, extension expectations or an application-controlled
 early final-response policy. Public request/response APIs are unchanged.
+
+### Managed WebSocket disconnection notification (unreleased)
+
+Managed WebSocket processing now observes terminal transport cleanup directly
+instead of checking state every 500 ms. Disconnection notifications can therefore
+arrive sooner after a completed close. Public callback signatures and asynchronous
+message/disconnection dispatch are unchanged; notification does not promise that
+all asynchronous application message callbacks have finished. Close handshakes,
+close deadlines and the native Microsoft backend are unchanged.

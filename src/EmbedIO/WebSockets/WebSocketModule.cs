@@ -578,12 +578,7 @@ namespace EmbedIO.WebSockets
                 catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { ex.Log(nameof(WebSocketModule)); }
             };
 
-            while (context.WebSocket.State == WebSocketState.Open
-                || context.WebSocket.State == WebSocketState.CloseReceived
-                || context.WebSocket.State == WebSocketState.CloseSent)
-            {
-                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
-            }
+            await ((Internal.WebSocket)context.WebSocket).WaitForCloseAsync(cancellationToken).ConfigureAwait(false);
         }
 
         private async Task ProcessSystemContext(IWebSocketContext context, SystemWebSocket webSocket, CancellationToken cancellationToken)
