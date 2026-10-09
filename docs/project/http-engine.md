@@ -4988,3 +4988,56 @@ existing allocation-budget groups, source/parser guards, changed-file whitespace
 shell syntax and pinned YARA scans pass. The discovery floor increases by the
 six boundary cases. The retained Linux zlib timing regressions and remaining
 runtime-only gap remain performance work; these passing gates do not close them.
+
+### Bounded SIMD Adler-32 checksum accounting
+
+The internal checksum updater processes 16 bytes at a time through portable
+Vector128 widening, weighted sums and accumulation on hardware-capable .NET 10.
+The weighted half sums fit ushort lanes, while 5,552-byte reduction batches bound
+both uint accumulators. Remaining bytes use scalar accounting. Hardware-disabled
+.NET 10 and the netstandard2.0 asset retain scalar paths without a new dependency.
+The request stream stores one checksum value instead of separate accumulators;
+raw decoding performs no checksum work. Framing/window/checksum validation and
+source lifecycle rules remain intact.
+
+121 added checksum cases compare against an independently written scalar
+reference: known vectors, input offsets, fragmented updates, lengths around
+16-byte and 5,552-byte boundaries, one-million-byte inputs, zero/all-255/random
+content, maximum valid initial accumulators, a seeded 500-input corpus and invalid
+array bounds. All 331 checksum/strict-codec cases also pass with runtime hardware
+intrinsics disabled; the known-vector fixtures verify the opt-out took effect.
+All 537 selected checksum/request cases pass on pinned Linux and the actual
+netstandard2.0 asset hosted by Windows .NET 10. This does not prove execution on
+older runtimes or native Arm64; exact-head platform CI remains required.
+
+The same runner hash 69d1592e685c7c2af187d418649932cccddeeb6641a64f449c94a97a1a76f69d
+compares frozen cores e084c0e71ab1e37fb790d2d7bf6fdd4b11ea499cb58e4d7878c2e24683c27cec
+and 410830ab8bb3b748f09a65d8482a7da7db4207dff0233f5a61ccc54dafa93f9f using the
+preceding paired-process protocol. Windows zlib random median improves from
+21.8 to 10.1 us and repeated from 26.5 to 14.7 us; Linux improves from 28.3 to
+11.9 us and 32.8 to 16.3 us respectively. These Linux samples are now faster than
+the earlier pre-parser-optimization observations, while all historical regressions
+remain recorded. Low-entropy zlib improves from 270 to 256 us on Windows and 293
+to 273 us on Linux. Raw timing is essentially unchanged. Allocations decrease by
+eight bytes per sampled operation. This is a component improvement, not final
+performance acceptance or an end-to-end engine claim. Artifacts are under ignored
+TestResults/http-engine/adler-before, adler-after, adler-windows-summary.json and
+adler-linux-performance.
+
+Final changed-source Windows coverage passes 4,000 cases: 3,995 passed, five
+skipped and zero failed in 2m34s. Both assets build without warnings; all four
+existing allocation-budget groups, source/parser guards, changed-file whitespace,
+shell syntax and pinned source YARA scans pass. The discovery floor increases by
+the 121 cases.
+
+Separately, ordinary CI on the preceding head 61fa515 reports the known stock
+Darwin rebind failure and a Linux process abort in the BCL
+HttpListenerResponse.FormatHeaders / HttpResponseStream.DisposeCore /
+HttpConnection.OnRead path. Linux reports only 3,234 cases before the abort, so
+its discovery floor correctly fails. The stack and preceding TRX records do not
+establish the triggering application's root cause. Logs and the original TRX are
+retained under ignored deflate-fast-ci-linux.log and deflate-fast-ci-linux-artifact;
+last completed cases concern routing and transport framing, not causal proof.
+This crash requires investigation and remains a compatibility/CI blocker. No
+check was weakened or rerun characterized as a fix. Fresh checksum-head checks
+remain required and the full engine goal is incomplete.

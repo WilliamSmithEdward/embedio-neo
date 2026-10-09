@@ -257,7 +257,7 @@ for iteration in 1 2 3 4 5; do
     --timeout 2m --report-trx --results-directory "$results/connected-$iteration" || candidate_failed=1
 done
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-  --minimum-expected-tests 3879 --timeout 5m --report-trx --coverlet \
+  --minimum-expected-tests 4000 --timeout 5m --report-trx --coverlet \
   --results-directory "$results/full-suite" || candidate_failed=1
 if test "$self_contained" = 1 && test "$tls_backend" = openssl; then
   # Exercise actual managed protocol/application behavior on the tests-disabled library.
@@ -266,7 +266,7 @@ if test "$self_contained" = 1 && test "$tls_backend" = openssl; then
     EMBEDIO_EXPECT_QUIC_LIBRARY_SHA256="$(jq -r .sha256 "$stage/build-receipt.json")" \
     EMBEDIO_QUIC_LIBRARY_EVIDENCE="$results/production-loaded-library.json" \
     dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-    --minimum-expected-tests 3879 --timeout 5m --report-trx --coverlet \
+    --minimum-expected-tests 4000 --timeout 5m --report-trx --coverlet \
     --results-directory "$results/production-full-suite" || candidate_failed=1
   jq -e '.verified and (.sha256 | length == 64)' "$results/production-loaded-library.json" > /dev/null || candidate_failed=1
 fi

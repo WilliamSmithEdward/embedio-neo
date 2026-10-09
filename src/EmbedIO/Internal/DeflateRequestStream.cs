@@ -19,8 +19,7 @@ namespace EmbedIO.Internal
         private bool _failed;
         private bool _finished;
         private ulong _decoded;
-        private uint _adlerLow = 1;
-        private uint _adlerHigh;
+        private uint _adler = 1;
 #if NET10_0_OR_GREATER
 #else
         private byte[]? _singleByte;
@@ -68,27 +67,13 @@ namespace EmbedIO.Internal
         private void Account(byte[] buffer, int offset, int count)
         {
             _decoded += (ulong)count;
-            if (!_zlib) return;
-            for (var index = offset; index < offset + count;)
-            {
-                var end = index + Math.Min(offset + count - index, 5552);
-                while (index < end) { _adlerLow += buffer[index++]; _adlerHigh += _adlerLow; }
-                _adlerLow %= 65521;
-                _adlerHigh %= 65521;
-            }
+            if (_zlib) _adler = Adler32.Update(_adler, buffer, offset, count);
         }
 #if NET10_0_OR_GREATER
         private void Account(ReadOnlySpan<byte> buffer)
         {
             _decoded += (ulong)buffer.Length;
-            if (!_zlib) return;
-            for (var index = 0; index < buffer.Length;)
-            {
-                var end = index + Math.Min(buffer.Length - index, 5552);
-                while (index < end) { _adlerLow += buffer[index++]; _adlerHigh += _adlerLow; }
-                _adlerLow %= 65521;
-                _adlerHigh %= 65521;
-            }
+            if (_zlib) _adler = Adler32.Update(_adler, buffer);
         }
 #endif
         private void VerifyCount()
@@ -120,7 +105,7 @@ namespace EmbedIO.Internal
                 if (read == 0)
                 {
                     VerifyCount();
-                    _input.Finish((_adlerHigh << 16) | _adlerLow);
+                    _input.Finish(_adler);
                     _finished = true;
                 }
                 return read;
@@ -144,7 +129,7 @@ namespace EmbedIO.Internal
                 if (read == 0)
                 {
                     VerifyCount();
-                    await _input.FinishAsync((_adlerHigh << 16) | _adlerLow, cancellationToken).ConfigureAwait(false);
+                    await _input.FinishAsync(_adler, cancellationToken).ConfigureAwait(false);
                     _finished = true;
                 }
                 return read;
@@ -177,7 +162,7 @@ namespace EmbedIO.Internal
                 if (read == 0)
                 {
                     VerifyCount();
-                    _input.Finish((_adlerHigh << 16) | _adlerLow);
+                    _input.Finish(_adler);
                     _finished = true;
                 }
                 return read;
@@ -200,7 +185,7 @@ namespace EmbedIO.Internal
                 if (read == 0)
                 {
                     VerifyCount();
-                    await _input.FinishAsync((_adlerHigh << 16) | _adlerLow, cancellationToken).ConfigureAwait(false);
+                    await _input.FinishAsync(_adler, cancellationToken).ConfigureAwait(false);
                     _finished = true;
                 }
                 return read;
