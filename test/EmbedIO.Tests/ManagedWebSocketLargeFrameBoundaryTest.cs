@@ -12,7 +12,7 @@ namespace EmbedIO.Tests
         [TestCase(int.MaxValue - 65534)]
         [TestCase(int.MaxValue - 1)]
         [TestCase(int.MaxValue)]
-        public void AnnouncedLargePayloadWithoutDataReportsTruncation(int length)
+        public async Task AnnouncedLargePayloadWithoutDataReportsTruncation(int length)
         {
             // Only a masked binary header is supplied; no large payload is allocated.
             var header = new byte[14];
@@ -38,7 +38,7 @@ namespace EmbedIO.Tests
                     ?? throw new AssertionException("Missing frame read method.");
                 var task = (Task)(read.Invoke(reader, new[] { socket })
                     ?? throw new AssertionException("Missing frame read task."));
-                var failure = Assert.ThrowsAsync<EmbedIO.WebSockets.WebSocketException>(
+                var failure = await Assert.ThrowsAsync<EmbedIO.WebSockets.WebSocketException>(
                     async () => await task.WaitAsync(TimeSpan.FromSeconds(2)));
                 Assert.That(failure?.Message, Does.Contain("payload data"));
                 Assert.That(stream.Position, Is.EqualTo(header.Length));
