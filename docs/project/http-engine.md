@@ -4247,3 +4247,61 @@ ordinary builds and the module file path in the instrumented build. It does
 not relax `set -u`. This run supplies no native or sanitizer execution evidence;
 its log and partial artifact are retained under suffix `8`. Corrected Darwin
 validation remains pending.
+
+### Strict Brotli request completion and ownership
+
+Eight real HTTP regressions expose permissive runtime-stream behavior: empty,
+truncated and trailing-data Brotli bodies return success, while invalid data
+returns an internal server error, through both byte and text helpers. All eight
+fail before the correction. The .NET 10 helper now wraps the runtime
+`BrotliDecoder` with local request-stream completion validation. It requires a
+complete coded stream followed by the framed HTTP body's EOF, rejects extra
+bytes, and maps invalid/incomplete coding to HTTP 400. It does not change the
+process-wide `System.IO.Compression.UseStrictValidation` switch.
+
+The wrapper rents input storage on the first nonempty read, validates fragmented
+input through the runtime decoder and clears/returns its buffer on disposal.
+A single atomic read/disposal state prevents decoder or buffer release while a
+read owns them. It rejects concurrent reads, preserves cancellation tokens,
+poisons an interrupted stream and closes its owned source once. Zero-length
+reads do not consume input. Completing an application-level partial read is not
+proof that the entire coded body has been validated; callers must read through
+EOF before treating the whole request body as accepted.
+
+All 31 focused cases pass, including the eight malformed-body/server-health
+cases, valid empty streams, one-byte input fragmentation, 192 KiB random binary
+content, small output reads, zero-length reads, concurrent-read rejection,
+pending-read cancellation and disposal. Windows full coverage passes 3,423 cases:
+3,418 passed, five skipped, zero failed. All 31 focused cases pass on pinned
+Linux .NET 10. All 21 public request-body/validation cases pass on the actual
+netstandard2.0 asset hosted by Windows .NET 10, where Brotli is explicitly
+unsupported. Both assets build; formatting, source guards, scoped YARA and
+all four allocation gates pass. Logs are retained under `brotli-strict-*`.
+The discovery floor is raised to 3,423 for the 18 additional cases.
+Output/resource limits, independent coding campaigns, response variants and the
+other unfinished content-coding requirements remain open.
+
+### Native sanitizer repetitions verified
+
+[Run 37889869599](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37889869599),
+job `113688135127`, tests head `d9d5533`. Its corrected harness configures and
+builds the instrumented candidate. Compiler commands for `datapath_kqueue.c`
+and `DataPathTest.cpp` contain `-fsanitize=address`; the native executable imports
+and loads Apple's AddressSanitizer runtime and the intended instrumented MsQuic
+library. Upstream's `DISABLE_CXPLAT_POOL=1` allocation mode remains enabled.
+
+The log contains 100 iterations with 11 passing cases each, including explicit
+descriptor reuse, zero-config UDP delivery, unsupported-map rejection and the
+selected existing IPv4/IPv6 UDP data cases. No sanitizer diagnostic is present.
+The ordinary candidate suite still fails the original optional-feature-mask
+assertion, and the experiment's final exit remains failure. The script did not
+record a separate sanitizer process exit code; its per-iteration results and
+absence of diagnostics are direct evidence, while a separately retained exit
+status is a follow-up provenance improvement. This subset does not establish
+whole-engine memory safety, leak detection, or correctness of uninstrumented
+system crypto libraries.
+
+Evidence is retained in `quic-cleanup-experiment-artifact9`, its job log and
+`quic-cleanup-ordering9.json`. Source configuration, compiler commands, native
+imports, loader logs, XML and all repetition output are included. The native
+candidate remains test-only and is not shipped.

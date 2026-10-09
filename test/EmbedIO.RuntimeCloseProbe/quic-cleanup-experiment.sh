@@ -160,7 +160,7 @@ for iteration in 1 2 3 4 5; do
     --timeout 2m --report-trx --results-directory "$results/connected-$iteration" || candidate_failed=1
 done
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-  --minimum-expected-tests 3405 --timeout 5m --report-trx --coverlet \
+  --minimum-expected-tests 3423 --timeout 5m --report-trx --coverlet \
   --results-directory "$results/full-suite" || candidate_failed=1
 # Additional memory-lifetime validation with upstream's sanitizer build.
 # The ordinary native suite and its real failures above remain unchanged.

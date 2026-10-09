@@ -2,6 +2,7 @@
 using System.IO.Compression;
 using System.Text;
 using EmbedIO.Diagnostics;
+using EmbedIO.Internal;
 
 namespace EmbedIO
 {
@@ -34,7 +35,7 @@ namespace EmbedIO
                     return new DeflateStream(stream, CompressionMode.Decompress);
 #if NET10_0_OR_GREATER
                 if (encoding.Equals(CompressionMethodNames.Brotli, System.StringComparison.OrdinalIgnoreCase))
-                    return new BrotliStream(stream, CompressionMode.Decompress);
+                    return new BrotliRequestStream(stream);
 #endif
             }
 
