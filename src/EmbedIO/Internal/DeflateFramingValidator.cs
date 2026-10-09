@@ -14,6 +14,13 @@ namespace EmbedIO.Internal
         private static readonly int[] DistanceBits = { 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 };
         private static readonly Huffman FixedLiterals = FixedLiteralTree();
         private static readonly Huffman FixedDistances = new Huffman(Filled(32, 5), false, false);
+        private readonly int _maximumDistance;
+        internal DeflateFramingValidator() : this(32768) { }
+        internal DeflateFramingValidator(int maximumDistance)
+        {
+            if (maximumDistance < 256 || maximumDistance > 32768) throw new ArgumentOutOfRangeException(nameof(maximumDistance));
+            _maximumDistance = maximumDistance;
+        }
         private Phase _phase;
         private ulong _bits;
         private int _bitCount;
@@ -198,7 +205,7 @@ namespace EmbedIO.Internal
                 case Phase.DistanceExtra:
                     if (!ReadBits(DistanceBits[_distanceIndex], out value)) return false;
                     var distance = DistanceBase[_distanceIndex] + value;
-                    if ((ulong)distance > DecodedBytes) throw new InvalidDataException("DEFLATE distance precedes the output history.");
+                    if (distance > _maximumDistance || (ulong)distance > DecodedBytes) throw new InvalidDataException("DEFLATE distance precedes the output history.");
                     AddOutput(_length);
                     _phase = Phase.Symbol;
                     return true;

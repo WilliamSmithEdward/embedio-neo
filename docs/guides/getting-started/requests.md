@@ -208,8 +208,10 @@ Streaming applications must read through EOF before treating the complete body
 as accepted. The chain wrapper drives outer layers to EOF, preserves cancellation,
 closes its owned source once and makes malformed-data failures sticky.
 
-This increment preserves existing raw-deflate behavior; the zlib envelope
-conformance work remains separate. Gzip/deflate runtime buffering/validation and
-response coding-chain support are not claimed complete by these request tests.
+Deflate requests still select the legacy raw format. The helpers now validate
+the complete raw stream and reject truncation or trailing bytes with HTTP 400.
+An empty decoded body requires a valid empty DEFLATE stream, such as 03 00;
+an absent compressed stream is malformed. Standards zlib selection, gzip
+envelope validation and response coding-chain support remain development work.
 Next: [Serve HTML and files](files.md) alongside this API, or
 [await an outbound HTTP request](../async-outbound-requests.md).

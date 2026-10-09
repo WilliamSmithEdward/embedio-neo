@@ -59,7 +59,7 @@ namespace EmbedIO.Internal
                     current = methods[index] switch
                     {
                         CompressionMethod.Gzip => new GZipStream(current, CompressionMode.Decompress),
-                        CompressionMethod.Deflate => new DeflateStream(current, CompressionMode.Decompress),
+                        CompressionMethod.Deflate => new DeflateRequestStream(current, false),
 #if NET10_0_OR_GREATER
                         CompressionMethod.Brotli => new BrotliRequestStream(current),
 #endif

@@ -4883,3 +4883,60 @@ whitespace checks, shell syntax and pinned YARA checks pass. The discovery floor
 increases by these 71 cases. Envelope integration, complete checksum validation,
 codec migration and comparative codec performance remain subsequent development;
 this component alone does not establish those requirements.
+
+### Strict DEFLATE request streams
+
+The framing component now backs DeflateRequestStream, which retains runtime
+inflation and independently verifies its exact boundary and decoded length.
+Single-coding and chain request helpers use the raw-format path on both assets.
+Eight real-HTTP regressions fail against the preceding helper because it accepts
+truncation/trailing bytes; all pass with HTTP 400 after integration. Valid raw
+format selection, opt-in compression and final decoded-limit placement remain
+unchanged. The empty-body fixture for raw deflate now emits the valid 03 00 stream
+instead of an absent compressed stream; malformed acceptance was not restored.
+Migration impact is recorded in the existing migration and request guides.
+
+The same internal stream can strip and validate a zlib envelope on both core
+targets without ZLibStream or a new production dependency. It validates CMF/FLG,
+FCHECK, supported method/window, absence of unnegotiated preset dictionaries,
+Adler-32 and full checksum/source completion. Huffman-distance validation enforces
+the advertised window. This path is tested directly; public zlib selection,
+response/cache migration and codec comparative performance remain unfinished.
+Source ownership is once-only, disposal wakes pending reads while inflater
+release waits for their exit, concurrent reads are rejected, cancellation retains
+its token, and malformed or interrupted decoding becomes sticky. Precancelled
+reads do not consume or poison the stream. No global runtime validation switch is
+changed, and no whole-body compressed or decompressed buffer is added.
+
+133 component cases and eight HTTP cases were added. All 410 selected cases pass
+on Windows, pinned Linux and the actual netstandard2.0 assembly hosted by Windows
+.NET 10. This includes array/span/memory/byte and async reads, fragmented input,
+empty/large bodies, checksum/header/window mutations, extra spoofed checksums,
+source disposal, pending-read cancellation and healthy existing request behavior.
+An initial cancellation fixture required the exact base exception rather than
+its legitimate TaskCanceledException subtype; it now checks the cancellation
+exception family and exact token. No runtime check was weakened. Full changed-source
+coverage and final gates remain pending at this checkpoint.
+
+Final changed-source Windows coverage passes 3,873 cases: 3,868 passed, five
+skipped and zero failed in 2m31s. Both core assets build without warnings. Four
+existing allocation-budget groups, source/parser guards, changed-file whitespace,
+shell syntax and pinned YARA checks pass. The discovery floor increases by the
+141 added cases. The .NET Standard execution uses a .NET 10 host and does not
+claim validation on an older runtime.
+
+An exploratory single-process Windows component comparison is retained under
+ignored TestResults/http-engine/deflate-stream-performance (source, raw rounds
+and summary). Both decoders read the same 64 KiB bodies into the same 8 KiB buffer,
+with 100 warmups and five rounds of 1,000 operations. It compares runtime-only
+inflation against added strict framing/checksum work, rather than equivalent
+validation policies. Raw low-entropy medians are about 51 us / 280 bytes versus
+571 us / 4,936 bytes per operation. Raw random/stored data is about 4.36 us / 280
+bytes versus 4.56 us / 576 bytes; repeated data is about 3.27 us / 280 bytes versus
+10.51 us / 3,656 bytes. Zlib low-entropy is about 51 us / 312 bytes versus 594 us /
+5,064 bytes. This first implementation therefore has a substantial compressed
+Huffman parsing/allocation regression; it is not performance-ready. The zlib path
+also adds managed checksum cost. These are exploratory component observations,
+not end-to-end server measurements or a performance acceptance claim. Optimize
+Huffman decoding/tree storage and checksum throughput, then repeat controlled
+comparisons and final validation before the engine can meet its performance goal.

@@ -948,3 +948,27 @@ both ends waiting until the client's fallback timer expired. Final response APIs
 are unchanged. Multiplexed CONNECT tunnels are excluded from automatic continue handling.
 The .NET Standard asset's existing cleartext HTTP/2 support and lack of TLS ALPN
 and QUIC are unchanged.
+
+## Unreleased modern engine: strict deflate request completion
+
+When compressed requests are enabled, the request helpers now reject truncated
+raw-DEFLATE data and bytes after its final block with HTTP 400. This applies to
+single `Content-Encoding: deflate` requests and deflate layers within supported
+coding chains, on both core target frameworks and listener modes. Valid existing
+raw-DEFLATE content retains its selected format. No automatic zlib-header sniffing
+or raw/zlib fallback is introduced.
+
+A request that decodes to an empty body must still carry a valid compressed
+stream. For raw DEFLATE, the empty fixed block `03 00` is valid; a zero-byte
+compressed payload is truncated. Update clients that previously relied on runtime
+acceptance of incomplete streams or trailing bytes to send one complete stream.
+Streaming handlers must read through EOF before accepting the entire body:
+application bytes can be returned before a later completion failure is detected.
+Decoded-byte limits remain applied to final application bytes, and direct reads
+of `Request.InputStream` bypass these helper policies.
+
+The internal zlib decoder is being validated for RFC 1950 headers, window limits,
+Adler-32 checksums and exact completion. It does not yet change public coding
+selection, response encoding or cached variants. The broader standards-format
+migration remains unfinished. These changes are development work and have not
+been released.

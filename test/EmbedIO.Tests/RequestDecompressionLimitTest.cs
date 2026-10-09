@@ -63,6 +63,7 @@ namespace EmbedIO.Tests
                 "br" => new BrotliStream(encoded, CompressionMode.Compress, true),
                 _ => throw new AssertionException("Unknown fixture coding.")
             }) compressor.Write(expected);
+            if (coding == "deflate" && expected.Length == 0) encoded.Write(new byte[] { 3, 0 });
             var status = expected.LongLength > maximum ? (HttpStatusCode)413 : HttpStatusCode.OK;
             var target = typeof(WebServer).Assembly.GetCustomAttribute<TargetFrameworkAttribute>()?.FrameworkName
                 ?? throw new AssertionException("Missing target metadata.");

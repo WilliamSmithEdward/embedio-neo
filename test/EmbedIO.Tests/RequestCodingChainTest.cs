@@ -16,6 +16,28 @@ namespace EmbedIO.Tests
 {
     public class RequestCodingChainTest
     {
+        [TestCase(HttpListenerMode.EmbedIO, false, false)]
+        [TestCase(HttpListenerMode.EmbedIO, false, true)]
+        [TestCase(HttpListenerMode.EmbedIO, true, false)]
+        [TestCase(HttpListenerMode.EmbedIO, true, true)]
+        [TestCase(HttpListenerMode.Microsoft, false, false)]
+        [TestCase(HttpListenerMode.Microsoft, false, true)]
+        [TestCase(HttpListenerMode.Microsoft, true, false)]
+        [TestCase(HttpListenerMode.Microsoft, true, true)]
+        public Task RawDeflateTruncationAndTrailingBytesAreBadRequests(HttpListenerMode mode, bool truncated, bool text)
+        {
+            var body = Encoding.UTF8.GetBytes("strict raw deflate envelope boundaries");
+            var raw = Encode(body, "deflate");
+            byte[] malformed;
+            if (truncated) malformed = raw[..^1];
+            else
+            {
+                malformed = new byte[raw.Length + 1];
+                raw.CopyTo(malformed, 0);
+                malformed[^1] = 0x42;
+            }
+            return Exchange(mode, "deflate", malformed, body, true, null, text, HttpStatusCode.BadRequest);
+        }
         public static IEnumerable CodingCases()
         {
             foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
