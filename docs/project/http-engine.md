@@ -3759,3 +3759,62 @@ campaign passes 100,000 operations per capacity on both target assemblies,
 and before/after input hashes still match at all three capacities. Full local
 coverage also passed before the final pinning-test reinforcement; both logs
 are retained rather than replacing the earlier evidence.
+
+
+### Measure QPACK pressure-path cost and burst tradeoffs
+
+The C# performance runner adds `--qpack-churn`, comparing stateless encoding
+with the connection response planner at capacity 4096. Three preconstructed
+workloads cycle through 2,048 resource values: change every call (`unique`),
+repeat each value eight times (`bursts`), and combine changing values with a
+stable field (`mixed`). These are synthetic workloads; `unique` revisits its
+values on the next cycle and is not a claim of permanently unique traffic.
+A fresh planner per round performs 4,096 warmup calls followed by 32,768 measured
+calls; seven rounds alternate mode order. Three independent process pairs on
+each platform alternate baseline/candidate order. The same runner and workload
+hashes are used on both assemblies, with only `EmbedIO.dll` replaced. All samples
+and a summary are under `TestResults/http-engine/qpack-churn-*`.
+
+The measurements include immediate insertion credit, encoder-queue draining and
+section ACK handling. Inputs, delegate compilation, reflection and JSON output
+are outside timing. Both platforms use .NET 10.0.12 x64 with tiered compilation
+disabled and workstation GC. Windows reports 16 processors; the pinned Linux
+SDK container reports two on the same physical host. Below are medians of the
+three process medians (each process median contains seven rounds):
+
+| Workload | Windows ns before / after | Linux ns before / after | Allocated B before / after | Section + encoder B before / after |
+| --- | --- | --- | --- | --- |
+| unique | 806.8 / 545.2 | 776.3 / 502.3 | 848 / 418.8 | 71.67 / 37.48 |
+| bursts | 513.4 / 534.6 | 500.3 / 516.8 | 827 / 775 | 13.34 / 17.51 |
+| mixed | 745.8 / 752.4 | 720.2 / 724.7 | 863.4 / 863.4 | 38.50 / 38.50 |
+
+Admission substantially improves rotating-unique cost and allocations, but
+short bursts spend about 31.2% more compression bytes and modestly more CPU:
+first-sighting refusal postpones useful insertion by one response. This is a
+measured policy tradeoff, not a universal speedup. The mixed workload keeps its
+stable oldest entry pinned during planning, so both policies retain it and emit
+no replacement instructions in the measured interval; its small timing changes
+do not establish a useful performance gain. Adaptive admission and table
+refresh/duplication policy remain open investigations. The stateless controls
+retain matching allocations and byte totals on both assemblies and platforms.
+The dynamic planner remains slower than the stateless codec, even where it
+reduces wire bytes.
+
+Baseline assembly SHA-256 is
+`A62ED41F1B5537EEE873B1F237D05EE0FD71E1F131703C2A6239CE38F543A824`;
+current policy assembly SHA-256 is
+`35A93F5A975B38677B8B901F7796F6B78B3DDAD211EBC86A5F6A9098E7DA2AEC`.
+The latter is built from committed 2b87bd5; its differing hash from the prior
+uncommitted candidate includes source-version metadata. No production code
+changes in this measurement increment. The runner build, formatting, source
+guards and new benchmark source's YARA scan pass. There is no timing gate,
+transport/peer-decoder cost, retained-memory measurement or end-to-end throughput
+claim here.
+
+On 2b87bd5, macOS CI 37880644155 / job 113659314003 fails the independent raw
+runtime rebind probe again: unconnected listener, cycle 12, bind stage,
+127.0.0.1:54774, .NET 10.0.12, AddressAlreadyInUse (48). The suite reports 3,400
+cases, 3,368 successes, 31 skips and this one failure. This uses no HTTP engine
+or QPACK code, so the log does not indicate a QPACK regression; it also does not
+establish the native failure's precise cause. The log is retained and no retry,
+suppression or resolution claim is introduced. The PR remains draft/unmerged.

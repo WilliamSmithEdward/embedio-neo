@@ -207,3 +207,32 @@ gate, HTTP/QUIC/TLS, application work and cold-table instruction traffic. It doe
 not establish request throughput or tail latency. See
 [the engine record](../../docs/project/http-engine.md) for measured changes and
 independent decoder validation.
+
+
+### QPACK table pressure
+
+Run the same built runner with `--qpack-churn` to measure table replacement
+costs. Three synthetic workloads rotate through 2,048 preconstructed field
+lists: `unique` changes the resource value each call (and revisits it next
+cycle), `bursts` repeats each list eight times, and `mixed` combines a stable
+field with each changing resource value. A fresh planner per round receives
+4,096 warmup operations followed by 32,768 measured operations. Seven rounds
+alternate stateless/planner order. Reflection, delegate compilation, input
+construction, input hashing and JSON output are outside the timed loop.
+
+Measurements include response encoding, draining encoder instructions, immediate
+insert-count credit and Section Acknowledgment handling. The driver supplies
+feedback directly; it does not time an independent decoder or network delivery.
+It reports section bytes and encoder-stream bytes separately and together,
+plus time/allocation per operation and a SHA-256 of the workload description.
+Feedback bytes and transport framing are not included in the byte totals.
+The planner uses capacity 4096 with no permitted blocked streams. Fresh state
+per round and a fixed schedule make baseline/candidate workloads comparable.
+The static control uses the same fields, array indexing and delegate dispatch.
+
+For a before/after comparison, copy this runner's complete output to separate
+ignored directories and replace only `EmbedIO.dll` in the baseline copy. Retain
+both hashes and every sample, use the same tiering setting, and alternate process
+order across repeats. Do not run competing benchmarks concurrently. These
+component results do not establish server throughput, tail latency, delayed-peer
+behavior or retained connection-memory costs, and impose no elapsed-time CI gate.
