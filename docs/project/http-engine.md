@@ -5744,3 +5744,21 @@ scan fully parses both verifier files (79 rules, zero findings, no diagnostics).
 Shell syntax and suppression/diff guards pass. Evidence is under ignored
 TestResults/http-engine/native-complete-contract-*. Native execution results and
 final exact-head checks remain required; no release or deployment is claimed.
+
+### Intel native experiment execution budget
+
+Run [37945962762](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37945962762)
+validated the candidate's Intel native datapath suite, ten rebind probes, five
+connected QUIC repeats, relocated/package consumers and 100 sanitizer repeats.
+The unchanged control reproduced both expected native defects. The two full
+coverage runs stopped below the mandatory 4,288-test floor: 2,192 and 2,188
+results, with no completed assertion failures. Their last completed tests were
+near the five-minute execution deadline; cleanup extended the process lifetime.
+This remains a failed validation, not a full-suite pass or proof of a hang's cause.
+
+The Intel experiment now gives each full coverage run 15 minutes and its complete
+native-build job 75 minutes. ARM retains five-minute suites and a 45-minute job.
+The selected budget is retained in the artifact. Test floors, assertions, native
+image verification, source pins and sanitizer checks are unchanged. Intel stays
+in scope following William's correction; a fresh run must complete every gate
+before the Intel candidate can be accepted.
