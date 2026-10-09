@@ -11,6 +11,8 @@ import threading
 
 import pylsqpack
 
+from response_campaign import verify_responses
+
 
 def run(capacity, assembly):
     rng = random.Random(9204002 + capacity)
@@ -133,6 +135,7 @@ def run(capacity, assembly):
                 assert acknowledgment
                 for octet in acknowledgment:
                     command(op="encoder-feedback", wire=bytes([octet]).hex())
+            response_planner = verify_responses(command, capacity)
             process.stdin.close()
             process.wait(timeout=10)
             assert process.returncode == 0, log_path
@@ -146,6 +149,7 @@ def run(capacity, assembly):
             process.stdout.close()
         result = {
             "capacity": capacity,
+            "response_planner": response_planner,
             "dynamic_insertions": dynamic_insertions,
             "bidirectional_sections": delivered,
             "blocked": blocked,

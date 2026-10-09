@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Buffers.Binary;
+using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
 var assembly = Assembly.LoadFrom(Path.GetFullPath(args[0]));
@@ -29,6 +30,16 @@ object? EncoderCall(object target, string method, params object[] values)
     try { return (target.GetType().GetMethod(method, hidden) ?? throw new Exception(method)).Invoke(target, values); }
     catch (TargetInvocationException ex) { ExceptionDispatchInfo.Capture(ex.InnerException ?? ex).Throw(); throw; }
 }
+var responseFeedback = Activator.CreateInstance(encoderFeedbackType, hidden, null, new object[] { 256, 4096 }, null) ?? throw new Exception("Missing response feedback");
+var responseType = assembly.GetType("EmbedIO.Net.Internal.Http3.QpackResponseEncoder", true) ?? throw new Exception("Missing response planner");
+var responseEncoder = Activator.CreateInstance(responseType, hidden, null, new object[] { responseFeedback, 4096, 65536 }, null) ?? throw new Exception("Missing response encoder");
+var settingBytes = new byte[11];
+settingBytes[0] = 1;
+BinaryPrimitives.WriteUInt64BigEndian(settingBytes.AsSpan(1), (ulong)uint.Parse(args[1]) | 0xc000000000000000UL);
+settingBytes[9] = 7; // No potentially blocked response streams are permitted.
+var settingsType = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3PeerSettings", true) ?? throw new Exception("Missing peer settings");
+var responseSettings = settingsType.GetMethod("Parse", BindingFlags.Static | BindingFlags.NonPublic)?.Invoke(null, new object[] { settingBytes, 1024 }) ?? throw new Exception("Missing settings parser");
+long ResponseState(string name) => Convert.ToInt64(responseFeedback.GetType().GetProperty(name, hidden)?.GetValue(responseFeedback));
 string? line;
 while ((line = Console.ReadLine()) != null)
 {
@@ -38,6 +49,7 @@ while ((line = Console.ReadLine()) != null)
     var ready = new List<object>();
     var blocked = false;
     object? insertion = null;
+    object? response = null;
     if (operation == "submit")
     {
         var stream = root.GetProperty("stream").GetInt64();
@@ -78,7 +90,28 @@ while ((line = Console.ReadLine()) != null)
         var bytes = Convert.FromHexString(root.GetProperty("wire").GetString() ?? "");
         EncoderCall(encoderFeedback, "Feed", bytes, 0, bytes.Length);
     }
+    else if (operation == "response")
+    {
+        var fieldType = assembly.GetType("EmbedIO.Net.Internal.Http2.HpackField", true) ?? throw new Exception("Missing field");
+        var input = root.GetProperty("fields");
+        var fields = Array.CreateInstance(fieldType, input.GetArrayLength());
+        var position = 0;
+        foreach (var field in input.EnumerateArray())
+            fields.SetValue(Activator.CreateInstance(fieldType, hidden, null,
+                new object[] { field[0].GetString() ?? "", field[1].GetString() ?? "", field.GetArrayLength() > 2 && field[2].GetBoolean() }, null), position++);
+        var wire = (byte[])(EncoderCall(responseEncoder, "Encode", root.GetProperty("stream").GetInt64(), fields, responseSettings, 65536, 65536)
+            ?? throw new Exception("Missing response bytes"));
+        var literal = (byte[])(encode.Invoke(null, new object[] { fields, 65536, 65536 }) ?? throw new Exception("Missing stateless comparison"));
+        var instructions = new List<string>();
+        while (EncoderCall(responseEncoder, "DequeueInstructions") is byte[] bytes) instructions.Add(Convert.ToHexString(bytes));
+        response = new { wire = Convert.ToHexString(wire), stateless = Convert.ToHexString(literal), instructions };
+    }
+    else if (operation == "response-feedback")
+    {
+        var bytes = Convert.FromHexString(root.GetProperty("wire").GetString() ?? "");
+        EncoderCall(responseFeedback, "Feed", bytes, 0, bytes.Length);
+    }
     else throw new Exception("Unknown operation");
     var feedback = (byte[]?)Invoke("DrainFeedback") ?? throw new Exception("Missing feedback");
-    Console.WriteLine(JsonSerializer.Serialize(new { ready, blocked, feedback = Convert.ToHexString(feedback), insertion }));
+    Console.WriteLine(JsonSerializer.Serialize(new { ready, blocked, feedback = Convert.ToHexString(feedback), insertion, response, known = ResponseState("KnownReceivedCount"), pending = ResponseState("PendingSections") }));
 }

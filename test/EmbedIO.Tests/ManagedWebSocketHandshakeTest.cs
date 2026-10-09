@@ -22,9 +22,18 @@ namespace EmbedIO.Tests
         {
             protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result) => Task.CompletedTask;
             internal int Connections;
+            private readonly TaskCompletionSource<bool> _first = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly TaskCompletionSource<bool> _second = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal Task WaitForConnectionsAsync(int count, CancellationToken token) =>
+                (count == 1 ? _first.Task : _second.Task).WaitAsync(token);
             internal Probe(bool protocol) : base("/ws", false) { if (protocol) AddProtocol("echo"); }
             protected override Task OnClientConnectedAsync(IWebSocketContext context)
-            { Interlocked.Increment(ref Connections); return Task.CompletedTask; }
+            {
+                var count = Interlocked.Increment(ref Connections);
+                if (count == 1) _first.TrySetResult(true);
+                else if (count == 2) _second.TrySetResult(true);
+                return Task.CompletedTask;
+            }
         }
         private static IEnumerable<TestCaseData> InvalidRequests()
         {
@@ -119,6 +128,7 @@ namespace EmbedIO.Tests
                         var expected = kind == "zero-key" ? "ICX+Yqv66kxgM0FcWaLWlFLwTAI=" : "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
                         Assert.That(response, Does.Contain("Sec-WebSocket-Accept: " + expected));
                         if (protocol) Assert.That(response, Does.Contain("Sec-WebSocket-Protocol: echo"));
+                        await probe.WaitForConnectionsAsync(1, stop.Token);
                         await stream.WriteAsync(new byte[] { 0x88, 0x82, 0, 0, 0, 0, 3, 232 }, stop.Token);
                         var close = new byte[4]; await stream.ReadExactlyAsync(close, stop.Token);
                         Assert.That(close, Is.EqualTo(new byte[] { 0x88, 2, 3, 232 }));
@@ -136,6 +146,9 @@ namespace EmbedIO.Tests
                 using var healthy = new ClientWebSocket();
                 if (protocol) healthy.Options.AddSubProtocol("echo");
                 await healthy.ConnectAsync(new Uri(url.Replace("http:", "ws:", StringComparison.Ordinal) + "ws"), stop.Token);
+                // Wire handshake completion does not await the application's
+                // independently scheduled connection callback.
+                await probe.WaitForConnectionsAsync(valid ? 2 : 1, stop.Token);
                 await healthy.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", stop.Token);
                 Assert.That(Volatile.Read(ref probe.Connections), Is.EqualTo(valid ? 2 : 1));
             }

@@ -3497,3 +3497,72 @@ reported cases: 3,393 successes and five existing skips in 2m 27s. The preceding
 head 660fcd2 finished every check except the two Security report/aggregate checks
 that reported the stale acceptance described above. A passing macOS test on
 that head does not establish a fix for the retained native rebind failure.
+
+
+### Independent response-planner interoperability campaign
+
+The pinned pylsqpack 0.3.24 harness now exercises QpackResponseEncoder, the same
+planner used by live HTTP/3 connections, at peer capacities 0, 220 and 4096. Each
+capacity processes 656 response sections on each production assembly: repeated
+fields, Latin-1 codec octets, sensitive/never-indexed fields, multiple sections
+on one stream, byte-fragmented instructions/feedback, instruction-before-header
+and header-before-instruction delivery, delayed acknowledgments, cancellation,
+and a full 256-section ownership budget with stateless fallback afterward.
+An entry larger than half the table is referenced while a competing insertion
+is considered; independent decoding checks that the selected entry survives.
+
+pylsqpack supplies the Section Acknowledgment bytes. Its Python interface does
+not expose a standalone Insert Count Increment flush, so the driver emits those
+only after the independent decoder accepts complete insertion instructions.
+Selected Stream Cancellations are also driver-generated to model abandoned
+sections. These limits are explicit in response_campaign.py. This is codec and
+planner interoperability, not an independent end-to-end QUIC client or complete
+HTTP conformance campaign. Existing incoming QPACK and insertion campaigns run
+alongside it, unchanged.
+
+Both assets pass all three capacities, with identical results. The retained
+reports include assembly hashes and these representation-byte measurements:
+
+| Peer capacity | Dynamic sections / 656 | Stateless section bytes | Encoder instruction + actual section bytes |
+| --- | --- | --- | --- |
+| 0 | 0 | 23,706 | 23,706 |
+| 220 | 353 | 24,038 | 23,670 |
+| 4096 | 603 | 29,858 | 18,732 |
+
+Compare within a row: the adversarial eviction payload scales with capacity.
+These counts exclude HTTP framing, QUIC/TLS overhead, CPU, allocation and latency;
+they are not throughput benchmarks. The small-table row also shows why a single
+large-table compression result cannot justify a general performance claim.
+
+Temporarily removing reference registration caused the independent decoder to
+reject the targeted stream 2052 eviction case with DecompressionFailed. The
+production source was restored byte-for-byte in a finally block and the restored
+campaign passes. An initial DLL hash-restoration assertion correctly detected
+that rebuilding after the preceding commit changed embedded source provenance
+from 660fcd2 to 630eeb5; the restored source has no production diff. Both targets
+were rebuilt and independently revalidated rather than claiming the old DLL was
+byte-identical. Mutation, restoration and final results remain under
+TestResults/http-engine/qpack-planner-* and TestResults/qpack-interop. Formatting,
+source guards and pinned YARA checks pass. Production dependencies and APIs are
+unchanged; the added Python module belongs only to the non-packable test harness.
+
+The preceding head 630eeb5's macOS run 37876745045 / job 113646973824 failed
+InvalidHandshake_missing-key: the final application connection count was zero
+where the fixture expected one. All 3,398 cases were reported (3,366 successes,
+31 skips, one failure). This failure differs from the retained raw QUIC rebind
+issue. The handshake fixture had inferred application callback completion from
+client wire-handshake completion, although the module invokes that callback
+independently after accepting the upgraded context. It now explicitly waits for
+the first/second callback before closing each valid connection, using completion
+signals and the original 15-second deadline. Invalid-request zero-callback and
+400/accept-header assertions remain intact. No production handshake behavior or
+retry policy changed. All 30 cases pass on Windows and isolated Linux; changed-head
+macOS CI must confirm the fixture correction. The original failure log is retained.
+
+
+The final Windows coverage run with the corrected fixture passes: 3,398 total,
+3,393 successes and five existing skips in 2m 26s. The discovery count and timeout
+are unchanged. Security report and Security passed are green on the preceding
+630eeb5 head after removal of the obsolete acceptance. Its CI aggregate remains
+failed because of the retained macOS handshake result; new-head checks are
+required independently.
