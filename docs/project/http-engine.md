@@ -4802,3 +4802,27 @@ added cases. The final guard-approved target conditional structure and native
 inspection helper are included in that build; the optional Darwin inspection
 requires its dedicated environment and remains unexecuted locally. Fresh
 exact-head CI and the native deployment experiment remain required.
+### Deflate envelope compatibility audit (October 9)
+
+HTTP deflate is a zlib envelope containing DEFLATE, as specified by
+[RFC 9110 section 8.4.1.2](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4.1.2).
+The existing request and response helpers use raw DEFLATE. The test-only
+[content-coding probe](../../test/EmbedIO.ContentCodingProbe/README.md) preserves
+an explicit format corpus and decoder observations outside production packages.
+On Windows and pinned Linux with .NET 10.0.12, raw/zlib matching decoders return
+identical application bytes, while the opposite decoder rejects each sample.
+A valid raw stored-block body begins with 78 9C, the same prefix as a common zlib
+header, yet returns 156 A bytes only with the raw decoder. Header sniffing alone
+therefore cannot preserve every legacy raw body while selecting standard zlib.
+The BCL zlib decoder returns complete application bytes for the tested missing
+or partial checksum and trailing-byte cases; it rejects a changed checksum.
+These are observed incomplete-validation behaviors, not successful HTTP strict
+conformance checks. The corpus does not establish all-runtime or all-input results.
+
+The next codec implementation must validate complete envelopes and make the
+legacy raw-format migration explicit for requests, responses and cached variants.
+A direct decoder swap or two-byte heuristic does not satisfy those requirements.
+Current helpers and defaults remain unchanged. Probe observations and binary
+inputs are retained under ignored TestResults/http-engine/content-coding-probe
+and content-coding-probe-linux. Locked restore, probe execution on both platforms
+and source guards pass; the ordinary test discovery floor is unchanged.
