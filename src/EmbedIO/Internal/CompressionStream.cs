@@ -19,6 +19,14 @@ namespace EmbedIO.Internal
                     _target = new DeflateStream(target, CompressionMode.Compress, true);
                     _leaveOpen = false;
                     break;
+                case CompressionMethod.Brotli:
+#if NET10_0_OR_GREATER
+                    _target = new BrotliStream(target, CompressionMode.Compress, true);
+                    _leaveOpen = false;
+                    break;
+#else
+                    throw new NotSupportedException("Brotli compression requires the .NET 10 asset.");
+#endif
                 case CompressionMethod.Gzip:
                     _target = new GZipStream(target, CompressionMode.Compress, true);
                     _leaveOpen = false;

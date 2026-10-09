@@ -5,10 +5,17 @@
     /// </summary>
     public static class QValueListExtensions
     {
+#if NET10_0_OR_GREATER
+        private static readonly CompressionMethod[] CompressionFirstMethods = { CompressionMethod.Gzip, CompressionMethod.Deflate, CompressionMethod.Brotli, CompressionMethod.None };
+        private static readonly string[] CompressionFirstNames = { CompressionMethodNames.Gzip, CompressionMethodNames.Deflate, CompressionMethodNames.Brotli, CompressionMethodNames.None };
+        private static readonly CompressionMethod[] IdentityFirstMethods = { CompressionMethod.None, CompressionMethod.Gzip, CompressionMethod.Deflate, CompressionMethod.Brotli };
+        private static readonly string[] IdentityFirstNames = { CompressionMethodNames.None, CompressionMethodNames.Gzip, CompressionMethodNames.Deflate, CompressionMethodNames.Brotli };
+#else
         private static readonly CompressionMethod[] CompressionFirstMethods = { CompressionMethod.Gzip, CompressionMethod.Deflate, CompressionMethod.None };
         private static readonly string[] CompressionFirstNames = { CompressionMethodNames.Gzip, CompressionMethodNames.Deflate, CompressionMethodNames.None };
         private static readonly CompressionMethod[] IdentityFirstMethods = { CompressionMethod.None, CompressionMethod.Gzip, CompressionMethod.Deflate };
         private static readonly string[] IdentityFirstNames = { CompressionMethodNames.None, CompressionMethodNames.Gzip, CompressionMethodNames.Deflate };
+#endif
 
         /// <summary>
         /// <para>Attempts to proactively negotiate a compression method for a response,

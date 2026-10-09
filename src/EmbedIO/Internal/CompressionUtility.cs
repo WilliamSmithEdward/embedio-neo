@@ -10,6 +10,15 @@ namespace EmbedIO.Internal
             if (source == null)
                 return null;
 
+            if (sourceMethod == CompressionMethod.Brotli || targetMethod == CompressionMethod.Brotli)
+            {
+#if NET10_0_OR_GREATER
+                return sourceMethod == targetMethod ? source : ConvertBrotli(source, sourceMethod, targetMethod);
+#else
+                throw new System.NotSupportedException("Brotli conversion requires the .NET 10 asset.");
+#endif
+            }
+
             if (sourceMethod == targetMethod)
                 return source;
 
@@ -78,5 +87,27 @@ namespace EmbedIO.Internal
                     }
             }
         }
+#if NET10_0_OR_GREATER
+        private static byte[] ConvertBrotli(byte[] source, CompressionMethod sourceMethod, CompressionMethod targetMethod)
+        {
+            using var input = new MemoryStream(source, false);
+            using var decoded = sourceMethod switch
+            {
+                CompressionMethod.Brotli => (Stream)new BrotliStream(input, CompressionMode.Decompress, true),
+                CompressionMethod.Gzip => new GZipStream(input, CompressionMode.Decompress, true),
+                CompressionMethod.Deflate => new DeflateStream(input, CompressionMode.Decompress, true),
+                _ => input
+            };
+            using var output = new MemoryStream();
+            using (Stream encoded = targetMethod switch
+            {
+                CompressionMethod.Brotli => new BrotliStream(output, CompressionMode.Compress, true),
+                CompressionMethod.Gzip => new GZipStream(output, CompressionMode.Compress, true),
+                CompressionMethod.Deflate => new DeflateStream(output, CompressionMode.Compress, true),
+                _ => output
+            }) decoded.CopyTo(encoded);
+            return output.ToArray();
+        }
+#endif
     }
 }

@@ -26,7 +26,7 @@
         /// <summary>
         /// Specifies the Brotli content coding.
         /// </summary>
-        /// <remarks>Request decompression is supported by the .NET 10 asset when enabled.</remarks>
+        /// <remarks>Response compression and opt-in request decompression are supported by the .NET 10 asset.</remarks>
         public const string Brotli = "br";
     }
 }

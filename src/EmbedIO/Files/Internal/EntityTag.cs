@@ -17,6 +17,9 @@ namespace EmbedIO.Files.Internal
                 case CompressionMethod.Deflate:
                     sb.Append('-').Append(CompressionMethodNames.Deflate);
                     break;
+                case CompressionMethod.Brotli:
+                    sb.Append('-').Append(CompressionMethodNames.Brotli);
+                    break;
                 case CompressionMethod.Gzip:
                     sb.Append('-').Append(CompressionMethodNames.Gzip);
                     break;

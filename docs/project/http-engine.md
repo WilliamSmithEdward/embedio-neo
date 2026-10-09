@@ -4425,3 +4425,45 @@ configuration, target capability, streaming acceptance and scope.
 This budget covers bytes delivered through helper decoding. Native codec window
 memory, wire-body limits, aggregate admission and slow-peer policies remain
 separate requirements; this increment does not close the resource-control gate.
+
+### Brotli response negotiation and static-file variants
+
+The .NET 10 asset now negotiates `br` for response stream/text helpers and
+compressible FileModule responses. The existing gzip/deflate/identity enum values
+retain their numeric values, and Brotli is additive. Quality weights and explicit
+client order remain authoritative; the server's wildcard tie order still puts
+gzip and deflate before Brotli. Identity remains preferred when compression is
+not requested and identity is acceptable. An absent Accept-Encoding remains
+uncompressed. The .NET Standard 2.0 asset keeps its original coding choices and
+returns 406 when only Brotli is acceptable. Explicit unsupported Brotli cache or
+conversion operations throw NotSupportedException rather than mislabel bytes.
+
+Response helpers use the BCL compressor for buffered or streaming transport.
+FileCacheItem retains one additional optional Brotli byte array in the .NET 10
+asset; its approximate item-overhead accounting grows accordingly. Identity,
+gzip, deflate and Brotli representations convert through owned streams and have
+distinct ETags. Brotli compressor disposal finalizes its output while preserving
+the cache's destination stream. Variant replacement/removal adjusts section
+accounting, and detached-item updates cannot increase retained section size.
+
+Thirty-nine added cases cover eight real HTTP helper combinations across both
+listeners, four static-file cache/listener combinations with cold/warm GET,
+HEAD, conditional requests and variant changes, nine negotiation controls,
+fourteen empty/200 KB coding conversions, and four cache-detachment/accounting
+cases. The initial fixtures incorrectly expected no BOM after explicitly
+selecting Encoding.UTF8, ignored existing client-order ties, and inspected
+HttpClient's synthesized HEAD length after reading an empty body. Those fixture
+errors are corrected; HEAD checks inspect actual header values before reading.
+No production behavior or assertion was relaxed to match those assumptions.
+
+Both library targets build with zero warnings/errors. Full Windows coverage
+passes 3,502 cases (3,497 passed, five skipped, zero failed), with the discovery
+minimum raised by the 39 added cases. All 115 focused new/adjacent cases pass on
+pinned Linux .NET 10 and against the actual netstandard2.0 assembly hosted by
+Windows .NET 10. That legacy run verifies explicit unsupported Brotli paths and
+retained existing compression; it does not prove older-runtime execution.
+All four allocation-budget groups, changed-file formatting, source guards and
+the pinned YARA scan of production source pass. This increment adds no production
+dependency. Codec CPU/native memory, compression profiles, coding chains,
+Zstandard/shared dictionaries and broad comparative server performance remain
+separate completion work. Required checks on the pushed head remain necessary.
