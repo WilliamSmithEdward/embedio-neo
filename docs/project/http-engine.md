@@ -5873,7 +5873,8 @@ Intel run (12,031), including ZIP and WebSocket message code whose fixtures have
 no recorded results. The interval after each deadline was the rest of the suite,
 not cleanup or a hang, and no hang was found. A `--timeout` deadline therefore
 discards results rather than stopping tests; job timeouts remain the effective
-bound for a genuine hang. No newer adapter release than 6.3.0 exists.
+bound for a genuine hang. On 2026-10-09, 6.3.0 was NuGet's newest stable
+NUnit3TestAdapter.
 
 Each complete Intel suite in run [37952457798](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37952457798)
 contains 49 tests that take whole multiples of five seconds (270 of about 566
@@ -5895,9 +5896,9 @@ take about five seconds, while a `localhost` prefix takes about 2 ms.
 One deterministic Intel failure follows from it.
 `NativeWebSocketShutdownTest.CancellationDuringUpgradeReleasesAcceptAndAllConnectedTransports(Microsoft)`
 constructs up to 32 Microsoft-mode servers on 127.0.0.1 within one 30-second
-deadline. The deadline expired while constructing the sixth server in both
-suites of run 37952457798 and the seventh in run 37955797744; the test takes
-0.28 seconds on ARM. This is the failure recorded above for the budgeted Intel
+deadline. The deadline expired in the sixth round in both suites of run
+37952457798, and in the seventh round with the unpatched library in run
+37955797744; the test takes 0.28 seconds on ARM. This is the failure recorded above for the budgeted Intel
 experiment: it comes from the runner's host-name lookup, not from the upgrade
 completion path, and it does not depend on the native QUIC candidate.
 
@@ -5912,3 +5913,27 @@ both above the uncorrected measurement. In that measurement the source-built
 library passed every QUIC test with `EMBEDIO_REQUIRE_QUIC=1`, 27 constrained ZIP
 cases and five reset-stress passes. The optional native experiment's own Intel
 suites do not receive this correction and will keep failing on that test.
+
+CI run [37959455344](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37959455344)
+on merge commit `cef2e21` validated the leg. The Intel MsQuic build took two
+minutes, and the host-name check measured 5.016 seconds before the hosts entry
+and 0.008 seconds after it. The Intel suite took 5m40s with no quantized stalls;
+its Microsoft-backend tests took 55 seconds instead of 330. Intel and ARM reported
+the same 4,302 tests with identical per-test outcomes: 4,263 passed, 38 skipped
+and one failure, `CancelledHttp3UploadsDoNotStopTheListener` (TLS `UserCanceled`).
+The base branch's own run 37958827017 on `998fe15` fails that test on macOS, and
+fails `EmptyDecodedChainWorksWithZeroLimit(Microsoft,False)` on Windows as this
+run does, so neither failure comes from these changes. Security 37959458758 and
+malware scan 37959462366 passed.
+
+Run [37961188089](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37961188089)
+on the pre-merge commit `1d2a7ca` (base `f23a5a5`) repeated the correction on two
+Intel runners (5.013 to 0.008 seconds and 5.034 to 0.009 seconds), with suites of
+5m43s and 5m18s. Its Windows test leg passed with the suite step running under
+bash. Its remaining failures were known base issues: the macOS rebind defect,
+`DisposedRuntimeListenerRebindsSameEndpoint(False)`, on ARM in both attempts and
+on Intel in the first, and in the second Intel attempt the lifetime-test race
+that #196 later fixed. The upgrade-cancellation failure did not recur in any
+corrected suite. No run has yet passed every job. The Intel ZIP and reset-stress
+steps follow the suite step, so they have run only in the diagnostic
+measurement.
