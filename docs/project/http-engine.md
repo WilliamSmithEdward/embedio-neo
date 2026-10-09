@@ -5851,3 +5851,30 @@ cold-start and listener-allocation guards pass. Both
 library targets build. Full-suite and exact-head gates remain required, along
 with the remaining HTTP/2 settings ordering and stream-state findings. Evidence
 is retained under ignored `TestResults/http-engine/f1-f2-*`.
+
+### F6 stream-state review against the modern baseline
+
+The engine now distinguishes a new request (`:method`) using a closed or skipped
+identifier from closed-stream trailing traffic. Two controlled cases fail on
+`b4e725f` and pass with the candidate: opening a lower skipped ID and reopening
+an already completed ID. The rejected request raises connection PROTOCOL_ERROR
+without creating another active object. The existing 2,500-iteration registry
+check retains its bounded-state assertions and now expects that error for new
+requests on skipped IDs. All 65 registry/header/HPACK/dispatcher cases pass on
+Windows and pinned Linux; both library targets build and source guards pass.
+
+The legacy h2spec findings need individual classification against the modern
+baseline. [RFC 9113 section 5.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1)
+permits minimal processing and discard on fully closed streams, while requiring
+STREAM_CLOSED for prohibited frames on half-closed-remote streams. Header blocks
+still update HPACK state and discarded DATA still consumes connection credit.
+[RFC 9218 section 2.1](https://www.rfc-editor.org/rfc/rfc9218.html#section-2.1)
+permits ignoring legacy priority signals when the server advertises that policy.
+Those behaviors must not be removed solely to satisfy older h2spec expectations.
+The new-request identifier guard follows
+[RFC 9113 section 5.1.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1.1).
+
+The original h2spec failures remain recorded; no aggregate tool result has been
+converted to success or its tests disabled. Fresh independent wire validation
+and exact-head CI remain required. F5 settings/queued-DATA ordering is still open.
+Evidence is under ignored `TestResults/http-engine/f6-*`.

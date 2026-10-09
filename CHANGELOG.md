@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Reject new HTTP/2 requests that reuse a completed stream identifier or try to
+  open a skipped lower identifier, while retaining minimal closed-stream
+  processing and the advertised modern priority policy.
+
 - Reject incomplete managed Content-Length bodies as errors rather than successful
   short uploads. Map body-framing failures to generic 400 responses before headers
   commit, and abort that connection after response commitment. Preserve ordinary
