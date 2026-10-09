@@ -6228,3 +6228,53 @@ five expected local/platform skips and zero failures. The sustained matching-
 harness comparison remains in progress; no server throughput benefit or integration
 acceptance is claimed yet. Evidence is under ignored admission TestResults in the
 review worktree. PR #201 and program #181 remain open.
+### Admission wakeup review and frozen-checkpoint comparison
+
+A second owner regression reproduced an independent wakeup backlog at integration
+checkpoint `667a3f5`. While an accept was paused during its dictionary claim,
+1,024 registrations released 1,024 semaphore permits. The requests were subsequently
+accepted exactly once, but all permits remained after the queue was empty. Empty
+accepts would consume stale wakeups unrelated to pending requests.
+
+The corrected candidate coalesces wakeups with an atomic pending flag. A successful
+semaphore wait clears it, and a successful queue claim relays a wakeup while work
+remains for other waiting accepts. Cancellation relays through the same bounded
+path. The flag and semaphore remain paired across stop/restart; restarting does
+not independently reset either while prior accepts are still completing. Public
+APIs and request admission policy are unchanged.
+
+The paused-burst regression fails with 1,024 retained permits on the old source
+and passes on the correction. Two further cases deliver every request to 32
+waiting accepts over twenty bursts, including repeated stop/restart. All sixteen
+admission cases pass. The full Windows suite reports 4,381 cases, 4,376 successes,
+five expected local/platform skips, zero failures. Both targets build without
+warnings/errors; formatting, analyzer guards and all four resource budgets pass.
+The pinned Linux admission/lifecycle/drain set reports 163 cases, 161 successes,
+two platform skips and zero failures. Sustained final-source comparison remains pending.
+
+The earlier frozen comparison measured `667a3f5` against engine `24cb39d` before
+this wakeup correction, using an identical private harness. Three alternating
+rounds used fresh client/server processes, disjoint CPUs, three seconds of warmup
+and fifteen seconds of measurement. The prefix scenario selector also included
+the close-after-100 row, producing eighteen samples, all with validated responses,
+zero request errors and zero remaining server sockets. No failed sample was retried.
+
+| Workload | Candidate/control median requests/s | Candidate/control CPU us/request |
+| --- | --- | --- |
+| HTTP/1.1 plain, 64 connections | 264,592 / 228,979 | 23.9 / 25.4 |
+| HTTP/1.1 plain, close after 100 requests | 244,542 / 265,043 | 24.3 / 24.1 |
+| HTTP/2 TLS, eight connections x 32 streams | 251,114 / 191,958 | 29.0 / 34.2 |
+
+HTTP/1.1 ranges overlap substantially, and the close-after-100 median regresses.
+HTTP/2 CPU per request improves in all three pairs, but throughput regresses by
+8.5% in one pair. These samples do not establish a consistent throughput gain.
+Separate profiled samples show aggregate Monitor.Enter_Slowpath exclusive sampled
+thread-time share falling from 12.87% to 9.60% for HTTP/1.1 and from 13.11% to
+11.28% for HTTP/2. Those frames include other locks and blocked thread time; this
+is not attribution solely to the listener lifecycle lock or a CPU percentage.
+Profiled throughput is not part of the comparison.
+
+The frozen results cannot establish performance of the later wakeup correction.
+Raw samples, hashes, traces and the corrected-source regression evidence remain
+under ignored `TestResults/admission-*` in the owner review worktree. PR #201 and
+program #181 remain open; no shipping or default-engine readiness is claimed.

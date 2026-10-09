@@ -33,6 +33,8 @@ namespace EmbedIO.Net
         private int _admissionsInFlight;
         // Accepts about to wait on _ctxQueueSem. Its permits are wake-ups, not a context count.
         private int _waitingAccepts;
+        // One outstanding wakeup is shared by queue bursts and listener generations.
+        private int _wakePending;
         private readonly ConcurrentDictionary<HttpConnection, object> _connections;
         private readonly HttpListenerPrefixCollection _prefixes;
         private bool _disposed;
@@ -240,13 +242,14 @@ namespace EmbedIO.Net
                             {
                                 if (TryTakeQueuedContext(out var context)) return context;
                                 await _ctxQueueSem.WaitAsync(linked.Token).ConfigureAwait(false);
+                                _ = Interlocked.Exchange(ref _wakePending, 0);
                             }
                             finally { _ = Interlocked.Decrement(ref _waitingAccepts); }
 
                             if (linked.IsCancellationRequested)
                             {
                                 // A canceled accept must not consume another waiter's queue signal.
-                                _ = _ctxQueueSem.Release();
+                                SignalAccept();
                                 linked.Token.ThrowIfCancellationRequested();
                             }
                         }
@@ -286,6 +289,7 @@ namespace EmbedIO.Net
                 if (((ICollection<KeyValuePair<string, IHttpContextImpl>>)_ctxQueue).Remove(new KeyValuePair<string, IHttpContextImpl>(candidate.Id, candidate)))
                 {
                     context = candidate;
+                    SignalAccept();
                     return true;
                 }
             }
@@ -346,7 +350,16 @@ namespace EmbedIO.Net
             // The queue publishes the item with a release write; the fence keeps this read
             // after it, pairing with the increment in GetContextAsync.
             Interlocked.MemoryBarrier();
-            if (Volatile.Read(ref _waitingAccepts) != 0) _ = _ctxQueueSem.Release();
+            SignalAccept();
+        }
+
+        private void SignalAccept()
+        {
+            // Coalesce permits while a waiter is paused before its queue check.
+            // Successful claims relay the wakeup while queued work remains.
+            if (Volatile.Read(ref _waitingAccepts) != 0 && !_ctxQueue.IsEmpty
+                && Interlocked.CompareExchange(ref _wakePending, 1, 0) == 0)
+                _ = _ctxQueueSem.Release();
         }
 
         // Callers hold _lifecycleSync. Admissions without the lock never block or

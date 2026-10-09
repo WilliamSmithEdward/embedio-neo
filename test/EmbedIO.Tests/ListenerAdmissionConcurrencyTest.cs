@@ -88,6 +88,79 @@ namespace EmbedIO.Tests
                     Assert.That(accepted, Does.Contain($"kept:{producer}:{index}"));
         }
         [Test]
+        public async Task ConsumedQueueBurstDoesNotLeaveAnUnboundedWakeupBacklog()
+        {
+            using var listener = new Net.HttpListener();
+            listener.Start();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var first = DispatchProxy.Create<IHttpContextImpl, PausedClaimContext>();
+            var paused = (PausedClaimContext)(object)first;
+            var receiving = listener.GetContextAsync(timeout.Token);
+            try
+            {
+                Register(listener, first);
+                await paused.Claiming.Task.WaitAsync(timeout.Token);
+                for (var index = 0; index < 1024; index++) Register(listener, FakeContext.Create("burst:" + index));
+                paused.Resume.TrySetResult();
+                Assert.That(await receiving.WaitAsync(timeout.Token), Is.SameAs(first));
+                for (var index = 0; index < 1024; index++)
+                    Assert.That((await listener.GetContextAsync(timeout.Token)).Id, Is.EqualTo("burst:" + index));
+                var semaphore = (SemaphoreSlim)(typeof(Net.HttpListener).GetField("_ctxQueueSem", PrivateInstance)?.GetValue(listener)
+                    ?? throw new AssertionException("Missing accept wakeup semaphore."));
+                Assert.That(semaphore.CurrentCount, Is.LessThanOrEqualTo(1),
+                    "Wakeups must not accumulate independently of pending work.");
+            }
+            finally { paused.Resume.TrySetResult(); await receiving.WaitAsync(TimeSpan.FromSeconds(2)); }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task CoalescedWakeupsDeliverBurstsToEveryWaitingAccept(bool restart)
+        {
+            using var listener = new Net.HttpListener();
+            listener.Start();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            for (var round = 0; round < 20; round++)
+            {
+                var accepts = Enumerable.Range(0, 32).Select(_ => listener.GetContextAsync(timeout.Token)).ToArray();
+                if (restart)
+                {
+                    listener.Stop();
+                    listener.Start();
+                    foreach (var accept in accepts)
+                        await Assert.ThatAsync(async () => await accept, Throws.TypeOf<HttpListenerException>());
+                    accepts = Enumerable.Range(0, 32).Select(_ => listener.GetContextAsync(timeout.Token)).ToArray();
+                }
+                for (var index = 0; index < accepts.Length; index++)
+                    Register(listener, FakeContext.Create($"{round}:{index}"));
+                var delivered = await Task.WhenAll(accepts).WaitAsync(timeout.Token);
+                Assert.That(delivered.Select(context => context.Id), Is.EquivalentTo(
+                    Enumerable.Range(0, accepts.Length).Select(index => $"{round}:{index}")));
+                Assert.That(Pending(listener).Count, Is.Zero);
+            }
+        }
+
+        public class PausedClaimContext : DispatchProxy
+        {
+            private int _reads;
+            internal readonly TaskCompletionSource Claiming = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal readonly TaskCompletionSource Resume = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+            {
+                if (targetMethod?.Name == "get_Id")
+                {
+                    if (Interlocked.Increment(ref _reads) == 2)
+                    {
+                        Claiming.TrySetResult();
+                        if (!Resume.Task.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Claim was not resumed.");
+                    }
+                    return "paused-first";
+                }
+                var type = targetMethod?.ReturnType;
+                return type != null && type.IsValueType && type != typeof(void) ? Activator.CreateInstance(type) : null;
+            }
+        }
+        [Test]
         public async Task ConcurrentRegistrationsAreAcceptedOnceInEachProducersOrder()
         {
             const int producers = 8;
