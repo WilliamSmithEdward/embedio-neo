@@ -3873,3 +3873,52 @@ is ordinary arm64. No native event-ordering conclusion follows from the first
 run. Its failure log and artifacts remain retained. Entries in successful
 native captures may appear out of timestamp order across threads; compare
 recorded intervals rather than file order.
+
+
+### Native trace confirms delayed socket close after managed disposal
+
+Corrected dispatch [37882631624](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37882631624)
+on commit 677b110 produces a complete trace in macOS job 113665548169. The
+standalone probe fails at cycle 2 on 127.0.0.1:54888, with .NET 10.0.12 on
+macOS 15.7.9 arm64. Its managed report confirms native tracing enabled and
+complete. Native PID 6496 matches the managed process; all 18 events were
+retained, with zero dropped/incomplete events and zero untracked descriptors.
+The loader log confirms the intended tracer and relocated MsQuic 2.6.2 dylib
+were loaded; the native import list includes the intercepted bind/close symbols.
+The loaded MsQuic dylib hash is
+`6f045def309758d760b162ab3a60239bd8afd56ff06e35cf729f5458edc8fa2e`.
+
+The relevant timestamps below share the native monotonic clock, in nanoseconds:
+
+| Event | Descriptor | Timestamp / interval |
+| --- | --- | --- |
+| Cycle 1 bind succeeds on port 54888 | 70 | 386810811000–386810863000 |
+| Cycle 1 managed disposal completed | — | 386811067000 |
+| Cycle 2 bind fails, errno 48 | 71 | 386811095000–386811113000 |
+| Previous descriptor close succeeds | 70 | 386811265000–386811270000 |
+
+Thus the new bind begins 28 microseconds after managed disposal and returns an
+address-in-use error before closing the previous descriptor has even begun.
+The prior descriptor's close starts 198 microseconds after disposal, 152
+microseconds after the failed bind returns. This is direct evidence of delayed
+native socket cleanup in this captured run, rather than merely a source-based
+hypothesis. It does not establish a repaired implementation. The independent
+ordinary regression in the same job also fails uninstrumented at cycle 26 on
+127.0.0.1:60749 (3,368 successes, 31 skips, one failure / 3,400 total).
+
+The pinned [kqueue implementation](https://github.com/microsoft/msquic/blob/819ab74f851ee168504cbc392ec32e7bed1d82e9/src/platform/datapath_kqueue.c)
+drains active upcalls and removes read notifications before queueing final
+context cleanup, where it closes the descriptor. The
+[pinned event-queue helper](https://github.com/microsoft/msquic/blob/819ab74f851ee168504cbc392ec32e7bed1d82e9/src/inc/quic_platform_posix.h)
+performs the event-removal kevent synchronously. A candidate investigation is to
+release the descriptor after that rundown/removal boundary while preserving
+deferred context reclamation and protection against stale events/descriptor
+reuse. No such native patch is implemented, validated, shipped or substituted
+for the pinned dependency yet. No retry, suppression, security relaxation or
+HTTP production change is used to make this diagnostic pass.
+
+Evidence is retained under `TestResults/http-engine/quic-trace-macos-artifact2`
+and `quic-trace-macos-job2.log`. The native JSONL SHA-256 is
+`aec15230393614d928aefb2f79264b0a77c4b152fc153e31e48376c27700abb7`.
+The initial header-build failure remains recorded separately. Both diagnostic
+runs retain their real failed status; the PR remains draft/unmerged.
