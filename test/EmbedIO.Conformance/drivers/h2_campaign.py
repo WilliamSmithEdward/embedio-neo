@@ -57,6 +57,40 @@ class Endpoint:
         return sock
 
 
+class FrameTrace:
+    """Bounded record of frame headers in one direction, for failure reports."""
+
+    NAMES = {0: "DATA", 1: "HEADERS", 2: "PRIORITY", 3: "RST_STREAM", 4: "SETTINGS", 5: "PUSH_PROMISE",
+             6: "PING", 7: "GOAWAY", 8: "WINDOW_UPDATE", 9: "CONTINUATION", 16: "PRIORITY_UPDATE"}
+
+    def __init__(self, direction, log, skip=0):
+        self.direction, self.log, self.skip, self.buffer = direction, log, skip, b""
+        self.started = time.monotonic()
+
+    def feed(self, data):
+        if self.skip:
+            taken = min(self.skip, len(data))
+            data, self.skip = data[taken:], self.skip - taken
+        self.buffer += data
+        while len(self.buffer) >= 9 and len(self.buffer) >= 9 + int.from_bytes(self.buffer[:3], "big"):
+            length = int.from_bytes(self.buffer[:3], "big")
+            kind, flags = self.buffer[3], self.buffer[4]
+            stream = int.from_bytes(self.buffer[5:9], "big") & 0x7FFFFFFF
+            payload = self.buffer[9:9 + length]
+            detail = ""
+            if kind == 4 and not flags & 1:
+                detail = " " + ",".join(f"{int.from_bytes(payload[i:i + 2], 'big')}={int.from_bytes(payload[i + 2:i + 6], 'big')}"
+                                        for i in range(0, len(payload) - 5, 6))
+            elif kind == 8:
+                detail = f" +{int.from_bytes(payload[:4], 'big') & 0x7FFFFFFF}"
+            elif kind in (3, 7):
+                detail = f" code={int.from_bytes(payload[-4:], 'big')}"
+            self.log.append(f"{time.monotonic() - self.started:8.4f} {self.direction} {self.NAMES.get(kind, kind)} "
+                            f"s={stream} f=0x{flags:02x} len={length}{detail}")
+            del self.log[:-400]
+            self.buffer = self.buffer[9 + length:]
+
+
 class Client:
     """Single-threaded hyper-h2 client with explicit flow-controlled uploads."""
 
@@ -71,11 +105,15 @@ class Client:
         self.streams = {}
         self.terminated = None
         self.closed = False
+        self.trace = []
+        self.sent_trace = FrameTrace("->", self.trace, skip=len(PREFACE))
+        self.received_trace = FrameTrace("<-", self.trace)
         self.flush()
 
     def flush(self):
         data = self.conn.data_to_send()
         if data:
+            self.sent_trace.feed(data)
             self.sock.sendall(data)
 
     def request(self, method, path, body=b"", headers=(), end=True):
@@ -124,6 +162,7 @@ class Client:
         if not data:
             self.closed = True
             return False
+        self.received_trace.feed(data)
         for event in self.conn.receive_data(data):
             self.handle(event)
         self.pump_uploads()
@@ -813,7 +852,8 @@ def run_fuzz(endpoint, seed, iterations, stats_port):
             client.close()
         except Exception as error:  # A failed invariant is a finding with a replayable seed.
             return {"result": "FAIL", "seed": seed, "iteration": iteration, "settings": {int(k): v for k, v in settings.items()},
-                    "error": f"{type(error).__name__}: {error}", "log": log}
+                    "error": f"{type(error).__name__}: {error}", "log": log,
+                    "trace": client.trace if "client" in locals() else []}
         if (iteration + 1) % max(1, iterations // 5) == 0:
             health = healthy(endpoint)
             if health:
