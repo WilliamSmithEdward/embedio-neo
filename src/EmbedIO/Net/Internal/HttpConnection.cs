@@ -18,6 +18,7 @@ namespace EmbedIO.Net.Internal
         private const int BufferSize = 8192;
         private static readonly byte[] BadRequestResponse = Encoding.ASCII.GetBytes(
             "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        private static readonly byte[] ContinueResponse = Encoding.ASCII.GetBytes("HTTP/1.1 100 Continue\r\n\r\n");
         private Http1HeadReader _headReader;
         private bool _http2;
         private EmbedIO.Internal.BorrowedResource<CancellationTokenSource>? _http2Stop;
@@ -367,6 +368,9 @@ namespace EmbedIO.Net.Internal
                         finally { Close(true); }
                         return;
                     }
+
+                    if (_context.HttpListenerRequest.RequiresContinue)
+                        await Stream.WriteAsync(ContinueResponse, 0, ContinueResponse.Length).ConfigureAwait(false);
 
                     StopRequestTimer();
                     if (!_epl.BindContext(_context))

@@ -65,6 +65,31 @@ namespace EmbedIO.Tests
             Assert.That(await fixture.ReadHeaders(), Does.StartWith("HTTP/1.1 204 "));
         }
 
+        [TestCase(false, "POST", "1.0", "abcdef")]
+        [TestCase(true, "POST", "1.0", "abcdef")]
+        [TestCase(false, "GET", "1.1", "")]
+        [TestCase(true, "GET", "1.1", "")]
+        [TestCase(false, "POST", "1.1", "")]
+        [TestCase(true, "POST", "1.1", "")]
+        [TestCase(false, "PUT", "1.1", "")]
+        [TestCase(true, "PUT", "1.1", "")]
+        public async Task Http10AndBodylessRequestsDoNotSendContinue(bool secure, string method, string version, string payload)
+        {
+            ArgumentNullException.ThrowIfNull(payload);
+            using var fixture = new RawListener(secure);
+            await fixture.Connect();
+            var accept = fixture.Listener.GetContextAsync(fixture.Token);
+            await fixture.Write($"{method} / HTTP/{version}\r\nHost: 127.0.0.1\r\nContent-Length: {payload.Length}\r\nExpect: 100-continue\r\n\r\n{payload}", 7);
+            var context = await accept;
+            using var body = new MemoryStream();
+            await context.Request.InputStream.CopyToAsync(body, fixture.Token);
+            Assert.That(Encoding.ASCII.GetString(body.ToArray()), Is.EqualTo(payload));
+            Respond(context, false);
+            var response = await fixture.ReadHeaders();
+            Assert.That(response, Does.Contain(" 204 "));
+            Assert.That(response, Does.Not.Contain("100 Continue"));
+        }
+
         [TestCase(false)]
         [TestCase(true)]
         public async Task TruncatedBodyTerminatesReadAndListenerStillServes(bool secure)

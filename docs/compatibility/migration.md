@@ -111,10 +111,10 @@ example, the audited serializers represent the same string differently:
 
 | Serializer | JSON string |
 | --- | --- |
-| Upstream SWAN defaults | `"cafÃ© <>&"` |
+| Upstream SWAN defaults | `"café <>&"` |
 | Neo defaults | `"caf\u00E9 \u003C\u003E\u0026"` |
 
-After JSON parsing, both values are `cafÃ© <>&`. Neo also uses compact spacing
+After JSON parsing, both values are `café <>&`. Neo also uses compact spacing
 where the audited SWAN output included spaces. Member ordering can differ;
 JSON object member order is not the same contract as JSON array element order.
 These textual differences do not imply changed string values or reordered list
@@ -292,7 +292,7 @@ shared CLR object identity by default. Distinct objects with equal values are
 also serialized as separate values.
 
 An actual cycle is different. For example, an object whose `Next` points back
-to itself, or an entity graph such as `Customer â†’ Orders â†’ Customer`, cannot be
+to itself, or an entity graph such as `Customer -> Orders -> Customer`, cannot be
 represented by endlessly expanding values. Upstream emitted a `$circref` marker
 in the audited self-cycle case. Neo defaults throw `JsonException`; the audited
 default HTTP response path returns 500. The server still serves subsequent valid
@@ -333,7 +333,7 @@ changes as follows:
 
 | Serializer | JSON timestamp |
 | --- | --- |
-| Upstream SWAN defaults | `"2026-10-07T12:34:56"` |
+| Upstream SWAN defaults | `"café <>&"` |
 | Neo defaults | `"2026-10-07T12:34:56.1234567Z"` |
 
 Neo preserves the tested fractional seconds and marks the UTC value with `Z`.
@@ -905,3 +905,18 @@ Connection reuse also honors the response's committed keep-alive decision after
 headers have been sent. Mutating the public header collection afterward cannot
 reopen a response that committed connection closure. This does not add a CONNECT
 tunnel API or complete authority-form handling.
+
+### HTTP/1 interim continue responses (unreleased)
+
+The managed listener ignores `Expect: 100-continue` on HTTP/1.0 requests, as
+required by [RFC 9110 section 10.1.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.1).
+It also omits the interim response when request framing indicates no body.
+Previously, HTTP/1.0 requests with a body and bodyless HTTP/1.1 methods other
+than POST/PUT could receive an unsolicited `100 Continue` before the final
+response. Clients must not wait for this interim response on HTTP/1.0 or
+bodyless requests. HTTP/1.1 requests with a body retain the existing handshake.
+
+The interim transport write is now asynchronous and remains covered by the
+request-header deadline until it completes. This change does not yet implement
+all expectation-list syntax, extension expectations or an application-controlled
+early final-response policy. Public request/response APIs are unchanged.

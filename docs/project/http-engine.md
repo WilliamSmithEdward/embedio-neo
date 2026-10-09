@@ -71,6 +71,11 @@ be assumed to expose identical protocol capabilities. Target removal, hidden
 fallback, and a new native dependency in the legacy asset are not implied by this
 plan. The Microsoft listener remains available.
 
+The HTTP/1 continue handshake is written asynchronously by the connection after
+request initialization. HTTP/1.0 ignores the expectation and bodyless requests
+omit the interim response; expectation-list and early-final-response completion
+remain outstanding.
+
 ## Incremental HTTP/1 head reader
 
 `Http1HeadReader` separates incremental request-head framing from connection
@@ -1825,7 +1830,7 @@ measured these medians over nine samples per cell on local Windows/.NET 10:
 | 8 MiB / 1 | 386.43 | 439.85 | 44.92 | 42.48 |
 | 8 MiB / 8 | 428.19 | 458.76 | 49.32 | 47.85 |
 
-Managed allocation rose by roughly 5 KiB per 1 MiB response and 30ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“37 KiB per
+Managed allocation rose by roughly 5 KiB per 1 MiB response and 30-37 KiB per
 8 MiB response, under 0.3% of combined client/server allocation in those cases.
 Small-response results varied: sequential 128-byte throughput fell from 0.92 to
 0.73 MiB/s in the selected run, while concurrency eight rose from 4.78 to 5.41.

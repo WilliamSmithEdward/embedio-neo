@@ -19,7 +19,6 @@ namespace EmbedIO.Net.Internal
     /// </summary>
     internal sealed partial class HttpListenerRequest : IHttpRequest
     {
-        private static readonly byte[] HttpStatus100 = WebServer.DefaultEncoding.GetBytes("HTTP/1.1 100 Continue\r\n\r\n");
 
 
         private readonly HttpConnection _connection;
@@ -158,6 +157,9 @@ namespace EmbedIO.Net.Internal
             && Headers.Contains(HttpHeaderNames.Upgrade, "websocket", StringComparison.OrdinalIgnoreCase)
             && Headers.Contains(HttpHeaderNames.Connection, "Upgrade", StringComparison.OrdinalIgnoreCase);
 
+        internal bool RequiresContinue => ProtocolVersion == HttpVersion.Version11 && HasEntityBody
+            && string.Equals(Headers["Expect"], "100-continue", StringComparison.OrdinalIgnoreCase);
+
         internal void SetRequestLine(string req)
         {
             var first = EmbedIO.Internal.StringOperations.IndexOfOrdinal(req, ' ');
@@ -275,15 +277,7 @@ namespace EmbedIO.Net.Internal
             Url = url;
             InitializeQueryString(Url.Query);
 
-            if (!HasEntityBody && (HttpVerb == HttpVerbs.Post || HttpVerb == HttpVerbs.Put))
-            {
-                return;
-            }
 
-            if (string.Compare(Headers["Expect"], "100-continue", StringComparison.OrdinalIgnoreCase) == 0)
-            {
-                _connection.GetResponseStream().InternalWrite(HttpStatus100, 0, HttpStatus100.Length);
-            }
         }
 
         internal void AddHeader(string header)
