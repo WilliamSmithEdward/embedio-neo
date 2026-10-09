@@ -216,37 +216,34 @@ status=0
   > "$results/control-datapath.log" 2>&1 || status=$?
 printf '%s\n' "$status" > "$results/control-datapath.exit"
 
-# Run the ordinary raw rebind regression unchanged against each native variant.
-# Each run binds, disposes and rebinds one loopback endpoint 32 times per case,
-# and the test process verifies which MsQuic image it actually loaded.
+# Run the raw runtime rebind test and EmbedIO's own HTTP/3 restart test unchanged
+# against each native variant. Each raw case binds, disposes and rebinds one
+# loopback endpoint 32 times; the EmbedIO test stops and restarts its listener on
+# one endpoint 64 times. The test process verifies which MsQuic image it loaded.
 rebind_repetitions=20
 rebind_columns='iteration\texit\tresults\tpassed\tfailed\tmatching\toutcome\n'
-rebind_xpath() {
-  xmllint --xpath "count(//*[local-name()='UnitTestResult']$1)" "$2"
-}
-# Prints the exit code, results, passed, failed and failures matching the
-# defect: the raw rebind test stopping at bind with AddressAlreadyInUse.
-# Returns 0 for a pass, 1 when every failure matches the defect, and 2 for
-# anything else, including a missing report or an unverified native image.
+# Prints the exit code, results, passed, failed and failures matching the defect:
+# the raw rebind test stopping at bind with AddressAlreadyInUse. Returns 0 for a
+# pass, 1 when every failure matches the defect, and 2 for anything else,
+# including any EmbedIO restart failure, a missing report or an unverified image.
 run_rebind_test() {
   local variant="$1" directory="$2" library_dir="$RUNNER_TEMP/msquic-$1-build/bin"
-  local status=0 trx total passed failed matching
+  local status=0 trx counts total passed failed matching
   mkdir -p "$directory" || return 2
   env DYLD_FALLBACK_LIBRARY_PATH="$library_dir" EMBEDIO_REQUIRE_QUIC=1 \
     EMBEDIO_EXPECT_QUIC_LIBRARY_ROOT="$library_dir" \
     EMBEDIO_EXPECT_QUIC_LIBRARY_SHA256="$(awk '{ print $1 }' "$results/$variant-library.sha256")" \
     EMBEDIO_QUIC_LIBRARY_EVIDENCE="$directory/loaded-library.json" \
     dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-    --filter 'FullyQualifiedName~QuicRuntimeRebindTest' --minimum-expected-tests 2 \
+    --filter 'FullyQualifiedName~QuicRuntimeRebindTest|FullyQualifiedName~Http3ListenerTest.StoppedListenerRebindsItsEndpointImmediately' \
+    --minimum-expected-tests 3 \
     --timeout 2m --report-trx --results-directory "$directory" > "$directory/console.log" 2>&1 || status=$?
   trx="$(find "$directory" -name '*.trx' -type f)"
   test -n "$trx" && test "$(printf '%s\n' "$trx" | wc -l | tr -d ' ')" = 1 || return 2
-  total="$(rebind_xpath '' "$trx")" || return 2
-  passed="$(rebind_xpath "[@outcome='Passed']" "$trx")" || return 2
-  failed="$(rebind_xpath "[@outcome='Failed']" "$trx")" || return 2
-  matching="$(rebind_xpath "[@outcome='Failed'][starts-with(@testName,'DisposedRuntimeListenerRebindsSameEndpoint(')][.//*[local-name()='StdOut'][contains(.,'stage=bind,')]][.//*[local-name()='Message'][contains(.,'SocketErrorCode: AddressAlreadyInUse')]]" "$trx")" || return 2
+  counts="$(bash "$repo/test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.sh" "$trx")" || return 2
+  read -r total passed failed matching <<< "$counts"
   printf '%s\t%s\t%s\t%s\t%s' "$status" "$total" "$passed" "$failed" "$matching"
-  test "$total" = 2 && test $((passed + failed)) = 2 || return 2
+  test "$total" = 3 && test $((passed + failed)) = 3 || return 2
   jq -e '.verified == true' "$directory/loaded-library.json" > /dev/null || return 2
   if test "$status" = 0 && test "$failed" = 0; then return 0; fi
   if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$matching"; then return 1; fi
@@ -334,7 +331,7 @@ for iteration in $(seq 1 "$rebind_repetitions"); do
   if test "$outcome" -ne 0; then candidate_failed=1; fi
 done
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-  --minimum-expected-tests 4360 --timeout "$full_suite_timeout" --report-trx --coverlet \
+  --minimum-expected-tests 4361 --timeout "$full_suite_timeout" --report-trx --coverlet \
   --results-directory "$results/full-suite" || candidate_failed=1
 if test "$self_contained" = 1 && test "$tls_backend" = openssl; then
   # Exercise actual managed protocol/application behavior on the tests-disabled library.
@@ -343,7 +340,7 @@ if test "$self_contained" = 1 && test "$tls_backend" = openssl; then
     EMBEDIO_EXPECT_QUIC_LIBRARY_SHA256="$(jq -r .sha256 "$stage/build-receipt.json")" \
     EMBEDIO_QUIC_LIBRARY_EVIDENCE="$results/production-loaded-library.json" \
     dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-    --minimum-expected-tests 4360 --timeout "$full_suite_timeout" --report-trx --coverlet \
+    --minimum-expected-tests 4361 --timeout "$full_suite_timeout" --report-trx --coverlet \
     --results-directory "$results/production-full-suite" || candidate_failed=1
   jq -e '.verified and (.sha256 | length == 64)' "$results/production-loaded-library.json" > /dev/null || candidate_failed=1
 fi
