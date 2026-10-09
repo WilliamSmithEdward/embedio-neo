@@ -18,6 +18,16 @@
   close status codes and UTF-8 reasons before processing or echoing them (#190). See the
   [compatibility notes](docs/compatibility/migration.md#managed-websocket-framing-unreleased).
 
+- Enforce `WebSocketModule.MaxMessageSize` on the managed listener before payloads
+  are buffered, complete the close handshake after rejecting oversized or invalid
+  text messages, deliver messages received just before the peer's close, and stop
+  failed close writes from escaping as unobserved task exceptions. Buffered frame
+  reads, 64 KiB send frames and fewer copies raise managed echo throughput by
+  about 8x for 64 KiB messages and 11x for 1 MiB messages in the documented
+  benchmark. A bounded stateful fuzzer now runs in the Fuzz workflow (#190). See the
+  [migration notes](docs/compatibility/migration.md#managed-websocket-limits-delivery-and-send-framing-unreleased)
+  and [benchmark](test/EmbedIO.Performance/README.md#managed-websocket-echo).
+
 - Keep the managed WebSocket receiver active during local closing so valid peer acknowledgements complete promptly. Use asynchronous receive-completion signaling while preserving close payloads, cancellation and shutdown limits (issue #184).
 
 - Remove compiler/analyzer suppressions and null-forgiving operators, correct nullable

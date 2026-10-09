@@ -168,6 +168,72 @@ stable-JIT runs. Record CPU topology and source revisions as well as assembly
 hashes. The 2026-10-08 validation-cost experiment is recorded in
 [the engine program](../../docs/project/http-engine.md#utf-8-reader-cost-experiment-2026-10-08).
 
+## Managed WebSocket echo
+
+`--websocket-host --url <prefix>` runs a managed-listener echo module, and
+`--websocket-load --url <prefix> --size <bytes> --fragments <n> --connections <n> --seconds <s> [--text]`
+is an independent RFC 6455 client in a separate process. The client masks
+every frame, stamps a sequence number into each payload, verifies every
+echoed byte, opcode and length, and finishes each connection with a full close
+handshake. Latency spans the client's send through the complete verified echo
+(closed loop, one outstanding message per connection). The host reports
+allocations, GC counts, CPU time, and the bytes promoted by a forced, blocking,
+compacting full collection both with connections open and idle and after they
+close. Only public EmbedIO APIs are used.
+
+`CompareWebSocket.ps1 -BaselineRunner <dir>/EmbedIO.Performance.dll -CandidateRunner <dir>/EmbedIO.Performance.dll -OutputDirectory <dir>`
+alternates baseline and candidate hosts per round across six workloads. Copy
+one harness build into two directories and replace only EmbedIO.dll in the
+baseline copy. The client always comes from the candidate directory. With eight
+or more logical processors the host is pinned to CPUs 0-3 and the client to
+4-7. Each run writes one JSON per side and round, plus the raw host lines.
+
+### Results for #190 (2026-10-09)
+
+Environment: AMD Ryzen 7 9800X3D (8 cores, 16 threads), 64 GB, Windows 11 Pro
+10.0.26300, .NET 10.0.12, loopback TCP, 8 s measured after a 2 s warmup,
+three alternating rounds; medians shown. Baseline: PR #182 head `9e1fe09`
+(core SHA-256 `101d2192...`). Candidate: branch `codex/websocket-hardening`
+at `50c0d33` (core `ecc64587...`). Harness assembly `30c52773...` on both sides.
+
+| Workload | msg/s before | msg/s after | p50 us before / after | p99 us before / after | Allocated B/msg before / after |
+|---|---:|---:|---:|---:|---:|
+| 32 B binary, 1 connection | 28,552 | 35,918 | 32.6 / 25.3 | 83.9 / 68.3 | 1,464 / 832 |
+| 32 B binary, 16 connections | 254,924 | 277,275 | 60.2 / 55.3 | 96.4 / 97.3 | 1,464 / 832 |
+| 1 KiB text, 4 connections | 101,139 | 140,063 | 36.6 / 27.6 | 65.6 / 43.5 | 7,808 / 3,928 |
+| 64 KiB binary, 4 connections | 4,730 | 37,282 | 782 / 59 | 1,050 / 141 | 281,203 / 66,440 |
+| 64 KiB as 16 fragments, 4 connections | 4,554 | 31,276 | 794 / 82 | 1,137 / 243 | 350,309 / 138,608 |
+| 1 MiB binary, 1 connection | 82 | 876 | 8,816 / 552 | 25,039 / 7,507 | 4,455,501 / 1,051,731 |
+
+Bytes surviving a full collection after load, connections open and idle
+(before / after): 32 B 413 / 417 KiB, 16 connections 690 / 726 KiB,
+1 KiB 472 / 498 KiB, 64 KiB 472 / 1,251 KiB, fragmented 473 / 1,509 KiB,
+1 MiB 413 / 2,147 KiB. After every client closed, both sides read 20 to 95 KiB
+higher than with connections open, and the gap between them is unchanged.
+
+Limitations and retained measurements:
+
+- An A/A run (baseline on both sides) varied by about 10% in throughput and
+  far more in p99, so the single-connection 32 B gain is within noise: in one
+  of three rounds the baseline was faster. Allocation counts were identical
+  from round to round. The 64 KiB and 1 MiB gains are an order of magnitude
+  larger than that noise.
+- The 1 MiB candidate p99 varied from 2.5 to 13.9 ms between rounds. Each
+  1 MiB payload is a large-object allocation; the candidate ran 2,336 gen2
+  collections in 8 s against 440 for the baseline, which handled a tenth of
+  the messages.
+- The larger retained figures after 64 KiB and 1 MiB load are buffers held
+  by the process-wide `ArrayPool<byte>.Shared` (64 KiB send frames rent from
+  its 128 KiB bucket; large receives use 64 KiB chunks). The pool bounds
+  this per processor and trims under memory pressure; it does not grow with
+  the number of connections. A run with 16 KiB send frames held 0.4 to
+  0.6 MiB less but lost 17 to 32% of large-message throughput and doubled the
+  1 MiB p99, so it was not adopted.
+- The first comparison measured retained memory with `GC.GetTotalMemory`,
+  which returned negative values in this host on .NET 10; those columns were
+  discarded and the host now uses `GC.GetGCMemoryInfo`.
+- One machine, loopback only, no TLS, no HTTP/2 tunnel, no slow peers and no
+  Linux or macOS runs. Not an HTTP Arena result.
 
 ### HTTP/2 flow scheduler comparison
 

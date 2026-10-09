@@ -615,6 +615,40 @@ shutdown state, an invalid peer may observe transport closure/reset rather than
 a readable close frame. Applications must not rely on echoing malformed close
 payloads. This change does not alter application text-message callback policy.
 
+### Managed WebSocket limits, delivery and send framing (unreleased)
+
+These changes from [#190](https://github.com/WilliamSmithEdward/embedio-neo/issues/190)
+affect only the managed listener (`HttpListenerMode.EmbedIO`), over HTTP/1.1
+and RFC 8441 HTTP/2 tunnels. Public APIs, defaults and the Microsoft backend
+are unchanged.
+
+- `WebSocketModule.MaxMessageSize` is now enforced. It was documented but the
+  managed listener ignored it, so applications that set it received messages
+  of any size. A message whose frames add up to more than the limit now closes
+  the connection with 1009 before `OnMessageReceivedAsync` runs and before its
+  payload is buffered. The default of 0 still means no limit. Review the value
+  you set if you relied on larger messages arriving.
+- After rejecting a message (1009, or 1007 for invalid UTF-8 text), the server
+  skips the rejected payload, sends its close frame and keeps reading, without
+  delivering anything, until the peer's close arrives or the existing
+  one-second close timeout passes. Previously it closed the transport at once,
+  and a peer that was still sending often saw a connection reset instead of
+  the close status. Other protocol errors still close immediately.
+- A message completed on the wire before the peer's close frame is now always
+  delivered when the module has subscribed. The callback stopped as soon as the
+  close was processed, and such messages were often dropped. The disconnect is
+  reported after the last delivered message has been handed to
+  `OnMessageReceivedAsync`. A message still queued when a connection closes
+  before the module subscribes is discarded, as before.
+- Outgoing messages are split into frames of up to 64 KiB instead of 1016
+  bytes. RFC 6455 lets a sender fragment freely and every conforming client
+  reassembles messages, but a client that read individual frames, rather
+  than whole messages, now sees fewer, larger frames.
+- A WebSocket frame sent in the same TCP segment as the upgrade request is
+  still lost. RFC 6455 requires clients to wait for the 101 response, so
+  conforming clients are unaffected; the correction belongs to the HTTP/1
+  transport and is tracked in #190.
+
 ## Warning-free API cleanup (unreleased, owner-approved)
 
 William approved the necessary source and binary changes for the compiler/analyzer
