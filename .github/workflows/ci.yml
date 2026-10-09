@@ -11,6 +11,10 @@ on:
         description: Regenerate test-only MAUI HTTPS dependency locks for review
         type: boolean
         default: false
+      quic-cleanup-experiment:
+        description: Compare pinned MsQuic source with a test-only macOS socket cleanup patch
+        type: boolean
+        default: false
       quic-rebind-probe:
         description: Trace native macOS UDP bind/close ordering in the independent QUIC rebind probe
         type: boolean
@@ -155,6 +159,32 @@ jobs:
         with:
           name: test-results-${{ matrix.os }}
           path: TestResults/
+          if-no-files-found: error
+
+  quic-cleanup-experiment:
+    name: Compare macOS native socket cleanup
+    if: inputs.quic-cleanup-experiment == true
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Prepare native build tools
+        run: brew install cmake openssl@3
+      - name: Compare pinned source with the test-only cleanup patch
+        run: bash test/EmbedIO.RuntimeCloseProbe/quic-cleanup-experiment.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: quic-cleanup-experiment
+          path: TestResults/quic-cleanup-experiment/
           if-no-files-found: error
 
   runtime-close-probe:

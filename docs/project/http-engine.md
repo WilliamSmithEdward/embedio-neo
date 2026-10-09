@@ -3922,3 +3922,36 @@ and `quic-trace-macos-job2.log`. The native JSONL SHA-256 is
 `aec15230393614d928aefb2f79264b0a77c4b152fc153e31e48376c27700abb7`.
 The initial header-build failure remains recorded separately. Both diagnostic
 runs retain their real failed status; the PR remains draft/unmerged.
+
+### Test-only native cleanup candidate
+
+The optional CI dispatch input `quic-cleanup-experiment` builds both an unmodified
+control and a patched candidate from MsQuic commit
+`819ab74f851ee168504cbc392ec32e7bed1d82e9` (2.6.2), using the same compiler,
+quictls provider, pinned TLS/gtest submodules and system libcrypto. It does not
+install, package or change the engine's native dependency. Ordinary CI keeps
+the pinned bottle and its unsuppressed rebind regression.
+
+The candidate patch closes and invalidates the UDP descriptor synchronously
+after I/O rundown and read-event removal. It retains the existing queued
+shutdown and context reclamation. This aims to release the endpoint before
+returning from native deletion without freeing context referenced by previously
+returned events. I/O callbacks acquire the rundown guard before accessing the
+descriptor; binding deletion requires a zero binding reference count. These
+source observations motivate the experiment; they do not prove all concurrent
+send/event lifetime cases safe.
+
+The experiment retains three untraced and three traced control runs. Only
+the specific macOS socket error 48 is accepted as a negative-control result;
+missing reports, loader mismatches and other failures stop the experiment.
+It then requires five untraced and five traced candidate runs of 4,096 immediate
+rebinds, native datapath tests, five repetitions of both managed raw QUIC rebind
+cases (including established peers), and the full 3,400-case coverage suite.
+Control datapath failures are retained as diagnostic evidence. Candidate
+failures remain failures. Source/patch hashes, native build configuration,
+compiler/OpenSSL identity, dylib hashes, loader logs, traces and test reports
+are uploaded together.
+
+Local preparation verifies patch application against the exact pinned source,
+shell syntax and the workflow security audit. Native macOS builds and outcomes
+remain pending; no cleanup repair or shipping readiness is claimed.
