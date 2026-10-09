@@ -19,8 +19,8 @@ internal static class WebSocketFuzz
 {
     private const BindingFlags Hidden = BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
     private static readonly Assembly Core = typeof(EmbedIO.WebServer).Assembly;
-    private static readonly Type SocketType = Core.GetType("EmbedIO.WebSockets.Internal.WebSocket", true)!;
-    private static readonly Type EventArgsType = Core.GetType("EmbedIO.WebSockets.Internal.MessageEventArgs", true)!;
+    private static readonly Type SocketType = Core.GetType("EmbedIO.WebSockets.Internal.WebSocket", true) ?? throw new InvalidOperationException("Missing socket type.");
+    private static readonly Type EventArgsType = Core.GetType("EmbedIO.WebSockets.Internal.MessageEventArgs", true) ?? throw new InvalidOperationException("Missing message type.");
     private static readonly MethodInfo FromStream = SocketType.GetMethod("FromStream", Hidden) ?? throw new InvalidOperationException("Missing FromStream.");
     private static readonly MethodInfo SetLimit = SocketType.GetMethod("SetAcceptedMaxMessageSize", Hidden) ?? throw new InvalidOperationException("Missing limit setter.");
     private static readonly MethodInfo WaitForClose = SocketType.GetMethod("WaitForCloseAsync", Hidden) ?? throw new InvalidOperationException("Missing close observer.");
@@ -103,7 +103,7 @@ internal static class WebSocketFuzz
     {
         internal readonly ConcurrentQueue<Message> Messages = new();
         public void Handle(object? sender, EventArgs args)
-            => Messages.Enqueue(new Message(Convert.ToInt32(EventOpcode.GetValue(args)!, System.Globalization.CultureInfo.InvariantCulture), Convert.ToHexString((byte[])RawData.GetValue(args)!)));
+            => Messages.Enqueue(new Message(Convert.ToInt32(EventOpcode.GetValue(args), System.Globalization.CultureInfo.InvariantCulture), Convert.ToHexString(RawData.GetValue(args) as byte[] ?? throw new InvalidDataException("Message has no data."))));
     }
 
     private static async Task<Outcome> RunEngine(byte[] input, int limit, int readFault, int writeFault, int chunkSeed)
@@ -112,13 +112,13 @@ internal static class WebSocketFuzz
         var closes = 0;
         SetLimit.Invoke(null, new object[] { limit });
         object socket;
-        try { socket = FromStream.Invoke(null, new object[] { transport, (Action)(() => Interlocked.Increment(ref closes)) })!; }
+        try { socket = FromStream.Invoke(null, new object[] { transport, (Action)(() => Interlocked.Increment(ref closes)) }) ?? throw new InvalidOperationException("Missing socket."); }
         finally { SetLimit.Invoke(null, new object[] { 0 }); }
         var collector = new Collector();
         var eventInfo = SocketType.GetEvent("OnMessage") ?? throw new InvalidOperationException("Missing OnMessage.");
-        eventInfo.AddEventHandler(socket, Delegate.CreateDelegate(eventInfo.EventHandlerType!, collector, typeof(Collector).GetMethod(nameof(Collector.Handle))!));
+        eventInfo.AddEventHandler(socket, Delegate.CreateDelegate(eventInfo.EventHandlerType ?? throw new InvalidOperationException("Missing handler type."), collector, typeof(Collector).GetMethod(nameof(Collector.Handle)) ?? throw new InvalidOperationException("Missing handler.")));
         transport.Subscribed.SetResult();
-        var closed = (Task)WaitForClose.Invoke(socket, new object[] { CancellationToken.None })!;
+        var closed = WaitForClose.Invoke(socket, new object[] { CancellationToken.None }) as Task ?? throw new InvalidOperationException("Missing close task.");
         if (await Task.WhenAny(closed, Task.Delay(TimeSpan.FromSeconds(10))) != closed)
             throw new TimeoutException("The socket never completed its close.");
         await closed;

@@ -96,7 +96,8 @@ internal static class WebSocketEcho
         private readonly TcpClient _tcp = new() { NoDelay = true };
         private readonly byte[] _input = new byte[1 << 16];
         private int _start, _end;
-        private NetworkStream _stream = null!;
+        private NetworkStream? _stream;
+        private NetworkStream Transport => _stream ?? throw new InvalidOperationException("The connection is not open.");
 
         internal static async Task<Connection> OpenAsync(Uri uri, CancellationToken token)
         {
@@ -104,7 +105,7 @@ internal static class WebSocketEcho
             await connection._tcp.ConnectAsync(IPAddress.Loopback, uri.Port, token).ConfigureAwait(false);
             connection._stream = connection._tcp.GetStream();
             var request = Encoding.ASCII.GetBytes($"GET /ws HTTP/1.1\r\nHost: {uri.Authority}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n");
-            await connection._stream.WriteAsync(request, token).ConfigureAwait(false);
+            await connection.Transport.WriteAsync(request, token).ConfigureAwait(false);
             var head = new StringBuilder();
             while (!head.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal))
             {
@@ -136,7 +137,7 @@ internal static class WebSocketEcho
             return offset;
         }
 
-        internal ValueTask SendAsync(byte[] wire, int count, CancellationToken token) => _stream.WriteAsync(wire.AsMemory(0, count), token);
+        internal ValueTask SendAsync(byte[] wire, int count, CancellationToken token) => Transport.WriteAsync(wire.AsMemory(0, count), token);
 
         private async ValueTask FillAsync(int needed, CancellationToken token)
         {
@@ -144,7 +145,7 @@ internal static class WebSocketEcho
             if (_start > 0) { Buffer.BlockCopy(_input, _start, _input, 0, _end - _start); _end -= _start; _start = 0; }
             while (_end < needed)
             {
-                var read = await _stream.ReadAsync(_input.AsMemory(_end), token).ConfigureAwait(false);
+                var read = await Transport.ReadAsync(_input.AsMemory(_end), token).ConfigureAwait(false);
                 if (read == 0) throw new EndOfStreamException("Server closed the connection.");
                 _end += read;
             }
@@ -183,7 +184,7 @@ internal static class WebSocketEcho
         {
             var close = new byte[8]; close[0] = 0x88; close[1] = 0x82; Key.CopyTo(close, 2);
             close[6] = (byte)(0x03 ^ Key[0]); close[7] = (byte)(0xe8 ^ Key[1]);
-            await _stream.WriteAsync(close, token).ConfigureAwait(false);
+            await Transport.WriteAsync(close, token).ConfigureAwait(false);
             await FillAsync(2, token).ConfigureAwait(false);
             if ((_input[_start] & 0x0f) != 8) throw new InvalidDataException("Expected a close acknowledgement.");
             var frame = 2 + (_input[_start + 1] & 0x7f);

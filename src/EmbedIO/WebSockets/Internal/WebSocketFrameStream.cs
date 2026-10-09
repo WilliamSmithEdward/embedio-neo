@@ -20,7 +20,7 @@ namespace EmbedIO.WebSockets.Internal
 
         private static readonly UTF8Encoding StrictUtf8 = new(false, true);
         private readonly Stream? _stream;
-        private byte[]? _input;
+        private readonly byte[] _input = new byte[InputBufferLength];
         private int _start;
         private int _end;
         private long _messageLength;
@@ -35,6 +35,8 @@ namespace EmbedIO.WebSockets.Internal
             _stream = stream;
             _ = unmask;
         }
+
+        private Stream Transport => _stream ?? throw new InvalidOperationException("The frame reader has no stream.");
 
         // Zero disables the check. Applies to the total payload of a data message.
         internal int MaxMessageSize { get; set; }
@@ -52,7 +54,7 @@ namespace EmbedIO.WebSockets.Internal
 
             if (!await FillAsync(2).ConfigureAwait(false))
                 throw new WebSocketException("The header of a frame cannot be read from the stream.");
-            var input = _input!;
+            var input = _input;
             var frame = ProcessHeader(input[_start], input[_start + 1]);
             _start += 2;
             // Reject invalid mask/flags/fragment state before reading attacker-
@@ -101,7 +103,7 @@ namespace EmbedIO.WebSockets.Internal
 
         private async Task SkipAsync()
         {
-            var input = _input!;
+            var input = _input;
             var buffered = Math.Min(_end - _start, _skip);
             _start += (int)buffered;
             _skip -= buffered;
@@ -109,7 +111,7 @@ namespace EmbedIO.WebSockets.Internal
             _start = _end = 0;
             while (_skip > 0)
             {
-                var read = await _stream!.ReadAsync(input, 0, (int)Math.Min(input.Length, _skip)).ConfigureAwait(false);
+                var read = await Transport.ReadAsync(input, 0, (int)Math.Min(input.Length, _skip)).ConfigureAwait(false);
                 if (read == 0) throw Truncated();
                 _skip -= read;
             }
@@ -176,7 +178,7 @@ namespace EmbedIO.WebSockets.Internal
         // request is satisfied, so validation can stop before further bytes are read.
         private async Task<bool> FillAsync(int count)
         {
-            var input = _input ??= new byte[InputBufferLength];
+            var input = _input;
             if (_end - _start >= count) return true;
             if (_start > 0)
             {
@@ -186,7 +188,7 @@ namespace EmbedIO.WebSockets.Internal
             }
             while (_end < count)
             {
-                var read = await _stream!.ReadAsync(input, _end, input.Length - _end).ConfigureAwait(false);
+                var read = await Transport.ReadAsync(input, _end, input.Length - _end).ConfigureAwait(false);
                 if (read == 0) return false;
                 _end += read;
             }
@@ -210,7 +212,7 @@ namespace EmbedIO.WebSockets.Internal
             }
 
             var bytes = new byte[len];
-            Buffer.BlockCopy(_input!, _start, bytes, 0, len);
+            Buffer.BlockCopy(_input, _start, bytes, 0, len);
             _start += len;
             frame.ExtendedPayloadLength = bytes;
             var length = frame.FullPayloadLength;
@@ -238,18 +240,18 @@ namespace EmbedIO.WebSockets.Internal
                 // Small payloads are read ahead with the following headers.
                 if (!await FillAsync(length).ConfigureAwait(false)) throw Truncated();
                 payload = new byte[length];
-                Buffer.BlockCopy(_input!, _start, payload, 0, length);
+                Buffer.BlockCopy(_input, _start, payload, 0, length);
                 _start += length;
             }
             else if (length <= ExactAllocationLimit)
             {
                 payload = new byte[length];
                 var filled = Math.Min(_end - _start, length);
-                Buffer.BlockCopy(_input!, _start, payload, 0, filled);
+                Buffer.BlockCopy(_input, _start, payload, 0, filled);
                 _start += filled;
                 while (filled < length)
                 {
-                    var read = await _stream!.ReadAsync(payload, filled, length - filled).ConfigureAwait(false);
+                    var read = await Transport.ReadAsync(payload, filled, length - filled).ConfigureAwait(false);
                     if (read == 0) throw Truncated();
                     filled += read;
                 }
@@ -275,11 +277,11 @@ namespace EmbedIO.WebSockets.Internal
                     chunks.Add(chunk);
                     var wanted = Math.Min(ExactAllocationLimit, length - filled);
                     var offset = Math.Min(_end - _start, wanted);
-                    Buffer.BlockCopy(_input!, _start, chunk, 0, offset);
+                    Buffer.BlockCopy(_input, _start, chunk, 0, offset);
                     _start += offset;
                     while (offset < wanted)
                     {
-                        var read = await _stream!.ReadAsync(chunk, offset, wanted - offset).ConfigureAwait(false);
+                        var read = await Transport.ReadAsync(chunk, offset, wanted - offset).ConfigureAwait(false);
                         if (read == 0) throw Truncated();
                         offset += read;
                     }

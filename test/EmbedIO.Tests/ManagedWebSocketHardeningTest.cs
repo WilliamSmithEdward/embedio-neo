@@ -53,7 +53,12 @@ namespace EmbedIO.Tests
         {
             private static readonly byte[] Key = { 0x37, 0xfa, 0x21, 0x3d };
             private readonly TcpClient _tcp = new();
-            internal NetworkStream Stream { get; private set; } = null!;
+            private NetworkStream? _stream;
+            internal NetworkStream Stream
+            {
+                get => _stream ?? throw new InvalidOperationException("The client is not connected.");
+                private set => _stream = value;
+            }
 
             internal static async Task<RawClient> ConnectAsync(string url, CancellationToken token, byte[]? pipelined = null)
             {
