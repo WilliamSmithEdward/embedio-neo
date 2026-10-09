@@ -99,6 +99,47 @@ namespace EmbedIO.Tests
             Assert.That(calls, Is.EqualTo(1));
         }
 
+        // A protocol failure whose close frame cannot be written must still release the
+        // connection once, and the write error must not fault the detached receive task.
+        [Test]
+        public async Task FailedCloseWriteAfterProtocolErrorIsContained()
+        {
+            var unobserved = 0;
+            EventHandler<UnobservedTaskExceptionEventArgs> observe = (_, e) =>
+            {
+                if (e.Exception.ToString().Contains("Injected close write failure.", StringComparison.Ordinal)) Interlocked.Increment(ref unobserved);
+            };
+            TaskScheduler.UnobservedTaskException += observe;
+            try
+            {
+                for (var attempt = 0; attempt < 20; ++attempt)
+                {
+                    var calls = 0;
+                    // An unmasked client frame fails the connection with 1002.
+                    using var transport = new FailingWriteStream(new byte[] { 0x81, 0x01, 0x41 });
+                    var socket = (SocketType.GetMethod("FromStream", BindingFlags.Static | BindingFlags.NonPublic)
+                        ?? throw new AssertionException("Missing FromStream.")).Invoke(null, new object[] { transport, (Action)(() => Interlocked.Increment(ref calls)) })
+                        ?? throw new AssertionException("Missing socket.");
+                    await Observe(socket).WaitAsync(TimeSpan.FromSeconds(5));
+                    Assert.That(((EmbedIO.WebSockets.IWebSocket)socket).State, Is.EqualTo(WebSocketState.Closed));
+                    Assert.That(calls, Is.EqualTo(1));
+                    ((IDisposable)socket).Dispose();
+                }
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                Assert.That(Volatile.Read(ref unobserved), Is.Zero);
+            }
+            finally { TaskScheduler.UnobservedTaskException -= observe; }
+        }
+
+        private sealed class FailingWriteStream : MemoryStream
+        {
+            internal FailingWriteStream(byte[] input) : base(input) { }
+            public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+                => Task.FromException(new IOException("Injected close write failure."));
+        }
+
         [Test]
         public async Task ThrowingTransportCloseStillCompletesObservers()
         {

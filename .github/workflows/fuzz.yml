@@ -2,9 +2,9 @@ name: Fuzz
 on:
   push:
     branches: [main]
-    paths: [src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
+    paths: [src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
   pull_request:
-    paths: [src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
+    paths: [src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
   schedule:
     - cron: '23 4 * * *'
   workflow_dispatch:
@@ -45,6 +45,11 @@ jobs:
         run: |
           seed=$((GITHUB_RUN_ID % 2147483647))
           dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --http3-transport "$seed" 100000 2>&1 | tee TestResults/fuzz/http3-transport.log
+      - name: Compare managed WebSocket sessions with the stateful oracle
+        shell: bash
+        run: |
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --websocket "$seed" 100000 2>&1 | tee TestResults/fuzz/websocket.log
       - name: Retain campaign metadata and failure reproducers
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

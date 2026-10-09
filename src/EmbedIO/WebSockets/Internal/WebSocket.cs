@@ -822,7 +822,7 @@ namespace EmbedIO.WebSockets.Internal
 
                             // Keep reading the close acknowledgement without dispatching
                             // new application messages once local closing has started.
-                            if (_readyState == WebSocketState.CloseSent && frame.Opcode != Opcode.Close)
+                            if (_readyState != WebSocketState.Open && frame.Opcode != Opcode.Close)
                             {
                                 if (frame.IsFragment) DiscardFragmentFrame(frame);
                                 continue;
@@ -847,7 +847,14 @@ namespace EmbedIO.WebSockets.Internal
                         }
                         catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
                         {
-                            Fatal("An exception has occurred while receiving.", ex);
+                            // Sending the failure status can itself fail on a broken
+                            // transport. Resources are released either way; nothing
+                            // observes this task, so the error must not escape it.
+                            try { Fatal("An exception has occurred while receiving.", ex); }
+                            catch (Exception closeError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(closeError))
+                            {
+                                closeError.Log(nameof(WebSocket));
+                            }
                             return;
                         }
                     }
