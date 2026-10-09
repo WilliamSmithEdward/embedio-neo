@@ -87,9 +87,9 @@ namespace EmbedIO.Net.Internal.Http2
             foreach (var frame in frames)
             {
                 if (frame == null) throw new ArgumentException("Missing frame.", nameof(frames));
-                if (frame.Payload.Length > peerMaximum) throw new ArgumentException("Outbound frame exceeds peer maximum.", nameof(frames));
+                if (frame.PayloadLength > peerMaximum) throw new ArgumentException("Outbound frame exceeds peer maximum.", nameof(frames));
                 frame.ValidateShape();
-                capacity = Math.Max(capacity, frame.Payload.Length + 9);
+                capacity = Math.Max(capacity, frame.PayloadLength + 9);
             }
             await _writeGate.WaitAsync(requestToken).ConfigureAwait(false);
             byte[]? buffer = null;
@@ -105,12 +105,12 @@ namespace EmbedIO.Net.Internal.Http2
                 buffer = ArrayPool<byte>.Shared.Rent(capacity);
                 foreach (var frame in frames)
                 {
-                    var length = frame.Payload.Length;
+                    var length = frame.PayloadLength;
                     buffer[0] = (byte)(length >> 16); buffer[1] = (byte)(length >> 8); buffer[2] = (byte)length;
                     buffer[3] = frame.Type; buffer[4] = frame.Flags;
                     buffer[5] = (byte)(frame.StreamId >> 24); buffer[6] = (byte)(frame.StreamId >> 16);
                     buffer[7] = (byte)(frame.StreamId >> 8); buffer[8] = (byte)frame.StreamId;
-                    Buffer.BlockCopy(frame.Payload, 0, buffer, 9, length);
+                    Buffer.BlockCopy(frame.Payload, frame.PayloadOffset, buffer, 9, length);
                     // Once any bytes of a frame batch may be on the wire, only
                     // the connection lifetime may interrupt its shared transport.
                     writeStarted = true;

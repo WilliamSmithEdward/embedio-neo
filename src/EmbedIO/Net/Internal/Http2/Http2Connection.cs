@@ -182,7 +182,7 @@ namespace EmbedIO.Net.Internal.Http2
         private void ReturnReservations(Http2Frame[] frames)
         {
             foreach (var frame in frames)
-                if (frame.Type == 0) SendFlow.ReturnUnusedReservation(frame.StreamId, frame.Payload.Length);
+                if (frame.Type == 0) SendFlow.ReturnUnusedReservation(frame.StreamId, frame.PayloadLength);
         }
 
         internal async Task SendAsync(Http2Frame[] frames, CancellationToken token)

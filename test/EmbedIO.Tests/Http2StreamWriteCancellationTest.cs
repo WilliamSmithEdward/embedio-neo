@@ -26,11 +26,11 @@ namespace EmbedIO.Tests
         {
             var reservations = new Dictionary<int, int>();
             foreach (var frame in frames)
-                if (Property<byte>(frame, "Type") == 0 && Property<byte[]>(frame, "Payload").Length > 0)
+                if (Property<byte>(frame, "Type") == 0 && Property<int>(frame, "PayloadLength") > 0)
                 {
                     var id = Property<int>(frame, "StreamId");
                     reservations.TryGetValue(id, out var previous);
-                    reservations[id] = previous + Property<byte[]>(frame, "Payload").Length;
+                    reservations[id] = previous + Property<int>(frame, "PayloadLength");
                 }
             var flow = ConnectionType.GetProperty("SendFlow", Flags)?.GetValue(connection)
                 ?? throw new AssertionException("Missing send flow control.");

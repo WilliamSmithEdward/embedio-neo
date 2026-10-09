@@ -5944,3 +5944,71 @@ under ignored `TestResults/http-engine/f5-*`.
 These tests cover wire commitment and resumed-response behavior. The original
 independent hyper-h2 SETTINGS-shrink campaign, full suites and exact-head CI are
 still required; no all-platform conformance completion or speedup is claimed.
+
+
+### Independent F5 campaign and client-oracle limits
+
+On exact engine `bbe0148`, the unmodified raw-frame SETTINGS-shrink case passes
+40 trials over plaintext and 40 over TLS, with no negative post-ACK DATA debit.
+The original stateful driver times out at seed 20261009 / iteration 62 because
+its final restoration updates only connection credit while a live stream remains
+negative after a SETTINGS shrink. Restoring stream credit is required by RFC 9113
+Section 6.9.2. A separately reviewed driver removes the known-F4 connection-loss
+allowance and restores both flow-control levels before requiring completion.
+
+Two independent decoder probes identify additional hyper-h2 4.3.0 limitations:
+its initial ACK consumes a subsequently queued setting override, and it rejects
+a permitted unpadded zero-length END_STREAM when SETTINGS left negative stream
+credit (RFC 9113 Section 6.9.1). A labeled adapted driver awaits the startup ACK
+and uses a narrow, version-guarded empty-END_STREAM adapter that preserves the
+negative credit. The probe verifies that nonempty overrun and idle-stream errors
+still fail. Every original failed run remains retained; these results are not
+represented as unmodified hyper-h2 conformance.
+
+The adapted campaign passes 300 plaintext and 300 TLS iterations on `bbe0148`,
+1,188 streams per transport, no server resets or accepted known-F4 closures and
+no active handlers after settlement. Handle growth is +9 / +1 and managed growth
+about 1.04 MB / 0.12 MB. The empty-END_STREAM adapter was not invoked in those
+successful samples; its forced positive/negative probes pass separately.
+Exact engine/driver/binary hashes, probes, original failures and successful
+samples are under ignored `TestResults/http-engine/f5-*`. Longer, other-seed,
+other-platform and other-client campaigns remain required.
+
+### Outgoing HTTP/2 DATA buffer ownership and allocation
+
+Each DATA frame previously allocated and copied its own payload, then copied it
+again into the transport buffer. Outgoing DATA now borrows a bounded slice of the
+caller's array for the awaited write. The transport still constructs one
+contiguous pooled wire frame. Received/header/control frames keep their existing
+complete payloads. Shape checks, SETTINGS commitment, canceled-queue credit
+refund and response-byte accounting use the slice length. No public API, target,
+production dependency or default changes.
+
+Five new cases verify empty/end slices, a nonzero-offset slice of a parent larger
+than the peer frame limit, unchanged owner bytes and cancellation credit based on
+the reserved slice rather than its 1 MiB owner. All 141 affected cases pass locally.
+The expanded Windows protocol/WebSocket set passes 849 cases, Linux passes all
+385 HTTP/2 cases, and all four resource budgets pass. Both library targets build;
+formatting/parser/suppression checks pass. Discovery floors increase by five to
+4,350. Full-suite and final exact-head platform checks remain required.
+
+A separate-process comparison uses clean `9f475d7` as control, the uncommitted
+DATA-slice candidate, and installed Kestrel 10.0.12. The same #199 harness code is
+used for every engine; the private runner adds `--baseline-modern` solely to
+allow a modern-engine control on HTTP/2 (its default main-core restriction is
+unchanged). Source patch, engine and matching harness hashes are recorded.
+Three alternating rounds, 2 s warmup / 5 s measurement / 1 s idle, four connections
+by four streams over TLS, disjoint server/client CPUs 0-7 / 8-15 on the same
+Windows Ryzen 9800X3D development host. All 18 samples pass byte/status/framing
+validation with no failures and no remaining server sockets.
+
+| 1 MiB workload | Control allocated B/request | Candidate allocated B/request | Control CPU us/request | Candidate CPU us/request |
+| --- | ---: | ---: | ---: | ---: |
+| Fixed response | 1,143,800 | 93,388 | 1,894.4 | 1,666.3 |
+| Streaming, flushed every 16 KiB | 1,181,201 | 130,734 | 1,971.9 | 1,721.9 |
+
+These medians show about 92% / 89% less allocation and lower CPU for these two
+workloads. Short closed-loop samples on one shared host do not establish a
+universal throughput, latency or Kestrel ranking improvement. Other transports,
+platforms, upload/inbound pooling and long-running memory behavior remain work.
+Evidence is under ignored `TestResults/benchmark-review/data-slice-*`.

@@ -18,11 +18,26 @@ namespace EmbedIO.Net.Internal.Http2
             if (streamId < 0) throw new ArgumentOutOfRangeException(nameof(streamId));
             Type = type; Flags = flags; StreamId = streamId;
             Payload = payload ?? throw new ArgumentNullException(nameof(payload));
+            PayloadLength = payload.Length;
         }
+        private Http2Frame(byte flags, int streamId, byte[] payload, int offset, int count)
+            : this(0, flags, streamId, payload)
+        {
+            if (offset < 0 || count < 0 || offset > payload.Length - count)
+                throw new ArgumentOutOfRangeException(nameof(count));
+            PayloadOffset = offset;
+            PayloadLength = count;
+        }
+        // Outgoing DATA borrows this slice only until its awaited write completes.
+        // Received frames and every control/header frame retain complete payloads.
+        internal static Http2Frame BorrowData(byte flags, int streamId, byte[] payload, int offset, int count)
+            => new(flags, streamId, payload, offset, count);
         public byte Type { get; }
         public byte Flags { get; }
         public int StreamId { get; }
         public byte[] Payload { get; }
+        internal int PayloadOffset { get; }
+        internal int PayloadLength { get; }
         public Http2HeaderBlock? HeaderBlock { get; internal set; }
 
         // Validate after reading the complete frame so a stream error does not
@@ -30,7 +45,7 @@ namespace EmbedIO.Net.Internal.Http2
         // continuation ordering and SETTINGS values belong to connection state.
         internal void ValidateShape()
         {
-            var length = Payload.Length;
+            var length = PayloadLength;
             switch (Type)
             {
                 case 0: // DATA
@@ -75,7 +90,7 @@ namespace EmbedIO.Net.Internal.Http2
                 var prefix = (Flags & 8) != 0 ? 1 : 0;
                 var required = prefix + (Type == 1 && (Flags & 32) != 0 ? 5 : Type == 5 ? 4 : 0);
                 if (length < required) throw new Http2ProtocolException(6, "Missing frame prefix.");
-                if (prefix != 0 && Payload[0] > length - required)
+                if (prefix != 0 && Payload[PayloadOffset] > length - required)
                     throw new Http2ProtocolException(1, "Invalid frame padding.");
             }
         }
@@ -85,6 +100,6 @@ namespace EmbedIO.Net.Internal.Http2
         private void RequireConnection()
         { if (StreamId != 0) throw new Http2ProtocolException(1, "Frame requires stream zero."); }
         private void RequireLength(int length)
-        { if (Payload.Length != length) throw new Http2ProtocolException(6, "Invalid frame length."); }
+        { if (PayloadLength != length) throw new Http2ProtocolException(6, "Invalid frame length."); }
     }
 }
