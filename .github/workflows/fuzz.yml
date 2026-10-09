@@ -2,9 +2,9 @@ name: Fuzz
 on:
   push:
     branches: [main]
-    paths: [src/EmbedIO/Utilities/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
+    paths: [src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
   pull_request:
-    paths: [src/EmbedIO/Utilities/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
+    paths: [src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
   schedule:
     - cron: '23 4 * * *'
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   fuzz:
-    name: Fuzz URL paths and query data
+    name: Fuzz URL data and HTTP/1 head framing
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -28,3 +28,17 @@ jobs:
         run: |
           seed=$((GITHUB_RUN_ID % 2147483647))
           dotnet run --project test/EmbedIO.Fuzz -c Release --no-restore -- "$seed" 100000
+      - name: Compare HTTP/1 head mutations with the batch oracle
+        shell: bash
+        run: |
+          mkdir -p TestResults/fuzz
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          printf '%s\n' "$GITHUB_SHA" > TestResults/fuzz/source.txt
+          dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --http1-head "$seed" 100000 2>&1 | tee TestResults/fuzz/http1-head.log
+      - name: Retain campaign metadata and failure reproducers
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: http1-head-fuzz
+          path: TestResults/fuzz
+          if-no-files-found: ignore

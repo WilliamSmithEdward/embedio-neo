@@ -104,8 +104,23 @@ against the applicable specification rather than assuming either implementation
 is correct. Preserve reproducer inputs, seeds, source revisions, platform/runtime
 versions and campaign settings; minimize defects into regression cases.
 
-The existing URL/query fuzz workflow and the head-reader mutation tests do not
-satisfy this gate. Sustained integrated campaigns, coverage review, cross-platform
+The standalone campaign can be reproduced with:
+
+```sh
+dotnet run --project test/EmbedIO.Fuzz -c Release -- --http1-head 20261008 100000
+```
+
+It compares mutated heads against an independently written batch framing oracle,
+including near-limit heads, Latin-1, arbitrary byte mutations, randomized delivery,
+completion and failure states. On failure it reports the input bytes, seed,
+iteration and delivery chunks, plus runtime and assembly identity. The fuzz CI
+workflow runs 100,000 inputs with a run-specific seed and retains its log and
+source revision. The oracle intentionally covers head framing only: it does not
+validate header semantics, bodies or connection behavior. Temporary budget and
+character-decoding faults were both detected when checking the harness itself.
+
+The URL/query workflow, standalone head campaign and regression mutations do not
+satisfy the whole-engine gate. Sustained integrated campaigns, coverage review, cross-platform
 stress and investigation of every reproducible finding remain outstanding.
 
 ## Default listener transition
@@ -1810,7 +1825,7 @@ measured these medians over nine samples per cell on local Windows/.NET 10:
 | 8 MiB / 1 | 386.43 | 439.85 | 44.92 | 42.48 |
 | 8 MiB / 8 | 428.19 | 458.76 | 49.32 | 47.85 |
 
-Managed allocation rose by roughly 5 KiB per 1 MiB response and 30Ã¢â‚¬â€œ37 KiB per
+Managed allocation rose by roughly 5 KiB per 1 MiB response and 30ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“37 KiB per
 8 MiB response, under 0.3% of combined client/server allocation in those cases.
 Small-response results varied: sequential 128-byte throughput fell from 0.92 to
 0.73 MiB/s in the selected run, while concurrency eight rose from 4.78 to 5.41.

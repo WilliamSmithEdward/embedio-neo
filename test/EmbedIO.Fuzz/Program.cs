@@ -4,7 +4,7 @@ using System.IO;
 using System.Text.Json;
 using EmbedIO.Utilities;
 
-if (HpackInterop.Run(args)) return;
+if (HpackInterop.Run(args) || Http1HeadFuzz.Run(args)) return;
 
 // Dependency-free mutation/property harness. Its scope is URL paths and query
 // data; it does not claim to fuzz the listener or WebSocket frame parser.
