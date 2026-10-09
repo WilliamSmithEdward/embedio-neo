@@ -6051,3 +6051,52 @@ Longer confirmation reverses that observation, but background CPU varies from
 latency improvement, a cross-platform result or a Kestrel ranking. Evidence,
 source patch, engine/harness hashes and original samples remain under ignored
 `TestResults/benchmark-review/inbound-*`; broader performance and soak work remain.
+### Independent conformance on fd58c90
+
+The original #197 HTTP/1.1 cases and stateful driver were run against an exact
+`git archive` snapshot of `fd58c904f881b831496d8127e5562c265a7924fe`, using
+unchanged helper source `56bbefe`, pinned container
+`d72fcf79aaddb0fd1ea0608724b73cb698ce19ba13a60ccc25d22abcf14ea181`,
+Ubuntu 24.04.5 x64 and .NET 10.0.12 with four CPUs. The built engine SHA-256 is
+`8CCC2E7479DB6476364318E8114B9EA99E22F868AEF1358CB366FC077E5BC832`.
+
+HTTP/1.1 reports 44 conforming and 13 permitted-policy cases, zero violations or
+errors. The seeded stateful campaign passes 2,000 iterations / 5,029 valid
+requests, 473 invalid requests and 211 aborts, with no malformed body becoming
+500. Active handlers return to zero; handle growth is +2 and managed growth
+357,928 bytes. This is one Linux seed, not whole-engine or cross-platform fuzz
+completion.
+
+Unmodified h2spec v2.6.0 reports 141/146 plaintext and 142/146 TLS, with no skipped
+cases. All raw failures remain evidence; the tool's aggregate result is failure.
+
+| Remaining h2spec assertion | Current-baseline assessment |
+| --- | --- |
+| 5.1/8 and 5.1/11: closed-stream DATA must trigger an error | RFC 9113 section 5.1 permits minimal processing/discard on all closed streams. HPACK and connection flow credit still apply. |
+| 5.3.1/1 and 5.3.1/2: self-dependency must reset | The server advertises NO_RFC7540_PRIORITIES=1. RFC 9218 section 2.1 permits ignoring these deprecated priority signals. Shape validation remains required. |
+| Plaintext-only 3.5/2: invalid preface reports unexpected EOF | TLS passes; plaintext protocol selection differs. Exact raw response/closure classification remains to be captured; this is not marked conforming. |
+
+References: [closed-stream rules](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1),
+[priority policy](https://www.rfc-editor.org/rfc/rfc9218.html#section-2.1) and
+[preface handling](https://www.rfc-editor.org/rfc/rfc9113.html#section-3.4).
+Two additional independent wire cases cover peer-reset and normally completed
+streams: repeated late DATA returns exactly 32,768 bytes of connection credit
+per batch, does not reset or close the connection, and a later request succeeds.
+Existing direct tests also preserve HPACK updates for ignored priority fields.
+Evidence is under ignored `TestResults/http-engine/conformance-fd58c90*` and
+`closed-stream-*`. HTTP/3, broader seeds/clients/platforms, long-running resource
+behavior and full standards coverage remain required.
+Both expanded HTTP/2 sets pass 395 cases on Windows and pinned Linux. The
+additional wire cases change no production code. Formatting/analyzer guards pass;
+discovery floors increase by two to 4,360.
+
+On `fd58c90`, CI 37978551488 has two concrete failures to investigate: the stock
+macOS raw QUIC rebind fails at cycle 28 with error 48, and the Windows resource
+job's HTTP/1 workload times out after 20 s on a fully consumed 65,536-byte upload
+with four workers and a new connection per request. Compatibility itself passes
+207 cases / 414 comparisons. The upload diagnostic reports Listening, no pending
+thread-pool work, 56 retained connections and an empty sampled live-connection
+list. This is not an allocation-budget violation or evidence of an HTTP/2 DATA
+pooling defect. Its cause remains unconfirmed; the earlier load comparison also
+recorded HTTP/1 upload timeouts. No budget or timeout has been relaxed, and both
+original logs/artifacts remain under ignored TestResults.
