@@ -52,6 +52,7 @@ namespace EmbedIO.WebSockets.Internal
         private TaskCompletionSource<bool>? _exitReceiving;
         private FragmentBuffer? _fragmentsBuffer;
         private bool _inMessage;
+        private bool _closeDeferred;
         private EventHandler<MessageEventArgs>? _onMessage;
         private AutoResetEvent? _receivePong;
         // The connection-close callback owns the underlying transport lifetime.
@@ -96,7 +97,17 @@ namespace EmbedIO.WebSockets.Internal
                 // Registering the consumer must also wake a previously idle queue.
                 ScheduleMessages();
             }
-            remove { lock (_messageSyncRoot) _onMessage -= value; }
+            remove
+            {
+                bool wake;
+                lock (_messageSyncRoot)
+                {
+                    _onMessage -= value;
+                    wake = _closeDeferred && !_inMessage;
+                }
+                // A close deferred for this consumer must still complete.
+                if (wake) _ = Task.Run(Message);
+            }
         }
 
         /// <inheritdoc />
@@ -457,40 +468,62 @@ namespace EmbedIO.WebSockets.Internal
         {
             lock (_messageSyncRoot)
             {
-                if (_inMessage || _onMessage == null || _readyState != WebSocketState.Open || _messageEventQueue.IsEmpty)
+                if (_inMessage || _onMessage == null || _messageEventQueue.IsEmpty)
                     return;
             }
             _ = Task.Run(Message);
         }
 
+        // Messages are queued only while the connection is open, so everything in the
+        // queue was completed on the wire before any close. A subscribed consumer keeps
+        // draining after the state changes; the close completes once it is idle.
         private void Message()
         {
+            bool closed;
             lock (_messageSyncRoot)
             {
-                if (_inMessage || _onMessage == null || _readyState != WebSocketState.Open)
-                    return;
-                _inMessage = true;
+                if (_inMessage) return;
+                if (_onMessage != null)
+                {
+                    _inMessage = true;
+                    closed = false;
+                }
+                // Without a consumer only a deferred close remains to be completed.
+                else if (TakeDeferredClose()) closed = true;
+                else return;
             }
 
-            while (true)
+            while (!closed)
             {
                 EventHandler<MessageEventArgs> handler;
                 MessageEventArgs? message;
                 lock (_messageSyncRoot)
                 {
-                    if (_onMessage == null || _readyState != WebSocketState.Open
-                        || !_messageEventQueue.TryDequeue(out message))
+                    var current = _onMessage;
+                    if (current == null || !_messageEventQueue.TryDequeue(out message))
                     {
                         // Publish the idle state atomically with the empty-queue check.
                         // An enqueue or subscription can then start the next consumer.
                         _inMessage = false;
-                        return;
+                        if (!TakeDeferredClose()) return;
+                        break;
                     }
-                    handler = _onMessage;
+                    handler = current;
                 }
                 try { handler(this, message); }
                 catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { ex.Log(nameof(WebSocket)); }
             }
+            CompleteClose();
+        }
+
+        // Called under _messageSyncRoot. After a close nothing more can be queued, and
+        // whatever an unsubscribed consumer left behind will never be delivered.
+        private bool TakeDeferredClose()
+        {
+            if (!_closeDeferred) return false;
+            _closeDeferred = false;
+            while (_messageEventQueue.TryDequeue(out _)) { }
+            return true;
         }
 
         private void Open() => StartReceiving();
@@ -604,7 +637,6 @@ namespace EmbedIO.WebSockets.Internal
                 finally
                 {
                     _stream = null;
-                    while (_messageEventQueue.TryDequeue(out _)) { }
 
                     if (_fragmentsBuffer != null)
                     {
@@ -625,15 +657,32 @@ namespace EmbedIO.WebSockets.Internal
             }
             finally
             {
-                TaskCompletionSource<bool>? closed;
-                lock (_stateSyncRoot)
+                // A subscribed consumer delivers what was received before the close,
+                // then completes it; observers such as WebSocketModule therefore see
+                // the close after the last message was handed to the application.
+                // Without a consumer the queued data is discarded.
+                bool drain;
+                lock (_messageSyncRoot)
                 {
-                    _closeCompleted = true;
-                    closed = _closedSignal;
-                    _closedSignal = null;
+                    drain = _onMessage != null && (_inMessage || !_messageEventQueue.IsEmpty);
+                    _closeDeferred = drain;
+                    if (!drain) while (_messageEventQueue.TryDequeue(out _)) { }
                 }
-                closed?.TrySetResult(true);
+                if (drain) _ = Task.Run(Message);
+                else CompleteClose();
             }
+        }
+
+        private void CompleteClose()
+        {
+            TaskCompletionSource<bool>? closed;
+            lock (_stateSyncRoot)
+            {
+                _closeCompleted = true;
+                closed = _closedSignal;
+                _closedSignal = null;
+            }
+            closed?.TrySetResult(true);
         }
 
         private Task Send(WebSocketFrame frame)

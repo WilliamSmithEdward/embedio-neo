@@ -311,6 +311,42 @@ namespace EmbedIO.Tests
             });
         }
 
+        private sealed class Recorder : WebSocketModule
+        {
+            internal readonly System.Collections.Concurrent.ConcurrentQueue<string> Received = new();
+            internal Recorder() : base("/ws", false) { }
+            protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
+            {
+                Received.Enqueue(Encoding.UTF8.GetString(buffer));
+                return Task.CompletedTask;
+            }
+        }
+
+        // A message completed on the wire before the peer's close frame was received
+        // by the server and must reach the application.
+        [Test]
+        public async Task MessagesReceivedBeforeThePeersCloseAreDelivered()
+        {
+            const int Attempts = 100;
+            var module = new Recorder();
+            await WithServerAsync(module, async (url, token) =>
+            {
+                for (var i = 0; i < Attempts; ++i)
+                {
+                    using var client = await RawClient.ConnectAsync(url, token);
+                    var burst = RawClient.Frame(0x81, Encoding.UTF8.GetBytes("last " + i)).Concat(RawClient.Frame(0x88, new byte[] { 3, 232 })).ToArray();
+                    await client.Stream.WriteAsync(burst, token);
+                    var close = await client.ReadFrameAsync(token);
+                    Assert.That(close.Flags, Is.EqualTo(0x88));
+                }
+                using var settle = CancellationTokenSource.CreateLinkedTokenSource(token);
+                settle.CancelAfter(TimeSpan.FromSeconds(5));
+                while (module.Received.Count < Attempts && !settle.IsCancellationRequested) await Task.Delay(10, CancellationToken.None);
+            });
+            var missing = Enumerable.Range(0, Attempts).Select(i => "last " + i).Except(module.Received).ToArray();
+            Assert.That(missing, Is.Empty, $"{missing.Length} of {Attempts} messages sent before close were dropped.");
+        }
+
         [Test]
         public void UnmaskingMatchesTheBytewiseDefinitionForEveryLengthAndKey()
         {
