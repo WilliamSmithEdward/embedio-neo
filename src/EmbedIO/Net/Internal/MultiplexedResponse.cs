@@ -26,6 +26,8 @@ namespace EmbedIO.Net.Internal
         private string _contentType = MimeType.Html;
         private bool _headersSent;
         private volatile bool _closed;
+        // Set when the output stream is disposed; later writes fail even before the close takes the gate.
+        private volatile bool _outputDisposed;
         private bool _chunked;
         private bool _keepAlive = true;
         internal MultiplexedResponse(IMultiplexedExchange exchange) { _exchange = exchange; _output = new Output(this); }
@@ -204,7 +206,19 @@ namespace EmbedIO.Net.Internal
             try { if (!_closed) await EnsureSentAsync(false, token).ConfigureAwait(false); }
             finally { Exit(); }
         }
+        // The first caller's token governs the shared close; later callers await the same task.
         internal Task CloseAsync(CancellationToken token = default) { lock (_lifecycle) return _closeTask ??= CloseCoreAsync(token); }
+
+        private void CloseFromDispose()
+        {
+            _outputDisposed = true;
+            var closing = CloseAsync();
+            // Failures surface to whoever awaits the context close; never leave them unobserved.
+            if (!closing.IsCompleted)
+                _ = closing.ContinueWith(static task => _ = task.Exception, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            else if (closing.IsFaulted) _ = closing.Exception;
+        }
         private async Task CloseCoreAsync(CancellationToken token)
         {
             if (!await EnterAsync(CancellationToken.None, true).ConfigureAwait(false)) return;
@@ -224,7 +238,7 @@ namespace EmbedIO.Net.Internal
         {
             lock (_lifecycle)
             {
-                if (_closed)
+                if (_closed || (_outputDisposed && !closing))
                 {
                     if (closing) return false;
                     throw new ObjectDisposedException(nameof(MultiplexedResponse));
@@ -260,7 +274,7 @@ namespace EmbedIO.Net.Internal
             internal Output(MultiplexedResponse owner) { _owner = owner; }
             public override bool CanRead => false;
             public override bool CanSeek => false;
-            public override bool CanWrite => !_owner._closed;
+            public override bool CanWrite => !_owner._closed && !_owner._outputDisposed;
             public override long Length => throw new NotSupportedException();
             public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
             public override void Flush() => _owner.FlushAsync(CancellationToken.None).GetAwaiter().GetResult();
@@ -270,7 +284,10 @@ namespace EmbedIO.Net.Internal
 #if NET10_0_OR_GREATER
             public override ValueTask DisposeAsync() => new(_owner.CloseAsync());
 #endif
-            protected override void Dispose(bool disposing) { if (disposing && !_owner._closed) _owner.Close(); base.Dispose(disposing); }
+            // Writers such as StreamWriter close their stream synchronously, often on a
+            // worker. Waiting here for the shared multiplexed output can starve the pool,
+            // so disposal only starts the close; the context's CloseAsync awaits the same task.
+            protected override void Dispose(bool disposing) { if (disposing && !_owner._closed) _owner.CloseFromDispose(); base.Dispose(disposing); }
             public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
             public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
             public override void SetLength(long value) => throw new NotSupportedException();

@@ -116,6 +116,40 @@ namespace EmbedIO.Tests
             });
         }
 
+        [Test]
+        public async Task SynchronousResponseStreamDisposeDoesNotBlockOnSharedOutput()
+        {
+            var bodySent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var disposeReturned = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            DrainGateStream? gate = null;
+            await WithRawServer(Array.Empty<byte>(), async (wire, token) =>
+            {
+                await SendWire(wire, 1, 5, 1, RequestBlock(), token);
+                var data = await Until(wire, 0, 1, token);
+                Assert.That(data.Payload, Is.EqualTo(new byte[] { 97, 98, 99 }));
+                var gated = gate ?? throw new AssertionException("Missing gate.");
+                await gated.Entered.Task.WaitAsync(token);
+                // StreamWriter closes its stream synchronously. With the END_STREAM write
+                // held, that dispose must not hold a worker until shared output drains.
+                Assert.That(await disposeReturned.Task.WaitAsync(TimeSpan.FromSeconds(5), token), Is.True);
+                gated.Release.TrySetResult();
+                var end = await Until(wire, 0, 1, token);
+                Assert.That((end.Payload.Length, end.Flags & 1), Is.EqualTo((0, 1)));
+            }, app: async exchange =>
+            {
+                var context = Adapter(exchange);
+                try
+                {
+                    var text = context.OpenResponseText(new System.Text.UTF8Encoding(false));
+                    await text.WriteAsync("abc");
+                    await text.FlushAsync();
+                    bodySent.TrySetResult();
+                    await Task.Run(() => { text.Dispose(); disposeReturned.TrySetResult(true); });
+                }
+                finally { await ((Task)(context.GetType().GetMethod("CloseAsync", Flags)?.Invoke(context, null) ?? throw new AssertionException("Missing CloseAsync."))); }
+            }, wrapTransport: stream => gate = new DrainGateStream(stream, 0));
+        }
+
         private static bool GetEnded(object exchange)
             => (bool)((exchange.GetType().GetProperty("Ended") ?? throw new AssertionException("Missing Ended.")).GetValue(exchange)
                 ?? throw new AssertionException("Missing Ended value."));
