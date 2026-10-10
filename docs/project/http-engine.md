@@ -1,5 +1,10 @@
 # Modern HTTP engine program
 
+Release scope: William designated this modern engine program for **EmbedIO-Neo v2**
+on 2026-10-10. Maintain the [Neo v1 to v2 migration guide](../compatibility/neo-v1-to-v2.md)
+as the implementation and approved behavior changes settle. V2 is not released;
+this designation does not authorize publication.
+
 The owner authorized a replacement managed transport on 2026-10-08, with extreme
 performance as a core requirement, incremental delivery, and HTTP support through
 the October 2026 standards baseline. Strict rejection of malformed and ambiguous
@@ -7175,3 +7180,52 @@ already exists, known cancellation/listener/timeout cleanup failures are logged
 without replacing it. The test still fails with its primary exception; success
 assertions, deadlines and transport behavior are unchanged. No retry, quarantine
 or production correction is added. Locked restore, both-target warning-free builds, source guards and changed-file formatting pass. All four existing combined-drain cases pass locally. No natural failure was captured during that focused run, so the root cause remains unconfirmed; hosted phase evidence is still required.
+
+### HTTP/1 response-write first-segment batching
+
+The managed HTTP/1 response stream now commits the first write of a response as
+one pooled transport segment: head, chunk-size line, up to 64 KiB of body and
+the chunk CRLF. Bodies beyond 64 KiB merge a 16 KiB prefix with the head and send
+the remainder directly, as before. The head buffer no longer reserves a fresh
+copy of the first body bytes, bounded subsequent chunks format their size line
+in place and clear only the bytes they wrote, and the synchronous write path
+batches bounded chunks like the asynchronous one. The change is confined to
+`ResponseStream.cs`; wire bytes, flush behavior, cancellation,
+`IgnoreWriteExceptions`, HEAD and bodyless suppression, trailers, disposal and
+graceful drain are unchanged, and no public API, default, target or dependency
+moved.
+
+A dotnet-trace profile of the base engine on flushed 1 MiB streaming attributes
+42 of the response stream's 46 points of sampled thread time to the socket send
+itself; pool clearing, copying and the write gate add about 3 points together.
+The socket-free `--response-write` component benchmark on the base showed the
+remaining waste directly: a 16 KiB fixed-length response needed two transport
+writes and a 16 KiB first chunk three, a complete small chunked response three,
+each batched chunk allocated 104 B and every response of 16 KiB or more
+allocated a fresh 16 KiB head buffer. The candidate removes those writes and
+allocations with exact wire bytes.
+
+Paired separate-process comparison against the exact base (66 samples, zero
+failures, three alternating rounds, fresh processes, every byte validated):
+small chunked responses use about 25% less server CPU per response and complete
+about 30% more responses per second on plain and TLS; flushed 1 MiB streaming
+uses 3-5% less CPU and 60% less allocation per response in every round; 1 MiB
+fixed-length and single-chunk responses keep their CPU within noise with two
+thirds less allocation; small fixed-length, pipelined and TLS small responses
+are unchanged within noise. Every sample carried 8-30 CPU-seconds of unrelated
+host activity per 15 s window, the client ran near saturation on the small
+chunked scenarios, and TLS streaming tails were noisy in both directions.
+Method, tables, per-round values and limits are recorded in the
+[load comparison](http-engine-load-comparison.md#http1-response-write-first-segment-batching-2026-10-10).
+
+Thirty-two regression cases cover first-write merging, bounded and oversized
+bodies and heads, synchronous batching, mid-write cancellation of the merged
+segment, transport failure under both write policies, 204 suppression, reserved
+trailers and exact 20,000-byte responses over HTTP and HTTPS. Both targets
+build; formatting, both source guards, the allocation and cleanup gates, the
+full Windows suite (4,935 cases, 4,930 passed, five existing skips) and the
+net472 engine smoke against the netstandard2.0 asset pass. The discovery floor
+rises by 32 once the shared floors are reconciled. Not addressed here: the
+synchronous terminator written when the pipeline closes a chunked response
+(`HttpConnection` closes synchronously), the write gate's task per write,
+batching across pipelined responses, and `NoDelay` on accepted sockets.
