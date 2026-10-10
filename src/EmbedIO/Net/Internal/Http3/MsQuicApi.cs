@@ -81,7 +81,8 @@ namespace EmbedIO.Net.Internal.Http3
             _configurationClose = Marshal.GetDelegateForFunctionPointer<CloseConfiguration>(Marshal.ReadIntPtr(table, 9 * IntPtr.Size));
             _loadCredential = Marshal.GetDelegateForFunctionPointer<LoadCredential>(Marshal.ReadIntPtr(table, 10 * IntPtr.Size));
             _listenerFunctions = new ListenerFunctions(table);
-            _connectionFunctions = new ConnectionFunctions(table);
+            _streamFunctions = new StreamFunctions(table);
+            _connectionFunctions = new ConnectionFunctions(table, _streamFunctions);
             SetHandle(table);
         }
 

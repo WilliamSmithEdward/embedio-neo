@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Threading.Channels;
 using Microsoft.Win32.SafeHandles;
 
 namespace EmbedIO.Net.Internal.Http3
@@ -34,8 +35,10 @@ namespace EmbedIO.Net.Internal.Http3
             internal readonly SetConfiguration Configure;
             internal readonly CloseStream StreamClose;
             internal readonly ShutdownStream StreamShutdown;
-            internal ConnectionFunctions(IntPtr table)
+            internal readonly StreamFunctions Streams;
+            internal ConnectionFunctions(IntPtr table, StreamFunctions streams)
             {
+                Streams = streams;
                 SetHandler = Marshal.GetDelegateForFunctionPointer<SetCallback>(Marshal.ReadIntPtr(table, 2 * IntPtr.Size));
                 Close = Marshal.GetDelegateForFunctionPointer<CloseConnection>(Marshal.ReadIntPtr(table, 16 * IntPtr.Size));
                 Shutdown = Marshal.GetDelegateForFunctionPointer<ShutdownConnection>(Marshal.ReadIntPtr(table, 17 * IntPtr.Size));
@@ -55,6 +58,8 @@ namespace EmbedIO.Net.Internal.Http3
             internal readonly TaskCompletionSource Closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly MsQuicApi.ConnectionFunctions.Callback Handler;
             internal readonly IntPtr Pointer;
+            internal Func<IntPtr, uint, bool>? AcceptStream;
+            internal Action? StopStreams;
             private readonly MsQuicApi.ConnectionFunctions _functions;
             private readonly ConcurrentDictionary<IntPtr, RejectedStream> _rejected = new();
             private sealed class RejectedStream
@@ -114,9 +119,13 @@ namespace EmbedIO.Net.Internal.Http3
                         case 0: Connected.TrySetResult(); break;
                         case 1:
                         case 2: Connected.TrySetCanceled(); break;
-                        case 3: Connected.TrySetCanceled(); Closed.TrySetResult(); break;
+                        case 3: Connected.TrySetCanceled(); StopStreams?.Invoke(); Closed.TrySetResult(); break;
                         // Streams are not exposed until their own callback/lifetime exists.
-                        case 6: RejectStream(Marshal.ReadIntPtr(eventData, 8)); break;
+                        case 6:
+                            var stream = Marshal.ReadIntPtr(eventData, 8);
+                            var accept = AcceptStream;
+                            if (accept == null || !accept(stream, (uint)Marshal.ReadInt32(eventData, 8 + IntPtr.Size))) RejectStream(stream);
+                            break;
                     }
                     return 0;
                 }
@@ -128,6 +137,66 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly MsQuicApi.ConnectionFunctions _functions;
         private readonly Signals _signals;
         private int _shutdown;
+        private readonly object _streamSync = new();
+        private Channel<MsQuicNativeStream>? _streams;
+        private bool _disposing;
+        internal void EnableStreamAcceptance()
+        {
+            lock (_streamSync)
+            {
+                if (IsClosed || _signals.Connected.Task.IsCompleted) throw new InvalidOperationException("Stream acceptance must be enabled before the handshake completes.");
+                if (_streams != null) return;
+                var queue = Channel.CreateBounded<MsQuicNativeStream>(128);
+                _streams = queue;
+                _signals.StopStreams = () => { lock (_streamSync) queue.Writer.TryComplete(); };
+                _signals.AcceptStream = (stream, flags) =>
+                {
+                    // Explicit stream credit controls native concurrency; this
+                    // queue additionally bounds unclaimed managed admission.
+                    lock (_streamSync)
+                    {
+                        if (_disposing || IsClosed || queue.Reader.Count >= 128) return false;
+                        var owned = MsQuicNativeStream.Accept(this, stream, flags, _functions.Streams);
+                        if (!queue.Writer.TryWrite(owned))
+                        {
+                            // Never replace the callback after ownership transfers.
+                            // Disposal and parent release must run outside native callbacks.
+                            _ = Task.Run(() =>
+                            {
+                                try { owned.Dispose(); }
+                                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                                { _signals.Closed.TrySetException(error); }
+                            });
+                        }
+                        return true;
+                    }
+                };
+            }
+        }
+        internal async Task<MsQuicNativeStream> AcceptStreamAsync(CancellationToken token)
+            => await (_streams ?? throw new InvalidOperationException("Stream acceptance is not enabled.")).Reader.ReadAsync(token).ConfigureAwait(false);
+        protected override void Dispose(bool disposing)
+        {
+            lock (_streamSync)
+            {
+                if (_disposing) return;
+                _disposing = true;
+                _streams?.Writer.TryComplete();
+            }
+            try
+            {
+                // Native calls and callback completion never run under _streamSync.
+                if (!IsClosed && !IsInvalid)
+                {
+                    var retained = false;
+                    DangerousAddRef(ref retained);
+                    try { if (Interlocked.Exchange(ref _shutdown, 1) == 0) _functions.Shutdown(handle, 0, 0x100); }
+                    finally { if (retained) DangerousRelease(); }
+                }
+                if (_streams != null) while (_streams.Reader.TryRead(out var pending)) pending.Dispose();
+            }
+            finally { base.Dispose(disposing); }
+        }
         private MsQuicNativeConnection(MsQuicRegistration registration, MsQuicApi.ConnectionFunctions functions, Signals signals) : base(true)
         { _registration = registration; _functions = functions; _signals = signals; }
         internal static MsQuicNativeConnection Accept(MsQuicRegistration registration, IntPtr handle, MsQuicApi.ConnectionFunctions functions)

@@ -6928,3 +6928,36 @@ Neither failure qualifies for the raw QUIC rebind quarantine. The Linux crash's
 origin and the incomplete macOS run remain unconfirmed; no product correction,
 quarantine, reduced discovery floor or increased timeout is claimed for them.
 Logs and both TRX artifacts are retained under ignored TestResults/native-datagrams.
+
+
+Native stream acceptance and reads are now internal opt-in capabilities.
+A bounded queue admits at most 128 unclaimed streams, and each stream retains its
+connection's SafeHandle lease until native close finishes. Native calls and
+callback completion run outside the admission lock. Stream callbacks retain
+one pending receive indication: buffer descriptors are copied within the
+callback, while payload bytes remain borrowed from MsQuic. A matching
+StreamReceiveComplete returns credit only after the whole indication has been
+consumed; cancellation preserves unread data for a subsequent read. Shutdown
+marks pending receive data unusable before native buffers can be reclaimed.
+
+Forty focused native tests pass on Windows and the pinned Linux runtime before
+final formatting: eight new read/FIN cases cover empty, single-byte, 64 KiB and
+1 MiB payloads on both stream types; six pending-read cases cover cancellation
+and resumption, stream disposal and connection shutdown. Every payload byte and
+EOF is checked. The Linux run uses the same Windows-built IL, not a Linux source
+build. Combined discovery is expected at 4785 (4712 development base, 33 framing
+and 40 native cases); actual full-suite discovery remains to be checked.
+
+Native writes, outgoing stream creation, datagrams and application-provider
+selection remain unimplemented. Native finalizer/fault coverage, retained-memory
+soak, macOS stream validation and comparative performance remain unproven.
+The existing application listener continues to use System.Net.Quic.
+
+The initial local full-suite attempt for native reads is invalid: the shared
+coordination lock was acquired by the WebTransport agent between inspection and
+launch, and PowerShell continued after FileMode.CreateNew failed. This worktree's
+test processes were stopped after approximately 24 seconds; the other worktree's
+processes and lock were preserved. The interrupted run is retained, is not used
+as validation, and does not establish full discovery. Subsequent launch commands
+must set ErrorActionPreference=Stop before atomic lock acquisition. Native-read
+full-suite and hosted exact-head acceptance remain pending.

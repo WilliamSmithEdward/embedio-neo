@@ -269,18 +269,116 @@ namespace EmbedIO.Tests
             if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
             await ExerciseNativeHandshake(false, bidirectional ? QuicStreamType.Bidirectional : QuicStreamType.Unidirectional, credit);
         }
+        [TestCase(false, 0)]
+        [TestCase(true, 0)]
+        [TestCase(false, 1)]
+        [TestCase(true, 1)]
+        [TestCase(false, 65536)]
+        [TestCase(true, 65536)]
+        [TestCase(false, 1048576)]
+        [TestCase(true, 1048576)]
+        public async Task NativeAcceptedStreamReadsExactPeerBytesThroughFin(bool bidirectional, int length)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeReadCore(bidirectional, length);
+        }
+        [TestCase(false, 0)]
+        [TestCase(true, 0)]
+        [TestCase(false, 1)]
+        [TestCase(true, 1)]
+        [TestCase(false, 2)]
+        [TestCase(true, 2)]
+        public async Task NativePendingReadReleasesOnCancellationStreamDisposalOrConnectionShutdown(bool bidirectional, int ending)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativePendingReadCore(bidirectional, ending);
+        }
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task ExerciseNativeHandshake(bool stopListenerFirst, QuicStreamType? streamType = null, bool credit = false)
+        private static async Task NativePendingReadCore(bool bidirectional, int ending)
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                await using var sending = await peer.OpenOutboundStreamAsync(bidirectional ? QuicStreamType.Bidirectional : QuicStreamType.Unidirectional, token);
+                await sending.WriteAsync(new byte[] { 42 }, token);
+                var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                await accepting.WaitAsync(token);
+                using var receiving = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                    ?? throw new AssertionException("Missing native stream."));
+                var buffer = new byte[16];
+                Assert.That(await (ValueTask<int>)ListenerCall(receiving, "ReadAsync", buffer.AsMemory(), token), Is.EqualTo(1));
+                Assert.That(buffer[0], Is.EqualTo(42));
+                using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+                var reading = ((ValueTask<int>)ListenerCall(receiving, "ReadAsync", buffer.AsMemory(), cancellation.Token)).AsTask();
+                Assert.That(reading.IsCompleted, Is.False, "The read must really be pending.");
+                if (ending == 0)
+                {
+                    cancellation.Cancel();
+                    await Assert.ThatAsync(async () => await reading.WaitAsync(token), Throws.InstanceOf<OperationCanceledException>());
+                    await sending.WriteAsync(new byte[] { 43 }, true, token);
+                    Assert.That(await (ValueTask<int>)ListenerCall(receiving, "ReadAsync", buffer.AsMemory(), token), Is.EqualTo(1));
+                    Assert.That(buffer[0], Is.EqualTo(43));
+                    Assert.That(await (ValueTask<int>)ListenerCall(receiving, "ReadAsync", buffer.AsMemory(), token), Is.Zero);
+                }
+                else if (ending == 1)
+                {
+                    receiving.Dispose();
+                    await Assert.ThatAsync(async () => await reading.WaitAsync(token), Throws.InstanceOf<ObjectDisposedException>());
+                    Assert.That(receiving.IsClosed, Is.True);
+                    await Assert.ThatAsync(async () => await (ValueTask<int>)ListenerCall(receiving, "ReadAsync", Memory<byte>.Empty, token), Throws.InstanceOf<ObjectDisposedException>());
+                }
+                else
+                {
+                    await ((Task)ListenerCall(connection, "ShutdownAsync", 0x100L)).WaitAsync(token);
+                    await Assert.ThatAsync(async () => await reading.WaitAsync(token), Throws.InstanceOf<System.IO.IOException>());
+                }
+            });
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeReadCore(bool bidirectional, int length)
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                await using var sending = await peer.OpenOutboundStreamAsync(bidirectional ? QuicStreamType.Bidirectional : QuicStreamType.Unidirectional, token);
+                var payload = new byte[length];
+                for (var i = 0; i < payload.Length; i++) payload[i] = (byte)(i * 37);
+                var write = sending.WriteAsync(payload, true, token).AsTask();
+                var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                await accepting.WaitAsync(token);
+                using var receiving = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                    ?? throw new AssertionException("Missing native stream."));
+                var readback = new byte[length];
+                var chunk = new byte[1023];
+                var total = 0;
+                while (true)
+                {
+                    var count = await (ValueTask<int>)ListenerCall(receiving, "ReadAsync", chunk.AsMemory(), token);
+                    if (count == 0) break;
+                    Assert.That(total + count, Is.LessThanOrEqualTo(length));
+                    chunk.AsSpan(0, count).CopyTo(readback.AsSpan(total)); total += count;
+                }
+                await write.WaitAsync(token);
+                Assert.That(total, Is.EqualTo(length));
+                Assert.That(readback, Is.EqualTo(payload));
+                Assert.That(receiving.GetType().GetProperty("Id", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(receiving), Is.EqualTo(sending.Id));
+                Assert.That(receiving.GetType().GetProperty("Unidirectional", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(receiving), Is.EqualTo(!bidirectional));
+            });
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task ExerciseNativeHandshake(bool stopListenerFirst, QuicStreamType? streamType = null, bool credit = false, Func<SafeHandle, QuicConnection, CancellationToken, Task>? streams = null)
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             using var api = OpenApi();
             using var registration = Register(api);
-            using var configuration = streamType.HasValue
+            using var configuration = streamType.HasValue || streams != null
                 ? (SafeHandle)ListenerCall(registration, "CreateStreamConfiguration", new byte[] { (byte)'h', (byte)'3' },
-                    credit && streamType == QuicStreamType.Bidirectional ? (ushort)8 : (ushort)0,
-                    credit && streamType == QuicStreamType.Unidirectional ? (ushort)8 : (ushort)0)
+                    streams != null || (credit && streamType == QuicStreamType.Bidirectional) ? (ushort)8 : (ushort)0,
+                    streams != null || (credit && streamType == QuicStreamType.Unidirectional) ? (ushort)8 : (ushort)0)
                 : Configure(registration, new byte[] { (byte)'h', (byte)'3' });
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
             LoadServerCertificate(configuration, certificate);
@@ -306,12 +404,14 @@ namespace EmbedIO.Tests
             await accept.WaitAsync(deadline.Token);
             using var connection = (SafeHandle)(accept.GetType().GetProperty("Result")?.GetValue(accept)
                 ?? throw new AssertionException("Missing accepted native connection."));
+            if (streams != null) ListenerCall(connection, "EnableStreamAcceptance");
             ListenerCall(connection, "Configure", configuration);
             await using var peer = await connecting.WaitAsync(deadline.Token);
             var ready = (Task)(connection.GetType().GetProperty("Connected", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(connection)
                 ?? throw new AssertionException("Missing handshake completion."));
             await ready.WaitAsync(deadline.Token);
             Assert.That(peer.NegotiatedApplicationProtocol, Is.EqualTo(new SslApplicationProtocol("h3")));
+            if (streams != null) await streams(connection, peer, deadline.Token);
             if (streamType.HasValue)
             {
                 if (credit)
