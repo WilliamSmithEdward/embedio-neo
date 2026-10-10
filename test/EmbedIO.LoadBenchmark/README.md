@@ -34,7 +34,14 @@ unset for comparison runs.
 
 Scenarios ending in `-close100` are controls: the client closes every connection
 after 100 requests, matching the managed listener's per-connection cap, so all
-engines pay the same reconnect cost. Churn scenarios are capped (5 s for HTTP/1.1,
+engines pay the same reconnect cost.
+
+Scenarios named `-inspect-` request `/inspect?id=42&name=neo%20bench&tag=a&tag=b`
+with User-Agent, Accept, Cookie, Referer and X-Request-Id headers. The handler
+reads the query (including the repeated `tag`), those headers, both cookies, the
+referrer, body framing and the endpoints, and answers 400 naming the first
+mismatched property. Body framing is read but HasEntityBody is not required to be
+false over HTTP/3, where a GET without content-length reports an unknown length. Churn scenarios are capped (5 s for HTTP/1.1,
 1.5 s for HTTP/2) to stay within the host's TIME_WAIT and ephemeral-port capacity.
 
 ## Profiling
