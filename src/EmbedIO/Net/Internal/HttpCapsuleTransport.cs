@@ -7,13 +7,6 @@ using EmbedIO.Net.Internal.Http3;
 
 namespace EmbedIO.Net.Internal
 {
-    internal readonly struct HttpCapsuleHeader
-    {
-        internal HttpCapsuleHeader(long type, long length) { Type = type; Length = length; }
-        public long Type { get; }
-        public long Length { get; }
-    }
-
     // RFC 9297 framing for an already negotiated carrier. The caller owns the
     // stream and supplies cancellation/resource policy. Payloads are streamed:
     // no allocation depends on the declared capsule length. This codec alone
@@ -21,6 +14,7 @@ namespace EmbedIO.Net.Internal
     internal sealed class HttpCapsuleTransport
     {
         private readonly Stream _stream;
+        private readonly Func<Exception, Task>? _abort;
         private readonly byte[] _readHeader = new byte[8];
         private readonly byte[] _writeHeader = new byte[16];
         private int _reading;
@@ -34,7 +28,9 @@ namespace EmbedIO.Net.Internal
         private long _readRemaining;
         private long _writeRemaining;
 
-        internal HttpCapsuleTransport(Stream stream) { _stream = stream ?? throw new ArgumentNullException(nameof(stream)); }
+        internal HttpCapsuleTransport(Stream stream) : this(stream, null) { }
+        internal HttpCapsuleTransport(Stream stream, Func<Exception, Task>? abort)
+        { _stream = stream ?? throw new ArgumentNullException(nameof(stream)); _abort = abort; }
 
         internal async Task<HttpCapsuleHeader?> ReadHeaderAsync(CancellationToken token)
         {
@@ -54,6 +50,12 @@ namespace EmbedIO.Net.Internal
                 _readRemaining = length;
                 _readStarted = true;
                 return new HttpCapsuleHeader(type.Value, length);
+            }
+            catch (EndOfStreamException error)
+            {
+                _readFailed = true;
+                if (_abort != null) await _abort(error).ConfigureAwait(false);
+                throw;
             }
             catch { if (started) _readFailed = true; throw; }
             finally { Volatile.Write(ref _reading, 0); }
@@ -105,6 +107,12 @@ namespace EmbedIO.Net.Internal
                 if (read == 0) throw new EndOfStreamException("Truncated capsule value.");
                 _readRemaining -= read;
                 return read;
+            }
+            catch (EndOfStreamException error)
+            {
+                _readFailed = true;
+                if (_abort != null) await _abort(error).ConfigureAwait(false);
+                throw;
             }
             catch { _readFailed = true; throw; }
         }

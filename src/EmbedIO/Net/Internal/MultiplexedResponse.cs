@@ -25,6 +25,9 @@ namespace EmbedIO.Net.Internal
         private int _status = 200;
         private string _contentType = MimeType.Html;
         private bool _headersSent;
+        private bool _tunnel;
+        private bool _capsuleCarrier;
+        private bool _contentTypeConfigured;
         private volatile bool _closed;
         // Set when the output stream is disposed; later writes fail even before the close takes the gate.
         private volatile bool _outputDisposed;
@@ -45,7 +48,7 @@ namespace EmbedIO.Net.Internal
         public string ContentType
         {
             get => _contentType;
-            set { EnsureHeaders(); if (string.IsNullOrEmpty(value)) throw new ArgumentException("Content type is required.", nameof(value)); _contentType = value; }
+            set { EnsureHeaders(); if (string.IsNullOrEmpty(value)) throw new ArgumentException("Content type is required.", nameof(value)); _contentType = value; _contentTypeConfigured = true; }
         }
         public Stream OutputStream => _output;
         public Encoding? ContentEncoding { get; set; } = WebServer.DefaultEncoding;
@@ -68,11 +71,31 @@ namespace EmbedIO.Net.Internal
             if (_closed) throw new ObjectDisposedException(nameof(MultiplexedResponse));
             if (_headersSent) throw new InvalidOperationException("Response headers were already sent.");
         }
+        internal void BeginTunnel(bool capsules)
+        {
+            EnsureHeaders();
+            if (_exchange.Request.Method != "CONNECT" || _status < 200 || _status >= 300)
+                throw new InvalidOperationException("A tunnel requires a successful CONNECT response.");
+            if (capsules)
+            {
+                HttpCapsuleProtocol.ValidateCarrierHeaders(_exchange.Request.Headers);
+                HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _status);
+                if (_contentTypeConfigured || _chunked)
+                    throw new InvalidOperationException("A capsule carrier cannot configure representation type or chunked framing.");
+                Headers[HttpCapsuleProtocol.HeaderName] = "?1";
+            }
+            _tunnel = true;
+            _capsuleCarrier = capsules;
+        }
         private HpackField[] BuildHeaders(bool closing)
         {
-            var contentType = Headers[HttpHeaderNames.ContentType] ?? _contentType;
-            if (ContentEncoding != null) contentType = WithCharset(contentType, ContentEncoding.WebName);
-            Headers[HttpHeaderNames.ContentType] = contentType;
+            if (_capsuleCarrier) HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _status);
+            if (!_tunnel || (_contentTypeConfigured && !_capsuleCarrier))
+            {
+                var contentType = Headers[HttpHeaderNames.ContentType] ?? _contentType;
+                if (ContentEncoding != null) contentType = WithCharset(contentType, ContentEncoding.WebName);
+                Headers[HttpHeaderNames.ContentType] = contentType;
+            }
             if (Headers[HttpHeaderNames.Server] == null) Headers[HttpHeaderNames.Server] = WebServer.Signature;
             if (Headers[HttpHeaderNames.Date] == null) Headers[HttpHeaderNames.Date] = CurrentDate();
             if (_chunked) Headers.Remove(HttpHeaderNames.ContentLength);

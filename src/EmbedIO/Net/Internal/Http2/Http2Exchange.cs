@@ -7,9 +7,10 @@ using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal.Http2
 {
-    internal sealed class Http2Exchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IDisposable
+    internal sealed class Http2Exchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedTunnelControl, IDisposable
     {
         private readonly Http2Connection _connection;
+        private readonly Func<int, Exception, bool, Task>? _abortTunnel;
         private readonly SemaphoreSlim _response = new(1, 1);
         private readonly CancellationTokenSource _stop;
         private readonly CancellationToken _token;
@@ -21,8 +22,10 @@ namespace EmbedIO.Net.Internal.Http2
         private long _responseBytes;
         private int _disposed;
         internal Http2Exchange(Http2Connection connection, Http2StreamState state, Action<int> consumed, CancellationToken token)
+            : this(connection, state, consumed, token, null) { }
+        internal Http2Exchange(Http2Connection connection, Http2StreamState state, Action<int> consumed, CancellationToken token, Func<int, Exception, bool, Task>? abortTunnel)
         {
-            _connection = connection; State = state;
+            _connection = connection; State = state; _abortTunnel = abortTunnel;
             _stop = CancellationTokenSource.CreateLinkedTokenSource(token);
             _token = _stop.Token;
             Body = new Http2RequestBody(state.Id, state.RequestHeaders.ContentLength, consumed);
@@ -180,6 +183,8 @@ namespace EmbedIO.Net.Internal.Http2
                 error.Log("HTTP/2 stream", "Exception thrown by an application cancellation callback.");
             }
         }
+        public Task AbortTunnelAsync(Exception cause, bool malformed)
+            => (_abortTunnel ?? throw new InvalidOperationException("Tunnel control is unavailable."))(Id, cause, malformed);
         internal void Cancel(Exception error) { CancelApplication(); Body.Fail(error); }
         public void Dispose()
         {

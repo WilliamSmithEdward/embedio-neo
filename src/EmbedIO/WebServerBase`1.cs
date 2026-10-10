@@ -304,6 +304,16 @@ namespace EmbedIO
                                 HttpException.BadRequest("Invalid or incomplete request body."), _onHttpException).ConfigureAwait(false);
                         }
                     }
+                    catch (Exception exception) when (context is Net.Internal.MultiplexedContext tunnel && tunnel.HasAcceptedTunnel && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
+                    {
+                        await tunnel.AbortTunnelAsync(exception).ConfigureAwait(false);
+                        exception.Log(LogSource, $"[{context.Id}] Tunnel application failed.");
+                    }
+                    catch (Exception exception) when (context is Net.Internal.HttpListenerContext tunnel && tunnel.HasAcceptedTunnel && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
+                    {
+                        tunnel.HttpListenerResponse.Abort();
+                        exception.Log(LogSource, $"[{context.Id}] Tunnel application failed.");
+                    }
                     catch (Exception exception) when (exception is IHttpException && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                     {
                         await HttpExceptionHandler.Handle(LogSource, context, exception, _onHttpException)
@@ -335,6 +345,8 @@ namespace EmbedIO
                             // Multiplexed FIN writes must not block a worker waiting for I/O.
                             if (context is Net.Internal.MultiplexedContext multiplexed)
                                 await multiplexed.CloseAsync().ConfigureAwait(false);
+                            else if (context is Net.Internal.HttpListenerContext managed && managed.HasAcceptedTunnel)
+                                await managed.CloseTunnelAsync().ConfigureAwait(false);
                             else context.Close();
                         }
                     }
@@ -360,6 +372,10 @@ namespace EmbedIO
                 // Completing an invalid body can encounter the aborted connection.
                 // That request cannot take down the listener shared by other clients.
                 ex.Log(LogSource, $"[{context.Id}] Invalid request body connection closed.");
+            }
+            catch (Exception ex) when (context is Net.Internal.HttpListenerContext tunnel && tunnel.HasAcceptedTunnel && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                ex.Log(LogSource, $"[{context.Id}] HTTP/1 tunnel connection closed.");
             }
             catch (Exception ex) when (context is Net.Internal.MultiplexedContext && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
