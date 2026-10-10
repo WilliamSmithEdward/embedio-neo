@@ -69,16 +69,15 @@ namespace EmbedIO.Net.Internal
         private HpackField[] BuildHeaders(bool closing)
         {
             var contentType = Headers[HttpHeaderNames.ContentType] ?? _contentType;
-            if (ContentEncoding != null && !(MediaTypeHeaderValue.TryParse(contentType, out var parsed) && parsed.CharSet != null))
-                contentType += "; charset=" + ContentEncoding.WebName;
+            if (ContentEncoding != null) contentType = WithCharset(contentType, ContentEncoding.WebName);
             Headers[HttpHeaderNames.ContentType] = contentType;
             if (Headers[HttpHeaderNames.Server] == null) Headers[HttpHeaderNames.Server] = WebServer.Signature;
-            if (Headers[HttpHeaderNames.Date] == null) Headers[HttpHeaderNames.Date] = HttpDate.Format(DateTime.UtcNow);
+            if (Headers[HttpHeaderNames.Date] == null) Headers[HttpHeaderNames.Date] = CurrentDate();
             if (_chunked) Headers.Remove(HttpHeaderNames.ContentLength);
             if (_status == 204 || _status < 200 || (_exchange.Request.Method == "CONNECT" && _status >= 200 && _status < 300))
                 Headers.Remove(HttpHeaderNames.ContentLength);
             else if (_status == 205 || (closing && !SuppressBody)) Headers[HttpHeaderNames.ContentLength] = "0";
-            var fields = new List<HpackField> { new(":status", _status.ToString(CultureInfo.InvariantCulture)) };
+            var fields = new List<HpackField>(Headers.Count + 1 + (_cookies?.Count ?? 0)) { new(":status", _status.ToString(CultureInfo.InvariantCulture)) };
             foreach (var key in Headers.AllKeys)
             {
                 if (key == null) continue;
@@ -100,7 +99,19 @@ namespace EmbedIO.Net.Internal
             }
             return fields.ToArray();
         }
+        // Valid names only, bounded so application-generated names cannot grow it without limit.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> WireNames = new(StringComparer.Ordinal);
+        private const int WireNameCacheLimit = 256;
+
         private static string WireHeaderName(string name)
+        {
+            if (WireNames.TryGetValue(name, out var cached)) return cached;
+            var wire = LowercaseFieldName(name);
+            if (WireNames.Count < WireNameCacheLimit) WireNames.TryAdd(name, wire);
+            return wire;
+        }
+
+        private static string LowercaseFieldName(string name)
         {
             // HTTP/2 and HTTP/3 field names are ASCII tokens and must be lowercase on the wire.
             // Unicode case folding could turn an invalid application name into a valid one.
@@ -117,6 +128,50 @@ namespace EmbedIO.Net.Internal
             }
             return characters == null ? name : new string(characters);
         }
+        private sealed class CachedDate
+        {
+            internal CachedDate(long second, string text) { Second = second; Text = text; }
+            internal readonly long Second;
+            internal readonly string Text;
+        }
+
+        private sealed class CachedContentType
+        {
+            internal CachedContentType(string contentType, string charset, string text) { ContentType = contentType; Charset = charset; Text = text; }
+            internal readonly string ContentType;
+            internal readonly string Charset;
+            internal readonly string Text;
+        }
+
+        private static CachedDate? _date;
+        private static CachedContentType? _contentTypeWithCharset;
+
+        // RFC 1123 dates have one-second resolution, so one string serves a whole second.
+        private static string CurrentDate()
+        {
+            var now = DateTime.UtcNow;
+            var second = now.Ticks / TimeSpan.TicksPerSecond;
+            var cached = Volatile.Read(ref _date);
+            if (cached != null && cached.Second == second) return cached.Text;
+            var text = HttpDate.Format(now);
+            Volatile.Write(ref _date, new CachedDate(second, text));
+            return text;
+        }
+
+        // Appends the charset unless the media type already declares one. The result
+        // depends only on both inputs, so the last pair is reused.
+        private static string WithCharset(string contentType, string charset)
+        {
+            var cached = Volatile.Read(ref _contentTypeWithCharset);
+            if (cached != null && string.Equals(cached.ContentType, contentType, StringComparison.Ordinal)
+                && string.Equals(cached.Charset, charset, StringComparison.Ordinal))
+                return cached.Text;
+            var text = MediaTypeHeaderValue.TryParse(contentType, out var parsed) && parsed.CharSet != null
+                ? contentType : contentType + "; charset=" + charset;
+            Volatile.Write(ref _contentTypeWithCharset, new CachedContentType(contentType, charset, text));
+            return text;
+        }
+
         private async Task EnsureSentAsync(bool closing, CancellationToken token)
         {
             if (_headersSent) return;
