@@ -7175,6 +7175,7 @@ already exists, known cancellation/listener/timeout cleanup failures are logged
 without replacing it. The test still fails with its primary exception; success
 assertions, deadlines and transport behavior are unchanged. No retry, quarantine
 or production correction is added. Locked restore, both-target warning-free builds, source guards and changed-file formatting pass. All four existing combined-drain cases pass locally. No natural failure was captured during that focused run, so the root cause remains unconfirmed; hosted phase evidence is still required.
+
 ### HTTP/1 response-write first-segment batching
 
 The managed HTTP/1 response stream now commits the first write of a response as
