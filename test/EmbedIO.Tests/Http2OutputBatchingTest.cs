@@ -148,6 +148,44 @@ namespace EmbedIO.Tests
                 Throws.InstanceOf<IOException>(), "Output stays terminal after a failed batch.");
         }
 
+        [TestCase(true)]
+        [TestCase(false)]
+        public async Task CommittedEndStreamRetiresTheStreamBeforeTheWriterResumes(bool headersOnly)
+        {
+            using var output = new BlockingFirstWrite();
+            using var connection = (IDisposable)Connection(output, error => Assert.Fail("Output failed: " + error));
+            var streams = ConnectionType.GetProperty("Streams", Flags)?.GetValue(connection) ?? throw new AssertionException("Missing stream registry.");
+            var blockType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.Http2HeaderBlock", true) ?? throw new AssertionException("Missing header block.");
+            var request = Fields((":method", "GET"), (":scheme", "https"), (":path", "/"), (":authority", "localhost"));
+            var block = Activator.CreateInstance(blockType, Flags, null, new object[] { 1, true, request, 0u }, null) ?? throw new AssertionException("Missing block.");
+            var frame = Frame(1, 5, 1, Array.Empty<byte>());
+            (FrameType.GetProperty("HeaderBlock", Flags | System.Reflection.BindingFlags.Public) ?? throw new AssertionException("Missing HeaderBlock.")).SetValue(frame, block);
+            _ = (streams.GetType().GetMethod("Receive", Flags) ?? throw new AssertionException("Missing Receive.")).Invoke(streams, new[] { frame });
+            int Active() => (int)((streams.GetType().GetProperty("ActiveCount", Flags | System.Reflection.BindingFlags.Public) ?? throw new AssertionException("Missing count.")).GetValue(streams)
+                ?? throw new AssertionException("Missing count value."));
+            Assert.That(Active(), Is.EqualTo(1));
+            Task response;
+            if (headersOnly) response = SendHeaders(connection, 1, Fields((":status", "204")), CancellationToken.None);
+            else
+            {
+                var flow = ConnectionType.GetProperty("SendFlow", Flags)?.GetValue(connection) ?? throw new AssertionException("Missing flow control.");
+                (flow.GetType().GetMethod("Open", Flags) ?? throw new AssertionException("Missing Open.")).Invoke(flow, new object[] { 1 });
+                Assert.That((int)((flow.GetType().GetMethod("TryReserve", Flags) ?? throw new AssertionException("Missing TryReserve.")).Invoke(flow, new object[] { 1, 3 })
+                    ?? throw new AssertionException("Missing reservation.")), Is.EqualTo(3));
+                response = (Task)((ConnectionType.GetMethod("SendDataAsync", Flags) ?? throw new AssertionException("Missing data writer."))
+                    .Invoke(connection, new object?[] { 1, Fields((":status", "200"), ("content-length", "3")), new byte[] { 1, 2, 3 }, 0, 3, true, CancellationToken.None, CancellationToken.None })
+                    ?? throw new AssertionException("Missing data task."));
+            }
+            await output.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            // The frame carrying END_STREAM is committed and its write is in progress.
+            // The peer may already see it, so the stream must no longer count against
+            // the concurrency limit even though the writer has not resumed.
+            Assert.That(response.IsCompleted, Is.False);
+            Assert.That(Active(), Is.Zero);
+            output.Release.TrySetResult(true);
+            await response.WaitAsync(TimeSpan.FromSeconds(2));
+        }
+
         // Holds the first write until released, then records each write's size.
         private sealed class BlockingFirstWrite : MemoryStream
         {

@@ -208,15 +208,25 @@ namespace EmbedIO.Net.Internal.Http2
 
             internal override bool Commit(Http2OutputBuffer output)
             {
-                if (_fields != null) WriteHeaders(output);
+                if (_fields != null)
+                {
+                    WriteHeaders(output);
+                    if (_headersEnd) EndStream();
+                }
                 if (_bytes == null) return true;
                 // A SETTINGS reduction can leave reserved DATA without stream credit.
                 if (_count != 0 && !_connection.SendFlow.CanSendReserved(_streamId)) return _fields != null;
                 output.WriteFrameHeader(_count, 0, _dataEnd ? (byte)1 : (byte)0, _streamId);
                 output.Write(_bytes, _offset, _count);
                 DataCommitted = true;
+                if (_dataEnd) EndStream();
                 return true;
             }
+
+            // The stream stops counting against the concurrency limit when its
+            // END_STREAM is committed, not when the writer later resumes: the peer
+            // can see the frame and open another stream before then.
+            private void EndStream() => _connection.Streams.EndLocal(_streamId);
 
             private void WriteHeaders(Http2OutputBuffer output)
             {
