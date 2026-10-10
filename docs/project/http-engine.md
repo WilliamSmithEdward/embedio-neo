@@ -7200,3 +7200,7 @@ source-guard and hosted final-head acceptance remain required. The original
 native adapter, application HTTP/3 integration, datagrams and WebTransport
 transport integration are still incomplete; this increment changes no public
 API, listener default, target or dependency.
+
+Native abort reconciliation onto verified direction merge a4f7105 preserves the entire tested 28480e0 tree before this status note. Production source, tests, workflows and discovery floor are unchanged; the retained 4908-case full result applies to those identical bytes. Fresh exact-head hosted checks remain required after the history reconciliation.
+
+Final native graceful-completion acceptance reports 4912 Windows cases: 4907 passed, five existing skips, zero failures (3m 22s), with all 76 focused native cases passing on Windows and pinned Linux using the same Windows-built IL. Both-target builds and source guards pass. The reconciliation changes only documentation beyond the tested source; fresh hosted final-head checks remain required.
