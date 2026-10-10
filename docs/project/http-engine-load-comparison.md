@@ -626,3 +626,49 @@ integration. Discovery guards increase by eight to 4505.
 
 Artifacts: ignored `TestResults/http2-batch-load`, `http2-batch-fast-load`,
 `http2-batch-fast-full`, `http2-batch-legacy.json` and `http2-batch-peer-campaign`.
+### Completed independent and broader candidate checks
+
+The pinned Linux campaign on snapshot `3795c5a` completed successfully. Cleartext
+and TLS each passed 16 requirement cases and recorded six permitted policy choices,
+including 300 reset-during-response trials, 40 shrinking-window trials and 60
+paired SETTINGS ordering trials per transport. Hyper-h2 4.4.1 / Python 3.12.3,
+SDK 10.0.401 / runtime 10.0.12, four CPUs and 6 GiB. Every phase loaded core
+SHA-256 `628136c7c5f1d29d411bf7ba89ce2e1701f3dd3f9494002551bd7109742c2875`.
+Later documentation commits do not change the production source.
+
+| Stateful seed 20261009 | Connections | Streams | Client/server resets | Settled handles growth | Managed growth bytes |
+| --- | --- | --- | --- | --- | --- |
+| Cleartext | 300 | 1235 | 114 / 0 | 13 | 1990488 |
+| TLS | 300 | 1269 | 191 / 0 | 14 | 2597128 |
+
+Both runs settle active handlers and pending thread-pool work at zero. These
+bounded campaigns are not a long soak or an engine-only memory attribution.
+A separate held-output probe canceled 5000 queued 1 KiB inputs. After 50 ms
+callback settlement and collection, all five rounds had zero reachable input
+owners and zero queued operations; two healthy controls subsequently emitted
+34 bytes. An initial immediate-GC probe saw one reachable input with an empty
+queue. Its failed record is retained; the transient root was not traced.
+
+The broader Windows comparison used the same refined/control hashes, frozen
+runner and process/CPU/sample method above. Twelve valid samples, no failures or
+retries, zero open server sockets after settlement:
+
+| TLS workload | Candidate/control requests/s | CPU us/request | B/request | p99 ms |
+| --- | --- | --- | --- | --- |
+| Small, 8 connections x 32 streams | 259509 / 248583 | 28.4 / 30.3 | 13202 / 14214 | 5.350 / 5.222 |
+| 1 MiB upload, 4 connections x 4 streams | 973 / 868 | 2843.1 / 2947.4 | 136745 / 136563 | 49.152 / 58.163 |
+| 1 MiB stream, flushed every 16 KiB, 4 x 4 | 5612 / 4202 | 1315.2 / 1759.2 | 122688 / 132695 | 4.608 / 5.350 |
+
+Upload allocation is effectively unchanged, and small TLS p99 varies by round
+(one improves, one worsens), so no general tail improvement is claimed. Both
+upload and streaming throughput improve in these paired samples. Upload CPU
+utilization remains low and its throughput limitation is still actionable.
+Retained managed-heap maxima candidate/control: 194/151 KiB small, 71/95 KiB
+upload and 183/161 KiB streaming. Preserve those increases; short settlement
+does not prove a universal retained-memory improvement.
+
+Additional artifacts: ignored `TestResults/http2-batch-broader-load` and
+`http2-batch-resource-probe`, including the first failed diagnostic. Final
+repository checks must be green on the head containing this report before merge.
+Broader protocol/platform/resource/performance acceptance for program #181 remains
+incomplete after this incremental change.
