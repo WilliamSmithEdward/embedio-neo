@@ -786,8 +786,7 @@ To repeat it from the repository root, build both core target assemblies and
 restores. In a Python 3.10+ virtual environment, install with
 `python -m pip --isolated install --require-hashes --only-binary=:all: -r test/EmbedIO.QpackInterop/requirements.txt`.
 Run `python test/EmbedIO.QpackInterop/verify.py src/EmbedIO/bin/Release/net10.0/EmbedIO.dll`
-and repeat with 
-etstandard2.0` in the assembly path. The tool is not a server,
+and repeat with `netstandard2.0` in the assembly path. The tool is not a server,
 network interoperability test or QUIC-conformance claim.
 
 Solution builds, standalone probe build/locked restore, complete whitespace checks
@@ -2373,8 +2372,7 @@ diagnostics are the next investigation for the mixed-load timeout.
 The initial all-transport probe still failed during a second full run: successive
 TCP port-0 allocations can land inside long UDP exclusion ranges. A separate
 Windows socket probe reproduced 60 exclusive UDP bind failures in 64 distinct
-TCP-assigned candidates; 
-etsh` confirmed UDP exclusion ranges overlapping the
+TCP-assigned candidates; `netsh` confirmed UDP exclusion ranges overlapping the
 observed ports. Evidence is in `port-exclusion-observation.txt` and
 `udp-port-exclusions.txt`. The fixture now samples candidates from 10000-29999
 and checks both transports/address families before using one. The second failed
