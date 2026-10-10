@@ -222,6 +222,8 @@
       href: project/http3-performance.md
     - name: HTTP conformance audit
       href: project/http-conformance.md
+    - name: HTTP standards applicability audit
+      href: project/http-standards-applicability.md
 
 - name: Suffix byte ranges
   href: user-reports/suffix-range-responses.md

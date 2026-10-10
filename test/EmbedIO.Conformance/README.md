@@ -17,7 +17,8 @@ The audit, results and prioritized findings are in
 | `Http1Fuzz.cs` | Stateful HTTP/1.1 campaign: pipelined valid, invalid and aborted requests with random framing and fragmentation, checked against an independent model, plus resource settlement. |
 | `drivers/h2_campaign.py` | HTTP/2 cases and stateful campaign. The client is hyper-h2; malformed and abusive input is written as raw frames with hyperframe. |
 | `drivers/h3_campaign.py` | HTTP/3 cases and stateful campaign over aioquic, whose QPACK decoder also checks the server's dynamic encoding. |
-| `standards/capture_standards.py` | Captures RFC Editor metadata (with update and obsolescence chains), errata, the RFC index sweep and IANA registries, with URLs, times and SHA-256. |
+| `standards/capture_standards.py` | Captures RFC Editor metadata (with update and obsolescence chains), errata, the RFC index sweep, IANA registries and datatracker state of tracked drafts, with URLs, times and SHA-256. |
+| `ApplicabilityProbes.cs` | `applicability` mode: in-process minimal reproductions for the [standards applicability audit](../../docs/project/http-standards-applicability.md) (informational responses, trailers, Upgrade/CONNECT, QUERY, HTTP/2 SETTINGS). Uses the `/probe/*` routes. Outcome `gap` records a missing application capability the RFC permits; it does not fail a run. |
 | `docker/Dockerfile` | Pinned runner: .NET SDK 10.0.401 image by digest, MsQuic 2.6.2 by SHA-256, h2spec v2.6.0 built from its tag commit, Python packages by hash. |
 | `run-campaigns.sh` | Every campaign against one separate server process, with a summary tied to the source commit. |
 | `repro.sh` | One focused driver run with engine logging, for reducing a failure. |
