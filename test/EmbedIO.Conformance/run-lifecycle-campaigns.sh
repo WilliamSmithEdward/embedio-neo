@@ -65,45 +65,47 @@ step() {
 
 py() { python3 -I "$src/test/EmbedIO.Conformance/drivers/$1" "${@:2}"; }
 cert="$out/conformance-cert.pem"
+# ONLY="phase ..." limits a diagnostic rerun to the named phases; default runs all.
+want() { [ -z "${ONLY:-}" ] || [[ " $ONLY " == *" $1 "* ]]; }
 
-start_server sections
+if want sections; then start_server sections
 step sections-h1 py response_sections.py h1 --port $http --cert "$cert"
 step sections-h1-tls py response_sections.py h1 --port $https --tls --cert "$cert"
 step sections-h2 py response_sections.py h2 --port $http --cert "$cert"
 step sections-h2-tls py response_sections.py h2 --port $https --tls --cert "$cert"
 step sections-h3 py response_sections.py h3 --host localhost --port $h3 --cert "$cert" --h3-interim-adapter
-stop_server
+stop_server; fi
 
-start_server capsules
+if want capsules; then start_server capsules
 step capsule-h2 py capsule_campaign.py h2 --port $http --stats-port $http --out "$out/capsule-h2.json"
 step capsule-h2-tls py capsule_campaign.py h2 --port $https --tls --stats-port $http --out "$out/capsule-h2-tls.json"
 step capsule-h3 py capsule_campaign.py h3 --host localhost --port $h3 --stats-port $http --out "$out/capsule-h3.json"
-stop_server
+stop_server; fi
 
-start_server lifecycle-h2
+if want lifecycle-h2; then start_server lifecycle-h2
 step lifecycle-h2-fuzz py lifecycle_campaign.py h2 fuzz --port $http --stats-port $http --seed "$seed" --iterations $((300 * scale)) --out "$out/lifecycle-h2-fuzz.json"
-stop_server
+stop_server; fi
 
-start_server lifecycle-h2-tls
+if want lifecycle-h2-tls; then start_server lifecycle-h2-tls
 step lifecycle-h2-tls-fuzz py lifecycle_campaign.py h2 fuzz --port $https --tls --stats-port $http --seed "$seed" --iterations $((100 * scale)) --out "$out/lifecycle-h2-tls-fuzz.json"
-stop_server
+stop_server; fi
 
-start_server lifecycle-h3
+if want lifecycle-h3; then start_server lifecycle-h3
 step lifecycle-h3-fuzz py lifecycle_campaign.py h3 fuzz --host localhost --port $h3 --stats-port $http --seed "$seed" --iterations $((100 * scale)) --out "$out/lifecycle-h3-fuzz.json"
-stop_server
+stop_server; fi
 
-start_server drain-h2
+if want drain-h2; then start_server drain-h2
 step drain-h2-tls py lifecycle_campaign.py h2 drain --port $https --tls --stats-port $http --endpoint https --out "$out/drain-h2-tls.json"
-stop_server
+stop_server; fi
 
-start_server drain-h3
+if want drain-h3; then start_server drain-h3
 step drain-h3 py lifecycle_campaign.py h3 drain --host localhost --port $h3 --stats-port $http --endpoint h3 --out "$out/drain-h3.json"
-stop_server
+stop_server; fi
 
-start_server h2spec
+if want h2spec; then start_server h2spec
 step h2spec-h2c h2spec --host 127.0.0.1 --port $http --timeout 3 --junit-report "$out/h2spec-h2c.xml"
 step h2spec-tls h2spec --host 127.0.0.1 --port $https --tls --insecure --timeout 3 --junit-report "$out/h2spec-tls.xml"
-stop_server
+stop_server; fi
 
 record "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ) overall=$status"
 exit $status

@@ -44,6 +44,8 @@ from pathlib import Path
 H3_REQUEST_CANCELLED = 0x10C
 H3_MESSAGE_ERROR = 0x10E
 H3_NO_ERROR = 0x100
+# Drain observations, kept module-wide so a driver failure still reports them.
+OBSERVATIONS = {}
 
 
 def load(name):
@@ -145,14 +147,14 @@ def lifecycle_path(p):
 def check(kind, p, state, protocol):
     """Raises AssertionError when a stream the client kept is not exactly right."""
     reset = state["reset"]
+    if reset is not None and reset[0] == "client":
+        return  # The client abandoned the stream first; nothing is owed on it.
     if kind == "malformed":
         expected = 1 if protocol == "h2" else H3_MESSAGE_ERROR
         if reset != ("server", expected):
             raise AssertionError(f"malformed request: expected stream error {expected:#x}, got reset={reset} status={state['status']}")
         return
     if reset is not None:
-        if reset[0] == "client":
-            return
         raise AssertionError(f"{kind}: unexpected server reset {reset}")
     if not state["ended"]:
         raise AssertionError(f"{kind}: stream did not end")
@@ -482,7 +484,8 @@ def h2_drain(args):
     authority = f"localhost:{args.port}".encode()
     scheme = b"https" if args.tls else b"http"
     inbound = bytearray()
-    observations = {"frames": []}
+    observations = OBSERVATIONS
+    observations["frames"] = []
 
     def send(frame):
         sock.sendall(frame.serialize())
@@ -737,10 +740,15 @@ def main():
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
     started = time.monotonic()
-    if args.protocol == "h2":
-        report = h2_fuzz(args) if args.mode == "fuzz" else h2_drain(args)
-    else:
-        report = asyncio.run(h3_fuzz(args) if args.mode == "fuzz" else h3_drain(args))
+    try:
+        if args.protocol == "h2":
+            report = h2_fuzz(args) if args.mode == "fuzz" else h2_drain(args)
+        else:
+            report = asyncio.run(h3_fuzz(args) if args.mode == "fuzz" else h3_drain(args))
+    except Exception as error:  # A driver failure is recorded with what was observed.
+        import traceback
+        report = {"result": "FAIL", "error": f"{type(error).__name__}: {error}", "traceback": traceback.format_exc(),
+                  "observations": OBSERVATIONS}
     report["identity"] = {"protocol": args.protocol, "mode": args.mode, "tls": args.tls or args.protocol == "h3",
                           "h2": importlib.metadata.version("h2"), "hyperframe": importlib.metadata.version("hyperframe"),
                           "hpack": importlib.metadata.version("hpack"), "aioquic": importlib.metadata.version("aioquic"),
