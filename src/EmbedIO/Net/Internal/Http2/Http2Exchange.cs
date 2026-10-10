@@ -16,6 +16,8 @@ namespace EmbedIO.Net.Internal.Http2
         private bool _headersSent;
         private bool _ended;
         private bool _endedByLength;
+        private bool _trailersExpected;
+        private bool _tunnel;
         private bool _bodyAllowed = true;
         private long? _responseLength;
         private long _responseBytes;
@@ -85,7 +87,7 @@ namespace EmbedIO.Net.Internal.Http2
                     await WriteCoreAsync(bytes, offset, count, false, token).ConfigureAwait(false);
                     return;
                 }
-                var end = reserved == count && response.ContentLength == count;
+                var end = !_trailersExpected && reserved == count && response.ContentLength == count;
                 var dataCommitted = await _connection.SendDataAsync(Id, fields, bytes, offset, reserved, end, token, _token).ConfigureAwait(false);
                 Sent(response, false);
                 if (dataCommitted)
@@ -107,6 +109,40 @@ namespace EmbedIO.Net.Internal.Http2
             finally { _response.Release(); }
         }
 
+        // Reserve before final headers so Content-Length completion leaves room
+        // for the ending HEADERS section. Ordinary responses retain coalesced FIN.
+        internal void ExpectTrailers()
+        {
+            _token.ThrowIfCancellationRequested();
+            if (!_response.Wait(0)) throw new InvalidOperationException("Cannot reserve trailers during an output operation.");
+            try
+            {
+                if (_headersSent || _ended) throw new InvalidOperationException("Reserve trailers before final response headers.");
+                _trailersExpected = true;
+            }
+            finally { _response.Release(); }
+        }
+
+        internal async Task SendTrailersAsync(HpackField[] fields, CancellationToken token)
+        {
+            if (fields == null) throw new ArgumentNullException(nameof(fields));
+            await EnterAsync(token).ConfigureAwait(false);
+            try
+            {
+                if (!_headersSent || _ended || !_bodyAllowed || _tunnel)
+                    throw new InvalidOperationException("Response cannot contain trailers.");
+                if (_responseLength.HasValue && _responseBytes != _responseLength.Value)
+                    throw new InvalidDataException("Response does not match Content-Length.");
+                try { Http2RequestHeaders.ValidateTrailers(new Http2HeaderBlock(Id, true, fields, 0)); }
+                catch (Http2ProtocolException error) { throw new InvalidDataException(error.Message, error); }
+                if (Array.Exists(fields, field => field.Name == "te"))
+                    throw new InvalidDataException("TE is only valid in requests.");
+                await _connection.SendDataAsync(Id, fields, null, 0, 0, true, token, _token).ConfigureAwait(false);
+                EndLocal();
+            }
+            finally { _response.Release(); }
+        }
+
         public Task CompleteAsync(CancellationToken token)
             => _headersSent ? WriteAsync(Array.Empty<byte>(), 0, 0, true, token) : RespondAsync(Array.Empty<byte>(), token);
 
@@ -122,7 +158,7 @@ namespace EmbedIO.Net.Internal.Http2
                 throw new InvalidDataException("Response does not match Content-Length.");
             // A body that reaches its declared length is complete: its last DATA
             // frame ends the stream instead of a separate empty frame at close.
-            var byLength = !endStream && count != 0 && _bodyAllowed && _responseLength == _responseBytes + count;
+            var byLength = !_trailersExpected && !endStream && count != 0 && _bodyAllowed && _responseLength == _responseBytes + count;
             endStream |= byLength;
             if (count == 0 && endStream)
                 await _connection.SendDataAsync(Id, null, bytes, offset, 0, true, token, _token).ConfigureAwait(false);
@@ -165,6 +201,7 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 _headersSent = true;
                 _bodyAllowed = response.BodyAllowed;
+                _tunnel = Request.Method == "CONNECT" && response.Status < 300;
                 _responseLength = response.ContentLength;
             }
             if (endStream) EndLocal();
