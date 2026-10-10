@@ -1021,13 +1021,13 @@ namespace EmbedIO.Tests
             private H2Peer(TcpClient tcp, Host host) { _tcp = tcp; _wire = tcp.GetStream(); _host = host; }
 
             // Every frame received, in wire order, including frames skipped while waiting.
-            internal List<(int Type, int Flags, int Id, int Length)> Log { get; } = new();
+            internal List<(int Type, int Flags, int Id, int Length, uint? Error)> Log { get; } = new();
 
             internal int DataBytes(int id) => Log.Where(f => f.Type == Http2Data && f.Id == id).Sum(f => f.Length);
 
             internal List<string> ReplyFailures { get; } = new();
 
-            internal string Describe() => string.Join(" ", Log.Select(f => $"{f.Type}/{f.Id}/{f.Flags:x}/{f.Length}"));
+            internal string Describe() => string.Join(" ", Log.Select(f => $"{f.Type}/{f.Id}/{f.Flags:x}/{f.Length}" + (f.Error.HasValue ? $"/error={f.Error.Value:x}" : "")));
 
             internal static async Task<H2Peer> ConnectAsync(Host host)
             {
@@ -1097,7 +1097,9 @@ namespace EmbedIO.Tests
                 var payload = new byte[(header[0] << 16) | (header[1] << 8) | header[2]];
                 await _wire.ReadExactlyAsync(payload, timeout.Token);
                 var frame = (Type: (int)header[3], Flags: (int)header[4], Id: BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(5)) & int.MaxValue, Payload: payload);
-                Log.Add((frame.Type, frame.Flags, frame.Id, payload.Length));
+                uint? code = frame.Type == Http2GoAway && payload.Length >= 8 ? BinaryPrimitives.ReadUInt32BigEndian(payload.AsSpan(4))
+                    : frame.Type == Http2Reset && payload.Length >= 4 ? BinaryPrimitives.ReadUInt32BigEndian(payload) : null;
+                Log.Add((frame.Type, frame.Flags, frame.Id, payload.Length, code));
                 if (_forbiddenStream != 0 && frame.Id == _forbiddenStream)
                     throw new AssertionException($"The server sent frame type {frame.Type} on stream {frame.Id} after that stream ended.");
                 // Automatic replies are best effort: once the server has closed its side
