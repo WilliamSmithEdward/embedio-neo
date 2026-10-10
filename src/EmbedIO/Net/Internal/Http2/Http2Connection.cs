@@ -14,10 +14,11 @@ namespace EmbedIO.Net.Internal.Http2
         private static readonly byte[] Preface = Encoding.ASCII.GetBytes("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
         private readonly Http2FrameTransport _transport;
         private CancellationToken _transportCancellation;
+        // Both are used only by the transport's output flusher, in wire order.
         private readonly HpackEncoder _encoder = new();
+        private readonly MemoryStream _encoded = new();
         private readonly Http2HeaderBlocks _headers = new();
         private int _pendingSettings = 1;
-        private readonly SemaphoreSlim _headerOutput = new(1, 1);
         public Http2PeerSettings Peer { get; } = new();
         internal Http2SendFlowControl SendFlow { get; } = new();
         internal Http2ReceiveFlowControl ReceiveFlow { get; } = new();
@@ -26,7 +27,7 @@ namespace EmbedIO.Net.Internal.Http2
         public int PeerLastStreamId { get; private set; }
         public uint PeerErrorCode { get; private set; }
         internal Action<Exception>? OutputFailed { get; set; }
-        internal void UseTransportCancellation(CancellationToken token) => _transportCancellation = token;
+        internal void UseTransportCancellation(CancellationToken token) => _transport.ConnectionToken = _transportCancellation = token;
         internal Action<int> AdjustStreamWindows { get; set; } = _ => { };
 
         private Http2Connection(Stream stream) : this(stream, ArrayPool<byte>.Shared) { }
@@ -46,7 +47,8 @@ namespace EmbedIO.Net.Internal.Http2
                     if (received[offset + i] != Preface[offset + i]) throw new Http2ProtocolException(1, "Invalid HTTP/2 connection preface.");
                 offset += count;
             }
-            var connection = new Http2Connection(stream) { _transportCancellation = token };
+            var connection = new Http2Connection(stream);
+            connection.UseTransportCancellation(token);
             try
             {
                 // Bound incoming streams/headers, advertise RFC 8441 tunnels and RFC 9218 priorities.
@@ -92,7 +94,8 @@ namespace EmbedIO.Net.Internal.Http2
                     }
                     else
                     {
-                        await _headerOutput.WaitAsync(token).ConfigureAwait(false);
+                        // Applied when the ACK commits, so the encoder table size and
+                        // DATA admission change exactly at the ACK's wire position.
                         try
                         {
                             await _transport.WriteSettingsAsync(new[] { new Http2Frame(4, 1, 0, Array.Empty<byte>()) },
@@ -107,7 +110,6 @@ namespace EmbedIO.Net.Internal.Http2
                             OutputFailed?.Invoke(error);
                             throw;
                         }
-                        finally { _headerOutput.Release(); }
                     }
                     return true;
                 case 6:
@@ -123,32 +125,63 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
+        // A reset before commit leaves the HPACK table untouched. Once encoded,
+        // the block is committed whole even if its stream resets, or the next
+        // block could refer to table entries the peer never received.
         internal async Task SendHeadersAsync(int streamId, HpackField[] fields, bool endStream, CancellationToken token)
         {
-            await _headerOutput.WaitAsync(token).ConfigureAwait(false);
+            if (fields == null) throw new ArgumentNullException(nameof(fields));
             try
             {
-                token.ThrowIfCancellationRequested();
-                long size = 0;
-                foreach (var field in fields) size += field.Size;
-                if (size > Peer.MaximumHeaderListSize) throw new IOException("Response headers exceed peer limit.");
-                var encoded = _encoder.Encode(fields);
-                // Use the universally supported size even while peer settings change.
-                var frames = new Http2Frame[Math.Max(1, (encoded.Length + 16383) / 16384)];
-                for (var i = 0; i < frames.Length; i++)
-                {
-                    var count = Math.Min(16384, encoded.Length - i * 16384);
-                    var fragment = new byte[count];
-                    Buffer.BlockCopy(encoded, i * 16384, fragment, 0, count);
-                    var flags = (byte)((i == frames.Length - 1 ? 4 : 0) | (i == 0 && endStream ? 1 : 0));
-                    frames[i] = new Http2Frame(i == 0 ? (byte)1 : (byte)9, flags, streamId, fragment);
-                }
-                // Encoding mutates the shared HPACK table. Commit the entire
-                // block even if this stream resets, or the next block may refer
-                // to table entries the peer never received.
-                await SendAsync(frames, _transportCancellation).ConfigureAwait(false);
+                await _transport.QueueWriteAsync(new HeaderWrite(this, streamId, fields, endStream, token, _transportCancellation)).ConfigureAwait(false);
             }
-            finally { _headerOutput.Release(); }
+            catch (Exception error) when (_transport.IsWriteFailed)
+            {
+                OutputFailed?.Invoke(error);
+                throw;
+            }
+        }
+
+        private sealed class HeaderWrite : Http2OutputWrite
+        {
+            private readonly Http2Connection _connection;
+            private readonly int _streamId;
+            private readonly HpackField[] _fields;
+            private readonly bool _endStream;
+            private readonly int _estimate;
+
+            internal HeaderWrite(Http2Connection connection, int streamId, HpackField[] fields, bool endStream,
+                CancellationToken token, CancellationToken writeToken) : base(token, writeToken)
+            {
+                _connection = connection; _streamId = streamId; _fields = fields; _endStream = endStream;
+                var estimate = 9;
+                foreach (var field in fields) estimate += field.Name.Length + field.Value.Length + 2;
+                _estimate = estimate;
+            }
+
+            internal override int EstimatedBytes => _estimate;
+
+            internal override bool Commit(Http2OutputBuffer output)
+            {
+                long size = 0;
+                foreach (var field in _fields) size += field.Size;
+                if (size > _connection.Peer.MaximumHeaderListSize) throw new IOException("Response headers exceed peer limit.");
+                var encoded = _connection._encoded;
+                encoded.SetLength(0);
+                _connection._encoder.EncodeTo(_fields, encoded);
+                var bytes = encoded.GetBuffer();
+                var length = (int)encoded.Length;
+                // Use the universally supported size even while peer settings change.
+                var count = Math.Max(1, (length + 16383) / 16384);
+                for (var i = 0; i < count; i++)
+                {
+                    var fragment = Math.Min(16384, length - i * 16384);
+                    var flags = (byte)((i == count - 1 ? 4 : 0) | (i == 0 && _endStream ? 1 : 0));
+                    output.WriteFrameHeader(fragment, i == 0 ? (byte)1 : (byte)9, flags, _streamId);
+                    output.Write(bytes, i * 16384, fragment);
+                }
+                return true;
+            }
         }
 
         // The owner cancels and joins connection I/O before disposing this state.
@@ -159,8 +192,57 @@ namespace EmbedIO.Net.Internal.Http2
             _headers.Dispose();
             ReceiveFlow.Abort();
             Streams.Abort();
-            _headerOutput.Dispose();
             _transport.Dispose();
+            _encoded.Dispose();
+        }
+
+        // DATA borrowing the caller's buffer until this completes. Its credit
+        // must already be reserved; it is returned unless the frame commits.
+        internal async Task<bool> SendDataAsync(int streamId, bool endStream, byte[] bytes, int offset, int count, CancellationToken token)
+        {
+            try
+            {
+                var committed = await _transport.QueueWriteAsync(new DataWrite(SendFlow, streamId, endStream, bytes, offset, count,
+                    token, _transportCancellation)).ConfigureAwait(false);
+                if (!committed) SendFlow.ReturnUnusedReservation(streamId, count);
+                return committed;
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested && !_transport.IsWriteFailed)
+            {
+                // No DATA reached the wire. A reset may already have removed its
+                // stream window; connection credit still belongs to siblings.
+                try { SendFlow.ReturnUnusedReservation(streamId, count); }
+                catch (Exception error) { OutputFailed?.Invoke(error); throw; }
+                throw;
+            }
+            catch (Exception error) { OutputFailed?.Invoke(error); throw; }
+        }
+
+        private sealed class DataWrite : Http2OutputWrite
+        {
+            private readonly Http2SendFlowControl _flow;
+            private readonly int _streamId;
+            private readonly bool _endStream;
+            private readonly byte[] _bytes;
+            private readonly int _offset;
+            private readonly int _count;
+
+            internal DataWrite(Http2SendFlowControl flow, int streamId, bool endStream, byte[] bytes, int offset, int count,
+                CancellationToken token, CancellationToken writeToken) : base(token, writeToken)
+            {
+                _flow = flow; _streamId = streamId; _endStream = endStream;
+                _bytes = bytes; _offset = offset; _count = count;
+            }
+
+            internal override int EstimatedBytes => _count + 9;
+
+            internal override bool Commit(Http2OutputBuffer output)
+            {
+                if (_count != 0 && !_flow.CanSendReserved(_streamId)) return false;
+                output.WriteFrameHeader(_count, 0, _endStream ? (byte)1 : (byte)0, _streamId);
+                output.Write(_bytes, _offset, _count);
+                return true;
+            }
         }
 
         internal async Task<bool> SendStreamAsync(Http2Frame[] frames, CancellationToken token)

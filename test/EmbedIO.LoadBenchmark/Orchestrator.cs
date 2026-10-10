@@ -33,7 +33,7 @@ internal static class Orchestrator
         var serverCpus = options.Optional("--server-cpus");
         var clientCpus = options.Optional("--client-cpus");
         var profile = options.Has("--profile");
-        var modernBaseline = options.Has("--modern-baseline");
+        var modernBaseline = options.Has("--modern-baseline") || options.Has("--baseline-all-protocols");
         var selected = SelectScenarios(options.Text("--scenarios", "all"));
         var engineFilter = options.Optional("--engines")?.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
@@ -389,6 +389,7 @@ internal static class Orchestrator
                 .Select(key => KeyValuePair.Create(key, (JsonNode?)Environment.GetEnvironmentVariable(key)))),
             ["candidateRevision"] = options.Optional("--candidate-revision"),
             ["baselineRevision"] = options.Optional("--baseline-revision"),
+            ["baselineAllProtocols"] = options.Has("--baseline-all-protocols"),
             ["targets"] = new JsonArray([.. targets.Select(target => (JsonNode)new JsonObject
             {
                 ["name"] = target.Name,
