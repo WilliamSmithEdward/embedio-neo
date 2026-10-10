@@ -522,3 +522,44 @@ exact-final-head hosted checks are still required before integration.
 
 Artifacts remain under ignored `TestResults/response-prefix-load`,
 `response-prefix-isolated-allocations.log`, and `response-prefix-corrected-full`.
+## Rejected request-dispatch scheduling experiment
+
+A prototype replaced the per-request Task.Run wrapper with a cached normal
+ThreadPool callback and one request state. Six preservation cases exercised
+ambient-state isolation across awaits and independent acceptance under synchronous
+and suspended handlers on both backends. The 45-case focused set and both target
+builds passed. This was an experiment, not an established fix.
+
+The source was PR216 head `4aca4b5c2eabb99c58bfdeaf13df331bf9310472` plus the
+recorded WebServer patch. Candidate core SHA-256
+`6e62594a8e2dc558bf028a5f2e36b5eb302d2dd0d127ec65547abb23c17c6522`;
+control capacity candidate
+`04532e6dac74055b721d7d1de6303b3175394f1f03e784b3a55d7185d8e39233`.
+The first frozen-harness run returned four paired pipeline samples and two
+candidate-only HTTP/2 samples: its historical-main baseline filter excludes
+HTTP/2. Those two samples cannot demonstrate a before/after effect.
+
+An explicit test-only `--modern-baseline` flag now permits paired comparisons
+against a recorded modern engine revision; its value is captured in environment
+metadata. It leaves historical-main filtering as the default and retains all byte,
+error, resource and process-exit checks. The corrected comparison uses identical
+new runner copies, swapping only the core DLL. Exact runner hashes and complete
+source patches are in ignored `TestResults/dispatch-scheduling-load`.
+
+The paired HTTP/2 small-response run, Windows .NET10.0.12 / Ryzen9800X3D,
+disjoint CPU sets, fresh processes, two alternating rounds and 5s warmup /15s
+measurement, produced four valid samples with no failures/retries and zero open
+server sockets after settlement:
+
+| Engine | Requests/s median (range) | CPU us/request | Bytes/request | p99 ms median |
+| --- | --- | --- | --- | --- |
+| Scheduling prototype | 231964 (216216-247712) | 27.4 | 13272 | 4.480 |
+| Capacity control | 233639 (217829-249448) | 27.3 | 13267 | 6.886 |
+
+These data do not establish a worthwhile throughput, CPU or allocation gain.
+Pipeline samples showed lower allocation but mixed paired throughput and substantial
+host competition. Tail differences from two rounds do not establish a general
+latency gain. The prototype production code and new tests were preserved under
+ignored evidence and restored out of the working source. No default, API,
+dependency or discovery floor changed. The broader performance target remains
+unmet; connection write serialization/batching needs further investigation.

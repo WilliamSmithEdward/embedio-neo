@@ -97,3 +97,13 @@ the candidate. HTTP/3 uses QUIC-only listeners on both engines (`EmbedIOHttp3`).
 - `--profile` adds runtime event listeners (allocation ticks, contention, exceptions)
   and perturbs timing. Profile runs are separate from comparison runs.
 - QUIC connections are not visible to the socket-cleanup check.
+
+## Comparing two modern engine revisions
+
+The default baseline filter deliberately excludes HTTP/2 and HTTP/3 because the
+pinned main baseline does not implement them. When the baseline DLL is a recorded
+modern-engine revision that supports the selected protocols, pass
+`--modern-baseline` explicitly. The environment record captures this choice;
+response validation and failure handling remain unchanged. Do not use this flag
+with the historical main baseline. Build identical runner copies and swap only
+the core DLL, retaining revision and binary hashes for both.
