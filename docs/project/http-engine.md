@@ -6797,3 +6797,16 @@ requires. Its 83 reflection-driven cases pass with both target assets; the
 specification basis, open choices, integration contract and remaining gaps are
 in [WebTransport session core development](http-webtransport-core.md). This is
 not WebTransport support and is not interoperability evidence.
+
+
+WebTransport core review found and reproduced a request-ordering defect in
+PR 233 at eea1ad8: all four early stream/datagram cases for delayed lower CONNECT
+IDs fail after an unrelated higher request is noted. The isolated correction
+uses exact bounded request ranges, retains unknown lower-ID traffic within the
+existing buffer limits, and updates the integration contract. No external agent
+branch was changed and no merge occurred. The 90 focused cases pass with both
+actual target assets on the .NET 10 Windows host and with the modern asset on
+pinned Linux. The full Windows suite reports 4802 cases, 4797 passed, five
+existing skips, zero failures. All hosted final-head checks remain required;
+docs/project/http-webtransport-core.md records the reproduction hash, scope,
+retained-asset setup failure and remaining interoperability gaps.

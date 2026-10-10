@@ -745,13 +745,38 @@ namespace EmbedIO.Tests
             Assert.That(aborts, Is.Empty);
         }
 
+        [TestCase(0L, false)]
+        [TestCase(8L, false)]
+        [TestCase(0L, true)]
+        [TestCase(8L, true)]
+        public void LowerDelayedConnectBuffersEarlyDataAfterHigherRequestProcessing(long sessionId, bool datagram)
+        {
+            var recorder = new Recorder();
+            var aborts = new List<(long Id, long Code)>();
+            var registry = Registry(Settings(true, 1000, 10, 10), Settings(true, 1000, 10, 10), recorder);
+            Call(registry, "NoteRequestStream", 12L);
+            if (datagram)
+                Assert.That(Call(registry, "RouteDatagram", sessionId, new byte[] { 17, 18 }, 0, 2), Is.True);
+            else
+                Assert.That(Call(registry, "RouteIncomingStream", sessionId, Handle(2, false, aborts)), Is.True);
+            var arguments = new object?[] { sessionId, null };
+            Assert.That(Call(registry, "TryCreateSession", arguments)?.ToString(), Is.EqualTo("Accepted"));
+            var session = arguments[1] ?? throw new AssertionException("Missing delayed session.");
+            Assert.That(recorder.Streams.Count + recorder.Datagrams.Count, Is.Zero);
+            Call(session, "Establish");
+            Assert.That(aborts, Is.Empty);
+            if (datagram) Assert.That(recorder.Datagrams.Single().Data, Is.EqualTo(new byte[] { 17, 18 }));
+            else Assert.That(recorder.Streams.Count, Is.EqualTo(1));
+        }
+
         [Test]
         public void StreamsForPastOrClosedSessionsAreResetWithSessionGone()
         {
             var aborts = new List<(long Id, long Code)>();
             var registry = Registry(Settings(true), Settings(true), new Recorder());
             Call(registry, "NoteRequestStream", 12L);
-            Assert.That(Call(registry, "RouteIncomingStream", 8L, Handle(2, false, aborts)), Is.False, "an ordinary request stream below the high-water mark");
+            Call(registry, "NoteRequestStream", 8L);
+            Assert.That(Call(registry, "RouteIncomingStream", 8L, Handle(2, false, aborts)), Is.False, "this exact request was classified as ordinary");
             Assert.That(Call(registry, "RouteDatagram", 12L, new byte[1], 0, 1), Is.False);
             var arguments = new object?[] { 16L, null };
             Call(registry, "TryCreateSession", arguments);
@@ -762,6 +787,54 @@ namespace EmbedIO.Tests
             Assert.That(Call(registry, "RouteIncomingStream", 16L, Handle(6, true, aborts)), Is.False);
             Assert.That(aborts, Is.EqualTo(new[] { (2L, SessionGone), (6L, SessionGone) }));
             Assert.That(Call(registry, "RouteIncomingStream", 20L, Handle(10, true, aborts)), Is.True, "a later identifier is still early");
+        }
+
+        [Test]
+        public void ExactOrdinaryClassificationReleasesOnlyItsOwnEarlyBuffers()
+        {
+            var recorder = new Recorder(); var aborts = new List<(long Id, long Code)>();
+            var registry = Registry(Settings(true), Settings(true), recorder);
+            Assert.That(Call(registry, "RouteIncomingStream", 8L, Handle(2, false, aborts)), Is.True);
+            Assert.That(Call(registry, "RouteIncomingStream", 4L, Handle(6, false, aborts)), Is.True);
+            Assert.That(Call(registry, "RouteDatagram", 8L, new byte[] { 1 }, 0, 1), Is.True);
+            Assert.That(Call(registry, "RouteDatagram", 4L, new byte[] { 2 }, 0, 1), Is.True);
+            Call(registry, "NoteRequestStream", 8L);
+            Assert.That(aborts, Is.EqualTo(new[] { (2L, SessionGone) }));
+            Assert.That(Prop<int>(registry, "BufferedStreamCount"), Is.EqualTo(1));
+            Assert.That(Prop<int>(registry, "BufferedDatagramCount"), Is.EqualTo(1));
+            var arguments = new object?[] { 4L, null };
+            Assert.That(Call(registry, "TryCreateSession", arguments)?.ToString(), Is.EqualTo("Accepted"));
+            Call(arguments[1] ?? throw new AssertionException("Missing delayed session."), "Establish");
+            Assert.That(recorder.Streams.Count, Is.EqualTo(1));
+            Assert.That(recorder.Datagrams.Single().Data, Is.EqualTo(new byte[] { 2 }));
+            Assert.Throws<InvalidOperationException>(() => Call(registry, "TryCreateSession", new object?[] { 8L, null }));
+        }
+        [Test]
+        public void ClassifiedRequestRangesCompactBothSidesAndBoundSparseHistory()
+        {
+            var limits = New("WebTransportRegistryLimits"); Set(limits, "MaximumTrackedRequestRanges", 2);
+            var registry = Registry(Settings(true), Settings(true), new Recorder(), limits: limits);
+            Call(registry, "NoteRequestStream", 12L); Call(registry, "NoteRequestStream", 4L);
+            Call(registry, "NoteRequestStream", 8L); // Joins both ranges.
+            Call(registry, "NoteRequestStream", 0L);
+            for (var id = 16L; id < 16384; id += 4) Call(registry, "NoteRequestStream", id);
+            Assert.That(Call(registry, "RouteDatagram", 0L, new byte[1], 0, 1), Is.False);
+            Assert.That(Call(registry, "RouteDatagram", 16380L, new byte[1], 0, 1), Is.False);
+            Call(registry, "NoteRequestStream", 20000L); // Second disjoint range.
+            Assert.That(Call(registry, "RouteDatagram", 19996L, new byte[1], 0, 1), Is.True, "an unclassified gap remains early");
+            AssertError("Http3ProtocolException", 0x107, () => Call(registry, "NoteRequestStream", 20008L));
+        }
+        [Test]
+        public void EndedSessionCannotBeRecreatedAndDoesNotClassifyUnseenLowerRequests()
+        {
+            var recorder = new Recorder(); var registry = Registry(Settings(true), Settings(true), recorder);
+            var arguments = new object?[] { 12L, null };
+            Call(registry, "TryCreateSession", arguments);
+            var session = arguments[1] ?? throw new AssertionException("Missing session.");
+            Call(session, "Establish"); Call(session, "Close", 0u, ""); Call(registry, "SessionEnded", session);
+            Assert.Throws<InvalidOperationException>(() => Call(registry, "TryCreateSession", new object?[] { 12L, null }));
+            Assert.That(Call(registry, "RouteDatagram", 8L, new byte[1], 0, 1), Is.True);
+            Assert.That(Call(registry, "RouteDatagram", 12L, new byte[1], 0, 1), Is.False);
         }
 
         [Test]

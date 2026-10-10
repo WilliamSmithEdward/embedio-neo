@@ -121,11 +121,13 @@ stream must be reset with.
   draft's treatment of an invalid close message.
 - An initial stream-limit setting above 2^60 is `H3_SETTINGS_ERROR`; the draft
   states the bound for capsules only.
-- "Session identifiers of closed sessions are not invalid" needs a bounded memory
-  of the past. The registry keeps one high-water mark of request stream
-  identifiers the connection has processed, which the transport must report for
-  every client bidirectional stream; identifiers at or below it with no live
-  session are treated as gone, higher ones as early.
+- Closed or positively classified non-WebTransport request identifiers are
+  tracked in compact, exact ranges of client bidirectional stream ordinals.
+  Seeing a higher request does not classify unseen lower identifiers: independent
+  HTTP/3 streams can arrive out of order. The default internal range budget is
+  128; excessive sparse history raises `H3_EXCESSIVE_LOAD`. Consecutive completed
+  requests compact into one range, including when gaps close out of order.
+  Unknown session traffic still uses the existing bounded early-data queues.
 - When a buffer is full the newest arrival is discarded.
 - Credit is re-advertised once half of the initial window has been released,
   before any blocked signal could be needed.
@@ -167,7 +169,10 @@ this core it must:
    WebTransport is enabled, advertise `SETTINGS_H3_DATAGRAM` only when datagrams
    really work, and construct one `WebTransportSessionRegistry` with the
    negotiated transport-parameter result.
-2. Call `NoteRequestStream` for every client bidirectional stream it processes.
+2. Call `NoteRequestStream` only after that exact request is positively classified
+   as non-WebTransport or its CONNECT is rejected. Do not call it just because a
+   stream arrives or header processing begins. It releases any early buffers for
+   that exact identifier; other identifiers remain eligible for association.
 3. On an extended CONNECT with `:protocol` equal to `ProtocolToken`, call
    `TryCreateSession`, answer `TooManySessions` with `H3_REQUEST_REJECTED` or 429,
    let the application accept or refuse (405 when the resource is not a
@@ -208,3 +213,35 @@ development in PR #231 is the expected home for that requirement.
   header fields (section 3.3, 9.7) are not implemented.
 - No independent peer, browser or fuzzing evidence exists; the draft may change
   before publication and every codepoint here must be re-checked against it.
+
+
+## Ordering correction under review
+
+At PR #233 head `eea1ad8`, four deterministic cases fail: request 12 is processed
+first, then a stream or datagram names delayed CONNECT 0 or 8. The original
+high-water inference rejects all four despite available buffering capacity.
+The retained unchanged production binary SHA-256 is
+`61E7349AD48829792043697891BDB7A056374C0A9A52A598FAF392D7832E4C01`.
+This follows the out-of-order arrival scenario in draft section 4.6; it is a
+core reproduction, not a browser or native QUIC interoperability campaign.
+
+The isolated correction records exact unavailable IDs using bounded compact
+ranges, releases early buffers when their exact request is classified as
+ordinary/rejected, and prevents reuse of a closed session ID. Seven additional
+cases cover four delayed-CONNECT vectors, exact-ID buffer release, range joining
+and sparse-history exhaustion, and closed-session identity. The old gone-session
+case now explicitly classifies request 8 instead of inferring it from request 12.
+The corrected source passes all 90 focused cases on Windows with the .NET 10
+asset, with the current .NET Standard 2.0 asset on a .NET 10 host, and on pinned
+Linux using the same Windows-built IL. Both core targets build without warnings;
+syntax, suppression and changed-source whitespace guards pass. The full Windows
+suite reports 4802 cases: 4797 passed, five existing skips, zero failures, in
+3m 18s. Hosted final-head checks remain required. This does not establish legacy
+.NET Framework, browser or native QUIC interoperability. No existing application
+advertises WebTransport support.
+
+An initial retained-asset probe accidentally selected a stale pre-WebTransport
+.NET Standard binary and failed with missing-type errors in all 90 cases. That
+setup failure is retained separately; after rebuilding both actual core targets,
+the current retained-asset run above passes. The modern binary is restored and
+its SHA-256 verified after each retained-asset probe.
