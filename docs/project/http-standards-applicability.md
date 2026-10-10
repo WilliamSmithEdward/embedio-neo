@@ -94,7 +94,7 @@ and stream-type registries (last updated 2023-06-13) contain only RFC 9114, 9204
 
 ### Errata that touch the audited areas
 
-Only verified errata and those held for document update change requirements.
+Verified technical errata are reviewed as conformance corrections. Held-for-document-update entries are tracked for interpretation and future revision; they do not automatically amend published normative requirements.
 The 2026-10-09 list in the conformance audit remains accurate; these were not in it.
 
 | Erratum | Status | Assessment |
@@ -161,7 +161,7 @@ WebTransport sessions.
 
 | Item | Engine `01e785d` | Draft #224 `a2dc18c` | Status |
 | --- | --- | --- | --- |
-| Settings, stream type 0x54, signal 0x41, `:protocol=webtransport` sessions | None. Unknown unidirectional stream types are aborted with H3_STREAM_CREATION_ERROR (`Http3QuicConnection.cs:245-246`) and unknown frames skipped, as RFC 9114 6.2.3 and 9 require. HTTP/3 `:protocol=webtransport` gets 501; HTTP/2 dispatches it (F2) | `:protocol=webtransport` dispatched on both versions; an application could accept it only as a generic capsule tunnel | Experimental draft, not supported. Out of scope until the drafts and IANA registrations settle; F2 applies meanwhile |
+| Settings, stream type 0x54, signal 0x41, `:protocol=webtransport` sessions | None. Unknown unidirectional stream types are aborted with H3_STREAM_CREATION_ERROR (`Http3QuicConnection.cs:245-246`) and unknown frames skipped, as RFC 9114 6.2.3 and 9 require. HTTP/3 `:protocol=webtransport` gets 501; HTTP/2 dispatches it (F2) | `:protocol=webtransport` dispatched on both versions; an application could accept it only as a generic capsule tunnel | Experimental draft, not supported. Concrete experimental work remains in program181: freeze the October2026 draft/registry version and validate session/datagram interoperability before advertising support; F2 applies to the generic probe route meanwhile |
 
 ### Priorities (RFC 9218)
 
@@ -270,3 +270,8 @@ Raw logs and JSON: ignored `TestResults/http-standards-applicability/runs`.
   documentation, not re-verified against .NET 10 API references here.
 - The inventory is frozen at the capture time above. RFCs, errata and registries
   published later need a new capture.
+
+
+## Integration review limits
+
+The frozen observations above retain their exact source revisions; they are not a claim that every probe was rerun on the current engine. Capsule PR224 is now integrated as1a4def7. Program181 retains native datagram and experimental WebTransport development and validation; draft status does not silently remove those work items. F2 uses an ordinary probe resource that does not implement the requested extension: its2xx response demonstrates accidental acceptance risk with catch-all handlers. It does not establish that every application-defined protocol handler is nonconforming. Explicit application-controlled dispatch was approved; safe acceptance behavior still needs a concrete compatibility decision and protocol-specific validation.

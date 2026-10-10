@@ -218,7 +218,7 @@ internal sealed class ConformanceServer : IDisposable
     {
         using var buffer = new MemoryStream();
         await context.Request.InputStream.CopyToAsync(buffer, context.CancellationToken).ConfigureAwait(false);
-        var names = context.Request.Headers.AllKeys.Where(k => k != null).Select(k => k!.ToLowerInvariant()).OrderBy(k => k, StringComparer.Ordinal);
+        var names = context.Request.Headers.AllKeys.OfType<string>().Select(k => k.ToLowerInvariant()).OrderBy(k => k, StringComparer.Ordinal);
         await context.SendStringAsync($"body={buffer.Length};fields={string.Join(",", names)}", "text/plain", WebServer.Utf8NoBomEncoding).ConfigureAwait(false);
     }
 
