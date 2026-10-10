@@ -54,10 +54,13 @@ and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
 least 4935 executed/reported test cases to catch accidental discovery loss; update
-that baseline deliberately when adding or removing tests. The five-minute suite
-budget allows the full coverage-enabled Windows run to finish; the discovery
-minimum remains enforced. NUnit 5 async assertions
-must be awaited.
+that baseline deliberately when adding or removing tests. The full coverage
+suite budget is five minutes on Windows and eight minutes on Linux/macOS,
+approved by William on 2026-10-10 after incomplete Unix runs reported no failed
+cases before the former five-minute limit. Use --timeout 8m for a full Unix run.
+Per-case deadlines, assertions, iterations, coverage and the discovery minimum
+remain enforced; this is a whole-run allowance, not a failure exemption. NUnit 5
+async assertions must be awaited.
 
 CI also runs test-only MAUI Mac Catalyst and Android apps outside the ordinary
 solution and shipped packages. The Android fixture uses the pinned .NET 10 SDK,

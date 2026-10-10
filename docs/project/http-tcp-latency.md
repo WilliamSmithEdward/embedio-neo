@@ -87,10 +87,16 @@ HTTP/1 response-write PR #256 at df5d5df on current engine base 40e0251. The
 production HttpConnection and ResponseStream files are byte-identical to their
 respective reviewed heads; the v2 guide is retained. The 32 new response-write
 cases raise the discovery floor to 4935 in CI, CONTRIBUTING and the native-close
-experiment. The five-minute budget, assertions, iterations, coverage and raw
+experiment. At initial reconciliation the five-minute budget, assertions,
+iterations, coverage and raw
 rebind classifier are unchanged.
 
 The individual measurements above and the response-write report do not measure
 this combined engine. Fresh combined Windows and pinned Linux source/coverage
 validation and exact-head hosted checks remain required. Neither constituent PR
 is integrated into the engine by this reconciliation alone.
+William approved an eight-minute full-suite CI budget on Linux/macOS on
+2026-10-10, retaining five minutes on Windows. The combined branch applies that
+approval with the 4935 discovery floor; per-case deadlines, iterations,
+assertions, coverage and the narrow raw-rebind classifier remain unchanged.
+The queued local comparison still uses five minutes on both platforms.
