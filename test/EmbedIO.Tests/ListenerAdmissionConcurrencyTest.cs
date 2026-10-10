@@ -376,6 +376,37 @@ namespace EmbedIO.Tests
             Timeout = TimeSpan.FromSeconds(10)
         };
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task ResponseFixtureAcceptsAnAlreadyCanceledHttp2Stream(bool dispatchOnThreadPool)
+        {
+            var prefix = Resources.GetServerAddress();
+            using var listener = new Net.HttpListener();
+            listener.AddPrefix(prefix); listener.Start();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var client = Client(true);
+            var request = client.GetStringAsync(prefix, timeout.Token);
+            try
+            {
+                var context = await listener.GetContextAsync(timeout.Token);
+                var exchange = context.GetType().GetField("_exchange", PrivateInstance)?.GetValue(context)
+                    ?? throw new AssertionException("Missing HTTP2 exchange.");
+                var cancel = exchange.GetType().GetMethod("Cancel", PrivateInstance)
+                    ?? throw new AssertionException("Missing stream cancellation.");
+                cancel.Invoke(exchange, new object[] { new OperationCanceledException("Controlled stream shutdown.") });
+                Assert.That(context.CancellationToken.IsCancellationRequested, Is.True);
+                var served = 0;
+                if (dispatchOnThreadPool) await Task.Run(() => Respond(context, () => Interlocked.Increment(ref served)), timeout.Token);
+                else await Respond(context, () => Interlocked.Increment(ref served));
+                Assert.That(served, Is.Zero, "An aborted response is not counted as successfully served.");
+            }
+            finally
+            {
+                listener.Stop();
+                try { await request.WaitAsync(TimeSpan.FromSeconds(5)); }
+                catch (HttpRequestException) { }
+            }
+        }
         private static async Task Serve(Net.HttpListener listener, bool dispatchOnThreadPool, Action onServed, CancellationToken token)
         {
             try
@@ -399,6 +430,11 @@ namespace EmbedIO.Tests
                 await context.Response.OutputStream.WriteAsync(body);
                 context.Close();
                 onServed();
+            }
+            catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
+            {
+                // HTTP/2 Stop/reset cancels the request token before disposing its response.
+                // This is a terminal response outcome, not a successfully served request.
             }
             catch (Exception error) when (error is System.IO.IOException or ObjectDisposedException or HttpListenerException)
             {
