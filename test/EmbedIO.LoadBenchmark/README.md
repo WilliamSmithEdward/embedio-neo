@@ -59,6 +59,9 @@ python scripts/attribute_trace_frames.py <sample>.speedscope.json --target Monit
 - One fresh server process and one fresh client process per sample. On Windows the
   children inherit their CPU set at creation (so server GC heaps and the thread pool
   are sized for it); on Linux they start under `taskset`. Use disjoint physical cores.
+  macOS cannot pin processes: `--server-cpus`/`--client-cpus` are refused there,
+  `environment.json` records `cpuAffinity: none`, and server and client share every
+  core, including Apple Silicon's separate performance levels (`processorTopology`).
 - Every engine runs the same handler work: route parse, a cached static body or a
   server-validated upload, and asynchronous writes. Bodies use a non-periodic byte
   pattern; the client checks status, protocol version, framing, length and every
@@ -75,8 +78,9 @@ python scripts/attribute_trace_frames.py <sample>.speedscope.json --target Monit
 - Client metrics: completed requests, every latency in a log-linear histogram
   (p50/p90/p95/p99/p99.9/max, raw buckets kept), connections opened, server-initiated
   closes, client CPU and allocation.
-- Machine busy CPU minus server and client CPU estimates background load per sample.
-- Server GC (concurrent) for every engine. Runtime, OS, CPU, power scheme, `DOTNET_*`
+- Machine busy CPU minus server and client CPU estimates background load per sample
+  (Windows `GetSystemTimes`, Linux `/proc/stat`, macOS `host_statistics`).
+- Server GC (concurrent) for every engine. Runtime, OS, CPU and topology, power scheme (Windows) or `pmset` state (macOS), `DOTNET_*`
   variables and hashes of the runner, both cores, Kestrel and QUIC assemblies go in
   `environment.json`.
 

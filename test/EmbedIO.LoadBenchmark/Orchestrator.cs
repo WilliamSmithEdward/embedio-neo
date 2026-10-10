@@ -32,6 +32,10 @@ internal static class Orchestrator
         var idle = options.Number("--idle", 2);
         var serverCpus = options.Optional("--server-cpus");
         var clientCpus = options.Optional("--client-cpus");
+        // Children are pinned only through Windows CPU-set inheritance or Linux taskset.
+        // macOS has no process CPU pinning, so a requested set would be recorded but not applied.
+        if ((serverCpus is not null || clientCpus is not null) && !OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+            throw new InvalidOperationException("--server-cpus/--client-cpus are supported only on Windows and Linux; this OS cannot pin processes. Omit them; environment.json then records cpuAffinity \"none\".");
         var profile = options.Has("--profile");
         var modernBaseline = options.Has("--modern-baseline") || options.Has("--baseline-all-protocols");
         var selected = SelectScenarios(options.Text("--scenarios", "all"));
@@ -218,8 +222,8 @@ internal static class Orchestrator
         {
             // Bounded diagnostic for transport failures: machine-wide TCP states by side.
             var census = new JsonObject();
-            foreach (var group in IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections()
-                .GroupBy(connection => (connection.LocalEndPoint.Port is >= ServerPortFirst and < ServerPortLast ? "server-" : "other-") + connection.State))
+            foreach (var group in TcpConnections()
+                .GroupBy(connection => (connection.LocalPort is >= ServerPortFirst and < ServerPortLast ? "server-" : "other-") + connection.State))
             {
                 census[group.Key] = group.Count();
             }
@@ -274,7 +278,8 @@ internal static class Orchestrator
         var clientCpu = client["clientCpuSeconds"]?.GetValue<double>() ?? 0;
         var serverProcessors = sample["server"]?["processorCount"]?.GetValue<int>() ?? Environment.ProcessorCount;
         var clientProcessors = client["clientProcessorCount"]?.GetValue<int>() ?? Environment.ProcessorCount;
-        long Delta(string name) => (sample["serverAfter"]?[name]?.GetValue<long>() ?? 0) - (sample["serverBefore"]?[name]?.GetValue<long>() ?? 0);
+        // Null when the platform does not report the metric (macOS private bytes).
+        long? Delta(string name) => sample["serverAfter"]?[name]?.GetValue<long>() - sample["serverBefore"]?[name]?.GetValue<long>();
         sample["derived"] = new JsonObject
         {
             ["requestsPerSecond"] = client["requestsPerSecond"]?.GetValue<double>(),
@@ -306,8 +311,31 @@ internal static class Orchestrator
     // Only client-side TIME_WAIT (local port outside the server port range) holds
     // ephemeral ports; server-side entries do not limit new client connections.
     private static int TimeWaitCount(bool clientSide = true)
-        => IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections().Count(connection => connection.State == TcpState.TimeWait
-            && (!clientSide || connection.LocalEndPoint.Port is < ServerPortFirst or >= ServerPortLast));
+        => TcpConnections().Count(connection => connection.State == TcpState.TimeWait
+            && (!clientSide || connection.LocalPort is < ServerPortFirst or >= ServerPortLast));
+
+    // Every non-listening TCP connection by local port and state. On macOS .NET's
+    // GetActiveTcpConnections omits TIME_WAIT, so the TIME_WAIT gate and the socket
+    // census read netstat, which lists every protocol control block.
+    private static List<(int LocalPort, TcpState State)> TcpConnections()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return [.. IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections().Select(connection => (connection.LocalEndPoint.Port, connection.State))];
+        var result = new List<(int LocalPort, TcpState State)>();
+        foreach (var line in SystemCpu.Command("netstat", "-an -p tcp").Split('\n'))
+        {
+            // tcp4  0  0  127.0.0.1.20123  127.0.0.1.54321  TIME_WAIT
+            var fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (fields.Length < 6 || !fields[0].StartsWith("tcp", StringComparison.Ordinal)) continue;
+            var local = fields[3];
+            var dot = local.LastIndexOf('.');
+            if (dot < 0 || !int.TryParse(local.AsSpan(dot + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var localPort)) continue;
+            if (!Enum.TryParse<TcpState>(fields[5].Replace("_", string.Empty, StringComparison.Ordinal), true, out var state) || state == TcpState.Listen) continue;
+            result.Add((localPort, state));
+        }
+
+        return result;
+    }
 
     private const int ServerPortFirst = 20000;
     private const int ServerPortLast = 30000;
@@ -318,8 +346,7 @@ internal static class Orchestrator
     private static JsonObject ServerSockets(int port)
     {
         var states = new JsonObject();
-        foreach (var group in IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections()
-            .Where(connection => connection.LocalEndPoint.Port == port).GroupBy(connection => connection.State))
+        foreach (var group in TcpConnections().Where(connection => connection.LocalPort == port).GroupBy(connection => connection.State))
         {
             states[group.Key.ToString()] = group.Count();
         }
@@ -383,7 +410,13 @@ internal static class Orchestrator
             ["totalMemoryBytes"] = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes,
             ["runtime"] = RuntimeInformation.FrameworkDescription,
             ["runtimeDirectory"] = runtimeDirectory,
+            ["processorTopology"] = SystemCpu.Topology(),
             ["powerScheme"] = OperatingSystem.IsWindows() ? SystemCpu.Command("powercfg", "/getactivescheme") : null,
+            ["powerSettings"] = OperatingSystem.IsMacOS()
+                ? string.Join("\n", SystemCpu.Command("pmset", "-g"), SystemCpu.Command("pmset", "-g batt"), SystemCpu.Command("pmset", "-g therm"))
+                : null,
+            ["cpuAffinity"] = serverCpus is null && clientCpus is null ? "none"
+                : OperatingSystem.IsWindows() ? "inherited CPU set (Windows)" : "taskset (Linux)",
             ["dotnetEnvironment"] = new JsonObject(Environment.GetEnvironmentVariables().Keys.Cast<string>()
                 .Where(key => key.StartsWith("DOTNET_", StringComparison.OrdinalIgnoreCase) || key.StartsWith("COMPlus_", StringComparison.OrdinalIgnoreCase))
                 .Select(key => KeyValuePair.Create(key, (JsonNode?)Environment.GetEnvironmentVariable(key)))),
