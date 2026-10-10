@@ -80,3 +80,17 @@ The response-write agent owns ResponseStream batching. This increment changes
 only connection setup and must be measured together with that work after
 integration. Existing before/after response-write numbers do not include this
 socket change. Program #181 remains open and Neo v2 is unreleased.
+## Combined HTTP/1 response-write integration
+
+The isolated integration branch combines TCP candidate 09e3df0 with the reviewed
+HTTP/1 response-write PR #256 at df5d5df on current engine base 40e0251. The
+production HttpConnection and ResponseStream files are byte-identical to their
+respective reviewed heads; the v2 guide is retained. The 32 new response-write
+cases raise the discovery floor to 4935 in CI, CONTRIBUTING and the native-close
+experiment. The five-minute budget, assertions, iterations, coverage and raw
+rebind classifier are unchanged.
+
+The individual measurements above and the response-write report do not measure
+this combined engine. Fresh combined Windows and pinned Linux source/coverage
+validation and exact-head hosted checks remain required. Neither constituent PR
+is integrated into the engine by this reconciliation alone.
