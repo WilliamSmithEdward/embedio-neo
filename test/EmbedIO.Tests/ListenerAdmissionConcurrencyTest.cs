@@ -346,12 +346,17 @@ namespace EmbedIO.Tests
         {
             var prefix = Resources.GetServerAddress();
             var handled = 0;
+            var handledIds = new ConcurrentQueue<string>();
+            var completedIds = new ConcurrentQueue<string>();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var server = new WebServer(HttpListenerMode.EmbedIO, prefix)
                 .WithModule(new ActionModule("/", HttpVerbs.Get, async context =>
                 {
+                    var requestId = context.Request.Headers["X-EmbedIO-Drain-Test"] ?? "<missing>";
+                    handledIds.Enqueue(requestId);
                     _ = Interlocked.Increment(ref handled);
                     await context.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding);
+                    completedIds.Enqueue(requestId);
                 }));
             var running = server.RunAsync(timeout.Token);
             var connector = new DrainConnector();
@@ -369,7 +374,12 @@ namespace EmbedIO.Tests
             Assert.That(outcome.Unexpected, Is.Empty);
             Assert.That(Pending((Net.HttpListener)server.Listener).Count, Is.Zero);
             // Graceful drain answers every request it admitted; refused ones never reach a handler.
-            Assert.That(outcome.Succeeded, Is.EqualTo(Volatile.Read(ref handled)));
+            Assert.That(outcome.Succeeded, Is.EqualTo(Volatile.Read(ref handled)),
+                "Handler entries: " + string.Join(",", handledIds.TakeLast(32))
+                + "; handler writes completed: " + completedIds.Count
+                + "; handled without a client response: " + string.Join(",", handledIds.Except(outcome.Delivered))
+                + "; duplicate handler entries: " + string.Join(",", handledIds.GroupBy(id => id).Where(group => group.Count() > 1).Select(group => group.Key))
+                + "; terminal failures: " + string.Join(" | ", outcome.Refused));
             await AssertPortRefusesAsync(prefix);
         }
 
@@ -567,6 +577,9 @@ namespace EmbedIO.Tests
         {
             internal int Stop;
             internal int Succeeded;
+            internal int NextRequestId;
+            internal readonly ConcurrentQueue<string> Delivered = new();
+            internal readonly ConcurrentQueue<string> Refused = new();
             internal readonly ConcurrentQueue<Exception> Unexpected = new();
             internal Task[] Workers = Array.Empty<Task>();
         }
@@ -578,14 +591,21 @@ namespace EmbedIO.Tests
             {
                 while (Volatile.Read(ref state.Stop) == 0)
                 {
+                    var requestId = Interlocked.Increment(ref state.NextRequestId).ToString(System.Globalization.CultureInfo.InvariantCulture);
                     try
                     {
-                        var body = await client.GetStringAsync(prefix, token);
+                        using var request = new HttpRequestMessage(HttpMethod.Get, prefix)
+                        { Version = client.DefaultRequestVersion, VersionPolicy = client.DefaultVersionPolicy };
+                        request.Headers.Add("X-EmbedIO-Drain-Test", requestId);
+                        using var response = await client.SendAsync(request, token);
+                        response.EnsureSuccessStatusCode();
+                        var body = await response.Content.ReadAsStringAsync(token);
                         if (body != "ok") state.Unexpected.Enqueue(new InvalidOperationException($"Unexpected body '{body}'."));
-                        else _ = Interlocked.Increment(ref state.Succeeded);
+                        else { state.Delivered.Enqueue(requestId); _ = Interlocked.Increment(ref state.Succeeded); }
                     }
-                    catch (HttpRequestException)
+                    catch (HttpRequestException error)
                     {
+                        state.Refused.Enqueue(requestId + ": " + error);
                         // Refused, reset or closed by Stop/drain: the request was not answered,
                         // but the client saw a terminal outcome rather than a hang.
                         await Task.Delay(1, token);
@@ -600,11 +620,11 @@ namespace EmbedIO.Tests
             return state;
         }
 
-        private static async Task<(int Succeeded, Exception[] Unexpected)> StopLoad(LoadState state)
+        private static async Task<(int Succeeded, Exception[] Unexpected, string[] Delivered, string[] Refused)> StopLoad(LoadState state)
         {
             Volatile.Write(ref state.Stop, 1);
             await Task.WhenAll(state.Workers).WaitAsync(TimeSpan.FromSeconds(20));
-            return (Volatile.Read(ref state.Succeeded), state.Unexpected.ToArray());
+            return (Volatile.Read(ref state.Succeeded), state.Unexpected.ToArray(), state.Delivered.ToArray(), state.Refused.ToArray());
         }
 
         private static IDictionary Pending(Net.HttpListener listener)
