@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Restrict public response StatusCode assignments to final statuses (200-599),
+  as explicitly approved. Use informational-response and protocol-handoff APIs
+  for 1xx; automatic Continue and negotiated 101 remain supported. See the
+  [migration note](docs/compatibility/migration.md#final-response-status-validation-unreleased).
 - Enable TCP_NODELAY on accepted managed TCP sockets to avoid delayed small
   writes while preserving protocol framing and writer batching. See the
   [controlled latency comparison](docs/project/http-tcp-latency.md).

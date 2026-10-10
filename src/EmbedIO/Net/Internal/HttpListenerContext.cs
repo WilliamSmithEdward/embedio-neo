@@ -198,7 +198,7 @@ namespace EmbedIO.Net.Internal
             Http1TunnelStream? stream = null;
             try
             {
-                Response.StatusCode = protocol == null ? 200 : 101;
+
                 HttpListenerResponse.BeginTunnel(protocol, useCapsules);
                 Connection.BeginTunnel();
                 stream = new Http1TunnelStream(Connection, Connection.TakeUpgradeStream());
