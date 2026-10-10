@@ -121,3 +121,11 @@ blocked. Draining delivers the exact body and trailers; resetting interrupts the
 writer. Both paths leave a subsequent request usable and no pending send-flow
 waiters. This is bounded HTTP/2 backpressure evidence, not HTTP/1, HTTP/3 or soak
 acceptance.
+
+Four HTTP/3 cases use a real QUIC peer with a 64 KiB stream receive window.
+They hold an unread 8 MiB response while a sibling completes, then drain the
+exact body followed by a single ending HEADERS section or abort reads to release
+the outstanding writer. Single application writes and 16 KiB writes are covered.
+A subsequent stream succeeds on the same connection. Trailer fields in this
+fixture are decoded by the engine's QPACK decoder, so this is transport/lifetime
+evidence; independent QPACK evidence remains the separate peer campaign above.
