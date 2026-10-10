@@ -30,10 +30,11 @@ namespace EmbedIO.Net.Internal.Http3
         private bool _data;
         private bool _ended;
         private volatile bool _disposed;
+        private volatile bool _inputAbandoned;
         private int _reading;
         internal Http3RequestBody(long streamId, Http3RequestStream reader, IHttp3RequestOwner owner)
         { _streamId = streamId; _reader = reader; _owner = owner; }
-        public override bool CanRead => !_disposed;
+        public override bool CanRead => !_disposed && !_inputAbandoned;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
         public override long Length => throw new NotSupportedException();
@@ -47,6 +48,7 @@ namespace EmbedIO.Net.Internal.Http3
             if (offset < 0 || count < 0 || offset > buffer.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
             if (_disposed) throw new ObjectDisposedException(nameof(Http3RequestBody));
             cancellationToken.ThrowIfCancellationRequested();
+            if (_inputAbandoned) throw new IOException("HTTP/3 request input was abandoned by a canceled read.");
             if (Interlocked.CompareExchange(ref _reading, 1, 0) != 0) throw new InvalidOperationException("Concurrent HTTP/3 body reads.");
             try
             {
@@ -71,6 +73,11 @@ namespace EmbedIO.Net.Internal.Http3
                     Trailers = fields;
                 }
             }
+            // A canceled transport read may have consumed part of a frame and
+            // System.Net.Quic aborts that direction. Preserve output, but never
+            // resume the input parser from an uncertain boundary.
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            { _inputAbandoned = true; throw; }
             catch (Exception error) when (error is IOException or OperationCanceledException) { _owner.Failed(error); throw; }
             finally { Volatile.Write(ref _reading, 0); }
         }

@@ -194,7 +194,7 @@ responses; the setter still accepts 100 to 199. Reproduction:
 `Http1StatusSetterNeverSendsAnInformationalStatusAsTheFinalResponse`, `Explicit`,
 category `AuditFinding`.
 
-**A1, new, unresolved (contract consistency).** On HTTP/3, an application that
+**A1, reproduced and corrected in the candidate (contract consistency).** On HTTP/3, an application that
 cancels its own pending request-body or tunnel read loses the whole stream:
 `Http3RequestBody.ReadAsync` reports any `OperationCanceledException` to
 `Http3QuicConnection.RequestFailed`, which calls `Abort(QuicAbortDirection.Both,
@@ -208,6 +208,17 @@ the guide's deadline pattern abort rather than answer on HTTP/3. Reproductions:
 `Http3TunnelApplicationReadCancellationLeavesOutputUsable` and
 `Http3ApplicationBodyReadTimeoutCanStillAnswer`, both `Explicit`, identical on
 Windows and Linux.
+
+The correction stops escalating a caller-canceled read into an output abort.
+The receive-direction watcher distinguishes local OperationAborted from peer
+StreamAborted and ConnectionAborted; write failures still cancel the request.
+Input remains unusable after an in-flight canceled read because framing may be
+partially consumed. The two A1 cases are ordinary regressions, with four more
+cases canceled inside a frame header, DATA payload, trailer section and unknown
+frame. Pre-canceled tokens leave input usable. Both original reproductions fail
+on the preserved unmodified core; the first candidate passes all 45 lifecycle
+and direction-watcher cases on Windows. Final full-suite, Linux and hosted
+validation remain required. Evidence: ignored TestResults/read-cancellation.
 
 **Observations (permitted choices, recorded).**
 

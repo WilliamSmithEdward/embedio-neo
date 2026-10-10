@@ -669,14 +669,12 @@ namespace EmbedIO.Tests
             await Http3TunnelCore(true);
         }
 
-        // Audit finding A1 (unresolved). On HTTP/1 and HTTP/2 an application that cancels its
+        // Regression for audit finding A1. On HTTP/1 and HTTP/2 an application that cancels its
         // own pending tunnel read can still write and complete output (lifetime audit table).
-        // On HTTP/3 the canceled read aborts the request stream in both directions with
+        // Previously HTTP/3 aborted the request stream in both directions with
         // H3_REQUEST_CANCELLED (0x10c), so the peer never receives the later output. This is
         // not an RFC 9114 violation (a server may abort a request stream, section 4.1.1); it
-        // is an inconsistency in the version-independent tunnel contract.
-        [Explicit("Audit finding A1 (unresolved): HTTP/3 application read cancellation aborts the whole request stream.")]
-        [Category("AuditFinding")]
+        // was an inconsistency in the version-independent tunnel contract.
         [Test]
         public async Task Http3TunnelApplicationReadCancellationLeavesOutputUsable()
         {
@@ -715,8 +713,6 @@ namespace EmbedIO.Tests
             await peer.AssertHealthyAsync(3);
         }
 
-        [Explicit("Audit finding A1 (unresolved): HTTP/3 application read cancellation aborts the whole request stream.")]
-        [Category("AuditFinding")]
         [Test]
         public async Task Http3ApplicationBodyReadTimeoutCanStillAnswer()
         {
@@ -728,13 +724,14 @@ namespace EmbedIO.Tests
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task Http3BodyTimeoutCore()
+        private static async Task Http3BodyTimeoutCore(string pendingInput = "")
         {
             using var certificate = Certificate();
             await using var host = await Host.StartAsync(HttpListenerMode.EmbedIOHttp3, certificate, BodyTimeoutHandler);
             await using var peer = await H3Peer.ConnectAsync(host, certificate);
             await using var request = await peer.OpenRequestAsync("POST", "/upload", false);
             await request.WriteAsync(new byte[] { 0, 3, 1, 2, 3 }, host.Token);
+            if (pendingInput.Length != 0) await request.WriteAsync(Convert.FromHexString(pendingInput), host.Token);
             Assert.That((await H3Peer.ReadFrameAsync(request, host.Token)).Type, Is.EqualTo(1L), "Final response HEADERS.");
             using var body = new MemoryStream();
             while (true)
@@ -747,12 +744,30 @@ namespace EmbedIO.Tests
             await peer.AssertHealthyAsync(host.Token);
         }
 
+        [TestCase("40")]
+        [TestCase("0004")]
+        [TestCase("010300")]
+        [TestCase("210400")]
+        public async Task Http3ReadTimeoutPreservesResponseWithPartialFrameInput(string pendingInput)
+        {
+            ArgumentNullException.ThrowIfNull(pendingInput);
+            RequireQuic();
+            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            await Http3BodyTimeoutCore(pendingInput);
+        }
         // Reads what arrives, times out the rest of the upload and answers 408.
         private static async Task BodyTimeoutHandler(IHttpContext context)
         {
             if (await Healthy(context)) return;
             var buffer = new byte[64];
             var total = 0;
+            if (context.Request.ProtocolVersion.Major == 3)
+            {
+                using var preCanceled = new CancellationTokenSource();
+                preCanceled.Cancel();
+                await Assert.ThrowsAsync<OperationCanceledException>(async () => await context.Request.InputStream.ReadExactlyAsync(buffer.AsMemory(0, 1), preCanceled.Token));
+                Assert.That(context.Request.InputStream.CanRead, Is.True, "A token canceled before reading must not abandon input.");
+            }
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
             try
             {
@@ -763,6 +778,11 @@ namespace EmbedIO.Tests
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested && !context.CancellationToken.IsCancellationRequested)
             {
+                if (context.Request.ProtocolVersion.Major == 3)
+                {
+                    Assert.That(context.Request.InputStream.CanRead, Is.False);
+                    await Assert.ThrowsAsync<IOException>(async () => await context.Request.InputStream.ReadExactlyAsync(buffer.AsMemory(0, 1), context.CancellationToken));
+                }
                 context.Response.StatusCode = 408;
                 await context.SendStringAsync("timeout after " + total, "text/plain", WebServer.Utf8NoBomEncoding);
                 return;

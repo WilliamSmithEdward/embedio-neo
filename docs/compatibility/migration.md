@@ -1216,3 +1216,17 @@ for platform and runtime limits. These APIs remain under validation and unreleas
 ## Optional response field sections (unreleased)
 
 The managed responses optionally implement `IHttpResponseSections` for awaited interim responses and declared response trailers. `IHttpResponse` is unchanged, so existing implementations and consumers remain compatible. The optional interface is identical on both target assets; unsupported backends do not advertise it. Existing automatic100 Continue, final-status property behavior and ordinary response framing remain unchanged. Opting into HTTP/1 trailers selects chunked framing and requires no configured Content-Length. Multiplexed trailers retain exact body-length validation and defer the final stream end until trailing HEADERS. The sender must choose fields whose definitions allow trailer use, and finish configuration before output disposal or handler completion. See [the guide](../guides/response-field-sections.md) for bounded snapshots, exclusions and validation limits.
+
+## HTTP/3 application read cancellation (unreleased)
+
+An application that cancels a pending HTTP/3 request-body or tunnel read can
+still send its response or tunnel output, provided the peer has not reset the
+stream and the request lifetime is still active. Previously the engine turned
+that local input cancellation into an abort of both transport directions.
+
+The canceled input remains unusable: a read may already have consumed part of
+a frame, and System.Net.Quic ends that read direction on cancellation. CanRead
+returns false and another read throws IOException. Catch the canceled read,
+write the intended response (for example, 408 for a timed-out upload), and
+complete output. A token canceled before a read begins does not abandon input.
+Peer resets, connection failure and canceled output still end the request.
