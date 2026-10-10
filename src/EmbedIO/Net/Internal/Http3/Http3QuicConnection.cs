@@ -69,6 +69,16 @@ namespace EmbedIO.Net.Internal.Http3
             // request. Per-request linked sources would all contend on this token.
             _stopRequests = _token.UnsafeRegister(static state => (state as Http3QuicConnection)?.CancelActiveRequests(), this);
         }
+        internal static async Task RunNativeAsync(MsQuicNativeConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token)
+        {
+            if (connection == null) throw new ArgumentNullException(nameof(connection));
+            if (dispatch == null) throw new ArgumentNullException(nameof(dispatch));
+            // Acceptance and credentials must be configured before the native
+            // handshake. The adapter owns this already-connected connection.
+            await using var transport = new MsQuicTransportConnection(connection);
+            using var session = new Http3QuicConnection(transport, dispatch, token, false);
+            await session.RunCoreAsync().ConfigureAwait(false);
+        }
         internal static async Task RunAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token)
         {
             if (connection == null) throw new ArgumentNullException(nameof(connection));
