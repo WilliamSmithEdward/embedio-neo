@@ -7226,9 +7226,11 @@ static QPACK requests, response frame ordering and exact DATA, not independent
 QPACK response decoding or an external HTTP/3 implementation.
 
 All 80 native cases pass on Windows and pinned Linux using the same Windows-built
-IL. Both target builds are warning-free. Combined discovery is 4916. Full-source
-and hosted final-head validation remain pending while another agent holds the
-shared campaign slot. The adapter has not been wired into listener startup or
+IL. Both target builds are warning-free. Combined discovery is 4916. The full
+Windows suite reports 4916 cases, 4911 passed, five expected skips and zero
+failures in 3m 17s; it held the shared workload lock. The tested core SHA-256 is
+`8B2419D3EE41554EC16CA0AAAA084CD60128D08DEABB02F4942692371567F193`.
+Hosted final-head validation remains required. The adapter has not been wired into listener startup or
 application routing, has no native external-drain entry point yet, and does not
 advertise datagrams or WebTransport. Existing BCL application paths are unchanged.
 Evidence and preserved failed attempts are under TestResults/native-http3-adapter.
