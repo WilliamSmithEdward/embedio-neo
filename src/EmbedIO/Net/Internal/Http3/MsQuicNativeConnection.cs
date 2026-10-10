@@ -36,9 +36,11 @@ namespace EmbedIO.Net.Internal.Http3
             internal readonly CloseStream StreamClose;
             internal readonly ShutdownStream StreamShutdown;
             internal readonly StreamFunctions Streams;
+            internal readonly DatagramFunctions Datagrams;
             internal ConnectionFunctions(IntPtr table, StreamFunctions streams)
             {
                 Streams = streams;
+                Datagrams = new DatagramFunctions(table);
                 SetHandler = Marshal.GetDelegateForFunctionPointer<SetCallback>(Marshal.ReadIntPtr(table, 2 * IntPtr.Size));
                 Close = Marshal.GetDelegateForFunctionPointer<CloseConnection>(Marshal.ReadIntPtr(table, 16 * IntPtr.Size));
                 Shutdown = Marshal.GetDelegateForFunctionPointer<ShutdownConnection>(Marshal.ReadIntPtr(table, 17 * IntPtr.Size));
@@ -50,7 +52,7 @@ namespace EmbedIO.Net.Internal.Http3
         internal MsQuicNativeConnection AcceptConnection(MsQuicRegistration registration, IntPtr connection)
             => MsQuicNativeConnection.Accept(registration, connection, _connectionFunctions);
     }
-    internal sealed class MsQuicNativeConnection : SafeHandleZeroOrMinusOneIsInvalid
+    internal sealed partial class MsQuicNativeConnection : SafeHandleZeroOrMinusOneIsInvalid
     {
         private sealed class Signals
         {
@@ -61,6 +63,7 @@ namespace EmbedIO.Net.Internal.Http3
             internal readonly IntPtr Pointer;
             internal Func<IntPtr, uint, bool>? AcceptStream;
             internal Action? StopStreams;
+            internal MsQuicNativeDatagrams? Datagrams;
             private readonly MsQuicApi.ConnectionFunctions _functions;
             private readonly ConcurrentDictionary<IntPtr, RejectedStream> _rejected = new();
             private sealed class RejectedStream
@@ -115,12 +118,17 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 try
                 {
-                    switch (Marshal.ReadInt32(eventData))
+                    var type = Marshal.ReadInt32(eventData);
+                    switch (type)
                     {
-                        case 0: Connected.TrySetResult(); break;
+                        case 0: Datagrams?.OnConnected(_functions.Datagrams.QuerySendEnabled(connection)); Connected.TrySetResult(); break;
                         case 1:
                         case 2: Volatile.Write(ref Closing, 1); Connected.TrySetCanceled(); break;
-                        case 3: Volatile.Write(ref Closing, 1); Connected.TrySetCanceled(); StopStreams?.Invoke(); Closed.TrySetResult(); break;
+                        case 3: Volatile.Write(ref Closing, 1); Connected.TrySetCanceled(); StopStreams?.Invoke(); Datagrams?.OnConnectionShutdownComplete(); Closed.TrySetResult(); break;
+                        // DATAGRAM_STATE_CHANGED, DATAGRAM_RECEIVED, DATAGRAM_SEND_STATE_CHANGED.
+                        case 10:
+                        case 11:
+                        case 12: Datagrams?.OnConnectionEvent(type, eventData); break;
                         // Streams are not exposed until their own callback/lifetime exists.
                         case 6:
                             var stream = Marshal.ReadIntPtr(eventData, 8);
@@ -248,7 +256,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
         protected override bool ReleaseHandle()
         {
-            try { _functions.Close(handle); _signals.CloseRejectedAfterConnectionClose(); _signals.Connected.TrySetCanceled(); _signals.Closed.TrySetResult(); GC.KeepAlive(_signals); }
+            try { _functions.Close(handle); _signals.CloseRejectedAfterConnectionClose(); _signals.Datagrams?.ReleaseAfterConnectionClose(); _signals.Connected.TrySetCanceled(); _signals.Closed.TrySetResult(); GC.KeepAlive(_signals); }
             finally { _registration.DangerousRelease(); }
             return true;
         }

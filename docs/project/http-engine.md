@@ -7294,3 +7294,145 @@ native production source and native tests from b09c36a. The combined-drain fixtu
 now retains its primary failure instead of replacing it during cleanup. Fresh
 focused and hosted checks remain required; the original root cause is not claimed
 resolved by this reconciliation.
+
+## Native QUIC datagram delivery (internal, unadvertised)
+
+`MsQuicNativeDatagrams` adds RFC 9221 datagram send/receive ownership to the
+internal native MsQuic connection. It is opt-in per connection through
+`EnableDatagrams`, which sets the public `QUIC_PARAM_CONN_DATAGRAM_RECEIVE_ENABLED`
+parameter. MsQuic accepts it only before `ConnectionSetConfiguration` starts the
+handshake; a late or repeated call fails without changing the connection.
+Configurations, HTTP/3 SETTINGS, `Http3DatagramCodec` association, application
+traffic and WebTransport are unchanged, and nothing is advertised to clients.
+The ABI and lifetimes follow the published [MsQuic v2.6.2 header](https://github.com/microsoft/msquic/blob/v2.6.2/src/inc/msquic.h)
+and its `datagram.c`, `connection.c`, `loss_detection.c` and `sent_packet_metadata.c`;
+no implementation code was copied.
+
+Ownership contracts:
+
+- Receive: the `DATAGRAM_RECEIVED` payload is borrowed for the callback only, so
+  it is copied there into pooled storage; no native pointer is retained. The
+  queue is bounded by count (128) and bytes (256 KiB) by default; arrivals beyond
+  either bound are dropped and counted. A received datagram is an owned lease
+  whose disposal clears and returns its storage. Cancellation of a pending
+  receive leaves the queue intact. After connection shutdown, already queued
+  datagrams remain readable and the receive then ends with null.
+- Send: each accepted submission owns one native allocation holding both its
+  `QUIC_BUFFER` descriptor and payload, because MsQuic retains both pointers.
+  The context is a non-null GCHandle (MsQuic suppresses discard indications for
+  a null context). Ownership returns only at a final
+  `DATAGRAM_SEND_STATE_CHANGED` (`LOST_DISCARDED`, `ACKNOWLEDGED`,
+  `ACKNOWLEDGED_SPURIOUS`, `CANCELED` or any later final value); the in/out
+  context is then cleared, the payload is zeroed and freed exactly once.
+  `SENT` and `LOST_SUSPECT` keep ownership. A synchronous native refusal means
+  MsQuic kept nothing and the submission is released immediately. At most 128
+  submissions may be unfinished by default; further sends report `QueueFull`.
+- Shutdown, disposal and late callbacks: MsQuic finalizes every datagram send
+  before `SHUTDOWN_COMPLETE`. Disposing the datagram owner stops delivery and
+  discards unread datagrams but never frees memory MsQuic still owns; later final
+  states still release it. After `ConnectionClose` returns, any send MsQuic never
+  finalized is released and counted (`AbandonedSends`, expected zero).
+- Negotiation: a server processes the peer's transport parameters inside the
+  ClientHello before the connection has an owner, so MsQuic may raise no
+  `DATAGRAM_STATE_CHANGED`. At `CONNECTED` the provider reads
+  `QUIC_PARAM_CONN_DATAGRAM_SEND_ENABLED`. Until MsQuic indicates a limit (it does
+  so after path MTU changes) only the 65535-byte protocol ceiling is checked
+  locally and MsQuic's own limit returns `TooLarge` synchronously. Sends are
+  never submitted before support is known. A peer without
+  `max_datagram_frame_size` yields `Unavailable`. Datagrams require a 64-bit
+  process, where the event union layout is established.
+
+The connection changes are confined to dispatch hooks in
+`MsQuicNativeConnection.cs`: the class is partial, `ConnectionFunctions` binds
+the datagram slots, `CONNECTED` reports the queried send state, events 10-12 are
+forwarded, `SHUTDOWN_COMPLETE` ends datagram delivery and `ReleaseHandle` releases
+remaining sends after `ConnectionClose`. Native stream code is unchanged.
+
+`MsQuicNativeDatagramTest` adds 35 discovered cases. Thirty-one drive the
+documented event layouts with a fake native send, covering negotiation, limits,
+byte-exact copying from array slices, empty datagrams, every final state,
+intermediate states, bounded sends, synchronous refusals, closed handles,
+borrowed-receive copying, count/byte overflow, lease clearing, cancellation,
+shutdown, disposal with late callbacks, abandoned sends and concurrent
+submission/completion. Two use a real MsQuic server with a System.Net.Quic peer,
+which never advertises datagrams: unsupported negotiation, and enablement refused
+after configuration or when repeated. The first version of the unsupported case
+timed out because no state event arrived; it reproduced the ownerless-negotiation
+behavior described above, and the `CONNECTED` query is the correction.
+
+Two further cases run an independent peer, pinned aioquic 1.3.0 from
+`test/EmbedIO.Conformance/drivers/requirements.txt`, when
+`EMBEDIO_DATAGRAM_PEER_PYTHON` is set; otherwise they are skipped, including in
+CI. On Windows (.NET 10, the Windows MsQuic with the runtime, Python 3.14.6 with
+hash-verified packages) the echo case verified the server's advertised
+`max_datagram_frame_size` of 65535, received the server greeting and echoed 0, 1,
+2, 63, 64, 255 and 1000-byte payloads byte-for-byte without retransmission.
+Four runs passed. In the first all eight server sends reported Acknowledged; in
+the three final-source runs 5-7 did, and the rest reported Lost even though the
+peer received every echo. The peer closes right after its last echo, and MsQuic
+indicates `LOST_DISCARDED` for datagrams still unacknowledged at shutdown, so
+`Lost` means "not acknowledged before discard", not proven wire loss. The
+unsupported case confirmed the server reports `Unavailable` and sends nothing to a
+peer without datagram support.
+
+On Linux the same cases ran from a source build of 6b76423 (git archive extracted
+inside the container, not a bind mount) in the pinned conformance image built from
+`test/EmbedIO.Conformance/docker/Dockerfile`: SDK 10.0.401, runtime 10.0.12,
+MsQuic 2.6.2 (library SHA-256 6729b82d...6497cf), Python 3.12.3 and aioquic 1.3.0
+installed with `--require-hashes`, under WSL2 kernel 6.18 with two CPUs. The build
+had no warnings, and three runs each passed all 35 cases with none skipped and
+`EMBEDIO_REQUIRE_QUIC=1`. Every echo matched on the first attempt; each run reported
+6-7 Acknowledged and 1-2 Lost, the discard-at-close behavior described above.
+
+Not verified: macOS native datagrams with the independent peer (CI skips it),
+Linux CI runners (the local container is WSL2, not a hosted runner), packet loss
+and Lost outcomes on a real path, MTU-change
+indications, sustained throughput or retained memory, 32-bit processes, HTTP/3
+datagram association (SETTINGS_H3_DATAGRAM, quarter stream IDs, request/session
+lifetime) and WebTransport. Discovery rises by 35 cases (two skipped without the
+peer); the shared floor is left for integration.
+
+On development base a4f7105 the full Windows suite reports 4938 cases (4903 plus
+35): 4931 passed, seven skipped (five existing plus the two peer cases without
+`EMBEDIO_DATAGRAM_PEER_PYTHON`), zero failures, in 3m 23s. Both targets build
+without warnings under enforced analyzers; formatting, suppression and parser
+guards pass, and the aioquic peer passes both modes on that build.
+
+### Native datagram submission versus connection disposal
+
+Review of the native datagram increment at `5f08f99` found that `TrySend`
+published its pending record before retaining the connection handle. Connection
+close could therefore inspect and release the record while the submitting thread
+was still initializing or copying its native payload. Removing a partially
+initialized record also prevented the submitting thread from releasing allocations
+created after that removal.
+
+The correction acquires a connection lease before publishing any pending record
+and holds it through allocation, payload copy and synchronous submission. A
+refused or failed submission is removed and cleared before releasing that lease.
+The native final-state callbacks continue to own successfully submitted records.
+No native API is called while holding the datagram state lock. The ownership
+contract follows the pinned [MsQuic ConnectionClose documentation](https://github.com/microsoft/msquic/blob/v2.6.2/docs/api/ConnectionClose.md);
+implementation and the regression are original.
+
+A controlled memory owner disposes the connection during payload preparation and
+then throws before copying into native memory. This safely reproduces premature
+connection release on the unchanged core without writing through freed storage.
+The regression fails against the saved baseline core (SHA-256
+`7AEF0B80CD0FD6D28F0E185940DC6EAD6C21199ECCEAD118D4024462BEADEA85`)
+and passes after the correction. The focused Windows set reports 36 cases:
+34 passed, two optional independent-peer cases skipped, zero failures. Both
+library targets build with zero warnings. Fresh hosted checks and independent-peer reruns remain pending for this correction; earlier peer evidence above is not evidence for these changed bytes. The discovery floor becomes 4939
+(4903 development-base cases, 35 datagram cases and this regression).
+
+Final local validation of the correction: the complete Windows suite reports
+4939 cases, 4932 passed, seven expected skips and zero failures in 3m 21s.
+The pinned Linux image runs the same Windows-built IL and reports 36 datagram
+cases, 34 passed, two optional peer skips and zero failures. Changed-source
+formatting and both analyzer guards pass. The tested core SHA-256 is
+`724C5423D76353E78BCBB6E4B3A589DAAA1633D06EAE9C304033C73E126CA819`.
+An initial unguarded full-suite attempt was stopped after about 17 seconds and
+retained as INVALID; it is not acceptance evidence. The accepted complete run
+held the shared lock and process inspection found no competing test or benchmark
+workload. The optional peer rerun was deferred when another owner acquired the
+lock; no competing run was launched.
