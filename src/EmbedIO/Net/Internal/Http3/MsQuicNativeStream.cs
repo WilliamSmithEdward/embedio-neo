@@ -2,6 +2,7 @@
 using System;
 using System.Buffers;
 using System.IO;
+using System.Net.Quic;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -69,6 +70,12 @@ namespace EmbedIO.Net.Internal.Http3
             internal readonly int Length;
             internal ReceiveBuffer(IntPtr pointer, int length) { Pointer = pointer; Length = length; }
         }
+        private static IOException DirectionFailure(bool peerAbort, long? code, string message)
+        {
+            if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+                return new QuicException(peerAbort ? QuicError.StreamAborted : QuicError.OperationAborted, code, message);
+            return new IOException(message);
+        }
         private sealed class Signals
         {
             internal readonly object Sync = new();
@@ -89,6 +96,38 @@ namespace EmbedIO.Net.Internal.Http3
             internal TaskCompletionSource<bool>? PendingSend;
             internal bool SendFinished;
             internal bool SendAborted;
+            internal Exception? SendError;
+            private TaskCompletionSource? _readsEnd;
+            private TaskCompletionSource? _writesEnd;
+            internal Task ReadDirection(bool readable)
+            {
+                lock (Sync)
+                {
+                    if (!readable) return Task.CompletedTask;
+                    _readsEnd ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    UpdateDirections();
+                    return _readsEnd.Task;
+                }
+            }
+            internal Task WriteDirection(bool writable)
+            {
+                lock (Sync)
+                {
+                    if (!writable) return Task.CompletedTask;
+                    _writesEnd ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    UpdateDirections();
+                    return _writesEnd.Task;
+                }
+            }
+            // Called under Sync. Receive buffers remain borrowed until consumed;
+            // a FIN indication alone cannot complete a still-buffered read.
+            internal void UpdateDirections()
+            {
+                if (Error != null) _readsEnd?.TrySetException(Error);
+                else if (Fin && Buffers == null) _readsEnd?.TrySetResult();
+                if (SendError != null) _writesEnd?.TrySetException(SendError);
+                else if (SendFinished) _writesEnd?.TrySetResult();
+            }
             private readonly MsQuicApi.StreamFunctions _functions;
             internal Signals(MsQuicApi.StreamFunctions functions, bool local = false)
             {
@@ -126,7 +165,7 @@ namespace EmbedIO.Net.Internal.Http3
                             case 1:
                                 var length = checked((long)(ulong)Marshal.ReadInt64(eventData, 16));
                                 Fin |= (Marshal.ReadInt32(eventData, 24 + IntPtr.Size + 4) & 2) != 0;
-                                if (length == 0) { Available.TrySetResult(); return 0; }
+                                if (length == 0) { Available.TrySetResult(); UpdateDirections(); return 0; }
                                 if (Buffers != null) throw new IOException("Overlapping native receive indications.");
                                 var pointer = Marshal.ReadIntPtr(eventData, 24);
                                 var count = checked((int)(uint)Marshal.ReadInt32(eventData, 24 + IntPtr.Size));
@@ -149,27 +188,43 @@ namespace EmbedIO.Net.Internal.Http3
                                 var pending = PendingSend; PendingSend = null;
                                 pending?.TrySetResult(Marshal.ReadByte(eventData, 8) != 0);
                                 break;
-                            case 5: SendAborted = true; break;
-                            case 6: SendFinished = true; break;
+                            case 5:
+                                SendAborted = true;
+                                SendError = DirectionFailure(true, Marshal.ReadInt64(eventData, 8), "Peer aborted the native stream receive direction.");
+                                break;
+                            case 6:
+                                SendFinished = Marshal.ReadByte(eventData, 8) != 0;
+                                if (!SendFinished) SendError ??= DirectionFailure(false, null, "Native stream writes were aborted.");
+                                break;
                             case 3: Fin = true; Available.TrySetResult(); break;
-                            case 4: Error = new IOException("Native peer aborted its stream send direction."); Available.TrySetResult(); break;
+                            case 4: Error = DirectionFailure(true, Marshal.ReadInt64(eventData, 8), "Peer aborted the native stream send direction."); Available.TrySetResult(); break;
                             case 7:
                                 PeerAccepted?.TrySetException(new IOException("Native stream closed before the peer accepted it."));
-                                if ((!Fin || Buffers != null) && Error == null) Error = new IOException("Native stream closed before pending receive data was consumed.");
+                                if ((!Fin || Buffers != null) && Error == null) Error = DirectionFailure(false, null, "Native stream closed before pending receive data was consumed.");
+                                if (!SendFinished) SendError ??= DirectionFailure(false, null, "Native stream closed before writes completed.");
                                 Available.TrySetResult(); Closed.TrySetResult(); break;
                         }
+                        UpdateDirections();
                         return 0;
                     }
                 }
                 catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
                 {
-                    lock (Sync) { Error = error; Available.TrySetResult(); }
+                    lock (Sync) { Error = error; SendError ??= error; UpdateDirections(); Available.TrySetResult(); }
                     _functions.Shutdown(stream, 0x16, 0x102);
                     return 0;
                 }
             }
             internal void StopReads()
-            { lock (Sync) { Disposed = true; Available.TrySetResult(); } }
+            {
+                lock (Sync)
+                {
+                    Disposed = true;
+                    if (!Fin || Buffers != null) Error ??= DirectionFailure(false, null, "Native stream reads were disposed.");
+                    if (!SendFinished) SendError ??= DirectionFailure(false, null, "Native stream writes were disposed.");
+                    UpdateDirections(); Available.TrySetResult();
+                }
+            }
         }
         private readonly MsQuicNativeConnection _connection;
         private readonly MsQuicApi.StreamFunctions _functions;
@@ -182,6 +237,8 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly bool _local;
         internal long Id => _id;
         internal bool Unidirectional { get; }
+        internal Task ReadsClosed => _signals.ReadDirection(!(_local && Unidirectional));
+        internal Task WritesClosed => _signals.WriteDirection(_local || !Unidirectional);
         private MsQuicNativeStream(MsQuicNativeConnection connection, MsQuicApi.StreamFunctions functions, Signals signals, long id, uint flags, bool local = false) : base(true)
         { _connection = connection; _functions = functions; _signals = signals; _id = id; _local = local; Unidirectional = (flags & 1) != 0; }
         internal static MsQuicNativeStream Accept(MsQuicNativeConnection connection, IntPtr handle, uint flags, MsQuicApi.StreamFunctions functions)
@@ -280,6 +337,7 @@ namespace EmbedIO.Net.Internal.Http3
                             {
                                 completed = (ulong)_signals.Length; _signals.Buffers = null;
                                 _signals.Available = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                                _signals.UpdateDirections();
                             }
                         }
                         if (copied == 0 && _signals.Fin) return 0;

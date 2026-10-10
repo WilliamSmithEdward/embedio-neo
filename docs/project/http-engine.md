@@ -7082,6 +7082,30 @@ core targets build without warnings. The two additional callback cases retain
 their controlled-invocation scope; focused native Linux results above precede
 this H2-only base move. All new-head hosted checks remain required.
 
+Native stream direction completion is now implemented internally: read FIN waits
+for borrowed bytes to be consumed, send completion waits for the native graceful
+shutdown event, and RESET_STREAM/STOP_SENDING fault only their respective tasks
+with the peer application code. Task sources are allocated only when observed;
+absent unidirectional sides use completed tasks. Disposal resolves pending
+observers. Public runtime exception constructors are called behind actual
+supported-platform guards; no private runtime shim or reused implementation code
+is used. This still does not route application HTTP through the native provider.
+
+Three initial direction cases fail on unchanged code because completion signals
+are absent. Six new real-peer cases cover FIN, both peer abort directions,
+unidirectional absent sides and disposal. All 67 focused native cases pass on
+Windows and pinned Linux (same Windows-built IL); both targets build warning-free
+and source guards pass. Expected combined discovery is 4813 (4807 base plus six).
+Full-source and hosted acceptance, native adapter/application integration,
+explicit local abort/completion operations and datagram delivery remain required.
+
+Final native direction acceptance: 4813 Windows cases, 4808 passed, five existing
+skips, zero failures (3m 21s), with all 67 focused native cases passing on Windows
+and pinned Linux using the same Windows-built IL. Both-target builds and source
+guards pass. The earlier platform-analyzer failure was corrected with an actual
+supported-platform check before constructing public QUIC exceptions; no analyzer
+suppression was added. All final-head hosted checks remain required.
+
 ### WebTransport session core (isolated, unintegrated)
 
 An original internal framing and session core for WebTransport over HTTP/3 now
@@ -7131,3 +7155,7 @@ Final reconciliation onto callback base 048f06f passes 4897 Windows cases,
 4892 passed, five existing skips, zero failures (3m 21s), with warning-free
 complete builds for both targets. All new-head checks remain required; neither
 application WebTransport capability nor independent interoperability is claimed.
+
+The native direction branch is reconciled onto verified WebTransport merge 90e84f1. Combined discovery is 4903 (4897 base plus six real-peer direction cases). Fresh combined-source and exact-head hosted validation remain required.
+
+Combined native direction acceptance on WebTransport development base 90e84f1 passes 4903 Windows cases: 4898 passed, five existing skips, zero failures (3m 23s), with complete warning-free builds for both targets. Fresh hosted checks on this reconciled head remain required.
