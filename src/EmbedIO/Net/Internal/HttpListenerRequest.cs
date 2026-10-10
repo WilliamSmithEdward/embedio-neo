@@ -238,6 +238,24 @@ namespace EmbedIO.Net.Internal
                 return;
             }
 
+            // CONNECT uses authority-form, including an explicit nonempty port.
+            // Preserve the exact destination in RawTarget; normal listener routing
+            // still uses the local endpoint and the reconstructed host URI.
+            var connect = HttpMethod == "CONNECT";
+            if (connect)
+            {
+                var separator = RawTarget.LastIndexOf(':');
+                if (separator <= RawTarget.LastIndexOf(']') || separator <= 0
+                    || separator == RawTarget.Length - 1 || !HttpRequestFraming.IsValidHost(RawTarget)
+                    || !Uri.TryCreate("http://" + RawTarget + "/", UriKind.Absolute, out var destination)
+                    || destination.Host.Length == 0 || destination.Port == 0)
+                {
+                    _connection.SetError("CONNECT requires a valid authority and explicit port.");
+                    return;
+                }
+                host = RawTarget;
+            }
+
             var targetPathStart = 0;
             if (RawTarget[0] != '/')
             {
@@ -256,14 +274,14 @@ namespace EmbedIO.Net.Internal
                     }
                 }
             }
-            if (!HttpRequestFraming.IsValidPathAndQuery(RawTarget, targetPathStart))
+            if (!connect && !HttpRequestFraming.IsValidPathAndQuery(RawTarget, targetPathStart))
             {
                 _connection.SetError("Invalid request target syntax.");
                 return;
             }
 
             var rawUri = UriUtility.StringToAbsoluteUri(RawTarget);
-            if (RawTarget[0] != '/' && RawTarget != "*"
+            if (!connect && RawTarget[0] != '/' && RawTarget != "*"
                 && (rawUri == null || (rawUri.Scheme != Uri.UriSchemeHttp && rawUri.Scheme != Uri.UriSchemeHttps)
                     || RawTarget.IndexOf("://", StringComparison.Ordinal) < 0))
             {
@@ -275,8 +293,8 @@ namespace EmbedIO.Net.Internal
                 _connection.SetError("Asterisk-form requires OPTIONS.");
                 return;
             }
-            var path = RawTarget == "*" ? "/" : rawUri?.PathAndQuery ?? RawTarget;
-            if (rawUri != null) host = rawUri.Host;
+            var path = connect || RawTarget == "*" ? "/" : rawUri?.PathAndQuery ?? RawTarget;
+            if (!connect && rawUri != null) host = rawUri.Host;
 
             if (string.IsNullOrEmpty(host))
             {

@@ -13,6 +13,7 @@ namespace EmbedIO.Net.Internal.Http2
         private readonly object _sync = new();
         private readonly Dictionary<int, Http2Exchange> _exchanges = new();
         private readonly WaitCallback _startApplication;
+        private readonly Func<int, Exception, bool, Task> _abortTunnel;
         private Func<Http2Exchange, Task>? _application;
         private int _runningApplications;
         private TaskCompletionSource<bool>? _applicationsDone;
@@ -32,6 +33,7 @@ namespace EmbedIO.Net.Internal.Http2
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             _startApplication = state => _ = RunApplicationAsync((Http2Exchange)(state ?? throw new InvalidOperationException("Missing exchange.")));
+            _abortTunnel = AbortTunnelAsync;
             _connection.OutputFailed = Abort;
             _connection.UseTransportCancellation(_stop.Token);
         }
@@ -90,7 +92,7 @@ namespace EmbedIO.Net.Internal.Http2
                                     _connection.SendFlow.Open(state.Id);
                                     _connection.SendFlow.SetPriority(state.Id, state.Priority);
                                     _connection.ReceiveFlow.Open(state.Id);
-                                    started = new Http2Exchange(_connection, state, count => Consumed(state.Id, count), _stop.Token);
+                                    started = new Http2Exchange(_connection, state, count => Consumed(state.Id, count), _stop.Token, _abortTunnel);
                                     _exchanges.Add(state.Id, started);
                                 }
                                 else exchange.Body.Append(Array.Empty<byte>(), 0, 0, true);
@@ -225,6 +227,8 @@ namespace EmbedIO.Net.Internal.Http2
                 if (_exchanges.Count == 0) CancelConnection();
             }
         }
+
+        private Task AbortTunnelAsync(int id, Exception cause, bool malformed) => ResetAsync(id, malformed ? 1u : 2u, cause);
 
         private async Task ResetAsync(int id, uint code, Exception error)
         {

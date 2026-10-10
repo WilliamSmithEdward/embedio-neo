@@ -22,7 +22,7 @@ namespace EmbedIO.Net.Internal.Http2
         private readonly Queue<Chunk> _chunks = new();
         private readonly Action<int> _consumed;
         private readonly int _streamId;
-        private readonly long? _length;
+        private long? _length;
         private Chunk? _tail;
         private TaskCompletionSource<bool>? _changed;
         private Exception? _failure;
@@ -45,6 +45,16 @@ namespace EmbedIO.Net.Internal.Http2
         public override long Length => throw new NotSupportedException();
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
 
+        internal void EnterTunnel()
+        {
+            lock (_sync)
+            {
+                ThrowIfUnavailable();
+                // After successful CONNECT, DATA is opaque tunnel traffic rather
+                // than content bounded by the request's representation metadata.
+                _length = null;
+            }
+        }
         internal void Append(byte[] bytes, int offset, int count, bool endStream)
         {
             Validate(bytes, offset, count);

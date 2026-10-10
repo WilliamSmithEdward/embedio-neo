@@ -27,6 +27,9 @@ namespace EmbedIO.Net.Internal
         private ResponseStream? _outputStream;
         private int _statusCode = 200;
         private bool _chunked;
+        private bool _tunnel;
+        private bool _capsuleCarrier;
+        private bool _contentTypeConfigured;
 
         internal HttpListenerResponse(HttpListenerContext context)
         {
@@ -70,6 +73,7 @@ namespace EmbedIO.Net.Internal
             {
                 EnsureCanChangeHeaders();
                 _contentType = Validate.NotNullOrEmpty(nameof(value), value);
+                _contentTypeConfigured = true;
             }
         }
 
@@ -177,9 +181,35 @@ namespace EmbedIO.Net.Internal
             _cookies.Add(cookie);
         }
 
+        internal void BeginTunnel(string? protocol, bool capsules)
+        {
+            EnsureCanChangeHeaders();
+            if (capsules)
+            {
+                HttpCapsuleProtocol.ValidateCarrierHeaders(_request.Headers);
+                HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _statusCode);
+                if (_contentTypeConfigured || _chunked) throw new InvalidOperationException("Capsule carriers cannot configure representation type or chunked framing.");
+                Headers[HttpCapsuleProtocol.HeaderName] = "?1";
+            }
+            Headers.Remove(HttpHeaderNames.ContentLength);
+            Headers.Remove(HttpHeaderNames.TransferEncoding);
+            Headers.Remove(HttpHeaderNames.KeepAlive);
+            Headers.Remove(HttpHeaderNames.Connection);
+            Headers.Remove(HttpHeaderNames.Upgrade);
+            if (protocol != null)
+            {
+                Headers[HttpHeaderNames.Connection] = "Upgrade";
+                Headers[HttpHeaderNames.Upgrade] = protocol;
+            }
+            _chunked = false;
+            _tunnel = true;
+            _capsuleCarrier = capsules;
+        }
+
         internal MemoryStream SendHeaders(bool closing, int bodyCount)
         {
-            if (_contentType != null)
+            if (_capsuleCarrier) HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _statusCode);
+            if (_contentType != null && (!_tunnel || (_contentTypeConfigured && !_capsuleCarrier)))
             {
                 var encoding = ContentEncoding;
                 var hasCharset = _contentType.IndexOf(";", System.StringComparison.Ordinal) >= 0
@@ -201,6 +231,8 @@ namespace EmbedIO.Net.Internal
             {
                 Headers.Add(HttpHeaderNames.Date, HttpDate.Format(DateTime.UtcNow));
             }
+
+            if (_tunnel) return WriteHeaders(bodyCount);
 
             if (_statusCode < 200 || _statusCode is 204 or 304)
             {

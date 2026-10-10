@@ -131,14 +131,14 @@ namespace EmbedIO.Tests
         [TestCase("127.0.0.1:443", true)]
         [TestCase("[::1]:443", false)]
         [TestCase("[::1]:443", true)]
-        public async Task UnsupportedConnectClosesBeforeOptimisticSuccessor(string authority, bool secure)
+        public async Task RejectedAuthorityConnectClosesBeforeOptimisticSuccessor(string authority, bool secure)
         {
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             using var certificate = HttpsSmoke.CreateCertificate();
             using var listener = new Net.HttpListener(secure ? certificate : null);
             var url = HttpsSmoke.GetUrl();
             if (!secure) url = url.Replace("https://", "http://", StringComparison.Ordinal);
-            listener.AddPrefix(url);
+            listener.AddPrefix(url.Replace("127.0.0.1", "*", StringComparison.Ordinal));
             listener.Start();
             var accept = listener.GetContextAsync(stop.Token);
             using var client = new TcpClient { NoDelay = true };
@@ -150,12 +150,21 @@ namespace EmbedIO.Tests
             var wire = "CONNECT " + authority + " HTTP/1.1\r\nHost: " + authority
                 + "\r\n\r\nGET /must-not-dispatch HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
             await stream.WriteAsync(Encoding.ASCII.GetBytes(wire), stop.Token);
+            var rejected = await accept;
+            Assert.That(rejected.Request.RawTarget, Is.EqualTo(authority));
+            rejected.Response.StatusCode = 403;
+            rejected.Response.ContentLength64 = 0;
+            rejected.Response.OutputStream.Write(Array.Empty<byte>(), 0, 0);
+            rejected.Close();
+            accept = listener.GetContextAsync(stop.Token);
             using var replies = new MemoryStream();
             await stream.CopyToAsync(replies, stop.Token);
             var response = Encoding.ASCII.GetString(replies.ToArray());
             Assert.Multiple(() =>
             {
-                Assert.That(response, Is.EqualTo("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
+                Assert.That(response, Does.StartWith("HTTP/1.1 403 "));
+                Assert.That(response, Does.Contain("Connection: close\r\n"));
+                Assert.That(response, Does.Not.Contain("must-not-dispatch"));
                 Assert.That(accept.IsCompleted, Is.False, "Rejected CONNECT and optimistic bytes must not dispatch.");
             });
 

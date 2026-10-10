@@ -7,9 +7,10 @@ using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal.Http2
 {
-    internal sealed class Http2Exchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedResponseTrailers, IDisposable
+    internal sealed class Http2Exchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedResponseTrailers, IMultiplexedTunnelControl, IDisposable
     {
         private readonly Http2Connection _connection;
+        private readonly Func<int, Exception, bool, Task>? _abortTunnel;
         private readonly SemaphoreSlim _response = new(1, 1);
         private readonly CancellationTokenSource _stop;
         private readonly CancellationToken _token;
@@ -23,8 +24,10 @@ namespace EmbedIO.Net.Internal.Http2
         private long _responseBytes;
         private int _disposed;
         internal Http2Exchange(Http2Connection connection, Http2StreamState state, Action<int> consumed, CancellationToken token)
+            : this(connection, state, consumed, token, null) { }
+        internal Http2Exchange(Http2Connection connection, Http2StreamState state, Action<int> consumed, CancellationToken token, Func<int, Exception, bool, Task>? abortTunnel)
         {
-            _connection = connection; State = state;
+            _connection = connection; State = state; _abortTunnel = abortTunnel;
             _stop = CancellationTokenSource.CreateLinkedTokenSource(token);
             _token = _stop.Token;
             Body = new Http2RequestBody(state.Id, state.RequestHeaders.ContentLength, consumed);
@@ -57,6 +60,7 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 if (_headersSent || _ended) throw new InvalidOperationException("Response headers already sent.");
                 var response = Http2ResponseHeaders.Validate(fields, Request.Method, endStream);
+                PrepareTunnel(response);
                 await _connection.SendDataAsync(Id, fields, null, 0, 0, endStream, token, _token).ConfigureAwait(false);
                 Sent(response, endStream);
             }
@@ -74,6 +78,7 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 if (_headersSent || _ended) throw new InvalidOperationException("Response headers already sent.");
                 var response = Http2ResponseHeaders.Validate(fields, Request.Method, false);
+                PrepareTunnel(response);
                 var reserved = 0;
                 if (count != 0 && response.Status >= 200 && response.BodyAllowed
                     && (!response.ContentLength.HasValue || count <= response.ContentLength.Value))
@@ -195,6 +200,14 @@ namespace EmbedIO.Net.Internal.Http2
             return await _connection.SendFlow.ReserveAsync(Id, maximum, linked.Token).ConfigureAwait(false);
         }
 
+        private void PrepareTunnel(Http2ResponseHeaders response)
+        {
+            if (Request.Method != "CONNECT" || response.Status < 200 || response.Status >= 300) return;
+            // Transition before sending headers: a peer can receive them and send
+            // DATA while the writer's completion continuation is still pending.
+            _connection.Streams.EnterTunnel(Id);
+            Body.EnterTunnel();
+        }
         private void Sent(Http2ResponseHeaders response, bool endStream)
         {
             if (response.Status >= 200)
@@ -217,6 +230,8 @@ namespace EmbedIO.Net.Internal.Http2
                 error.Log("HTTP/2 stream", "Exception thrown by an application cancellation callback.");
             }
         }
+        public Task AbortTunnelAsync(Exception cause, bool malformed)
+            => (_abortTunnel ?? throw new InvalidOperationException("Tunnel control is unavailable."))(Id, cause, malformed);
         internal void Cancel(Exception error) { CancelApplication(); Body.Fail(error); }
         public void Dispose()
         {

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -14,6 +15,8 @@ internal sealed class ConformanceServer : IDisposable
     internal const int FileLength = 100_000;
     private static long _active;
     private static long _completed;
+    private static long _capsuleAfterFinMessages;
+    private static long _capsuleAfterFinByteSum;
     private readonly List<WebServer> _servers = new();
     private readonly string _root;
 
@@ -59,12 +62,65 @@ internal sealed class ConformanceServer : IDisposable
                 context.SendStringAsync("hello", "text/plain", WebServer.Utf8NoBomEncoding)))
             .WithModule(new ActionModule("/get-only", HttpVerbs.Get, context =>
                 context.SendStringAsync("get", "text/plain", WebServer.Utf8NoBomEncoding)))
+            .WithModule(new ActionModule("/capsule", HttpVerbs.Any, CapsuleAsync))
             .WithModule(new ActionModule("/echo", HttpVerbs.Any, EchoAsync))
             .WithModule(new ActionModule("/query", HttpVerbs.Query, EchoAsync))
             .WithModule(new ActionModule("/stream", HttpVerbs.Get, StreamAsync))
             .WithModule(new ActionModule("/slow", HttpVerbs.Any, SlowAsync))
             .WithModule(new ActionModule("/__stats", HttpVerbs.Get, StatsAsync))
             .WithStaticFolder("/files", _root, false);
+    }
+
+    // A test-only extension carrier. Type 0 echoes opaque HTTP Datagram payloads;
+    // unknown types are skipped. It never forwards UDP or changes production defaults.
+    private static async Task CapsuleAsync(IHttpContext context)
+    {
+        if (context is not IHttpTunnelContext capability)
+            throw new HttpException(HttpStatusCode.NotImplemented, "This backend has no optional tunnel capability.");
+        Interlocked.Increment(ref _active);
+        try
+        {
+            var tunnel = await capability.AcceptTunnelAsync("example-tunnel", true, context.CancellationToken).ConfigureAwait(false);
+            var channel = tunnel.Capsules ?? throw new InvalidOperationException("Missing accepted capsule channel.");
+            var scratch = new byte[4096];
+            var halfClose = context.Request.QueryString["half-close"] == "true";
+            var outputComplete = false;
+            while (await channel.ReadHeaderAsync(context.CancellationToken).ConfigureAwait(false) is { } header)
+            {
+                if (header.Type != 0)
+                {
+                    await channel.SkipPayloadAsync(context.CancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+                if (header.Length > 16384)
+                {
+                    await channel.SkipPayloadAsync(context.CancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+                if (!outputComplete)
+                    await channel.WriteHeaderAsync(0, header.Length, context.CancellationToken).ConfigureAwait(false);
+                var remaining = header.Length;
+                while (remaining != 0)
+                {
+                    var count = await channel.ReadPayloadAsync(scratch, 0, (int)Math.Min(remaining, scratch.Length), context.CancellationToken).ConfigureAwait(false);
+                    if (!outputComplete) await channel.WritePayloadAsync(scratch, 0, count, context.CancellationToken).ConfigureAwait(false);
+                    if (outputComplete)
+                        for (var i = 0; i < count; i++) Interlocked.Add(ref _capsuleAfterFinByteSum, scratch[i]);
+                    remaining -= count;
+                }
+                if (outputComplete) Interlocked.Increment(ref _capsuleAfterFinMessages);
+                if (halfClose && !outputComplete)
+                {
+                    await tunnel.CompleteOutputAsync(context.CancellationToken).ConfigureAwait(false);
+                    outputComplete = true;
+                }
+            }
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _active);
+            Interlocked.Increment(ref _completed);
+        }
     }
 
     // Echo reads the whole request body and reports what the application saw.
@@ -154,6 +210,8 @@ internal sealed class ConformanceServer : IDisposable
             workingSet = process.WorkingSet64,
             activeHandlers = Interlocked.Read(ref _active),
             completedHandlers = Interlocked.Read(ref _completed),
+            capsuleAfterFinMessages = Interlocked.Read(ref _capsuleAfterFinMessages),
+            capsuleAfterFinByteSum = Interlocked.Read(ref _capsuleAfterFinByteSum),
             threadPoolPending = ThreadPool.PendingWorkItemCount,
         });
     }

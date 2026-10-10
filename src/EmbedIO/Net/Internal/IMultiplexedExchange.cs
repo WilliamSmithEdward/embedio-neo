@@ -30,6 +30,12 @@ namespace EmbedIO.Net.Internal
         Task SendTrailersAsync(HpackField[] fields, CancellationToken token);
     }
 
+    // A negotiated carrier failure ends one request stream, not its connection.
+    internal interface IMultiplexedTunnelControl
+    {
+        Task AbortTunnelAsync(Exception cause, bool malformed);
+    }
+
     // Optional: a transport that can send final response headers together with
     // the first body bytes. Explicit flushes still send headers on their own.
     internal interface IMultiplexedHeaderCoalescing
