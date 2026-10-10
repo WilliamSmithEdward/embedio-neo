@@ -53,8 +53,7 @@ namespace EmbedIO.Tests
                         await wire.WriteAsync(bytes.AsMemory(offset, Math.Min(fragment, bytes.Length - offset)), stop.Token);
                 }
                 catch (IOException) { /* The server can reject before the entire oversized request is sent. */ }
-                try { await wire.CopyToAsync(received, stop.Token); }
-                catch (IOException) when (received.Length > 0) { /* A reset still terminates the rejected pipeline. */ }
+                await reading;
                 var response = Encoding.ASCII.GetString(received.ToArray());
                 Assert.That(response, Does.StartWith("HTTP/1.1 " + status + " "));
                 Assert.That(response, Does.Contain("Content-Length: 0\r\nConnection: close\r\n\r\n"));
