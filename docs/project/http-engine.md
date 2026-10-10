@@ -7193,6 +7193,18 @@ using the same Windows-built IL. Formatting and both source guards pass.
 Fresh hosted checks remain required. The tested core SHA-256 is
 `5B155800B43D8BBF090966B2067C3E36790C29260BC0D67753FBC9FDCDFE2BE2`.
 
+Reconciliation on engine `0fc0caa` preserves the narrow cancellation correction
+and both regression cases. The Windows coverage run on `080013e` reports 4937
+total, 4932 passed, five expected skips and zero failures in 3m40s. The current
+discovery minimum is reconciled to 4937; the approved five-minute Windows and
+eight-minute Unix suite budgets remain unchanged. PR #255's Windows run
+38085897387 independently captured the same final-barrier cancellation at
+`Http2Dispatcher.RunAsync` line 162 in
+`GracefulDrainCompletesExistingUploadAndRefusesNewStream` on the uncorrected
+engine. PR #245 still requires fresh checks on its reconciled head; the earlier
+HTTP/3 TLS handshake cancellation on its previous head is retained as an
+unconfirmed separate failure, not claimed repaired by this HTTP/2 correction.
+
 Combined drain investigation: Windows PR 239 head ba4991b failed
 CombinedDrainPreservesEveryProtocolUntilItsResponseFinishes(True,True) in run
 38071451499, job 114269517877. The published listener error 995 points to the
