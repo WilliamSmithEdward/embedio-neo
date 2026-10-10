@@ -196,6 +196,8 @@
       href: architecture/dependency-injection.md
 - name: Compatibility
   items:
+    - name: Neo v1 to v2
+      href: compatibility/neo-v1-to-v2.md
     - name: Migration
       href: compatibility/migration.md
 - name: Platforms
