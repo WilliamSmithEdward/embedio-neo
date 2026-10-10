@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- Add the optional managed `IHttpResponseSections` capability for awaited informational responses and declared response trailers, preserving the existing response interface and documenting opt-in framing and ownership. This increment remains under validation.
 - Reduce managed HTTP/3 per-request cost: connection-owned request cancellation
   scopes, one continuation per transport direction, fewer thread-pool hops,
   separate QPACK gates and one QUIC write per small frame, with final headers and

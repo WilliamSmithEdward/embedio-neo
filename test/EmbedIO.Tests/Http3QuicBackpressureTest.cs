@@ -26,9 +26,22 @@ namespace EmbedIO.Tests
             { Assert.Ignore("The legacy asset has no direct QUIC transport."); return; }
             await ExerciseResponseBackpressure(reset, singleWrite);
         }
+        [TestCase(false, false)]
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        [TestCase(true, true)]
+        public async Task ReservedHttp3TrailersSurviveBackpressureOrReleaseOnReset(bool reset, bool singleWrite)
+        {
+            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            { Assert.Ignore("The host does not provide QUIC."); return; }
+            if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
+            { Assert.Ignore("The legacy asset has no direct QUIC transport."); return; }
+            await ExerciseResponseBackpressure(reset, singleWrite, true);
+        }
         private sealed class BackpressuredApplication
         {
             internal bool SingleWrite;
+            internal bool Trailers;
             internal readonly byte[] Large = new byte[8 * 1024 * 1024];
             internal readonly byte[] Small = { 17, 31, 47, 63 };
             internal readonly TaskCompletionSource<Task> Pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -38,12 +51,41 @@ namespace EmbedIO.Tests
                 var type = exchange.GetType();
                 var id = (long)(type.GetProperty("Id", Flags)?.GetValue(exchange) ?? throw new AssertionException("Missing ID."));
                 var token = (CancellationToken)(type.GetProperty("CancellationToken", Flags)?.GetValue(exchange) ?? throw new AssertionException("Missing cancellation."));
-                var write = WriteResponse(exchange, id == 0 ? Large : Small, token, SingleWrite);
+                var write = WriteResponse(exchange, id == 0 ? Large : Small, token, SingleWrite, Trailers && id == 0);
                 if (id == 0) Pending.TrySetResult(write);
                 await write;
             }
-            private static async Task WriteResponse(object exchange, byte[] bytes, CancellationToken token, bool singleWrite)
+            private static async Task WriteResponse(object exchange, byte[] bytes, CancellationToken token, bool singleWrite, bool trailers)
             {
+                if (trailers)
+                {
+                    var contextType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.MultiplexedContext", true)
+                        ?? throw new AssertionException("Missing response adapter.");
+                    var context = (IHttpContextImpl)(Activator.CreateInstance(contextType, Flags, null,
+                        new object[] { exchange, new IPEndPoint(IPAddress.Loopback, 80), new IPEndPoint(IPAddress.Loopback, 12345), true }, null)
+                        ?? throw new AssertionException("Missing adapter context."));
+                    Exception? writeFailure = null;
+                    try
+                    {
+                        context.Response.ContentLength64 = bytes.Length;
+                        var sections = context.Response as IHttpResponseSections
+                            ?? throw new AssertionException("Missing response capability.");
+                        sections.DeclareTrailers("x-finished");
+                        var responseQuantum = singleWrite ? bytes.Length : 16384;
+                        for (var offset = 0; offset < bytes.Length; offset += responseQuantum)
+                            await context.Response.OutputStream.WriteAsync(bytes.AsMemory(offset, Math.Min(responseQuantum, bytes.Length - offset)), token);
+                        sections.SetTrailers(new WebHeaderCollection { ["x-finished"] = "yes" });
+                        await context.Response.OutputStream.DisposeAsync();
+                    }
+                    catch (Exception error) { writeFailure = error; throw; }
+                    finally
+                    {
+                        try { context.Close(); }
+                        catch (Exception cleanup) when (writeFailure != null && cleanup is IOException or OperationCanceledException or InvalidOperationException)
+                        { TestContext.Out.WriteLine("Response cleanup after failed write: " + cleanup.GetType().Name); }
+                    }
+                    return;
+                }
                 var type = exchange.GetType();
                 var fieldType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http2.HpackField", true)
                     ?? throw new AssertionException("Missing field type.");
@@ -64,10 +106,10 @@ namespace EmbedIO.Tests
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task ExerciseResponseBackpressure(bool reset, bool singleWrite)
+        private static async Task ExerciseResponseBackpressure(bool reset, bool singleWrite, bool trailers = false)
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var application = new BackpressuredApplication { SingleWrite = singleWrite };
+            var application = new BackpressuredApplication { SingleWrite = singleWrite, Trailers = trailers };
             new Random(9218).NextBytes(application.Large);
             using var key = RSA.Create(2048);
             var req = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -155,7 +197,7 @@ namespace EmbedIO.Tests
                 }
                 else
                 {
-                    Assert.That(await ReadResponseData(stalled, deadline.Token, first), Is.EqualTo(application.Large));
+                    Assert.That(await ReadResponseData(stalled, deadline.Token, first, trailers), Is.EqualTo(application.Large));
                     await pending.WaitAsync(deadline.Token);
                 }
                 // A reset or fully drained response must leave the connection useful.
@@ -170,7 +212,7 @@ namespace EmbedIO.Tests
                 catch (OperationCanceledException) { }
             }
         }
-        private static async Task<byte[]> ReadResponseData(Stream stream, CancellationToken token, byte[]? prefix = null)
+        private static async Task<byte[]> ReadResponseData(Stream stream, CancellationToken token, byte[]? prefix = null, bool trailers = false)
         {
             using var wire = new MemoryStream();
             if (prefix != null) wire.Write(prefix);
@@ -179,21 +221,45 @@ namespace EmbedIO.Tests
             using var body = new MemoryStream();
             var offset = 0;
             var headers = false;
+            var trailerReceived = false;
             while (offset < bytes.Length)
             {
                 var type = ReadResponseInteger(bytes, ref offset);
                 var length = ReadResponseInteger(bytes, ref offset);
                 Assert.That(length, Is.LessThanOrEqualTo(bytes.Length - offset));
-                if (type == 1) { Assert.That(headers, Is.False); headers = true; }
+                if (type == 1)
+                {
+                    if (!headers) headers = true;
+                    else
+                    {
+                        Assert.That(trailers, Is.True);
+                        Assert.That(trailerReceived, Is.False);
+                        Assert.That(body.Length, Is.EqualTo(8 * 1024 * 1024), "Ending fields must follow the entire body.");
+                        var decoderType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.QpackDecoder", true)
+                            ?? throw new AssertionException("Missing field decoder.");
+                        using var decoder = (IDisposable)(Activator.CreateInstance(decoderType, Flags, null,
+                            new object[] { 0, 0, 65536, 65536, 0L, 65536 }, null) ?? throw new AssertionException("Missing decoder."));
+                        var payload = bytes.AsSpan(offset, checked((int)length)).ToArray();
+                        var fields = (Array)(decoderType.GetMethod("Submit", Flags)?.Invoke(decoder, new object[] { 0L, payload })
+                            ?? throw new AssertionException("Missing decoded fields."));
+                        Assert.That(fields.Length, Is.EqualTo(1));
+                        var field = fields.GetValue(0) ?? throw new AssertionException("Missing trailer field.");
+                        Assert.That(field.GetType().GetProperty("Name")?.GetValue(field), Is.EqualTo("x-finished"));
+                        Assert.That(field.GetType().GetProperty("Value")?.GetValue(field), Is.EqualTo("yes"));
+                        trailerReceived = true;
+                    }
+                }
                 else
                 {
                     Assert.That(type, Is.Zero);
                     Assert.That(headers, Is.True);
+                    Assert.That(trailerReceived, Is.False, "DATA cannot follow ending trailers.");
                     body.Write(bytes, offset, checked((int)length));
                 }
                 offset += checked((int)length);
             }
             Assert.That(headers, Is.True);
+            Assert.That(trailerReceived, Is.EqualTo(trailers));
             return body.ToArray();
         }
         private static long ReadResponseInteger(byte[] bytes, ref int offset)

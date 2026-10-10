@@ -13,7 +13,7 @@ using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
 {
-    internal sealed class MultiplexedResponse : IHttpResponse, IDisposable
+    internal sealed class MultiplexedResponse : IHttpResponseSections, IDisposable
     {
         private readonly IMultiplexedExchange _exchange;
         private readonly SemaphoreSlim _gate = new(1, 1);
@@ -28,6 +28,8 @@ namespace EmbedIO.Net.Internal
         private bool _tunnel;
         private bool _capsuleCarrier;
         private bool _contentTypeConfigured;
+        private HashSet<string>? _trailerNames;
+        private HpackField[] _trailers = Array.Empty<HpackField>();
         private volatile bool _closed;
         // Set when the output stream is disposed; later writes fail even before the close takes the gate.
         private volatile bool _outputDisposed;
@@ -38,7 +40,15 @@ namespace EmbedIO.Net.Internal
         public int StatusCode
         {
             get => _status;
-            set { EnsureHeaders(); if (value < 100 || value > 999) throw new ArgumentOutOfRangeException(nameof(value)); _status = value; StatusDescription = HttpListenerResponseHelper.GetStatusDescription(value); }
+            set
+            {
+                EnsureHeaders();
+                if (value < 100 || value > 999) throw new ArgumentOutOfRangeException(nameof(value));
+                if (_trailerNames != null && (value < 200 || value is 204 or 205 or 304))
+                    throw new InvalidOperationException("Reserved trailers require a body-capable final response.");
+                _status = value;
+                StatusDescription = HttpListenerResponseHelper.GetStatusDescription(value);
+            }
         }
         public long ContentLength64
         {
@@ -74,6 +84,7 @@ namespace EmbedIO.Net.Internal
         internal void BeginTunnel(bool capsules)
         {
             EnsureHeaders();
+            if (_trailerNames != null) throw new InvalidOperationException("A trailer response cannot become a tunnel.");
             if (_exchange.Request.Method != "CONNECT" || _status < 200 || _status >= 300)
                 throw new InvalidOperationException("A tunnel requires a successful CONNECT response.");
             if (capsules)
@@ -89,6 +100,8 @@ namespace EmbedIO.Net.Internal
         }
         private HpackField[] BuildHeaders(bool closing)
         {
+            if (_trailerNames != null && (SuppressBody || _status == 205 || _tunnel))
+                throw new InvalidOperationException("Reserved trailers require a body-capable response.");
             if (_capsuleCarrier) HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _status);
             if (!_tunnel || (_contentTypeConfigured && !_capsuleCarrier))
             {
@@ -101,7 +114,7 @@ namespace EmbedIO.Net.Internal
             if (_chunked) Headers.Remove(HttpHeaderNames.ContentLength);
             if (_status == 204 || _status < 200 || (_exchange.Request.Method == "CONNECT" && _status >= 200 && _status < 300))
                 Headers.Remove(HttpHeaderNames.ContentLength);
-            else if (_status == 205 || (closing && !SuppressBody)) Headers[HttpHeaderNames.ContentLength] = "0";
+            else if (_status == 205 || (closing && !SuppressBody && _trailerNames == null)) Headers[HttpHeaderNames.ContentLength] = "0";
             var fields = new List<HpackField>(Headers.Count + 1 + (_cookies?.Count ?? 0)) { new(":status", _status.ToString(CultureInfo.InvariantCulture)) };
             foreach (var key in Headers.AllKeys)
             {
@@ -197,10 +210,69 @@ namespace EmbedIO.Net.Internal
             return text;
         }
 
+        private void EnterSectionConfiguration()
+        {
+            lock (_lifecycle)
+            {
+                if (_closed || _outputDisposed) throw new ObjectDisposedException(nameof(MultiplexedResponse));
+                _operations++;
+            }
+            try
+            {
+                if (!_gate.Wait(0)) throw new InvalidOperationException("Cannot configure response sections during output.");
+            }
+            catch { ReleaseReference(); throw; }
+        }
+
+        public void DeclareTrailers(params string[] fieldNames) => PrepareTrailers(fieldNames);
+
+        internal void PrepareTrailers(string[] names)
+        {
+            var declared = HttpResponseTrailerFields.Declaration(names);
+            EnterSectionConfiguration();
+            try
+            {
+                EnsureHeaders();
+                if (SuppressBody || _status == 205 || _tunnel || (_exchange.Request.Method == "CONNECT" && _status >= 200 && _status < 300))
+                    throw new InvalidOperationException("This response cannot carry trailers.");
+                var transport = _exchange as IMultiplexedResponseTrailers ?? throw new NotSupportedException("Transport does not support response trailers.");
+                transport.ExpectTrailers();
+                Headers["Trailer"] = string.Join(", ", declared);
+                _trailerNames = declared;
+            }
+            finally { Exit(); }
+        }
+
+        public void SetTrailers(WebHeaderCollection trailers)
+        {
+            EnterSectionConfiguration();
+            try
+            {
+                if (_trailerNames == null || SuppressBody || _status == 205 || _tunnel)
+                    throw new InvalidOperationException("Trailers were not reserved for an open response.");
+                _trailers = HttpResponseTrailerFields.Snapshot(trailers, _trailerNames);
+            }
+            finally { Exit(); }
+        }
+
+        public async Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken cancellationToken = default)
+        {
+            var token = cancellationToken;
+            var fields = HttpResponseFieldSections.Informational(statusCode, headers);
+            await EnterAsync(token, false).ConfigureAwait(false);
+            try
+            {
+                EnsureHeaders();
+                if (_tunnel) throw new InvalidOperationException("A tunnel cannot carry informational sections.");
+                await _exchange.SendHeadersAsync(fields, false, token).ConfigureAwait(false);
+            }
+            finally { Exit(); }
+        }
+
         private async Task EnsureSentAsync(bool closing, CancellationToken token)
         {
             if (_headersSent) return;
-            await _exchange.SendHeadersAsync(BuildHeaders(closing), closing || SuppressBody, token).ConfigureAwait(false);
+            await _exchange.SendHeadersAsync(BuildHeaders(closing), (closing && _trailerNames == null) || SuppressBody, token).ConfigureAwait(false);
             _headersSent = true;
         }
         private async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken token)
@@ -260,7 +332,13 @@ namespace EmbedIO.Net.Internal
                 token.ThrowIfCancellationRequested();
                 _exchange.CloseConnectionAfterResponse = !_keepAlive;
                 await EnsureSentAsync(true, token).ConfigureAwait(false);
-                if (!_exchange.Ended) await _exchange.CompleteAsync(token).ConfigureAwait(false);
+                if (!_exchange.Ended)
+                {
+                    if (_trailerNames != null)
+                        await ((_exchange as IMultiplexedResponseTrailers) ?? throw new NotSupportedException("Transport does not support response trailers."))
+                            .SendTrailersAsync(_trailers, token).ConfigureAwait(false);
+                    else await _exchange.CompleteAsync(token).ConfigureAwait(false);
+                }
             }
             finally { _output.Dispose(); Exit(); }
         }

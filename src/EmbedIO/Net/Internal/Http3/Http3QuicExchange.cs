@@ -15,7 +15,7 @@ namespace EmbedIO.Net.Internal.Http3
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("macos")]
-    internal sealed class Http3QuicExchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedTunnelControl, IDisposable
+    internal sealed class Http3QuicExchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedResponseTrailers, IMultiplexedTunnelControl, IDisposable
     {
         private const int MaximumDataPayload = 256 * 1024;
         // Frames up to this payload size are submitted with their header in one
@@ -29,6 +29,7 @@ namespace EmbedIO.Net.Internal.Http3
         private int _outputUsers;
         private readonly byte[] _frameHeader = new byte[16];
         private bool _headers;
+        private bool _trailersExpected;
         private bool _tunnel;
         private bool _ended;
         private bool _bodyAllowed = true;
@@ -122,8 +123,26 @@ namespace EmbedIO.Net.Internal.Http3
             catch (Exception error) when (error is QuicException or OperationCanceledException) { _outputFailed = true; _owner.Failed(error); throw; }
             finally { ReleaseOutput(); }
         }
-        internal async Task SendTrailersAsync(HpackField[] fields, CancellationToken token)
+        public void ExpectTrailers()
         {
+            lock (_outputLifetime)
+            {
+                CancellationToken.ThrowIfCancellationRequested();
+                if (_disposed != 0) throw new ObjectDisposedException(nameof(Http3QuicExchange));
+                if (!_output.Wait(0)) throw new InvalidOperationException("Cannot reserve trailers during an output operation.");
+                ++_outputUsers;
+            }
+            try
+            {
+                CheckWritable();
+                if (_headers) throw new InvalidOperationException("Reserve trailers before final response headers.");
+                _trailersExpected = true;
+            }
+            finally { ReleaseOutput(); }
+        }
+        public async Task SendTrailersAsync(HpackField[] fields, CancellationToken token)
+        {
+            if (fields == null) throw new ArgumentNullException(nameof(fields));
             await AcquireOutputAsync(token).ConfigureAwait(false);
             try
             {
@@ -131,8 +150,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (!_headers || !_bodyAllowed || _tunnel)
                     throw new InvalidOperationException("Response cannot contain trailers.");
                 if (_length.HasValue && _sent != _length.Value) throw new InvalidDataException("Response does not match Content-Length.");
-                try { Http2RequestHeaders.ValidateTrailers(new Http2HeaderBlock(0, true, fields, 0)); }
-                catch (Http2ProtocolException error) { throw new InvalidDataException(error.Message, error); }
+                HttpResponseTrailerFields.Validate(fields);
                 var encoded = _owner.Encode(fields);
                 await FrameAsync(1, encoded, true, token).ConfigureAwait(false);
                 _ended = true;
@@ -165,7 +183,7 @@ namespace EmbedIO.Net.Internal.Http3
                 CheckWritable();
                 if (_headers) throw new InvalidOperationException("Final response headers already sent.");
                 var encoded = _owner.Encode(fields);
-                var end = response.ContentLength == count;
+                var end = !_trailersExpected && response.ContentLength == count;
                 // Committed once submitted, even if the transport write then fails.
                 _headers = true; _bodyAllowed = true; _length = response.ContentLength;
                 await HeadersAndDataAsync(encoded, bytes.AsMemory(offset, count), end, token).ConfigureAwait(false);

@@ -1212,3 +1212,7 @@ The server joins completion when the handler ends, so retain handler lifetime
 while consuming peer input after send completion. See
 [capsule development and current validation](../project/http-capsule-transport.md)
 for platform and runtime limits. These APIs remain under validation and unreleased.
+
+## Optional response field sections (unreleased)
+
+The managed responses optionally implement `IHttpResponseSections` for awaited interim responses and declared response trailers. `IHttpResponse` is unchanged, so existing implementations and consumers remain compatible. The optional interface is identical on both target assets; unsupported backends do not advertise it. Existing automatic100 Continue, final-status property behavior and ordinary response framing remain unchanged. Opting into HTTP/1 trailers selects chunked framing and requires no configured Content-Length. Multiplexed trailers retain exact body-length validation and defer the final stream end until trailing HEADERS. The sender must choose fields whose definitions allow trailer use, and finish configuration before output disposal or handler completion. See [the guide](../guides/response-field-sections.md) for bounded snapshots, exclusions and validation limits.

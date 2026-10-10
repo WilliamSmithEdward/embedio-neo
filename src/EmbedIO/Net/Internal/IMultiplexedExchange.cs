@@ -22,6 +22,14 @@ namespace EmbedIO.Net.Internal
         Task CompleteAsync(CancellationToken token);
     }
 
+    // Reserve before final headers so a declared body does not end the stream
+    // before the application's ending field section can be written.
+    internal interface IMultiplexedResponseTrailers
+    {
+        void ExpectTrailers();
+        Task SendTrailersAsync(HpackField[] fields, CancellationToken token);
+    }
+
     // A negotiated carrier failure ends one request stream, not its connection.
     internal interface IMultiplexedTunnelControl
     {
