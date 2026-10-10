@@ -63,6 +63,7 @@ internal sealed class ConformanceServer : IDisposable
             .WithModule(new ActionModule("/get-only", HttpVerbs.Get, context =>
                 context.SendStringAsync("get", "text/plain", WebServer.Utf8NoBomEncoding)))
             .WithModule(new ActionModule("/capsule", HttpVerbs.Any, CapsuleAsync))
+            .WithModule(new ActionModule("/sections", HttpVerbs.Get, SectionsAsync))
             .WithModule(new ActionModule("/echo", HttpVerbs.Any, EchoAsync))
             .WithModule(new ActionModule("/query", HttpVerbs.Query, EchoAsync))
             .WithModule(new ActionModule("/stream", HttpVerbs.Get, StreamAsync))
@@ -72,6 +73,30 @@ internal sealed class ConformanceServer : IDisposable
             .WithModule(new ActionModule("/probe/reject", HttpVerbs.Any, RejectAsync))
             .WithModule(new ActionModule("/probe/fields", HttpVerbs.Any, FieldsAsync))
             .WithStaticFolder("/files", _root, false);
+    }
+
+    private static async Task SectionsAsync(IHttpContext context)
+    {
+        if (context.Response is not IHttpResponseSections sections)
+            throw new HttpException(HttpStatusCode.NotImplemented, "This backend has no response-section capability.");
+        var size = int.Parse(context.Request.QueryString["size"] ?? "3", System.Globalization.CultureInfo.InvariantCulture);
+        if (size is not (0 or 3 or 196608)) throw HttpException.BadRequest("Unsupported test payload size.");
+        var bytes = new byte[size];
+        for (var i = 0; i < bytes.Length; i++) bytes[i] = (byte)(i % 251);
+        Interlocked.Increment(ref _active);
+        try
+        {
+            await sections.SendInformationalAsync(103, new WebHeaderCollection { ["Link"] = "</one>; rel=preload" }, context.CancellationToken);
+            await sections.SendInformationalAsync(103, new WebHeaderCollection { ["Link"] = "</two>; rel=preload" }, context.CancellationToken);
+            sections.DeclareTrailers("Content-Digest", "X-Section-End");
+            if (context.Request.ProtocolVersion.Major >= 2 && context.Request.QueryString["fixed"] == "1")
+                context.Response.ContentLength64 = bytes.Length;
+            for (var offset = 0; offset < bytes.Length; offset += 16384)
+                await context.Response.OutputStream.WriteAsync(bytes, offset, Math.Min(16384, bytes.Length - offset), context.CancellationToken);
+            var digest = Convert.ToBase64String(SHA256.HashData(bytes));
+            sections.SetTrailers(new WebHeaderCollection { ["Content-Digest"] = "sha-256=:" + digest + ":", ["X-Section-End"] = "finished" });
+        }
+        finally { Interlocked.Decrement(ref _active); Interlocked.Increment(ref _completed); }
     }
 
     // A test-only extension carrier. Type 0 echoes opaque HTTP Datagram payloads;
