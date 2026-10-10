@@ -352,7 +352,7 @@ namespace EmbedIO.Tests
             using var server = new WebServer(HttpListenerMode.EmbedIO, prefix)
                 .WithModule(new ActionModule("/", HttpVerbs.Get, async context =>
                 {
-                    var requestId = context.Request.Headers["X-EmbedIO-Drain-Test"] ?? "<missing>";
+                    var requestId = context.Request.QueryString["__embedio_drain_id"] ?? "<missing>";
                     handledIds.Enqueue(requestId);
                     _ = Interlocked.Increment(ref handled);
                     await context.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding);
@@ -594,12 +594,7 @@ namespace EmbedIO.Tests
                     var requestId = Interlocked.Increment(ref state.NextRequestId).ToString(System.Globalization.CultureInfo.InvariantCulture);
                     try
                     {
-                        using var request = new HttpRequestMessage(HttpMethod.Get, prefix)
-                        { Version = client.DefaultRequestVersion, VersionPolicy = client.DefaultVersionPolicy };
-                        request.Headers.Add("X-EmbedIO-Drain-Test", requestId);
-                        using var response = await client.SendAsync(request, token);
-                        response.EnsureSuccessStatusCode();
-                        var body = await response.Content.ReadAsStringAsync(token);
+                        var body = await client.GetStringAsync(prefix + "?__embedio_drain_id=" + requestId, token);
                         if (body != "ok") state.Unexpected.Enqueue(new InvalidOperationException($"Unexpected body '{body}'."));
                         else { state.Delivered.Enqueue(requestId); _ = Interlocked.Increment(ref state.Succeeded); }
                     }
