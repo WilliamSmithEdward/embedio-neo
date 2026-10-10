@@ -1193,6 +1193,10 @@ namespace EmbedIO.Tests
             if (!connection.IsClosed)
                 await ((Task)ListenerCall(connection, "ShutdownAsync", 0x100L)).WaitAsync(deadline.Token);
             connection.Dispose();
+            // Disposed streams retain the connection until their native shutdown
+            // callbacks finish. Verify final release within the existing deadline.
+            while (!connection.IsClosed)
+                await Task.Delay(1, deadline.Token);
             Assert.That(connection.IsClosed, Is.True);
         }
         [Test]

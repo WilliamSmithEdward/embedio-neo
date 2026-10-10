@@ -488,3 +488,12 @@ EMBEDIO_DATAGRAM_PEER_PYTHON skipped its two independent-peer cases and is retai
 as incomplete coverage. The three reproductions are now ordinary regressions.
 Full suite, Linux/macOS, fault-injection/forced-GC and final-head hosted checks
 remain required. No release or application-level native support is claimed.
+
+The first Windows full-suite attempt discovered 4981 cases, with 4970 passed,
+ten skipped and one failure in `NativeAcceptedStreamReadsExactPeerBytesThroughFin`
+for an empty bidirectional stream. Its final assertion assumed that disposing
+the connection immediately released its SafeHandle, even while a disposed stream
+still held the parent lease pending native shutdown. The fixture now waits for
+that final release within its existing handshake deadline and retains the closed
+handle assertion. This attempt is retained; the corrected full suite and Linux
+run must pass before acceptance.
