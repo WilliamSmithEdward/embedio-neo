@@ -360,3 +360,34 @@ of process CPU. This evidence does not justify assigning all contention to the
 listener admission lock or claim that one small change will remove the gap.
 The next optimization requires focused attribution and before/after measurements
 while preserving framing, cancellation, explicit flush and graceful drain.
+
+## HTTP/1 chunk-write prototype
+
+The bounded chunk-write prototype serializes the size line, payload slice and
+trailing CRLF into one awaited transport write for subsequent asynchronous chunks
+up to 64 KiB. The first response head and larger chunks retain the existing path.
+It does not defer writes across application calls or change HTTP framing, public
+APIs, defaults, target frameworks or production dependencies. The local pooled
+buffer is returned and cleared on success, cancellation and transport failure.
+
+A preliminary two-round, fresh-process comparison used the identical frozen
+load harness and swapped only the core DLL. The candidate was base `4c531fe`
+plus the preserved ResponseStream patch (SHA-256
+`C7739392449C0DF1797081E5B4BBAA33E8EC74D1135DAB61E57AED62DC5A6226`);
+the control was the frozen `ae80537` assembly from the checkpoint above.
+Both rounds byte-validated 1 MiB responses flushed every 16 KiB over 16 connections.
+All four samples completed without failures or retained open server sockets.
+Artifacts: `TestResults/chunk-batch-load/streaming-comparison`, with source patch,
+binary hashes, environment and per-sample JSON retained in the owned worktree.
+
+Candidate server CPU was 913 and 943 us/response; control was 2,189 and 2,203.
+Candidate throughput was 8,132 and 7,370 responses/s; control was 1,549 and 2,916.
+Allocation stayed approximately 31.6 KB/response on both. Competing host activity
+was substantial in the control windows, so these throughput numbers do not prove
+a clean speedup ratio. Further isolated comparisons and platform validation remain
+necessary; these measurements are not a release or general performance claim.
+
+The separate write-gate completed-task experiment reduced streaming allocation
+from approximately 31.6 KB to 27.1 KB/response but showed inconsistent throughput
+and no small-response allocation improvement. It is preserved as a development
+patch and is not included in the chunk-write prototype.

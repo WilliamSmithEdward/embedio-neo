@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+- Commit bounded asynchronous managed HTTP/1 chunks with one transport write,
+  preserving byte framing, immediate application writes and cancellation.
 - Process valid higher HTTP/1 minor versions using HTTP/1.1 framing while retaining
   received request metadata and advertising only the supported response version.
   Preserve strict framing and HTTP/1.0/1.1 behavior; see the
