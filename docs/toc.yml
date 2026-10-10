@@ -228,6 +228,8 @@
       href: project/http2-performance.md
     - name: HTTP/3 request path performance
       href: project/http3-performance.md
+    - name: HTTP/3 transport abstraction cost
+      href: project/http3-abstraction-cost.md
     - name: HTTP conformance audit
       href: project/http-conformance.md
     - name: HTTP standards applicability audit

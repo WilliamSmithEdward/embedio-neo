@@ -140,6 +140,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Managed engine load comparison](project/http-engine-load-comparison.md): separate-process HTTP/1.1, HTTP/2 and HTTP/3 measurements against main and Kestrel, profiled bottlenecks and prioritized improvements.
 - [HTTP/2 output and dispatch performance](project/http2-performance.md): profiled small-response costs, output batching and response coalescing, before/after measurements and remaining bottlenecks.
 - [HTTP/3 request path performance](project/http3-performance.md): profiled HTTP/3 request costs, request scopes, write coalescing and QPACK feedback, before/after measurements and remaining bottlenecks.
+- [HTTP/3 transport abstraction cost](project/http3-abstraction-cost.md): cost of the provider-neutral transport boundary on the System.Net.Quic listener, guarded shared-machine procedure and how to repeat it for the native provider.
 
 - [HTTP conformance audit](project/http-conformance.md): October 2026 standards baseline, black-box conformance and stateful campaigns, and prioritized findings.
 - [HTTP standards applicability audit](project/http-standards-applicability.md): frozen October 2026 RFC, errata, registry and draft inventory, requirement-to-evidence matrix for extensions and application APIs, and reproduced gaps.
