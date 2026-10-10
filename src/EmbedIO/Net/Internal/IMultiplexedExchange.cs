@@ -22,6 +22,14 @@ namespace EmbedIO.Net.Internal
         Task CompleteAsync(CancellationToken token);
     }
 
+    // Reserve before final headers so a declared body does not end the stream
+    // before the application's ending field section can be written.
+    internal interface IMultiplexedResponseTrailers
+    {
+        void ExpectTrailers();
+        Task SendTrailersAsync(HpackField[] fields, CancellationToken token);
+    }
+
     // Optional: a transport that can send final response headers together with
     // the first body bytes. Explicit flushes still send headers on their own.
     internal interface IMultiplexedHeaderCoalescing

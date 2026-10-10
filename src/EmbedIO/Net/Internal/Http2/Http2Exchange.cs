@@ -7,7 +7,7 @@ using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal.Http2
 {
-    internal sealed class Http2Exchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IDisposable
+    internal sealed class Http2Exchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedResponseTrailers, IDisposable
     {
         private readonly Http2Connection _connection;
         private readonly SemaphoreSlim _response = new(1, 1);
@@ -111,7 +111,7 @@ namespace EmbedIO.Net.Internal.Http2
 
         // Reserve before final headers so Content-Length completion leaves room
         // for the ending HEADERS section. Ordinary responses retain coalesced FIN.
-        internal void ExpectTrailers()
+        public void ExpectTrailers()
         {
             _token.ThrowIfCancellationRequested();
             if (!_response.Wait(0)) throw new InvalidOperationException("Cannot reserve trailers during an output operation.");
@@ -123,7 +123,7 @@ namespace EmbedIO.Net.Internal.Http2
             finally { _response.Release(); }
         }
 
-        internal async Task SendTrailersAsync(HpackField[] fields, CancellationToken token)
+        public async Task SendTrailersAsync(HpackField[] fields, CancellationToken token)
         {
             if (fields == null) throw new ArgumentNullException(nameof(fields));
             await EnterAsync(token).ConfigureAwait(false);
