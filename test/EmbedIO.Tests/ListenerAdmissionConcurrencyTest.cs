@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -353,12 +354,14 @@ namespace EmbedIO.Tests
                     await context.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding);
                 }));
             var running = server.RunAsync(timeout.Token);
-            using var client = Client(http2);
+            var connector = new DrainConnector();
+            using var client = connector.Client(http2);
             var load = Load(client, prefix, 16, timeout.Token);
             while (Volatile.Read(ref handled) < 200) await Task.Delay(5, timeout.Token);
 
             // Requests already sent must finish; none are started against the drained port.
             Volatile.Write(ref load.Stop, 1);
+            connector.BeginDrain();
             await server.DrainAsync(TimeSpan.FromSeconds(10)).WaitAsync(timeout.Token);
             await running.WaitAsync(timeout.Token);
             var outcome = await StopLoad(load);
@@ -367,6 +370,7 @@ namespace EmbedIO.Tests
             Assert.That(Pending((Net.HttpListener)server.Listener).Count, Is.Zero);
             // Graceful drain answers every request it admitted; refused ones never reach a handler.
             Assert.That(outcome.Succeeded, Is.EqualTo(Volatile.Read(ref handled)));
+            await AssertPortRefusesAsync(prefix);
         }
 
         [TestCase(false)]
@@ -391,11 +395,14 @@ namespace EmbedIO.Tests
                     await context.SendStringAsync("late", "text/plain", WebServer.Utf8NoBomEncoding);
                 }));
             var running = server.RunAsync(timeout.Token);
-            using var client = Client(http2);
+            var connector = new DrainConnector();
+            using var client = connector.Client(http2);
             var held = client.GetStringAsync(prefix + "held", timeout.Token);
             await entered.Task.WaitAsync(timeout.Token);
 
-            // The admitted request keeps the drain open while later requests are refused.
+            // The admitted request keeps the drain open while later requests are refused:
+            // HTTP/2 streams past the GOAWAY cutoff are refused and retried on a new connection.
+            connector.BeginDrain();
             var drain = server.DrainAsync(TimeSpan.FromSeconds(20));
             var clock = System.Diagnostics.Stopwatch.StartNew();
             var late = Enumerable.Range(0, 4).Select(async index =>
@@ -422,6 +429,65 @@ namespace EmbedIO.Tests
             Assert.That(heldOutcome, Is.EqualTo("held"), "The admitted request must complete during drain.");
             Assert.That(outcomes.Select(outcome => outcome.Item3), Is.All.InstanceOf<HttpRequestException>(),
                 "Every request refused before admission must observe a refusal, not the client timeout.");
+            Assert.That(outcomes.Select(outcome => DrainConnector.RefusedAtConnect(outcome.Item3)), Is.All.True,
+                "Each late request was refused when the client opened a connection, never by a handler.");
+            await AssertPortRefusesAsync(prefix);
+        }
+
+        // Connections a client opens after drain begins can only reach the closed listening
+        // socket. Windows reports each refused loopback connect after about two seconds per
+        // address, and SocketsHttpHandler opens one HTTP/2 connection at a time, failing one
+        // queued request per attempt. Refuse those attempts here so they cannot outlast the
+        // client timeout; AssertPortRefusesAsync checks the real socket once instead.
+        private sealed class DrainConnector
+        {
+            private const string RefusalMessage = "Connection opened after drain began.";
+            private int _draining;
+
+            internal void BeginDrain() => Volatile.Write(ref _draining, 1);
+
+            internal HttpClient Client(bool http2) => new(new SocketsHttpHandler
+            {
+                UseProxy = false,
+                ConnectCallback = ConnectAsync
+            })
+            {
+                DefaultRequestVersion = http2 ? HttpVersion.Version20 : HttpVersion.Version11,
+                DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact,
+                Timeout = TimeSpan.FromSeconds(10)
+            };
+
+            internal static bool RefusedAtConnect(Exception? error)
+            {
+                for (; error != null; error = error.InnerException)
+                    if (error is SocketException && error.Message == RefusalMessage) return true;
+                return false;
+            }
+
+            private async ValueTask<System.IO.Stream> ConnectAsync(SocketsHttpConnectionContext context, CancellationToken token)
+            {
+                if (Volatile.Read(ref _draining) != 0)
+                    throw new SocketException((int)SocketError.ConnectionRefused, RefusalMessage);
+                // Same socket shape as the handler's default connection.
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                try
+                {
+                    await socket.ConnectAsync(context.DnsEndPoint, token).ConfigureAwait(false);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            }
+        }
+
+        private static async Task AssertPortRefusesAsync(string prefix)
+        {
+            using var probe = new Socket(SocketType.Stream, ProtocolType.Tcp);
+            var error = await Assert.CatchAsync<SocketException>(() => probe.ConnectAsync(IPAddress.Loopback, new Uri(prefix).Port));
+            Assert.That(error?.SocketErrorCode, Is.EqualTo(SocketError.ConnectionRefused), "The drained port still accepts connections.");
         }
 
         private static HttpClient Client(bool http2) => new(new SocketsHttpHandler { UseProxy = false })
