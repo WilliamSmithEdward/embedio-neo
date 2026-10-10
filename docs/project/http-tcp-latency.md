@@ -80,6 +80,7 @@ The response-write agent owns ResponseStream batching. This increment changes
 only connection setup and must be measured together with that work after
 integration. Existing before/after response-write numbers do not include this
 socket change. Program #181 remains open and Neo v2 is unreleased.
+
 ## Combined HTTP/1 response-write integration
 
 The isolated integration branch combines TCP candidate 09e3df0 with the reviewed
@@ -100,3 +101,33 @@ William approved an eight-minute full-suite CI budget on Linux/macOS on
 approval with the 4935 discovery floor; per-case deadlines, iterations,
 assertions, coverage and the narrow raw-rebind classifier remain unchanged.
 The queued local comparison still uses five minutes on both platforms.
+
+### Combined acceptance and JSON completion investigation
+
+On e0f1abe the full Windows coverage suite reports 4935 cases: 4930 passed,
+five expected skips, zero failures, 3m29s. The pinned Linux source/coverage run
+on a Linux filesystem reports 4935: 4906 passed, 29 platform skips, zero failures,
+2m36s. Both local whole-run budgets remain five minutes. Hosted macOS reports
+4935: 4904 passed, 31 skips, zero failures, 4m12s.
+
+Hosted Linux run 38081847171 / job 114300214536 reports every case but fails
+LargeActionAndJsonResponsesCompleteWithoutDelayingOtherRequests(EmbedIO,False).
+The client times out after its unchanged ten seconds while reading the chunked
+six-MiB JSON body, at Issue574_LargeResponses.cs line 110. This is a functional
+failure, not incomplete discovery or the raw-rebind quarantine.
+
+A planned ten-round comparison uses the identical 4935-case compiled harness,
+swapping only the core, alternating engine order in fresh pinned Linux containers
+with four CPUs and 6 GiB. The TCP-only FF490218...1445EB and combined
+3A3E6FCF...AB68E cores each pass all forty focused cases (twenty total samples,
+eighty cases), with coverage and the original ten-second client deadline.
+No failed sample is retried. Full hashes and every log/TRX are retained under
+TestResults/tcp-response-performance/json-comparison. These passes do not explain
+or repair the hosted failure; the integration remains unaccepted.
+
+The fixture now records JSON serializer invocation/completion, the serializer
+Task status, context closure, server state and response framing on a failure.
+It delegates to the unchanged serializer, keeps every request/assertion/deadline,
+and rethrows the original failure. Both-target builds are warning-free and the
+four diagnostic cases pass on Windows and pinned Linux. Fresh full-order and
+exact-head checks remain required. No production correction is claimed.
