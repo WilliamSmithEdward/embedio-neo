@@ -73,3 +73,31 @@ HTTP/2/HTTP/3 clients cover interim state, ending trailers, immutable snapshots 
 coalesced fixed-length bodies. Wider cancellation, malformed fields, compatibility,
 resource, independent peer and exact-head platform/scanner gates remain in progress.
 This guide does not claim the increment has merged or shipped.
+
+## Independent peer evidence and limits
+
+The immutable-source campaign at827e55b used image
+`sha256:cad57be0903a303f62b6492f695d658256f0c728af9a9c5454c839093fb29df3`,
+SDK10.0.401/runtime10.0.12, hyper-h2 4.4.1 and aioquic1.3.0. Twenty-four
+response vectors passed across HTTP/1 cleartext/TLS, HTTP/2 cleartext/TLS and
+HTTP/3: empty, three-byte and196608-byte bodies, unknown/fixed lengths where
+applicable, two ordered103 sections, exact digest trailers and healthy reuse.
+The HTTP/3 peer explicitly advertises a65536-byte stream window.
+
+The initial unmodified aioquic1.3.0 run failed on HTTP/3: its response parser
+advances to final-header state after every HEADERS block, including103, then
+rejects the next `:status` as a trailer pseudo-header. The test driver retains
+this default behavior. Its optional `--h3-interim-adapter` resets that state only
+for interim responses; final/trailer field validation and independent QPACK
+decoding remain active, and all ordering/body/digest assertions remain enforced.
+The passing HTTP/3 result is explicitly an adapted-peer result, not an unmodified
+aioquic interoperability claim. The unmodified .NET HTTP/3 client separately
+passes two103 sections followed by final metadata, body and trailers.
+
+The pinned source was inspected at
+[aioquic1.3.0](https://github.com/aiortc/aioquic/blob/1.3.0/src/aioquic/h3/connection.py).
+The initial failure and adapted run are preserved under ignored
+`TestResults/response-sections-peers` and`response-sections-peers-adapted`.
+No production implementation code was copied or changed to accommodate the peer.
+These vectors do not prove browser, soak, reset/backpressure or whole-engine fuzz
+acceptance. Hosted final-head checks remain required.
