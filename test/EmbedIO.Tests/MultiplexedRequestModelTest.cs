@@ -121,6 +121,8 @@ namespace EmbedIO.Tests
             });
             var (first, second) = await observed.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(first?.OriginalString, Is.EqualTo(expected));
+            if (referrer == "/relative/page" && !OperatingSystem.IsWindows())
+                Assert.That(first?.Scheme, Is.EqualTo(Uri.UriSchemeFile), "Preserve the existing Unix absolute-file URI interpretation.");
             Assert.That(second, Is.SameAs(first));
         }
 
@@ -129,7 +131,7 @@ namespace EmbedIO.Tests
                from pair in new (string? Referrer, string? Expected)[]
                {
                    ("https://origin.test/page", "https://origin.test/page"),
-                   ("/relative/page", null),
+                   ("/relative/page", OperatingSystem.IsWindows() ? null : "/relative/page"),
                    ("not a uri", null),
                    (null, null),
                }
@@ -224,7 +226,7 @@ namespace EmbedIO.Tests
                     && typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3Listener") != null;
                 if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1") Assert.That(supported, Is.True);
                 if (!supported) Assert.Ignore("The selected asset or host has no HTTP/3 transport.");
-                certificate = HttpsSmoke.CreateCertificate();
+                certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
                 using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
                 socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
                 prefix = $"https://localhost:{((IPEndPoint)(socket.LocalEndPoint ?? throw new AssertionException("Missing endpoint."))).Port}/";
