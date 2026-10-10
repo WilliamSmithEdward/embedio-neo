@@ -206,6 +206,8 @@
       href: platforms/maui-android.md
     - name: MAUI Mac Catalyst
       href: platforms/maui-mac-catalyst.md
+    - name: Native QUIC datagrams on macOS
+      href: platforms/quic-datagrams-macos-validation.md
 - name: Project
   items:
     - name: Baseline and direction

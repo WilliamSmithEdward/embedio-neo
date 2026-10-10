@@ -156,6 +156,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [MAUI HTTPS validation](platforms/maui-https-validation.md): native client, WebView and external-client fixtures.
 - [MAUI Android](platforms/maui-android.md): background work, listener ownership, and restart diagnostics.
 - [MAUI Mac Catalyst](platforms/maui-mac-catalyst.md): listener startup and sandbox entitlements.
+- [Native QUIC datagrams on macOS](platforms/quic-datagrams-macos-validation.md): local Apple Silicon evidence for the internal datagram owner, scoped to the exact tested commits.
 
 - [Informational responses and response trailers](guides/response-field-sections.md): optional managed response sections and ownership rules.
 
