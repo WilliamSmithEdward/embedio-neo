@@ -79,7 +79,7 @@ another header, and finish a payload before writing another header. `CompleteOut
 checks capsule framing and forbids later writes; it does not send transport FIN.
 
 `HttpTunnel` owns its accepted duplex stream. `CompleteOutputAsync` finishes the
-send direction while keeping peer input readable. Keep the handler running while
+send direction subject to the negotiated transport closure semantics. Plain TCP, HTTP/2, HTTP/3 and TLS 1.3 allow remaining peer input. TLS 1.2 peers must finish sending before TLS close_notify. Keep the handler running while
 reading that remaining input. Its first caller's cancellation token controls the
 shared completion task; later calls observe the same success, cancellation or
 failure. Await pending capsule writes before completing output.
@@ -109,8 +109,7 @@ consistent with [RFC 9297](https://www.rfc-editor.org/rfc/rfc9297.html#section-3
 HTTP/1 handoff preserves bytes read with the request head and requires the application to consume any HTTP request body before switching. Inspect and authorize `Request.RawTarget` for
 ordinary CONNECT destinations. .NET 10 uses public TLS send shutdown; the
 netstandard asset binds the same public runtime API when available. A runtime
-without it rejects TLS handoff before sending the success head. The current
-half-close tests use TLS 1.3; older TLS/runtime behavior is not implied.
+without it rejects TLS handoff before sending the success head. TLS 1.2 closure is defined by [RFC 5246 section 7.2.1](https://www.rfc-editor.org/rfc/rfc5246.html#section-7.2.1); TLS 1.3 supports independent closure under [RFC 8446 section 6.1](https://www.rfc-editor.org/rfc/rfc8446.html#section-6.1). macOS server-side SslStream currently negotiates TLS 1.2; the .NET 10 Network.framework TLS 1.3 option applies to clients only. See [the runtime explanation](https://devblogs.microsoft.com/dotnet/dotnet-10-networking-improvements/).
 
 Native unreliable QUIC DATAGRAM delivery, browser WebTransport sessions and
 extension-specific capsule value validation are separate capabilities. This API

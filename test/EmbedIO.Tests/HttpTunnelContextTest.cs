@@ -21,7 +21,7 @@ namespace EmbedIO.Tests
         [TestCase(false, true)]
         [TestCase(true, false)]
         [TestCase(true, true)]
-        public async Task Http1HandoffPreservesPipelinedBytesAndReadsAfterSendCompletion(bool tls, bool capsules)
+        public async Task Http1HandoffPreservesPipelinedBytesAndNegotiatedClosureSemantics(bool tls, bool capsules)
         {
             using var certificate = HttpsSmoke.CreateCertificate();
             var url = HttpsSmoke.GetUrl();
@@ -31,6 +31,7 @@ namespace EmbedIO.Tests
             var verified = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var closed = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
             var closes = 0;
+            var independentDirections = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithCertificate(certificate))
                 .WithAction("/", HttpVerbs.Any, async context =>
                 {
@@ -44,6 +45,7 @@ namespace EmbedIO.Tests
                     {
                         var capability = context as IHttpTunnelContext ?? throw new AssertionException("Missing managed tunnel capability.");
                         var tunnel = await capability.AcceptTunnelAsync(capsules ? "example-tunnel/1" : null, capsules, stop.Token);
+                        var halfClose = await independentDirections.Task.WaitAsync(stop.Token);
                         if (capsules)
                         {
                             var channel = tunnel.Capsules ?? throw new AssertionException("Missing capsule framing.");
@@ -56,11 +58,12 @@ namespace EmbedIO.Tests
                             Assert.That(bytes, Is.EqualTo(new byte[] { 7, 8, 9 }));
                             await channel.WriteHeaderAsync(17, 3, stop.Token);
                             await channel.WritePayloadAsync(bytes, 0, bytes.Length, stop.Token);
-                            await tunnel.CompleteOutputAsync(stop.Token);
+                            if (halfClose) await tunnel.CompleteOutputAsync(stop.Token);
                             var last = await channel.ReadHeaderAsync(stop.Token);
                             Assert.That(last?.Length, Is.EqualTo(1));
                             Assert.That(await channel.ReadPayloadAsync(bytes, 0, 1, stop.Token), Is.EqualTo(1));
                             Assert.That(bytes[0], Is.EqualTo(42));
+                            if (!halfClose) await tunnel.CompleteOutputAsync(stop.Token);
                         }
                         else
                         {
@@ -68,10 +71,11 @@ namespace EmbedIO.Tests
                             await tunnel.Stream.ReadExactlyAsync(bytes, stop.Token);
                             Assert.That(bytes, Is.EqualTo(new byte[] { 7, 8, 9 }));
                             await tunnel.Stream.WriteAsync(bytes, stop.Token);
-                            await tunnel.CompleteOutputAsync(stop.Token);
+                            if (halfClose) await tunnel.CompleteOutputAsync(stop.Token);
                             var last = new byte[4];
                             await tunnel.Stream.ReadExactlyAsync(last, stop.Token);
                             Assert.That(Encoding.ASCII.GetString(last), Is.EqualTo("done"));
+                            if (!halfClose) await tunnel.CompleteOutputAsync(stop.Token);
                         }
                         verified.TrySetResult();
                     }
@@ -88,13 +92,17 @@ namespace EmbedIO.Tests
                     var fingerprint = certificate.GetCertHashString(HashAlgorithmName.SHA256);
                     var ssl = new SslStream(wire, false, (_, peer, _, _) => peer?.GetCertHashString(HashAlgorithmName.SHA256) == fingerprint);
                     wire = ssl;
-                    // TLS 1.3 allows each peer to finish its send side independently.
+                    // Negotiate the platform default: Apple server-side SslStream
+                    // uses TLS 1.2, whose close_notify ends both sending directions.
                     await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
                     {
                         TargetHost = "localhost",
-                        EnabledSslProtocols = SslProtocols.Tls13
+                        EnabledSslProtocols = SslProtocols.None
                     }, stop.Token);
+                    Assert.That(ssl.SslProtocol, Is.EqualTo(OperatingSystem.IsMacOS() ? SslProtocols.Tls12 : SslProtocols.Tls13));
+                    independentDirections.TrySetResult(ssl.SslProtocol == SslProtocols.Tls13);
                 }
+                else independentDirections.TrySetResult(true);
                 using (wire)
                 {
                     var authority = endpoint.Host + ":" + endpoint.Port;
@@ -116,8 +124,13 @@ namespace EmbedIO.Tests
                     var echoed = new byte[capsules ? 5 : 3];
                     await wire.ReadExactlyAsync(echoed, stop.Token);
                     Assert.That(echoed, Is.EqualTo(capsules ? new byte[] { 17, 3, 7, 8, 9 } : new byte[] { 7, 8, 9 }));
-                    Assert.That(await wire.ReadAsync(new byte[1], stop.Token), Is.Zero, "The server must finish its send side before the peer's final input.");
-                    await wire.WriteAsync(capsules ? new byte[] { 0, 1, 42 } : Encoding.ASCII.GetBytes("done"), stop.Token);
+                    var finalInput = capsules ? new byte[] { 0, 1, 42 } : Encoding.ASCII.GetBytes("done");
+                    var halfClose = await independentDirections.Task.WaitAsync(stop.Token);
+                    if (!halfClose) await wire.WriteAsync(finalInput, stop.Token);
+                    Assert.That(await wire.ReadAsync(new byte[1], stop.Token), Is.Zero, "Server output must end cleanly.");
+                    // Plain TCP and TLS 1.3 retain the original independent send-end
+                    // assertion. TLS 1.2 peers must finish input before close_notify.
+                    if (halfClose) await wire.WriteAsync(finalInput, stop.Token);
                     await verified.Task.WaitAsync(stop.Token);
                     Assert.That(await closed.Task.WaitAsync(stop.Token), Is.EqualTo(1));
                 }

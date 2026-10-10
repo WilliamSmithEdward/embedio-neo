@@ -108,8 +108,7 @@ netstandard2.0 reference assembly lacks that API, the legacy asset binds the sam
 public runtime method when available. It does not access private TLS fields or
 add native interop. A runtime without that public method rejects a TLS handoff
 before sending the handshake. Plain tunnels do not need this method. A TLS 1.3
-peer is used by the staged half-close cases; older TLS closure semantics require
-separate validation before broader claims.
+peer retains independent send completion. TLS 1.2 requires peers to finish input before close_notify, according to [RFC 5246 section 7.2.1](https://www.rfc-editor.org/rfc/rfc5246.html#section-7.2.1). The corrected fixture negotiates the platform default and asserts TLS 1.2 on macOS and TLS 1.3 on the current Windows/Linux hosts. A temporary TLS 1.2 control passed all five HTTP/1 tunnel cases on Windows; corrected macOS behavior still requires hosted validation.
 
 Draft real-peer cases cover plain/TLS CONNECT and capsule Upgrade, early bytes in
 the same write as the HTTP head, correct handshake fields, server send EOF before
@@ -216,3 +215,9 @@ binding; this does not establish older TLS or .NET Framework runtime support.
 Final hosted checks and wider cancellation/drain/resource campaigns remain required.
 See [the usage guide](../guides/capsule-tunnels.md) and
 [approved migration impact](../compatibility/migration.md#generic-tunnel-and-capsule-carriers-unreleased).
+
+### Initial capsule CI corrections
+
+The initial draft head a2dc18c failed the target API parity audit because HttpTunnel intentionally exposes IAsyncDisposable and DisposeAsync only in the .NET 10 asset. The owner-approved difference is now recorded as exactly those two entries; unexpected or missing differences still fail. The corrected audit passed against the Windows, Linux and macOS artifacts, including eleven negative checks. No allocation budget was changed.
+
+The initial macOS job also rejected the fixture's forced TLS 1.3 before HTTP handoff. Its server-side SslStream uses TLS 1.2; the .NET 10 Network.framework switch enables TLS 1.3 for client operations only, as documented by [Microsoft](https://devblogs.microsoft.com/dotnet/dotnet-10-networking-improvements/). The fixture now preserves independent half-close assertions for plain TCP/TLS 1.3 and checks TLS 1.2's negotiated closure ordering. The separately observed raw MsQuic rebind failure remains subject only to the existing narrow classifier.

@@ -18,7 +18,7 @@ namespace EmbedIO
         private Task? _disposal;
         /// <summary>Creates a tunnel over an already negotiated stream, taking ownership of that stream.</summary>
         /// <param name="stream">The duplex stream whose disposal ends the tunnel.</param>
-        /// <param name="completeOutput">Backend action finishing only the send direction.</param>
+        /// <param name="completeOutput">Backend action completing output according to transport closure semantics.</param>
         /// <param name="protocol">Selected protocol metadata; null for ordinary CONNECT.</param>
         /// <param name="useCapsules">Whether this accepted extension uses reliable capsule framing.</param>
         public HttpTunnel(Stream stream, Func<CancellationToken, Task> completeOutput, string? protocol = null, bool useCapsules = false)
@@ -37,7 +37,8 @@ namespace EmbedIO
         public string? Protocol { get; }
         /// <summary>Gets the capsule channel when explicitly negotiated, otherwise null.</summary>
         public HttpCapsuleChannel? Capsules { get; }
-        /// <summary>Finishes the send direction after pending writes, while preserving readable peer input.</summary>
+        /// <summary>Finishes output after pending writes according to transport closure semantics.</summary>
+        /// <remarks>TLS 1.2 peers must finish sending before close_notify; independent half-close requires a supporting transport.</remarks>
         /// <param name="cancellationToken">The first caller's token controls shared completion.</param>
         /// <returns>The same completion task for every caller, including failures.</returns>
         public Task CompleteOutputAsync(CancellationToken cancellationToken = default)

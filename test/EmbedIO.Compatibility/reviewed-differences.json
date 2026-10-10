@@ -2571,5 +2571,16 @@
         "cancelError": "System.AggregateException"
       }
     ]
-  }
+  },
+  "targetApiDifferences": [
+    {
+      "type": "EmbedIO.HttpTunnel",
+      "neoOnly": [
+        "Method: System.Threading.Tasks.ValueTask DisposeAsync() | ",
+        "interface: System.IAsyncDisposable"
+      ],
+      "neoStandardOnly": [],
+      "reason": "Owner-approved additive capsule/tunnel API: .NET 10 exposes IAsyncDisposable and DisposeAsync; both assets retain Task-returning CloseAsync and IDisposable. This does not permit other target differences. See docs/compatibility/migration.md#generic-tunnel-and-capsule-carriers-unreleased."
+    }
+  ]
 }
