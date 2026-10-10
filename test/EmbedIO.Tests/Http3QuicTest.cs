@@ -316,7 +316,7 @@ namespace EmbedIO.Tests
                     if (blocked)
                     {
                         var session = await sessionReady.Task.WaitAsync(deadline.Token);
-                        var gate = connection.GetField("_sync", Flags)?.GetValue(session) ?? throw new AssertionException("Missing gate.");
+                        var gate = connection.GetField("_decoderSync", Flags)?.GetValue(session) ?? throw new AssertionException("Missing gate.");
                         var pending = (System.Collections.IDictionary)(connection.GetField("_pending", Flags)?.GetValue(session) ?? throw new AssertionException("Missing pending sections."));
                         while (true)
                         {

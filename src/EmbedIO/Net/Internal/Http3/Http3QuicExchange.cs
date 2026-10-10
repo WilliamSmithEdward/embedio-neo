@@ -1,5 +1,6 @@
 ﻿#if NET10_0_OR_GREATER
 using System;
+using System.Buffers;
 using System.Globalization;
 using System.IO;
 using System.Net.Quic;
@@ -17,10 +18,12 @@ namespace EmbedIO.Net.Internal.Http3
     internal sealed class Http3QuicExchange : IMultiplexedExchange, IDisposable
     {
         private const int MaximumDataPayload = 256 * 1024;
+        // Frames up to this payload size are submitted with their header in one
+        // transport write; larger payloads are written in place without a copy.
+        private const int CoalescedPayload = 16 * 1024;
         private readonly BorrowedResource<QuicStream> _stream;
         private readonly Http3RequestStream _reader;
-        private readonly Func<HpackField[], byte[]> _encode;
-        private readonly Action<Exception> _failed;
+        private readonly IHttp3ExchangeOwner _owner;
         private readonly SemaphoreSlim _output = new(1, 1);
         private readonly object _outputLifetime = new();
         private int _outputUsers;
@@ -34,11 +37,11 @@ namespace EmbedIO.Net.Internal.Http3
         private long _sent;
         private int _disposed;
         internal Http3QuicExchange(QuicStream stream, Http3RequestStream reader, Http2RequestHeaders request,
-            Func<byte[], CancellationToken, Task<HpackField[]>> decode, Func<HpackField[], byte[]> encode, Action<Exception> failed, CancellationToken token)
+            IHttp3ExchangeOwner owner, CancellationToken token)
         {
             _stream = new BorrowedResource<QuicStream>(stream); _reader = reader; Request = request;
-            _encode = encode; _failed = failed; CancellationToken = token;
-            Body = new Http3RequestBody(stream.Id, reader, decode, failed);
+            _owner = owner; CancellationToken = token;
+            Body = new Http3RequestBody(stream.Id, reader, owner);
         }
         internal Http3PriorityState.Entry? PriorityState { get; set; }
         internal HttpPriority Priority => PriorityState?.Value ?? new HttpPriority(3, false);
@@ -70,7 +73,7 @@ namespace EmbedIO.Net.Internal.Http3
                 CheckWritable();
                 if (_headers) throw new InvalidOperationException("Final response headers already sent.");
                 var response = Http2ResponseHeaders.Validate(fields, Request.Method, endStream);
-                var encoded = _encode(fields);
+                var encoded = _owner.Encode(fields);
                 await FrameAsync(1, encoded, endStream, token).ConfigureAwait(false);
                 if (response.Status >= 200)
                 {
@@ -112,7 +115,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
             catch (ObjectDisposedException error) when (CancellationToken.IsCancellationRequested)
             { throw new OperationCanceledException("The HTTP/3 request was canceled during transport disposal.", error, CancellationToken); }
-            catch (Exception error) when (error is QuicException or OperationCanceledException) { _outputFailed = true; _failed(error); throw; }
+            catch (Exception error) when (error is QuicException or OperationCanceledException) { _outputFailed = true; _owner.Failed(error); throw; }
             finally { ReleaseOutput(); }
         }
         internal async Task SendTrailersAsync(HpackField[] fields, CancellationToken token)
@@ -126,7 +129,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_length.HasValue && _sent != _length.Value) throw new InvalidDataException("Response does not match Content-Length.");
                 try { Http2RequestHeaders.ValidateTrailers(new Http2HeaderBlock(0, true, fields, 0)); }
                 catch (Http2ProtocolException error) { throw new InvalidDataException(error.Message, error); }
-                var encoded = _encode(fields);
+                var encoded = _owner.Encode(fields);
                 await FrameAsync(1, encoded, true, token).ConfigureAwait(false);
                 _ended = true;
             }
@@ -143,14 +146,28 @@ namespace EmbedIO.Net.Internal.Http3
         {
             var size = QuicInteger.Write(_frameHeader, 0, type);
             size += QuicInteger.Write(_frameHeader, size, payload.Length);
+            byte[]? coalesced = null;
             try
             {
-                await _stream.Value.WriteAsync(_frameHeader.AsMemory(0, size), false, token).ConfigureAwait(false);
-                await _stream.Value.WriteAsync(payload, endStream, token).ConfigureAwait(false);
+                if (payload.Length <= CoalescedPayload)
+                {
+                    // One transport submission (and completion) per small frame.
+                    // QuicStream copies the bytes when the write is submitted.
+                    coalesced = ArrayPool<byte>.Shared.Rent(size + payload.Length);
+                    _frameHeader.AsSpan(0, size).CopyTo(coalesced);
+                    payload.Span.CopyTo(coalesced.AsSpan(size));
+                    await _stream.Value.WriteAsync(coalesced.AsMemory(0, size + payload.Length), endStream, token).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _stream.Value.WriteAsync(_frameHeader.AsMemory(0, size), false, token).ConfigureAwait(false);
+                    await _stream.Value.WriteAsync(payload, endStream, token).ConfigureAwait(false);
+                }
             }
             catch (ObjectDisposedException error) when (CancellationToken.IsCancellationRequested)
             { throw new OperationCanceledException("The HTTP/3 request was canceled during transport disposal.", error, CancellationToken); }
-            catch (Exception error) when (error is IOException or OperationCanceledException) { _outputFailed = true; _failed(error); throw; }
+            catch (Exception error) when (error is IOException or OperationCanceledException) { _outputFailed = true; _owner.Failed(error); throw; }
+            finally { if (coalesced != null) ArrayPool<byte>.Shared.Return(coalesced); }
         }
         private async Task AcquireOutputAsync(CancellationToken token)
         {

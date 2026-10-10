@@ -1,68 +1,111 @@
-﻿using System;
+using System;
 using System.IO;
+using System.Net.Quic;
 using System.Reflection;
+using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
+    [SupportedOSPlatform("windows")]
+    [SupportedOSPlatform("linux")]
+    [SupportedOSPlatform("macos")]
     public class Http3DirectionWatcherTest
     {
-        private static Task Watch(Task direction, CancellationTokenSource requestStop, Task stopped)
+        private static MethodInfo Method(string name)
         {
             var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection");
             if (type == null) Assert.Ignore("The legacy asset has no direct QUIC transport.");
-            var method = (type ?? throw new AssertionException("Missing QUIC connection."))
-                .GetMethod("WatchRequestDirectionAsync", BindingFlags.Static | BindingFlags.NonPublic)
-                ?? throw new AssertionException("Missing request-direction watcher.");
-            return (Task)(method.Invoke(null, new object[] { direction, requestStop, stopped })
-                ?? throw new AssertionException("Missing watcher task."));
+            return (type ?? throw new AssertionException("Missing QUIC connection."))
+                .GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new AssertionException("Missing request-direction member " + name + ".");
         }
+
+        private static void Watch(Task direction, CancellationTokenSource requestStop)
+            => Method("WatchRequestDirection").Invoke(null, new object[] { direction, requestStop });
+
+        // What the request owner sees for this direction when the request ends.
+        private static Exception? Unexpected(Task direction, CancellationTokenSource requestStop)
+            => (Exception?)Method("UnexpectedDirectionFault").Invoke(null, new object[] { direction, requestStop });
 
         [TestCase(false)]
         [TestCase(true)]
-        public async Task SuccessfulFinDoesNotCancelTheRequest(bool alreadyCompleted)
+        public void SuccessfulFinDoesNotCancelTheRequest(bool alreadyCompleted)
         {
             using var requestStop = new CancellationTokenSource();
-            var direction = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var direction = new TaskCompletionSource();
             if (alreadyCompleted) direction.TrySetResult();
-            var watching = Watch(direction.Task, requestStop, stopped.Task);
+            Watch(direction.Task, requestStop);
             direction.TrySetResult();
-            await watching.WaitAsync(TimeSpan.FromSeconds(2));
             Assert.That(requestStop.IsCancellationRequested, Is.False);
-            Assert.That(stopped.Task.IsCompleted, Is.False);
+            Assert.That(Unexpected(direction.Task, requestStop), Is.Null);
         }
 
         [TestCase(false)]
         [TestCase(true)]
-        public async Task StoppingObservationDoesNotCompleteTheTransportDirection(bool alreadyStopped)
+        public void TransportFaultCancelsTheRequest(bool alreadyFaulted)
         {
             using var requestStop = new CancellationTokenSource();
-            var direction = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var registration = requestStop.Token.Register(() => stopped.TrySetResult());
+            var direction = new TaskCompletionSource();
+            var reset = new QuicException(QuicError.StreamAborted, 0x10c, "Peer reset.");
+            if (alreadyFaulted) direction.TrySetException(reset);
+            Watch(direction.Task, requestStop);
+            direction.TrySetException(reset);
+            // The continuation may be queued rather than inlined under a synchronization context.
+            Assert.That(SpinWait.SpinUntil(() => requestStop.IsCancellationRequested, TimeSpan.FromSeconds(2)), Is.True, "An early upload reset must cancel the running request.");
+            Assert.That(Unexpected(direction.Task, requestStop), Is.Null, "The cancellation is the reset's only effect.");
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void EndingTheRequestDoesNotCompleteTheTransportDirection(bool alreadyStopped)
+        {
+            using var requestStop = new CancellationTokenSource();
+            var direction = new TaskCompletionSource();
             if (alreadyStopped) requestStop.Cancel();
-            var watching = Watch(direction.Task, requestStop, stopped.Task);
+            Watch(direction.Task, requestStop);
             requestStop.Cancel();
-            await watching.WaitAsync(TimeSpan.FromSeconds(2));
             Assert.That(direction.Task.IsCompleted, Is.False);
+            Assert.That(Unexpected(direction.Task, requestStop), Is.Null, "An unfinished direction is not a failure.");
             direction.TrySetResult();
         }
 
         [Test]
-        public async Task UnexpectedDirectionFaultRemainsVisibleToTheOwner()
+        public void DirectionEndingAfterTheRequestHasNoFurtherEffect()
         {
             using var requestStop = new CancellationTokenSource();
-            var direction = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var watching = Watch(direction.Task, requestStop, stopped.Task);
+            var direction = new TaskCompletionSource();
+            var observed = 0;
+            using var registration = requestStop.Token.Register(() => Interlocked.Increment(ref observed));
+            Watch(direction.Task, requestStop);
+            requestStop.Cancel();
+            direction.TrySetException(new QuicException(QuicError.ConnectionAborted, 0x100, "Connection closed."));
+            Assert.That(Volatile.Read(ref observed), Is.EqualTo(1), "Request callbacks run once.");
+        }
+
+        [Test]
+        public void UnexpectedDirectionFaultRemainsVisibleToTheOwner()
+        {
+            using var requestStop = new CancellationTokenSource();
+            var direction = new TaskCompletionSource();
+            Watch(direction.Task, requestStop);
             var failure = new IOException("Unexpected direction failure.");
             direction.TrySetException(failure);
-            var observed = await Assert.ThrowsAsync<IOException>(async () => await watching.WaitAsync(TimeSpan.FromSeconds(2)));
-            Assert.That(observed, Is.SameAs(failure));
             Assert.That(requestStop.IsCancellationRequested, Is.False);
+            Assert.That(Unexpected(direction.Task, requestStop), Is.SameAs(failure));
+        }
+
+        [Test]
+        public void CancellationAfterTheRequestStoppedIsNotAFailure()
+        {
+            using var requestStop = new CancellationTokenSource();
+            var direction = new TaskCompletionSource();
+            Watch(direction.Task, requestStop);
+            requestStop.Cancel();
+            direction.TrySetCanceled(requestStop.Token);
+            Assert.That(Unexpected(direction.Task, requestStop), Is.Null);
         }
     }
 }
