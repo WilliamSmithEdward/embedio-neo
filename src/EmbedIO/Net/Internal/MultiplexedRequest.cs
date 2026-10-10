@@ -11,11 +11,9 @@ namespace EmbedIO.Net.Internal
 {
     internal sealed class MultiplexedRequest : IHttpRequest
     {
-        private static readonly object NoReferrer = new();
         private readonly IMultiplexedExchange _exchange;
         private CookieList? _cookies;
         private NameValueCollection? _queryString;
-        private object? _referrer;
         internal MultiplexedRequest(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
         {
             _exchange = exchange;
@@ -27,16 +25,18 @@ namespace EmbedIO.Net.Internal
             var scheme = request.Scheme.Length == 0 ? (secure ? "https" : "http") : request.Scheme;
             Url = new Uri(scheme + "://" + request.Authority + (request.Path.Length == 0 || request.Path == "*" ? "/" : request.Path));
             HasEntityBody = !exchange.InitialBodyComplete || request.ContentLength.GetValueOrDefault() > 0;
-            // The referrer is the header value at construction. Parsing waits for the
-            // first read, so a request whose referrer is never used builds no Uri.
-            _referrer = Headers[HttpHeaderNames.Referer];
+            // A present query is parsed here, before the request is queued. Deferring it
+            // to the handler's first read raised HTTP/2 tail latency with many streams
+            // per connection (docs/project/http-request-model-allocations.md).
+            if (EmbedIO.Internal.StringOperations.IndexOfOrdinal(request.Path, '?') >= 0) _queryString = ParseQuery(Url.Query);
+            if (Uri.TryCreate(Headers[HttpHeaderNames.Referer], UriKind.Absolute, out var referer)) UrlReferrer = referer;
         }
         public NameValueCollection Headers => _exchange.Request.Headers;
         public bool KeepAlive => true;
         public string RawTarget { get; }
 
-        // Parsed on first read from the immutable Url. Concurrent first readers may
-        // each parse, but only one collection is published and every caller gets it.
+        // Without a query the empty collection is created on first read. Concurrent
+        // first readers may each create one; only one is published and all get it.
         public NameValueCollection QueryString
         {
             get
@@ -71,22 +71,7 @@ namespace EmbedIO.Net.Internal
         public string? ContentType => Headers[HttpHeaderNames.ContentType];
         public long ContentLength64 => _exchange.Request.ContentLength ?? (_exchange.InitialBodyComplete ? 0 : -1);
         public bool IsAuthenticated => false;
-        public Uri? UrlReferrer
-        {
-            get
-            {
-                // _referrer holds the raw header until the first read, then the parsed
-                // Uri, or NoReferrer when the header was absent or not an absolute URI.
-                var current = Volatile.Read(ref _referrer);
-                if (current is string text)
-                {
-                    object parsed = Uri.TryCreate(text, UriKind.Absolute, out var uri) ? uri : NoReferrer;
-                    current = Interlocked.CompareExchange(ref _referrer, parsed, text);
-                    if (ReferenceEquals(current, text)) current = parsed;
-                }
-                return current as Uri;
-            }
-        }
+        public Uri? UrlReferrer { get; }
         public ICookieCollection Cookies => _cookies ??= HttpListenerRequest.ParseCookies(Headers[HttpHeaderNames.Cookie] ?? string.Empty);
         public Version ProtocolVersion => _exchange.ProtocolVersion;
 

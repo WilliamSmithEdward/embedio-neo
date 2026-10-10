@@ -16,10 +16,11 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    // The HTTP/2 and HTTP/3 request model builds its query collection, items and
-    // close-callback storage on first use and parses the referrer on first read.
-    // These cases pin the values, identity and mutability those members had when
-    // they were built eagerly, through the public WebServer on both protocols.
+    // The HTTP/2 and HTTP/3 request model creates an empty query collection, items
+    // and close-callback storage on first use, and parses a present query without
+    // splitting it into parts. These cases pin the values, identity and mutability
+    // those members had when they were built eagerly, through the public WebServer
+    // on both protocols.
     public class MultiplexedRequestModelTest
     {
         public enum Transport
