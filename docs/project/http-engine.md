@@ -7060,6 +7060,28 @@ also passes 100 drain iterations. Hosted final-head acceptance remains required;
 [HTTP/2 graceful output lifetime](http2-drain-output-lifetime.md) preserves the
 failures, exact mechanism, limits and validation scope.
 
+Native listener callback follow-up: controlled pre-ownership admission failures
+reproduce both exception escape and poisoning of future listener stop on 54f4c5c.
+A separate admission boundary preserves refusal, records the failure without
+callback logging/allocation, and keeps successful return after ownership cleanup.
+The 61 focused native cases pass on Windows/Linux; full Windows acceptance is
+4806 cases, 4801 passed, five existing skips, zero failures. Both-target builds
+and guards pass. Hosted checks and broader native callback/finalizer/application
+acceptance remain required; the audit record states the injection limits.
+
+PR #236 is integrated into the development engine as 416e773 after all 35 checks
+passed or intentionally skipped on 21c964f. Its merged tree matches the tested
+tree, 851e7a5bb6125b06df7b193ad728e87ec398e19d, with an explicit clean squash
+message. The original macOS initial QUIC handshake failure is retained; unchanged
+failed-job rerun passed, and its cause remains unconfirmed. Program #181 remains
+open. Combined callback/drain acceptance and hosted checks remain required.
+
+Combined acceptance after integrating verified drain base 416e773 reports 4807
+Windows cases, 4802 passed, five existing skips, zero failures (3m 22s). Both
+core targets build without warnings. The two additional callback cases retain
+their controlled-invocation scope; focused native Linux results above precede
+this H2-only base move. All new-head hosted checks remain required.
+
 ### WebTransport session core (isolated, unintegrated)
 
 An original internal framing and session core for WebTransport over HTTP/3 now
@@ -7099,3 +7121,8 @@ Reconciled WebTransport acceptance on 416e773 reports 4895 Windows cases,
 4890 passed, five existing skips, zero failures (3m 22s), with warning-free
 both-target builds and locked restore. Earlier focused results and limits are
 preserved in the guide; all new-head hosted checks remain required.
+
+PR #237 is verified in development at 048f06f; the corrected WebTransport branch
+is reconciled onto it. Expected discovery is 4897 (4807 base plus 90 core cases).
+The integrated callback tree matches 48fa5d51519e9582ac1a56ba26269d86a91298a3.
+Fresh combined-source and hosted acceptance remain required.
