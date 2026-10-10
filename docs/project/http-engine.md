@@ -7094,3 +7094,8 @@ The corrected isolated WebTransport branch is reconciled onto verified drain
 base 416e773. Expected combined discovery is 4895 (4805 base plus 90 core cases).
 Fresh combined and hosted acceptance remain required; existing capability and
 interoperability limits above remain unchanged.
+
+Reconciled WebTransport acceptance on 416e773 reports 4895 Windows cases,
+4890 passed, five existing skips, zero failures (3m 22s), with warning-free
+both-target builds and locked restore. Earlier focused results and limits are
+preserved in the guide; all new-head hosted checks remain required.

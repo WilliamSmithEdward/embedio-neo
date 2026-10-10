@@ -245,3 +245,12 @@ An initial retained-asset probe accidentally selected a stale pre-WebTransport
 setup failure is retained separately; after rebuilding both actual core targets,
 the current retained-asset run above passes. The modern binary is restored and
 its SHA-256 verified after each retained-asset probe.
+
+
+Reconciled acceptance on verified drain/native base 416e773 reports 4895
+Windows cases, 4890 passed, five existing skips, zero failures (3m 22s).
+Locked restore and complete builds for both core targets pass without warnings.
+The earlier 2601cca hosted Windows failure was the admitted HTTP/2 response loss
+now corrected in merged PR #236; its failed evidence is retained in the drain
+lifetime guide. This updated source requires every new-head hosted check before
+integration. The core still advertises no application WebTransport capability.
