@@ -248,13 +248,15 @@ Retained, not overwritten:
 
 ### Validation
 
-On rebased head `094fe8f`'s audit files (snapshot `0a0d212` over `90e84f1`), the
-Windows full suite at the audit's first base reported 4,924 cases: 4,915 passed and 9
-skipped (5 existing platform skips and the 4 explicit reproductions). Windows 11
-build 26300, SDK 10.0.401, runtime 10.0.12. All 23 ordinary cases passed in the
-pinned Linux container with `EMBEDIO_REQUIRE_QUIC=1`. Both production targets
-build without warnings; the suppression and null-forgiving guards and whitespace
-verification pass for the changed C# files.
+On the rebased audit head over engine `a4f7105`, the Windows full suite reports
+4,930 cases with `--minimum-expected-tests 4930`: 4,921 passed, 9 skipped (5
+existing platform skips and the 4 explicit reproductions), none failed. Windows 11
+build 26300, SDK 10.0.401, runtime 10.0.12. Locked restore and the warning-free
+solution build pass, as do the suppression and null-forgiving guards and whitespace
+verification of the changed C# files. On the pinned Linux container with
+`EMBEDIO_REQUIRE_QUIC=1`, all 23 ordinary cases passed on snapshot `0a0d212`
+(identical audit files over `90e84f1`), and the four explicit reproductions failed
+exactly as on Windows.
 
 ### Limits
 
