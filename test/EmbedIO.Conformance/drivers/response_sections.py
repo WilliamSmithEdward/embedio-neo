@@ -125,13 +125,28 @@ def h2(args):
 async def h3(args):
     from aioquic.asyncio.client import connect
     from aioquic.asyncio.protocol import QuicConnectionProtocol
-    from aioquic.h3.connection import H3Connection, H3_ALPN
+    from aioquic.h3.connection import H3Connection, H3_ALPN, HeadersState
     from aioquic.h3.events import HeadersReceived, DataReceived
     from aioquic.quic.configuration import QuicConfiguration
     from aioquic.quic.events import ConnectionTerminated, StreamReset
+    class InterimAwareH3(H3Connection):
+        # aioquic 1.3.0 advances to final-header state after every HEADERS block,
+        # including 103. This test-only adapter retains INITIAL only for validated
+        # interim sections; final/trailer validation and independent QPACK stay intact.
+        def _handle_request_or_push_frame(self, frame_type, frame_data, stream, stream_ended):
+            events = super()._handle_request_or_push_frame(frame_type, frame_data, stream, stream_ended)
+            for event in events:
+                if isinstance(event, HeadersReceived):
+                    fields = dict(event.headers); status = fields.get(b":status")
+                    if status and int(status) < 200:
+                        if int(status) == 101 or event.stream_ended or b"content-length" in fields or b"transfer-encoding" in fields:
+                            raise AssertionError("Invalid informational section")
+                        stream.headers_recv_state = HeadersState.INITIAL
+            return events
+
     class Peer(QuicConnectionProtocol):
         def __init__(self, *a, **kw):
-            super().__init__(*a, **kw); self.http = H3Connection(self._quic); self.states = {}
+            super().__init__(*a, **kw); self.http = (InterimAwareH3 if args.h3_interim_adapter else H3Connection)(self._quic); self.states = {}
         def quic_event_received(self, event):
             if isinstance(event, (ConnectionTerminated, StreamReset)):
                 for current in self.states.values():
@@ -156,7 +171,7 @@ async def h3(args):
             self.transmit(); await asyncio.wait_for(current["done"].wait(), 15)
             if current["error"]: raise AssertionError(current["error"])
             return current
-    config = QuicConfiguration(is_client=True, alpn_protocols=H3_ALPN)
+    config = QuicConfiguration(is_client=True, alpn_protocols=H3_ALPN, max_stream_data=65536)
     config.load_verify_locations(args.cert)
     async with connect("localhost", args.port, configuration=config, create_protocol=Peer) as peer:
         for size in (0, 3, 196608):
@@ -169,9 +184,9 @@ async def h3(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(); parser.add_argument("protocol", choices=("h1", "h2", "h3"))
     parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, required=True)
-    parser.add_argument("--tls", action="store_true"); parser.add_argument("--cert", required=True)
+    parser.add_argument("--h3-interim-adapter", action="store_true"); parser.add_argument("--tls", action="store_true"); parser.add_argument("--cert", required=True)
     args = parser.parse_args()
-    print(json.dumps({"protocol": args.protocol, "h2": importlib.metadata.version("h2"), "aioquic": importlib.metadata.version("aioquic")}))
+    print(json.dumps({"protocol": args.protocol, "h2": importlib.metadata.version("h2"), "aioquic": importlib.metadata.version("aioquic"), "h3InterimAdapter": args.h3_interim_adapter}))
     if args.protocol == "h3": asyncio.run(h3(args))
     elif args.protocol == "h2": h2(args)
     else: h1(args)

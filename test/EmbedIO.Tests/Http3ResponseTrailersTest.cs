@@ -90,6 +90,8 @@ namespace EmbedIO.Tests
                         var sections = context.Response as IHttpResponseSections ?? throw new AssertionException("Missing response capability.");
                         await sections.SendInformationalAsync(103,
                             new WebHeaderCollection { ["Link"] = "</asset>; rel=preload" }, context.CancellationToken);
+                        await sections.SendInformationalAsync(103,
+                            new WebHeaderCollection { ["Link"] = "</second>; rel=preload" }, context.CancellationToken);
                         Assert.That(context.Response.StatusCode, Is.EqualTo(200));
                         sections.DeclareTrailers("x-verified");
                         await context.Response.OutputStream.WriteAsync(new byte[] { 7, 8, 9 }, context.CancellationToken);
