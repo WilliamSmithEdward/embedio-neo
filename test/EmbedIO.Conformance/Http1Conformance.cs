@@ -235,7 +235,7 @@ internal static class Http1Conformance
         new("long-target", "RFC9112 3", "MUST", t =>
         {
             var (r, _, e) = Exchange(t, "GET /plain?" + new string('a', 40_000) + " HTTP/1.1\r\nHost: a\r\n\r\n");
-            if (r == null) return (Error, "No required limit status received: " + e);
+            if (r == null) return ("error", "No required limit status received: " + e);
             return Expect(r.Status == 414, Describe(r));
         }),
         new("large-header", "RFC6585 5", "MAY", t =>
