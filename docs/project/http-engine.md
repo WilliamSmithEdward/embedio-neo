@@ -6907,3 +6907,24 @@ combined discovery floor is 4771: development base 4712, 33 framing cases and
 26 native cases. macOS stream-credit/rejection, native reads/writes/datagrams,
 complete failure/finalizer coverage and measured provider performance remain
 unverified. No application provider or protocol capability is enabled.
+
+
+Native-provider CI run 38041810051 at e52da5f retained two separate failures.
+The macOS incomplete-outgoing-capsule case received H3_MESSAGE_ERROR while
+reading the initial response field section, before entering its expected reset
+assertion. Its application returned and triggered an intentional reset before
+the peer consumed the successful response; QUIC reset does not preserve unread
+stream bytes. The fixture now waits for the peer to consume and assert the 200
+headers before returning with the incomplete capsule. The same reset code,
+partial-payload limit, close-callback count and healthy-sibling assertions remain.
+The correction passes once on Windows and in ten fresh pinned Linux processes;
+macOS and complete exact-head validation remain required.
+
+The Linux test process in that run crashed with an unhandled NullReferenceException
+in System.Net.HttpListenerResponse.FormatHeaders, called from the runtime's
+HttpConnection.OnRead shutdown path. It reported 3907 cases before exit 7.
+The macOS process reported only 3875 cases and violated the discovery floor.
+Neither failure qualifies for the raw QUIC rebind quarantine. The Linux crash's
+origin and the incomplete macOS run remain unconfirmed; no product correction,
+quarantine, reduced discovery floor or increased timeout is claimed for them.
+Logs and both TRX artifacts are retained under ignored TestResults/native-datagrams.
