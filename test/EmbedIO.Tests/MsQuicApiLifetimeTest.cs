@@ -399,6 +399,96 @@ namespace EmbedIO.Tests
                 Assert.That(await sibling.ReadAsync(input, token), Is.Zero);
             }, unbuffered: true);
         }
+        [TestCase(false, 0)]
+        [TestCase(true, 0)]
+        [TestCase(false, 65536)]
+        [TestCase(true, 65536)]
+        public async Task NativeOutgoingStreamsReachPeerWithExactBytesAndFin(bool unidirectional, int length)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeOutgoingCore(unidirectional, length);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeOutgoingCore(bool unidirectional, int length)
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                var opening = (Task)ListenerCall(connection, "OpenStreamAsync", unidirectional, token);
+                await opening.WaitAsync(token);
+                using var native = (SafeHandle)(opening.GetType().GetProperty("Result")?.GetValue(opening)
+                    ?? throw new AssertionException("Missing native outgoing stream."));
+                await using var incoming = await peer.AcceptInboundStreamAsync(token);
+                Assert.That(incoming.Type, Is.EqualTo(unidirectional ? QuicStreamType.Unidirectional : QuicStreamType.Bidirectional));
+                Assert.That(incoming.Id & 3, Is.EqualTo(unidirectional ? 3 : 1));
+                Assert.That(native.GetType().GetProperty("Id", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(native), Is.EqualTo(incoming.Id));
+                var payload = new byte[length];
+                for (var i = 0; i < payload.Length; i++) payload[i] = (byte)(i * 11);
+                var writing = ((ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)payload, true, token)).AsTask();
+                var actual = new byte[length]; var chunk = new byte[8191]; var total = 0;
+                while (true)
+                {
+                    var count = await incoming.ReadAsync(chunk, token);
+                    if (count == 0) break;
+                    Assert.That(total + count, Is.LessThanOrEqualTo(length));
+                    chunk.AsSpan(0, count).CopyTo(actual.AsSpan(total)); total += count;
+                }
+                await writing.WaitAsync(token);
+                Assert.That(total, Is.EqualTo(length)); Assert.That(actual, Is.EqualTo(payload));
+                if (unidirectional)
+                    await Assert.ThatAsync(async () => await (ValueTask<int>)ListenerCall(native, "ReadAsync", chunk.AsMemory(), token), Throws.InstanceOf<NotSupportedException>());
+                else
+                {
+                    await incoming.WriteAsync(new byte[] { 99 }, true, token);
+                    Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", chunk.AsMemory(), token), Is.EqualTo(1));
+                    Assert.That(chunk[0], Is.EqualTo(99));
+                    Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", chunk.AsMemory(), token), Is.Zero);
+                }
+            });
+        }
+        [TestCase(false, false)]
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        [TestCase(true, true)]
+        public async Task NativeOutgoingStreamWaitsForPeerCreditAndReleasesOnCancellationOrShutdown(bool unidirectional, bool shutdown)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeOutgoingBlockedCore(unidirectional, shutdown);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeOutgoingBlockedCore(bool unidirectional, bool shutdown)
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+                var opening = (Task)ListenerCall(connection, "OpenStreamAsync", unidirectional, cancellation.Token);
+                await Task.Delay(50, token);
+                Assert.That(opening.IsCompleted, Is.False, "A local ID must not substitute for actual peer credit.");
+                if (shutdown)
+                {
+                    await ((Task)ListenerCall(connection, "ShutdownAsync", 0x100L)).WaitAsync(token);
+                    await Assert.ThatAsync(async () => await opening.WaitAsync(token), Throws.InstanceOf<System.IO.IOException>());
+                }
+                else
+                {
+                    cancellation.Cancel();
+                    await Assert.ThatAsync(async () => await opening.WaitAsync(token), Throws.InstanceOf<OperationCanceledException>().With.Property(nameof(OperationCanceledException.CancellationToken)).EqualTo(cancellation.Token));
+                    await using var sibling = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                    await sibling.WriteAsync(new byte[] { 53 }, true, token);
+                    var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                    await accepting.WaitAsync(token);
+                    using var native = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                        ?? throw new AssertionException("Missing healthy native sibling."));
+                    var bytes = new byte[8];
+                    Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.EqualTo(1));
+                    Assert.That(bytes[0], Is.EqualTo(53));
+                    Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.Zero);
+                }
+            }, peerCredit: 0);
+        }
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
@@ -470,7 +560,7 @@ namespace EmbedIO.Tests
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task ExerciseNativeHandshake(bool stopListenerFirst, QuicStreamType? streamType = null, bool credit = false, Func<SafeHandle, QuicConnection, CancellationToken, Task>? streams = null, bool unbuffered = false)
+        private static async Task ExerciseNativeHandshake(bool stopListenerFirst, QuicStreamType? streamType = null, bool credit = false, Func<SafeHandle, QuicConnection, CancellationToken, Task>? streams = null, bool unbuffered = false, int peerCredit = 8)
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             using var api = OpenApi();
@@ -489,6 +579,8 @@ namespace EmbedIO.Tests
             var connecting = QuicConnection.ConnectAsync(new QuicClientConnectionOptions
             {
                 RemoteEndPoint = endpoint,
+                MaxInboundBidirectionalStreams = peerCredit,
+                MaxInboundUnidirectionalStreams = peerCredit,
                 DefaultCloseErrorCode = 0x100,
                 DefaultStreamErrorCode = 0x10c,
                 ClientAuthenticationOptions = new SslClientAuthenticationOptions

@@ -20,6 +20,12 @@ namespace EmbedIO.Net.Internal.Http3
             internal delegate void CompleteReceive(IntPtr stream, ulong length);
             [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
             internal delegate uint SendStream(IntPtr stream, IntPtr buffers, uint count, uint flags, IntPtr context);
+            [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+            internal delegate uint OpenStream(IntPtr connection, uint flags, IntPtr callback, IntPtr context, out IntPtr stream);
+            [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+            internal delegate uint StartStream(IntPtr stream, uint flags);
+            internal readonly OpenStream Open;
+            internal readonly StartStream Start;
             internal readonly SendStream Send;
             private readonly GetParameter _get;
             internal readonly CompleteReceive ReceiveComplete;
@@ -32,6 +38,8 @@ namespace EmbedIO.Net.Internal.Http3
                 SetHandler = Marshal.GetDelegateForFunctionPointer<ConnectionFunctions.SetCallback>(Marshal.ReadIntPtr(table, 2 * IntPtr.Size));
                 Close = Marshal.GetDelegateForFunctionPointer<ConnectionFunctions.CloseStream>(Marshal.ReadIntPtr(table, 22 * IntPtr.Size));
                 Shutdown = Marshal.GetDelegateForFunctionPointer<ConnectionFunctions.ShutdownStream>(Marshal.ReadIntPtr(table, 24 * IntPtr.Size));
+                Open = Marshal.GetDelegateForFunctionPointer<OpenStream>(Marshal.ReadIntPtr(table, 21 * IntPtr.Size));
+                Start = Marshal.GetDelegateForFunctionPointer<StartStream>(Marshal.ReadIntPtr(table, 23 * IntPtr.Size));
                 Send = Marshal.GetDelegateForFunctionPointer<SendStream>(Marshal.ReadIntPtr(table, 25 * IntPtr.Size));
                 ReceiveComplete = Marshal.GetDelegateForFunctionPointer<CompleteReceive>(Marshal.ReadIntPtr(table, 26 * IntPtr.Size));
             }
@@ -50,7 +58,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
     }
 
-    // An accepted stream holds its connection and the callback table alive.
+    // An owned stream holds its connection and the callback table alive.
     // Receive descriptors are copied, but their payload stays in MsQuic until
     // one matching ReceiveComplete after the entire indication is consumed.
     internal sealed class MsQuicNativeStream : SafeHandleZeroOrMinusOneIsInvalid
@@ -65,6 +73,9 @@ namespace EmbedIO.Net.Internal.Http3
         {
             internal readonly object Sync = new();
             internal readonly TaskCompletionSource Closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal readonly TaskCompletionSource<long>? Started;
+            internal readonly TaskCompletionSource? PeerAccepted;
+            internal bool StartSucceeded;
             internal TaskCompletionSource Available = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly MsQuicApi.ConnectionFunctions.Callback Handler;
             internal readonly IntPtr Pointer;
@@ -79,8 +90,16 @@ namespace EmbedIO.Net.Internal.Http3
             internal bool SendFinished;
             internal bool SendAborted;
             private readonly MsQuicApi.StreamFunctions _functions;
-            internal Signals(MsQuicApi.StreamFunctions functions)
-            { _functions = functions; Handler = OnEvent; Pointer = Marshal.GetFunctionPointerForDelegate(Handler); }
+            internal Signals(MsQuicApi.StreamFunctions functions, bool local = false)
+            {
+                _functions = functions; Handler = OnEvent; Pointer = Marshal.GetFunctionPointerForDelegate(Handler);
+                if (local)
+                {
+                    Started = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    PeerAccepted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                }
+                else StartSucceeded = true;
+            }
             private uint OnEvent(IntPtr stream, IntPtr context, IntPtr eventData)
             {
                 try
@@ -89,6 +108,21 @@ namespace EmbedIO.Net.Internal.Http3
                     {
                         switch (Marshal.ReadInt32(eventData))
                         {
+                            case 0:
+                                var status = unchecked((uint)Marshal.ReadInt32(eventData, 8));
+                                if (MsQuicApi.Failed(status))
+                                {
+                                    Started?.TrySetException(new IOException("Native stream start failed with status 0x" + status.ToString("X8")));
+                                    Closed.TrySetResult();
+                                }
+                                else
+                                {
+                                    StartSucceeded = true;
+                                    Started?.TrySetResult(Marshal.ReadInt64(eventData, 16));
+                                    if ((Marshal.ReadByte(eventData, 24) & 1) != 0) PeerAccepted?.TrySetResult();
+                                }
+                                break;
+                            case 9: PeerAccepted?.TrySetResult(); break;
                             case 1:
                                 var length = checked((long)(ulong)Marshal.ReadInt64(eventData, 16));
                                 Fin |= (Marshal.ReadInt32(eventData, 24 + IntPtr.Size + 4) & 2) != 0;
@@ -120,6 +154,7 @@ namespace EmbedIO.Net.Internal.Http3
                             case 3: Fin = true; Available.TrySetResult(); break;
                             case 4: Error = new IOException("Native peer aborted its stream send direction."); Available.TrySetResult(); break;
                             case 7:
+                                PeerAccepted?.TrySetException(new IOException("Native stream closed before the peer accepted it."));
                                 if ((!Fin || Buffers != null) && Error == null) Error = new IOException("Native stream closed before pending receive data was consumed.");
                                 Available.TrySetResult(); Closed.TrySetResult(); break;
                         }
@@ -143,10 +178,12 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly EmbedIO.Internal.AsyncWriteGate _writeGate = new();
         private int _disposeStarted;
         private bool _finQueued;
-        internal long Id { get; }
+        private long _id;
+        private readonly bool _local;
+        internal long Id => _id;
         internal bool Unidirectional { get; }
-        private MsQuicNativeStream(MsQuicNativeConnection connection, MsQuicApi.StreamFunctions functions, Signals signals, long id, uint flags) : base(true)
-        { _connection = connection; _functions = functions; _signals = signals; Id = id; Unidirectional = (flags & 1) != 0; }
+        private MsQuicNativeStream(MsQuicNativeConnection connection, MsQuicApi.StreamFunctions functions, Signals signals, long id, uint flags, bool local = false) : base(true)
+        { _connection = connection; _functions = functions; _signals = signals; _id = id; _local = local; Unidirectional = (flags & 1) != 0; }
         internal static MsQuicNativeStream Accept(MsQuicNativeConnection connection, IntPtr handle, uint flags, MsQuicApi.StreamFunctions functions)
         {
             if (handle == IntPtr.Zero) throw new ArgumentException("Missing accepted stream.", nameof(handle));
@@ -163,10 +200,48 @@ namespace EmbedIO.Net.Internal.Http3
             }
             finally { if (retained) connection.DangerousRelease(); }
         }
+        internal static async Task<MsQuicNativeStream> OpenAsync(MsQuicNativeConnection connection, bool unidirectional, MsQuicApi.StreamFunctions functions, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            var signals = new Signals(functions, true);
+            if (unidirectional) signals.Fin = true; // Locally opened uni streams have no receive direction.
+            var result = new MsQuicNativeStream(connection, functions, signals, -1, unidirectional ? 1u : 0u, true);
+            var retained = false;
+            var stream = IntPtr.Zero;
+            connection.DangerousAddRef(ref retained);
+            try
+            {
+                var status = functions.Open(connection.DangerousGetHandle(), unidirectional ? 1u : 0u, signals.Pointer, IntPtr.Zero, out stream);
+                if (MsQuicApi.Failed(status)) throw new IOException("Native stream allocation failed with status 0x" + status.ToString("X8"));
+                if (stream == IntPtr.Zero) throw new IOException("Native stream allocation returned no handle.");
+                result.SetHandle(stream); stream = IntPtr.Zero; retained = false;
+                token.ThrowIfCancellationRequested();
+                // IMMEDIATE + INDICATE_PEER_ACCEPT assigns an ID, then observes
+                // actual peer credit rather than exposing a merely local queued stream.
+                status = functions.Start(result.handle, 9);
+                if (MsQuicApi.Failed(status))
+                {
+                    var failure = new IOException("Native stream start failed with status 0x" + status.ToString("X8"));
+                    signals.Started?.TrySetException(failure);
+                    _ = signals.Started?.Task.Exception;
+                    throw failure;
+                }
+                result._id = await (signals.Started ?? throw new IOException("Missing stream start completion.")).Task.WaitAsync(token).ConfigureAwait(false);
+                await (signals.PeerAccepted ?? throw new IOException("Missing peer credit completion.")).Task.WaitAsync(token).ConfigureAwait(false);
+                return result;
+            }
+            catch { result.Dispose(); _ = signals.Started?.Task.Exception; _ = signals.PeerAccepted?.Task.Exception; throw; }
+            finally
+            {
+                if (stream != IntPtr.Zero) functions.Close(stream); // Allocation never started.
+                if (retained) connection.DangerousRelease();
+            }
+        }
         internal async ValueTask<int> ReadAsync(Memory<byte> destination, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             if (IsClosed) throw new ObjectDisposedException(nameof(MsQuicNativeStream));
+            if (_local && Unidirectional) throw new NotSupportedException("A local unidirectional stream is send-only.");
             if (destination.IsEmpty) return 0;
             using var scope = await _readGate.EnterAsync(token).ConfigureAwait(false);
             var retained = false;
@@ -220,7 +295,7 @@ namespace EmbedIO.Net.Internal.Http3
         internal async ValueTask WriteAsync(ReadOnlyMemory<byte> payload, bool completeWrites, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            if (Unidirectional) throw new InvalidOperationException("A peer-initiated unidirectional stream is receive-only.");
+            if (Unidirectional && !_local) throw new InvalidOperationException("A peer-initiated unidirectional stream is receive-only.");
             using var scope = await _writeGate.EnterAsync(token).ConfigureAwait(false);
             var retained = false;
             var pin = default(GCHandle);
@@ -275,6 +350,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (retained) DangerousRelease();
             }
         }
+        private uint AbortFlags => _signals.PeerAccepted != null && !_signals.PeerAccepted.Task.IsCompletedSuccessfully ? 0x0eu : 6u;
         protected override void Dispose(bool disposing)
         {
             if (Interlocked.Exchange(ref _disposeStarted, 1) != 0) return;
@@ -283,7 +359,7 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 if (!IsClosed && !IsInvalid) DangerousAddRef(ref retained);
                 _signals.StopReads(); _readGate.Dispose(); _writeGate.Dispose();
-                if (retained) _functions.Shutdown(handle, 6, 0x10c);
+                if (retained && _signals.StartSucceeded) _functions.Shutdown(handle, AbortFlags, 0x10c);
             }
             finally
             {
@@ -295,9 +371,9 @@ namespace EmbedIO.Net.Internal.Http3
         {
             try
             {
-                if (!_signals.Closed.Task.IsCompleted)
+                if (_signals.StartSucceeded && !_signals.Closed.Task.IsCompleted)
                 {
-                    _functions.Shutdown(handle, 6, 0x10c);
+                    _functions.Shutdown(handle, AbortFlags, 0x10c);
                     _signals.Closed.Task.GetAwaiter().GetResult();
                 }
                 _functions.Close(handle);

@@ -173,6 +173,11 @@ namespace EmbedIO.Net.Internal.Http3
                 };
             }
         }
+        internal async Task<MsQuicNativeStream> OpenStreamAsync(bool unidirectional, CancellationToken token)
+        {
+            await Connected.WaitAsync(token).ConfigureAwait(false);
+            return await MsQuicNativeStream.OpenAsync(this, unidirectional, _functions.Streams, token).ConfigureAwait(false);
+        }
         internal async Task<MsQuicNativeStream> AcceptStreamAsync(CancellationToken token)
             => await (_streams ?? throw new InvalidOperationException("Stream acceptance is not enabled.")).Reader.ReadAsync(token).ConfigureAwait(false);
         protected override void Dispose(bool disposing)

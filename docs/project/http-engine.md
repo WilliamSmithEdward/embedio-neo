@@ -6990,3 +6990,38 @@ suppression guard and diff checks pass. The shared lock was acquired atomically
 with terminating error handling and released by its owner after completion.
 These results do not establish native HTTP delivery, macOS sends, finalizer/fault
 coverage, independent datagram/WebTransport interoperability or performance.
+
+
+Native outgoing bidirectional and unidirectional streams now allocate through
+StreamOpen, start with IMMEDIATE and INDICATE_PEER_ACCEPT, and wait for actual
+peer credit before returning. START_COMPLETE establishes the stream ID;
+PEER_ACCEPTED releases a stream initially queued for credit. Only outgoing
+streams allocate these two completion sources. Local unidirectional streams are
+send-only, and peer unidirectional streams remain receive-only.
+
+Start failure or cancellation before start closes the unstarted handle directly:
+MsQuic does not deliver SHUTDOWN_COMPLETE in that state. A started stream that
+has never been peer-accepted uses immediate local abort for cancellation; the
+initial ordered-shutdown attempt otherwise blocked until the fixture deadline.
+Accepted streams retain ordered shutdown to preserve the wire error code.
+The regression now requires the caller's cancellation token, preventing the
+fixture-wide deadline from masquerading as successful cancellation. Original
+failed logs and TRX remain in ignored TestResults/native-datagrams/native-open.
+
+Eight new peer cases cover server stream IDs and types, empty/64 KiB output and
+FIN, bidirectional reverse data, send-only read rejection, zero-credit waits,
+caller cancellation with healthy incoming sibling traffic, and connection
+shutdown. All 54 focused native cases pass on Windows before final formatting;
+pinned Linux and complete-source results are recorded separately. Expected
+combined discovery is 4799 (4712 base, 33 framing, 54 native cases). Application
+HTTP/provider integration and native datagram delivery remain unfinished; no
+application capability is advertised. macOS, fault/finalizer/soak and comparative
+performance acceptance remain outstanding.
+
+Final outgoing-stream validation: all 54 focused native cases pass on Windows
+and pinned Linux (same Windows-built IL). The complete Windows suite reports
+4799 cases, 4794 passed, five existing skips, zero failures, in 3m 19s. Both
+retained targets and syntax/suppression/format guards pass. Native application
+HTTP integration and datagram delivery are still unavailable; these results do
+not establish macOS outgoing streams, fault/finalizer/soak coverage or native
+provider performance.
