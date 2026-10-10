@@ -159,7 +159,8 @@ namespace EmbedIO.Net.Internal.Http2
                 // Queue a barrier behind controls already committed while the last
                 // application finished. Normal drain must not cancel shared output.
                 if (graceful && !_stop.IsCancellationRequested)
-                    await _connection.SendAsync(Array.Empty<Http2Frame>(), _stop.Token).ConfigureAwait(false);
+                    try { await _connection.SendAsync(Array.Empty<Http2Frame>(), _stop.Token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
             }
             if (_failure != null) throw new IOException("HTTP/2 connection failed.", _failure);
         }

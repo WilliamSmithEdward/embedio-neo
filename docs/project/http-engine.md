@@ -1,4 +1,4 @@
-# Modern HTTP engine program
+﻿# Modern HTTP engine program
 
 Release scope: William designated this modern engine program for **EmbedIO-Neo v2**
 on 2026-10-10. Maintain the [Neo v1 to v2 migration guide](../compatibility/neo-v1-to-v2.md)
@@ -7273,6 +7273,46 @@ failures in 3m 22s under the shared workload lock. The tested core SHA-256 is
 Hosted final-head checks remain required. The combined discovery floor is 4918
 (4916 adapter base plus two cases).
 
+### HTTP/2 cancellation while the final drain barrier is queued
+
+PR #241's Windows regression run 38073076144 failed
+`InFlightRefusedUploadPreservesDrainedResponseAndConnectionCredit(False)` during
+cleanup: `TaskCanceledException` escaped `Http2Dispatcher.RunAsync`'s final empty
+output barrier. The helper cancels its server token after wire verification;
+that cancellation can occur after the dispatcher's cancellation check and while
+the barrier is still queued. This is distinct from the combined-listener
+admission/drain failure and the HTTP/1.1 upload-churn timeout.
+
+A controlled fixture holds the credit pump and output flusher, observes the real
+empty barrier in the output queue, and then cancels the connection. That case
+fails on unchanged production source at a4f7105. A companion case injects an
+IOException into the same queued barrier before cancellation and verifies that
+the original output error still propagates. These are controlled internal-state
+fixtures, not independent wire-conformance cases.
+
+The correction handles only OperationCanceledException when the connection's
+stop token is canceled, matching the existing read-loop and drain-task cleanup
+paths. It changes no successful drain ordering or application response writes.
+Other failures still propagate. Both target builds have zero warnings; all 126
+focused HTTP/2 interoperability/drain/cancellation cases pass on Windows. The
+discovery floor becomes 4905 (4903 base plus two cases). The full Windows suite reports 4905 cases, 4900 passed, five expected skips
+and zero failures in 3m 21s. All 126 focused cases also pass on pinned Linux,
+using the same Windows-built IL. Formatting and both source guards pass.
+Fresh hosted checks remain required. The tested core SHA-256 is
+`5B155800B43D8BBF090966B2067C3E36790C29260BC0D67753FBC9FDCDFE2BE2`.
+
+Reconciliation on engine `0fc0caa` preserves the narrow cancellation correction
+and both regression cases. The Windows coverage run on `080013e` reports 4937
+total, 4932 passed, five expected skips and zero failures in 3m40s. The current
+discovery minimum is reconciled to 4937; the approved five-minute Windows and
+eight-minute Unix suite budgets remain unchanged. PR #255's Windows run
+38085897387 independently captured the same final-barrier cancellation at
+`Http2Dispatcher.RunAsync` line 162 in
+`GracefulDrainCompletesExistingUploadAndRefusesNewStream` on the uncorrected
+engine. PR #245 still requires fresh checks on its reconciled head; the earlier
+HTTP/3 TLS handshake cancellation on its previous head is retained as an
+unconfirmed separate failure, not claimed repaired by this HTTP/2 correction.
+
 Combined drain investigation: Windows PR 239 head ba4991b failed
 CombinedDrainPreservesEveryProtocolUntilItsResponseFinishes(True,True) in run
 38071451499, job 114269517877. The published listener error 995 points to the
@@ -7485,3 +7525,11 @@ rises by 32 once the shared floors are reconciled. Not addressed here: the
 synchronous terminator written when the pipeline closes a chunked response
 (`HttpConnection` closes synchronously), the write gate's task per write,
 batching across pipelined responses, and `NoDelay` on accepted sockets.
+
+The correction was subsequently reconciled with engine commit `1b70377` at
+`00d2640`. The coverage-enabled Windows run reports 4,986 cases: 4,981 passed,
+five expected skips and zero failures in 3m35s. The six discovery minimums are
+now 4,986. The prior Linux CI failure at `0abf879` was the explicit server
+disposal/accept race corrected by the engine's PR #261; fresh checks on the
+reconciled head remain required. This does not establish a correction for
+the separate HTTP/2 response/trailer loss or HTTP/3 TLS failures.
