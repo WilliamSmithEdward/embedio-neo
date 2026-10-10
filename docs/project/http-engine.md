@@ -6701,3 +6701,41 @@ failure and the original hosted handshake phase remain unresolved. The raw
 MsQuic rebind quarantine does not cover either failure. An unchanged permanent-ban
 persistence test also fails locally on the pre-optimization engine; its Windows
 file replacement error remains unconfirmed and is not waived by HTTP validation.
+
+### Admission fixture cancellation during immediate Stop
+
+The macOS test leg of tooling PR #217 (run 38020076573, job 114118913230,
+head 14ffdf315ff80c9e5732279f260593149333f153) failed in
+`StopAndRestartUnderConcurrentLoadLeavesNoRequestStranded(true,false)`.
+The response helper propagated TaskCanceledException from the HTTP/2 header
+writer's semaphore wait. That fixture already allowed IOException,
+ObjectDisposedException and HttpListenerException when immediate Stop closes a
+request; it omitted the canceled-token outcome during stream shutdown.
+
+On unchanged integrated production code at 1f928303, a controlled accepted HTTP/2
+stream is canceled before the same fixture response helper runs. Direct dispatch
+reproduces the uncaught cancellation; the thread-pool control can reach disposal
+first and already passes via the existing ObjectDisposedException handling.
+These are controlled paths, not a claim of reproducing the natural macOS schedule.
+
+The test-only correction accepts OperationCanceledException only when the
+context's request token is demonstrably canceled. It leaves served-success
+accounting, client timeout/unexpected-outcome assertions, Stop/restart assertions,
+production behavior, timeout values and quarantine classification unchanged.
+Both new cases and all 18 admission cases pass locally. The discovery guards
+increase by two to 4497. Full-suite and exact-head hosted validation remain required.
+
+Original hosted log and controlled before/after TRX remain under ignored
+`TestResults/pr217-macos-failure.log`, `admission-cancellation-before` and
+`admission-cancellation-after`. This correction is separate from the uncommitted
+HTTP/2 output batching experiment, which is not present in this production tree.
+The first full validation of this fixture correction reported 4497 cases,
+4491 passed, five skips and one failure in the unchanged HTTP/1 request-limit
+fixture (`syntax`, fragment 17), with ConnectionReset during CopyToAsync. Its
+source started ReadReply before sending, but then started another CopyToAsync
+instead of awaiting that task. Two reads could compete on one NetworkStream and
+write one MemoryStream; the first task was also not joined before cleanup.
+The correction awaits the existing reader. It does not change the existing
+reset condition or any status, complete-error-head, body, pipeline, dispatch or
+healthy-follow-up assertion. The original failed full run remains under ignored
+`TestResults/admission-cancellation-full`; no production correction is claimed.
