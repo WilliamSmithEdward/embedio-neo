@@ -344,10 +344,10 @@ namespace EmbedIO.Tests
                     await Within(Task.Run(dispose, token), trace).ConfigureAwait(false);
                 }
                 trace.Phase = "closed";
-                foreach (var stream in streams) Assert.That(stream.IsClosed, Is.True, trace.ToString());
-                Assert.That(connection.IsClosed, Is.True, trace.ToString());
                 // Parents may release asynchronously after their last child.
                 await Eventually(() => server.Registration.IsClosed && server.Api.IsClosed, trace + ": parents were not released.").ConfigureAwait(false);
+                foreach (var stream in streams) Assert.That(stream.IsClosed, Is.True, trace.ToString());
+                Assert.That(connection.IsClosed, Is.True, trace.ToString());
             }
             finally
             {
