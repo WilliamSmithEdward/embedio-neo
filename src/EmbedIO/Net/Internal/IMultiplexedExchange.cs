@@ -21,4 +21,13 @@ namespace EmbedIO.Net.Internal
         Task WriteAsync(byte[] bytes, int offset, int count, bool endStream, CancellationToken token);
         Task CompleteAsync(CancellationToken token);
     }
+
+    // Optional: a transport that can send final response headers together with
+    // the first body bytes. Explicit flushes still send headers on their own.
+    internal interface IMultiplexedHeaderCoalescing
+    {
+        // True once final headers committed, even if the body write then failed.
+        bool FinalHeadersSent { get; }
+        Task SendHeadersAndWriteAsync(HpackField[] fields, byte[] bytes, int offset, int count, CancellationToken token);
+    }
 }

@@ -133,7 +133,8 @@ namespace EmbedIO.Net.Internal.Http2
             if (fields == null) throw new ArgumentNullException(nameof(fields));
             try
             {
-                await _transport.QueueWriteAsync(new HeaderWrite(this, streamId, fields, endStream, token, _transportCancellation)).ConfigureAwait(false);
+                await _transport.QueueWriteAsync(new StreamWrite(this, streamId, fields, endStream, null, 0, 0, false,
+                    token, default, _transportCancellation)).ConfigureAwait(false);
             }
             catch (Exception error) when (_transport.IsWriteFailed)
             {
@@ -142,33 +143,90 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
-        private sealed class HeaderWrite : Http2OutputWrite
+        // Sends an optional header block and then a DATA frame in one write.
+        // DATA borrows the caller's buffer until this completes; its credit must
+        // already be reserved and is returned unless the frame commits. Either
+        // token cancels the write before it commits. Returns whether DATA committed:
+        // the header block can commit while DATA is refused by a shrunken window.
+        internal async Task<bool> SendDataAsync(int streamId, HpackField[]? fields, byte[]? bytes, int offset, int count, bool endStream,
+            CancellationToken token, CancellationToken streamToken)
+        {
+            var write = new StreamWrite(this, streamId, fields, bytes == null && endStream, bytes, offset, count, endStream, token, streamToken, _transportCancellation);
+            try
+            {
+                await _transport.QueueWriteAsync(write).ConfigureAwait(false);
+                if (!write.DataCommitted) SendFlow.ReturnUnusedReservation(streamId, count);
+                return write.DataCommitted;
+            }
+            catch (OperationCanceledException) when (write.IsCanceled && !_transport.IsWriteFailed)
+            {
+                // No DATA reached the wire. A reset may already have removed its
+                // stream window; connection credit still belongs to siblings.
+                try { SendFlow.ReturnUnusedReservation(streamId, count); }
+                catch (Exception error) { OutputFailed?.Invoke(error); throw; }
+                throw;
+            }
+            catch (Exception) when (fields != null && !_transport.IsWriteFailed)
+            {
+                // The header block was rejected at commit; nothing of this write reached the wire.
+                SendFlow.ReturnUnusedReservation(streamId, count);
+                throw;
+            }
+            catch (Exception error) { OutputFailed?.Invoke(error); throw; }
+        }
+
+        private sealed class StreamWrite : Http2OutputWrite
         {
             private readonly Http2Connection _connection;
             private readonly int _streamId;
-            private readonly HpackField[] _fields;
-            private readonly bool _endStream;
+            private readonly HpackField[]? _fields;
+            private readonly bool _headersEnd;
+            private readonly byte[]? _bytes;
+            private readonly int _offset;
+            private readonly int _count;
+            private readonly bool _dataEnd;
             private readonly int _estimate;
 
-            internal HeaderWrite(Http2Connection connection, int streamId, HpackField[] fields, bool endStream,
-                CancellationToken token, CancellationToken writeToken) : base(token, writeToken)
+            internal StreamWrite(Http2Connection connection, int streamId, HpackField[]? fields, bool headersEnd,
+                byte[]? bytes, int offset, int count, bool dataEnd,
+                CancellationToken token, CancellationToken streamToken, CancellationToken writeToken)
+                : base(token, streamToken, writeToken)
             {
-                _connection = connection; _streamId = streamId; _fields = fields; _endStream = endStream;
-                var estimate = 9;
-                foreach (var field in fields) estimate += field.Name.Length + field.Value.Length + 2;
+                _connection = connection; _streamId = streamId; _fields = fields; _headersEnd = headersEnd;
+                _bytes = bytes; _offset = offset; _count = count; _dataEnd = dataEnd;
+                var estimate = bytes == null ? 0 : count + 9;
+                if (fields != null)
+                {
+                    estimate += 9;
+                    foreach (var field in fields) estimate += field.Name.Length + field.Value.Length + 2;
+                }
                 _estimate = estimate;
             }
 
+            internal bool DataCommitted { get; private set; }
             internal override int EstimatedBytes => _estimate;
 
             internal override bool Commit(Http2OutputBuffer output)
             {
+                if (_fields != null) WriteHeaders(output);
+                if (_bytes == null) return true;
+                // A SETTINGS reduction can leave reserved DATA without stream credit.
+                if (_count != 0 && !_connection.SendFlow.CanSendReserved(_streamId)) return _fields != null;
+                output.WriteFrameHeader(_count, 0, _dataEnd ? (byte)1 : (byte)0, _streamId);
+                output.Write(_bytes, _offset, _count);
+                DataCommitted = true;
+                return true;
+            }
+
+            private void WriteHeaders(Http2OutputBuffer output)
+            {
+                var fields = _fields ?? throw new InvalidOperationException("Missing header block.");
                 long size = 0;
-                foreach (var field in _fields) size += field.Size;
+                foreach (var field in fields) size += field.Size;
                 if (size > _connection.Peer.MaximumHeaderListSize) throw new IOException("Response headers exceed peer limit.");
                 var encoded = _connection._encoded;
                 encoded.SetLength(0);
-                _connection._encoder.EncodeTo(_fields, encoded);
+                _connection._encoder.EncodeTo(fields, encoded);
                 var bytes = encoded.GetBuffer();
                 var length = (int)encoded.Length;
                 // Use the universally supported size even while peer settings change.
@@ -176,13 +234,13 @@ namespace EmbedIO.Net.Internal.Http2
                 for (var i = 0; i < count; i++)
                 {
                     var fragment = Math.Min(16384, length - i * 16384);
-                    var flags = (byte)((i == count - 1 ? 4 : 0) | (i == 0 && _endStream ? 1 : 0));
+                    var flags = (byte)((i == count - 1 ? 4 : 0) | (i == 0 && _headersEnd ? 1 : 0));
                     output.WriteFrameHeader(fragment, i == 0 ? (byte)1 : (byte)9, flags, _streamId);
                     output.Write(bytes, i * 16384, fragment);
                 }
-                return true;
             }
         }
+
 
         // The owner cancels and joins connection I/O before disposing this state.
         // The underlying stream remains caller-owned.
@@ -196,54 +254,6 @@ namespace EmbedIO.Net.Internal.Http2
             _encoded.Dispose();
         }
 
-        // DATA borrowing the caller's buffer until this completes. Its credit
-        // must already be reserved; it is returned unless the frame commits.
-        internal async Task<bool> SendDataAsync(int streamId, bool endStream, byte[] bytes, int offset, int count, CancellationToken token)
-        {
-            try
-            {
-                var committed = await _transport.QueueWriteAsync(new DataWrite(SendFlow, streamId, endStream, bytes, offset, count,
-                    token, _transportCancellation)).ConfigureAwait(false);
-                if (!committed) SendFlow.ReturnUnusedReservation(streamId, count);
-                return committed;
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested && !_transport.IsWriteFailed)
-            {
-                // No DATA reached the wire. A reset may already have removed its
-                // stream window; connection credit still belongs to siblings.
-                try { SendFlow.ReturnUnusedReservation(streamId, count); }
-                catch (Exception error) { OutputFailed?.Invoke(error); throw; }
-                throw;
-            }
-            catch (Exception error) { OutputFailed?.Invoke(error); throw; }
-        }
-
-        private sealed class DataWrite : Http2OutputWrite
-        {
-            private readonly Http2SendFlowControl _flow;
-            private readonly int _streamId;
-            private readonly bool _endStream;
-            private readonly byte[] _bytes;
-            private readonly int _offset;
-            private readonly int _count;
-
-            internal DataWrite(Http2SendFlowControl flow, int streamId, bool endStream, byte[] bytes, int offset, int count,
-                CancellationToken token, CancellationToken writeToken) : base(token, writeToken)
-            {
-                _flow = flow; _streamId = streamId; _endStream = endStream;
-                _bytes = bytes; _offset = offset; _count = count;
-            }
-
-            internal override int EstimatedBytes => _count + 9;
-
-            internal override bool Commit(Http2OutputBuffer output)
-            {
-                if (_count != 0 && !_flow.CanSendReserved(_streamId)) return false;
-                output.WriteFrameHeader(_count, 0, _endStream ? (byte)1 : (byte)0, _streamId);
-                output.Write(_bytes, _offset, _count);
-                return true;
-            }
-        }
 
         internal async Task<bool> SendStreamAsync(Http2Frame[] frames, CancellationToken token)
         {

@@ -188,6 +188,23 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
+        // Reserves available credit without waiting. Returns 0 when the caller
+        // must wait with ReserveAsync.
+        internal int TryReserve(int streamId, int maximumBytes)
+        {
+            if (maximumBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+            lock (_sync)
+            {
+                ThrowIfFailed();
+                if (!_streams.TryGetValue(streamId, out var window)) throw new IOException("HTTP/2 stream is closed.");
+                if (window.Waiting != null) throw new InvalidOperationException("A stream already has a pending DATA reservation.");
+                var count = Math.Min(maximumBytes, Math.Min(_connection, window.Credit));
+                if (count <= 0) return 0;
+                _connection -= count; window.Credit -= count;
+                return count;
+            }
+        }
+
         internal Task<int> ReserveAsync(int streamId, int maximumBytes, CancellationToken token)
         {
             if (maximumBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
