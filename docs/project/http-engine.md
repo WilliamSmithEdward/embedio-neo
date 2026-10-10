@@ -6779,3 +6779,20 @@ cases raise the discovery guards to 4532. Applications
 draining under load should expect clients to retry refused HTTP/2 requests on a
 new connection. On Windows, a SocketsHttpHandler client can take several seconds
 per queued request to report the refusal.
+
+## Native HTTP/3 datagram framing prerequisite
+
+The native-datagram development branch adds an original internal RFC 9297
+section 2.1 codec. It borrows packet storage, returns the request stream ID and
+payload offset, accepts all four legal QUIC integer widths, and rejects
+truncated or oversized quarter-stream IDs with H3_DATAGRAM_ERROR (0x33).
+Outgoing identifiers must be client-initiated bidirectional request streams.
+Thirty-three focused cases include explicit wire vectors, empty payloads,
+maximum IDs and slice boundaries. Both library targets build without warnings.
+
+This codec is not connected to a datagram transport and does not change
+SETTINGS or public APIs. Native MsQuic send/receive ownership, negotiation,
+request/session association, bounded receive policy, stream closure and
+WebTransport remain required development. The current System.Net.Quic provider
+still provides reliable streams only. No native datagram capability or completed
+WebTransport support is claimed. Source specification: [RFC 9297 section 2.1](https://www.rfc-editor.org/rfc/rfc9297.html#section-2.1).
