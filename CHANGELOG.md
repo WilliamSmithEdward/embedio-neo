@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Preserve committed managed HTTP/2 control output when the last admitted response
+  completes during graceful drain. Stop input separately and wait for queued output;
+  forced cancellation and drain deadlines remain. See the
+  [lifetime evidence](docs/project/http2-drain-output-lifetime.md).
 - Add the optional managed `IHttpResponseSections` capability for awaited informational responses and declared response trailers, preserving the existing response interface and documenting opt-in framing and ownership. This increment remains under validation.
 - Reduce managed HTTP/3 per-request cost: connection-owned request cancellation
   scopes, one continuation per transport direction, fewer thread-pool hops,

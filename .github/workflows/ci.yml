@@ -103,7 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           status=0
-          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4806 --coverlet || status=$?
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4807 --coverlet || status=$?
           if test "$status" = 0; then exit 0; fi
           # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
           # disposal returns (a deferred close on macOS; accepted connections on every
@@ -114,7 +114,7 @@ jobs:
           counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
           read -r total passed failed defect <<< "$counts"
           # The owner-approved exception cannot hide discovery loss.
-          test "$total" -ge 4806 || exit "$status"
+          test "$total" -ge 4807 || exit "$status"
           if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
             echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
             exit 0

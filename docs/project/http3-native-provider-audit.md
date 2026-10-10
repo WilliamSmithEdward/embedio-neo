@@ -141,7 +141,7 @@ floor from actual discovery.
 - Finalizer-thread closure with live callbacks was reviewed but not exercised.
 - Fault injection for allocation failure was not attempted.
 
-## Current listener correction (development, not merged)
+## Listener correction and development integration
 
 The audit tests were rerun against the unchanged current foundation binary at
 50fd2a7 (SHA-256
@@ -173,6 +173,12 @@ Those historical findings do not describe the current implementation. Callback
 allocation-failure containment, accept-error isolation from listener stop,
 32-bit ABI validation and finalizer/fault coverage remain outstanding; this
 listener correction does not claim to resolve them.
+
+The validated foundation and this listener correction are now merged into the
+development engine through PR #231 at 54f4c5c. All 35 exact-head checks on
+33d65a6 passed or intentionally skipped, and the merged tree matches the tested
+tree. Audit PR #232 is superseded and closed. Program #181 remains open for the
+remaining work above; native application HTTP/datagrams are not yet online.
 
 ## Listener callback fault isolation follow-up
 
