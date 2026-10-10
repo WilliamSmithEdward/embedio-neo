@@ -507,3 +507,23 @@ same configured independent peer. The skipped counts include the five explicit
 campaigns and existing platform exclusions. These results do not execute those
 campaigns or prove macOS acceptance of the correction. The native candidate
 still needs reconciliation with the latest engine and final-head hosted checks.
+
+The corrected native candidate also executes all five explicit campaigns on
+Windows and pinned Linux at source `67e5604`, seed 20261010: ownership churn,
+pending-operation endings, concurrent disposal and parent retention each finish
+200 iterations; admission overflow finishes twenty heavier iterations. Both
+platforms report five passed, zero failed and zero skipped (820 iterations per
+platform). Native connection and stream counters return to zero after every
+campaign, with no recorded unobserved native exceptions. The Windows-built core
+SHA-256 is `44474C177B7CC6312DEE3A98B21C06AE78986A8E088DF43737135FEC81272000`;
+Linux campaigns use that same IL with MsQuic 2.6.2, while Windows uses the runtime's
+MsQuic 2.5.10. This is additional campaign evidence, separate from the fresh Linux
+source-build full suite above.
+
+Earlier campaign attempts are retained. The first Windows attempt failed the
+concurrent-disposal and parent-retention immediate child-closure assertions;
+the second exposed the same ordering assumption in ownership churn at iteration
+180. Each fixture already waited for final parent closure, so the child assertions
+now run after that existing wait. Assertions, resource checks, iteration counts
+and deadlines remain unchanged. macOS correction campaigns and final combined
+engine acceptance are still outstanding.
