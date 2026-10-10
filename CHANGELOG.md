@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- Add an isolated internal WebTransport over HTTP/3 session core (draft-ietf-webtrans-http3-16 framing, session association, capsules, flow control and bounded buffering) with unit coverage only. No listener advertises it, no public API or dependency changes; see [WebTransport session core development](docs/project/http-webtransport-core.md).
 - Add the optional managed `IHttpResponseSections` capability for awaited informational responses and declared response trailers, preserving the existing response interface and documenting opt-in framing and ownership. This increment remains under validation.
 - Reduce managed HTTP/3 per-request cost: connection-owned request cancellation
   scopes, one continuation per transport direction, fewer thread-pool hops,

@@ -6779,3 +6779,21 @@ cases raise the discovery guards to 4532. Applications
 draining under load should expect clients to retry refused HTTP/2 requests on a
 new connection. On Windows, a SocketsHttpHandler client can take several seconds
 per queued request to report the refusal.
+
+
+### WebTransport session core (isolated, unintegrated)
+
+An original internal framing and session core for WebTransport over HTTP/3 now
+exists under `src/EmbedIO/Net/Internal/WebTransport`, built against
+draft-ietf-webtrans-http3-16 (2026-07-06, WG Last Call, no RFC; no IANA
+WebTransport registrations as of 2026-10-10). It covers session identifier and
+stream/datagram association, the section 3.1 settings requirements, the close,
+drain and flow-control capsules, section 5 flow control, closure and reset
+behavior, malformed input and bounded pre-establishment buffering, behind
+transport abstractions only. No listener creates a session, no setting is
+advertised, and the native QUIC work in PR #231 remains the place for
+`RESET_STREAM_AT`, datagram delivery and the transport parameters the draft
+requires. Its 83 reflection-driven cases pass with both target assets; the
+specification basis, open choices, integration contract and remaining gaps are
+in [WebTransport session core development](http-webtransport-core.md). This is
+not WebTransport support and is not interoperability evidence.

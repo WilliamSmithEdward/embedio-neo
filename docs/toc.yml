@@ -218,6 +218,8 @@
       href: project/http-capsule-transport.md
     - name: Capsule and tunnel lifetime validation
       href: project/http-capsule-lifetime.md
+    - name: WebTransport session core development
+      href: project/http-webtransport-core.md
     - name: QUIC lifetime and rebind
       href: project/quic-lifetime.md
     - name: Managed engine load comparison
