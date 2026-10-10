@@ -6834,3 +6834,17 @@ Linux source build. Credential loading, actual listener/connection callbacks,
 stream/datagram delivery, macOS native loading and complete failure-injection
 coverage remain required. Current native development discovery is 4710 cases
 (base 4669 plus 33 framing and eight native lifetime cases).
+
+The native configuration now loads server credentials synchronously through the
+public API: Windows uses a retained public certificate-context snapshot; the
+OpenSSL path exports temporary PKCS#12 bytes, pins them only for native loading
+and clears their contents in finally. Configuration ownership remains retained
+during the native call. Missing private keys and closed configurations are
+rejected; duplicate successful loading is prevented.
+
+All 11 native lifetime/credential initialization cases pass on Windows and in
+the pinned network-isolated Linux runtime. These results do not prove an actual
+TLS handshake, client-certificate authentication, native listener callbacks or
+datagram delivery. macOS credential loading remains unverified. Both targets
+build without warnings and guards pass. The discovery floor is now 4713 (base
+4669 plus 33 framing and 11 native cases). No protocol capability is advertised.

@@ -3,6 +3,8 @@ using System.Net.Quic;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography.X509Certificates;
+using EmbedIO.PlatformTests;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
@@ -112,6 +114,55 @@ namespace EmbedIO.Tests
             registration.Dispose();
             Parallel.For(0, 32, _ => configuration.Dispose());
             Assert.That(configuration.IsClosed, Is.True);
+        }
+        private static void LoadServerCertificate(SafeHandle configuration, X509Certificate2 certificate)
+        {
+            try
+            {
+                (configuration.GetType().GetMethod("LoadServerCertificate", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? throw new AssertionException("Missing credential loader.")).Invoke(configuration, new object[] { certificate });
+            }
+            catch (TargetInvocationException error) when (error.InnerException != null)
+            { ExceptionDispatchInfo.Capture(error.InnerException).Throw(); throw; }
+        }
+
+        [Test]
+        public void NativeServerCredentialsLoadAndRejectDuplicateLoading()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var configuration = Configure(registration, new byte[] { (byte)'h', (byte)'3' });
+            using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
+            LoadServerCertificate(configuration, certificate);
+            Assert.Throws<InvalidOperationException>(() => LoadServerCertificate(configuration, certificate));
+            certificate.Dispose();
+            Assert.That(configuration.IsClosed, Is.False);
+        }
+
+        [Test]
+        public void RejectedCertificateWithoutPrivateKeyAllowsSubsequentValidLoading()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var configuration = Configure(registration, new byte[] { (byte)'h', (byte)'3' });
+            using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
+            using var publicOnly = X509CertificateLoader.LoadCertificate(certificate.Export(X509ContentType.Cert));
+            Assert.Throws<ArgumentException>(() => LoadServerCertificate(configuration, publicOnly));
+            LoadServerCertificate(configuration, certificate);
+        }
+
+        [Test]
+        public void ClosedConfigurationRejectsCredentialLoading()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var configuration = Configure(registration, new byte[] { (byte)'h', (byte)'3' });
+            using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
+            configuration.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => LoadServerCertificate(configuration, certificate));
         }
     }
 }

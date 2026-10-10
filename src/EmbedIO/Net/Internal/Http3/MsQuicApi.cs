@@ -3,6 +3,8 @@ using System;
 using System.IO;
 using System.Net.Quic;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Win32.SafeHandles;
 
 namespace EmbedIO.Net.Internal.Http3
@@ -30,6 +32,28 @@ namespace EmbedIO.Net.Internal.Http3
             internal uint Length;
             internal IntPtr Bytes;
         }
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate uint LoadCredential(IntPtr configuration, IntPtr credentials);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Credential
+        {
+            internal uint Type;
+            internal uint Flags;
+            internal IntPtr Certificate;
+            internal IntPtr Principal;
+            internal IntPtr Reserved;
+            internal IntPtr AsyncHandler;
+            internal uint AllowedCipherSuites;
+            internal IntPtr CaCertificateFile;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Pkcs12
+        {
+            internal IntPtr Bytes;
+            internal uint Length;
+            internal IntPtr Password;
+        }
+        private readonly LoadCredential _loadCredential;
         private readonly OpenConfiguration _configurationOpen;
         private readonly CloseConfiguration _configurationClose;
         private readonly IntPtr _library;
@@ -46,6 +70,7 @@ namespace EmbedIO.Net.Internal.Http3
             _registrationClose = Marshal.GetDelegateForFunctionPointer<CloseRegistration>(Marshal.ReadIntPtr(table, 6 * IntPtr.Size));
             _configurationOpen = Marshal.GetDelegateForFunctionPointer<OpenConfiguration>(Marshal.ReadIntPtr(table, 8 * IntPtr.Size));
             _configurationClose = Marshal.GetDelegateForFunctionPointer<CloseConfiguration>(Marshal.ReadIntPtr(table, 9 * IntPtr.Size));
+            _loadCredential = Marshal.GetDelegateForFunctionPointer<LoadCredential>(Marshal.ReadIntPtr(table, 10 * IntPtr.Size));
             SetHandle(table);
         }
 
@@ -125,6 +150,51 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
 
+        internal void LoadServerCertificate(MsQuicConfiguration configuration, X509Certificate2 certificate)
+        {
+            if (certificate == null) throw new ArgumentNullException(nameof(certificate));
+            if (!certificate.HasPrivateKey) throw new ArgumentException("A server certificate requires its private key.", nameof(certificate));
+            var retained = false;
+            configuration.DangerousAddRef(ref retained);
+            var pin = default(GCHandle);
+            byte[]? keyBytes = null;
+            var pkcs = IntPtr.Zero;
+            var credentials = IntPtr.Zero;
+            try
+            {
+                using var snapshot = new X509Certificate2(certificate);
+                var input = new Credential();
+                if (OperatingSystem.IsWindows())
+                {
+                    input.Type = 3; // Public CERT_CONTEXT credential form.
+                    input.Certificate = snapshot.Handle;
+                }
+                else
+                {
+                    keyBytes = snapshot.Export(X509ContentType.Pkcs12);
+                    pin = GCHandle.Alloc(keyBytes, GCHandleType.Pinned);
+                    pkcs = Marshal.AllocHGlobal(Marshal.SizeOf<Pkcs12>());
+                    Marshal.StructureToPtr(new Pkcs12 { Bytes = pin.AddrOfPinnedObject(), Length = (uint)keyBytes.Length }, pkcs, false);
+                    input.Type = 6;
+                    input.Certificate = pkcs;
+                }
+                // Flags zero selects synchronous server loading with no client
+                // certificate requirement; peer validation is never disabled.
+                credentials = Marshal.AllocHGlobal(Marshal.SizeOf<Credential>());
+                Marshal.StructureToPtr(input, credentials, false);
+                var status = _loadCredential(configuration.DangerousGetHandle(), credentials);
+                if (status != 0) throw new IOException("MsQuic server credential loading failed with status 0x" + status.ToString("X8"));
+            }
+            finally
+            {
+                if (credentials != IntPtr.Zero) Marshal.FreeHGlobal(credentials);
+                if (pkcs != IntPtr.Zero) Marshal.FreeHGlobal(pkcs);
+                if (keyBytes != null) CryptographicOperations.ZeroMemory(keyBytes);
+                if (pin.IsAllocated) pin.Free();
+                if (retained) configuration.DangerousRelease();
+            }
+        }
+
         protected override bool ReleaseHandle()
         {
             try { _close(handle); }
@@ -140,6 +210,8 @@ namespace EmbedIO.Net.Internal.Http3
         internal MsQuicRegistration(IntPtr registration, MsQuicApi api, MsQuicApi.CloseRegistration close) : base(true)
         { _api = api; _close = close; SetHandle(registration); }
         internal MsQuicConfiguration CreateConfiguration(byte[] alpn) => _api.CreateConfiguration(this, alpn);
+        internal void LoadServerCertificate(MsQuicConfiguration configuration, X509Certificate2 certificate)
+            => _api.LoadServerCertificate(configuration, certificate);
         protected override bool ReleaseHandle()
         {
             try { _close(handle); }
@@ -149,10 +221,21 @@ namespace EmbedIO.Net.Internal.Http3
     }
     internal sealed class MsQuicConfiguration : SafeHandleZeroOrMinusOneIsInvalid
     {
+        private readonly object _credentialsSync = new();
+        private bool _credentialsLoaded;
         private readonly MsQuicRegistration _registration;
         private readonly MsQuicApi.CloseConfiguration _close;
         internal MsQuicConfiguration(IntPtr configuration, MsQuicRegistration registration, MsQuicApi.CloseConfiguration close) : base(true)
         { _registration = registration; _close = close; SetHandle(configuration); }
+        internal void LoadServerCertificate(X509Certificate2 certificate)
+        {
+            lock (_credentialsSync)
+            {
+                if (_credentialsLoaded) throw new InvalidOperationException("Credentials are already loaded.");
+                _registration.LoadServerCertificate(this, certificate);
+                _credentialsLoaded = true;
+            }
+        }
         protected override bool ReleaseHandle()
         {
             try { _close(handle); }
