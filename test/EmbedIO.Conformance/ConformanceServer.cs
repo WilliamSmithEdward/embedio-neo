@@ -68,6 +68,9 @@ internal sealed class ConformanceServer : IDisposable
             .WithModule(new ActionModule("/stream", HttpVerbs.Get, StreamAsync))
             .WithModule(new ActionModule("/slow", HttpVerbs.Any, SlowAsync))
             .WithModule(new ActionModule("/__stats", HttpVerbs.Get, StatsAsync))
+            .WithModule(new ActionModule("/probe/status-103", HttpVerbs.Any, Status103Async))
+            .WithModule(new ActionModule("/probe/reject", HttpVerbs.Any, RejectAsync))
+            .WithModule(new ActionModule("/probe/fields", HttpVerbs.Any, FieldsAsync))
             .WithStaticFolder("/files", _root, false);
     }
 
@@ -190,6 +193,33 @@ internal sealed class ConformanceServer : IDisposable
             Interlocked.Decrement(ref _active);
             Interlocked.Increment(ref _completed);
         }
+    }
+
+    // Applicability probes. Each uses only the public response API an application
+    // would reach for, so the observed wire behavior is what applications get.
+
+    // An application attempting Early Hints through the only public status setter.
+    private static async Task Status103Async(IHttpContext context)
+    {
+        context.Response.StatusCode = 103;
+        context.Response.Headers["Link"] = "</files/text.txt>; rel=preload";
+        await context.Response.OutputStream.FlushAsync(context.CancellationToken).ConfigureAwait(false);
+    }
+
+    // Rejects without reading the request content (for Expect: 100-continue).
+    private static Task RejectAsync(IHttpContext context)
+    {
+        context.Response.StatusCode = 413;
+        return context.SendStringAsync("rejected", "text/plain", WebServer.Utf8NoBomEncoding);
+    }
+
+    // Reads the content, then reports the request field names the application can see.
+    private static async Task FieldsAsync(IHttpContext context)
+    {
+        using var buffer = new MemoryStream();
+        await context.Request.InputStream.CopyToAsync(buffer, context.CancellationToken).ConfigureAwait(false);
+        var names = context.Request.Headers.AllKeys.Where(k => k != null).Select(k => k!.ToLowerInvariant()).OrderBy(k => k, StringComparer.Ordinal);
+        await context.SendStringAsync($"body={buffer.Length};fields={string.Join(",", names)}", "text/plain", WebServer.Utf8NoBomEncoding).ConfigureAwait(false);
     }
 
     // Resource snapshot after a full blocking collection. Not a production endpoint.

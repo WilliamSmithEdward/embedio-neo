@@ -16,6 +16,9 @@ independently tested behavior, not a codec or roadmap alone.
 - [ ] Freeze the October 2026 RFC/errata/registry inventory and map mandatory core
   requirements and applicable extensions to implementations and tests. Record
   optional application extensions and platform restrictions explicitly.
+  The 2026-10-10 inventory, extension matrix and open findings are in the
+  [standards applicability audit](http-standards-applicability.md); this gate
+  stays open until those findings are decided.
 - [ ] Complete HTTP/1 request/response semantics, framing, streaming, upgrades,
   bounded resource policies and compatibility/migration coverage.
 - [ ] Implement HTTP/2 negotiation, HPACK, frame/state validation, multiplexed

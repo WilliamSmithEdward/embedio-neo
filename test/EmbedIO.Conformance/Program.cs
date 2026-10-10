@@ -8,6 +8,7 @@ using EmbedIO;
 //   serve [--http P] [--https P] [--h3 P] [--combined]   host the application surface and wait for "stop" on stdin
 //   h1 --port P [--host H] [--filter TEXT] [--out FILE]  run HTTP/1.1 requirement checks against a running server
 //   h1-fuzz --port P [--host H] --seed S --iterations N [--out DIR]  stateful HTTP/1.1 campaign
+//   applicability [--filter TEXT] [--out FILE]           in-process minimal reproductions for the standards applicability audit
 //   self [--out DIR] [--seed S] [--iterations N]          start an in-process server on loopback, then run h1 and h1-fuzz
 var mode = args.Length > 0 ? args[0] : "self";
 string? Option(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
@@ -116,6 +117,22 @@ switch (mode)
             try { await running; }
             catch (OperationCanceledException) { }
             return outcomes.Any(o => o.Result is "violation" or "error") || !fuzzPassed ? 1 : 0;
+        }
+    case "applicability":
+        {
+            using var host = ConformanceServer.Create();
+            var port = Option("--port") is { } fixedPort ? int.Parse(fixedPort, System.Globalization.CultureInfo.InvariantCulture) : FreePort();
+            using var stop = new CancellationTokenSource();
+            var running = host.Add($"http://127.0.0.1:{port}/", HttpListenerMode.EmbedIO, false).RunAsync(stop.Token);
+            var target = new Http1Conformance.Target("127.0.0.1", port, TimeSpan.FromSeconds(IntOption("--timeout", 3)));
+            var outcomes = await ApplicabilityProbes.RunAsync(target, Option("--filter"));
+            foreach (var outcome in outcomes) Console.WriteLine(Http1Conformance.Ascii(Http1Conformance.Line(outcome)));
+            Console.WriteLine(Http1Conformance.Summary(outcomes));
+            if (Option("--out") is { } file) File.WriteAllText(file, Http1Conformance.ToJson(new { identity = JsonDocument.Parse(Identity()).RootElement, outcomes }));
+            stop.Cancel();
+            try { await running; }
+            catch (OperationCanceledException) { }
+            return outcomes.Any(o => o.Result is "violation" or "error") ? 1 : 0;
         }
     default:
         Console.Error.WriteLine("Unknown mode " + mode);
