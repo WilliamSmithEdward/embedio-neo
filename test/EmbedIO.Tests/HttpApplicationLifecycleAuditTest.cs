@@ -842,6 +842,7 @@ namespace EmbedIO.Tests
         {
             var closes = 0;
             var outcome = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var headersReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             using var certificate = Certificate();
             await using var host = await Host.StartAsync(HttpListenerMode.EmbedIOHttp3, certificate, async context =>
             {
@@ -850,7 +851,14 @@ namespace EmbedIO.Tests
                 var tunnel = await Tunnel(context).AcceptTunnelAsync("audit-tunnel", false, context.CancellationToken);
                 using var local = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
                 var pending = tunnel.Stream.ReadAsync(new byte[16], 0, 16, local.Token);
-                if (fail) throw new InvalidOperationException("Audit handler failure with a read in flight.");
+                if (fail)
+                {
+                    // RESET_STREAM can discard previously submitted response bytes.
+                    // Observe the CONNECT response at the peer before provoking the
+                    // handler failure, so the assertion exercises the intended phase.
+                    await headersReceived.Task.WaitAsync(context.CancellationToken);
+                    throw new InvalidOperationException("Audit handler failure with a read in flight.");
+                }
                 await Task.Delay(100, context.CancellationToken);
                 local.Cancel();
                 try { await pending; outcome.TrySetResult("read completed"); }
@@ -863,6 +871,7 @@ namespace EmbedIO.Tests
             await using var request = await peer.OpenConnectAsync("audit-tunnel", host.Token);
             var head = await H3Peer.ReadFrameAsync(request, host.Token);
             Assert.That(head.Type, Is.EqualTo(1L));
+            headersReceived.TrySetResult();
             if (fail)
             {
                 var error = await Assert.CatchAsync<QuicException>(async () =>

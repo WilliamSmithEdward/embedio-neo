@@ -613,3 +613,25 @@ The independent model now identifies oversized-target 414 as MUST; other statuse
 fail instead of being labeled a policy choice. A missing response is an observation
 error, not proof of conformance. The optional 431 case is labeled MAY. Method-length
 policy and broader limits/resource behavior remain separate acceptance items.
+
+### HTTP/3 tunnel handler-failure fixture ordering
+
+The final-status candidate's hosted run 38079096891 reports
+Http3TunnelHandlerFailureStaysOnItsStream failing on macOS while reading the
+initial CONNECT response: the peer instead observes H3_REQUEST_CANCELLED (268).
+The handler starts a pending tunnel read, then immediately throws; it can reset
+the stream before the peer consumes the already-submitted response HEADERS.
+[RFC 9000 section 3.2](https://www.rfc-editor.org/rfc/rfc9000.html#section-3.2)
+allows RESET_STREAM to interrupt delivery and discard unconsumed stream bytes,
+so transport-write completion is not proof of application delivery at the peer.
+
+The fixture now waits for the peer to receive and assert those HEADERS before
+throwing with the tunnel read still pending. It retains the stream-abort,
+subsequent healthy-request, exactly-once close and listening-state assertions.
+No production, deadline, discovery or assertion policy changes. Both target
+projects build warning-free and formatting passes. The corrected fixture passes
+20 of 20 fresh Windows processes and 10 of 10 pinned Linux executions, zero
+skips, under the shared workload lock. The Linux run uses Windows-built IL; its
+combined log retains every result, while its repeated TRX path retains only the
+last run. Fresh exact-head hosted results remain required. This correction does
+not establish a captured natural macOS production defect.
