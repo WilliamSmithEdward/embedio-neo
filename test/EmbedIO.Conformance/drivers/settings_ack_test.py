@@ -129,4 +129,5 @@ def completion_window():
         peer.close()
 
 
-completion_window()print("PASS: ACK ordering, legal EOF and completion credit; nonzero overrun remains rejected")
+completion_window()
+print("PASS: ACK ordering, legal EOF and completion credit; nonzero overrun remains rejected")
