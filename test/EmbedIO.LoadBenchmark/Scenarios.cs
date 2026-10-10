@@ -38,6 +38,13 @@
         new("h2-plain-small-c8x32", Protocol.Http2, false, "/plaintext", 0, 8, 32, 1, 0, "h2c prior knowledge, 8 connections x 32 streams"),
         new("h2-tls-small-c8x32", Protocol.Http2, true, "/plaintext", 0, 8, 32, 1, 0, "h2 over TLS ALPN, 8 connections x 32 streams"),
         new("h2-tls-small-c64x1", Protocol.Http2, true, "/plaintext", 0, 64, 1, 1, 0, "h2 over TLS, 64 connections x 1 stream"),
+        new("h2-plain-small-c64x1", Protocol.Http2, false, "/plaintext", 0, 64, 1, 1, 0, "h2c prior knowledge, 64 connections x 1 stream"),
+        // Inspect scenarios read the query, headers, cookies, referrer and endpoints
+        // an ordinary route uses; a mismatch fails the client's status check.
+        new("h2-plain-inspect-c8x32", Protocol.Http2, false, InspectRequest.Target, 0, 8, 32, 1, 0, "h2c request-property route, 8 connections x 32 streams"),
+        new("h2-plain-inspect-c64x1", Protocol.Http2, false, InspectRequest.Target, 0, 64, 1, 1, 0, "h2c request-property route, 64 connections x 1 stream"),
+        new("h2-tls-inspect-c8x32", Protocol.Http2, true, InspectRequest.Target, 0, 8, 32, 1, 0, "h2 TLS request-property route, 8 connections x 32 streams"),
+        new("h2-tls-inspect-c64x1", Protocol.Http2, true, InspectRequest.Target, 0, 64, 1, 1, 0, "h2 TLS request-property route, 64 connections x 1 stream"),
         // The HTTP/2 client closes first, so each connection holds a client port in
         // TIME_WAIT. Warmup and measurement are each capped at 1.5 s (about 7,000
         // connections in total) to stay inside a 16,384-port dynamic range.
@@ -46,6 +53,9 @@
         new("h2-tls-upload1m-c4x4", Protocol.Http2, true, "/upload", Mebibyte, 4, 4, 1, 0, "h2 1 MiB uploads, 4 connections x 4 streams"),
         new("h2-tls-stream1m-c4x4", Protocol.Http2, true, "/stream/1048576/16384", 0, 4, 4, 1, 0, "h2 1 MiB flushed every 16 KiB, 4 connections x 4 streams"),
         new("h3-small-c8x32", Protocol.Http3, true, "/plaintext", 0, 8, 32, 1, 0, "HTTP/3, 8 connections x 32 streams"),
+        new("h3-small-c64x1", Protocol.Http3, true, "/plaintext", 0, 64, 1, 1, 0, "HTTP/3, 64 connections x 1 stream"),
+        new("h3-inspect-c8x32", Protocol.Http3, true, InspectRequest.Target, 0, 8, 32, 1, 0, "HTTP/3 request-property route, 8 connections x 32 streams"),
+        new("h3-inspect-c64x1", Protocol.Http3, true, InspectRequest.Target, 0, 64, 1, 1, 0, "HTTP/3 request-property route, 64 connections x 1 stream"),
         new("h3-churn-c16", Protocol.Http3, true, "/plaintext", 0, 16, 1, 1, 1, "QUIC handshake per request, 16 concurrent"),
         new("h3-large1m-c4x4", Protocol.Http3, true, "/bytes/1048576", 0, 4, 4, 1, 0, "HTTP/3 1 MiB responses, 4 connections x 4 streams"),
         new("h3-upload1m-c4x4", Protocol.Http3, true, "/upload", Mebibyte, 4, 4, 1, 0, "HTTP/3 1 MiB uploads, 4 connections x 4 streams"),
