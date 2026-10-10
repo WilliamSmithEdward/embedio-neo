@@ -101,6 +101,21 @@ unchanged. Use `--payload-bytes 65536` for a 64 KB response, and
 response bytes are validated after decoding transfer framing; dedicated regression
 cases check the exact raw chunk framing separately.
 
+## Managed HTTP/1 response writes
+
+`--response-write` measures the managed HTTP/1 response stream against a
+socket-free counting transport: the first write that commits the response head
+(fixed-length and chunked bodies of 13 bytes, 16 KiB and 1 MiB), a complete small
+chunked response including synchronous disposal, and subsequent chunks of 1 KiB,
+16 KiB, 64 KiB, 80 KiB and 1 MiB on the array, memory and synchronous paths. Each
+row reports median time, managed allocation, transport submissions and bytes per
+operation. The `first-*` rows include construction of a socket-free context; the
+`context-only` row is that control. Use the same runner against baseline and
+candidate cores (copy the output and replace only `EmbedIO.dll`), alternate
+process order, and set `DOTNET_TieredCompilation=0` for stable-JIT comparisons.
+Submission and byte counts are exact; timings exclude kernel, TLS and application
+work and do not establish server throughput.
+
 ## Managed engine parser
 
 `--engine-parser` measures context construction, header parsing and handoff for

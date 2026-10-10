@@ -12,9 +12,11 @@ namespace EmbedIO.Net.Internal
         // An application write of at most this many body bytes is committed with one
         // transport write that also carries its chunk framing; the first write of a
         // response carries the response head as well. Larger writes send the body
-        // directly from the caller's buffer after a bounded merged prefix, so the
-        // pooled copy never exceeds this bound plus the head and framing.
+        // directly from the caller's buffer after a merged head segment that copies
+        // only FirstSegmentPrefix body bytes, so the pooled copy never exceeds this
+        // bound plus the head and framing.
         private const int BatchedBodyBound = 65536;
+        private const int FirstSegmentPrefix = 16384;
         private static readonly byte[] CrLf = { 13, 10 };
         private readonly object _headersSyncRoot = new();
         private readonly EmbedIO.Internal.AsyncWriteGate _asyncWriteLock = new();
@@ -329,14 +331,14 @@ namespace EmbedIO.Net.Internal
             _response.Close();
         }
 
-        // One transport segment for the first write: head, chunk-size line, up to
-        // BatchedBodyBound body bytes and, when the whole body fits, its chunk CRLF.
+        // One transport segment for the first write: head, chunk-size line, the whole
+        // body with its chunk CRLF when it fits the bound, otherwise a 16 KiB prefix.
         // The caller sends any remaining body bytes directly and ends the chunk.
         private static byte[] RentFirstSegment(byte[] head, int headStart, int headLength,
             byte[] buffer, int offset, int count, bool chunked, out int length, out int prefix)
         {
-            prefix = Math.Min(count, BatchedBodyBound);
-            var complete = prefix == count;
+            var complete = count <= BatchedBodyBound;
+            prefix = complete ? count : FirstSegmentPrefix;
             length = headLength + prefix + (chunked ? GetChunkPrefixLength(count) + (complete ? CrLf.Length : 0) : 0);
             var segment = ArrayPool<byte>.Shared.Rent(length);
             Buffer.BlockCopy(head, headStart, segment, 0, headLength);

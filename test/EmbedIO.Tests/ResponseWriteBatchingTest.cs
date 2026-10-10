@@ -72,7 +72,7 @@ namespace EmbedIO.Tests
             if (!chunked) fixture.Response.ContentLength64 = Count;
             var payload = Pattern(Count + 3);
             await fixture.Stream.WriteAsync(payload, 3, Count);
-            // Head plus 65536 body bytes, the remaining 4097 bytes, and for chunked the CRLF.
+            // Head plus a 16 KiB body prefix, the remaining bytes directly, and for chunked the CRLF.
             Assert.That(fixture.Transport.AsyncWrites, Is.EqualTo(chunked ? 3 : 2));
             fixture.Stream.Dispose();
             Assert.That(Body(fixture.Transport), Is.EqualTo(chunked
