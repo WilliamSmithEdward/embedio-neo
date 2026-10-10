@@ -7234,3 +7234,36 @@ Hosted final-head validation remains required. The adapter has not been wired in
 application routing, has no native external-drain entry point yet, and does not
 advertise datagrams or WebTransport. Existing BCL application paths are unchanged.
 Evidence and preserved failed attempts are under TestResults/native-http3-adapter.
+
+### Native HTTP/3 external drain and peer connection closure
+
+The native adapter now has a listener-worker entry point with independent abort
+and drain tokens and a bounded drain timeout. It reuses the common HTTP/3 drain
+state machine and its non-blocking listener dispatch path; listener startup and
+public application routing are still not connected to the native provider.
+
+Two real .NET QUIC peer cases, with empty and 1 MiB responses, fail before the
+entry point exists. They keep an admitted handler pending, decode server SETTINGS
+and GOAWAY on the control stream, verify the request cutoff, observe
+H3_REQUEST_REJECTED on a later stream, and then validate the admitted response's
+exact DATA and FIN. The peer closes the connection after reading its response;
+the worker must finish without canceling the caller's abort token.
+
+The first entry-point implementation exposed another defect: normal peer
+connection closure became H3_CLOSED_CRITICAL_STREAM because native stream shutdown
+observers reported an operation abort without the connection's shutdown state.
+Both new cases failed after completing their responses. Connection shutdown
+callbacks now publish a closing flag; native stream shutdown observes that flag
+and reports a connection abort. Explicit stream RESET/STOP indications retain
+their stream-abort classification. The callback only publishes state; it does
+not execute application cancellation callbacks on the native callback thread.
+
+The unchanged entry-point core and failed runs are retained under ignored
+TestResults/native-drain. After classification correction all 82 native cases
+pass on Windows and pinned Linux using the same Windows-built IL. Both targets
+build with zero warnings; source guards and formatting checks pass. The full
+Windows suite reports 4918 cases, 4913 passed, five expected skips and zero
+failures in 3m 22s under the shared workload lock. The tested core SHA-256 is
+`09A897EABE2276ACD8F5B2BDD99DFC2859D2B2235139D9A28C5F787FE25A274B`.
+Hosted final-head checks remain required. The combined discovery floor is 4918
+(4916 adapter base plus two cases).

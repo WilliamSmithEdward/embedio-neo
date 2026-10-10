@@ -78,6 +78,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private sealed class Signals
         {
+            private readonly MsQuicNativeConnection _connection;
             internal readonly object Sync = new();
             internal readonly TaskCompletionSource Closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly TaskCompletionSource<long>? Started;
@@ -129,8 +130,9 @@ namespace EmbedIO.Net.Internal.Http3
                 else if (SendFinished) _writesEnd?.TrySetResult();
             }
             private readonly MsQuicApi.StreamFunctions _functions;
-            internal Signals(MsQuicApi.StreamFunctions functions, bool local = false)
+            internal Signals(MsQuicNativeConnection connection, MsQuicApi.StreamFunctions functions, bool local = false)
             {
+                _connection = connection;
                 _functions = functions; Handler = OnEvent; Pointer = Marshal.GetFunctionPointerForDelegate(Handler);
                 if (local)
                 {
@@ -194,14 +196,14 @@ namespace EmbedIO.Net.Internal.Http3
                                 break;
                             case 6:
                                 SendFinished = Marshal.ReadByte(eventData, 8) != 0;
-                                if (!SendFinished) SendError ??= DirectionFailure(false, null, "Native stream writes were aborted.");
+                                if (!SendFinished) SendError ??= ShutdownFailure("Native stream writes were aborted.");
                                 break;
                             case 3: Fin = true; Available.TrySetResult(); break;
                             case 4: Error = DirectionFailure(true, Marshal.ReadInt64(eventData, 8), "Peer aborted the native stream send direction."); Available.TrySetResult(); break;
                             case 7:
                                 PeerAccepted?.TrySetException(new IOException("Native stream closed before the peer accepted it."));
-                                if ((!Fin || Buffers != null) && Error == null) Error = DirectionFailure(false, null, "Native stream closed before pending receive data was consumed.");
-                                if (!SendFinished) SendError ??= DirectionFailure(false, null, "Native stream closed before writes completed.");
+                                if ((!Fin || Buffers != null) && Error == null) Error = ShutdownFailure("Native stream closed before pending receive data was consumed.");
+                                if (!SendFinished) SendError ??= ShutdownFailure("Native stream closed before writes completed.");
                                 Available.TrySetResult(); Closed.TrySetResult(); break;
                         }
                         UpdateDirections();
@@ -214,6 +216,15 @@ namespace EmbedIO.Net.Internal.Http3
                     _functions.Shutdown(stream, 0x16, 0x102);
                     return 0;
                 }
+            }
+            private IOException ShutdownFailure(string message)
+            {
+                // Use the connection's observed shutdown state to distinguish
+                // connection closure from a reset
+                // of an HTTP/3 critical stream by the peer.
+                if (_connection.IsClosing && (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()))
+                    return new QuicException(QuicError.ConnectionAborted, null, message);
+                return DirectionFailure(false, null, message);
             }
             internal void StopReads()
             {
@@ -247,7 +258,7 @@ namespace EmbedIO.Net.Internal.Http3
         internal static MsQuicNativeStream Accept(MsQuicNativeConnection connection, IntPtr handle, uint flags, MsQuicApi.StreamFunctions functions)
         {
             if (handle == IntPtr.Zero) throw new ArgumentException("Missing accepted stream.", nameof(handle));
-            var signals = new Signals(functions);
+            var signals = new Signals(connection, functions);
             var result = new MsQuicNativeStream(connection, functions, signals, functions.Id(handle), flags);
             var retained = false;
             connection.DangerousAddRef(ref retained);
@@ -263,7 +274,7 @@ namespace EmbedIO.Net.Internal.Http3
         internal static async Task<MsQuicNativeStream> OpenAsync(MsQuicNativeConnection connection, bool unidirectional, MsQuicApi.StreamFunctions functions, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            var signals = new Signals(functions, true);
+            var signals = new Signals(connection, functions, true);
             if (unidirectional) signals.Fin = true; // Locally opened uni streams have no receive direction.
             var result = new MsQuicNativeStream(connection, functions, signals, -1, unidirectional ? 1u : 0u, true);
             var retained = false;

@@ -56,6 +56,7 @@ namespace EmbedIO.Net.Internal.Http3
         {
             internal readonly TaskCompletionSource Connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly TaskCompletionSource Closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal int Closing;
             internal readonly MsQuicApi.ConnectionFunctions.Callback Handler;
             internal readonly IntPtr Pointer;
             internal Func<IntPtr, uint, bool>? AcceptStream;
@@ -118,8 +119,8 @@ namespace EmbedIO.Net.Internal.Http3
                     {
                         case 0: Connected.TrySetResult(); break;
                         case 1:
-                        case 2: Connected.TrySetCanceled(); break;
-                        case 3: Connected.TrySetCanceled(); StopStreams?.Invoke(); Closed.TrySetResult(); break;
+                        case 2: Volatile.Write(ref Closing, 1); Connected.TrySetCanceled(); break;
+                        case 3: Volatile.Write(ref Closing, 1); Connected.TrySetCanceled(); StopStreams?.Invoke(); Closed.TrySetResult(); break;
                         // Streams are not exposed until their own callback/lifetime exists.
                         case 6:
                             var stream = Marshal.ReadIntPtr(eventData, 8);
@@ -137,6 +138,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly MsQuicApi.ConnectionFunctions _functions;
         private readonly Signals _signals;
         private int _shutdown;
+        internal bool IsClosing => Volatile.Read(ref _shutdown) != 0 || Volatile.Read(ref _signals.Closing) != 0;
         private readonly object _streamSync = new();
         private Channel<MsQuicNativeStream>? _streams;
         private bool _disposing;

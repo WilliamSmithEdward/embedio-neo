@@ -79,6 +79,19 @@ namespace EmbedIO.Net.Internal.Http3
             using var session = new Http3QuicConnection(transport, dispatch, token, false);
             await session.RunCoreAsync().ConfigureAwait(false);
         }
+        internal static async Task RunNativeForListenerAsync(MsQuicNativeConnection connection, Func<Http3QuicExchange, Task> dispatch,
+            CancellationToken abortToken, CancellationToken drainToken, TimeSpan drainTimeout)
+        {
+            if (connection == null) throw new ArgumentNullException(nameof(connection));
+            if (dispatch == null) throw new ArgumentNullException(nameof(dispatch));
+            if (drainTimeout <= TimeSpan.Zero || drainTimeout.TotalMilliseconds > uint.MaxValue - 1)
+                throw new ArgumentOutOfRangeException(nameof(drainTimeout));
+            await using var transport = new MsQuicTransportConnection(connection);
+            using var session = new Http3QuicConnection(transport, dispatch, abortToken, true);
+            session._drainToken = drainToken;
+            session._drainTimeout = drainTimeout;
+            await session.RunCoreAsync().ConfigureAwait(false);
+        }
         internal static async Task RunAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token)
         {
             if (connection == null) throw new ArgumentNullException(nameof(connection));
