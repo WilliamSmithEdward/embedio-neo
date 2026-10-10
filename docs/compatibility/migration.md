@@ -1155,3 +1155,27 @@ No new target, header or body limit is introduced; valid APIs, HTTP/1.0/1.1,
 higher-minor handling, framing and request deadlines remain. HTTP/2, HTTP/3 and
 the Microsoft listener backend are unchanged. This increment does not settle
 separate method-length policy or every HTTP limit requirement.
+
+## Multiplexed response stream disposal (unreleased)
+
+William explicitly approved this behavior change for the managed HTTP/2 and
+HTTP/3 engines. Disposing the response output stream synchronously now starts
+closure and prevents further writes, then returns without waiting for network
+output. Previously it blocked until closure completed, which could starve the
+worker pool when many streams waited for shared transport output. This also
+applies when a StreamWriter disposes its underlying response output stream.
+
+The server still awaits the same close operation before completing the HTTP
+context. Stream disposal returning does not prove END_STREAM reached the peer.
+A close-time transport failure is observed during context completion instead of
+being thrown from synchronous output-stream Dispose. If application code needs
+to wait for network closure and observe that error locally, await
+Response.OutputStream.DisposeAsync on the .NET 10 asset, or explicitly close the
+HTTP context or response. Synchronous explicit context/response Close still
+waits; the .NET Standard 2.0 asset has no Stream.DisposeAsync API. Flush still
+commits headers/output and is not a substitute for completing the response.
+
+The shared close operation remains idempotent; writes after stream disposal
+fail, and cancellation and graceful drain still join completion. HTTP/1 and the
+Microsoft listener backend are unchanged. No new public API or dependency is
+introduced.

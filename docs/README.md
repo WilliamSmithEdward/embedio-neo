@@ -135,6 +135,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Modern HTTP engine program](project/http-engine.md): protocol roadmap, compatibility changes and performance acceptance.
 - [QUIC lifetime and rebind](project/quic-lifetime.md): native disposal evidence, bounded retry, quarantine limits and retirement gates.
 - [Managed engine load comparison](project/http-engine-load-comparison.md): separate-process HTTP/1.1, HTTP/2 and HTTP/3 measurements against main and Kestrel, profiled bottlenecks and prioritized improvements.
+- [HTTP/2 output and dispatch performance](project/http2-performance.md): profiled small-response costs, output batching and response coalescing, before/after measurements and remaining bottlenecks.
 
 - [HTTP conformance audit](project/http-conformance.md): October 2026 standards baseline, black-box conformance and stateful campaigns, and prioritized findings.
 

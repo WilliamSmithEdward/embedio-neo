@@ -32,7 +32,16 @@ namespace EmbedIO.Net.Internal.Http2
 
         internal byte[] Encode(HpackField[] fields)
         {
+            using var output = new MemoryStream();
+            EncodeTo(fields, output);
+            return output.ToArray();
+        }
+
+        // Appends one header block. Validation precedes any table change.
+        internal void EncodeTo(HpackField[] fields, Stream output)
+        {
             if (fields == null) throw new ArgumentNullException(nameof(fields));
+            if (output == null) throw new ArgumentNullException(nameof(output));
             // Invalid application data must not partially mutate compression state.
             long total = 0;
             foreach (var field in fields)
@@ -43,7 +52,6 @@ namespace EmbedIO.Net.Internal.Http2
                 ValidateOctets(field.Name);
                 ValidateOctets(field.Value);
             }
-            using var output = new MemoryStream();
             if (_pendingMinimum != int.MaxValue)
             {
                 PrefixInteger.Write(output, _pendingMinimum, 5, 0x20);
@@ -70,7 +78,6 @@ namespace EmbedIO.Net.Internal.Http2
                     _tableBytes += field.Size;
                 }
             }
-            return output.ToArray();
         }
 
         private static bool IsSensitive(string name) => name.Equals("authorization", StringComparison.OrdinalIgnoreCase)

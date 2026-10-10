@@ -22,9 +22,15 @@ source does not. `runners.json` records revisions, uncommitted paths and SHA-256
 hashes.
 
 `run` options: `--scenarios all|<prefix>,...`, `--engines candidate,baseline,kestrel`,
+`--baseline-all-protocols` (alias for `--modern-baseline`; also run the baseline on HTTP/2 and HTTP/3 scenarios, for a
+baseline core that serves them, such as an earlier engine revision passed to the prepare
+script with `--baseline <revision>`),
 `--rounds 3`, `--warmup 5`, `--duration 15`, `--idle 2`, `--server-cpus`/`--client-cpus`
 (for example `0-7`), `--time-wait-limit 4000`, `--profile`, `--trace-tool <dotnet-trace>`.
 The output directory must be new or empty, so earlier evidence is never overwritten.
+Set `EMBEDIO_BENCH_EXCEPTION_DETAIL=1` to key the server's first-chance exception
+counts by message and write the first stack trace per key to its stderr log; leave it
+unset for comparison runs.
 
 Scenarios ending in `-close100` are controls: the client closes every connection
 after 100 requests, matching the managed listener's per-connection cap, so all

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal.Http2
 {
@@ -11,7 +12,10 @@ namespace EmbedIO.Net.Internal.Http2
         private readonly Http2Connection _connection;
         private readonly object _sync = new();
         private readonly Dictionary<int, Http2Exchange> _exchanges = new();
-        private readonly HashSet<Task> _applications = new();
+        private readonly WaitCallback _startApplication;
+        private Func<Http2Exchange, Task>? _application;
+        private int _runningApplications;
+        private TaskCompletionSource<bool>? _applicationsDone;
         private readonly object _creditSync = new();
         private readonly Dictionary<int, int> _credits = new();
         private readonly CancellationTokenSource _stop = new();
@@ -27,6 +31,7 @@ namespace EmbedIO.Net.Internal.Http2
         internal Http2Dispatcher(Http2Connection connection)
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+            _startApplication = state => _ = RunApplicationAsync((Http2Exchange)(state ?? throw new InvalidOperationException("Missing exchange.")));
             _connection.OutputFailed = Abort;
             _connection.UseTransportCancellation(_stop.Token);
         }
@@ -35,7 +40,8 @@ namespace EmbedIO.Net.Internal.Http2
         {
             if (application == null) throw new ArgumentNullException(nameof(application));
             if (Interlocked.Exchange(ref _running, 1) != 0) throw new InvalidOperationException("Dispatcher already started.");
-            using var registration = token.Register(() => _stop.Cancel());
+            _application = application;
+            using var registration = token.Register(CancelConnection);
             try
             {
                 while (!_stop.IsCancellationRequested)
@@ -105,7 +111,7 @@ namespace EmbedIO.Net.Internal.Http2
                             else if (frame.Type == 8 && !state.LocalEnded)
                                 _connection.SendFlow.Update(state.Id, (int)(Http2PeerSettings.ReadUInt32(frame.Payload, 0) & 0x7fffffff));
                         }
-                        if (started != null) StartApplication(started, application);
+                        if (started != null) StartApplication(started);
                     }
                     catch (Http2ProtocolException error) when (error.StreamId != 0)
                     {
@@ -128,15 +134,16 @@ namespace EmbedIO.Net.Internal.Http2
             }
             finally
             {
-                _stop.Cancel();
-                Task[] applications;
+                CancelConnection();
+                Task applications;
                 lock (_sync)
                 {
                     foreach (var exchange in _exchanges.Values) exchange.Cancel(new IOException("HTTP/2 connection ended."));
-                    applications = new Task[_applications.Count];
-                    _applications.CopyTo(applications);
+                    // The read loop has ended, so no further application can start.
+                    applications = Volatile.Read(ref _runningApplications) == 0 ? Task.CompletedTask
+                        : (_applicationsDone ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
                 }
-                await Task.WhenAll(applications).ConfigureAwait(false);
+                await applications.ConfigureAwait(false);
                 await _creditPump.ConfigureAwait(false);
                 Task? drain;
                 lock (_sync) drain = _drainTask;
@@ -147,36 +154,50 @@ namespace EmbedIO.Net.Internal.Http2
             if (_failure != null) throw new IOException("HTTP/2 connection failed.", _failure);
         }
 
-        private void StartApplication(Http2Exchange exchange, Func<Http2Exchange, Task> application)
+        // Called only by the read loop. The application runs on the thread pool so
+        // reading continues. RunAsync waits for the count after the read loop ends.
+        private void StartApplication(Http2Exchange exchange)
         {
-            lock (_sync)
+            _ = Interlocked.Increment(ref _runningApplications);
+            ThreadPool.QueueUserWorkItem(_startApplication, exchange);
+        }
+
+        private async Task RunApplicationAsync(Http2Exchange exchange)
+        {
+            try
             {
-                var task = Task.Run(async () =>
+                var application = _application ?? throw new InvalidOperationException("Dispatcher has not started.");
+                await application(exchange).ConfigureAwait(false);
+                if (!exchange.Ended) await exchange.CompleteAsync(exchange.CancellationToken).ConfigureAwait(false);
+                if (exchange.CloseConnectionAfterResponse) await DrainAsync().ConfigureAwait(false);
+                if (!exchange.State.RemoteEnded) await ResetAsync(exchange.Id, 0, new IOException("Response completed before request body.")).ConfigureAwait(false);
+            }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                if (!_stop.IsCancellationRequested && !exchange.State.Reset)
+                    try { await ResetAsync(exchange.Id, 2, error).ConfigureAwait(false); } catch (Exception failure) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(failure)) { Abort(failure); }
+            }
+            finally
+            {
+                try
                 {
                     try
-                    {
-                        await application(exchange).ConfigureAwait(false);
-                        if (!exchange.Ended) await exchange.CompleteAsync(exchange.CancellationToken).ConfigureAwait(false);
-                        if (exchange.CloseConnectionAfterResponse) await DrainAsync().ConfigureAwait(false);
-                        if (!exchange.State.RemoteEnded) await ResetAsync(exchange.Id, 0, new IOException("Response completed before request body.")).ConfigureAwait(false);
-                    }
-                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-                    {
-                        if (!_stop.IsCancellationRequested && !exchange.State.Reset)
-                            try { await ResetAsync(exchange.Id, 2, error).ConfigureAwait(false); } catch (Exception failure) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(failure)) { Abort(failure); }
-                    }
-                    finally
                     {
                         lock (_sync)
                         {
                             Release(exchange, null);
-                            if (_drainSent && _exchanges.Count == 0) _stop.Cancel();
+                            if (_drainSent && _exchanges.Count == 0) CancelConnection();
                         }
-                        exchange.Dispose();
                     }
-                });
-                _applications.Add(task);
-                _ = task.ContinueWith(completed => { lock (_sync) _applications.Remove(completed); }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                    finally { exchange.Dispose(); }
+                }
+                finally
+                {
+                    // Cleanup failures must not strand connection shutdown.
+                    // RunAsync reads the count and creates the signal under _sync.
+                    if (Interlocked.Decrement(ref _runningApplications) == 0)
+                        lock (_sync) _applicationsDone?.TrySetResult(true);
+                }
             }
         }
 
@@ -201,7 +222,7 @@ namespace EmbedIO.Net.Internal.Http2
                 _drainSent = true;
                 // An external drain can start with no applications, or the last
                 // stream can reset while GOAWAY waits for the output gate.
-                if (_exchanges.Count == 0) _stop.Cancel();
+                if (_exchanges.Count == 0) CancelConnection();
             }
         }
 
@@ -272,7 +293,15 @@ namespace EmbedIO.Net.Internal.Http2
             lock (_creditSync) _pumping = false;
         }
 
-        private void Abort(Exception error) { if (_stop.IsCancellationRequested) return; _failure = error; _stop.Cancel(); }
+        private void CancelConnection()
+        {
+            try { _stop.Cancel(); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                error.Log("HTTP/2 connection", "Exception thrown by an application cancellation callback.");
+            }
+        }
+        private void Abort(Exception error) { if (_stop.IsCancellationRequested) return; _failure = error; CancelConnection(); }
         internal static void WriteUInt32(byte[] bytes, int offset, uint value)
         { bytes[offset] = (byte)(value >> 24); bytes[offset + 1] = (byte)(value >> 16); bytes[offset + 2] = (byte)(value >> 8); bytes[offset + 3] = (byte)value; }
         public void Dispose() { _connection.OutputFailed = null; _stop.Dispose(); }

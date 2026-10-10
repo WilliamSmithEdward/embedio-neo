@@ -22,7 +22,18 @@ internal static class ServerHost
         var settings = new ServerSettings(options.Required("--engine"), protocol, tls, options.Integer("--port", 0), certificate);
         Payloads.Prepare(options.Integer("--reference-bytes", 1 << 20));
         var exceptions = new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
-        AppDomain.CurrentDomain.FirstChanceException += (_, e) => exceptions.AddOrUpdate(e.Exception.GetType().FullName ?? "?", 1, static (_, count) => count + 1);
+        // Diagnostic opt-in: key by message too and log the first stack per key (bounded).
+        var detail = Environment.GetEnvironmentVariable("EMBEDIO_BENCH_EXCEPTION_DETAIL") == "1";
+        AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
+        {
+            var key = e.Exception.GetType().FullName ?? "?";
+            if (detail)
+            {
+                key += ": " + e.Exception.Message;
+                if (!exceptions.ContainsKey(key) && exceptions.Count < 64) Console.Error.WriteLine("FIRST " + key + Environment.NewLine + e.Exception.StackTrace);
+            }
+            exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
+        };
         using var profile = options.Has("--profile") ? new RuntimeEventProfile() : null;
         await using IBenchmarkServer server = settings.Engine switch
         {

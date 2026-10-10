@@ -89,6 +89,8 @@ namespace EmbedIO.Net.Internal.Http2
     {
         private static readonly Encoding Octets = Encoding.GetEncoding(28591);
         private readonly List<HpackField> _dynamic = new();
+        // Reused per block; one decoder serves one connection direction sequentially.
+        private readonly List<HpackField> _decoded = new();
         private readonly int _maximumHeaderListSize;
         private int _maximumTableSize;
         private int _capacity;
@@ -118,7 +120,8 @@ namespace EmbedIO.Net.Internal.Http2
             if (_failed) throw new InvalidDataException("HPACK decoder is no longer usable.");
             try
             {
-                var headers = new List<HpackField>();
+                var headers = _decoded;
+                headers.Clear();
                 var position = 0;
                 var remaining = _maximumHeaderListSize;
                 var sawHeader = false;
