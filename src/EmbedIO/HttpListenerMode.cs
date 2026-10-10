@@ -27,7 +27,8 @@
         /// <summary>
         /// Host HTTP/1.1 and HTTP/2 over TCP alongside HTTP/3 over QUIC on the
         /// same HTTPS prefixes. Requires the .NET 10 asset, native QUIC support
-        /// and a certificate with its private key. Graceful drain is not yet supported.
+        /// and a certificate with its private key. Supports bounded graceful drain across
+        /// accepted TCP and QUIC requests.
         /// </summary>
         EmbedIOCombined,
     }
