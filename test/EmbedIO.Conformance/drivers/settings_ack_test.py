@@ -85,4 +85,48 @@ def check(reject_overrun=False, finish_empty=False):
 check()
 check(reject_overrun=True)
 check(finish_empty=True)
-print("PASS: ordered ACKs, legal DATA and empty END_STREAM pass; an actual window overrun fails")
+def completion_window():
+    local, peer = socket.socketpair()
+
+    class Endpoint:
+        host, port, tls, authority = "127.0.0.1", 1, False, b"example.test"
+
+        def connect(self):
+            return local
+
+    client = campaign.Client(Endpoint(), settings={h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: 1 << 20})
+    try:
+        sid = client.request(b"GET", b"/")
+        ack = hf.SettingsFrame(0)
+        ack.flags.add("ACK")
+        peer.sendall(hf.SettingsFrame(0).serialize() + ack.serialize() + ack.serialize())
+        client.receive(1)
+        headers = hf.HeadersFrame(sid, data=b"\x88")
+        headers.flags.add("END_HEADERS")
+        peer.sendall(headers.serialize())
+        client.receive(1)
+        for length in [16384, 16384, 16384, 16383]:
+            peer.sendall(hf.DataFrame(sid, data=b"a" * length).serialize())
+            client.receive(1)
+        client.update_settings({h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: 65535})
+        client.flush()
+        peer.sendall(ack.serialize())
+        client.receive(1)
+        assert client.conn.streams[sid].inbound_flow_control_window == 0
+        client.update_settings({h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: 1 << 20})
+        client.flush()
+        peer.sendall(ack.serialize())
+        client.receive(1)
+        assert client.conn.streams[sid].inbound_flow_control_window > 0
+        end = hf.DataFrame(sid, data=b"z")
+        end.flags.add("END_STREAM")
+        peer.sendall(end.serialize())
+        client.receive(1)
+        assert client.streams[sid]["body"] == b"a" * 65535 + b"z"
+        assert client.done(sid)
+    finally:
+        local.close()
+        peer.close()
+
+
+completion_window()print("PASS: ACK ordering, legal EOF and completion credit; nonzero overrun remains rejected")

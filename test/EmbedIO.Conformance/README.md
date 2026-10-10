@@ -109,3 +109,11 @@ ordinary checks. The peer-only regression also verifies this EOF and preserves a
 nonzero overrun that must raise FlowControlError.
 
 Reference: https://www.rfc-editor.org/rfc/rfc9113.html#section-6.9.1
+The next retained run timed out at iteration 178. Its completion phase restored
+INITIAL_WINDOW_SIZE to 65,535 even after advertising 1 MiB, which could shrink
+an active stream to zero after 65,535 consumed bytes. No new DATA arrived to drive
+the peer library's automatic replenishment. The completion phase now explicitly
+opens a 1 MiB stream window (larger than every generated response) while preserving
+all randomized window changes before completion. A peer-only wire regression
+reproduces the zero window and verifies that explicit reopening permits the final
+payload. The 30-second completion deadline and byte validation remain unchanged.

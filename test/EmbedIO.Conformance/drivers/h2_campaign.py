@@ -902,8 +902,9 @@ def run_fuzz(endpoint, seed, iterations, stats_port):
                     log.append(("settings",))
                 for _ in range(rng.randint(0, 3)):
                     client.receive(0.01)
-            # Any window left at zero is reopened so every live stream can complete.
-            client.update_settings({h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: 65535})
+            # Reopen above the largest response. Restoring 65535 can instead shrink
+            # a prior 1 MiB window to zero after those bytes have been consumed.
+            client.update_settings({h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: 1 << 20})
             client.conn.increment_flow_control_window(1 << 24)
             client.flush()
             client.wait(list(expected), 30)
