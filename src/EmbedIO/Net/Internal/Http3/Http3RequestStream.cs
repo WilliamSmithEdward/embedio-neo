@@ -60,7 +60,7 @@ namespace EmbedIO.Net.Internal.Http3
             if (Interlocked.CompareExchange(ref _reading, 1, 0) != 0) throw new InvalidOperationException("Concurrent HTTP/3 request reads.");
             if (_failed) { Volatile.Write(ref _reading, 0); throw new IOException("HTTP/3 request input is no longer usable."); }
         }
-        internal async Task<Http3RequestEvent> ReadEventAsync(CancellationToken token)
+        internal async ValueTask<Http3RequestEvent> ReadEventAsync(CancellationToken token)
         {
             Enter(token);
             try
@@ -110,6 +110,16 @@ namespace EmbedIO.Net.Internal.Http3
             catch (Exception error) when (error is IOException or OperationCanceledException) { _failed = true; throw; }
             finally { Volatile.Write(ref _reading, 0); }
         }
+        // Returns the next event when the source supplies it without waiting.
+        // Otherwise the read stays pending and is returned as `pending`; the
+        // caller must end it (by aborting the source) and observe that task.
+        internal Http3RequestEvent? TryReadEventWithoutWaiting(out Task? pending)
+        {
+            var next = ReadEventAsync(CancellationToken.None);
+            if (next.IsCompleted) { pending = null; return next.Result; }
+            pending = next.AsTask();
+            return null;
+        }
         internal void ConfirmHeaders(long? contentLength)
         {
             if (contentLength < 0) throw new ArgumentOutOfRangeException(nameof(contentLength));
@@ -144,7 +154,7 @@ namespace EmbedIO.Net.Internal.Http3
             if (!Volatile.Read(ref _headersAccepted)) throw new InvalidOperationException("Initial headers have not been accepted.");
             Volatile.Write(ref _tunnel, 1);
         }
-        internal async Task<int> ReadDataAsync(byte[] bytes, int offset, int count, CancellationToken token)
+        internal async ValueTask<int> ReadDataAsync(byte[] bytes, int offset, int count, CancellationToken token)
         {
             if (bytes == null) throw new ArgumentNullException(nameof(bytes));
             if (offset < 0 || count < 0 || offset > bytes.Length - count) throw new ArgumentOutOfRangeException(nameof(count));

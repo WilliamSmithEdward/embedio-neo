@@ -2,6 +2,7 @@
 using System.IO;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -89,14 +90,24 @@ namespace EmbedIO.Tests
             }
             internal async Task<object?> Header(CancellationToken token = default)
             {
-                var task = (Task)Call("ReadHeaderAsync", token);
+                var task = AsTask(Call("ReadHeaderAsync", token));
                 await task;
                 return (task.GetType().GetProperty("Result") ?? throw new AssertionException("Missing header result.")).GetValue(task);
             }
-            internal Task<byte[]> Buffer(int maximum, CancellationToken token = default) => (Task<byte[]>)Call("ReadBufferedPayloadAsync", maximum, token);
-            internal Task Skip(CancellationToken token = default) => (Task)Call("SkipPayloadAsync", token);
-            internal Task<int> Read(byte[] bytes, int offset, int count, CancellationToken token = default) => (Task<int>)Call("ReadPayloadAsync", bytes, offset, count, token);
+            internal Task<byte[]> Buffer(int maximum, CancellationToken token = default) => (Task<byte[]>)AsTask(Call("ReadBufferedPayloadAsync", maximum, token));
+            internal Task Skip(CancellationToken token = default) => AsTask(Call("SkipPayloadAsync", token));
+            internal Task<int> Read(byte[] bytes, int offset, int count, CancellationToken token = default) => (Task<int>)AsTask(Call("ReadPayloadAsync", bytes, offset, count, token));
         }
+        // Reader operations return Task or ValueTask; tests observe them as tasks.
+        private static Task AsTask(object? pending) => pending as Task
+            ?? (Task)((pending ?? throw new AssertionException("Missing async result.")).GetType().GetMethod("AsTask")?.Invoke(pending, null)
+                ?? throw new AssertionException("Missing async result."));
+        // The frame reader reads through the memory overload on modern targets;
+        // these fixtures keep their array-based fragmentation and pending behavior.
+        private static ValueTask<int> ArrayRead(Memory<byte> buffer, CancellationToken token, Func<byte[], int, int, CancellationToken, Task<int>> read)
+            => MemoryMarshal.TryGetArray<byte>(buffer, out var segment) && segment.Array != null
+                ? new ValueTask<int>(read(segment.Array, segment.Offset, segment.Count, token))
+                : throw new NotSupportedException("Fixture reads require array-backed memory.");
         private static long Property(object? value, string name)
         {
             Assert.That(value, Is.Not.Null);
@@ -106,12 +117,15 @@ namespace EmbedIO.Tests
         }
         private sealed class FragmentedStream(byte[] bytes, int fragment) : MemoryStream(bytes)
         {
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => ArrayRead(buffer, cancellationToken, ReadAsync);
             public int MaximumRead { get; private set; }
+            public int Reads { get; private set; }
             public override int Read(byte[] buffer, int offset, int count) => throw new AssertionException("Synchronous read.");
             public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 MaximumRead = Math.Max(MaximumRead, count);
+                Reads++;
                 return Task.FromResult(base.Read(buffer, offset, Math.Min(fragment, count)));
             }
         }
@@ -136,6 +150,23 @@ namespace EmbedIO.Tests
             Assert.That(await reader.Buffer(0), Is.Empty);
             Assert.That(await reader.Header(), Is.Null);
             Assert.That(await reader.Header(), Is.Null);
+        }
+
+        // A frame header is read with as few transport reads as its encoding
+        // allows, and no read ever asks for a byte beyond the header.
+        [TestCase("0003aabbcc", 0L, 3L, 2, 1)]
+        [TestCase("01404000", 1L, 64L, 3, 2)]
+        [TestCase("402105aabbccddee", 33L, 5L, 3, 2)]
+        [TestCase("2180000005aabbccddee", 33L, 5L, 5, 2)]
+        public async Task FrameHeaderReadsStopAtTheHeader(string wire, long type, long length, int headerBytes, int reads)
+        {
+            using var source = new FragmentedStream(Convert.FromHexString(wire), 4096);
+            var reader = new Reader(source);
+            var header = await reader.Header();
+            Assert.That(Property(header, "Type"), Is.EqualTo(type));
+            Assert.That(Property(header, "Length"), Is.EqualTo(length));
+            Assert.That(source.Position, Is.EqualTo(headerBytes), "Payload bytes stay in the transport.");
+            Assert.That(source.Reads, Is.EqualTo(reads));
         }
 
         [TestCase("40")]
@@ -181,6 +212,7 @@ namespace EmbedIO.Tests
 
         private sealed class PendingStream : MemoryStream
         {
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => ArrayRead(buffer, cancellationToken, ReadAsync);
             internal TaskCompletionSource<bool> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {

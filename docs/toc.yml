@@ -220,6 +220,8 @@
       href: project/http-engine-load-comparison.md
     - name: HTTP/2 output and dispatch performance
       href: project/http2-performance.md
+    - name: HTTP/3 request path performance
+      href: project/http3-performance.md
     - name: HTTP conformance audit
       href: project/http-conformance.md
 

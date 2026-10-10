@@ -46,6 +46,7 @@ namespace EmbedIO.Net.Internal.Http3
         public int BlockedStreams { get { lock (_sync) return _pending.Count; } }
         public long BlockedBytes { get { lock (_sync) return _blockedBytes; } }
         public long KnownReceivedCount { get { lock (_sync) return _knownReceivedCount; } }
+        internal bool HasFeedback { get { lock (_sync) return _feedback.Length != 0; } }
 
         internal HpackField[]? Submit(long streamId, byte[] wire)
         {

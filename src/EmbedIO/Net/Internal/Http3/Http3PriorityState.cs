@@ -47,12 +47,16 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
         internal Entry Get(long id) { lock (_sync) return _active[id]; }
-        internal void Headers(long id, string? field)
+        // Applies the request's priority field unless a control-stream update
+        // already arrived, and returns the active entry (null when not open).
+        internal Entry? Headers(long id, string? field)
         {
             HttpPriority.TryParse(field ?? "", out var priority);
             lock (_sync)
             {
-                if (_active.TryGetValue(id, out var entry) && !entry.HasUpdate) entry.Set(priority);
+                if (!_active.TryGetValue(id, out var entry)) return null;
+                if (!entry.HasUpdate) entry.Set(priority);
+                return entry;
             }
         }
         internal void Update(long id, HttpPriority priority)

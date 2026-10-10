@@ -42,10 +42,19 @@ namespace EmbedIO.Net.Internal.Http3
         // limit and retain flow-control credit until the section is consumed/canceled.
         internal HpackField[]? TryDecode() => _table.DecodeSection(this);
 
+        // Decoding is synchronous, so each thread reuses one scratch list and only
+        // the exact result array is allocated. Cleared entries release strings.
+        [ThreadStatic] private static List<HpackField>? t_fields;
         // Called while the table lock is held, so eviction cannot interleave with decoding.
         internal HpackField[] DecodeEntries()
         {
-            var fields = new List<HpackField>();
+            var fields = t_fields ?? new List<HpackField>(16);
+            t_fields = null;
+            try { return DecodeEntries(fields); }
+            finally { fields.Clear(); if (fields.Capacity <= 64) t_fields = fields; }
+        }
+        private HpackField[] DecodeEntries(List<HpackField> fields)
+        {
             var cursor = _fieldsOffset;
             var remaining = _maximumDecodedBytes;
             var largest = -1L;

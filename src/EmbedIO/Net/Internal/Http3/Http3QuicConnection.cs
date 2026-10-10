@@ -24,12 +24,19 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Func<Http3QuicExchange, Task> _dispatch;
         private readonly CancellationTokenSource _stop;
         private readonly CancellationToken _token;
+        // _sync guards stream workers, request admission and drain state.
+        // QPACK decoding and response encoding each have their own gate, so
+        // sibling streams do not serialize field coding behind admission.
         private readonly object _sync = new();
+        private readonly object _decoderSync = new();
+        private readonly object _encoderSync = new();
         private readonly Dictionary<long, Task> _workers = new();
-        private readonly Dictionary<long, QuicStream> _requests = new();
+        private readonly Dictionary<long, RequestScope> _requests = new();
         private readonly HashSet<long> _admitted = new();
         private readonly Http3PriorityState _priorities = new(256);
         private readonly Dictionary<long, TaskCompletionSource<HpackField[]>> _pending = new();
+        private readonly CancellationTokenRegistration _stopRequests;
+        private readonly bool _dispatchInline;
         private readonly QpackDecoder _decoder = new(4096, 16, 65536, 65536, 1048576, 65536);
         private readonly QpackEncoderFeedback _encoderFeedback = new(256, 4096);
         private readonly QpackResponseEncoder _responseEncoder;
@@ -47,12 +54,18 @@ namespace EmbedIO.Net.Internal.Http3
         private long _highestRequestId = -4;
 
         private Http3QuicConnection(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token)
+            : this(connection, dispatch, token, false) { }
+        private Http3QuicConnection(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token, bool dispatchInline)
         {
             _connection = new BorrowedResource<QuicConnection>(connection);
             _dispatch = dispatch;
+            _dispatchInline = dispatchInline;
             _responseEncoder = new QpackResponseEncoder(_encoderFeedback, 4096, 65536);
             _stop = CancellationTokenSource.CreateLinkedTokenSource(token);
             _token = _stop.Token;
+            // One registration fans connection cancellation out to every active
+            // request. Per-request linked sources would all contend on this token.
+            _stopRequests = _token.UnsafeRegister(static state => (state as Http3QuicConnection)?.CancelActiveRequests(), this);
         }
         internal static async Task RunAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token)
         {
@@ -62,15 +75,24 @@ namespace EmbedIO.Net.Internal.Http3
             using (var session = new Http3QuicConnection(connection, dispatch, token))
                 await session.RunCoreAsync().ConfigureAwait(false);
         }
-        internal static async Task RunWithDrainAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch,
+        internal static Task RunWithDrainAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch,
             CancellationToken abortToken, CancellationToken drainToken, TimeSpan drainTimeout)
+            => RunWithDrainCoreAsync(connection, dispatch, abortToken, drainToken, drainTimeout, false);
+        // The listener's dispatch only builds a context and queues it; it never
+        // blocks before returning its task, so it may run on the stream worker
+        // instead of paying a second thread-pool hop per request.
+        internal static Task RunForListenerAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch,
+            CancellationToken abortToken, CancellationToken drainToken, TimeSpan drainTimeout)
+            => RunWithDrainCoreAsync(connection, dispatch, abortToken, drainToken, drainTimeout, true);
+        private static async Task RunWithDrainCoreAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch,
+            CancellationToken abortToken, CancellationToken drainToken, TimeSpan drainTimeout, bool dispatchInline)
         {
             if (connection == null) throw new ArgumentNullException(nameof(connection));
             if (dispatch == null) throw new ArgumentNullException(nameof(dispatch));
             if (drainTimeout <= TimeSpan.Zero || drainTimeout.TotalMilliseconds > uint.MaxValue - 1)
                 throw new ArgumentOutOfRangeException(nameof(drainTimeout));
             await using (connection.ConfigureAwait(false))
-            using (var session = new Http3QuicConnection(connection, dispatch, abortToken))
+            using (var session = new Http3QuicConnection(connection, dispatch, abortToken, dispatchInline))
             {
                 session._drainToken = drainToken;
                 session._drainTimeout = drainTimeout;
@@ -104,8 +126,17 @@ namespace EmbedIO.Net.Internal.Http3
                         // Register under the tracking gate before a worker can finish.
                         if (!rejected)
                         {
-                            if ((stream.Id & 3) == 0) { _priorities.Open(stream.Id); _requests.Add(stream.Id, stream); }
-                            _workers.Add(stream.Id, Task.Run(() => ProcessStreamAsync(stream)));
+                            RequestScope? scope = null;
+                            if ((stream.Id & 3) == 0)
+                            {
+                                _priorities.Open(stream.Id);
+                                scope = new RequestScope(this, stream);
+                                _requests.Add(stream.Id, scope);
+                                // CancelActiveRequests may already have taken its snapshot.
+                                if (_token.IsCancellationRequested) scope.Stop.Cancel();
+                            }
+                            // The worker yields to the thread pool before any stream work.
+                            _workers.Add(stream.Id, ProcessStreamAsync(stream, scope));
                         }
                     }
                     if (rejected)
@@ -125,7 +156,7 @@ namespace EmbedIO.Net.Internal.Http3
                 try
                 {
                     CancelRequests(_stop);
-                    lock (_sync)
+                    lock (_decoderSync)
                     {
                         foreach (var pending in _pending.Values) pending.TrySetCanceled(_token);
                         _pending.Clear();
@@ -167,7 +198,7 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     _draining = true;
                     cutoff = _highestRequestId + 4;
-                    unprocessed = _requests.Where(item => !_admitted.Contains(item.Key)).Select(item => item.Value).ToArray();
+                    unprocessed = _requests.Where(item => !_admitted.Contains(item.Key)).Select(item => item.Value.Stream).ToArray();
                     accepted = _workers.Where(item => (item.Key & 3) == 0).Select(item => item.Value).ToArray();
                 }
                 foreach (var request in unprocessed) AbortStream(request, 0x10b);
@@ -192,16 +223,19 @@ namespace EmbedIO.Net.Internal.Http3
             { if (!_token.IsCancellationRequested) Fail(error); }
             finally { CancelRequests(_stop); }
         }
-        private async Task ProcessStreamAsync(QuicStream stream)
+        private async Task ProcessStreamAsync(QuicStream stream, RequestScope? scope)
         {
             var critical = false;
             var streamId = stream.Id;
+            // Leave the accept loop at once. Yielding queues this state machine
+            // itself, without the closure and wrapper tasks of Task.Run.
+            await Task.Yield();
             try
             {
                 if (stream.Type == QuicStreamType.Bidirectional)
                 {
-                    if ((stream.Id & 3) != 0) throw new Http3ProtocolException(0x103, "Invalid request stream initiator.");
-                    await ProcessRequestAsync(stream).ConfigureAwait(false);
+                    if (scope == null) throw new Http3ProtocolException(0x103, "Invalid request stream initiator.");
+                    await ProcessRequestAsync(stream, scope).ConfigureAwait(false);
                 }
                 else
                 {
@@ -238,7 +272,14 @@ namespace EmbedIO.Net.Internal.Http3
             }
             finally
             {
-                if ((streamId & 3) == 0) { CancelDecode(streamId); _priorities.Close(streamId); }
+                if ((streamId & 3) == 0)
+                {
+                    // RFC 9204 section 4.4.2: Stream Cancellation is for reset or
+                    // abandoned input. A stream read to its FIN has no section left
+                    // to decode, and every decoded section was already acknowledged.
+                    if (scope?.InputComplete != true) CancelDecode(streamId);
+                    _priorities.Close(streamId);
+                }
                 try { await stream.DisposeAsync().ConfigureAwait(false); }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
                 { if (!_token.IsCancellationRequested) Fail(error); }
@@ -248,16 +289,16 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
         }
-        private async Task ProcessRequestAsync(QuicStream stream)
+        private async Task ProcessRequestAsync(QuicStream stream, RequestScope scope)
         {
-            using var requestStop = CancellationTokenSource.CreateLinkedTokenSource(_token);
+            var requestStop = scope.Stop;
             var requestToken = requestStop.Token;
             // FIN is a successful half-close. Only faulted direction completion
             // cancels the request; this observes resets even while QPACK is blocked.
-            var directionsStopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var directionStopRegistration = requestToken.Register(() => directionsStopped.TrySetResult());
-            var reads = WatchRequestDirectionAsync(stream.ReadsClosed, requestStop, directionsStopped.Task);
-            var writes = WatchRequestDirectionAsync(stream.WritesClosed, requestStop, directionsStopped.Task);
+            var reads = stream.ReadsClosed;
+            var writes = stream.WritesClosed;
+            WatchRequestDirection(reads, requestStop);
+            WatchRequestDirection(writes, requestStop);
             try
             {
                 var reader = new Http3RequestStream(stream.Id, stream, 65536, long.MaxValue);
@@ -267,12 +308,8 @@ namespace EmbedIO.Net.Internal.Http3
                 try { request = Http2RequestHeaders.Parse(new Http2HeaderBlock(0, false, fields, 0), true); }
                 catch (Http2ProtocolException error) { throw new Http3StreamException(stream.Id, 0x10e, error.Message); }
                 reader.ConfirmHeaders(request.ContentLength);
-                _priorities.Headers(stream.Id, request.Headers["priority"]);
-                using var exchange = new Http3QuicExchange(stream, reader, request,
-                    (wire, token) => DecodeRequestAsync(stream.Id, wire, token, requestToken),
-                    fields => EncodeResponse(stream.Id, fields),
-                    error => RequestFailed(stream, error), requestToken)
-                { PriorityState = _priorities.Get(stream.Id) };
+                using var exchange = new Http3QuicExchange(stream, reader, request, scope, requestToken)
+                { PriorityState = _priorities.Headers(stream.Id, request.Headers["priority"]) };
                 lock (_sync)
                 {
                     if (_draining) throw new Http3StreamException(stream.Id, 0x10b, "Request arrived during connection drain.");
@@ -285,7 +322,7 @@ namespace EmbedIO.Net.Internal.Http3
                     Interlocked.Decrement(ref _applicationCount);
                     throw new Http3StreamException(stream.Id, 0x107, "Too many outstanding application callbacks.");
                 }
-                var application = Task.Run(() => DispatchApplicationAsync(exchange, requestToken));
+                var application = DispatchApplicationAsync(exchange, requestToken);
                 try { await application.WaitAsync(requestToken).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (requestToken.IsCancellationRequested)
                 {
@@ -297,7 +334,18 @@ namespace EmbedIO.Net.Internal.Http3
                     throw;
                 }
                 if (!exchange.Ended) await exchange.CompleteAsync(requestToken).ConfigureAwait(false);
-                if (!exchange.Body.Ended) stream.Abort(QuicAbortDirection.Read, 0x100);
+                // Most bodiless requests carry FIN with their HEADERS. Consuming an
+                // already received end avoids STOP_SENDING and a QPACK Stream
+                // Cancellation; unread or still-arriving input is abandoned as before.
+                if (exchange.Body.TryEndWithoutWaiting(out var abandoned)) scope.InputComplete = true;
+                else
+                {
+                    stream.Abort(QuicAbortDirection.Read, 0x100);
+                    // The abort (or stream disposal) completes an abandoned read.
+                    _ = abandoned?.ContinueWith(static completed => { _ = completed.Exception; },
+                        CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
+                }
                 if (exchange.CloseConnectionAfterResponse) _applicationDrain.Cancel();
             }
             catch (OperationCanceledException) when (requestToken.IsCancellationRequested)
@@ -305,26 +353,45 @@ namespace EmbedIO.Net.Internal.Http3
             finally
             {
                 CancelRequests(requestStop);
-                await Task.WhenAll(reads, writes).ConfigureAwait(false);
+                var unexpected = UnexpectedDirectionFault(reads, requestStop) ?? UnexpectedDirectionFault(writes, requestStop);
+                if (unexpected != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(unexpected).Throw();
             }
         }
         private async Task DispatchApplicationAsync(Http3QuicExchange exchange, CancellationToken token)
         {
             try
             {
+                // Isolate even callbacks that block before returning their Task,
+                // unless the dispatcher is the listener's known non-blocking one.
+                if (!_dispatchInline) await Task.Yield();
                 token.ThrowIfCancellationRequested();
                 await _dispatch(exchange).ConfigureAwait(false);
             }
             finally { Interlocked.Decrement(ref _applicationCount); }
         }
-        private static async Task WatchRequestDirectionAsync(Task completion, CancellationTokenSource requestStop, Task stopped)
+        // Observes one transport direction for the request's lifetime with a single
+        // continuation, instead of a watcher task per direction. FIN is a normal
+        // half-close; a QUIC fault (peer reset, STOP_SENDING, connection loss)
+        // cancels the request. The source is never disposed, so a continuation
+        // that runs after the request ended only repeats an earlier cancellation.
+        internal static void WatchRequestDirection(Task direction, CancellationTokenSource requestStop)
         {
-            // Stopping observation is a normal request-lifetime transition. It
-            // must not throw merely because the peer has not acknowledged FIN.
-            if (!completion.IsCompleted && await Task.WhenAny(completion, stopped).ConfigureAwait(false) != completion) return;
-            try { await completion.ConfigureAwait(false); }
-            catch (OperationCanceledException) when (requestStop.IsCancellationRequested) { }
-            catch (QuicException) { CancelRequests(requestStop); }
+            if (direction.IsCompleted) { ObserveDirection(direction, requestStop); return; }
+            direction.ConfigureAwait(false).GetAwaiter().UnsafeOnCompleted(() => ObserveDirection(direction, requestStop));
+        }
+        private static void ObserveDirection(Task direction, CancellationTokenSource requestStop)
+        {
+            if (direction.IsFaulted && direction.Exception?.InnerException is QuicException) CancelRequests(requestStop);
+        }
+        // A completed direction that failed in some other way is reported to the
+        // stream owner when the request ends, as an awaited watcher would have.
+        internal static Exception? UnexpectedDirectionFault(Task direction, CancellationTokenSource requestStop)
+        {
+            if (!direction.IsCompleted || direction.IsCompletedSuccessfully) return null;
+            if (direction.IsCanceled) return requestStop.IsCancellationRequested ? null : new TaskCanceledException(direction);
+            var error = direction.Exception?.InnerException;
+            if (error is QuicException || (error is OperationCanceledException && requestStop.IsCancellationRequested)) return null;
+            return error;
         }
         private async Task<HpackField[]> DecodeRequestAsync(long streamId, byte[] wire, CancellationToken caller, CancellationToken lifetime)
         {
@@ -336,12 +403,13 @@ namespace EmbedIO.Net.Internal.Http3
         private async Task<HpackField[]> DecodeAsync(long streamId, byte[] wire, CancellationToken token)
         {
             Task<HpackField[]> pending;
-            lock (_sync)
+            lock (_decoderSync)
             {
                 _token.ThrowIfCancellationRequested();
                 token.ThrowIfCancellationRequested();
                 var decoded = _decoder.Submit(streamId, wire);
-                SignalFeedback();
+                // Static-only sections produce no acknowledgment to send.
+                if (_decoder.HasFeedback) SignalFeedback();
                 if (decoded != null) return decoded;
                 var completion = new TaskCompletionSource<HpackField[]>(TaskCreationOptions.RunContinuationsAsynchronously);
                 _pending.Add(streamId, completion);
@@ -351,13 +419,16 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private void CancelDecode(long streamId)
         {
-            lock (_sync)
+            Http3ProtocolException? failure = null;
+            lock (_decoderSync)
             {
                 if (_pending.Remove(streamId, out var pending)) pending.TrySetCanceled();
                 if (_token.IsCancellationRequested) return;
                 try { _decoder.Cancel(streamId); SignalFeedback(); }
-                catch (Http3ProtocolException error) { Fail(error); }
+                catch (Http3ProtocolException error) { failure = error; }
             }
+            // Connection cancellation runs request callbacks; never under the gate.
+            if (failure != null) Fail(failure);
         }
         private void SignalFeedback()
         { if (_feedbackReady.CurrentCount == 0) _feedbackReady.Release(); }
@@ -368,7 +439,7 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 var count = await stream.ReadAsync(bytes, _token).ConfigureAwait(false);
                 if (count == 0) throw new Http3ProtocolException(0x104, "QPACK encoder stream closed.");
-                lock (_sync)
+                lock (_decoderSync)
                 {
                     foreach (var ready in _decoder.FeedEncoder(bytes, 0, count))
                     {
@@ -406,7 +477,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private byte[] EncodeResponse(long streamId, HpackField[] fields)
         {
-            lock (_sync)
+            lock (_encoderSync)
             {
                 _token.ThrowIfCancellationRequested();
                 var peer = Volatile.Read(ref _peer);
@@ -433,7 +504,7 @@ namespace EmbedIO.Net.Internal.Http3
                     while (true)
                     {
                         byte[]? bytes;
-                        lock (_sync) bytes = _responseEncoder.DequeueInstructions();
+                        lock (_encoderSync) bytes = _responseEncoder.DequeueInstructions();
                         if (bytes == null) break;
                         await stream.WriteAsync(bytes, _token).ConfigureAwait(false);
                     }
@@ -458,7 +529,7 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     await _feedbackReady.WaitAsync(_token).ConfigureAwait(false);
                     byte[] bytes;
-                    lock (_sync) bytes = _decoder.DrainFeedback();
+                    lock (_decoderSync) bytes = _decoder.DrainFeedback();
                     if (bytes.Length != 0) await stream.WriteAsync(bytes, _token).ConfigureAwait(false);
                 }
             }
@@ -515,13 +586,35 @@ namespace EmbedIO.Net.Internal.Http3
                 error.Log("HTTP/3 connection", "Exception thrown by a request cancellation callback.");
             }
         }
+        private void CancelActiveRequests()
+        {
+            RequestScope[] active;
+            lock (_sync) active = _requests.Values.ToArray();
+            // Request callbacks run outside the tracking gate.
+            foreach (var scope in active) CancelRequests(scope.Stop);
+        }
+        // Per-request state owned by the connection. It also serves as the
+        // exchange's owner, so no per-request delegates capture the stream.
+        internal sealed class RequestScope : IHttp3ExchangeOwner
+        {
+            private readonly Http3QuicConnection _connection;
+            internal RequestScope(Http3QuicConnection connection, QuicStream stream) { _connection = connection; Stream = stream; }
+            internal QuicStream Stream { get; }
+            internal CancellationTokenSource Stop { get; } = new();
+            // Set by the request worker when its input was read to FIN.
+            internal bool InputComplete { get; set; }
+            public Task<HpackField[]> DecodeAsync(byte[] wire, CancellationToken token)
+                => _connection.DecodeRequestAsync(Stream.Id, wire, token, Stop.Token);
+            public byte[] Encode(HpackField[] fields) => _connection.EncodeResponse(Stream.Id, fields);
+            public void Failed(Exception error) => _connection.RequestFailed(Stream, error);
+        }
         private void Fail(Exception error)
         {
             if (_token.IsCancellationRequested) return;
             Interlocked.CompareExchange(ref _failure, error, null);
             CancelRequests(_stop);
         }
-        public void Dispose() { lock (_sync) { _responseEncoder.Clear(); _encoderFeedback.Abort(); } _encoderReady.Dispose(); _priorities.Clear(); _decoder.Dispose(); _feedbackReady.Dispose(); _applicationDrain.Dispose(); _stop.Dispose(); }
+        public void Dispose() { _stopRequests.Dispose(); lock (_encoderSync) { _responseEncoder.Clear(); _encoderFeedback.Abort(); } _encoderReady.Dispose(); _priorities.Clear(); _decoder.Dispose(); _feedbackReady.Dispose(); _applicationDrain.Dispose(); _stop.Dispose(); }
     }
 }
 #endif
