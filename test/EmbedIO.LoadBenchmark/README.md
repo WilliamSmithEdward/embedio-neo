@@ -107,6 +107,10 @@ the candidate. HTTP/3 uses QUIC-only listeners on both engines (`EmbedIOHttp3`).
 - `--profile` adds runtime event listeners (allocation ticks, contention, exceptions)
   and perturbs timing. Profile runs are separate from comparison runs.
 - QUIC connections are not visible to the socket-cleanup check.
+- macOS: .NET's `GetActiveTcpConnections` omits TIME_WAIT there, so the TIME_WAIT gate and
+  socket census parse `netstat -an -p tcp`. `HandleCount` and `PrivateMemorySize64` read 0, so
+  `handles` is the open file-descriptor count (`/dev/fd`) and private bytes is reported as
+  unavailable (null). In one check the host held at most 8,192 server-side TIME_WAIT entries.
 
 ## Comparing two modern engine revisions
 

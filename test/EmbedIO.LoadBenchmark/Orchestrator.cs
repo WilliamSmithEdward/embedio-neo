@@ -39,6 +39,9 @@ internal static class Orchestrator
         var profile = options.Has("--profile");
         var modernBaseline = options.Has("--modern-baseline") || options.Has("--baseline-all-protocols");
         var selected = SelectScenarios(options.Text("--scenarios", "all"));
+        if (selected.Any(scenario => scenario.Protocol == Protocol.Http3)
+            && !((OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) && System.Net.Quic.QuicListener.IsSupported))
+            throw new InvalidOperationException("HTTP/3 scenarios were selected but QUIC is unavailable (no loadable MsQuic). On macOS/Linux put libmsquic on DYLD_FALLBACK_LIBRARY_PATH / LD_LIBRARY_PATH, or exclude h3 scenarios.");
         var engineFilter = options.Optional("--engines")?.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
         var targets = new List<EngineTarget> { new("candidate", "embedio", candidate) };
@@ -411,6 +414,12 @@ internal static class Orchestrator
             ["runtime"] = RuntimeInformation.FrameworkDescription,
             ["runtimeDirectory"] = runtimeDirectory,
             ["processorTopology"] = SystemCpu.Topology(),
+            // HTTP/3 needs a loadable native MsQuic; macOS and Linux find it only on the library path.
+            ["quicSupported"] = OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()
+                ? System.Net.Quic.QuicListener.IsSupported : null,
+            ["libraryPath"] = new JsonObject(new[] { "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH" }
+                .Where(key => Environment.GetEnvironmentVariable(key) is not null)
+                .Select(key => KeyValuePair.Create(key, (JsonNode?)Environment.GetEnvironmentVariable(key)))),
             ["powerScheme"] = OperatingSystem.IsWindows() ? SystemCpu.Command("powercfg", "/getactivescheme") : null,
             ["powerSettings"] = OperatingSystem.IsMacOS()
                 ? string.Join("\n", SystemCpu.Command("pmset", "-g"), SystemCpu.Command("pmset", "-g batt"), SystemCpu.Command("pmset", "-g therm"))
