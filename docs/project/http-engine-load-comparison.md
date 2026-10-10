@@ -289,3 +289,74 @@ is `HttpClient`; in several Kestrel rows client CPU was 85-93%, so Kestrel may b
 faster than shown. Profiling used thread-time sampling, which includes runnable time
 on contended locks, not hardware CPU counters. The Speedscope attribution is per
 nearest EmbedIO caller and does not identify lock objects.
+
+## Post-integration small-request checkpoint
+
+This checkpoint measures frozen candidate `ae80537fa6c5b3d85235f4171e619f29374aacfc`
+against baseline `1445c238afea7d5a237088e8f19c7a4e84eb43f1` and Kestrel
+10.0.12. The candidate production source is byte-identical to engine integration
+`e52f829` and `6ca91d4`; it predates PR #210's higher-minor HTTP/1 processing.
+It is not a measurement of every subsequent engine head.
+
+The Windows host, CPU partition and runtime match the earlier campaign. Each
+sample used fresh server/client processes, five seconds of warmup and fifteen
+seconds of measurement, with two alternating rounds. The baseline loads the
+same harness with only the core assembly replaced. Responses are byte-validated.
+No failures were retried and no OS socket limits were changed.
+
+Artifact root: `TestResults/load-candidate-ae80537`. Preparation manifests record
+runner SHA-256 `4bab11108325ff746253affbcc6ddfd0074e3ca949e323bf16db2b98b2b9c7b7`,
+candidate core `025e7e48d36d711c6183b880c699492f38d63d3345fe38f5dc95502e8cb8e915`,
+and baseline core `a7eb20216af2ff7efbacb9c38537902340da62921791b626dc4d7343b40c17fc`.
+Raw samples, environment, full histograms and summaries are retained under
+`results-small-protocols` in the owned profiling worktree.
+
+There were **36 samples, 35 valid and one failed**. Kestrel's second close-after-100
+sample failed with a client SocketException reporting insufficient socket buffer
+or queue space. The exact cause is not established. Its remaining single sample
+must not be treated as a two-round comparison. All recorded post-run open server
+socket counts were zero. These short loopback runs do not establish soak behavior
+or a universal performance ranking.
+| Scenario | Engine | Valid/total | Requests/s median (min-max) | p50 ms | p99 ms | Server CPU us/req | Server B/req | Server CPU util | Client CPU util | Open server sockets after (max) | Handle growth (max) | Retained heap KB (max) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| h1-plain-small-c64 | candidate | 2/2 | 383,201 (382,549-383,853) | 0.113 | 0.947 | 20.2 | 7,914 | 97 % | 89 % | 0 | 7 | 95 |
+| h1-plain-small-c64 | baseline | 2/2 | 325,637 (323,970-327,303) | 0.117 | 0.979 | 22.9 | 10,331 | 93 % | 85 % | 0 | 28 | 99 |
+| h1-plain-small-c64 | kestrel | 2/2 | 478,678 (478,540-478,816) | 0.128 | 0.301 | 16.1 | 32 | 96 % | 94 % | 0 | 9 | 118 |
+| h1-plain-pipe16-c16 | candidate | 2/2 | 479,717 (479,083-480,350) | 0.277 | 0.778 | 16.2 | 7,550 | 97 % | 71 % | 0 | 7 | 91 |
+| h1-plain-pipe16-c16 | baseline | 2/2 | 419,567 (419,554-419,579) | 0.285 | 0.896 | 17.9 | 10,360 | 94 % | 71 % | 0 | 14 | 863 |
+| h1-plain-pipe16-c16 | kestrel | 2/2 | 4,174,176 (4,146,251-4,202,100) | 0.056 | 0.161 | 1.8 | 32 | 95 % | 88 % | 0 | 10 | 119 |
+| h1-plain-small-c64-close100 | candidate | 2/2 | 336,128 (335,929-336,326) | 0.117 | 1.082 | 22.1 | 8,011 | 93 % | 84 % | 0 | 6 | 115 |
+| h1-plain-small-c64-close100 | baseline | 2/2 | 324,710 (321,677-327,744) | 0.116 | 1.011 | 22.7 | 10,377 | 92 % | 82 % | 0 | 22 | 111 |
+| h1-plain-small-c64-close100 | kestrel | 1/2 | 400,278 (400,278-400,278) | 0.138 | 0.454 | 17.6 | 126 | 88 % | 88 % | 0 | 9 | 190 |
+| h1-tls-small-c64 | candidate | 2/2 | 363,864 (362,261-365,467) | 0.149 | 0.864 | 21.1 | 8,045 | 96 % | 90 % | 0 | 16 | 108 |
+| h1-tls-small-c64 | baseline | 2/2 | 165,650 (157,921-173,378) | 0.288 | 1.318 | 34.9 | 10,601 | 72 % | 56 % | 0 | 15 | 122 |
+| h1-tls-small-c64 | kestrel | 2/2 | 440,186 (439,885-440,487) | 0.135 | 0.490 | 17.4 | 32 | 96 % | 94 % | 0 | 5 | 227 |
+| h2-plain-small-c8x32 | candidate | 2/2 | 301,603 (301,217-301,988) | 0.627 | 3.635 | 25.6 | 13,508 | 97 % | 78 % | 0 | 4 | 110 |
+| h2-plain-small-c8x32 | kestrel | 2/2 | 1,707,514 (1,674,543-1,740,484) | 0.136 | 0.522 | 3.9 | 32 | 84 % | 88 % | 0 | 9 | 118 |
+| h2-tls-small-c8x32 | candidate | 2/2 | 245,299 (239,591-251,007) | 0.736 | 5.478 | 30.1 | 14,102 | 92 % | 74 % | 0 | 4 | 179 |
+| h2-tls-small-c8x32 | kestrel | 2/2 | 1,350,466 (1,333,238-1,367,693) | 0.165 | 0.701 | 5.4 | 42 | 90 % | 91 % | 0 | 4 | 224 |
+| h3-small-c8x32 | candidate | 2/2 | 165,032 (156,120-173,944) | 0.947 | 15.155 | 42.4 | 16,341 | 87 % | 55 % | 0 | 31 | 123 |
+| h3-small-c8x32 | kestrel | 2/2 | 307,163 (288,918-325,408) | 0.560 | 10.547 | 21.1 | 2,536 | 81 % | 68 % | 0 | 37 | 266 |
+
+The candidate improves on the pinned baseline in these rows, but the extreme
+performance objective remains unmet. Kestrel is approximately 8.7 times faster
+on pipelining, 5.7 times on plaintext HTTP/2, 5.5 times on TLS HTTP/2 and 1.9 times
+on small HTTP/3 responses. Allocation remains about 7.5-8.0 KB per small HTTP/1
+request and 13.5-14.1 KB per small HTTP/2 request.
+
+A separate one-round profiling campaign (`profile-pipe-h2`) ran candidate and
+Kestrel for plaintext pipelining and HTTP/2: four valid samples, zero failures.
+It preserves nettrace files, inclusive/exclusive reports and candidate Speedscope
+exports. Candidate throughput was 449,472 pipelined requests/s and 282,702 HTTP/2
+requests/s; Kestrel achieved 4,119,626 and 1,587,553 respectively. Profiling samples
+are separate from the sustained medians above.
+
+Socket sends, thread-pool continuations and Monitor contention appear prominently.
+Caller attribution identifies HTTP/1 connection read/completion and AsyncWriteGate,
+and HTTP/2 application dispatch and frame transport, among lock callers. The
+reports contain sleeping threads, and the attribution tool's idle classification
+is heuristic: its percentages are sampled thread time, not a measured fraction
+of process CPU. This evidence does not justify assigning all contention to the
+listener admission lock or claim that one small change will remove the gap.
+The next optimization requires focused attribution and before/after measurements
+while preserving framing, cancellation, explicit flush and graceful drain.
