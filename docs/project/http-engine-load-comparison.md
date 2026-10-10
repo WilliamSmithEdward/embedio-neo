@@ -391,3 +391,21 @@ The separate write-gate completed-task experiment reduced streaming allocation
 from approximately 31.6 KB to 27.1 KB/response but showed inconsistent throughput
 and no small-response allocation improvement. It is preserved as a development
 patch and is not included in the chunk-write prototype.
+
+Independent HTTP/1 validation of pushed source `ab0301d61b79a05afac9c1d1d740d78b879504f6`
+ran in the pinned Linux container with four CPUs and a 6 GiB memory limit, SDK
+10.0.401 and runtime 10.0.12. The loaded core SHA-256 was
+`82eba815932076736331df1d073f955a90884afbeb4063e5efd38ba10b69ac61`.
+The independent model reported 45 conforms, 12 permitted policy choices and no
+violations/errors. Seed 20261009 passed 2,000 stateful iterations: 5,029 valid
+requests, 473 invalid requests and 211 aborts. Handlers drained to zero; handles
+grew by two and managed memory by 2,097,832 bytes. This was the tooling's `self`
+mode, so client and server share a process; retained-memory figures cannot be
+assigned entirely to the engine. This short campaign is not soak evidence.
+Artifacts are under `TestResults/chunk-batch-conformance-linux`.
+
+The full local Windows suite discovered 4,475 cases: 4,469 passed, five expected
+skips and one failure in unchanged permanent-ban file replacement. That failure
+also reproduces with the frozen pre-change engine. Its Windows HRESULT is
+`0x80070497`; the underlying cause remains unconfirmed. No production persistence
+change, assertion weakening or quarantine is part of this prototype.
