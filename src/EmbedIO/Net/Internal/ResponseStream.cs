@@ -9,6 +9,12 @@ namespace EmbedIO.Net.Internal
 {
     internal class ResponseStream : Stream
     {
+        // An application write of at most this many body bytes is committed with one
+        // transport write that also carries its chunk framing; the first write of a
+        // response carries the response head as well. Larger writes send the body
+        // directly from the caller's buffer after a bounded merged prefix, so the
+        // pooled copy never exceeds this bound plus the head and framing.
+        private const int BatchedBodyBound = 65536;
         private static readonly byte[] CrLf = { 13, 10 };
         private readonly object _headersSyncRoot = new();
         private readonly EmbedIO.Internal.AsyncWriteGate _asyncWriteLock = new();
@@ -90,53 +96,59 @@ namespace EmbedIO.Net.Internal
             {
                 buffer = Array.Empty<byte>(); offset = 0; count = 0;
             }
-            using var headers = GetHeaders(false, count);
+            // Framing is decided while the head is prepared; read it afterwards.
+            using var headers = GetHeaders(false, 0);
             var chunked = _response.SendChunked && !_response.SuppressesBody;
             var hasBody = count > 0;
-            if (headers == null && chunked && hasBody && count <= 65536)
+            if (headers != null)
+            {
+                var head = headers.GetBuffer();
+                var headStart = (int)headers.Position;
+                var headLength = (int)(headers.Length - headStart);
+                if (!hasBody)
+                {
+                    await InternalWriteAsync(head, headStart, headLength, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                if (headLength <= BatchedBodyBound)
+                {
+                    var segment = RentFirstSegment(head, headStart, headLength, buffer, offset, count, chunked, out var length, out var prefix);
+                    try
+                    {
+                        await InternalWriteAsync(segment, 0, length, cancellationToken).ConfigureAwait(false);
+                    }
+                    finally { ReturnCleared(segment, length); }
+                    if (prefix == count) return;
+                    await InternalWriteAsync(buffer, offset + prefix, count - prefix, cancellationToken).ConfigureAwait(false);
+                    if (chunked)
+                        await InternalWriteAsync(CrLf, 0, CrLf.Length, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                // An oversized head is sent alone; the body follows as an ordinary write.
+                await InternalWriteAsync(head, headStart, headLength, cancellationToken).ConfigureAwait(false);
+            }
+            if (!hasBody) return;
+            if (!chunked)
+            {
+                await InternalWriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            if (count <= BatchedBodyBound)
             {
                 // Bound the copy while committing this application write immediately.
                 // The local lease remains owned until transport completion or failure.
-                var size = GetChunkSizeBytes(count, false);
-                var length = size.Length + count + CrLf.Length;
-                var chunk = ArrayPool<byte>.Shared.Rent(length);
+                var segment = RentChunkSegment(buffer, offset, count, out var length);
                 try
                 {
-                    Buffer.BlockCopy(size, 0, chunk, 0, size.Length);
-                    Buffer.BlockCopy(buffer, offset, chunk, size.Length, count);
-                    Buffer.BlockCopy(CrLf, 0, chunk, size.Length + count, CrLf.Length);
-                    await InternalWriteAsync(chunk, 0, length, cancellationToken).ConfigureAwait(false);
+                    await InternalWriteAsync(segment, 0, length, cancellationToken).ConfigureAwait(false);
                 }
-                finally { ArrayPool<byte>.Shared.Return(chunk, true); }
+                finally { ReturnCleared(segment, length); }
                 return;
             }
-            if (headers != null)
-            {
-                var start = headers.Position;
-                headers.Position = headers.Length;
-                if (chunked && hasBody)
-                {
-                    var size = GetChunkSizeBytes(count, false);
-                    headers.Write(size, 0, size.Length);
-                }
-
-                var prefixCount = Math.Min(count, Math.Max(0, 16384 - (int)(headers.Length - start)));
-                headers.Write(buffer, offset, prefixCount);
-                await InternalWriteAsync(headers.GetBuffer(), (int)start, (int)(headers.Length - start), cancellationToken)
-                    .ConfigureAwait(false);
-                offset += prefixCount;
-                count -= prefixCount;
-            }
-            else if (chunked && hasBody)
-            {
-                var size = GetChunkSizeBytes(count, false);
-                await InternalWriteAsync(size, 0, size.Length, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (count > 0)
-                await InternalWriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
-            if (chunked && hasBody)
-                await InternalWriteAsync(CrLf, 0, CrLf.Length, cancellationToken).ConfigureAwait(false);
+            var size = GetChunkSizeBytes(count, false);
+            await InternalWriteAsync(size, 0, size.Length, cancellationToken).ConfigureAwait(false);
+            await InternalWriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+            await InternalWriteAsync(CrLf, 0, CrLf.Length, cancellationToken).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -153,44 +165,54 @@ namespace EmbedIO.Net.Internal
                 buffer = Array.Empty<byte>(); offset = 0; count = 0;
             }
 
-            byte[] bytes;
-            var ms = GetHeaders(false, count);
+            using var headers = GetHeaders(false, 0);
             var chunked = _response.SendChunked && !_response.SuppressesBody;
             var hasBody = count > 0;
-
-            if (ms != null)
+            if (headers != null)
             {
-                var start = ms.Position; // After the possible preamble for the encoding
-                ms.Position = ms.Length;
-                if (chunked && hasBody)
+                var head = headers.GetBuffer();
+                var headStart = (int)headers.Position;
+                var headLength = (int)(headers.Length - headStart);
+                if (!hasBody)
                 {
-                    bytes = GetChunkSizeBytes(count, false);
-                    ms.Write(bytes, 0, bytes.Length);
+                    InternalWrite(head, headStart, headLength);
+                    return;
                 }
-
-                var newCount = Math.Min(count, Math.Max(0, 16384 - (int)ms.Position + (int)start));
-                ms.Write(buffer, offset, newCount);
-                count -= newCount;
-                offset += newCount;
-                InternalWrite(ms.GetBuffer(), (int)start, (int)(ms.Length - start));
-                ms.SetLength(0);
-                ms.Capacity = 0; // 'dispose' the buffer in ms.
+                if (headLength <= BatchedBodyBound)
+                {
+                    var segment = RentFirstSegment(head, headStart, headLength, buffer, offset, count, chunked, out var length, out var prefix);
+                    try
+                    {
+                        InternalWrite(segment, 0, length);
+                    }
+                    finally { ReturnCleared(segment, length); }
+                    if (prefix == count) return;
+                    InternalWrite(buffer, offset + prefix, count - prefix);
+                    if (chunked) InternalWrite(CrLf, 0, CrLf.Length);
+                    return;
+                }
+                InternalWrite(head, headStart, headLength);
             }
-            else if (chunked && hasBody)
-            {
-                bytes = GetChunkSizeBytes(count, false);
-                InternalWrite(bytes, 0, bytes.Length);
-            }
-
-            if (count > 0)
+            if (!hasBody) return;
+            if (!chunked)
             {
                 InternalWrite(buffer, offset, count);
+                return;
             }
-
-            if (chunked && hasBody)
+            if (count <= BatchedBodyBound)
             {
-                InternalWrite(CrLf, 0, 2);
+                var segment = RentChunkSegment(buffer, offset, count, out var length);
+                try
+                {
+                    InternalWrite(segment, 0, length);
+                }
+                finally { ReturnCleared(segment, length); }
+                return;
             }
+            var size = GetChunkSizeBytes(count, false);
+            InternalWrite(size, 0, size.Length);
+            InternalWrite(buffer, offset, count);
+            InternalWrite(CrLf, 0, CrLf.Length);
         }
 
         /// <inheritdoc />
@@ -307,21 +329,79 @@ namespace EmbedIO.Net.Internal
             _response.Close();
         }
 
-        private static byte[] GetChunkSizeBytes(int size, bool final)
+        // One transport segment for the first write: head, chunk-size line, up to
+        // BatchedBodyBound body bytes and, when the whole body fits, its chunk CRLF.
+        // The caller sends any remaining body bytes directly and ends the chunk.
+        private static byte[] RentFirstSegment(byte[] head, int headStart, int headLength,
+            byte[] buffer, int offset, int count, bool chunked, out int length, out int prefix)
+        {
+            prefix = Math.Min(count, BatchedBodyBound);
+            var complete = prefix == count;
+            length = headLength + prefix + (chunked ? GetChunkPrefixLength(count) + (complete ? CrLf.Length : 0) : 0);
+            var segment = ArrayPool<byte>.Shared.Rent(length);
+            Buffer.BlockCopy(head, headStart, segment, 0, headLength);
+            var position = headLength;
+            if (chunked) position += WriteChunkPrefix(segment, position, count);
+            Buffer.BlockCopy(buffer, offset, segment, position, prefix);
+            position += prefix;
+            if (chunked && complete)
+            {
+                segment[position] = 13;
+                segment[position + 1] = 10;
+            }
+            return segment;
+        }
+
+        // One transport segment for a subsequent chunk of at most BatchedBodyBound bytes.
+        private static byte[] RentChunkSegment(byte[] buffer, int offset, int count, out int length)
+        {
+            length = GetChunkPrefixLength(count) + count + CrLf.Length;
+            var segment = ArrayPool<byte>.Shared.Rent(length);
+            var position = WriteChunkPrefix(segment, 0, count);
+            Buffer.BlockCopy(buffer, offset, segment, position, count);
+            position += count;
+            segment[position] = 13;
+            segment[position + 1] = 10;
+            return segment;
+        }
+
+        // Only the bytes this stream wrote are cleared before the lease returns.
+        private static void ReturnCleared(byte[] segment, int length)
+        {
+            Array.Clear(segment, 0, length);
+            ArrayPool<byte>.Shared.Return(segment);
+        }
+
+        private static int GetHexDigitCount(int size)
+        {
+            var digits = 1;
+            for (var remaining = unchecked((uint)size) >> 4; remaining != 0; remaining >>= 4) digits++;
+            return digits;
+        }
+
+        private static int GetChunkPrefixLength(int size) => GetHexDigitCount(size) + CrLf.Length;
+
+        // Writes the lowercase hexadecimal size line, returning the bytes written.
+        private static int WriteChunkPrefix(byte[] target, int offset, int size)
         {
             var value = unchecked((uint)size);
-            var digits = 1;
-            for (var remaining = value >> 4; remaining != 0; remaining >>= 4) digits++;
-            var bytes = new byte[digits + (final ? 4 : 2)];
+            var digits = GetHexDigitCount(size);
             for (var index = digits - 1; index >= 0; index--)
             {
                 var digit = (int)(value & 15);
-                bytes[index] = (byte)(digit < 10 ? '0' + digit : 'a' + digit - 10);
+                target[offset + index] = (byte)(digit < 10 ? '0' + digit : 'a' + digit - 10);
                 value >>= 4;
             }
-            bytes[digits] = 13;
-            bytes[digits + 1] = 10;
-            if (final) { bytes[digits + 2] = 13; bytes[digits + 3] = 10; }
+            target[offset + digits] = 13;
+            target[offset + digits + 1] = 10;
+            return digits + CrLf.Length;
+        }
+
+        private static byte[] GetChunkSizeBytes(int size, bool final)
+        {
+            var bytes = new byte[GetChunkPrefixLength(size) + (final ? CrLf.Length : 0)];
+            var written = WriteChunkPrefix(bytes, 0, size);
+            if (final) { bytes[written] = 13; bytes[written + 1] = 10; }
             return bytes;
         }
 
