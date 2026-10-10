@@ -6,21 +6,33 @@ using EmbedIO.Net.Internal.Http2;
 
 namespace EmbedIO.Net.Internal.Http3
 {
+    // The connection-side owner of one request stream's field coding and errors.
+    internal interface IHttp3RequestOwner
+    {
+        // Decodes a later field section (trailers) within the request lifetime.
+        Task<HpackField[]> DecodeAsync(byte[] wire, CancellationToken token);
+        // Applies the stream or connection error scope of a request failure.
+        void Failed(Exception error);
+    }
+
+    internal interface IHttp3ExchangeOwner : IHttp3RequestOwner
+    {
+        byte[] Encode(HpackField[] fields);
+    }
+
     // Pull directly from the request's QUIC stream. No independent body queue
     // releases transport flow-control credit ahead of application consumption.
     internal sealed class Http3RequestBody : Stream
     {
         private readonly Http3RequestStream _reader;
         private readonly long _streamId;
-        private readonly Func<byte[], CancellationToken, Task<HpackField[]>> _decode;
-        private readonly Action<Exception> _failed;
+        private readonly IHttp3RequestOwner _owner;
         private bool _data;
         private bool _ended;
         private volatile bool _disposed;
         private int _reading;
-        internal Http3RequestBody(long streamId, Http3RequestStream reader,
-            Func<byte[], CancellationToken, Task<HpackField[]>> decode, Action<Exception> failed)
-        { _streamId = streamId; _reader = reader; _decode = decode; _failed = failed; }
+        internal Http3RequestBody(long streamId, Http3RequestStream reader, IHttp3RequestOwner owner)
+        { _streamId = streamId; _reader = reader; _owner = owner; }
         public override bool CanRead => !_disposed;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
@@ -52,15 +64,39 @@ namespace EmbedIO.Net.Internal.Http3
                     if (next.Kind == Http3RequestEventKind.Data) { _data = true; continue; }
                     if (next.Kind != Http3RequestEventKind.Trailers || next.EncodedFields == null)
                         throw new Http3ProtocolException(0x105, "Unexpected field section in request body.");
-                    var fields = await _decode(next.EncodedFields, cancellationToken).ConfigureAwait(false);
+                    var fields = await _owner.DecodeAsync(next.EncodedFields, cancellationToken).ConfigureAwait(false);
                     try { Http2RequestHeaders.ValidateTrailers(new Http2HeaderBlock(0, true, fields, 0)); }
                     catch (Http2ProtocolException error) { throw new Http3StreamException(_streamId, 0x10e, error.Message); }
                     _reader.ConfirmTrailers();
                     Trailers = fields;
                 }
             }
-            catch (Exception error) when (error is IOException or OperationCanceledException) { _failed(error); throw; }
+            catch (Exception error) when (error is IOException or OperationCanceledException) { _owner.Failed(error); throw; }
             finally { Volatile.Write(ref _reading, 0); }
+        }
+        // After the response, reports whether the input has ended, reading only
+        // what the transport has already received. It never waits for the peer:
+        // any DATA, trailer section, error or not-yet-arrived input returns false
+        // and the owner abandons the remaining input as before. A read that could
+        // not complete at once is returned as abandoned; the owner's read abort
+        // completes it, and the body stays unreadable afterwards.
+        internal bool TryEndWithoutWaiting(out Task? abandoned)
+        {
+            abandoned = null;
+            if (_ended) return true;
+            if (_disposed || _data) return false;
+            if (Interlocked.CompareExchange(ref _reading, 1, 0) != 0) return false;
+            var release = true;
+            try
+            {
+                var next = _reader.TryReadEventWithoutWaiting(out abandoned);
+                if (abandoned != null) { release = false; return false; }
+                if (next?.Kind != Http3RequestEventKind.End) return false;
+                _ended = true;
+                return true;
+            }
+            catch (Exception error) when (error is IOException or InvalidOperationException) { return false; }
+            finally { if (release) Volatile.Write(ref _reading, 0); }
         }
         protected override void Dispose(bool disposing) { _disposed = true; base.Dispose(disposing); }
         public override void Flush() { }

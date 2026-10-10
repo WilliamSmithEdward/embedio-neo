@@ -39,23 +39,29 @@ namespace EmbedIO.Net.Internal.Http3
             var entries = maximumTableCapacity / 32;
             if (required != 0 && entries == 0) throw new ArgumentException("Dynamic QPACK references require table capacity.", nameof(maximumTableCapacity));
             var encodedCount = required == 0 ? 0 : required % (2 * entries) + 1;
-            using var output = new MemoryStream(Math.Min(maximumEncodedBytes, 256));
-            Ensure(output, IntegerLength(encodedCount, 8) + 1, maximumEncodedBytes);
-            QpackInteger.Write(output, encodedCount, 8, 0);
-            output.WriteByte(0);
-            for (var i = 0; i < fields.Length; ++i)
+            var output = RentOutput();
+            byte[] wire;
+            try
             {
-                if (UseDynamic(fields[i], indices[i]))
+                Ensure(output, IntegerLength(encodedCount, 8) + 1, maximumEncodedBytes);
+                QpackInteger.Write(output, encodedCount, 8, 0);
+                output.WriteByte(0);
+                for (var i = 0; i < fields.Length; ++i)
                 {
-                    var relative = required - indices[i] - 1;
-                    Ensure(output, IntegerLength(relative, 6), maximumEncodedBytes);
-                    QpackInteger.Write(output, relative, 6, 128);
+                    if (UseDynamic(fields[i], indices[i]))
+                    {
+                        var relative = required - indices[i] - 1;
+                        Ensure(output, IntegerLength(relative, 6), maximumEncodedBytes);
+                        QpackInteger.Write(output, relative, 6, 128);
+                    }
+                    else WriteField(output, fields[i], maximumEncodedBytes);
                 }
-                else WriteField(output, fields[i], maximumEncodedBytes);
+                wire = output.ToArray();
             }
+            finally { ReturnOutput(output); }
             var owned = new long[references.Count];
             references.CopyTo(owned);
-            return new FieldSection(output.ToArray(), owned);
+            return new FieldSection(wire, owned);
         }
         private static bool UseDynamic(HpackField field, long index) => index >= 0 && !field.NeverIndexed
             && !Sensitive(field.Name) && !Exact.ContainsKey((field.Name, field.Value));

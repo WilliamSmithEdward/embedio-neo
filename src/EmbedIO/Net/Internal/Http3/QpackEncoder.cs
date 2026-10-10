@@ -23,11 +23,31 @@ namespace EmbedIO.Net.Internal.Http3
         internal static byte[] Encode(HpackField[] fields, int maximumEncodedBytes, int maximumDecodedBytes)
         {
             Validate(fields, maximumEncodedBytes, maximumDecodedBytes);
-            using var output = new MemoryStream(Math.Min(maximumEncodedBytes, 256));
-            output.WriteByte(0);
-            output.WriteByte(0);
-            foreach (var field in fields) WriteField(output, field, maximumEncodedBytes);
-            return output.ToArray();
+            var output = RentOutput();
+            try
+            {
+                output.WriteByte(0);
+                output.WriteByte(0);
+                foreach (var field in fields) WriteField(output, field, maximumEncodedBytes);
+                return output.ToArray();
+            }
+            finally { ReturnOutput(output); }
+        }
+        // Serialization is synchronous, so each thread reuses one scratch stream
+        // and only the exact field section is allocated per response.
+        [ThreadStatic] private static MemoryStream? t_output;
+        private static MemoryStream RentOutput()
+        {
+            var output = t_output ?? new MemoryStream(256);
+            t_output = null;
+            output.SetLength(0);
+            return output;
+        }
+        private static void ReturnOutput(MemoryStream output)
+        {
+            // Encoded fields (cookies included) must not linger in the scratch buffer.
+            Array.Clear(output.GetBuffer(), 0, (int)output.Length);
+            if (output.Capacity <= 4096) t_output = output;
         }
         private static void Validate(HpackField[] fields, int maximumEncodedBytes, int maximumDecodedBytes)
         {

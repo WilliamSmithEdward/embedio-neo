@@ -23,7 +23,7 @@ namespace EmbedIO.Tests
             }
             internal async Task<object> Next(CancellationToken token = default)
             {
-                var task = (Task?)Call("ReadEventAsync", token) ?? throw new AssertionException("Missing event task.");
+                var task = AsTask(Call("ReadEventAsync", token));
                 await task;
                 return task.GetType().GetProperty("Result")?.GetValue(task) ?? throw new AssertionException("Missing event.");
             }
@@ -31,8 +31,14 @@ namespace EmbedIO.Tests
             internal void Trailers() => Call("ConfirmTrailers");
             internal void Tunnel() => Call("EnterTunnel");
             internal Task<int> Data(byte[] bytes, CancellationToken token = default) =>
-                (Task<int>?)Call("ReadDataAsync", bytes, 0, bytes.Length, token) ?? throw new AssertionException("Missing DATA task.");
+                (Task<int>)AsTask(Call("ReadDataAsync", bytes, 0, bytes.Length, token));
             internal long Bytes => Property(_instance, "BodyBytes");
+            internal (object? Event, Task? Pending) TryWithoutWaiting()
+            {
+                var args = new object?[] { null };
+                var next = Call("TryReadEventWithoutWaiting", args);
+                return (next, (Task?)args[0]);
+            }
         }
         private static string Kind(object value) => value.GetType().GetProperty("Kind")?.GetValue(value)?.ToString() ?? throw new AssertionException("Missing kind.");
         private static byte[] Frame(long type, byte[]? payload = null)
@@ -250,6 +256,7 @@ namespace EmbedIO.Tests
 
         private sealed class HeadersThenPendingFin : MemoryStream
         {
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => ArrayRead(buffer, cancellationToken, ReadAsync);
             internal HeadersThenPendingFin() : base(new byte[] { 1, 2, 0, 0 }) { }
             internal TaskCompletionSource<bool> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal TaskCompletionSource<bool> Resume { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -274,6 +281,40 @@ namespace EmbedIO.Tests
             reader.Tunnel();
             source.Resume.TrySetResult(true);
             Assert.That(Kind(await pending), Is.EqualTo("End"));
+        }
+
+        // Returns the probe's event (null when it could not complete at once) and
+        // the read it left pending, if any.
+        private static (object? Event, Task? Pending) Probe(RequestReader reader) => reader.TryWithoutWaiting();
+
+        [TestCase("01020000", "End")]
+        [TestCase("010200000003616263", "Data")]
+        [TestCase("010200002100", "End")]
+        public async Task InputEndProbeUsesOnlyReceivedBytes(string wire, string expected)
+        {
+            // HEADERS, then FIN; DATA; or an unknown reserved frame (0x21) before FIN.
+            using var source = new FragmentedStream(Convert.FromHexString(wire), 4096);
+            var reader = new RequestReader(source);
+            Assert.That(Kind(await reader.Next()), Is.EqualTo("Headers"));
+            reader.Headers();
+            var (next, pending) = Probe(reader);
+            Assert.That(pending, Is.Null);
+            Assert.That(Kind(next ?? throw new AssertionException("Missing event.")), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public async Task InputEndProbeNeverWaitsForThePeer()
+        {
+            using var source = new HeadersThenPendingFin();
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var reader = new RequestReader(source);
+            await reader.Next(stop.Token); reader.Headers(0);
+            var (next, pending) = Probe(reader);
+            Assert.That(next, Is.Null, "A FIN that has not arrived is not waited for.");
+            var read = pending ?? throw new AssertionException("The unfinished read must be returned.");
+            Assert.That(read.IsCompleted, Is.False);
+            source.Resume.TrySetResult(true);
+            await read.WaitAsync(stop.Token);
         }
 
         [Test]

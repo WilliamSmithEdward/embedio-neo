@@ -262,7 +262,7 @@ namespace EmbedIO.Net.Internal.Http3
                 var remote = connection.RemoteEndPoint;
                 try
                 {
-                    await Http3QuicConnection.RunWithDrainAsync(connection, exchange => DispatchAsync(exchange, local, remote, prefixes),
+                    await Http3QuicConnection.RunForListenerAsync(connection, exchange => DispatchAsync(exchange, local, remote, prefixes),
                         _stop.Token, _drain.Token, TimeSpan.FromMilliseconds(uint.MaxValue - 1)).ConfigureAwait(false);
                 }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))

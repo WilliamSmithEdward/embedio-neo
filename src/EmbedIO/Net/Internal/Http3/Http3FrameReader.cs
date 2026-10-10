@@ -25,7 +25,7 @@ namespace EmbedIO.Net.Internal.Http3
     internal sealed class Http3FrameReader
     {
         private readonly BorrowedResource<Stream> _source;
-        private readonly byte[] _integer = new byte[8];
+        private readonly byte[] _integer = new byte[16];
         private long _remaining;
         private int _reading;
         private bool _failed;
@@ -42,44 +42,57 @@ namespace EmbedIO.Net.Internal.Http3
             if (_failed) { Volatile.Write(ref _reading, 0); throw new IOException("HTTP/3 stream input is no longer usable."); }
         }
 
-        internal async Task<Http3FrameHeader?> ReadHeaderAsync(CancellationToken token)
+        internal async ValueTask<Http3FrameHeader?> ReadHeaderAsync(CancellationToken token)
         {
             Enter(token);
             try
             {
                 if (_remaining != 0) throw new InvalidOperationException("Consume the current HTTP/3 frame before reading another header.");
                 if (_ended) return null;
-                var type = await ReadIntegerAsync(true, token).ConfigureAwait(false);
-                if (!type.HasValue) { _ended = true; return null; }
-                var length = await ReadIntegerAsync(false, token).ConfigureAwait(false)
-                    ?? throw new Http3ProtocolException(0x106, "Missing HTTP/3 frame length.");
+                // Every frame header has at least a one-byte type and a one-byte
+                // length. Each read asks only for bytes the header must still
+                // contain, so the payload stays in the transport.
+                var count = await ReadSourceAsync(_integer, 0, 2, token).ConfigureAwait(false);
+                if (count == 0) { _ended = true; return null; }
+                var typeLength = 1 << (_integer[0] >> 6);
+                count = await FillAsync(count, typeLength + 1, typeLength, token).ConfigureAwait(false);
+                var lengthLength = 1 << (_integer[typeLength] >> 6);
+                await FillAsync(count, typeLength + lengthLength, -1, token).ConfigureAwait(false);
+                var offset = 0;
+                var type = QuicInteger.Read(_integer, ref offset, typeLength);
+                var length = QuicInteger.Read(_integer, ref offset, typeLength + lengthLength);
                 _remaining = length;
-                return new Http3FrameHeader(type.Value, length);
+                return new Http3FrameHeader(type, length);
             }
             catch (Exception error) when (error is IOException or OperationCanceledException) { _failed = true; throw; }
             finally { Volatile.Write(ref _reading, 0); }
         }
 
-        private async Task<long?> ReadIntegerAsync(bool allowEnd, CancellationToken token)
+        // Reads until `required` header bytes are buffered. A stream that ends at
+        // `typeEnd`, after a complete type and before any length byte, has a
+        // truncated header; any other early end truncates an integer.
+        private async ValueTask<int> FillAsync(int count, int required, int typeEnd, CancellationToken token)
         {
-            var count = await _source.Value.ReadAsync(_integer, 0, 1, token).ConfigureAwait(false);
-            if (count == 0)
+            while (count < required)
             {
-                if (allowEnd) return null;
-                throw new Http3ProtocolException(0x106, "Truncated HTTP/3 frame header.");
-            }
-            var length = 1 << (_integer[0] >> 6);
-            while (count < length)
-            {
-                var read = await _source.Value.ReadAsync(_integer, count, length - count, token).ConfigureAwait(false);
-                if (read == 0) throw new Http3ProtocolException(0x106, "Truncated HTTP/3 frame integer.");
+                var read = await ReadSourceAsync(_integer, count, required - count, token).ConfigureAwait(false);
+                if (read == 0)
+                    throw new Http3ProtocolException(0x106, count == typeEnd ? "Truncated HTTP/3 frame header." : "Truncated HTTP/3 frame integer.");
                 count += read;
             }
-            var offset = 0;
-            return QuicInteger.Read(_integer, ref offset, length);
+            return count;
         }
 
-        internal async Task<int> ReadPayloadAsync(byte[] bytes, int offset, int count, CancellationToken token)
+        // The memory overload completes without allocating when the transport
+        // already holds data; the legacy target only has the array overload.
+        private ValueTask<int> ReadSourceAsync(byte[] bytes, int offset, int count, CancellationToken token)
+#if NET10_0_OR_GREATER
+            => _source.Value.ReadAsync(bytes.AsMemory(offset, count), token);
+#else
+            => new(_source.Value.ReadAsync(bytes, offset, count, token));
+#endif
+
+        internal async ValueTask<int> ReadPayloadAsync(byte[] bytes, int offset, int count, CancellationToken token)
         {
             if (bytes == null) throw new ArgumentNullException(nameof(bytes));
             if (offset < 0 || count < 0 || offset > bytes.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
@@ -89,16 +102,16 @@ namespace EmbedIO.Net.Internal.Http3
             finally { Volatile.Write(ref _reading, 0); }
         }
 
-        private async Task<int> ReadPayloadCoreAsync(byte[] bytes, int offset, int count, CancellationToken token)
+        private async ValueTask<int> ReadPayloadCoreAsync(byte[] bytes, int offset, int count, CancellationToken token)
         {
             if (_remaining == 0 || count == 0) return 0;
-            var read = await _source.Value.ReadAsync(bytes, offset, (int)Math.Min(count, _remaining), token).ConfigureAwait(false);
+            var read = await ReadSourceAsync(bytes, offset, (int)Math.Min(count, _remaining), token).ConfigureAwait(false);
             if (read == 0) throw new Http3ProtocolException(0x106, "Truncated HTTP/3 frame payload.");
             _remaining -= read;
             return read;
         }
 
-        internal async Task<byte[]> ReadBufferedPayloadAsync(int maximum, CancellationToken token)
+        internal async ValueTask<byte[]> ReadBufferedPayloadAsync(int maximum, CancellationToken token)
         {
             if (maximum < 0) throw new ArgumentOutOfRangeException(nameof(maximum));
             Enter(token);
@@ -114,7 +127,7 @@ namespace EmbedIO.Net.Internal.Http3
             finally { Volatile.Write(ref _reading, 0); }
         }
 
-        internal async Task SkipPayloadAsync(CancellationToken token)
+        internal async ValueTask SkipPayloadAsync(CancellationToken token)
         {
             Enter(token);
             byte[]? bytes = null;

@@ -125,7 +125,18 @@ internal static class Http3TransportFuzz
     {
         var operation = ReaderType.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Missing reader operation.");
-        var task = (Task)(operation.Invoke(reader, args) ?? throw new InvalidOperationException("Missing reader task."));
+        var pending = operation.Invoke(reader, args) ?? throw new InvalidOperationException("Missing reader operation.");
+        // The optimized reader uses ValueTask; the baseline uses Task. Consume
+        // each reflected operation once without changing the oracle or cases.
+        var task = pending switch
+        {
+            Task taskValue => taskValue,
+            ValueTask valueTask => valueTask.AsTask(),
+            _ when operation.ReturnType.IsGenericType && operation.ReturnType.GetGenericTypeDefinition() == typeof(ValueTask<>)
+                => (Task)(operation.ReturnType.GetMethod(nameof(ValueTask.AsTask), Type.EmptyTypes)?.Invoke(pending, null)
+                    ?? throw new InvalidOperationException("Missing ValueTask conversion.")),
+            _ => throw new InvalidOperationException("Unsupported reader operation type."),
+        };
         await task.ConfigureAwait(false);
         return task.GetType().GetProperty("Result")?.GetValue(task);
     }
