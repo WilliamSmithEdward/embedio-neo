@@ -86,6 +86,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task TrailersCannotFinishAnIncompleteDeclaredBody()
         {
+            var verified = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             await WithServer(async exchange =>
             {
                 ReserveResponseTrailers(exchange);
@@ -97,11 +98,13 @@ namespace EmbedIO.Tests
                 await SendResponseTrailers(exchange, "x-finish", "complete");
                 await Assert.ThatAsync(async () => await SendResponseTrailers(exchange, "x-repeat", "forbidden"),
                     Throws.InstanceOf<InvalidOperationException>());
+                verified.TrySetResult();
             }, async client =>
             {
                 using var response = await client.GetAsync("short-body");
                 Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.EqualTo(new byte[] { 1, 2, 3 }));
                 Assert.That(response.TrailingHeaders.GetValues("x-finish").Single(), Is.EqualTo("complete"));
+                await verified.Task.WaitAsync(TimeSpan.FromSeconds(5));
             });
         }
 
