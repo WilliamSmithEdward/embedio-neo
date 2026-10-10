@@ -181,7 +181,9 @@ All results are for the final source `f6e87fc` unless noted.
   visibility and non-blocking stream disposal. The four tests of new batching
   behavior fail against `4c531fe`, the two retirement cases and the disposal
   case fail against the source before their fixes, and the invariant tests pass
-  on both. The CI discovery floor stays at 4,469.
+  on both. After merging the engine branch at `3a45029`, the combined suite
+  discovered 4,508 tests (its floor is 4,497): 4,503 passed, 5 existing skips,
+  and 865 HTTP/2 and HTTP/3 cases passed.
 - Existing flow-control, SETTINGS-ordering, reset, framing, HPACK, interop,
   drain and HTTP/3 suites pass unchanged (863 HTTP/2 and HTTP/3 cases).
 - With the actual .NET Standard 2.0 core, 416 of 422 HTTP/2 cases pass. The six
