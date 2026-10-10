@@ -40,13 +40,27 @@ internal static class ListenerAllocations
             context.Response.Headers["X-Text"] = text;
             context.Response.Headers["X-Last"] = "tail";
             var expected = Encoding.UTF8.GetBytes($"HTTP/1.1 201 Created\r\nX-Text: {text}\r\nX-Last: tail\r\n\r\n");
-            var write = ((context.Response.GetType().GetMethod("WriteHeaders", PrivateInstance)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).CreateDelegate<Func<MemoryStream>>(context.Response);
+            var write = ((context.Response.GetType().GetMethod("WriteHeaders", PrivateInstance)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).CreateDelegate<Func<int, MemoryStream>>(context.Response);
             Measure("headers-" + size, () =>
             {
-                using var wire = write();
+                using var wire = write(0);
                 if (!wire.GetBuffer().AsSpan(0, (int)wire.Length).SequenceEqual(expected))
                     throw new InvalidOperationException("Header bytes changed.");
             }, size == 0 ? 1000 : size == 1024 ? 8500 : 105000);
+            var body = Encoding.ASCII.GetBytes("Hello, World!");
+            foreach (var reserve in new[] { false, true })
+            {
+                Measure("headers-" + size + "-first-body-13-" + (reserve ? "reserved" : "growth"), () =>
+                {
+                    using var wire = write(reserve ? body.Length : 0);
+                    if (!wire.GetBuffer().AsSpan(0, (int)wire.Length).SequenceEqual(expected))
+                        throw new InvalidOperationException("Header bytes changed.");
+                    wire.Position = wire.Length;
+                    wire.Write(body);
+                    if (!wire.GetBuffer().AsSpan((int)wire.Length - body.Length, body.Length).SequenceEqual(body))
+                        throw new InvalidOperationException("Body bytes changed.");
+                }, size == 0 ? 2000 : size == 1024 ? 17000 : 210000);
+            }
         }
         Console.WriteLine(JsonSerializer.Serialize(new
         {

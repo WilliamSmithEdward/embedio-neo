@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+- Reserve the bounded first-body prefix in managed HTTP/1 response-header buffers,
+  preserving framing and write boundaries while avoiding fitting-header growth.
 - Defer unused managed HTTP/1 query/item collections while preserving populated
   query initialization, stable mutable collections and request-local state.
 - Commit bounded asynchronous managed HTTP/1 chunks with one transport write,
