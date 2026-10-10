@@ -1,4 +1,4 @@
-# Modern HTTP engine program
+﻿# Modern HTTP engine program
 
 Release scope: William designated this modern engine program for **EmbedIO-Neo v2**
 on 2026-10-10. Maintain the [Neo v1 to v2 migration guide](../compatibility/neo-v1-to-v2.md)
@@ -7269,3 +7269,11 @@ rises by 32 once the shared floors are reconciled. Not addressed here: the
 synchronous terminator written when the pipeline closes a chunked response
 (`HttpConnection` closes synchronously), the write gate's task per write,
 batching across pipelined responses, and `NoDelay` on accepted sockets.
+
+The correction was subsequently reconciled with engine commit `1b70377` at
+`00d2640`. The coverage-enabled Windows run reports 4,986 cases: 4,981 passed,
+five expected skips and zero failures in 3m35s. The six discovery minimums are
+now 4,986. The prior Linux CI failure at `0abf879` was the explicit server
+disposal/accept race corrected by the engine's PR #261; fresh checks on the
+reconciled head remain required. This does not establish a correction for
+the separate HTTP/2 response/trailer loss or HTTP/3 TLS failures.
