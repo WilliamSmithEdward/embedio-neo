@@ -7038,3 +7038,24 @@ passed, five existing skips, zero failures, in 3m 23s. Locked restore, warning-f
 solution builds, whitespace, syntax and suppression guards pass. Hosted final-head
 acceptance remains required. Callback fault isolation and broader finalizer/ABI
 coverage remain open in the audit record.
+
+
+PR #231 is integrated into the development engine as 54f4c5c after all 35 checks
+passed or intentionally skipped on 33d65a6. The merged tree exactly matches the
+tested tree, d3d43df9459ddff2ec0ae9d1eed49bb15ebea8a3; the explicit squash message
+contains no AI co-author trailers. Its included audit tests/docs supersede #232,
+which is closed. Program #181 remains open, and application HTTP still uses the
+BCL QUIC provider. No release or main integration occurred.
+
+HTTP/2 drain investigation: the Windows failure on #234 recorded 221 handler
+entries but only 214 successful responses. The unchanged engine reproduced
+230 completed writes versus 217 responses without duplicate handling. A
+controlled regression proves that finishing the last application canceled a
+committed late-stream refusal write. Separate input cancellation and an output
+barrier make that case, five existing drain cases and a 100-iteration response
+preservation campaign pass. Combined acceptance reports 4805 Windows cases,
+4800 passed, five existing skips, zero failures, plus 493 passing Linux cases
+and six retained-asset cases on a .NET 10 host. The final GetStringAsync fixture
+also passes 100 drain iterations. Hosted final-head acceptance remains required;
+[HTTP/2 graceful output lifetime](http2-drain-output-lifetime.md) preserves the
+failures, exact mechanism, limits and validation scope.
