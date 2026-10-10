@@ -2,6 +2,9 @@
 using System.Net.Quic;
 using System.Net;
 using System.Net.Sockets;
+using System.Net.Security;
+using System.Runtime.Versioning;
+using System.Threading;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
@@ -250,5 +253,76 @@ namespace EmbedIO.Tests
             await Task.WhenAll(stops).WaitAsync(TimeSpan.FromSeconds(5));
             foreach (var stopped in stops) Assert.That(stopped, Is.SameAs(stops[0]));
         }
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task NativeAcceptedConnectionCompletesTlsAndShutdown(bool stopListenerFirst)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await ExerciseNativeHandshake(stopListenerFirst);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task ExerciseNativeHandshake(bool stopListenerFirst)
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var configuration = Configure(registration, new byte[] { (byte)'h', (byte)'3' });
+            using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
+            LoadServerCertificate(configuration, certificate);
+            using var listener = Listen(registration);
+            ListenerCall(listener, "EnableAcceptance");
+            ListenerCall(listener, "Start", new IPEndPoint(IPAddress.Loopback, 0), new byte[] { (byte)'h', (byte)'3' });
+            var endpoint = (IPEndPoint)ListenerCall(listener, "LocalEndPoint");
+            var connecting = QuicConnection.ConnectAsync(new QuicClientConnectionOptions
+            {
+                RemoteEndPoint = endpoint,
+                DefaultCloseErrorCode = 0x100,
+                DefaultStreamErrorCode = 0x10c,
+                ClientAuthenticationOptions = new SslClientAuthenticationOptions
+                {
+                    TargetHost = "localhost",
+                    ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
+                    RemoteCertificateValidationCallback = (_, peer, _, errors) => peer != null
+                        && (errors & ~SslPolicyErrors.RemoteCertificateChainErrors) == SslPolicyErrors.None
+                        && peer.GetCertHashString() == certificate.GetCertHashString(),
+                },
+            }, deadline.Token).AsTask();
+            var accept = (Task)ListenerCall(listener, "AcceptAsync", deadline.Token);
+            await accept.WaitAsync(deadline.Token);
+            using var connection = (SafeHandle)(accept.GetType().GetProperty("Result")?.GetValue(accept)
+                ?? throw new AssertionException("Missing accepted native connection."));
+            ListenerCall(connection, "Configure", configuration);
+            await using var peer = await connecting.WaitAsync(deadline.Token);
+            var ready = (Task)(connection.GetType().GetProperty("Connected", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(connection)
+                ?? throw new AssertionException("Missing handshake completion."));
+            await ready.WaitAsync(deadline.Token);
+            Assert.That(peer.NegotiatedApplicationProtocol, Is.EqualTo(new SslApplicationProtocol("h3")));
+            if (stopListenerFirst)
+            {
+                await ((Task)ListenerCall(listener, "StopAsync")).WaitAsync(deadline.Token);
+                listener.Dispose();
+            }
+            await ((Task)ListenerCall(connection, "ShutdownAsync", 0x100L)).WaitAsync(deadline.Token);
+            connection.Dispose();
+            Assert.That(connection.IsClosed, Is.True);
+        }
+        [Test]
+        public async Task NativeStopReleasesAPendingConnectionAccept()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var listener = Listen(registration);
+            ListenerCall(listener, "EnableAcceptance");
+            ListenerCall(listener, "Start", new IPEndPoint(IPAddress.Loopback, 0), new byte[] { 1 });
+            var pending = (Task)ListenerCall(listener, "AcceptAsync", CancellationToken.None);
+            Assert.That(pending.IsCompleted, Is.False);
+            await ((Task)ListenerCall(listener, "StopAsync")).WaitAsync(TimeSpan.FromSeconds(5));
+            await Assert.ThatAsync(async () => await pending.WaitAsync(TimeSpan.FromSeconds(5)),
+                Throws.InstanceOf<System.Threading.Channels.ChannelClosedException>());
+        }
+
     }
 }

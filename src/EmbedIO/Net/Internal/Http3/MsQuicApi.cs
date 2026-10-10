@@ -72,8 +72,11 @@ namespace EmbedIO.Net.Internal.Http3
             _configurationClose = Marshal.GetDelegateForFunctionPointer<CloseConfiguration>(Marshal.ReadIntPtr(table, 9 * IntPtr.Size));
             _loadCredential = Marshal.GetDelegateForFunctionPointer<LoadCredential>(Marshal.ReadIntPtr(table, 10 * IntPtr.Size));
             _listenerFunctions = new ListenerFunctions(table);
+            _connectionFunctions = new ConnectionFunctions(table);
             SetHandle(table);
         }
+
+        internal static bool Failed(uint status) => OperatingSystem.IsWindows() ? unchecked((int)status) < 0 : unchecked((int)status) > 0;
 
         internal static MsQuicApi Open()
         {
@@ -86,7 +89,7 @@ namespace EmbedIO.Net.Internal.Http3
                 var open = Marshal.GetDelegateForFunctionPointer<OpenApi>(NativeLibrary.GetExport(library, "MsQuicOpenVersion"));
                 close = Marshal.GetDelegateForFunctionPointer<CloseApi>(NativeLibrary.GetExport(library, "MsQuicClose"));
                 var status = open(2, out table);
-                if (status != 0) throw new IOException("MsQuic API initialization failed with status 0x" + status.ToString("X8"));
+                if (Failed(status)) throw new IOException("MsQuic API initialization failed with status 0x" + status.ToString("X8"));
                 if (table == IntPtr.Zero) throw new IOException("MsQuic returned an empty API table.");
                 return new MsQuicApi(library, table, close);
             }
@@ -106,7 +109,7 @@ namespace EmbedIO.Net.Internal.Http3
             try
             {
                 var status = _registrationOpen(IntPtr.Zero, out registration);
-                if (status != 0) throw new IOException("MsQuic registration failed with status 0x" + status.ToString("X8"));
+                if (Failed(status)) throw new IOException("MsQuic registration failed with status 0x" + status.ToString("X8"));
                 if (registration == IntPtr.Zero) throw new IOException("MsQuic returned an empty registration.");
                 var result = new MsQuicRegistration(registration, this, _registrationClose);
                 registration = IntPtr.Zero;
@@ -135,7 +138,7 @@ namespace EmbedIO.Net.Internal.Http3
                 buffer = Marshal.AllocHGlobal(Marshal.SizeOf<NativeBuffer>());
                 Marshal.StructureToPtr(new NativeBuffer { Length = (uint)alpn.Length, Bytes = pin.AddrOfPinnedObject() }, buffer, false);
                 var status = _configurationOpen(registration.DangerousGetHandle(), buffer, 1, IntPtr.Zero, 0, IntPtr.Zero, out configuration);
-                if (status != 0) throw new IOException("MsQuic configuration failed with status 0x" + status.ToString("X8"));
+                if (Failed(status)) throw new IOException("MsQuic configuration failed with status 0x" + status.ToString("X8"));
                 if (configuration == IntPtr.Zero) throw new IOException("MsQuic returned an empty configuration.");
                 var result = new MsQuicConfiguration(configuration, registration, _configurationClose);
                 configuration = IntPtr.Zero;
@@ -184,7 +187,7 @@ namespace EmbedIO.Net.Internal.Http3
                 credentials = Marshal.AllocHGlobal(Marshal.SizeOf<Credential>());
                 Marshal.StructureToPtr(input, credentials, false);
                 var status = _loadCredential(configuration.DangerousGetHandle(), credentials);
-                if (status != 0) throw new IOException("MsQuic server credential loading failed with status 0x" + status.ToString("X8"));
+                if (Failed(status)) throw new IOException("MsQuic server credential loading failed with status 0x" + status.ToString("X8"));
             }
             finally
             {
@@ -210,6 +213,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly MsQuicApi.CloseRegistration _close;
         internal MsQuicRegistration(IntPtr registration, MsQuicApi api, MsQuicApi.CloseRegistration close) : base(true)
         { _api = api; _close = close; SetHandle(registration); }
+        internal MsQuicNativeConnection AcceptConnection(IntPtr connection) => _api.AcceptConnection(this, connection);
         internal MsQuicNativeListener CreateListener() => _api.CreateListener(this);
         internal MsQuicConfiguration CreateConfiguration(byte[] alpn) => _api.CreateConfiguration(this, alpn);
         internal void LoadServerCertificate(MsQuicConfiguration configuration, X509Certificate2 certificate)
@@ -225,6 +229,7 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly object _credentialsSync = new();
         private bool _credentialsLoaded;
+        internal MsQuicRegistration Registration => _registration;
         private readonly MsQuicRegistration _registration;
         private readonly MsQuicApi.CloseConfiguration _close;
         internal MsQuicConfiguration(IntPtr configuration, MsQuicRegistration registration, MsQuicApi.CloseConfiguration close) : base(true)

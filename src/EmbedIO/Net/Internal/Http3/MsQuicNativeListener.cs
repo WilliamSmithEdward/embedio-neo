@@ -5,6 +5,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using System.Threading.Channels;
+using System.Threading;
 using Microsoft.Win32.SafeHandles;
 
 namespace EmbedIO.Net.Internal.Http3
@@ -62,7 +64,7 @@ namespace EmbedIO.Net.Internal.Http3
                     buffer = Marshal.AllocHGlobal(Marshal.SizeOf<NativeBuffer>());
                     Marshal.StructureToPtr(new NativeBuffer { Length = (uint)alpn.Length, Bytes = pin.AddrOfPinnedObject() }, buffer, false);
                     var status = _start(listener, buffer, 1, nativeAddress);
-                    if (status != 0) throw new IOException("MsQuic listener start failed with status 0x" + status.ToString("X8"));
+                    if (MsQuicApi.Failed(status)) throw new IOException("MsQuic listener start failed with status 0x" + status.ToString("X8"));
                 }
                 finally
                 {
@@ -78,7 +80,7 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     uint size = 28;
                     var status = _get(listener, 0x04000000, ref size, buffer);
-                    if (status != 0 || size > 28 || size < 16) throw new IOException("MsQuic listener address query failed.");
+                    if (MsQuicApi.Failed(status) || size > 28 || size < 16) throw new IOException("MsQuic listener address query failed.");
                     var address = new byte[28]; Marshal.Copy(buffer, address, 0, (int)size);
                     var family = OperatingSystem.IsMacOS() ? address[1] : BitConverter.ToUInt16(address, 0);
                     var port = (address[2] << 8) | address[3];
@@ -98,7 +100,7 @@ namespace EmbedIO.Net.Internal.Http3
             try
             {
                 var status = _listenerFunctions.Open(registration.DangerousGetHandle(), signals.Handler, IntPtr.Zero, out listener);
-                if (status != 0) throw new IOException("MsQuic listener creation failed with status 0x" + status.ToString("X8"));
+                if (MsQuicApi.Failed(status)) throw new IOException("MsQuic listener creation failed with status 0x" + status.ToString("X8"));
                 if (listener == IntPtr.Zero) throw new IOException("MsQuic returned an empty listener.");
                 var result = new MsQuicNativeListener(listener, registration, _listenerFunctions, signals);
                 listener = IntPtr.Zero; retained = false;
@@ -118,16 +120,22 @@ namespace EmbedIO.Net.Internal.Http3
         {
             internal readonly TaskCompletionSource Stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly MsQuicApi.ListenerFunctions.Callback Handler;
+            internal Func<IntPtr, uint>? Accept;
+            internal Action? StopAcceptance;
             internal Signals() { Handler = OnEvent; }
             private uint OnEvent(IntPtr listener, IntPtr context, IntPtr eventData)
             {
                 try
                 {
-                    if (Marshal.ReadInt32(eventData) == 1) Stopped.TrySetResult();
+                    if (Marshal.ReadInt32(eventData) == 1) { StopAcceptance?.Invoke(); Stopped.TrySetResult(); }
                     // Connection ownership is not implemented yet. Never accept a
                     // native handle without installing its callback and lifetime.
                     if (Marshal.ReadInt32(eventData) == 0)
+                    {
+                        var accept = Accept;
+                        if (accept != null) return accept(Marshal.ReadIntPtr(eventData, IntPtr.Size * 2));
                         return OperatingSystem.IsWindows() ? 0x80004004u : OperatingSystem.IsMacOS() ? 89u : 125u;
+                    }
                     return 0;
                 }
                 catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
@@ -141,6 +149,29 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly MsQuicRegistration _registration;
         private readonly MsQuicApi.ListenerFunctions _functions;
         private readonly Signals _signals;
+        private Channel<MsQuicNativeConnection>? _accepted;
+        internal void EnableAcceptance()
+        {
+            lock (_sync)
+            {
+                if (_started || IsClosed) throw new InvalidOperationException("Acceptance must be enabled before startup.");
+                if (_accepted != null) return;
+                var queue = Channel.CreateBounded<MsQuicNativeConnection>(256);
+                _accepted = queue;
+                _signals.StopAcceptance = () => queue.Writer.TryComplete();
+                _signals.Accept = connection =>
+                {
+                    if (Volatile.Read(ref _stopping)) return OperatingSystem.IsWindows() ? 0x80004004u : OperatingSystem.IsMacOS() ? 89u : 125u;
+                    var owned = _registration.AcceptConnection(connection);
+                    if (!queue.Writer.TryWrite(owned)) owned.Dispose();
+                    // Once the callback is installed, ownership belongs to us.
+                    // Even a full queue returns success after closing its accepted handle.
+                    return 0;
+                };
+            }
+        }
+        internal async Task<MsQuicNativeConnection> AcceptAsync(CancellationToken token)
+            => await (_accepted ?? throw new InvalidOperationException("Acceptance is not enabled.")).Reader.ReadAsync(token).ConfigureAwait(false);
         private bool _started;
         private bool _stopping;
         internal MsQuicNativeListener(IntPtr listener, MsQuicRegistration registration, MsQuicApi.ListenerFunctions functions, Signals signals) : base(true)
@@ -178,7 +209,14 @@ namespace EmbedIO.Net.Internal.Http3
         }
         protected override bool ReleaseHandle()
         {
-            try { _functions.Close(handle); _signals.Stopped.TrySetResult(); GC.KeepAlive(_signals); }
+            try
+            {
+                _functions.Close(handle);
+                _accepted?.Writer.TryComplete();
+                if (_accepted != null) while (_accepted.Reader.TryRead(out var pending)) pending.Dispose();
+                _signals.Stopped.TrySetResult();
+                GC.KeepAlive(_signals);
+            }
             finally { _registration.DangerousRelease(); }
             return true;
         }

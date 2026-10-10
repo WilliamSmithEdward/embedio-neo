@@ -6864,3 +6864,21 @@ Both library assets build without warnings and guards pass. These tests do not
 prove immediate UDP port release after stop, actual TLS handshakes, stream I/O,
 native datagrams, WebTransport or macOS lifecycle behavior. Discovery is 4721
 (base 4669 plus 33 framing and 19 native cases).
+
+Native connection acceptance is now opt-in within the internal listener. It
+installs a rooted callback before transferring ownership, queues at most 256
+unconfigured native connections, then applies server credentials after acceptance
+outside the listener callback. A full queue closes its accepted handle while
+returning native success, as required to avoid double-free rejection. Pending
+accepts are completed after native stop. Accepted connections own their parent
+registration and support handshake notification and shutdown completion.
+
+All 22 native cases pass on Windows and the pinned Linux runtime, including
+actual TLS/ALPN with a System.Net.Quic peer retaining hostname validation and leaf
+pinning, shutdown after listener disposal, and release of a pending accept. The
+first Windows handshake exposed incorrect treatment of the successful PENDING
+status; status classification now follows the documented Windows/POSIX ABI and
+the initial failure is retained. Native stream delivery is not implemented; peer
+streams are closed, and application HTTP/datagrams/WebTransport are not enabled.
+macOS connection validation and complete failure/resource coverage remain pending.
+This branch's floor is 4724 before integration with response PR 230.
