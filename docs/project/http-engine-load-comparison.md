@@ -563,3 +563,122 @@ latency gain. The prototype production code and new tests were preserved under
 ignored evidence and restored out of the working source. No default, API,
 dependency or discovery floor changed. The broader performance target remains
 unmet; connection write serialization/batching needs further investigation.
+
+## HTTP/1 response-write first-segment batching (2026-10-10)
+
+Candidate `a4a0d6c` on branch `codex/http1-response-write` (production change
+limited to `src/EmbedIO/Net/Internal/ResponseStream.cs`) against its exact base
+`a4f7105` (`codex/managed-http-engine`). `scripts/prepare_load_benchmark.py`
+built both cores into identical copies of one harness build, swapping only
+`EmbedIO.dll`. Runner SHA-256:
+`c0b72234e6162da96d4af80e937f1be26e8518af33d1d08103dbe1cdba8e14e6`; candidate core:
+`37a726cb7c1c456d48f57f9854c289ba1e4857caa6479cd3774bb3e19d3d3174`; baseline core:
+`bae1acd42c8dd7a7d0080f8bdd2aafea0af1fd27289a562d59ec9b6ce86eadd3`. Windows
+10.0.26300, .NET 10.0.12, AMD Ryzen 7 9800X3D (8 cores, 16 logical), Ultimate
+Performance scheme, server logical CPUs 0-7 and client 8-15, server GC for both.
+Fresh server and client processes per sample, engine order alternating by round,
+5 s warmup, 15 s measurement, 2 s idle before each resource snapshot, three
+rounds, every response byte validated, no retries. 66 samples, 0 failed, 0 open
+server sockets after every sample. Raw data: `TestResults/http1-response-write/cmp-*`
+in the branch worktree (per-sample JSON with full histograms, `environment.json`,
+`summary.json` and `summary.md`), the base-engine trace under `profile-base-stream`,
+and the component runs under `component2`.
+
+What changed: the first write of a response sends the head, the chunk-size line,
+the body (up to 64 KiB) and the chunk CRLF in one pooled transport write instead
+of up to three; bodies beyond 64 KiB still merge a 16 KiB prefix with the head
+and send the rest directly from the caller's buffer. The head buffer no longer
+reserves a fresh copy of the first body bytes. Subsequent bounded chunks format
+their size line in place and clear only the bytes they wrote; the synchronous
+write path batches bounded chunks the same way. Wire bytes are identical, and
+cancellation, `IgnoreWriteExceptions`, HEAD and bodyless suppression, trailers
+and disposal keep their behavior.
+
+Four scenarios were added to the harness for paths the existing list did not
+reach: `h1-plain-chunk13-c64` and `h1-tls-chunk13-c64` (`/stream/13/13`: one
+small chunked write, flush and terminator), `h1-plain-chunked1m-c16`
+(`/stream/1048576/1048576`: one chunked write above the batching bound) and
+`h1-tls-stream1m-c16`.
+
+| Scenario | Requests/s base -> candidate (ratio) | Server CPU us/req (ratio) | Server B/req (ratio) | p50 ms (ratio) | p99 ms (ratio) |
+| --- | --- | --- | --- | --- | --- |
+| 13 B chunked, 64 conn | 182,763 -> 240,842 (1.318) | 42.0 -> 31.5 (0.749) | 7,463 -> 7,336 (0.983) | 0.291 -> 0.177 (0.610) | 2.099 -> 1.843 (0.878) |
+| TLS 13 B chunked, 64 conn | 169,105 -> 224,119 (1.325) | 43.7 -> 33.2 (0.760) | 6,723 -> 7,481 (1.113) | 0.330 -> 0.243 (0.738) | 1.894 -> 1.459 (0.770) |
+| 1 MiB flushed per 16 KiB, 16 conn | 8,162 -> 8,682 (1.064) | 913.5 -> 876.8 (0.960) | 30,456 -> 12,274 (0.403) | 1.766 -> 1.715 (0.971) | 6.451 -> 5.171 (0.802) |
+| TLS 1 MiB flushed per 16 KiB | 4,527 -> 4,609 (1.018) | 1,657.6 -> 1,631.2 (0.984) | 30,478 -> 12,303 (0.404) | 3.277 -> 3.174 (0.969) | 7.680 -> 14.541 (1.893) |
+| 1 MiB fixed-length, 16 conn | 19,395 -> 19,676 (1.015) | 390.4 -> 386.4 (0.990) | 23,804 -> 7,676 (0.322) | 0.768 -> 0.761 (0.992) | 1.997 -> 1.843 (0.923) |
+| TLS 1 MiB fixed-length | 7,764 -> 8,011 (1.032) | 960.7 -> 961.9 (1.001) | 23,941 -> 7,798 (0.326) | 1.894 -> 1.894 (1.000) | 4.454 -> 4.198 (0.943) |
+| 1 MiB in one chunked write, 16 conn | 18,278 -> 18,489 (1.012) | 405.5 -> 408.6 (1.008) | 24,147 -> 8,002 (0.331) | 0.800 -> 0.787 (0.984) | 2.534 -> 2.560 (1.010) |
+| 13 B fixed-length, 64 conn | 369,887 -> 379,874 (1.027) | 20.5 -> 20.3 (0.990) | 7,122 -> 7,134 (1.002) | 0.117 -> 0.117 (1.000) | 0.986 -> 0.934 (0.948) |
+| 13 B fixed-length, closed after 100 | 317,872 -> 328,167 (1.032) | 22.5 -> 22.8 (1.014) | 7,210 -> 7,221 (1.001) | 0.121 -> 0.120 (0.987) | 1.152 -> 1.139 (0.989) |
+| 13 B pipelined x16, 16 conn | 470,194 -> 474,561 (1.009) | 16.5 -> 16.4 (0.993) | 6,771 -> 6,760 (0.998) | 0.275 -> 0.275 (1.000) | 0.870 -> 0.832 (0.956) |
+| TLS 13 B fixed-length, 64 conn | 341,113 -> 348,106 (1.021) | 22.0 -> 21.9 (0.995) | 7,262 -> 7,246 (0.998) | 0.152 -> 0.152 (1.000) | 0.973 -> 0.921 (0.947) |
+
+Medians of three rounds. Per-round values (candidate / base):
+
+- Small chunked, plain: CPU 31.3, 31.7, 31.5 / 41.9, 42.0, 42.1 us; 244.6k,
+  240.6k, 240.8k / 182.8k, 184.0k, 182.6k requests/s.
+- Small chunked, TLS: CPU 33.7, 32.9, 33.2 / 43.7, 45.3, 43.4 us; 224.1k,
+  221.7k, 230.7k / 166.9k, 169.1k, 176.7k requests/s.
+- Flushed streaming, plain: CPU 888.8, 876.8, 871.7 / 913.5, 917.5, 913.3 us;
+  8,641, 8,682, 8,879 / 8,150, 8,162, 8,549 responses/s.
+- Flushed streaming, TLS: CPU 1,631, 1,632, 1,616 / 1,636, 1,658, 1,685 us;
+  4,788, 4,592, 4,609 / 4,664, 4,527, 4,479 responses/s.
+- 1 MiB fixed-length and single chunked write, plain and TLS: CPU and throughput
+  within round-to-round noise (one candidate chunked round at 421 us against
+  404-409 us elsewhere); allocation fell from 23.4-24.2 KB to 7.7-8.0 KB in every
+  round.
+- 13 B fixed-length, its close-after-100 control, pipelined x16 and TLS 13 B:
+  unchanged within noise. Those paths already used one transport write; the only
+  difference is the removed 13-byte prefix reservation.
+
+Reading: a complete small chunked response goes from three transport writes to
+two (the terminator is still written synchronously when the response closes),
+which removes about a quarter of the server CPU per response and lifts throughput
+about 30% on plain and TLS, with p50 down 26-39% and p99 down 12-23%. Flushed
+streaming saves the two extra writes of its first chunk and half of the pool
+clearing: 3-5% less CPU per response and 60% less allocation in every round.
+Large single responses change only in allocation, by two thirds.
+
+Noise and limits: each 15 s window recorded 8 to 30 CPU-seconds of machine
+activity outside the two measured processes (3-12% of 16 logical CPUs), on both
+engines alike. Other agents ran test suites on this host outside the benchmark
+lock throughout, so no sample is from a quiet machine; the watchdog-guarded
+attempts that waited for an idle window never found one and are retained as
+`profile-base-stream.guard.log`. The client ran at 83-89% of its CPUs on the
+small chunked scenarios, so their throughput ratios are bounded by the client;
+CPU per request is the reliable figure there. TLS streaming tail latency is
+noisy in both directions (candidate p99 5.8, 15.0, 14.5 ms; base 6.2, 7.7,
+12.4 ms) and is not claimed improved. Baseline allocation on the small chunked
+scenarios alternated between about 6.6 KB and 7.5 KB per request across rounds
+on both plain and TLS, while the candidate stayed at 7.3-7.5 KB; the component
+measurement shows the candidate allocating 48 B less per first write, so the
+0.98 and 1.11 allocation ratios in those rows reflect that baseline variation,
+not a change in the stream. Loopback, one Windows host, closed loop, HTTP/1.1
+only. HTTP/2, HTTP/3 and the Microsoft listener do not use this stream.
+
+Where the time goes (base engine, flushed streaming, dotnet-trace 10.0.745401
+sampled thread time, one profiling sample separate from the comparison):
+`ResponseStream.WriteAsyncCore` holds 45.9% of sampled thread time, of which
+`SocketAsyncEventArgs.DoOperationSendSingleBuffer` is 42.2 points;
+`Buffer.ZeroMemoryInternal` 1.33%, `Buffer.MemmoveInternal` 1.13%,
+`AsyncWriteGate.EnterAsync` 0.60% and `Monitor.Enter_Slowpath` 1.56%; idle
+waits (`LowLevelLifoSemaphore.WaitForSignal`, `WaitHandle.WaitOneNoCheck`,
+stdin `ReadFile`, the I/O poller) account for about 44%. Sampled allocation:
+`byte[]` 65%, dominated by the per-response head-and-prefix buffer, and
+`Task<AsyncWriteGate.Scope>` 9.8%. Costs outside this stream remain for other
+changes: the per-request context and admission lock, the gate's task per write,
+and Nagle on accepted sockets (`NoDelay` is not set anywhere in the listener).
+
+Socket-free component measurements (`EmbedIO.Performance --response-write`,
+`DOTNET_TieredCompilation=0`, three alternating process pairs on the loaded host,
+medians; submission and byte counts are exact): first write of a 16 KiB
+fixed-length body 2 -> 1 transport writes and 21,049 -> 4,897 B; 16 KiB chunked
+first write 3 -> 1 writes and 21,041 -> 4,865 B; complete 13-byte chunked
+response 3 -> 2 writes; 1 MiB first writes keep their write counts with
+21,069 -> 4,925 B; a subsequent 16 KiB chunk 306 -> 224 ns and 104 -> 72 B; a
+64 KiB chunk 1,330 -> 935 ns; synchronous bounded chunks 3 -> 1 writes. An
+intermediate revision that merged a 64 KiB prefix for bodies beyond the bound
+cost about 0.8 us more per 1 MiB first write without saving a write; the
+committed revision keeps a 16 KiB prefix. Those timings exclude kernel and TLS
+work and are not throughput evidence.
