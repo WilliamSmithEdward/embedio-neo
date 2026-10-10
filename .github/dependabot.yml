@@ -40,7 +40,9 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: pip
-    directory: /.github/requirements
+    directories:
+      - /.github/requirements
+      - /.github/security/semgrep
     schedule:
       interval: daily
     cooldown:
