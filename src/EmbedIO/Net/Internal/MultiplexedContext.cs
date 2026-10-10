@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Security.Principal;
 using System.Threading;
@@ -19,10 +20,11 @@ namespace EmbedIO.Net.Internal
     internal sealed class MultiplexedContext : IHttpContextImpl, IHttpTunnelContext, IDisposable
     {
         private readonly object _sync = new();
-        private readonly Lazy<IDictionary<object, object>> _items = new(() => new Dictionary<object, object>(), true);
-        private readonly Stack<Action<IHttpContext>> _callbacks = new();
-        private readonly TimeKeeper _age = new();
+        private readonly long _started = Stopwatch.GetTimestamp();
         private readonly IMultiplexedExchange _exchange;
+        private Dictionary<object, object>? _items;
+        // Created by the first OnClose registration, under _sync.
+        private Stack<Action<IHttpContext>>? _callbacks;
         private HttpTunnel? _acceptedTunnel;
         private IReadOnlyList<string>? _tunnelProtocols;
         private readonly TaskCompletionSource<bool> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -37,7 +39,7 @@ namespace EmbedIO.Net.Internal
             Request = new MultiplexedRequest(exchange, local, remote, secure);
             Response = new MultiplexedResponse(exchange);
         }
-        public string Id { get; } = UniqueIdGenerator.GetNext();
+        public string Id { get; } = NextId();
         public CancellationToken CancellationToken
         {
             get => _cancellation;
@@ -56,7 +58,7 @@ namespace EmbedIO.Net.Internal
                 }
             }
         }
-        public long Age => _age.ElapsedTime;
+        public long Age => (long)((Stopwatch.GetTimestamp() - _started) * MillisecondsPerTimestamp);
         public IPEndPoint LocalEndPoint => Request.LocalEndPoint;
         public IPEndPoint RemoteEndPoint => Request.RemoteEndPoint;
         public IHttpRequest Request { get; }
@@ -66,11 +68,34 @@ namespace EmbedIO.Net.Internal
         public IPrincipal User { get; set; } = Auth.NoUser;
         public ISessionProxy Session { get; set; } = SessionProxy.None;
         public bool SupportCompressedRequests { get; set; }
-        public IDictionary<object, object> Items => _items.Value;
+        public IDictionary<object, object> Items
+        {
+            get
+            {
+                var items = Volatile.Read(ref _items);
+                if (items != null) return items;
+                var created = new Dictionary<object, object>();
+                return Interlocked.CompareExchange(ref _items, created, null) ?? created;
+            }
+        }
         public bool IsHandled { get; private set; }
         public MimeTypeProviderStack MimeTypeProviders { get; } = new();
         internal Task Completion => _completion.Task;
         private static readonly HpackField[] ContinueFields = { new(":status", "100") };
+        private static readonly double MillisecondsPerTimestamp = 1000.0 / Stopwatch.Frequency;
+
+        // Same value format as UniqueIdGenerator.GetNext, the first 22 base64 characters
+        // of a new GUID, without its intermediate byte array and 24-character string.
+        private static string NextId()
+        {
+#if NET
+            Span<byte> bytes = stackalloc byte[16];
+            Span<char> chars = stackalloc char[24];
+            if (Guid.NewGuid().TryWriteBytes(bytes) && Convert.TryToBase64Chars(bytes, chars, out var written) && written == 24)
+                return new string(chars.Slice(0, 22));
+#endif
+            return UniqueIdGenerator.GetNext();
+        }
         internal Task SendContinueAsync()
             => Request.HttpMethod != "CONNECT" && Request.HasEntityBody && Request.ContentLength64 != 0
                 && HttpExpectations.ContainsContinue(Request.Headers["Expect"])
@@ -86,7 +111,7 @@ namespace EmbedIO.Net.Internal
             lock (_sync)
             {
                 if (_closed) throw new InvalidOperationException("HTTP context has already been closed.");
-                _callbacks.Push(callback);
+                (_callbacks ??= new Stack<Action<IHttpContext>>()).Push(callback);
             }
         }
         public void Dispose() => Close();
@@ -129,8 +154,10 @@ namespace EmbedIO.Net.Internal
                 }
                 _acceptedTunnel?.Dispose();
                 PropagateCancellation();
-                foreach (var callback in _callbacks)
-                    try { callback(this); } catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback."); }
+                // BeginClose set _closed under _sync after the last registration.
+                if (_callbacks != null)
+                    foreach (var callback in _callbacks)
+                        try { callback(this); } catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback."); }
                 _linked?.Dispose();
                 if (failure == null) _completion.TrySetResult(true); else _completion.TrySetException(failure);
             }
