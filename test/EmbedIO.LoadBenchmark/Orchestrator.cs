@@ -389,7 +389,7 @@ internal static class Orchestrator
                 .Select(key => KeyValuePair.Create(key, (JsonNode?)Environment.GetEnvironmentVariable(key)))),
             ["candidateRevision"] = options.Optional("--candidate-revision"),
             ["baselineRevision"] = options.Optional("--baseline-revision"),
-            ["baselineAllProtocols"] = options.Has("--baseline-all-protocols"),
+            ["baselineAllProtocols"] = options.Has("--modern-baseline") || options.Has("--baseline-all-protocols"),
             ["targets"] = new JsonArray([.. targets.Select(target => (JsonNode)new JsonObject
             {
                 ["name"] = target.Name,
