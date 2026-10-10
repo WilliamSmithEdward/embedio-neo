@@ -497,3 +497,13 @@ still held the parent lease pending native shutdown. The fixture now waits for
 that final release within its existing handshake deadline and retains the closed
 handle assertion. This attempt is retained; the corrected full suite and Linux
 run must pass before acceptance.
+
+On corrected fixture head `9214ef5`, the complete coverage-enabled suites pass:
+Windows reports 4981 total, 4971 passed and ten skipped in 3m47s; pinned Linux
+reports 4981 total, 4947 passed and thirty-four skipped in 4m53s. Both have zero
+failures. Linux rebuilt the archived source on its own filesystem, with .NET
+10.0.12, MsQuic 2.6.2 and the hash-locked aioquic 1.3.0 peer; Windows uses the
+same configured independent peer. The skipped counts include the five explicit
+campaigns and existing platform exclusions. These results do not execute those
+campaigns or prove macOS acceptance of the correction. The native candidate
+still needs reconciliation with the latest engine and final-head hosted checks.
