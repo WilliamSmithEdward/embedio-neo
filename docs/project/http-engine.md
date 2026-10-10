@@ -7038,3 +7038,12 @@ passed, five existing skips, zero failures, in 3m 23s. Locked restore, warning-f
 solution builds, whitespace, syntax and suppression guards pass. Hosted final-head
 acceptance remains required. Callback fault isolation and broader finalizer/ABI
 coverage remain open in the audit record.
+
+Native listener callback follow-up: controlled pre-ownership admission failures
+reproduce both exception escape and poisoning of future listener stop on 54f4c5c.
+A separate admission boundary preserves refusal, records the failure without
+callback logging/allocation, and keeps successful return after ownership cleanup.
+The 61 focused native cases pass on Windows/Linux; full Windows acceptance is
+4806 cases, 4801 passed, five existing skips, zero failures. Both-target builds
+and guards pass. Hosted checks and broader native callback/finalizer/application
+acceptance remain required; the audit record states the injection limits.

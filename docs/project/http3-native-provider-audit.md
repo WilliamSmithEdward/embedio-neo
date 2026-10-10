@@ -173,3 +173,27 @@ Those historical findings do not describe the current implementation. Callback
 allocation-failure containment, accept-error isolation from listener stop,
 32-bit ABI validation and finalizer/fault coverage remain outstanding; this
 listener correction does not claim to resolve them.
+
+## Listener callback fault isolation follow-up
+
+Two controlled managed callback invocations reproduce the remaining listener
+findings on development base 54f4c5c: an admission IOException faults the future
+stop signal, and a pre-ownership OutOfMemoryException escapes the callback.
+Neither test creates actual memory pressure or crashes a native worker.
+
+Admission now has its own failure boundary. Pre-ownership failures return the
+existing refusal status without logging or allocating in the catch path; one
+exception reference is retained for diagnostics. After native ownership
+transfers, cleanup still returns success, since closing and returning failure
+would double-free the handle. An admission failure no longer decides the result
+of later STOP_COMPLETE. This does not alter the general exception policy or
+claim recovery from corrupted process state.
+
+All 61 native cases pass on Windows and pinned Linux using the same Windows-built
+IL. The full Windows suite reports 4806 cases, 4801 passed, five existing skips,
+zero failures (3m 21s). Locked restore, solution builds for both core targets,
+syntax/suppression guards and changed-source whitespace verification pass. The
+post-transfer cleanup path is inspected rather than fault-injected. Stream and
+connection callback allocation failures, actual memory-pressure campaigns,
+finalizer/ABI/soak and native application traffic remain outstanding. Hosted
+final-head checks remain required before integration.
