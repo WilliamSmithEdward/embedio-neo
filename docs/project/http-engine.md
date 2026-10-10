@@ -6670,9 +6670,9 @@ as are the native experiment's two full-suite guards. This increment does not
 establish complete protocol or shipping readiness; exact-head hosted gates remain
 required. See the [migration note](../compatibility/migration.md#higher-http1-minor-versions-unreleased).
 
-### Integrated engine status after PR #210 and PR #211
+### Integrated engine status after PR #210, PR #211 and PR #212
 
-The engine development branch reached `6524471`: HTTP/1 higher-minor processing
+The engine development branch reached `e1add82`: HTTP/1 higher-minor processing
 (PR #210) and the current comparative performance checkpoint (PR #211) are
 integrated after every exact-head check passed. This is development-branch
 integration, not a main merge or release. The accepted core has a 4,469-case
