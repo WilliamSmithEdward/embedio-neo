@@ -69,9 +69,12 @@ the production code.
 
 ## Limits
 
-The runs used Windows 11 (build 26300) with .NET 10 runtimes 10.0.11 and 10.0.12
-installed; HTTP/3 used the Windows MsQuic stack. Linux and macOS, the netstandard2.0
-asset and HTTP/2 over TLS were not run for these cases.
+On Windows 11 (build 26300) all 40 new cases passed, with HTTP/3 on the Windows
+MsQuic stack; installed runtimes were 10.0.11 and 10.0.12. In the digest-pinned
+Ubuntu 24.04 SDK 10.0.401 container (runtime 10.0.12, case-sensitive filesystem,
+exact git archive) the 30 HTTP/1 and HTTP/2 cases passed and the 10 HTTP/3 cases
+were skipped because that image has no libmsquic. macOS, HTTP/3 on Linux, the
+netstandard2.0 asset and HTTP/2 over TLS were not run for these cases.
 
 The HTTP/1 TLS peer negotiates the platform default, as the existing context tests
 do: TLS 1.3 on Windows and Linux, TLS 1.2 against the macOS server. TLS 1.2
