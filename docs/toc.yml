@@ -226,6 +226,8 @@
       href: project/quic-lifetime.md
     - name: Native HTTP/3 provider ownership audit
       href: project/http3-native-provider-audit.md
+    - name: Native QUIC lifetime campaigns
+      href: project/http3-native-lifetime-campaigns.md
     - name: Managed engine load comparison
       href: project/http-engine-load-comparison.md
     - name: HTTP/2 graceful output lifetime
