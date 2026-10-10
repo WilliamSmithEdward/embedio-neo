@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
@@ -123,6 +124,23 @@ namespace EmbedIO.Tests.Issues
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var diagnosticStop = new CancellationTokenSource();
+            var diagnostic = ObserveSlowResponseAsync();
+            async Task ObserveSlowResponseAsync()
+            {
+                if (!OperatingSystem.IsLinux()) return;
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(9), diagnosticStop.Token);
+                    TestContext.Error.WriteLine($"Large-response pre-deadline: mode={mode}, buffered={buffered}, serializationPhase={Volatile.Read(ref serializationPhase)}, serialization={serialization?.Status}, jsonClosed={Volatile.Read(ref jsonClosed)}.");
+                    await CaptureLargeResponseTransportState(url);
+                }
+                catch (OperationCanceledException) when (diagnosticStop.IsCancellationRequested) { }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                {
+                    TestContext.Error.WriteLine($"Pre-deadline diagnostic unavailable: {error.GetType().Name}.");
+                }
+            }
             try
             {
                 var bytes = client.GetByteArrayAsync(url + "large");
@@ -144,9 +162,56 @@ namespace EmbedIO.Tests.Issues
                 {
                     TestContext.Error.WriteLine($"JSON context diagnostic unavailable: {diagnosticError.GetType().Name}.");
                 }
+                await CaptureLargeResponseTransportState(url);
                 throw;
             }
-            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
+            finally
+            {
+                diagnosticStop.Cancel();
+                await diagnostic;
+                stop.Cancel();
+                await running.WaitAsync(TimeSpan.FromSeconds(10));
+            }
+        }
+
+        private static async Task CaptureLargeResponseTransportState(string url)
+        {
+            try
+            {
+                ThreadPool.GetAvailableThreads(out var workers, out var completions);
+                TestContext.Error.WriteLine($"Thread pool: threads={ThreadPool.ThreadCount}, pending={ThreadPool.PendingWorkItemCount}, completed={ThreadPool.CompletedWorkItemCount}, availableWorkers={workers}, availableCompletions={completions}.");
+                if (!OperatingSystem.IsLinux()) return;
+                var start = new ProcessStartInfo("ss")
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                };
+                start.ArgumentList.Add("-tinmp");
+                start.ArgumentList.Add($"( sport = :{new Uri(url).Port} or dport = :{new Uri(url).Port} )");
+                using var process = Process.Start(start);
+                if (process == null) return;
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                try
+                {
+                    var output = process.StandardOutput.ReadToEndAsync(deadline.Token);
+                    var errors = process.StandardError.ReadToEndAsync(deadline.Token);
+                    await process.WaitForExitAsync(deadline.Token);
+                    var snapshot = await output;
+                    TestContext.Error.WriteLine($"TCP snapshot: exit={process.ExitCode}, {snapshot[..Math.Min(snapshot.Length, 8192)]}");
+                    var error = await errors;
+                    if (error.Length != 0) TestContext.Error.WriteLine($"TCP diagnostic: {error[..Math.Min(error.Length, 1024)]}");
+                }
+                finally
+                {
+                    if (!process.HasExited) process.Kill();
+                }
+            }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                TestContext.Error.WriteLine($"Transport diagnostic unavailable: {error.GetType().Name}.");
+            }
         }
 
         [Test]

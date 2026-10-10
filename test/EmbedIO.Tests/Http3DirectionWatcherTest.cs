@@ -107,6 +107,21 @@ namespace EmbedIO.Tests
             }
         }
 
+        [TestCase(true, QuicError.OperationAborted, false)]
+        [TestCase(false, QuicError.OperationAborted, true)]
+        [TestCase(true, QuicError.StreamAborted, true)]
+        [TestCase(false, QuicError.StreamAborted, true)]
+        [TestCase(true, QuicError.ConnectionAborted, true)]
+        [TestCase(false, QuicError.ConnectionAborted, true)]
+        public void LocalReadAbortPreservesOutputButPeerAndWriteFaultsCancel(bool reading, QuicError error, bool canceled)
+        {
+            using var requestStop = new CancellationTokenSource();
+            var direction = Task.FromException(new QuicException(error, null, "Direction failed."));
+            Method(reading ? "WatchRequestReadDirection" : "WatchRequestDirection")
+                .Invoke(null, new object[] { direction, requestStop });
+            Assert.That(requestStop.IsCancellationRequested, Is.EqualTo(canceled));
+            Assert.That(Unexpected(direction, requestStop), Is.Null);
+        }
         [Test]
         public void UnexpectedDirectionFaultRemainsVisibleToTheOwner()
         {
