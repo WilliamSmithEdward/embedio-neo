@@ -165,6 +165,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Capsule transport development](project/http-capsule-transport.md): streamed framing, negotiation constraints and remaining integration work.
 - [Capsule and tunnel lifetime validation](project/http-capsule-lifetime.md): independent-peer cancellation, reset, drain and retention checks on HTTP/1, HTTP/2 and HTTP/3, with findings and limits.
+- [WebTransport session core development](project/http-webtransport-core.md): draft-ietf-webtrans-http3-16 framing, session association, capsules, flow control and bounded buffering as an isolated internal core, with the transport integration contract and remaining gaps.
 
 - [Neo baseline and direction](project/embed_io_neo.md): initial fork decisions and acknowledgments.
 - [Changelog](../CHANGELOG.md): released and unreleased changes.

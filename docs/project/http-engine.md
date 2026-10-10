@@ -7105,3 +7105,57 @@ and pinned Linux using the same Windows-built IL. Both-target builds and source
 guards pass. The earlier platform-analyzer failure was corrected with an actual
 supported-platform check before constructing public QUIC exceptions; no analyzer
 suppression was added. All final-head hosted checks remain required.
+
+### WebTransport session core (isolated, unintegrated)
+
+An original internal framing and session core for WebTransport over HTTP/3 now
+exists under `src/EmbedIO/Net/Internal/WebTransport`, built against
+draft-ietf-webtrans-http3-16 (2026-07-06, WG Last Call, no RFC; no IANA
+WebTransport registrations as of 2026-10-10). It covers session identifier and
+stream/datagram association, the section 3.1 settings requirements, the close,
+drain and flow-control capsules, section 5 flow control, closure and reset
+behavior, malformed input and bounded pre-establishment buffering, behind
+transport abstractions only. No listener creates a session, no setting is
+advertised, and the native QUIC work in PR #231 remains the place for
+`RESET_STREAM_AT`, datagram delivery and the transport parameters the draft
+requires. Its 83 reflection-driven cases pass with both target assets; the
+specification basis, open choices, integration contract and remaining gaps are
+in [WebTransport session core development](http-webtransport-core.md). This is
+not WebTransport support and is not interoperability evidence.
+
+
+WebTransport core review found and reproduced a request-ordering defect in
+PR 233 at eea1ad8: all four early stream/datagram cases for delayed lower CONNECT
+IDs fail after an unrelated higher request is noted. The isolated correction
+uses exact bounded request ranges, retains unknown lower-ID traffic within the
+existing buffer limits, and updates the integration contract. No external agent
+branch was changed and no merge occurred. The 90 focused cases pass with both
+actual target assets on the .NET 10 Windows host and with the modern asset on
+pinned Linux. The full Windows suite reports 4802 cases, 4797 passed, five
+existing skips, zero failures. All hosted final-head checks remain required;
+docs/project/http-webtransport-core.md records the reproduction hash, scope,
+retained-asset setup failure and remaining interoperability gaps.
+
+The corrected isolated WebTransport branch is reconciled onto verified drain
+base 416e773. Expected combined discovery is 4895 (4805 base plus 90 core cases).
+Fresh combined and hosted acceptance remain required; existing capability and
+interoperability limits above remain unchanged.
+
+Reconciled WebTransport acceptance on 416e773 reports 4895 Windows cases,
+4890 passed, five existing skips, zero failures (3m 22s), with warning-free
+both-target builds and locked restore. Earlier focused results and limits are
+preserved in the guide; all new-head hosted checks remain required.
+
+PR #237 is verified in development at 048f06f; the corrected WebTransport branch
+is reconciled onto it. Expected discovery is 4897 (4807 base plus 90 core cases).
+The integrated callback tree matches 48fa5d51519e9582ac1a56ba26269d86a91298a3.
+Fresh combined-source and hosted acceptance remain required.
+
+Final reconciliation onto callback base 048f06f passes 4897 Windows cases,
+4892 passed, five existing skips, zero failures (3m 21s), with warning-free
+complete builds for both targets. All new-head checks remain required; neither
+application WebTransport capability nor independent interoperability is claimed.
+
+The native direction branch is reconciled onto verified WebTransport merge 90e84f1. Combined discovery is 4903 (4897 base plus six real-peer direction cases). Fresh combined-source and exact-head hosted validation remain required.
+
+Combined native direction acceptance on WebTransport development base 90e84f1 passes 4903 Windows cases: 4898 passed, five existing skips, zero failures (3m 23s), with complete warning-free builds for both targets. Fresh hosted checks on this reconciled head remain required.
