@@ -193,7 +193,42 @@ def h2_fuzz(args):
     peer = load("h2_campaign.py")
     import h2.events
 
+    import copy
+
     class Client(peer.Client):
+        # hyper-h2 4.4.1 defines no (CLOSED, RECV_INFORMATIONAL_HEADERS) transition, so
+        # an interim HEADERS the server queued before it processed the client's RST_STREAM
+        # raises ProtocolError and tears the client connection down. RFC 9113 section 5.1
+        # requires the resetting endpoint to minimally process (update HPACK) and discard
+        # such frames. This adapter does exactly that, only for 1xx HEADERS on streams the
+        # client reset, and counts each use. Every other frame takes hyper-h2's path.
+        adapted = 0
+
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            original = self.conn.receive_data
+
+            def receive_data(data):
+                if len(data) >= 9 and data[3] == 1 and data[4] & 0x4:
+                    sid = int.from_bytes(data[5:9], "big") & 0x7fffffff
+                    state = self.streams.get(sid)
+                    if state is not None and state["reset"] is not None and state["reset"][0] == "client":
+                        block = bytes(data[9:])
+                        if data[4] & 0x8:
+                            block = block[1:len(block) - block[0]]
+                        if data[4] & 0x20:
+                            block = block[5:]
+                        decoder = copy.deepcopy(self.conn.decoder)
+                        fields = dict(decoder.decode(block, raw=True))
+                        status = fields.get(b":status")
+                        if status is not None and int(status) < 200:
+                            self.conn.decoder = decoder
+                            Client.adapted += 1
+                            return []
+                return original(data)
+
+            self.conn.receive_data = receive_data
+
         def handle(self, event):
             if isinstance(event, h2.events.TrailersReceived):
                 self.streams[event.stream_id]["trailers"] = event.headers
@@ -273,9 +308,10 @@ def h2_fuzz(args):
         except Exception as error:
             return {"result": "FAIL", "seed": args.seed, "iteration": iteration, "error": f"{type(error).__name__}: {error}",
                     "log": log, "plan": [(k, {a: (len(b) if isinstance(b, bytes) else b) for a, b in p.items()}) for k, p in operations],
-                    "trace": client.trace[-60:], "totals": totals}
+                    "trace": client.trace[-60:], "totals": dict(totals, closedInterimAdapterUses=Client.adapted)}
         finally:
             client.close()
+    totals["closedInterimAdapterUses"] = Client.adapted
     after = settle(args.host, args.stats_port)
     return finish(before, after, totals, args)
 
