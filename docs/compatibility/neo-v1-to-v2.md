@@ -10,9 +10,34 @@ The comparison baseline is the published source tag
 [v1.0.3](https://github.com/WilliamSmithEdward/embedio-neo/tree/v1.0.3).
 If you use an earlier v1 patch, also review the
 [general migration notes](migration.md): they include historical upstream-to-Neo
-and earlier v1 changes that are not new in v2. For example, RawTarget is already
-present in v1.0.3; the engine upgrade does not introduce that rename.
+and earlier v1 changes that are not new in v2. Compare against the released tag,
+not the unreleased main branch: source compatibility changes already present on
+main can still be new to a v1 package consumer.
 
+## Rebuild and update source references
+
+V2 includes the approved compiler/API cleanup as well as the engine replacement.
+Rebuild dependent assemblies; do not treat the major upgrade as a binary-compatible
+drop-in. Verified v1.0.3-to-current-source changes include:
+
+| Neo v1.0.3 API | V2 source migration |
+| --- | --- |
+| IHttpRequest.RawUrl | Use IHttpRequest.RawTarget. It retains the received request-target text; update custom adapters too. |
+| Validate.Url returns string | It returns Uri. Use the Uri directly, or ToString when text is required. |
+| RedirectModule.RedirectUrl is string | It is Uri; existing string constructors remain available. |
+| ITestWebServer.BaseUrl is string | It is Uri; update custom test-server implementations and text comparisons. |
+
+Review the [approved API-cleanup notes](migration.md#warning-free-api-cleanup-unreleased-owner-approved)
+for named-argument changes, URI overloads, nullability annotations, error parameter
+names, cache ownership and exception-recovery boundaries. Specify the intended
+argument type when passing null to overloaded string/Uri entry points.
+
+The System.Text.Json migration and SWAN removal already occurred in Neo v1;
+upgrading to v2 does not introduce them again. Still run serialization contract
+tests for custom converters, unsupported payloads, numeric precision and exact
+response bytes against the final v2 package. The
+[JSON compatibility guide](../user-reports/json-migration-compatibility.md)
+records the audited behavior and its limits.
 ## Listener selection and deployment
 
 The intended v2 outcome is for the new managed engine to become the default and
