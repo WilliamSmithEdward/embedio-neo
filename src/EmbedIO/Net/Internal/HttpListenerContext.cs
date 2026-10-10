@@ -18,7 +18,7 @@ namespace EmbedIO.Net.Internal
     // Provides access to the request and response objects used by the HttpListener class.
     internal sealed class HttpListenerContext : IHttpContextImpl
     {
-        private readonly Lazy<IDictionary<object, object>> _items = new(() => new Dictionary<object, object>(), true);
+        private Dictionary<object, object>? _items;
 
         private readonly TimeKeeper _ageKeeper = new();
 
@@ -63,7 +63,16 @@ namespace EmbedIO.Net.Internal
 
         public bool SupportCompressedRequests { get; set; }
 
-        public IDictionary<object, object> Items => _items.Value;
+        public IDictionary<object, object> Items
+        {
+            get
+            {
+                var items = Volatile.Read(ref _items);
+                if (items != null) return items;
+                var created = new Dictionary<object, object>();
+                return Interlocked.CompareExchange(ref _items, created, null) ?? created;
+            }
+        }
 
         public bool IsHandled { get; private set; }
 
