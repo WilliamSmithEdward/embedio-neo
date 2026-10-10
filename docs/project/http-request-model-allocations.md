@@ -1,4 +1,4 @@
-# Multiplexed request-model allocation
+﻿# Multiplexed request-model allocation
 
 HTTP/2 and HTTP/3 requests share one application model, `MultiplexedContext` and
 `MultiplexedRequest`. This change removes about 510 to 590 bytes of server
@@ -226,3 +226,22 @@ require `HasEntityBody` false over HTTP/3.
 
 Evidence (samples, logs, probes, profiles, guard journals and summaries) is kept under
 the ignored `TestResults/mra` directory of the working tree that produced it.
+
+## Integration fixture review
+
+The review branch reconciles these changes with engine `1b70377` and raises
+the discovery floor from 4,984 to 5,018 for the 34 ordinary cases. The rooted
+referrer fixture now preserves the existing Windows/Unix `Uri.TryCreate`
+difference: `/relative/page` is an absolute file URI on Unix. The HTTP/3
+fixture provisions an exportable key, consistent with existing QUIC fixtures.
+No production referrer semantics or trust policy changes.
+
+Before reconciliation, the corrected fixture passes 34/34 cases with zero
+skips on Windows and pinned Linux. The original fixture fails the two Unix
+rooted-referrer cases; its macOS TLS failures require hosted verification of
+the corrected key provision. The original PR #260 Linux run also terminated
+with an unhandled Microsoft-listener `FormatHeaders` null-reference callback.
+That cause remains unconfirmed. Reconciliation and new positive runs alone
+do not establish its repair; integration remains held pending investigation
+and every exact-head check. Earlier performance results are for their named
+revisions and do not measure the reconciled review head.
