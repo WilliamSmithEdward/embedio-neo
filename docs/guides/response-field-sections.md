@@ -57,7 +57,8 @@ or information essential to interpreting the body.
 HTTP/1.1 selects chunked framing and rejects a previously configured Content-Length.
 HTTP/2 and HTTP/3 can retain Content-Length, but reserve their ending HEADERS/FIN
 until the trailer snapshot is sent. HTTP/1.0, HEAD, bodyless statuses and accepted
-tunnels reject trailers. Fields that control framing, routing, authentication,
+tunnels reject trailers. After declaration, incompatible bodyless status, tunnel
+and HTTP/1 framing changes are rejected before changing the response. Fields that control framing, routing, authentication,
 content format or early response handling are rejected. Applications remain
 responsible for knowing that each field's definition permits trailer use under
 [RFC 9110 section 6.5.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-6.5.1).

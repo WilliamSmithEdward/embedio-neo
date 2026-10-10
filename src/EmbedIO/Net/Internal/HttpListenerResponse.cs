@@ -61,6 +61,7 @@ namespace EmbedIO.Net.Internal
                     throw new ArgumentOutOfRangeException(nameof(value), "Must be >= 0");
                 }
 
+                if (_trailerNames != null) throw new InvalidOperationException("Reserved HTTP/1 trailers require chunked framing without Content-Length.");
                 Headers[HttpHeaderNames.ContentLength] = value.ToString(CultureInfo.InvariantCulture);
             }
         }
@@ -118,6 +119,7 @@ namespace EmbedIO.Net.Internal
             set
             {
                 EnsureCanChangeHeaders();
+                if (_trailerNames != null && !value) throw new InvalidOperationException("Reserved HTTP/1 trailers require chunked framing.");
                 _chunked = value;
             }
         }
@@ -137,6 +139,8 @@ namespace EmbedIO.Net.Internal
                     throw new ArgumentOutOfRangeException(nameof(StatusCode), "StatusCode must be between 100 and 999.");
                 }
 
+                if (_trailerNames != null && (value < 200 || value is 204 or 205 or 304))
+                    throw new InvalidOperationException("Reserved trailers require a body-capable final response.");
                 _statusCode = value;
                 StatusDescription = HttpListenerResponseHelper.GetStatusDescription(value);
             }
@@ -227,6 +231,7 @@ namespace EmbedIO.Net.Internal
         internal void BeginTunnel(string? protocol, bool capsules)
         {
             EnsureCanChangeHeaders();
+            if (_trailerNames != null) throw new InvalidOperationException("A trailer response cannot become a tunnel.");
             if (capsules)
             {
                 HttpCapsuleProtocol.ValidateCarrierHeaders(_request.Headers);

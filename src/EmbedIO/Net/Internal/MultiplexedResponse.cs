@@ -40,7 +40,15 @@ namespace EmbedIO.Net.Internal
         public int StatusCode
         {
             get => _status;
-            set { EnsureHeaders(); if (value < 100 || value > 999) throw new ArgumentOutOfRangeException(nameof(value)); _status = value; StatusDescription = HttpListenerResponseHelper.GetStatusDescription(value); }
+            set
+            {
+                EnsureHeaders();
+                if (value < 100 || value > 999) throw new ArgumentOutOfRangeException(nameof(value));
+                if (_trailerNames != null && (value < 200 || value is 204 or 205 or 304))
+                    throw new InvalidOperationException("Reserved trailers require a body-capable final response.");
+                _status = value;
+                StatusDescription = HttpListenerResponseHelper.GetStatusDescription(value);
+            }
         }
         public long ContentLength64
         {
@@ -76,6 +84,7 @@ namespace EmbedIO.Net.Internal
         internal void BeginTunnel(bool capsules)
         {
             EnsureHeaders();
+            if (_trailerNames != null) throw new InvalidOperationException("A trailer response cannot become a tunnel.");
             if (_exchange.Request.Method != "CONNECT" || _status < 200 || _status >= 300)
                 throw new InvalidOperationException("A tunnel requires a successful CONNECT response.");
             if (capsules)
