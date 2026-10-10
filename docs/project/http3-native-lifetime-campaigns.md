@@ -46,10 +46,15 @@ Linux container:
   isolated beside MsQuic. Nothing was installed system-wide, and no firewall,
   OS limit or runtime replacement was changed.
 
-The host was shared with another agent's datagram work in a separate checkout.
-No `BENCHMARK-LOCK.txt` existed. Campaigns took this checkout's lock
-atomically and recorded the foreign processes present at start. The measured
-counters are per process, so another process's load affects timing, not counts.
+The host was shared with other agents' datagram and performance work. The
+first-pass campaigns took `BENCHMARK-LOCK.txt` atomically through the script
+and recorded foreign processes; another agent's full suite still ran during
+part of them. Several diagnostic A/B runs used a direct `dotnet test` loop that
+did not check the lock and overlapped another owner's lock window; they are
+marked `CONTAMINATED` and used only for diagnosis, never as quiet evidence.
+The quiet-machine runs cited for the setup hangs held the lock with no
+foreign test process. Counters are per process, so foreign load affects
+timing, not counts.
 
 Intel hardware was not available; no Intel runtime result is claimed.
 
@@ -75,7 +80,8 @@ each):
 - Connection admission overflow: 256 queued connections, four refused with
   CONNECTION_REFUSED, a drain that shuts each queued connection down before
   disposal, no re-admission, then a healthy connection.
-- Concurrent, repeated disposal of streams, connection, listener,
+- Concurrent, repeated disposal (after every stream of the iteration is
+  accepted) of streams, connection, listener,
   configuration, registration and API while reads are pending, writes are
   flow-blocked and peers keep sending.
 - Parent retention: listener and configuration release at once; registration
@@ -220,7 +226,7 @@ the same abortive path.
 ## Proposed fixes for the native owner
 
 Two changes, both validated only in scratch checkouts on top of `a4f7105`
-(diffs under `TestResults/apple-lifetime` and the probe directory):
+(combined diff: `TestResults/apple-lifetime/consolidated/probes/candidate-connection-and-stream-fix.diff`):
 
 1. **Connection.** Do not call `ConnectionClose` until SHUTDOWN_COMPLETE once a
    shutdown has been requested. A non-blocking form in
@@ -325,7 +331,76 @@ used.
 
 ## Campaign results
 
-CAMPAIGN-RESULTS
+First pass, 1000 iterations per campaign (admission overflow: 100 rounds),
+seed 20261010 unless noted. Native connections/streams and UDP sockets are
+baseline then quiescent; descriptors include runtime files. Managed growth is
+the second-half least-squares slope in bytes per iteration.
+
+| Revision | Campaign | Iterations | Result | Native conn/streams | UDP | Descriptors | Managed B/iter | Unobserved |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| base `a4f7105` | admission overflow | 100/100 | pass | 0/0 → 0/0 | 0 → 0 | 170 → 182 | −3208 | 0 |
+| base | concurrent disposal | 1000/1000 | pass | 0/0 → 0/0 | 0 → 0 | 191 → 192 | −6822 | 0 |
+| base | ownership churn | 1000/1000 | pass | 0/0 → 0/0 | 0 → 0 | 192 → 192 | −7 | 0 |
+| base | parent retention | 1000/1000 | pass | 0/0 → 0/0 | 0 → 0 | 192 → 192 | 6 | 0 |
+| base | pending endings | 1000/1000 | pass | 0/0 → 0/0 | 0 → 0 | 192 → 192 | 4236 | 0 |
+| #239 `ba4991b` | admission, churn, retention, pending | all complete | pass | 0/0 → 0/0 | 0 → 0 | stable | −888 to 7178 | 0 |
+| #239 | concurrent disposal | 435/1000 | setup hang (see below) | 0/0 → 0/0 | 0 → 0 | 191 → 192 | – | 0 |
+| #240 `ac81b20` | all five | all complete | pass | 0/0 → 0/0 | 0 → 0 | stable | −5319 to −50 | 0 |
+| #240, seed 181 | admission, churn, retention, pending | all complete | pass | 0/0 → 0/0 | 0 → 0 | stable | −314 to 10088 | 1 (see below) |
+| #240, seed 181 | concurrent disposal | 252/1000 | setup hang | 0/0 → 1/4 at failure | 0 → 1 | 191 → 193 | – | 0 |
+| base + connection candidate | four campaigns | all complete | pass | 0/0 → 0/0 | 0 → 0 | stable | −2758 to 18 | 0 |
+| base + connection candidate | concurrent disposal | 403/1000 | setup hang | 0/0 → 0/0 | 0 → 0 | 191 → 191 | – | 0 |
+
+Every completed campaign returned MsQuic's active connections and streams and
+the process's UDP sockets to baseline. Managed slopes change sign between runs
+and are small against a 19 to 37 MB heap: no managed accumulation. Threads
+grew to about 60 under admission overflow and returned to the thirties.
+
+The single unobserved exception (`Peer aborted the native stream send
+direction`) was already present in the seed-181 churn baseline. It came from
+the preceding concurrent-disposal campaign in the same process, whose hang
+abandoned pending native reads. The campaign failure path now observes its
+abandoned operations; no unobserved native exception appeared in any
+completed iteration.
+
+### Concurrent-disposal setup hangs
+
+Every concurrent-disposal failure was in the setup phase, before any
+disposal, and occurred on all revisions including base, so none is attributed
+to PRs #239 or #240. Two causes were separated.
+
+**Peer send starvation (test design, corrected).** The first campaign version
+started peer "pump" streams, which write continuously, while later streams of
+the same iteration were still being opened. With a diagnostic that stops the
+pumps after a timed-out acceptance, both quiet-machine occurrences showed the
+waiting stream arriving 0.0 s after the pumps stopped: it was starved, not
+lost. MsQuic's default `QUIC_STREAM_SCHEDULING_SCHEME_FIFO` sends a
+continuously fed stream ahead of later ones, and the System.Net.Quic peer uses
+that default. A native stack sample at a hang showed the single MsQuic worker
+thread busy in `sendmsg`. The campaign now starts pumps only after every stream
+is accepted; six further quiet runs (6000 iterations) had no stream starvation.
+
+The native provider does not set `QUIC_PARAM_CONN_STREAM_SCHEDULING_SCHEME`
+either, so its own sends are FIFO. Once application HTTP/3 uses it, one large
+response could delay sibling responses on the same connection. This was not
+measured on the native send side; it is a design risk for the integration
+owner (round-robin is selected per connection with that parameter).
+
+**Unexplained listener silence (open).** In one quiet run (seed 20261011,
+iteration 673 of the corrected campaign) and in several runs under heavy
+foreign load, a fresh native listener never produced a connection: the client's
+handshake timed out after 10 s with no response, the listener recorded no
+admission failure, its accept queue was empty, and MsQuic's
+`CONN_CREATED` counter shows that only the client connection was created in
+that iteration. The listener port had not been used by any of the previous
+64 listeners; client-port tracking was added afterwards and three further
+quiet runs (3000 iterations) did not reproduce it. The sampled MsQuic worker
+was idle, but the sample was taken after the client had given up. The
+cause is not established: candidates include Darwin's deferred socket close
+handing out a still-owned port and lost loopback datagrams under load. Its
+quiet-machine rate here is about one in 6000 iterations; it never occurred in
+the churn, retention, pending-ending or admission campaigns. It needs packet
+capture or an MsQuic trace on a quiet host before a fix can be proposed.
 
 ## Running the campaigns
 
@@ -357,6 +432,14 @@ EMBEDIO_REQUIRE_QUIC=1 EMBEDIO_NATIVE_QUIC_CAMPAIGN_ITERATIONS=200 EMBEDIO_NATIV
   dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --filter "TestCategory=NativeQuicLifetimeCampaign"
 ```
 
+## Evidence
+
+All logs, TRX files, campaign JSON, stack samples and crash reports are under
+ignored `TestResults/native-quic-lifetime` and `TestResults/apple-lifetime` of
+this branch's checkout. Runs from the detached PR-head, candidate and probe
+checkouts are copied to `TestResults/apple-lifetime/consolidated`. Every failed
+or invalid attempt is retained; none was retried into a pass.
+
 ## Untested gaps
 
 - Hosted macOS runners, Intel Macs and other Apple Silicon generations; only
@@ -370,7 +453,11 @@ EMBEDIO_REQUIRE_QUIC=1 EMBEDIO_NATIVE_QUIC_CAMPAIGN_ITERATIONS=200 EMBEDIO_NATIV
 - Packet loss and reordering; all traffic is loopback.
 - Physical-footprint (`phys_footprint`) memory; resident size is reported.
 - Durations beyond the bounded campaigns.
+- The cause of the rare listener silence in concurrent disposal, and
+  native-side FIFO stream scheduling under real multiplexed HTTP/3 load.
 
-The 19 new ordinary cases raise discovery from 4903 to 4922. The CI and
-CONTRIBUTING floors are unchanged here and still pass; the integrating branch
-should set the floor from actual discovery.
+The new file adds 19 ordinary cases. The complete macOS suite at this branch's
+head discovered 4930 cases: 4889 passed, 41 skipped (platform skips and the two
+capability-gated cases on base), none failed. The CI and CONTRIBUTING floor of
+4903 is unchanged here and still passes; the integrating branch should set the
+floor from actual discovery.

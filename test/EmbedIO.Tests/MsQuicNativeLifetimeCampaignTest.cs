@@ -34,6 +34,20 @@ namespace EmbedIO.Tests
         private static readonly byte[] H3 = { (byte)'h', (byte)'3' };
         private static readonly TimeSpan Step = TimeSpan.FromSeconds(15);
         private static readonly ConcurrentQueue<string> Unobserved = new();
+        // Darwin closes a released MsQuic socket on a later kqueue turn, so a
+        // hang report states whether the listener port was handed out recently.
+        private static readonly ConcurrentQueue<(int Port, DateTime Bound, string Role)> RecentPorts = new();
+        private static void RememberPort(int port, string role)
+        {
+            RecentPorts.Enqueue((port, DateTime.UtcNow, role));
+            while (RecentPorts.Count > 4096) RecentPorts.TryDequeue(out _);
+        }
+        private static string PortHistory(int port)
+        {
+            var uses = RecentPorts.Where(entry => entry.Port == port).Select(entry => entry.Role + " " + entry.Bound.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)).ToList();
+            return "port " + port.ToString(CultureInfo.InvariantCulture) + " used " + uses.Count.ToString(CultureInfo.InvariantCulture)
+                + " time(s) among the last 4096 listener and client sockets (" + string.Join(", ", uses) + ")";
+        }
         private static int _tracking;
 
         [TestCase(181)]
@@ -809,12 +823,13 @@ namespace EmbedIO.Tests
                 var (connection, client) = await Within(Connect(server, 8, token), trace).ConfigureAwait(false);
                 peer = client;
                 var count = random.Next(2, 7);
+                var pumping = new List<(QuicStream Remote, SafeHandle Native)>();
                 for (var i = 0; i < count; i++)
                 {
                     var remote = await client.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token).ConfigureAwait(false);
                     remotes.Add(remote);
                     await remote.WriteAsync(new byte[] { 1 }, token).ConfigureAwait(false);
-                    var native = await Within(AcceptStream(connection, token), trace).ConfigureAwait(false);
+                    var native = await AcceptDiagnosed(connection, stop, pumps, trace).ConfigureAwait(false);
                     natives.Add(native);
                     Assert.That(await Read(native, new byte[1], token).ConfigureAwait(false), Is.EqualTo(1));
                     // Mix pending reads, blocked writes and peers that keep sending.
@@ -822,9 +837,12 @@ namespace EmbedIO.Tests
                     {
                         case 0: pending.Add(Read(native, new byte[64], CancellationToken.None).AsTask()); break;
                         case 1: pending.Add(Write(native, new byte[4 * 1024 * 1024], false, CancellationToken.None).AsTask()); break;
-                        default: pumps.Add(Pump(remote, stop.Token)); pending.Add(Drain(native)); break;
+                        default: pumping.Add((remote, native)); break;
                     }
                 }
+                // Pumps start only after every stream is accepted: MsQuic's default
+                // FIFO stream scheduling lets a saturating stream starve later ones.
+                foreach (var (remote, native) in pumping) { pumps.Add(Pump(remote, stop.Token)); pending.Add(Drain(native)); }
                 await Task.Delay(random.Next(0, 30), token).ConfigureAwait(false);
                 trace.Phase = "concurrent-dispose";
                 var actions = new List<Action>();
@@ -850,10 +868,33 @@ namespace EmbedIO.Tests
             finally
             {
                 await stop.CancelAsync().ConfigureAwait(false);
+                // After a failure, observe abandoned operations so their faults
+                // cannot surface as unobserved exceptions in a later case.
+                foreach (var task in pending.Concat(pumps)) _ = task.ContinueWith(done => done.Exception, CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
                 foreach (var remote in remotes) await remote.DisposeAsync().ConfigureAwait(false);
                 if (peer != null) await peer.DisposeAsync().ConfigureAwait(false);
                 server.Dispose();
             }
+        }
+
+        // A stream not accepted within the step is waited for after the peer
+        // pumps stop, so the failure states whether it was late or lost.
+        private static async Task<SafeHandle> AcceptDiagnosed(SafeHandle connection, CancellationTokenSource stop, List<Task> pumps, Trace trace)
+        {
+            var accepting = AcceptStream(connection, CancellationToken.None);
+            if (await Task.WhenAny(accepting, Task.Delay(Step, CancellationToken.None)).ConfigureAwait(false) == accepting) return await accepting.ConfigureAwait(false);
+            var clock = Stopwatch.StartNew();
+            await stop.CancelAsync().ConfigureAwait(false);
+            var stopping = Task.WhenAll(pumps);
+            var pumpsStopped = await Task.WhenAny(stopping, Task.Delay(TimeSpan.FromSeconds(10), CancellationToken.None)).ConfigureAwait(false) == stopping;
+            var late = await Task.WhenAny(accepting, Task.Delay(TimeSpan.FromSeconds(60), CancellationToken.None)).ConfigureAwait(false) == accepting;
+            var outcome = late ? "arrived " + clock.Elapsed.TotalSeconds.ToString("F1", CultureInfo.InvariantCulture) + " s after the step expired"
+                : "still not accepted 60 s after the step expired";
+            if (late) await Settled(accepting).ConfigureAwait(false);
+            throw new AssertionException("Hang: " + trace + " stream acceptance exceeded " + Step.TotalSeconds.ToString(CultureInfo.InvariantCulture)
+                + " s with " + pumps.Count.ToString(CultureInfo.InvariantCulture) + " peer pump(s) running; " + outcome
+                + (pumpsStopped ? "" : " (pumps did not stop)") + ". " + HangEvidence(trace));
         }
 
         private static void IgnoreDisposed(Action action)
@@ -1020,7 +1061,9 @@ namespace EmbedIO.Tests
                     var listener = (SafeHandle)Call(registration, "CreateListener"); owners.Push(listener);
                     Call(listener, "EnableAcceptance");
                     Call(listener, "Start", new IPEndPoint(IPAddress.Loopback, 0), H3);
-                    return new Server(api, registration, configuration, listener, certificate, (IPEndPoint)Call(listener, "LocalEndPoint"));
+                    var endpoint = (IPEndPoint)Call(listener, "LocalEndPoint");
+                    RememberPort(endpoint.Port, "listener");
+                    return new Server(api, registration, configuration, listener, certificate, endpoint);
                 }
                 catch
                 {
@@ -1048,21 +1091,22 @@ namespace EmbedIO.Tests
             try
             {
                 var accept = (Task)Call(server.Listener, "AcceptAsync", token);
-                try { await accept.WaitAsync(Step, token).ConfigureAwait(false); }
+                try { await accept.WaitAsync(Step - TimeSpan.FromSeconds(3), token).ConfigureAwait(false); }
                 catch (TimeoutException)
                 {
                     // Record why no connection reached the queue before failing.
-                    await Task.WhenAny(connecting, Task.Delay(Step, CancellationToken.None)).ConfigureAwait(false);
+                    await Task.WhenAny(connecting, Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None)).ConfigureAwait(false);
                     var admission = server.Listener.GetType().GetProperty("LastAdmissionFailure", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(server.Listener);
                     throw new TimeoutException("No native connection was accepted within " + Step.TotalSeconds.ToString(CultureInfo.InvariantCulture)
                         + " s; client " + (connecting.IsCompletedSuccessfully ? "connected" : connecting.Exception?.InnerException?.ToString() ?? "pending")
                         + "; listener admission failure " + (admission?.ToString() ?? "none") + "; queued " + QueuedConnections(server.Listener).ToString(CultureInfo.InvariantCulture)
-                        + "; endpoint " + server.Endpoint + ".");
+                        + "; endpoint " + server.Endpoint + "; " + PortHistory(server.Endpoint.Port) + ".");
                 }
                 connection = Handle(accept);
                 Call(connection, "EnableStreamAcceptance");
                 Call(connection, "Configure", server.Configuration);
                 var peer = await connecting.WaitAsync(token).ConfigureAwait(false);
+                RememberPort(peer.LocalEndPoint.Port, "client");
                 await ((Task)(connection.GetType().GetProperty("Connected", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(connection)
                     ?? throw new AssertionException("Missing handshake completion."))).WaitAsync(token).ConfigureAwait(false);
                 return (connection, peer);
@@ -1219,7 +1263,7 @@ namespace EmbedIO.Tests
             if (OperatingSystem.IsMacOS() && File.Exists("/usr/bin/sample"))
             {
                 using var sampler = Process.Start(new ProcessStartInfo("/usr/bin/sample",
-                    Environment.ProcessId.ToString(CultureInfo.InvariantCulture) + " 2 -file " + file + "-sample.txt")
+                    Environment.ProcessId.ToString(CultureInfo.InvariantCulture) + " 2 -file \"" + file + "-sample.txt\"")
                 { UseShellExecute = false });
                 sampler?.WaitForExit(60000);
             }
