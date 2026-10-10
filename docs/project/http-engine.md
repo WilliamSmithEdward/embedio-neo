@@ -7180,3 +7180,5 @@ application integration and datagram delivery are still incomplete; no listener
 default or public API is changed by this increment.
 
 Final combined native local-abort acceptance reports 4908 Windows cases: 4903 passed, five existing skips, zero failures (3m 21s). Complete builds for both targets and both source guards pass. Hosted checks on the final PR head remain required before integration.
+
+Native abort reconciliation onto verified direction merge a4f7105 preserves the entire tested 28480e0 tree before this status note. Production source, tests, workflows and discovery floor are unchanged; the retained 4908-case full result applies to those identical bytes. Fresh exact-head hosted checks remain required after the history reconciliation.
