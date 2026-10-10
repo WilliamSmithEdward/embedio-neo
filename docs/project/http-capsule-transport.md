@@ -185,3 +185,34 @@ route cases exposed attempted wrong-protocol acceptance producing 500. The route
 now rejects generic CONNECT before invoking the WebSocket handshake; a focused
 294-case set passes, including all HTTP/3 listener and managed WebSocket cases.
 Final combined-source full-suite and platform gates remain required.
+## Combined-source checkpoint
+
+HTTP/3 performance was integrated into the engine branch as 01e785d through
+PR #223 after all 35 exact-head checks were terminal (32 passed, three intentional
+skips); tested and merged trees matched. The first Windows run had one unresolved
+HTTP/2 drain timeout; twenty fresh focused rounds passed, then one unchanged
+failed-job rerun passed. That initial failure is retained as a program validation
+concern, not described as repaired or infrastructure.
+
+The capsule branch was reconciled at 44201f0, retaining both header coalescing
+and stream-local tunnel failure control. Its full Windows suite passed 4,625
+cases: 4,620 passed, five existing skips, zero failures in 2m59.748s. All fifteen
+independent H2 cleartext/TLS and H3 capsule vectors passed against that immutable
+snapshot; core SHA-256 was
+`3eaaa9e6d3e85d2ac88e4580b1c46f2e5427fe0e237f26fd9af5eedbaff9c39e`.
+The container image, runtime and peer pins are unchanged from the preceding runs.
+
+The independent batch oracle now also exercises capsule streamed/skipped payloads
+with contiguous and fragmented input, complete/truncated tuples, nonminimal integer
+widths, maximum declarations and terminal-reader behavior. 100,000 mutations passed
+with seed 20261010; the unchanged HTTP/3 oracle also passed 100,000 with its earlier
+CI seed 1523930174. The capsule mode is added to Fuzz CI without changing or weakening
+existing modes. This is framing mutation evidence, not a claim that every connection,
+application extension, lifetime or platform path has been fuzzed.
+
+The public guide example compiles without warnings. Fifty-nine relevant retained
+netstandard-asset cases passed on .NET 10.0.12, including the public TLS-shutdown
+binding; this does not establish older TLS or .NET Framework runtime support.
+Final hosted checks and wider cancellation/drain/resource campaigns remain required.
+See [the usage guide](../guides/capsule-tunnels.md) and
+[approved migration impact](../compatibility/migration.md#generic-tunnel-and-capsule-carriers-unreleased).

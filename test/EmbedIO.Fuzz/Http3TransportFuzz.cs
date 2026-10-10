@@ -17,8 +17,11 @@ internal static class Http3TransportFuzz
 
     internal static async Task<bool> RunAsync(string[] args)
     {
-        if (args.Length == 0 || args[0] != "--http3-transport") return false;
-        if (args.Length != 3) throw new ArgumentException("--http3-transport seed iterations");
+        if (args.Length == 0 || (args[0] != "--http3-transport" && args[0] != "--capsule-transport")) return false;
+        var capsules = args[0] == "--capsule-transport";
+        var readerType = capsules ? typeof(EmbedIO.WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpCapsuleTransport", true)
+            ?? throw new InvalidOperationException("Missing capsule reader.") : ReaderType;
+        if (args.Length != 3) throw new ArgumentException("Transport mode requires seed and iterations.");
         var seed = int.Parse(args[1]);
         var iterations = int.Parse(args[2]);
         if (iterations < 1 || iterations > 1_000_000) throw new ArgumentOutOfRangeException(nameof(iterations));
@@ -34,12 +37,14 @@ internal static class Http3TransportFuzz
                 input = Generate(random, iteration);
                 for (mode = 0; mode < 3; ++mode)
                 {
+                    // Capsules deliberately have no declared-length buffered-read API.
+                    if (capsules && mode == 1) continue;
                     var expected = Reference(input, mode);
                     foreach (var fragmented in new[] { false, true })
                     {
                         chunks.Clear();
                         using var source = new FragmentStream(input, fragmented ? random : null, chunks);
-                        var reader = Activator.CreateInstance(ReaderType, BindingFlags.Instance | BindingFlags.NonPublic,
+                        var reader = Activator.CreateInstance(readerType, BindingFlags.Instance | BindingFlags.NonPublic,
                             null, new object[] { source }, null) ?? throw new InvalidOperationException("Missing reader constructor.");
                         var frames = new List<Frame>();
                         var state = "End";
@@ -74,12 +79,18 @@ internal static class Http3TransportFuzz
                             }
                             catch (IOException error)
                             {
+                                if (capsules)
+                                {
+                                    if (error is not EndOfStreamException) throw;
+                                    state = "Truncated";
+                                    break;
+                                }
                                 var code = Convert.ToInt64(error.GetType().GetProperty("ErrorCode")?.GetValue(error));
                                 state = code switch { 0x106 => "Truncated", 0x107 => "Oversized", _ => throw new InvalidDataException("Unexpected HTTP/3 error.", error) };
                                 break;
                             }
                         }
-                        var actual = new Result(state, checked((int)source.Position), Get<long>(reader, "Remaining"), frames.ToArray());
+                        var actual = new Result(state, checked((int)source.Position), Remaining(reader, capsules), frames.ToArray());
                         if (JsonSerializer.Serialize(actual) != JsonSerializer.Serialize(expected))
                             throw new InvalidDataException($"Oracle mismatch: expected {JsonSerializer.Serialize(expected)}, actual {JsonSerializer.Serialize(actual)}");
                         var consumed = source.Position;
@@ -104,6 +115,7 @@ internal static class Http3TransportFuzz
         {
             Console.Error.WriteLine(JsonSerializer.Serialize(new
             {
+                transport = capsules ? "capsule" : "http3",
                 seed,
                 iteration,
                 mode,
@@ -114,16 +126,20 @@ internal static class Http3TransportFuzz
             }));
             throw;
         }
-        Console.WriteLine($"Passed {iterations} HTTP/3 transport mutations across streamed, buffered and skipped payloads, contiguous and fragmented reads; seed {seed}.");
+        Console.WriteLine($"Passed {iterations} {(capsules ? "capsule" : "HTTP/3")} transport mutations across {(capsules ? "streamed and skipped" : "streamed, buffered and skipped")} payloads, contiguous and fragmented reads; seed {seed}.");
         return true;
     }
 
     private static T Get<T>(object value, string property)
         => (T)(value.GetType().GetProperty(property)?.GetValue(value) ?? throw new InvalidDataException("Missing reader property."));
 
+    private static long Remaining(object reader, bool capsules)
+        => capsules ? (long)(reader.GetType().GetField("_readRemaining", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(reader)
+            ?? throw new InvalidOperationException("Missing capsule remainder.")) : Get<long>(reader, "Remaining");
+
     private static async Task<object?> Invoke(object reader, string method, params object[] args)
     {
-        var operation = ReaderType.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)
+        var operation = reader.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Missing reader operation.");
         var pending = operation.Invoke(reader, args) ?? throw new InvalidOperationException("Missing reader operation.");
         // The optimized reader uses ValueTask; the baseline uses Task. Consume
