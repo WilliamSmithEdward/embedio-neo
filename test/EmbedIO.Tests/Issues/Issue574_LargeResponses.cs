@@ -90,8 +90,30 @@ namespace EmbedIO.Tests.Issues
             var url = Resources.GetServerAddress();
             var payload = MakePayload(6 * 1024 * 1024);
             var jsonValue = Encoding.ASCII.GetString(payload);
+            var serialize = ResponseSerializer.Json(buffered);
+            Task? serialization = null;
+            IHttpContext? jsonContext = null;
+            var serializationPhase = "not entered";
+            var jsonClosed = 0;
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(mode))
-                .WithWebApi("/api", ResponseSerializer.Json(buffered), m => m.WithController(() => new LargeController(jsonValue)))
+                .WithWebApi("/api", async (context, value) =>
+                {
+                    jsonContext = context;
+                    context.OnClose(_ => Interlocked.Increment(ref jsonClosed));
+                    Volatile.Write(ref serializationPhase, "serialize invoked");
+                    try
+                    {
+                        serialization = serialize(context, value);
+                        Volatile.Write(ref serializationPhase, "await serialization");
+                        await serialization;
+                        Volatile.Write(ref serializationPhase, "serialization completed");
+                    }
+                    catch
+                    {
+                        Volatile.Write(ref serializationPhase, "serialization failed");
+                        throw;
+                    }
+                }, m => m.WithController(() => new LargeController(jsonValue)))
                 .WithModule(new ActionModule("/large", HttpVerbs.Get, async context =>
                 {
                     using var output = context.OpenResponseStream(buffered, preferCompression: false);
@@ -109,6 +131,20 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(await bytes, Is.EqualTo(payload));
                 Assert.That(JsonSerializer.Deserialize<string>(await json), Is.EqualTo(jsonValue));
                 Assert.That(await client.GetStringAsync(url + "health"), Is.EqualTo("healthy"));
+            }
+            catch (Exception error)
+            {
+                TestContext.Error.WriteLine($"Large-response failure: mode={mode}, buffered={buffered}, server={server.State}, run={running.Status}, serializationPhase={Volatile.Read(ref serializationPhase)}, serialization={serialization?.Status}, jsonClosed={Volatile.Read(ref jsonClosed)}, clientError={error.GetType().Name}.");
+                try
+                {
+                    if (jsonContext != null)
+                        TestContext.Error.WriteLine($"JSON context: id={jsonContext.Id}, cancellation={jsonContext.CancellationToken.IsCancellationRequested}, status={jsonContext.Response.StatusCode}, chunked={jsonContext.Response.SendChunked}, declaredLength={jsonContext.Response.ContentLength64}.");
+                }
+                catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError))
+                {
+                    TestContext.Error.WriteLine($"JSON context diagnostic unavailable: {diagnosticError.GetType().Name}.");
+                }
+                throw;
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
         }
