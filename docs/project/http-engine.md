@@ -7025,3 +7025,16 @@ retained targets and syntax/suppression/format guards pass. Native application
 HTTP integration and datagram delivery are still unavailable; these results do
 not establish macOS outgoing streams, fault/finalizer/soak coverage or native
 provider performance.
+
+Native listener audit follow-up: the two deterministic findings in PR #232 also
+fail on the unchanged 50fd2a7 binary. Reserving bounded accept capacity before
+ownership transfer restores prompt refusal, and unstarted stop now completes
+pending accepts. All five unchanged audit cases pass on Windows and pinned
+Linux with the independent correction. Audit tests/docs were brought into this
+development branch only after that before/after proof; PR #232 was not merged
+and its branch was not changed. Final combined validation passes 59 native cases
+on Windows and pinned Linux. The full Windows suite reports 4804 cases, 4799
+passed, five existing skips, zero failures, in 3m 23s. Locked restore, warning-free
+solution builds, whitespace, syntax and suppression guards pass. Hosted final-head
+acceptance remains required. Callback fault isolation and broader finalizer/ABI
+coverage remain open in the audit record.

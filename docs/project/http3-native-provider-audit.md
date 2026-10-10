@@ -140,3 +140,36 @@ floor from actual discovery.
 - The proposed fixes were not executed.
 - Finalizer-thread closure with live callbacks was reviewed but not exercised.
 - Fault injection for allocation failure was not attempted.
+
+## Current listener correction (development, not merged)
+
+The audit tests were rerun against the unchanged current foundation binary at
+50fd2a7 (SHA-256
+`0CB0D779E552EB650DEAB256A0C6B5872DD7F705D5E3820B176E2785A98A3EE0`).
+Exactly the same two defects fail; the other three cases pass. The independent
+listener correction reserves one of 256 accept slots before transferring native
+ownership. A full queue returns the existing refusal status without closing or
+owning the new handle. Successful dequeue, failed admission and disposal release
+reservations exactly once. Stop of an unstarted acceptance-enabled listener
+completes its accept channel without waiting for a native stop event that cannot
+arrive.
+
+All five unchanged audit cases pass on Windows and in the same pinned Linux
+image against the corrected binary. Both actual core targets build without
+warnings. The Linux probe initially selected a read-only default results folder;
+that setup failure is retained, and a writable `/tmp` results directory is used
+for the passing invocation. Final combined validation passes all 59 native cases
+on Windows and pinned Linux (same Windows-built IL). The complete Windows suite
+reports 4804 cases, 4799 passed, five existing skips, zero failures, in 3m 23s.
+Locked restore, warning-free solution builds, changed-source whitespace, syntax
+and suppression guards pass. All hosted final-head checks remain required.
+Combined discovery is 4804: the 4799 current foundation cases plus these five
+audit cases; no production API or application default changes.
+
+The initial inspection findings above refer to 0591b27. The current foundation
+already installs callbacks and waits for real shutdown completion when rejecting
+peer streams, and opt-in configurations explicitly permit and test peer streams.
+Those historical findings do not describe the current implementation. Callback
+allocation-failure containment, accept-error isolation from listener stop,
+32-bit ABI validation and finalizer/fault coverage remain outstanding; this
+listener correction does not claim to resolve them.

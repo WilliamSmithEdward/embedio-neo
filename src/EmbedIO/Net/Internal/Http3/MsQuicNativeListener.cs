@@ -128,8 +128,8 @@ namespace EmbedIO.Net.Internal.Http3
                 try
                 {
                     if (Marshal.ReadInt32(eventData) == 1) { StopAcceptance?.Invoke(); Stopped.TrySetResult(); }
-                    // Connection ownership is not implemented yet. Never accept a
-                    // native handle without installing its callback and lifetime.
+                    // Acceptance transfers ownership only after installing the
+                    // native connection callback and its retained parent lifetime.
                     if (Marshal.ReadInt32(eventData) == 0)
                     {
                         var accept = Accept;
@@ -150,28 +150,58 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly MsQuicApi.ListenerFunctions _functions;
         private readonly Signals _signals;
         private Channel<MsQuicNativeConnection>? _accepted;
+        private const int AcceptQueueCapacity = 256;
+        private int _queuedConnections;
+        private int _acceptanceStopped;
+        private bool TryReserveAcceptSlot()
+        {
+            while (true)
+            {
+                var count = Volatile.Read(ref _queuedConnections);
+                if (count >= AcceptQueueCapacity) return false;
+                if (Interlocked.CompareExchange(ref _queuedConnections, count + 1, count) == count) return true;
+            }
+        }
         internal void EnableAcceptance()
         {
             lock (_sync)
             {
                 if (_started || IsClosed) throw new InvalidOperationException("Acceptance must be enabled before startup.");
                 if (_accepted != null) return;
-                var queue = Channel.CreateBounded<MsQuicNativeConnection>(256);
+                var queue = Channel.CreateBounded<MsQuicNativeConnection>(AcceptQueueCapacity);
                 _accepted = queue;
-                _signals.StopAcceptance = () => queue.Writer.TryComplete();
+                _signals.StopAcceptance = () =>
+                {
+                    Volatile.Write(ref _acceptanceStopped, 1);
+                    queue.Writer.TryComplete();
+                };
                 _signals.Accept = connection =>
                 {
-                    if (Volatile.Read(ref _stopping)) return OperatingSystem.IsWindows() ? 0x80004004u : OperatingSystem.IsMacOS() ? 89u : 125u;
-                    var owned = _registration.AcceptConnection(connection);
-                    if (!queue.Writer.TryWrite(owned)) owned.Dispose();
-                    // Once the callback is installed, ownership belongs to us.
-                    // Even a full queue returns success after closing its accepted handle.
-                    return 0;
+                    var refusal = OperatingSystem.IsWindows() ? 0x80004004u : OperatingSystem.IsMacOS() ? 89u : 125u;
+                    if (Volatile.Read(ref _acceptanceStopped) != 0 || Volatile.Read(ref _stopping) || !TryReserveAcceptSlot()) return refusal;
+                    var queued = false;
+                    try
+                    {
+                        if (Volatile.Read(ref _acceptanceStopped) != 0 || Volatile.Read(ref _stopping)) return refusal;
+                        // Refuse overload before installing a callback or taking
+                        // ownership. MsQuic then sends CONNECTION_REFUSED.
+                        var owned = _registration.AcceptConnection(connection);
+                        queued = queue.Writer.TryWrite(owned);
+                        if (!queued) owned.Dispose();
+                        // A stop racing ownership transfer still belongs to us;
+                        // never return failure after closing the accepted handle.
+                        return 0;
+                    }
+                    finally { if (!queued) Interlocked.Decrement(ref _queuedConnections); }
                 };
             }
         }
         internal async Task<MsQuicNativeConnection> AcceptAsync(CancellationToken token)
-            => await (_accepted ?? throw new InvalidOperationException("Acceptance is not enabled.")).Reader.ReadAsync(token).ConfigureAwait(false);
+        {
+            var connection = await (_accepted ?? throw new InvalidOperationException("Acceptance is not enabled.")).Reader.ReadAsync(token).ConfigureAwait(false);
+            Interlocked.Decrement(ref _queuedConnections);
+            return connection;
+        }
         private bool _started;
         private bool _stopping;
         internal MsQuicNativeListener(IntPtr listener, MsQuicRegistration registration, MsQuicApi.ListenerFunctions functions, Signals signals) : base(true)
@@ -200,7 +230,11 @@ namespace EmbedIO.Net.Internal.Http3
                 var retained = false; DangerousAddRef(ref retained);
                 try
                 {
-                    if (!_started) return Task.CompletedTask;
+                    if (!_started)
+                    {
+                        _signals.StopAcceptance?.Invoke();
+                        return Task.CompletedTask;
+                    }
                     _stopping = true; _functions.Stop(handle);
                     return _signals.Stopped.Task;
                 }
@@ -213,7 +247,11 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 _functions.Close(handle);
                 _accepted?.Writer.TryComplete();
-                if (_accepted != null) while (_accepted.Reader.TryRead(out var pending)) pending.Dispose();
+                if (_accepted != null) while (_accepted.Reader.TryRead(out var pending))
+                {
+                    Interlocked.Decrement(ref _queuedConnections);
+                    pending.Dispose();
+                }
                 _signals.Stopped.TrySetResult();
                 GC.KeepAlive(_signals);
             }
