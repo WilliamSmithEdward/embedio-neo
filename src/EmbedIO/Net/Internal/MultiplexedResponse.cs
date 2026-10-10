@@ -132,6 +132,12 @@ namespace EmbedIO.Net.Internal
             {
                 if (_closed) throw new ObjectDisposedException(nameof(MultiplexedResponse));
                 if (count == 0) return;
+                if (!_headersSent && !SuppressBody && _status >= 200 && _exchange is IMultiplexedHeaderCoalescing coalescing)
+                {
+                    try { await coalescing.SendHeadersAndWriteAsync(BuildHeaders(false), buffer, offset, count, token).ConfigureAwait(false); }
+                    finally { _headersSent = coalescing.FinalHeadersSent; }
+                    return;
+                }
                 await EnsureSentAsync(false, token).ConfigureAwait(false);
                 if (!SuppressBody) await _exchange.WriteAsync(buffer, offset, count, false, token).ConfigureAwait(false);
             }

@@ -125,6 +125,7 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 if (_writeFailed || _outputClosed) return Task.FromException<bool>(new IOException("HTTP/2 output is no longer usable."));
                 if (write.Token.IsCancellationRequested) return Task.FromCanceled<bool>(write.Token);
+                if (write.StreamToken.IsCancellationRequested) return Task.FromCanceled<bool>(write.StreamToken);
                 if (!_flushing)
                 {
                     _flushing = true;
@@ -140,7 +141,13 @@ namespace EmbedIO.Net.Internal.Http2
                         write.Registration = write.Token.Register(static state =>
                         {
                             var queued = (Http2OutputWrite)(state ?? throw new InvalidOperationException("Missing queued write."));
-                            queued.Owner?.CancelQueued(queued);
+                            queued.Owner?.CancelQueued(queued, queued.Token);
+                        }, write);
+                    if (write.StreamToken.CanBeCanceled)
+                        write.StreamRegistration = write.StreamToken.Register(static state =>
+                        {
+                            var queued = (Http2OutputWrite)(state ?? throw new InvalidOperationException("Missing queued write."));
+                            queued.Owner?.CancelQueued(queued, queued.StreamToken);
                         }, write);
                     _queue.Enqueue(write);
                     return write.Completion.Task;
@@ -150,7 +157,7 @@ namespace EmbedIO.Net.Internal.Http2
             return FlushAsync(write);
         }
 
-        private void CancelQueued(Http2OutputWrite write)
+        private void CancelQueued(Http2OutputWrite write, CancellationToken token)
         {
             lock (_outputSync)
             {
@@ -158,7 +165,7 @@ namespace EmbedIO.Net.Internal.Http2
                 // Left in the queue; the flusher skips it.
                 write.Canceled = true;
             }
-            write.Completion?.TrySetCanceled(write.Token);
+            write.Completion?.TrySetCanceled(token);
         }
 
         // Runs while _flushing is owned by this call. The leading write completes
@@ -192,7 +199,7 @@ namespace EmbedIO.Net.Internal.Http2
                 }
                 // Committed writes ignore later request cancellation. Dispose
                 // outside the output lock: a running callback waits for that lock.
-                foreach (var write in _batch) write.Registration.Dispose();
+                foreach (var write in _batch) write.Unregister();
 
                 var writeToken = ConnectionToken;
                 CancellationTokenSource? linked = null;
@@ -289,7 +296,7 @@ namespace EmbedIO.Net.Internal.Http2
             }
             foreach (var write in pending)
             {
-                write.Registration.Dispose();
+                write.Unregister();
                 write.Completion?.TrySetException(new IOException("HTTP/2 output is no longer usable.", error));
             }
         }
@@ -308,7 +315,7 @@ namespace EmbedIO.Net.Internal.Http2
             }
             foreach (var write in pending)
             {
-                write.Registration.Dispose();
+                write.Unregister();
                 write.Completion?.TrySetException(new ObjectDisposedException(nameof(Http2FrameTransport)));
             }
         }
@@ -324,9 +331,15 @@ namespace EmbedIO.Net.Internal.Http2
     internal abstract class Http2OutputWrite
     {
         protected Http2OutputWrite(CancellationToken token, CancellationToken writeToken)
-        { Token = token; WriteToken = writeToken; }
+            : this(token, default, writeToken) { }
+        // Two tokens cancel a queued write, so callers need not link a request
+        // token with their stream's token for every write.
+        protected Http2OutputWrite(CancellationToken token, CancellationToken streamToken, CancellationToken writeToken)
+        { Token = token; StreamToken = streamToken; WriteToken = writeToken; }
         internal CancellationToken Token { get; }
+        internal CancellationToken StreamToken { get; }
         internal CancellationToken WriteToken { get; }
+        internal bool IsCanceled => Token.IsCancellationRequested || StreamToken.IsCancellationRequested;
         internal Exception? Invalid { get; set; }
         internal abstract int EstimatedBytes { get; }
         internal abstract bool Commit(Http2OutputBuffer output);
@@ -335,10 +348,18 @@ namespace EmbedIO.Net.Internal.Http2
         internal Http2FrameTransport? Owner;
         internal TaskCompletionSource<bool>? Completion;
         internal CancellationTokenRegistration Registration;
+        internal CancellationTokenRegistration StreamRegistration;
         internal bool Committed;
         internal bool Canceled;
         internal bool Result;
         internal Exception? Failure;
+
+        // Call outside the transport's output lock: a running callback waits for it.
+        internal void Unregister()
+        {
+            Registration.Dispose();
+            StreamRegistration.Dispose();
+        }
     }
 
     internal sealed class Http2FrameWrite : Http2OutputWrite
