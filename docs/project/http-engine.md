@@ -7157,3 +7157,5 @@ complete builds for both targets. All new-head checks remain required; neither
 application WebTransport capability nor independent interoperability is claimed.
 
 The native direction branch is reconciled onto verified WebTransport merge 90e84f1. Combined discovery is 4903 (4897 base plus six real-peer direction cases). Fresh combined-source and exact-head hosted validation remain required.
+
+Combined native direction acceptance on WebTransport development base 90e84f1 passes 4903 Windows cases: 4898 passed, five existing skips, zero failures (3m 23s), with complete warning-free builds for both targets. Fresh hosted checks on this reconciled head remain required.
