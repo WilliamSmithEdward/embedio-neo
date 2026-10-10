@@ -65,3 +65,19 @@ The HTTP/1.1 fuzz counts body-framing 500s (F2). The HTTP/2 fuzz counts silent
 closures after a client reset (F4). The HTTP/3 fuzz skips upload cancellation with
 `--avoid-known` (F3) and runs before the HTTP/3 cases, which can stop the listener.
 Remove each allowance with its fix.
+
+## Windows sender pacing and current-engine check
+
+Fragmented requests use an elapsed-time schedule. A one-millisecond sleep can
+consume a full Windows scheduler tick; accumulating one sleep per fragment made
+the test sender exceed its own unchanged five-second response timeout. The first
+current-engine run stopped at seed 20261009, iteration 1230, with 392 delayed
+fragments. A separate 400-sleep diagnostic took 6.17 seconds on that host.
+
+After correcting sender pacing, the same 2,000-iteration seed passed against
+engine 401983a on Windows: 5,029 valid requests, 473 malformed sequences and 211
+aborts; no body-framing 500s, no active handlers at completion, handle growth 7
+and retained managed growth about 2.24 MiB. All 57 HTTP/1 cases passed (44
+conforming and 13 permitted policy choices). These results do not cover the
+HTTP/2, HTTP/3 or sustained-load campaigns, or the legacy range-end policy.
+The original timeout record remains separate from the passing campaign evidence.

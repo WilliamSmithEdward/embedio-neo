@@ -1,4 +1,5 @@
-﻿using System.Net.Sockets;
+﻿using System.Diagnostics;
+using System.Net.Sockets;
 using System.Text;
 
 // Independent HTTP/1.1 response reader written from RFC 9112 Section 6.3; it shares
@@ -44,6 +45,8 @@ internal sealed class RawHttp1 : IDisposable
     internal void SendFragmented(byte[] bytes, IReadOnlyList<int> chunks, int delayMs)
     {
         var offset = 0;
+        var started = Stopwatch.GetTimestamp();
+        var sentChunks = 0;
         foreach (var size in chunks)
         {
             if (offset >= bytes.Length) break;
@@ -51,7 +54,12 @@ internal sealed class RawHttp1 : IDisposable
             _stream.Write(bytes, offset, count);
             _stream.Flush();
             offset += count;
-            if (delayMs > 0) Thread.Sleep(delayMs);
+            // Pace against elapsed time: one millisecond sleeps can take a full
+            // scheduler tick on Windows. Accumulating those ticks can make the
+            // sender itself exceed the unchanged response timeout.
+            sentChunks++;
+            while (delayMs > 0 && Stopwatch.GetElapsedTime(started).TotalMilliseconds < (long)sentChunks * delayMs)
+                Thread.Sleep(1);
         }
         if (offset < bytes.Length) _stream.Write(bytes, offset, bytes.Length - offset);
     }
