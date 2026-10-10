@@ -26,10 +26,20 @@ namespace EmbedIO.Tests
             await RunResponseTrailers(coalesced);
         }
 
+        [Test]
+        public async Task AdapterHttp3TrailersCompleteAfterACoalescedBody()
+        {
+            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            { Assert.Ignore("The host does not provide QUIC."); return; }
+            if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
+            { Assert.Ignore("The netstandard asset does not provide direct QUIC transport."); return; }
+            await RunResponseTrailers(true, true);
+        }
+
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task RunResponseTrailers(bool coalesced)
+        private static async Task RunResponseTrailers(bool coalesced, bool adapter = false)
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var certificate = HttpsSmoke.CreateCertificate();
@@ -67,6 +77,33 @@ namespace EmbedIO.Tests
                     .Invoke(exchange, arguments) ?? throw new AssertionException("Missing task."));
             Func<object, Task> application = async exchange =>
             {
+                if (adapter)
+                {
+                    var contextType = assembly.GetType("EmbedIO.Net.Internal.MultiplexedContext", true)
+                        ?? throw new AssertionException("Missing adapter context.");
+                    var context = (IHttpContextImpl)(Activator.CreateInstance(contextType, Flags, null,
+                        new object[] { exchange, new IPEndPoint(IPAddress.Loopback, 80), new IPEndPoint(IPAddress.Loopback, 12345), true }, null)
+                        ?? throw new AssertionException("Missing context."));
+                    try
+                    {
+                        context.Response.ContentLength64 = 3;
+                        var interim = context.Response.GetType().GetMethod("SendInformationalAsync", Flags)
+                            ?? throw new AssertionException("Missing interim adapter writer.");
+                        await (Task)(interim.Invoke(context.Response, new object[]
+                        { 103, new WebHeaderCollection { ["Link"] = "</asset>; rel=preload" }, context.CancellationToken })
+                            ?? throw new AssertionException("Missing interim task."));
+                        Assert.That(context.Response.StatusCode, Is.EqualTo(200));
+                        (context.Response.GetType().GetMethod("PrepareTrailers", Flags) ?? throw new AssertionException("Missing declaration."))
+                            .Invoke(context.Response, new object[] { new[] { "x-verified" } });
+                        await context.Response.OutputStream.WriteAsync(new byte[] { 7, 8, 9 }, context.CancellationToken);
+                        var trailers = new WebHeaderCollection { ["x-verified"] = "yes" };
+                        (context.Response.GetType().GetMethod("SetTrailers", Flags) ?? throw new AssertionException("Missing snapshot."))
+                            .Invoke(context.Response, new object[] { trailers });
+                        trailers["x-verified"] = "changed-after-set";
+                    }
+                    finally { context.Close(); }
+                    return;
+                }
                 (exchangeType.GetMethod("ExpectTrailers", Flags) ?? throw new AssertionException("Missing reservation."))
                     .Invoke(exchange, null);
                 var token = (CancellationToken)(exchangeType.GetProperty("CancellationToken")?.GetValue(exchange)
@@ -110,6 +147,8 @@ namespace EmbedIO.Tests
                     Assert.That(await response.Content.ReadAsByteArrayAsync(deadline.Token), Is.EqualTo(new byte[] { 7, 8, 9 }));
                     Assert.That(response.TrailingHeaders.GetValues("x-verified"), Is.EqualTo(new[] { "yes" }));
                     Assert.That(response.Headers.Contains("x-verified"), Is.False);
+                    Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                    Assert.That(response.Headers.Contains("link"), Is.False);
                 }
             }
             finally

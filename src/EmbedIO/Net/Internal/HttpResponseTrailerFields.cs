@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Net;
 using System.Text;
 using EmbedIO.Net.Internal.Http2;
 
@@ -20,6 +22,44 @@ namespace EmbedIO.Net.Internal
                 if (character >= 'A' && character <= 'Z') characters[i] = (char)(character + ('a' - 'A'));
             }
             return new string(characters);
+        }
+
+        internal static HashSet<string> Declaration(string[] names)
+        {
+            if (names == null) throw new ArgumentNullException(nameof(names));
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            long size = 0;
+            foreach (var name in names)
+            {
+                var wire = LowercaseName(name);
+                Validate(new[] { new HpackField(wire, "") });
+                if (!result.Add(wire)) continue;
+                size += wire.Length + 2L;
+                if (size > 32768) throw new InvalidDataException("Trailer declaration exceeds 32 KiB.");
+            }
+            if (result.Count == 0) throw new ArgumentException("Declare at least one trailer field.", nameof(names));
+            return result;
+        }
+
+        internal static HpackField[] Snapshot(WebHeaderCollection trailers, HashSet<string> declared)
+        {
+            if (trailers == null) throw new ArgumentNullException(nameof(trailers));
+            var fields = new List<HpackField>();
+            long size = 0;
+            foreach (var name in trailers.AllKeys)
+            {
+                if (name == null || !declared.Contains(name)) throw new InvalidDataException("Trailer field was not declared before response headers.");
+                var wire = LowercaseName(name);
+                foreach (var value in trailers.GetValues(name) ?? Array.Empty<string>())
+                {
+                    size += wire.Length + (long)value.Length + 32;
+                    if (size > 32768) throw new InvalidDataException("Response trailer section exceeds 32 KiB.");
+                    fields.Add(new HpackField(wire, value));
+                }
+            }
+            var result = fields.ToArray();
+            Validate(result);
+            return result;
         }
 
         internal static void Validate(HpackField[] fields)

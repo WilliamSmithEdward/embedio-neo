@@ -35,6 +35,37 @@ namespace EmbedIO.Tests
         [TestCase(false, 3)]
         [TestCase(true, 0)]
         [TestCase(true, 3)]
+        public async Task AdapterCompletesReservedTrailersAfterTheBody(bool length, int size)
+        {
+            var expected = Enumerable.Range(1, size).Select(value => (byte)value).ToArray();
+            await WithServer(async exchange =>
+            {
+                var context = Adapter(exchange);
+                try
+                {
+                    if (length) context.Response.ContentLength64 = size;
+                    (context.Response.GetType().GetMethod("PrepareTrailers", Flags) ?? throw new AssertionException("Missing declaration."))
+                        .Invoke(context.Response, new object[] { new[] { "X-Adapter" } });
+                    if (size != 0) await context.Response.OutputStream.WriteAsync(expected, context.CancellationToken);
+                    var trailers = new System.Net.WebHeaderCollection { ["X-Adapter"] = "snapshot" };
+                    (context.Response.GetType().GetMethod("SetTrailers", Flags) ?? throw new AssertionException("Missing trailer snapshot."))
+                        .Invoke(context.Response, new object[] { trailers });
+                    trailers["X-Adapter"] = "changed-after-set";
+                }
+                finally { context.Close(); }
+            }, async client =>
+            {
+                using var response = await client.GetAsync("adapter-trailers");
+                Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.EqualTo(expected));
+                Assert.That(response.TrailingHeaders.GetValues("x-adapter"), Is.EqualTo(new[] { "snapshot" }));
+                Assert.That(response.Headers.Contains("x-adapter"), Is.False);
+            });
+        }
+
+        [TestCase(false, 0)]
+        [TestCase(false, 3)]
+        [TestCase(true, 0)]
+        [TestCase(true, 3)]
         public async Task ResponseTrailersFollowCompleteBodyWithoutPrematureEnd(bool length, int size)
         {
             var expected = Enumerable.Range(1, size).Select(value => (byte)value).ToArray();
