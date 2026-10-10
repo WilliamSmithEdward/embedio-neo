@@ -163,3 +163,25 @@ when the old length check was restored temporarily; both pass with the transitio
 The malformed-capsule cases still require stream PROTOCOL_ERROR and healthy siblings.
 Full-suite, independent H2/H3 peer campaigns and final cross-platform checks remain
 pending. No Linux/macOS capsule result, shipping capability or performance claim is made.
+## Independent carrier evidence
+
+The immutable 6afca04 snapshot passed all five hyper-h2 4.4.1 vectors over
+cleartext and TLS in the pinned Ubuntu 24.04.5/.NET 10.0.12/MsQuic 2.6.2
+container (four CPUs). The core SHA-256 was
+`E3009147578CE12DC409D86C0F390785D9B1FF86595C55CD91E204756C239177`.
+The same campaign honestly failed all HTTP/3 cases with 501 before application
+handoff; the original reports remain retained. Its overall result was failure.
+
+William approved changing the HTTP/3 staging gate to dispatch generic extended
+CONNECT for application authorization. Snapshot 0b7bea0 then passed all five
+independent aioquic 1.3.0 vectors: unknown value crossing flow credit, nonminimal
+integers and empty value, send FIN with verified later application input, and
+three truncated-input reset cases, each with a healthy sibling. This is reliable
+capsule-stream evidence, not native QUIC DATAGRAM or WebTransport evidence.
+
+The earlier corrected full Windows suite at 6afca04 passed 4,609 cases (4,604
+passed and five existing skips). Following generic dispatch, two WebSocket-only
+route cases exposed attempted wrong-protocol acceptance producing 500. The route
+now rejects generic CONNECT before invoking the WebSocket handshake; a focused
+294-case set passes, including all HTTP/3 listener and managed WebSocket cases.
+Final combined-source full-suite and platform gates remain required.
