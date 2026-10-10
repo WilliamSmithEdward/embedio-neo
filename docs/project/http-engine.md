@@ -6675,10 +6675,10 @@ required. See the [migration note](../compatibility/migration.md#higher-http1-mi
 The engine development branch reached `e1add82`: HTTP/1 higher-minor processing
 (PR #210) and the current comparative performance checkpoint (PR #211) are
 integrated after every exact-head check passed. This is development-branch
-integration, not a main merge or release. The accepted core has a 4,469-case
-discovery floor. PR #212's chunk batching remains a separate draft with a
-4,475-case floor; its preliminary performance and independent Linux campaign
-must not be attributed to the integrated engine until accepted.
+integration, not a main merge or release. The accepted core has a 4,475-case
+discovery floor. PR #212's bounded chunk batching is now integrated after every
+exact-head check passed; the merged tree matches the tested source. Its preliminary
+performance and independent Linux campaign retain their documented limits.
 
 HTTP/2 and HTTP/3 implementations now have independent-peer and regression
 evidence, including stream cancellation isolation, codec checks and bounded
