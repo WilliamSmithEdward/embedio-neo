@@ -351,10 +351,16 @@ namespace EmbedIO.Tests
             if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
             await NativeBlockedSendCore(dispose);
         }
+        [Test]
+        public async Task NativeLocalWriteAbortReleasesACommittedFlowBlockedSend()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeBlockedSendCore(false, true);
+        }
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task NativeBlockedSendCore(bool dispose)
+        private static async Task NativeBlockedSendCore(bool dispose, bool localAbort = false)
         {
             await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
             {
@@ -373,7 +379,18 @@ namespace EmbedIO.Tests
                 var writing = ((ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)payload, false, cancellation.Token)).AsTask();
                 await Task.Delay(50, token);
                 Assert.That(writing.IsCompleted, Is.False, "The committed unbuffered write must remain blocked by unread peer flow control.");
-                if (dispose)
+                if (localAbort)
+                {
+                    var closed = NativeDirection(native, "WritesClosed");
+                    ListenerCall(native, "Abort", QuicAbortDirection.Write, 0x127L);
+                    await Assert.ThatAsync(async () => await writing.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.QuicError)).EqualTo(QuicError.OperationAborted));
+                    await Assert.ThatAsync(async () => await closed.WaitAsync(token), Throws.TypeOf<QuicException>());
+                    await Assert.ThatAsync(async () => await stream.ReadsClosed.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.ApplicationErrorCode)).EqualTo(0x127));
+                    Assert.That(NativeDirection(native, "ReadsClosed").IsCompletedSuccessfully, Is.True);
+                }
+                else if (dispose)
                 {
                     native.Dispose();
                     await Assert.ThatAsync(async () => await writing.WaitAsync(token), Throws.InstanceOf<System.IO.IOException>());
@@ -558,6 +575,83 @@ namespace EmbedIO.Tests
                 }
                 Assert.That(NativeDirection(native, "ReadsClosed"), Is.SameAs(reads));
                 Assert.That(NativeDirection(native, "WritesClosed"), Is.SameAs(writes));
+            });
+        }
+
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task NativeLocalAbortPreservesTheOtherDirectionAndPeerErrorCode(int direction)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeLocalAbortCore(direction);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeLocalAbortCore(int choice)
+        {
+            var direction = choice == 0 ? QuicAbortDirection.Read : choice == 1 ? QuicAbortDirection.Write : QuicAbortDirection.Both;
+            var firstCode = choice == 3 ? 0x3fffffffffffffffL : 0x125L;
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                await using var remote = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                await remote.WriteAsync(new byte[] { 71 }, token);
+                var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                await accepting.WaitAsync(token);
+                using var native = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                    ?? throw new AssertionException("Missing native stream."));
+                var bytes = new byte[8];
+                Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.EqualTo(1));
+                var reads = NativeDirection(native, "ReadsClosed");
+                var writes = NativeDirection(native, "WritesClosed");
+                var readAborted = direction != QuicAbortDirection.Write;
+                var writeAborted = direction != QuicAbortDirection.Read;
+                var pendingRead = ((ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token)).AsTask();
+                Assert.That(pendingRead.IsCompleted, Is.False);
+                Assert.Throws<ArgumentOutOfRangeException>(() => ListenerCall(native, "Abort", direction, -1L));
+                Assert.Throws<ArgumentOutOfRangeException>(() => ListenerCall(native, "Abort", direction, 0x4000000000000000L));
+                Assert.Throws<ArgumentOutOfRangeException>(() => ListenerCall(native, "Abort", (QuicAbortDirection)99, 0L));
+                Assert.That(reads.IsCompleted, Is.False, "Rejected arguments must not change stream state.");
+                Assert.That(writes.IsCompleted, Is.False);
+                ListenerCall(native, "Abort", direction, firstCode);
+                ListenerCall(native, "Abort", direction, 0x126L);
+                if (readAborted)
+                {
+                    await Assert.ThatAsync(async () => await reads.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.QuicError)).EqualTo(QuicError.OperationAborted));
+                    await Assert.ThatAsync(async () => await pendingRead.WaitAsync(token), Throws.TypeOf<QuicException>());
+                    await Assert.ThatAsync(async () => await remote.WritesClosed.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.ApplicationErrorCode)).EqualTo(firstCode));
+                }
+                else
+                {
+                    Assert.That(reads.IsCompleted, Is.False);
+                    await remote.WriteAsync(new byte[] { 72 }, true, token);
+                    Assert.That(await pendingRead.WaitAsync(token), Is.EqualTo(1));
+                    Assert.That(bytes[0], Is.EqualTo(72));
+                    Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.Zero);
+                    await reads.WaitAsync(token);
+                }
+                if (writeAborted)
+                {
+                    await Assert.ThatAsync(async () => await writes.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.QuicError)).EqualTo(QuicError.OperationAborted));
+                    await Assert.ThatAsync(async () => await remote.ReadsClosed.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.ApplicationErrorCode)).EqualTo(firstCode));
+                    await Assert.ThatAsync(async () => await (ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)new byte[] { 73 }, false, token),
+                        Throws.TypeOf<QuicException>());
+                }
+                else
+                {
+                    Assert.That(writes.IsCompleted, Is.False);
+                    await (ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)new byte[] { 74 }, true, token);
+                    Assert.That(await remote.ReadAsync(bytes, token), Is.EqualTo(1));
+                    Assert.That(bytes[0], Is.EqualTo(74));
+                    Assert.That(await remote.ReadAsync(bytes, token), Is.Zero);
+                    await writes.WaitAsync(token);
+                }
             });
         }
 

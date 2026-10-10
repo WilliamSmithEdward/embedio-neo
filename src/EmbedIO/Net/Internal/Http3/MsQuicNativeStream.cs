@@ -350,6 +350,48 @@ namespace EmbedIO.Net.Internal.Http3
             }
             finally { if (retained) DangerousRelease(); }
         }
+        internal void Abort(QuicAbortDirection direction, long code)
+        {
+            if (code < 0 || code > QuicInteger.Maximum) throw new ArgumentOutOfRangeException(nameof(code));
+            // QuicAbortDirection is platform annotated, as are its named values.
+            if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+                throw new PlatformNotSupportedException();
+            if (direction != QuicAbortDirection.Read && direction != QuicAbortDirection.Write && direction != QuicAbortDirection.Both)
+                throw new ArgumentOutOfRangeException(nameof(direction));
+            var retained = false;
+            try
+            {
+                DangerousAddRef(ref retained);
+                uint flags = 0;
+                lock (_signals.Sync)
+                {
+                    if (_signals.Disposed) throw new ObjectDisposedException(nameof(MsQuicNativeStream));
+                    if (direction != QuicAbortDirection.Write && !(_local && Unidirectional)
+                        && _signals.Error == null && (!_signals.Fin || _signals.Buffers != null))
+                    {
+                        flags |= 4;
+                        _signals.Error = DirectionFailure(false, null, "Native stream reads were locally aborted.");
+                        _signals.Available.TrySetResult();
+                    }
+                    if (direction != QuicAbortDirection.Read && (_local || !Unidirectional)
+                        && _signals.SendError == null && !_signals.SendFinished)
+                    {
+                        flags |= 2;
+                        _signals.SendAborted = true;
+                        _signals.SendError = DirectionFailure(false, null, "Native stream writes were locally aborted.");
+                    }
+                    _signals.UpdateDirections();
+                }
+                // Native SEND_COMPLETE still owns pending pins and descriptors.
+                // An abort must never release them at the local cancellation point.
+                if (flags != 0)
+                {
+                    var status = _functions.Shutdown(handle, flags, (ulong)code);
+                    if (MsQuicApi.Failed(status)) throw new IOException("Native stream abort failed with status 0x" + status.ToString("X8"));
+                }
+            }
+            finally { if (retained) DangerousRelease(); }
+        }
         internal async ValueTask WriteAsync(ReadOnlyMemory<byte> payload, bool completeWrites, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
@@ -366,6 +408,7 @@ namespace EmbedIO.Net.Internal.Http3
                 lock (_signals.Sync)
                 {
                     if (_signals.Disposed) throw new ObjectDisposedException(nameof(MsQuicNativeStream));
+                    if (_signals.SendError != null) throw _signals.SendError;
                     if (_finQueued || _signals.SendFinished || _signals.SendAborted) throw new IOException("Native stream send direction is closed.");
                     pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     _signals.PendingSend = pending;
@@ -394,7 +437,14 @@ namespace EmbedIO.Net.Internal.Http3
                     await pending.Task.ConfigureAwait(false);
                     throw;
                 }
-                if (cancelled) throw new IOException("Native stream send was cancelled by shutdown.");
+                if (cancelled)
+                {
+                    lock (_signals.Sync)
+                    {
+                        if (_signals.SendError != null) throw _signals.SendError;
+                    }
+                    throw new IOException("Native stream send was cancelled by shutdown.");
+                }
             }
             finally
             {
