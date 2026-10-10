@@ -448,11 +448,16 @@ namespace EmbedIO.Tests
             var data = 0;
             var trailers = false;
             var late = new List<string>();
+            var ending = "";
             while (true)
             {
                 (int Type, int Flags, int Id, byte[] Payload) frame;
                 try { frame = await peer.ReceiveAsync(); }
-                catch (Exception error) when (error is EndOfStreamException or IOException) { break; }
+                catch (Exception error) when (error is EndOfStreamException or IOException)
+                {
+                    ending = error.GetType().Name + ": " + error.Message;
+                    break;
+                }
                 if (frame.Id == 3)
                 {
                     // Ignoring (RFC 9113 6.8) or refusing with REFUSED_STREAM are both permitted;
@@ -472,7 +477,8 @@ namespace EmbedIO.Tests
                 if (frame.Type == Http2Headers && (frame.Flags & EndStream) != 0) trailers = true;
             }
             TestContext.Out.WriteLine("Stream above the cutoff: " + (late.Count == 0 ? "ignored" : string.Join(", ", late)));
-            Assert.That(trailers, Is.True, "The admitted response must end with its trailer section.");
+            TestContext.Out.WriteLine("Connection ended with: " + ending + "; failed replies: " + string.Join("; ", peer.ReplyFailures));
+            Assert.That(trailers, Is.True, "The admitted response must end with its trailer section. Frames: " + peer.Describe() + "; ended with " + ending);
             Assert.That(data, Is.GreaterThan(0), "The admitted response continued after GOAWAY.");
             Assert.That(peer.DataBytes(1), Is.EqualTo(6000), "All DATA of the admitted response.");
             await drain.WaitAsync(Settle);
@@ -945,6 +951,10 @@ namespace EmbedIO.Tests
 
             internal int DataBytes(int id) => Log.Where(f => f.Type == Http2Data && f.Id == id).Sum(f => f.Length);
 
+            internal List<string> ReplyFailures { get; } = new();
+
+            internal string Describe() => string.Join(" ", Log.Select(f => $"{f.Type}/{f.Id}/{f.Flags:x}/{f.Length}"));
+
             internal static async Task<H2Peer> ConnectAsync(Host host)
             {
                 var tcp = new TcpClient { NoDelay = true };
@@ -1016,15 +1026,22 @@ namespace EmbedIO.Tests
                 Log.Add((frame.Type, frame.Flags, frame.Id, payload.Length));
                 if (_forbiddenStream != 0 && frame.Id == _forbiddenStream)
                     throw new AssertionException($"The server sent frame type {frame.Type} on stream {frame.Id} after that stream ended.");
-                if (frame.Type == Http2Ping && (frame.Flags & 1) == 0) await SendAsync(Http2Ping, 1, 0, payload);
-                // Keep both windows open so large responses never wait on the peer.
-                if (frame.Type == Http2Data && payload.Length > 0)
+                // Automatic replies are best effort: once the server has closed its side
+                // (after a drain, for example) a reply can fail while frames it already sent
+                // are still readable. A failed reply is recorded, never treated as the end.
+                try
                 {
-                    var increment = new byte[4];
-                    BinaryPrimitives.WriteUInt32BigEndian(increment, (uint)payload.Length);
-                    await SendAsync(Http2WindowUpdate, 0, 0, increment);
-                    if ((frame.Flags & EndStream) == 0) await SendAsync(Http2WindowUpdate, 0, frame.Id, increment);
+                    if (frame.Type == Http2Ping && (frame.Flags & 1) == 0) await SendAsync(Http2Ping, 1, 0, payload);
+                    // Keep both windows open so large responses never wait on the peer.
+                    if (frame.Type == Http2Data && payload.Length > 0)
+                    {
+                        var increment = new byte[4];
+                        BinaryPrimitives.WriteUInt32BigEndian(increment, (uint)payload.Length);
+                        await SendAsync(Http2WindowUpdate, 0, 0, increment);
+                        if ((frame.Flags & EndStream) == 0) await SendAsync(Http2WindowUpdate, 0, frame.Id, increment);
+                    }
                 }
+                catch (IOException error) { ReplyFailures.Add(error.GetType().Name + ": " + error.Message); }
                 return frame;
             }
 
