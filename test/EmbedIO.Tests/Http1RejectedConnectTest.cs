@@ -56,10 +56,11 @@ namespace EmbedIO.Tests
             {
                 using var client = new TcpClient();
                 await client.ConnectAsync("127.0.0.1", new Uri(prefix).Port, stop.Token);
-                // Exercise the existing origin-form application path. Full CONNECT
-                // authority-form/tunnel support is a separate implementation gate.
+                // Valid CONNECT uses authority-form; method lookalikes and GET
+                // retain origin-form. Rejection must still discard optimistic bytes.
                 var upgrade = method == "GET" ? "Connection: Upgrade\r\nUpgrade: websocket\r\n" : string.Empty;
-                var wire = method + " /proxy HTTP/1.1\r\nHost: " + new Uri(prefix).Authority + "\r\n" + upgrade + "\r\n"
+                var target = method == "CONNECT" ? new Uri(prefix).Authority : "/proxy";
+                var wire = method + " " + target + " HTTP/1.1\r\nHost: " + new Uri(prefix).Authority + "\r\n" + upgrade + "\r\n"
                     + "GET /next HTTP/1.1\r\nHost: " + new Uri(prefix).Authority + "\r\nConnection: close\r\n\r\n";
                 await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(wire), stop.Token);
                 using var output = new MemoryStream();

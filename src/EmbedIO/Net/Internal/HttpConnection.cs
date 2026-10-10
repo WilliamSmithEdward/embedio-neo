@@ -178,19 +178,29 @@ namespace EmbedIO.Net.Internal
             return _iStream;
         }
 
-#if !NET10_0_OR_GREATER
+#if NETSTANDARD2_0
         // Only public runtime API is queried: the older reference assembly does
         // not expose this method. No private TLS state or native interop is used.
         private static readonly Func<SslStream, Task>? ShutdownTls = GetTlsShutdown();
         private static Func<SslStream, Task>? GetTlsShutdown()
         {
-            var method = typeof(SslStream).GetMethod("ShutdownAsync", Type.EmptyTypes);
-            return method == null ? null : (Func<SslStream, Task>)method.CreateDelegate(typeof(Func<SslStream, Task>));
+            try
+            {
+                var method = typeof(SslStream).GetMethod("ShutdownAsync", Type.EmptyTypes);
+                return method == null || method.ReturnType != typeof(Task) ? null
+                    : (Func<SslStream, Task>)method.CreateDelegate(typeof(Func<SslStream, Task>));
+            }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                // Unsupported public delegate binding disables only the additive
+                // TLS handoff, never initialization of ordinary legacy listeners.
+                return null;
+            }
         }
 #endif
         internal void BeginTunnel()
         {
-#if !NET10_0_OR_GREATER
+#if NETSTANDARD2_0
             if (IsSecure && ShutdownTls == null)
                 throw new NotSupportedException("This runtime has no public TLS send-shutdown API for HTTP/1 tunnels.");
 #endif

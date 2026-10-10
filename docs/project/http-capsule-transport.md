@@ -3,7 +3,7 @@
 This is an unfinished increment of [program #181](http-engine.md), based on the
 HTTP/2 integration in PR #221. The owner approved the additive capsule/tunnel API;
 its public facade and HTTP/1/2/3 handoff are now under development.
-This is not yet validated or an advertised capsule/native QUIC datagram capability.
+Focused Windows validation has begun; independent peers and final platform gates remain pending. This is not an advertised capsule/native QUIC datagram capability.
 
 ## Implemented components
 
@@ -44,8 +44,7 @@ vectors, fragmented and nonminimal widths, maximum declared length, unknown-type
 skip, truncation, partial writes, cancellation, operation ownership and output
 completion. Together with negotiation and existing priority cases, 175 tests
 passed on Windows before the public facade edits. Those results do not validate
-the current public API or handoff changes. Builds and test execution are paused
-during the HTTP/3 agent's reserved performance measurement window.
+the later public API or handoff changes. The measurement hold has now ended; the public implementation and test host build with zero warnings.
 
 Remaining work includes application-facing generic Upgrade/extended CONNECT
 handoff without breaking existing interface implementers, negotiated response
@@ -70,7 +69,7 @@ extended CONNECT protocol. Capsule mode omits default representation/framing
 headers and rejects contradictory request or response configuration. WebSocket
 negotiation continues through its existing API. Draft regressions cover shared
 completion, disposal failures, half-closed input, carrier headers and incomplete
-output cleanup. They have not been run yet.
+output cleanup. These cases now pass in focused Windows runs; full-suite and independent peer validation remain pending.
 
 The draft maps truncated capsule input and incomplete output to HTTP/2
 PROTOCOL_ERROR or HTTP/3 H3_MESSAGE_ERROR on the selected request stream.
@@ -87,7 +86,7 @@ Upgrade selection uses an original parser for
 [RFC 9110 section 7.8](https://www.rfc-editor.org/rfc/rfc9110.html#section-7.8).
 Names match without case, while protocol-version spelling remains exact. Invalid
 field members prevent partial selection. This parser is preparation for HTTP/1
-handoff; its draft cases have not been executed.
+handoff; its parser cases pass on Windows.
 ## HTTP/1 handoff draft
 
 The managed HTTP/1 context now stages the optional tunnel capability. Upgrade
@@ -118,7 +117,7 @@ final peer input, once-only close callbacks and a healthy subsequent client.
 A separate post-handoff application-failure case requires the listener to remain
 active. HTTP/1 tunnel faults close that connection; HTTP/2/3 tunnel faults abort
 only the selected stream. Application failures use transport internal-error
-handling rather than the malformed-capsule error code. These cases are unrun.
+handling rather than the malformed-capsule error code. All five real HTTP/1 cases pass on Windows, including TLS 1.3 send completion with subsequent readable peer input.
 ## Independent capsule peer draft
 
 The existing `test/EmbedIO.Conformance` host has a test-only `/capsule` extension
@@ -147,3 +146,20 @@ python3 -I test/EmbedIO.Conformance/drivers/capsule_campaign.py h2 --port 18080 
 python3 -I test/EmbedIO.Conformance/drivers/capsule_campaign.py h2 --port 18443 --tls --stats-port 18080 --out h2-tls-capsules.json
 python3 -I test/EmbedIO.Conformance/drivers/capsule_campaign.py h3 --port 18444 --stats-port 18080 --out h3-capsules.json
 ```
+## First public-API validation increment
+
+The first focused run reproduced HTTP/1 rejection of valid authority-form CONNECT.
+The parser now requires an explicit nonempty, valid port and preserves the exact
+destination in RawTarget; eleven malformed target cases retain strict rejection.
+Routing still reconstructs the host with the listener's local endpoint, consistently
+with the existing application URI model. Applications must authorize the requested
+destination before accepting; this API does not connect to that destination.
+
+The corrected focused run passed 234 Windows cases (public capsule/tunnel behavior,
+Upgrade selection, malformed-capsule raw peers, existing request targets and priority).
+Two additional raw HTTP/2 cases prove classic and extended CONNECT do not apply the
+HTTP request Content-Length after successful handoff. Both failed with stream reset
+when the old length check was restored temporarily; both pass with the transition.
+The malformed-capsule cases still require stream PROTOCOL_ERROR and healthy siblings.
+Full-suite, independent H2/H3 peer campaigns and final cross-platform checks remain
+pending. No Linux/macOS capsule result, shipping capability or performance claim is made.

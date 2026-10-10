@@ -69,6 +69,36 @@ namespace EmbedIO.Tests
             });
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task ConnectedDataIsNotLimitedByTheHttpRequestContentLength(bool extended)
+        {
+            var verified = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await WithRawServer(Array.Empty<byte>(), async (wire, token) =>
+            {
+                await SendWire(wire, 1, 4, 1, CapsuleConnectBlock(extended, false, true), token);
+                await Until(wire, 1, 1, token);
+                await SendWire(wire, 0, 1, 1, new byte[] { 7, 8, 9 }, token);
+                Assert.That((await Until(wire, 0, 1, token)).Payload, Is.EqualTo(new byte[] { 7, 8, 9 }));
+                await verified.Task.WaitAsync(token);
+                await SendWire(wire, 1, 5, 3, RequestBlock(), token);
+                Assert.That((await Until(wire, 0, 3, token)).Payload, Is.EqualTo(new byte[] { 1, 2, 3 }));
+            }, app: async exchange =>
+            {
+                if (Property<int>(exchange, "Id") != 1) { await RawEcho(exchange); return; }
+                try
+                {
+                    var context = CreateCapsuleContext(exchange);
+                    var tunnel = await context.AcceptTunnelAsync(extended ? "example-tunnel" : null, false, context.CancellationToken);
+                    var bytes = new byte[3];
+                    await tunnel.Stream.ReadExactlyAsync(bytes, context.CancellationToken);
+                    await tunnel.Stream.WriteAsync(bytes, context.CancellationToken);
+                    await CloseCapsuleContextAsync(context);
+                    verified.TrySetResult();
+                }
+                catch (Exception error) { verified.TrySetException(error); throw; }
+            });
+        }
         private static IHttpTunnelContext CreateCapsuleContext(object exchange)
         {
             var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.MultiplexedContext", true)
@@ -83,7 +113,7 @@ namespace EmbedIO.Tests
 
         // Literal HPACK without indexing or Huffman coding. This raw peer does
         // not use EmbedIO's encoder to generate the request field section.
-        private static byte[] CapsuleConnectBlock()
+        private static byte[] CapsuleConnectBlock(bool extended = true, bool capsules = true, bool emptyHttpBody = false)
         {
             using var output = new MemoryStream();
             void Field(string name, string value)
@@ -97,11 +127,12 @@ namespace EmbedIO.Tests
                 output.Write(valueBytes, 0, valueBytes.Length);
             }
             Field(":method", "CONNECT");
-            Field(":scheme", "http");
+            if (extended) Field(":scheme", "http");
             Field(":authority", "localhost:443");
-            Field(":path", "/tunnel");
-            Field(":protocol", "example-tunnel");
-            Field("capsule-protocol", "?1");
+            if (extended) Field(":path", "/tunnel");
+            if (extended) Field(":protocol", "example-tunnel");
+            if (capsules) Field("capsule-protocol", "?1");
+            if (emptyHttpBody) Field("content-length", "0");
             return output.ToArray();
         }
     }

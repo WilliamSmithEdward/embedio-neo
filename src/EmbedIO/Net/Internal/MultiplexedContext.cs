@@ -127,6 +127,7 @@ namespace EmbedIO.Net.Internal
                         if (!ReferenceEquals(cleanup, failure)) cleanup.Log("HTTP context", $"[{Id}] Exception thrown while releasing failed tunnel output.");
                     }
                 }
+                _acceptedTunnel?.Dispose();
                 PropagateCancellation();
                 foreach (var callback in _callbacks)
                     try { callback(this); } catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback."); }

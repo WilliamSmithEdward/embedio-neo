@@ -16,7 +16,7 @@ namespace EmbedIO.Net.Internal
         private readonly CancellationTokenSource _stop = new();
         private readonly CancellationToken _token;
         private int _disposed;
-        private bool _sendEnded;
+        private volatile bool _sendEnded;
         internal Http1TunnelStream(HttpConnection connection, Stream stream)
         { _connection = connection; _stream = new BorrowedResource<Stream>(stream); _token = _stop.Token; }
         public override bool CanRead => Volatile.Read(ref _disposed) == 0;
@@ -64,7 +64,7 @@ namespace EmbedIO.Net.Internal
                 try { _stop.Cancel(); }
                 finally
                 {
-                    try { _connection.ForceClose(); }
+                    try { _connection.Dispose(); }
                     finally { _output.Dispose(); _stop.Dispose(); }
                 }
             }

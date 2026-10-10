@@ -23,6 +23,7 @@ namespace EmbedIO.Net.Internal.Http2
         internal volatile bool RemoteEnded;
         internal volatile bool LocalEnded;
         internal volatile bool Reset;
+        internal bool Tunnel;
     }
 
     // This server-side registry currently owns client-initiated streams only.
@@ -93,6 +94,7 @@ namespace EmbedIO.Net.Internal.Http2
                         return stream;
                     }
                     if (stream.RemoteEnded) throw new Http2ProtocolException(5, "Request stream already ended.", stream.Id);
+                    if (stream.Tunnel) throw new Http2ProtocolException(1, "HEADERS are not permitted on a connected stream.", stream.Id);
                     if (block.StreamError != 0) throw new Http2ProtocolException(block.StreamError, "Invalid stream headers.", stream.Id);
                     if (!block.EndStream) throw new Http2ProtocolException(1, "Request trailers must end the stream.", stream.Id);
                     Http2RequestHeaders.ValidateTrailers(block);
@@ -140,6 +142,15 @@ namespace EmbedIO.Net.Internal.Http2
             return null;
         }
 
+        internal void EnterTunnel(int id)
+        {
+            lock (_sync)
+            {
+                if (!_active.TryGetValue(id, out var stream) || stream.Reset)
+                    throw new Http2ProtocolException(5, "Tunnel stream is no longer available.", id);
+                stream.Tunnel = true;
+            }
+        }
         internal void EndLocal(int id)
         {
             lock (_sync)

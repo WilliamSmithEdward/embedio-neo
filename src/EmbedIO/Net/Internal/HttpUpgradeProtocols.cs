@@ -25,8 +25,8 @@ namespace EmbedIO.Net.Internal
         internal static bool Matches(string requested, string selected)
         {
             if (!Valid(requested) || !Valid(selected)) return false;
-            var left = requested.IndexOf('/');
-            var right = selected.IndexOf('/');
+            var left = EmbedIO.Internal.StringOperations.IndexOfOrdinal(requested, '/');
+            var right = EmbedIO.Internal.StringOperations.IndexOfOrdinal(selected, '/');
             if ((left < 0) != (right < 0)) return false;
             if (left < 0) return string.Equals(requested, selected, StringComparison.OrdinalIgnoreCase);
             return string.Equals(requested.Substring(0, left), selected.Substring(0, right), StringComparison.OrdinalIgnoreCase)

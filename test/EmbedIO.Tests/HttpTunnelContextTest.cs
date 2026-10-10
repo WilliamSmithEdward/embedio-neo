@@ -91,7 +91,8 @@ namespace EmbedIO.Tests
                     // TLS 1.3 allows each peer to finish its send side independently.
                     await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
                     {
-                        TargetHost = "localhost", EnabledSslProtocols = SslProtocols.Tls13
+                        TargetHost = "localhost",
+                        EnabledSslProtocols = SslProtocols.Tls13
                     }, stop.Token);
                 }
                 using (wire)
