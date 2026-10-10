@@ -2,7 +2,6 @@
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,11 +12,9 @@ namespace EmbedIO.Tests
 {
     public sealed class Http1InformationalSectionsTest
     {
-        private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
         private static Task Send(IHttpResponse response, int status, WebHeaderCollection headers, CancellationToken token)
-            => (Task)((response.GetType().GetMethod("SendInformationalAsync", Flags)
-                ?? throw new AssertionException("Missing informational writer.")).Invoke(response,
-                new object[] { status, headers, token }) ?? throw new AssertionException("Missing task."));
+            => (response as IHttpResponseSections ?? throw new AssertionException("Missing response capability."))
+                .SendInformationalAsync(status, headers, token);
 
         [TestCase("1.0", 103, false)]
         [TestCase("1.1", 101, false)]
@@ -31,8 +28,10 @@ namespace EmbedIO.Tests
             {
                 var fields = new WebHeaderCollection();
                 if (framing) fields["Content-Length"] = "0";
-                var rejected = Assert.Throws<TargetInvocationException>(() => Send(context.Response, status, fields, stop.Token));
-                Assert.That(rejected?.InnerException, Is.Not.Null);
+                var rejected = Assert.Catch(() => Send(context.Response, status, fields, stop.Token));
+                var expectedError = version == "1.0" ? typeof(InvalidOperationException)
+                    : framing ? typeof(InvalidDataException) : typeof(ArgumentOutOfRangeException);
+                Assert.That(rejected, Is.TypeOf(expectedError));
                 Assert.That(context.Response.StatusCode, Is.EqualTo(200));
                 context.Response.ContentLength64 = 7;
                 await context.Response.OutputStream.WriteAsync(Encoding.ASCII.GetBytes("healthy"), stop.Token);

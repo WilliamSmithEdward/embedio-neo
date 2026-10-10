@@ -2,7 +2,6 @@
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.PlatformTests;
@@ -12,11 +11,6 @@ namespace EmbedIO.Tests
 {
     public sealed class Http1ResponseTrailersTest
     {
-        private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-        private static void Invoke(IHttpResponse response, string method, object argument)
-            => (response.GetType().GetMethod(method, Flags) ?? throw new AssertionException("Missing internal trailer capability."))
-                .Invoke(response, new[] { argument });
-
         [TestCase(0)]
         [TestCase(3)]
         [TestCase(65537)]
@@ -27,13 +21,13 @@ namespace EmbedIO.Tests
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             using var server = new WebServer(HttpListenerMode.EmbedIO, url).WithAction("/", HttpVerbs.Get, async context =>
             {
-                Invoke(context.Response, "PrepareTrailers", new[] { "X-Body-Check", "X-Finished" });
+                var sections = context.Response as IHttpResponseSections ?? throw new AssertionException("Missing optional response capability.");
+                sections.DeclareTrailers("X-Body-Check", "X-Finished");
                 if (expected.Length != 0) await context.Response.OutputStream.WriteAsync(expected, stop.Token);
                 var undeclared = new WebHeaderCollection { ["X-Undeclared"] = "forbidden" };
-                var failure = Assert.Throws<TargetInvocationException>(() => Invoke(context.Response, "SetTrailers", undeclared));
-                Assert.That(failure?.InnerException, Is.InstanceOf<System.IO.InvalidDataException>());
+                Assert.Throws<System.IO.InvalidDataException>(() => sections.SetTrailers(undeclared));
                 var trailers = new WebHeaderCollection { ["X-Body-Check"] = "verified", ["X-Finished"] = "yes" };
-                Invoke(context.Response, "SetTrailers", trailers);
+                sections.SetTrailers(trailers);
                 trailers["X-Finished"] = "caller-mutated";
             });
             var running = server.RunAsync(stop.Token);

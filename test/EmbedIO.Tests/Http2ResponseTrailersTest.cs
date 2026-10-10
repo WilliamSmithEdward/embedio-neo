@@ -44,12 +44,11 @@ namespace EmbedIO.Tests
                 try
                 {
                     if (length) context.Response.ContentLength64 = size;
-                    (context.Response.GetType().GetMethod("PrepareTrailers", Flags) ?? throw new AssertionException("Missing declaration."))
-                        .Invoke(context.Response, new object[] { new[] { "X-Adapter" } });
+                    var sections = context.Response as IHttpResponseSections ?? throw new AssertionException("Missing response capability.");
+                    sections.DeclareTrailers("X-Adapter");
                     if (size != 0) await context.Response.OutputStream.WriteAsync(expected, context.CancellationToken);
                     var trailers = new System.Net.WebHeaderCollection { ["X-Adapter"] = "snapshot" };
-                    (context.Response.GetType().GetMethod("SetTrailers", Flags) ?? throw new AssertionException("Missing trailer snapshot."))
-                        .Invoke(context.Response, new object[] { trailers });
+                    sections.SetTrailers(trailers);
                     trailers["X-Adapter"] = "changed-after-set";
                 }
                 finally { context.Close(); }

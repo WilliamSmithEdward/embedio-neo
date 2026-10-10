@@ -18,12 +18,10 @@ namespace EmbedIO.Tests
                     context.Response.StatusCode = 201;
                     context.Response.ContentLength64 = 3;
                     context.Response.Headers["X-Final"] = "retained";
-                    var method = context.Response.GetType().GetMethod("SendInformationalAsync", Flags)
-                        ?? throw new AssertionException("Missing adapter informational writer.");
+                    var sections = context.Response as IHttpResponseSections ?? throw new AssertionException("Missing response capability.");
                     foreach (var path in new[] { "/one", "/two" })
-                        await (Task)(method.Invoke(context.Response, new object[]
-                        { 103, new WebHeaderCollection { ["Link"] = "<" + path + ">; rel=preload" }, context.CancellationToken })
-                            ?? throw new AssertionException("Missing task."));
+                        await sections.SendInformationalAsync(103,
+                            new WebHeaderCollection { ["Link"] = "<" + path + ">; rel=preload" }, context.CancellationToken);
                     Assert.That(context.Response.StatusCode, Is.EqualTo(201));
                     Assert.That(context.Response.Headers["Link"], Is.Null);
                     await context.Response.OutputStream.WriteAsync(new byte[] { 1, 2, 3 }, context.CancellationToken);

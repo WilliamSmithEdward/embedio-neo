@@ -230,3 +230,6 @@
 
 - name: Capsule and tunnel carriers
   href: guides/capsule-tunnels.md
+
+- name: Informational responses and response trailers
+  href: guides/response-field-sections.md

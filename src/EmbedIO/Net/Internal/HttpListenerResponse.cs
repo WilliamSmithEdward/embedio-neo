@@ -17,7 +17,7 @@ namespace EmbedIO.Net.Internal
     /// Represents an HTTP Listener's response.
     /// </summary>
     /// <seealso cref="IDisposable" />
-    internal sealed class HttpListenerResponse : IHttpResponse, IDisposable
+    internal sealed class HttpListenerResponse : IHttpResponseSections, IDisposable
     {
         private readonly HttpConnection _connection;
         private readonly HttpListenerRequest _request;
@@ -186,8 +186,9 @@ namespace EmbedIO.Net.Internal
             _cookies.Add(cookie);
         }
 
-        internal Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken token)
+        public Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken cancellationToken = default)
         {
+            var token = cancellationToken;
             EnsureCanChangeHeaders();
             if (ProtocolVersion < HttpVersion.Version11 || _tunnel)
                 throw new InvalidOperationException("This response cannot carry informational sections.");
@@ -195,6 +196,8 @@ namespace EmbedIO.Net.Internal
             var bytes = HttpResponseFieldSections.Http1Informational(statusCode, fields);
             return ((ResponseStream)OutputStream).WriteInformationalAsync(bytes, token);
         }
+
+        public void DeclareTrailers(params string[] fieldNames) => PrepareTrailers(fieldNames);
 
         internal void PrepareTrailers(string[] names)
         {
@@ -205,34 +208,19 @@ namespace EmbedIO.Net.Internal
                 throw new InvalidOperationException("This response cannot carry trailers.");
             if (Headers[HttpHeaderNames.ContentLength] != null)
                 throw new InvalidOperationException("HTTP/1 trailers require chunked framing without Content-Length.");
-            var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var name in names)
-            {
-                if (name == null) throw new ArgumentException("Trailer names cannot be null.", nameof(names));
-                var field = new Http2.HpackField(HttpResponseTrailerFields.LowercaseName(name), "");
-                HttpResponseTrailerFields.Validate(new[] { field });
-                declared.Add(field.Name);
-            }
-            if (declared.Count == 0) throw new ArgumentException("Declare at least one trailer field.", nameof(names));
+            var declared = HttpResponseTrailerFields.Declaration(names);
             Headers["Trailer"] = string.Join(", ", declared);
             _trailerNames = declared;
             _chunked = true;
         }
 
-        internal void SetTrailers(WebHeaderCollection trailers)
+        public void SetTrailers(WebHeaderCollection trailers)
         {
             if (trailers == null) throw new ArgumentNullException(nameof(trailers));
             if (_disposed != 0 || _tunnel || _trailerNames == null || !_chunked || SuppressesBody || _statusCode == 205)
                 throw new InvalidOperationException("Trailers were not reserved for an open response.");
-            var fields = new List<Http2.HpackField>();
-            foreach (var name in trailers.AllKeys)
-            {
-                if (name == null || !_trailerNames.Contains(name))
-                    throw new InvalidDataException("Trailer field was not declared before response headers.");
-                foreach (var value in trailers.GetValues(name) ?? Array.Empty<string>())
-                    fields.Add(new Http2.HpackField(HttpResponseTrailerFields.LowercaseName(name), value));
-            }
-            var ending = HttpResponseTrailerFields.ChunkEnd(fields.ToArray());
+            var fields = HttpResponseTrailerFields.Snapshot(trailers, _trailerNames);
+            var ending = HttpResponseTrailerFields.ChunkEnd(fields);
             Volatile.Write(ref _endingChunk, ending);
         }
 

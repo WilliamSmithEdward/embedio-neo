@@ -87,18 +87,14 @@ namespace EmbedIO.Tests
                     try
                     {
                         context.Response.ContentLength64 = 3;
-                        var interim = context.Response.GetType().GetMethod("SendInformationalAsync", Flags)
-                            ?? throw new AssertionException("Missing interim adapter writer.");
-                        await (Task)(interim.Invoke(context.Response, new object[]
-                        { 103, new WebHeaderCollection { ["Link"] = "</asset>; rel=preload" }, context.CancellationToken })
-                            ?? throw new AssertionException("Missing interim task."));
+                        var sections = context.Response as IHttpResponseSections ?? throw new AssertionException("Missing response capability.");
+                        await sections.SendInformationalAsync(103,
+                            new WebHeaderCollection { ["Link"] = "</asset>; rel=preload" }, context.CancellationToken);
                         Assert.That(context.Response.StatusCode, Is.EqualTo(200));
-                        (context.Response.GetType().GetMethod("PrepareTrailers", Flags) ?? throw new AssertionException("Missing declaration."))
-                            .Invoke(context.Response, new object[] { new[] { "x-verified" } });
+                        sections.DeclareTrailers("x-verified");
                         await context.Response.OutputStream.WriteAsync(new byte[] { 7, 8, 9 }, context.CancellationToken);
                         var trailers = new WebHeaderCollection { ["x-verified"] = "yes" };
-                        (context.Response.GetType().GetMethod("SetTrailers", Flags) ?? throw new AssertionException("Missing snapshot."))
-                            .Invoke(context.Response, new object[] { trailers });
+                        sections.SetTrailers(trailers);
                         trailers["x-verified"] = "changed-after-set";
                     }
                     finally { context.Close(); }

@@ -13,7 +13,7 @@ using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
 {
-    internal sealed class MultiplexedResponse : IHttpResponse, IDisposable
+    internal sealed class MultiplexedResponse : IHttpResponseSections, IDisposable
     {
         private readonly IMultiplexedExchange _exchange;
         private readonly SemaphoreSlim _gate = new(1, 1);
@@ -215,6 +215,8 @@ namespace EmbedIO.Net.Internal
             catch { ReleaseReference(); throw; }
         }
 
+        public void DeclareTrailers(params string[] fieldNames) => PrepareTrailers(fieldNames);
+
         internal void PrepareTrailers(string[] names)
         {
             var declared = HttpResponseTrailerFields.Declaration(names);
@@ -232,7 +234,7 @@ namespace EmbedIO.Net.Internal
             finally { Exit(); }
         }
 
-        internal void SetTrailers(WebHeaderCollection trailers)
+        public void SetTrailers(WebHeaderCollection trailers)
         {
             EnterSectionConfiguration();
             try
@@ -244,8 +246,9 @@ namespace EmbedIO.Net.Internal
             finally { Exit(); }
         }
 
-        internal async Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken token)
+        public async Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken cancellationToken = default)
         {
+            var token = cancellationToken;
             var fields = HttpResponseFieldSections.Informational(statusCode, headers);
             await EnterAsync(token, false).ConfigureAwait(false);
             try
