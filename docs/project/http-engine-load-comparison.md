@@ -454,3 +454,71 @@ fixtures, assertions or quarantine rules were changed. Source and logs are
 retained under `TestResults/context-allocation-socket-probe`; original suite/TRX
 and affected-family results remain beside the allocation campaign.
 A subsequent unchanged-source full-suite confirmation passes all 4,495 cases (4,490 passed/five expected skips). This does not repair or erase the original native allocator failures.
+
+## HTTP/1 first-body buffer reservation experiment
+
+The response-header MemoryStream previously allocated exactly the header size,
+then grew when ResponseStream appended the bounded first-body prefix. The
+candidate reserves that prefix, including a chunk-size line when applicable,
+after deciding response framing. It preserves the 16 KiB first-write boundary,
+large-header behavior, wire bytes, immediate writes and cancellation. No public
+API, default, target or dependency changes are involved.
+
+Measured source is `00102bdfda311170d7bed8c132ddee9eacbe4638` plus the recorded
+production patch. Frozen runner SHA-256 is
+`4bab11108325ff746253affbcc6ddfd0074e3ca949e323bf16db2b98b2b9c7b7`.
+Candidate core SHA-256 is
+`04532e6dac74055b721d7d1de6303b3175394f1f03e784b3a55d7185d8e39233`;
+control is the prior collection candidate,
+`80461a69bb8866dd081fd237c8310a580bc43a3b2c9cd7d6945484d72d1f7be8`.
+Only the core DLL is swapped. Windows .NET 10.0.12 / Ryzen 9800X3D,
+fresh processes, alternating order, disjoint CPU sets 0-7 / 8-15,
+5 s warmup and 15 s measurement. Each campaign has four valid samples,
+no failures/retries and zero open server sockets after settlement.
+
+| Campaign / sample | Requests/s | p99 ms | CPU us/request | Bytes/request |
+| --- | --- | --- | --- | --- |
+| Initial candidate r1 | 284371 | 5.018 | 15.8 | 5726 |
+| Initial control r1 | 458400 | 0.960 | 16.5 | 7216 |
+| Initial control r2 | 476334 | 0.819 | 16.3 | 7201 |
+| Initial candidate r2 | 473485 | 0.909 | 16.2 | 6737 |
+| Follow-up candidate r1 | 313109 | 3.994 | 17.2 | 6788 |
+| Follow-up control r1 | 324569 | 3.737 | 16.2 | 5831 |
+| Follow-up control r2 | 475243 | 0.761 | 16.4 | 7202 |
+| Follow-up candidate r2 | 479424 | 0.755 | 16.3 | 6732 |
+
+The initial slow candidate window recorded 124.109 CPU seconds outside the
+server/client, versus 11.094-22.859 in the other initial windows. Both first
+follow-up windows also recorded substantial competing CPU. This supports host
+competition as a contributor; it does not prove sole causation. All samples
+remain evidence, including the poor tails and the follow-up allocation reversal.
+Do not infer an overall throughput gain or a universal allocation reduction.
+
+An isolated serializer comparison on the same candidate calls the real header
+writer with either no reservation or a 13-byte first-body hint, then appends and
+validates identical body bytes. Header-only budget rows are unchanged.
+
+| X-Text padding | Growth B/operation | Reserved B/operation |
+| --- | --- | --- |
+| 0 | 424 | 160 |
+| 1024 | 3352 | 1184 |
+| 16384 | 49432 | 49432 |
+
+The last row intentionally has no reserved body prefix because its headers exceed
+the existing first-write bound; the direct harness then appends bytes beyond that
+bound to check growth. It is not a production transport measurement. These rows
+prove a local allocation saving for fitting headers, not server throughput.
+The listener-specific `--verify-listener-allocations` gate passes. An earlier
+command used the general verification flag and produced measurements without
+enforcing this gate; its log is retained separately.
+
+Validation: 115 focused cases, both target builds, parser/suppression guards and
+changed-source formatting. Corrected full Windows suite: 4495 total,
+4490 passed, five expected skips, zero failures. The initial full run had eight
+TargetParameterCountException failures in private header-writer reflection calls;
+the callers were updated to supply the new internal argument without changing
+wire assertions. That failed run remains recorded. Independent campaign and
+exact-final-head hosted checks are still required before integration.
+
+Artifacts remain under ignored `TestResults/response-prefix-load`,
+`response-prefix-isolated-allocations.log`, and `response-prefix-corrected-full`.

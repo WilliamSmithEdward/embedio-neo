@@ -177,7 +177,7 @@ namespace EmbedIO.Net.Internal
             _cookies.Add(cookie);
         }
 
-        internal MemoryStream SendHeaders(bool closing)
+        internal MemoryStream SendHeaders(bool closing, int bodyCount)
         {
             if (_contentType != null)
             {
@@ -291,7 +291,7 @@ namespace EmbedIO.Net.Internal
                 Headers.Add(HttpHeaderNames.Connection, "close");
             }
 
-            return WriteHeaders();
+            return WriteHeaders(bodyCount);
         }
 
         private void AppendSetCookieHeader(StringBuilder sb, Cookie cookie)
@@ -368,7 +368,7 @@ namespace EmbedIO.Net.Internal
             else _connection.Close(force);
         }
 
-        private MemoryStream WriteHeaders()
+        private MemoryStream WriteHeaders(int bodyCount)
         {
             var encoding = WebServer.DefaultEncoding;
             var preamble = encoding.GetPreamble();
@@ -395,7 +395,7 @@ namespace EmbedIO.Net.Internal
             {
                 var content = text.Slice(0, characters.Position);
                 var size = checked(preamble.Length + encoding.GetByteCount(content));
-                stream = new MemoryStream(size);
+                stream = new MemoryStream(GetHeaderBufferCapacity(size, preamble.Length, bodyCount));
                 stream.SetLength(size);
                 preamble.CopyTo(stream.GetBuffer(), 0);
                 encoding.GetBytes(content, stream.GetBuffer().AsSpan(preamble.Length));
@@ -405,7 +405,7 @@ namespace EmbedIO.Net.Internal
             {
                 var writer = new HeaderWriter(encoding, null, preamble.Length);
                 WriteHeaderFields(ref writer, version, status, keys, cookies, rawCookies);
-                stream = new MemoryStream(writer.Position);
+                stream = new MemoryStream(GetHeaderBufferCapacity(writer.Position, preamble.Length, bodyCount));
                 stream.SetLength(writer.Position);
                 var buffer = stream.GetBuffer();
                 Buffer.BlockCopy(preamble, 0, buffer, 0, preamble.Length);
@@ -418,6 +418,20 @@ namespace EmbedIO.Net.Internal
             return stream;
         }
 
+        private int GetHeaderBufferCapacity(int headerSize, int preambleSize, int bodyCount)
+        {
+            if (bodyCount == 0 || SuppressesBody) return headerSize;
+            var chunkSize = 0;
+            if (_chunked)
+            {
+                chunkSize = 3; // At least one hexadecimal digit and CRLF.
+                for (var remaining = (uint)bodyCount >> 4; remaining != 0; remaining >>= 4) chunkSize++;
+            }
+            // Match ResponseStream's bounded first write exactly. Large headers and
+            // bodies retain their existing transport write boundaries.
+            var prefix = Math.Min(bodyCount, Math.Max(0, 16384 - (headerSize - preambleSize + chunkSize)));
+            return checked(headerSize + chunkSize + prefix);
+        }
         private void WriteHeaderFields(ref HeaderWriter writer, string version, string status,
             string[] keys, string? cookies, string[]? rawCookies)
         {

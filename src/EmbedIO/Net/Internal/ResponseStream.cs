@@ -82,7 +82,7 @@ namespace EmbedIO.Net.Internal
             {
                 buffer = Array.Empty<byte>(); offset = 0; count = 0;
             }
-            using var headers = GetHeaders(false);
+            using var headers = GetHeaders(false, count);
             var chunked = _response.SendChunked && !_response.SuppressesBody;
             var hasBody = count > 0;
             if (headers == null && chunked && hasBody && count <= 65536)
@@ -146,7 +146,7 @@ namespace EmbedIO.Net.Internal
             }
 
             byte[] bytes;
-            var ms = GetHeaders(false);
+            var ms = GetHeaders(false, count);
             var chunked = _response.SendChunked && !_response.SuppressesBody;
             var hasBody = count > 0;
 
@@ -258,7 +258,7 @@ namespace EmbedIO.Net.Internal
             }
 
             _asyncWriteLock.Dispose();
-            using var ms = GetHeaders(true);
+            using var ms = GetHeaders(true, 0);
             var chunked = _response.SendChunked && !_response.SuppressesBody;
 
             if (_stream.CanWrite)
@@ -317,11 +317,11 @@ namespace EmbedIO.Net.Internal
             return bytes;
         }
 
-        private MemoryStream? GetHeaders(bool closing)
+        private MemoryStream? GetHeaders(bool closing, int bodyCount)
         {
             lock (_headersSyncRoot)
             {
-                return _response.HeadersSent ? null : _response.SendHeaders(closing);
+                return _response.HeadersSent ? null : _response.SendHeaders(closing, bodyCount);
             }
         }
     }
