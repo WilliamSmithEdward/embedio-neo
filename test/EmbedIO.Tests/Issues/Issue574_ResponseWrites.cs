@@ -147,6 +147,52 @@ namespace EmbedIO.Tests.Issues
             Assert.Throws<ObjectDisposedException>(() => fixture.Stream.WriteAsync(new byte[1], 0, 1));
         }
 
+        [TestCase(1)]
+        [TestCase(16384)]
+        [TestCase(65536)]
+        [TestCase(65537)]
+        public async Task BoundedChunkWritesCommitOneTransportWriteAndPreserveSlices(int count)
+        {
+            using var fixture = await Fixture.Create(true);
+            await fixture.Stream.WriteAsync(Array.Empty<byte>(), 0, 0);
+            var before = fixture.Transport.AsyncWrites;
+            var payload = new byte[count + 2];
+            for (var index = 0; index < payload.Length; index++) payload[index] = (byte)('A' + index % 26);
+            await fixture.Stream.WriteAsync(payload, 1, count);
+            Assert.That(fixture.Transport.AsyncWrites - before, Is.EqualTo(count <= 65536 ? 1 : 3));
+            fixture.Stream.Dispose();
+            var wire = Encoding.ASCII.GetString(fixture.Transport.ToArray());
+            var body = wire[(wire.IndexOf("\r\n\r\n", StringComparison.Ordinal) + 4)..];
+            Assert.That(body, Is.EqualTo(count.ToString("x", System.Globalization.CultureInfo.InvariantCulture)
+                + "\r\n" + Encoding.ASCII.GetString(payload, 1, count) + "\r\n0\r\n\r\n"));
+            Assert.That(fixture.Transport.SynchronousWrites, Is.EqualTo(1), "Only final stream disposal writes synchronously.");
+        }
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task BoundedChunkCancellationReleasesTheWriterForASubsequentWrite(bool ignoreErrors)
+        {
+            using var fixture = await Fixture.Create(true, ignoreErrors);
+            await fixture.Stream.WriteAsync(Array.Empty<byte>(), 0, 0);
+            fixture.Transport.BlockWrites = true;
+            using var cancel = new CancellationTokenSource();
+            var pending = fixture.Stream.WriteAsync(new byte[16384], 0, 16384, cancel.Token);
+            try
+            {
+                Assert.That(pending.IsCompleted, Is.False);
+                cancel.Cancel();
+                var error = await Assert.CatchAsync<OperationCanceledException>(async () => await pending);
+                Assert.That(error.CancellationToken, Is.EqualTo(cancel.Token));
+            }
+            finally
+            {
+                cancel.Cancel();
+                fixture.Transport.BlockWrites = false;
+                fixture.Transport.ReleaseWrites.TrySetResult();
+            }
+            await fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("OK"));
+            fixture.Stream.Dispose();
+            Assert.That(Encoding.ASCII.GetString(fixture.Transport.ToArray()), Does.EndWith("\r\n\r\n2\r\nOK\r\n0\r\n\r\n"));
+        }
         internal sealed class Fixture : IDisposable
         {
             private readonly Net.HttpListener _listener;
