@@ -64,6 +64,7 @@ namespace EmbedIO.Tests
                     var context = (IHttpContextImpl)(Activator.CreateInstance(contextType, Flags, null,
                         new object[] { exchange, new IPEndPoint(IPAddress.Loopback, 80), new IPEndPoint(IPAddress.Loopback, 12345), true }, null)
                         ?? throw new AssertionException("Missing adapter context."));
+                    Exception? writeFailure = null;
                     try
                     {
                         context.Response.ContentLength64 = bytes.Length;
@@ -76,7 +77,13 @@ namespace EmbedIO.Tests
                         sections.SetTrailers(new WebHeaderCollection { ["x-finished"] = "yes" });
                         await context.Response.OutputStream.DisposeAsync();
                     }
-                    finally { context.Close(); }
+                    catch (Exception error) { writeFailure = error; throw; }
+                    finally
+                    {
+                        try { context.Close(); }
+                        catch (Exception cleanup) when (writeFailure != null && cleanup is IOException or OperationCanceledException or InvalidOperationException)
+                        { TestContext.Out.WriteLine("Response cleanup after failed write: " + cleanup.GetType().Name); }
+                    }
                     return;
                 }
                 var type = exchange.GetType();

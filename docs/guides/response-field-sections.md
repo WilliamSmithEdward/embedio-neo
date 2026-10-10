@@ -129,3 +129,19 @@ the outstanding writer. Single application writes and 16 KiB writes are covered.
 A subsequent stream succeeds on the same connection. Trailer fields in this
 fixture are decoded by the engine's QPACK decoder, so this is transport/lifetime
 evidence; independent QPACK evidence remains the separate peer campaign above.
+
+Hosted validation at 4029387 identified two fixture corrections: the QUIC
+trailer fixture must import its synthetic certificate with Exportable for the
+non-Schannel backend, as the existing QUIC fixtures do. If a backpressured write
+fails, context cleanup can fail too; the fixture now preserves the original
+write failure and records recoverable cleanup errors. The reset must still
+interrupt the writer, and sibling/subsequent stream assertions remain required.
+Eleven adjacent Windows cases pass after these corrections. macOS/Linux
+confirmation remains required.
+
+The same head also timed out in the Windows full-consumption POST verification
+with four workers and a new connection per request. That workload's failure shape
+was previously recorded on fd58c90, before this response API work. Three fresh
+local runs of the exact workload pass; they do not establish the cause or resolve
+the intermittent failure. Its original timeout, diagnostics and artifacts are
+retained, and no gate or timeout is relaxed.

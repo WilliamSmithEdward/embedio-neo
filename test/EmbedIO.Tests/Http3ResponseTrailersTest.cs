@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Quic;
 using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
@@ -42,7 +43,7 @@ namespace EmbedIO.Tests
         private static async Task RunResponseTrailers(bool coalesced, bool adapter = false)
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            using var certificate = HttpsSmoke.CreateCertificate();
+            using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
             await using var listener = await QuicListener.ListenAsync(new QuicListenerOptions
             {
                 ListenEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
