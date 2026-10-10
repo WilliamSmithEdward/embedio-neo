@@ -205,6 +205,10 @@ All results are for the final source `f6e87fc` unless noted.
 
 ## Integration review
 
+The combined Windows suite reported 4,514 cases: 4,509 passed, five expected
+skips and zero failures (3m00.759s). Both production targets built cleanly;
+analyzer guards and formatting passed. The discovery floor is 4,514.
+
 The measurements above belong to the explicitly recorded agent revisions, not
 to every subsequent engine build. Integration onto `3a45029` preserves the
 current HTTP/1 and listener fixes and adds three writer safety regressions from
