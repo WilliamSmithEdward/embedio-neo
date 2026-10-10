@@ -81,3 +81,20 @@ and retained managed growth about 2.24 MiB. All 57 HTTP/1 cases passed (44
 conforming and 13 permitted policy choices). These results do not cover the
 HTTP/2, HTTP/3 or sustained-load campaigns, or the legacy range-end policy.
 The original timeout record remains separate from the passing campaign evidence.
+## SETTINGS acknowledgement model
+
+The pinned hyper-h2 4.4.1 settings object acknowledges pending values per key,
+which can apply values from a later SETTINGS frame when an earlier frame's ACK
+arrives. With initial SETTINGS, MAX_FRAME_SIZE, zero INITIAL_WINDOW_SIZE and
+restoration all outstanding, an isolated peer-only probe applied zero on the
+first ACK. The original current-engine campaign retained a FlowControlError at
+seed 20261009, iteration 58; its trace shows the DATA before the zero-window ACK.
+
+The driver now queues settings by frame and stages only the acknowledged frame's
+values through hyper-h2's normal validation and flow-control update. Every ACK
+and DATA frame is consumed in wire order, including fragmented ACKs. Overlapping
+SETTINGS remain in the campaign. `drivers/settings_ack_test.py` verifies legal
+DATA before the shrink ACK, a negative adjusted window after that ACK, restoration,
+and rejection of an actual DATA overrun. It requires no EmbedIO server and runs
+before the full campaign. This does not waive any server flow-control assertion;
+the original failure remains recorded and the corrected seed must be rerun.

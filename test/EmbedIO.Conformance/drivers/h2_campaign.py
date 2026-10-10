@@ -11,6 +11,7 @@ Exit status is 1 when any violation, error or failed invariant is recorded.
 """
 
 import argparse
+from collections import deque
 import hashlib
 import json
 import random
@@ -100,18 +101,28 @@ class Client:
         self.timeout = timeout
         self.conn = h2.connection.H2Connection(config=h2.config.H2Configuration(client_side=True, header_encoding=None))
         self.conn.initiate_connection()
-        if settings:
-            self.conn.update_settings(settings)
+        # Each ACK applies only the oldest SETTINGS frame, not pending values
+        # from later frames. Keep them outside hyper-h2 until that ACK arrives.
+        self.pending_settings = deque([{}])  # Initial connection SETTINGS.
+        self.pending_settings_bytes = bytearray()
+        self.inbound_frames = bytearray()
         self.streams = {}
         self.terminated = None
         self.closed = False
         self.trace = []
         self.sent_trace = FrameTrace("->", self.trace, skip=len(PREFACE))
         self.received_trace = FrameTrace("<-", self.trace)
+        if settings:
+            self.update_settings(settings)
         self.flush()
 
+    def update_settings(self, settings):
+        self.pending_settings.append(dict(settings))
+        self.pending_settings_bytes.extend(hf.SettingsFrame(0, settings=settings).serialize())
+
     def flush(self):
-        data = self.conn.data_to_send()
+        data = self.conn.data_to_send() + bytes(self.pending_settings_bytes)
+        self.pending_settings_bytes.clear()
         if data:
             self.sent_trace.feed(data)
             self.sock.sendall(data)
@@ -163,8 +174,21 @@ class Client:
             self.closed = True
             return False
         self.received_trace.feed(data)
-        for event in self.conn.receive_data(data):
-            self.handle(event)
+        self.inbound_frames.extend(data)
+        while len(self.inbound_frames) >= 9:
+            length = int.from_bytes(self.inbound_frames[:3], "big")
+            if len(self.inbound_frames) < 9 + length:
+                break
+            frame = bytes(self.inbound_frames[:9 + length])
+            del self.inbound_frames[:9 + length]
+            if frame[3] == 4 and frame[4] & 1 and length == 0:
+                if not self.pending_settings:
+                    raise AssertionError("Unsolicited SETTINGS acknowledgement")
+                # Use the peer library's ordinary settings validation/window update,
+                # but stage only this frame's values immediately before its ACK.
+                self.conn.local_settings.update(self.pending_settings.popleft())
+            for event in self.conn.receive_data(frame):
+                self.handle(event)
         self.pump_uploads()
         self.flush()
         return True
@@ -865,13 +889,13 @@ def run_fuzz(endpoint, seed, iterations, stats_port):
                     client.flush()
                     log.append(("window",))
                 else:
-                    client.conn.update_settings({h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: rng.choice([0, 1000, 65535, 1 << 20])})
+                    client.update_settings({h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: rng.choice([0, 1000, 65535, 1 << 20])})
                     client.flush()
                     log.append(("settings",))
                 for _ in range(rng.randint(0, 3)):
                     client.receive(0.01)
             # Any window left at zero is reopened so every live stream can complete.
-            client.conn.update_settings({h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: 65535})
+            client.update_settings({h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: 65535})
             client.conn.increment_flow_control_window(1 << 24)
             client.flush()
             client.wait(list(expected), 30)

@@ -18,6 +18,7 @@ record "seed=$seed scale=$scale cpus=$(nproc) kernel=$(uname -r)"
 record "dotnet=$(dotnet --version) msquic=$(dpkg-query --show --showformat='${Version}' libmsquic 2>/dev/null || echo missing)"
 record "h2spec=$(h2spec --version 2>&1 | head -1) python=$(python3 --version)"
 
+python3 -I "$src/test/EmbedIO.Conformance/drivers/settings_ack_test.py" > "$out/peer-settings-ack.log" 2>&1 || { record "PEER SETTINGS MODEL FAILED"; exit 2; }
 dotnet build "$src/test/EmbedIO.Conformance" -c Release -o /tmp/conformance > "$out/build.log" 2>&1 || { record "BUILD FAILED"; exit 2; }
 sha256sum /tmp/conformance/EmbedIO.dll | tee -a "$out/summary.txt"
 
