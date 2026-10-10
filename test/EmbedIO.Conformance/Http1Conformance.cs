@@ -5,7 +5,7 @@ using System.Text.Json;
 
 // Black-box HTTP/1.1 requirement checks against a running server. Each case cites
 // the requirement it checks. "policy" records behavior where the RFC permits a
-// choice; only "violation" outcomes are conformance failures.
+// choice; violations and observation errors fail the campaign.
 internal static class Http1Conformance
 {
     internal sealed record Outcome(string Id, string Reference, string Level, string Result, string Detail, double Milliseconds);
