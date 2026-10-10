@@ -7,6 +7,46 @@ is out of scope here and covered separately. This document records what was
 verified, against which sources and source revision, and what remains open. It is
 not a claim of complete protocol conformance.
 
+## Current integration checkpoint
+
+The findings and baseline tables below retain the original audit revision; they
+must not be read as current engine failures. A later independent campaign used
+an archived d6107f8 source snapshot, with production source byte-identical to
+engine e52f829. The corrected HTTP/2 peer rerun used archived 76e4f58. Both Linux
+builds loaded the same core SHA-256:
+`E5D0109DA72920E4A7E17705B565C737AA13B7848AD7D95A6080496E225CC57D`.
+The host was Ubuntu 24.04.5 x64, SDK 10.0.401, runtime 10.0.12 and MsQuic 2.6.2,
+inside a container limited to four CPUs and 6 GiB. Seed: 20261009.
+
+| Completed campaign | Result |
+| --- | --- |
+| HTTP/1 cases | 44 conforming, 13 permitted policy choices; no violations/errors |
+| HTTP/1 stateful | 2,000 iterations; 5,029 valid requests, 473 malformed sequences, 211 aborts; handlers drained, handles +2 |
+| HTTP/2 cases, cleartext and TLS separately | 16 conforming, 6 policy observations each; no violations/errors; each includes 300 reset trials with no lost connections, 40 shrink trials and 60 paired-settings trials |
+| HTTP/2 stateful with corrected peer | 300 connections, 1,245 streams, 121 client resets, no server resets; handlers drained, handles +14, retained managed growth 1,552,016 bytes |
+| HTTP/3 cases | 7 conforming, 1 policy observation; includes 200 rounds of four cancelled uploads with a healthy listener afterward |
+| HTTP/3 stateful, upload cancellation included | 100 connections, 676 streams, 96 cancellations, no server resets; handlers drained, handles +16, retained managed growth 1,607,688 bytes |
+
+The original HTTP/2 runs are retained: iteration 58 exposed the pinned peer's
+per-key ACK bookkeeping; iteration 76 exposed its rejection of legal empty EOF
+with a negative adjusted window; iteration 178 exposed the driver's completion
+phase shrinking larger credit to zero. Server-free wire regressions cover all
+three corrections and still require a genuine nonzero window overrun to fail.
+Overlapping SETTINGS, randomized resets, payload checks and deadlines remain.
+See the [peer-model notes](../../test/EmbedIO.Conformance/README.md).
+
+Unmodified h2spec still reports failure: 141/146 cleartext and 142/146 TLS.
+Its four common failures use older closed-stream/priority expectations, assessed
+against RFC 9113 and RFC 9218 in the [engine program](http-engine.md).
+The exact plaintext invalid-preface input was captured separately: it received
+HTTP/1.1 400 with Content-Length 0 and Connection: close, then clean EOF. TLS h2
+received clean EOF. These observations do not relabel h2spec's aggregate as passing.
+The original full campaign aggregate remains failed and its artifacts are retained.
+
+These are focused Linux campaigns, not completion of Windows/macOS, browser,
+WebSocket, long-running soak, performance or the full standards inventory.
+No production source or package change was needed for these peer corrections.
+
 ## Verification date and sources
 
 The standards baseline was captured on **2026-10-09 between 14:36:12 and
@@ -86,7 +126,7 @@ reported errata are listed when they touch a tested behavior.
 ## Applicability matrix
 
 Requirement families an origin server must meet, the campaign that exercises them,
-and the current result. "Engine" names the owner of any gap; nothing here changes
+and the result at the original evidence revision. "Engine" names the owner of any gap; nothing here changes
 production code.
 
 | Area | Requirement source | Exercised by | Result at the evidence commit |
