@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+- Reduce managed HTTP/3 per-request cost: connection-owned request cancellation
+  scopes, one continuation per transport direction, fewer thread-pool hops,
+  separate QPACK gates and one QUIC write per small frame, with final headers and
+  a small first body write coalesced. A request read to its FIN no longer emits a
+  QPACK Stream Cancellation, and an already received end of input is consumed
+  instead of aborting the read direction. See
+  [HTTP/3 request path performance](docs/project/http3-performance.md).
 - Batch managed HTTP/2 output in wire order, coalesce initial headers with body
   data and retire streams when END_STREAM commits. Guard application cancellation
   callbacks so cleanup and connection shutdown continue after callback failures.
