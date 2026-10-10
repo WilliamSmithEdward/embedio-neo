@@ -1,5 +1,10 @@
 # Modern HTTP engine program
 
+Release scope: William designated this modern engine program for **EmbedIO-Neo v2**
+on 2026-10-10. Maintain the [Neo v1 to v2 migration guide](../compatibility/neo-v1-to-v2.md)
+as the implementation and approved behavior changes settle. V2 is not released;
+this designation does not authorize publication.
+
 The owner authorized a replacement managed transport on 2026-10-08, with extreme
 performance as a core requirement, incremental delivery, and HTTP support through
 the October 2026 standards baseline. Strict rejection of malformed and ambiguous
