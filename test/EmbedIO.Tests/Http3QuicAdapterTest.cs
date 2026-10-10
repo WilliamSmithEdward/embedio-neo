@@ -27,6 +27,8 @@ namespace EmbedIO.Tests
         [TestCase("205")]
         [TestCase("304")]
         [TestCase("close")]
+        [TestCase("declared-length")]
+        [TestCase("declared-split")]
         public async Task ApplicationAdapterPreservesHttp3Semantics(string scenario)
         {
             ArgumentNullException.ThrowIfNull(scenario);
@@ -119,8 +121,14 @@ namespace EmbedIO.Tests
                     context.Response.Headers["Transfer-Encoding"] = "chunked";
                     context.Response.SetCookie(new Cookie("one", "1", "/"));
                     context.Response.SetCookie(new Cookie("two", "2", "/"));
-                    if (scenario == "head") context.Response.ContentLength64 = payload.Length;
-                    if (scenario != "empty-body") await context.Response.OutputStream.WriteAsync(payload, context.CancellationToken);
+                    if (scenario is "head" or "declared-length" or "declared-split") context.Response.ContentLength64 = payload.Length;
+                    // A split write covers a declared length across the coalesced first write and a later one.
+                    if (scenario == "declared-split")
+                    {
+                        await context.Response.OutputStream.WriteAsync(payload.AsMemory(0, 3), context.CancellationToken);
+                        await context.Response.OutputStream.WriteAsync(payload.AsMemory(3), context.CancellationToken);
+                    }
+                    else if (scenario != "empty-body") await context.Response.OutputStream.WriteAsync(payload, context.CancellationToken);
                     context.SetHandled();
                     Assert.That(context.IsHandled, Is.True);
                     context.Response.OutputStream.Dispose();
@@ -162,7 +170,7 @@ namespace EmbedIO.Tests
                 Assert.That(response.Headers.GetValues("Set-Cookie").ToArray(), Has.Length.EqualTo(2));
                 Assert.That(response.Headers.Contains("Connection"), Is.False);
                 Assert.That(response.Headers.Contains("Transfer-Encoding"), Is.False);
-                if (scenario == "head") Assert.That(response.Content.Headers.ContentLength, Is.EqualTo(payload.Length));
+                if (scenario is "head" or "declared-length" or "declared-split") Assert.That(response.Content.Headers.ContentLength, Is.EqualTo(payload.Length));
                 if (scenario == "empty-body") Assert.That(response.Content.Headers.ContentLength, Is.EqualTo(0));
                 await application.Completed.Task.WaitAsync(deadline.Token);
                 Assert.That(callbacks, Is.EqualTo(new[] { 2, 1 }));

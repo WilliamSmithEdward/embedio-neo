@@ -85,6 +85,28 @@ namespace EmbedIO.Tests
             Assert.That(Volatile.Read(ref observed), Is.EqualTo(1), "Request callbacks run once.");
         }
 
+        // A transport fault racing the end of the request (which cancels the
+        // request source) cancels exactly once and never reports a failure.
+        // Request sources are not disposed, as in the connection.
+        [Test]
+        public async Task DirectionFaultRacingRequestEndCancelsOnce()
+        {
+            for (var i = 0; i < 2000; ++i)
+            {
+                var requestStop = new CancellationTokenSource();
+                var direction = new TaskCompletionSource();
+                var observed = 0;
+                requestStop.Token.Register(() => Interlocked.Increment(ref observed));
+                Watch(direction.Task, requestStop);
+                using var start = new Barrier(2);
+                var fault = Task.Run(() => { start.SignalAndWait(); direction.TrySetException(new QuicException(QuicError.StreamAborted, 0x10c, "Peer reset.")); });
+                var end = Task.Run(() => { start.SignalAndWait(); requestStop.Cancel(); });
+                await Task.WhenAll(fault, end);
+                Assert.That(SpinWait.SpinUntil(() => Volatile.Read(ref observed) == 1, TimeSpan.FromSeconds(2)), Is.True);
+                Assert.That(Unexpected(direction.Task, requestStop), Is.Null);
+            }
+        }
+
         [Test]
         public void UnexpectedDirectionFaultRemainsVisibleToTheOwner()
         {

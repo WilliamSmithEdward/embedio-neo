@@ -15,7 +15,7 @@ namespace EmbedIO.Net.Internal.Http3
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("macos")]
-    internal sealed class Http3QuicExchange : IMultiplexedExchange, IDisposable
+    internal sealed class Http3QuicExchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IDisposable
     {
         private const int MaximumDataPayload = 256 * 1024;
         // Frames up to this payload size are submitted with their header in one
@@ -56,6 +56,7 @@ namespace EmbedIO.Net.Internal.Http3
         // A declared zero-length body is known empty without reading ahead.
         public bool InitialBodyComplete => Request.ContentLength == 0;
         public bool Ended => _ended;
+        public bool FinalHeadersSent => _headers;
         public bool CloseConnectionAfterResponse { get; set; }
 
         internal async Task RespondAsync(byte[] bytes, CancellationToken token)
@@ -137,6 +138,67 @@ namespace EmbedIO.Net.Internal.Http3
         }
         public Task CompleteAsync(CancellationToken token) => _headers
             ? WriteAsync(Array.Empty<byte>(), 0, 0, true, token) : RespondAsync(Array.Empty<byte>(), token);
+        // Final headers and a small first DATA frame share one transport write.
+        // A write that completes a declared Content-Length also carries FIN.
+        // Anything else (informational or bodiless status, CONNECT tunnel, a
+        // body larger than the declared length or the coalescing bound) uses
+        // the separate header and DATA paths with their usual validation.
+        public async Task SendHeadersAndWriteAsync(HpackField[] fields, byte[] bytes, int offset, int count, CancellationToken token)
+        {
+            if (bytes == null) throw new ArgumentNullException(nameof(bytes));
+            if (offset < 0 || count < 0 || offset > bytes.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
+            var response = Http2ResponseHeaders.Validate(fields, Request.Method, false);
+            if (count == 0 || count > CoalescedPayload || response.Status < 200 || !response.BodyAllowed
+                || (Request.Method == "CONNECT" && response.Status < 300)
+                || (response.ContentLength.HasValue && count > response.ContentLength.Value))
+            {
+                await SendHeadersAsync(fields, false, token).ConfigureAwait(false);
+                await WriteAsync(bytes, offset, count, false, token).ConfigureAwait(false);
+                return;
+            }
+            await AcquireOutputAsync(token).ConfigureAwait(false);
+            try
+            {
+                CheckWritable();
+                if (_headers) throw new InvalidOperationException("Final response headers already sent.");
+                var encoded = _owner.Encode(fields);
+                var end = response.ContentLength == count;
+                // Committed once submitted, even if the transport write then fails.
+                _headers = true; _bodyAllowed = true; _length = response.ContentLength;
+                await HeadersAndDataAsync(encoded, bytes.AsMemory(offset, count), end, token).ConfigureAwait(false);
+                _sent = count;
+                if (end) _ended = true;
+            }
+            finally { ReleaseOutput(); }
+        }
+        private async Task HeadersAndDataAsync(byte[] fields, ReadOnlyMemory<byte> data, bool endStream, CancellationToken token)
+        {
+            // Two frame headers need at most 18 bytes.
+            var total = 18 + fields.Length + data.Length;
+            var buffer = ArrayPool<byte>.Shared.Rent(total);
+            var size = 0;
+            try
+            {
+                size += QuicInteger.Write(buffer, size, 1);
+                size += QuicInteger.Write(buffer, size, fields.Length);
+                fields.AsSpan().CopyTo(buffer.AsSpan(size));
+                size += fields.Length;
+                size += QuicInteger.Write(buffer, size, 0);
+                size += QuicInteger.Write(buffer, size, data.Length);
+                data.Span.CopyTo(buffer.AsSpan(size));
+                size += data.Length;
+                await _stream.Value.WriteAsync(buffer.AsMemory(0, size), endStream, token).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException error) when (CancellationToken.IsCancellationRequested)
+            { throw new OperationCanceledException("The HTTP/3 request was canceled during transport disposal.", error, CancellationToken); }
+            catch (Exception error) when (error is IOException or OperationCanceledException) { _outputFailed = true; _owner.Failed(error); throw; }
+            finally
+            {
+                // Response bytes must not linger in the shared pool.
+                buffer.AsSpan(0, total).Clear();
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
         private void CheckWritable()
         {
             CancellationToken.ThrowIfCancellationRequested();
