@@ -187,6 +187,14 @@ class Client:
                 # Use the peer library's ordinary settings validation/window update,
                 # but stage only this frame's values immediately before its ACK.
                 self.conn.local_settings.update(self.pending_settings.popleft())
+            if frame[3] == 0 and length == 0 and frame[4] & 1 and not frame[4] & 8:
+                sid = int.from_bytes(frame[5:9], "big") & 0x7fffffff
+                stream = self.conn.streams.get(sid)
+                if stream and not stream.closed and stream.inbound_flow_control_window < 0:
+                    # hyper-h2 rejects even zero-byte END_STREAM when a SETTINGS
+                    # shrink leaves a negative window. Publicly return only that
+                    # consumed credit before EOF; no later DATA can use it after EOF.
+                    self.conn.increment_flow_control_window(-stream.inbound_flow_control_window, stream_id=sid)
             for event in self.conn.receive_data(frame):
                 self.handle(event)
         self.pump_uploads()

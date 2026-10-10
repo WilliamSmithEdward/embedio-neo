@@ -12,7 +12,7 @@ campaign = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(campaign)
 
 
-def check(reject_overrun=False):
+def check(reject_overrun=False, finish_empty=False):
     local, peer = socket.socketpair()
 
     class Endpoint:
@@ -51,6 +51,15 @@ def check(reject_overrun=False):
         client.receive(1)
         assert client.conn.local_settings.initial_window_size == 0
         assert client.conn.streams[sid].inbound_flow_control_window == -3
+        if finish_empty:
+            end = hf.DataFrame(sid, data=b"")
+            end.flags.add("END_STREAM")
+            peer.sendall(end.serialize())
+            client.receive(1)
+            assert client.streams[sid]["body"] == b"abc"
+            assert client.done(sid)
+            assert client.conn.streams[sid].inbound_flow_control_window == 0
+            return
         if reject_overrun:
             peer.sendall(hf.DataFrame(sid, data=b"x").serialize())
             try:
@@ -75,4 +84,5 @@ def check(reject_overrun=False):
 
 check()
 check(reject_overrun=True)
-print("PASS: ordered and fragmented ACKs retain legal DATA and reject an actual window overrun")
+check(finish_empty=True)
+print("PASS: ordered ACKs, legal DATA and empty END_STREAM pass; an actual window overrun fails")

@@ -98,3 +98,14 @@ DATA before the shrink ACK, a negative adjusted window after that ACK, restorati
 and rejection of an actual DATA overrun. It requires no EmbedIO server and runs
 before the full campaign. This does not waive any server flow-control assertion;
 the original failure remains recorded and the corrected seed must be rerun.
+A second retained run reached iteration 76: DATA arrived before the shrink ACK,
+then a zero-byte END_STREAM arrived with the adjusted stream window negative.
+RFC 9113 section 6.9.1 permits that empty EOF, but hyper-h2 rejected it. For that
+exact unpadded zero-byte EOF only, the driver returns the consumed stream credit
+through the library's public WINDOW_UPDATE API before processing EOF. The stream
+then closes, so later payload cannot consume the returned credit. Nonzero DATA,
+padded DATA, invalid stream state and empty frames without END_STREAM retain the
+ordinary checks. The peer-only regression also verifies this EOF and preserves a
+nonzero overrun that must raise FlowControlError.
+
+Reference: https://www.rfc-editor.org/rfc/rfc9113.html#section-6.9.1
