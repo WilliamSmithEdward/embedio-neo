@@ -6881,4 +6881,29 @@ status; status classification now follows the documented Windows/POSIX ABI and
 the initial failure is retained. Native stream delivery is not implemented; peer
 streams are closed, and application HTTP/datagrams/WebTransport are not enabled.
 macOS connection validation and complete failure/resource coverage remain pending.
-This branch's floor is 4724 before integration with response PR 230.
+Response PR 230 is integrated from verified development head e733402. The
+combined source discovered 4767 cases and passed the full Windows suite
+(4762 passed, five existing skips, zero failures) before stream-credit additions.
+
+
+The native configuration can now advertise explicit bidirectional and
+unidirectional peer stream counts. Its original binding supplies only the two
+selected public QUIC_SETTINGS fields; all other native defaults are inherited.
+Ordinary configuration remains at zero peer streams. The four new independent
+System.Net.Quic peer cases cover both stream types: positive credit permits
+opening, and zero credit leaves opening pending until cancellation.
+
+Native byte delivery is still disabled. A credited stream that reaches the
+connection callback is explicitly aborted with H3_REQUEST_CANCELLED (0x10c).
+Its callback is rooted until actual SHUTDOWN_COMPLETE, then StreamClose is the
+last native call. The first immediate-shutdown implementation produced code zero
+on the wire in both Windows stream cases; retaining the stream through actual
+shutdown completion preserves the explicit code. The initial failures remain in
+ignored TestResults. This is rejection lifecycle coverage, not native stream I/O.
+
+All 26 focused native cases pass on Windows and in the pinned network-isolated
+Linux container (the same Windows-built IL, not a Linux source build). The
+combined discovery floor is 4771: development base 4712, 33 framing cases and
+26 native cases. macOS stream-credit/rejection, native reads/writes/datagrams,
+complete failure/finalizer coverage and measured provider performance remain
+unverified. No application provider or protocol capability is enabled.

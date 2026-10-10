@@ -260,15 +260,28 @@ namespace EmbedIO.Tests
             if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
             await ExerciseNativeHandshake(stopListenerFirst);
         }
+        [TestCase(true, false)]
+        [TestCase(false, false)]
+        [TestCase(true, true)]
+        [TestCase(false, true)]
+        public async Task NativeConfigurationAdvertisesOnlyItsExplicitPeerStreamCredit(bool bidirectional, bool credit)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await ExerciseNativeHandshake(false, bidirectional ? QuicStreamType.Bidirectional : QuicStreamType.Unidirectional, credit);
+        }
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task ExerciseNativeHandshake(bool stopListenerFirst)
+        private static async Task ExerciseNativeHandshake(bool stopListenerFirst, QuicStreamType? streamType = null, bool credit = false)
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             using var api = OpenApi();
             using var registration = Register(api);
-            using var configuration = Configure(registration, new byte[] { (byte)'h', (byte)'3' });
+            using var configuration = streamType.HasValue
+                ? (SafeHandle)ListenerCall(registration, "CreateStreamConfiguration", new byte[] { (byte)'h', (byte)'3' },
+                    credit && streamType == QuicStreamType.Bidirectional ? (ushort)8 : (ushort)0,
+                    credit && streamType == QuicStreamType.Unidirectional ? (ushort)8 : (ushort)0)
+                : Configure(registration, new byte[] { (byte)'h', (byte)'3' });
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
             LoadServerCertificate(configuration, certificate);
             using var listener = Listen(registration);
@@ -299,6 +312,30 @@ namespace EmbedIO.Tests
                 ?? throw new AssertionException("Missing handshake completion."));
             await ready.WaitAsync(deadline.Token);
             Assert.That(peer.NegotiatedApplicationProtocol, Is.EqualTo(new SslApplicationProtocol("h3")));
+            if (streamType.HasValue)
+            {
+                if (credit)
+                {
+                    await using var stream = await peer.OpenOutboundStreamAsync(streamType.Value, deadline.Token);
+                    Assert.That(stream.Type, Is.EqualTo(streamType.Value));
+                    Assert.That(stream.Id & 3, Is.EqualTo(streamType == QuicStreamType.Bidirectional ? 0 : 2));
+                    // Sending forces the peer stream to reach the native callback.
+                    // The temporary provider rejects it with H3_REQUEST_CANCELLED.
+                    try { await stream.WriteAsync(new byte[] { 42 }, deadline.Token); }
+                    catch (QuicException error) when (error.QuicError == QuicError.StreamAborted)
+                    { Assert.That(error.ApplicationErrorCode, Is.EqualTo(0x10c)); }
+                    await Assert.ThatAsync(async () => await stream.WritesClosed.WaitAsync(deadline.Token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.ApplicationErrorCode)).EqualTo(0x10c));
+                }
+                else
+                {
+                    using var cancelled = new CancellationTokenSource();
+                    var pending = peer.OpenOutboundStreamAsync(streamType.Value, cancelled.Token).AsTask();
+                    Assert.That(pending.IsCompleted, Is.False, "Zero credit must leave stream creation pending.");
+                    cancelled.Cancel();
+                    await Assert.ThatAsync(async () => await pending.WaitAsync(deadline.Token), Throws.InstanceOf<OperationCanceledException>());
+                }
+            }
             if (stopListenerFirst)
             {
                 await ((Task)ListenerCall(listener, "StopAsync")).WaitAsync(deadline.Token);

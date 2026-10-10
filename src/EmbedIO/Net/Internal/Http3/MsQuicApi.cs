@@ -32,6 +32,15 @@ namespace EmbedIO.Net.Internal.Http3
             internal uint Length;
             internal IntPtr Bytes;
         }
+        // Public QUIC_SETTINGS v2 ABI: only these IsSet fields are supplied.
+        // Unselected fields remain zero and inherit MsQuic's configuration defaults.
+        [StructLayout(LayoutKind.Explicit, Size = 144)]
+        private struct StreamSettings
+        {
+            [FieldOffset(0)] internal ulong IsSet;
+            [FieldOffset(94)] internal ushort PeerBidirectional;
+            [FieldOffset(96)] internal ushort PeerUnidirectional;
+        }
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate uint LoadCredential(IntPtr configuration, IntPtr credentials);
         [StructLayout(LayoutKind.Sequential)]
@@ -123,7 +132,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
 
-        internal MsQuicConfiguration CreateConfiguration(MsQuicRegistration registration, byte[] alpn)
+        internal MsQuicConfiguration CreateConfiguration(MsQuicRegistration registration, byte[] alpn, ushort bidirectional = 0, ushort unidirectional = 0)
         {
             if (alpn == null) throw new ArgumentNullException(nameof(alpn));
             if (alpn.Length == 0 || alpn.Length > 255) throw new ArgumentOutOfRangeException(nameof(alpn));
@@ -132,12 +141,20 @@ namespace EmbedIO.Net.Internal.Http3
             var pin = default(GCHandle);
             var buffer = IntPtr.Zero;
             var configuration = IntPtr.Zero;
+            var settings = IntPtr.Zero;
             try
             {
                 pin = GCHandle.Alloc(alpn, GCHandleType.Pinned);
                 buffer = Marshal.AllocHGlobal(Marshal.SizeOf<NativeBuffer>());
                 Marshal.StructureToPtr(new NativeBuffer { Length = (uint)alpn.Length, Bytes = pin.AddrOfPinnedObject() }, buffer, false);
-                var status = _configurationOpen(registration.DangerousGetHandle(), buffer, 1, IntPtr.Zero, 0, IntPtr.Zero, out configuration);
+                settings = Marshal.AllocHGlobal(Marshal.SizeOf<StreamSettings>());
+                Marshal.StructureToPtr(new StreamSettings
+                {
+                    IsSet = (1UL << 18) | (1UL << 19),
+                    PeerBidirectional = bidirectional,
+                    PeerUnidirectional = unidirectional,
+                }, settings, false);
+                var status = _configurationOpen(registration.DangerousGetHandle(), buffer, 1, settings, (uint)Marshal.SizeOf<StreamSettings>(), IntPtr.Zero, out configuration);
                 if (Failed(status)) throw new IOException("MsQuic configuration failed with status 0x" + status.ToString("X8"));
                 if (configuration == IntPtr.Zero) throw new IOException("MsQuic returned an empty configuration.");
                 var result = new MsQuicConfiguration(configuration, registration, _configurationClose);
@@ -148,6 +165,7 @@ namespace EmbedIO.Net.Internal.Http3
             finally
             {
                 if (configuration != IntPtr.Zero) _configurationClose(configuration);
+                if (settings != IntPtr.Zero) Marshal.FreeHGlobal(settings);
                 if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
                 if (pin.IsAllocated) pin.Free();
                 if (retained) registration.DangerousRelease();
@@ -216,6 +234,8 @@ namespace EmbedIO.Net.Internal.Http3
         internal MsQuicNativeConnection AcceptConnection(IntPtr connection) => _api.AcceptConnection(this, connection);
         internal MsQuicNativeListener CreateListener() => _api.CreateListener(this);
         internal MsQuicConfiguration CreateConfiguration(byte[] alpn) => _api.CreateConfiguration(this, alpn);
+        internal MsQuicConfiguration CreateStreamConfiguration(byte[] alpn, ushort bidirectional, ushort unidirectional)
+            => _api.CreateConfiguration(this, alpn, bidirectional, unidirectional);
         internal void LoadServerCertificate(MsQuicConfiguration configuration, X509Certificate2 certificate)
             => _api.LoadServerCertificate(configuration, certificate);
         protected override bool ReleaseHandle()

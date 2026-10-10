@@ -1,5 +1,6 @@
 ﻿#if NET10_0_OR_GREATER
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -25,11 +26,14 @@ namespace EmbedIO.Net.Internal.Http3
             internal delegate uint SetConfiguration(IntPtr connection, IntPtr configuration);
             [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
             internal delegate void CloseStream(IntPtr stream);
+            [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+            internal delegate uint ShutdownStream(IntPtr stream, uint flags, ulong code);
             internal readonly SetCallback SetHandler;
             internal readonly CloseConnection Close;
             internal readonly ShutdownConnection Shutdown;
             internal readonly SetConfiguration Configure;
             internal readonly CloseStream StreamClose;
+            internal readonly ShutdownStream StreamShutdown;
             internal ConnectionFunctions(IntPtr table)
             {
                 SetHandler = Marshal.GetDelegateForFunctionPointer<SetCallback>(Marshal.ReadIntPtr(table, 2 * IntPtr.Size));
@@ -37,6 +41,7 @@ namespace EmbedIO.Net.Internal.Http3
                 Shutdown = Marshal.GetDelegateForFunctionPointer<ShutdownConnection>(Marshal.ReadIntPtr(table, 17 * IntPtr.Size));
                 Configure = Marshal.GetDelegateForFunctionPointer<SetConfiguration>(Marshal.ReadIntPtr(table, 19 * IntPtr.Size));
                 StreamClose = Marshal.GetDelegateForFunctionPointer<CloseStream>(Marshal.ReadIntPtr(table, 22 * IntPtr.Size));
+                StreamShutdown = Marshal.GetDelegateForFunctionPointer<ShutdownStream>(Marshal.ReadIntPtr(table, 24 * IntPtr.Size));
             }
         }
         internal MsQuicNativeConnection AcceptConnection(MsQuicRegistration registration, IntPtr connection)
@@ -51,6 +56,53 @@ namespace EmbedIO.Net.Internal.Http3
             internal readonly MsQuicApi.ConnectionFunctions.Callback Handler;
             internal readonly IntPtr Pointer;
             private readonly MsQuicApi.ConnectionFunctions _functions;
+            private readonly ConcurrentDictionary<IntPtr, RejectedStream> _rejected = new();
+            private sealed class RejectedStream
+            {
+                private readonly Signals _owner;
+                private readonly IntPtr _stream;
+                internal readonly MsQuicApi.ConnectionFunctions.Callback Handler;
+                private int _closed;
+                internal RejectedStream(Signals owner, IntPtr stream)
+                { _owner = owner; _stream = stream; Handler = OnEvent; }
+                private uint OnEvent(IntPtr stream, IntPtr context, IntPtr eventData)
+                {
+                    try
+                    {
+                        if (Marshal.ReadInt32(eventData) == 7) Close();
+                        return 0;
+                    }
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                    {
+                        _owner.Closed.TrySetException(error);
+                        return OperatingSystem.IsWindows() ? 0x80004004u : OperatingSystem.IsMacOS() ? 89u : 125u;
+                    }
+                }
+                internal void Close()
+                {
+                    if (Interlocked.Exchange(ref _closed, 1) != 0) return;
+                    _owner._functions.StreamClose(_stream);
+                    _owner._rejected.TryRemove(_stream, out _);
+                    GC.KeepAlive(Handler);
+                }
+            }
+            private void RejectStream(IntPtr stream)
+            {
+                var rejected = new RejectedStream(this, stream);
+                if (!_rejected.TryAdd(stream, rejected)) throw new IOException("Duplicate native peer stream.");
+                _functions.SetHandler(stream, Marshal.GetFunctionPointerForDelegate(rejected.Handler), IntPtr.Zero);
+                // ABORT + INLINE is valid here because this is a connection
+                // callback. Retain ownership until real SHUTDOWN_COMPLETE;
+                // immediate completion followed by close can lose the wire code.
+                var status = _functions.StreamShutdown(stream, 0x16, 0x10c);
+                if (MsQuicApi.Failed(status)) throw new IOException("MsQuic stream rejection failed with status 0x" + status.ToString("X8"));
+                GC.KeepAlive(rejected);
+            }
+            internal void CloseRejectedAfterConnectionClose()
+            {
+                // Connection close has finished all callbacks and shut streams down.
+                foreach (var rejected in _rejected.Values) rejected.Close();
+            }
             internal Signals(MsQuicApi.ConnectionFunctions functions)
             { _functions = functions; Handler = OnEvent; Pointer = Marshal.GetFunctionPointerForDelegate(Handler); }
             private uint OnEvent(IntPtr connection, IntPtr context, IntPtr eventData)
@@ -64,7 +116,7 @@ namespace EmbedIO.Net.Internal.Http3
                         case 2: Connected.TrySetCanceled(); break;
                         case 3: Connected.TrySetCanceled(); Closed.TrySetResult(); break;
                         // Streams are not exposed until their own callback/lifetime exists.
-                        case 6: _functions.StreamClose(Marshal.ReadIntPtr(eventData, 8)); break;
+                        case 6: RejectStream(Marshal.ReadIntPtr(eventData, 8)); break;
                     }
                     return 0;
                 }
@@ -120,7 +172,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
         protected override bool ReleaseHandle()
         {
-            try { _functions.Close(handle); _signals.Connected.TrySetCanceled(); _signals.Closed.TrySetResult(); GC.KeepAlive(_signals); }
+            try { _functions.Close(handle); _signals.CloseRejectedAfterConnectionClose(); _signals.Connected.TrySetCanceled(); _signals.Closed.TrySetResult(); GC.KeepAlive(_signals); }
             finally { _registration.DangerousRelease(); }
             return true;
         }
