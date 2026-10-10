@@ -217,8 +217,16 @@ partially consumed. The two A1 cases are ordinary regressions, with four more
 cases canceled inside a frame header, DATA payload, trailer section and unknown
 frame. Pre-canceled tokens leave input usable. Both original reproductions fail
 on the preserved unmodified core; the first candidate passes all 45 lifecycle
-and direction-watcher cases on Windows. Final full-suite, Linux and hosted
-validation remain required. Evidence: ignored TestResults/read-cancellation.
+and direction-watcher cases on Windows. The final source passes the same 45
+cases on Windows and pinned Linux with no skips; the Linux run uses the same
+Windows-built IL and requires QUIC. Both target builds are warning-free and
+source guards and formatting pass. Full Windows discovery is 4940: 4933 passed,
+seven expected skips (five platform cases and two open F1 findings), zero failures
+in 3m 27s under the shared workload lock. Core SHA-256:
+`BA9B5E8A66F2820EC7E02C0C3A19EE57D78F573FE0EFEE798CD40B65E60A77C8`.
+Hosted final-head checks remain required. Evidence: ignored
+TestResults/read-cancellation; the unmodified core and its two failing cases
+are retained alongside the candidate logs and TRX.
 
 **Observations (permitted choices, recorded).**
 

@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Preserve HTTP/3 response output after an application cancels its own pending
+  body or tunnel read. Abandon uncertain input framing while retaining peer-reset
+  and connection-failure cancellation; see the
+  [migration note](docs/compatibility/migration.md#http3-application-read-cancellation-unreleased).
 - Add an isolated internal WebTransport over HTTP/3 session core (draft-ietf-webtrans-http3-16 framing, session association, capsules, flow control and bounded buffering) with unit coverage only. No listener advertises it, no public API or dependency changes; see [WebTransport session core development](docs/project/http-webtransport-core.md).
 - Preserve committed managed HTTP/2 control output when the last admitted response
   completes during graceful drain. Stop input separately and wait for queued output;
