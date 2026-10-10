@@ -67,6 +67,14 @@ namespace EmbedIO.Net.Internal
             return WriteAsyncCore(buffer, offset, count, cancellationToken);
         }
 
+        internal async Task WriteInformationalAsync(byte[] bytes, CancellationToken token)
+        {
+            using var scope = await _asyncWriteLock.EnterAsync(token).ConfigureAwait(false);
+            ValidateWrite(bytes, 0, bytes.Length);
+            if (_response.HeadersSent) throw new InvalidOperationException("Final response headers already sent.");
+            await InternalWriteAsync(bytes, 0, bytes.Length, token).ConfigureAwait(false);
+        }
+
         private async Task WriteAsyncCore(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             // Stream's inherited async fallback serialized writes. Preserve that ordering

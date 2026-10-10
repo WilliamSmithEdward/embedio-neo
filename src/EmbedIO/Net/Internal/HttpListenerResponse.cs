@@ -7,6 +7,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using EmbedIO.Internal;
 using EmbedIO.Utilities;
 
@@ -183,6 +184,16 @@ namespace EmbedIO.Net.Internal
             }
 
             _cookies.Add(cookie);
+        }
+
+        internal Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken token)
+        {
+            EnsureCanChangeHeaders();
+            if (ProtocolVersion < HttpVersion.Version11 || _tunnel)
+                throw new InvalidOperationException("This response cannot carry informational sections.");
+            var fields = HttpResponseFieldSections.Informational(statusCode, headers);
+            var bytes = HttpResponseFieldSections.Http1Informational(statusCode, fields);
+            return ((ResponseStream)OutputStream).WriteInformationalAsync(bytes, token);
         }
 
         internal void PrepareTrailers(string[] names)

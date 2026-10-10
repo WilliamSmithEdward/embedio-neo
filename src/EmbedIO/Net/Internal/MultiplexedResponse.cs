@@ -197,6 +197,19 @@ namespace EmbedIO.Net.Internal
             return text;
         }
 
+        internal async Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken token)
+        {
+            var fields = HttpResponseFieldSections.Informational(statusCode, headers);
+            await EnterAsync(token, false).ConfigureAwait(false);
+            try
+            {
+                EnsureHeaders();
+                if (_tunnel) throw new InvalidOperationException("A tunnel cannot carry informational sections.");
+                await _exchange.SendHeadersAsync(fields, false, token).ConfigureAwait(false);
+            }
+            finally { Exit(); }
+        }
+
         private async Task EnsureSentAsync(bool closing, CancellationToken token)
         {
             if (_headersSent) return;
