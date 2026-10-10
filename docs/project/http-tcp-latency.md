@@ -62,8 +62,17 @@ A coverage-enabled Linux source build on a Windows-mounted directory reported
 all 4903 cases in 2 minutes 39 seconds, with one failure in the case-sensitive
 file fixture: its assembly-relative data directory was on the case-insensitive
 mount, while its probe used Linux /tmp. That run is retained as failed setup
-evidence, not acceptance. A corrected run uses a Linux filesystem and locked
-restore; its full result and hosted exact-head checks are pending. The existing five-minute suite
+evidence, not acceptance. After retaining a missing-cache build attempt and a
+CRLF command-text setup
+failure, the corrected Linux-filesystem run with locked restore and coverage
+passes all 4903 cases (4874 passed, 29 expected platform skips), zero failures,
+in 2 minutes 36 seconds; both target builds have zero warnings or errors.
+Hosted Linux and Windows regression jobs pass on 1fdbc4a. The macOS job
+reports 3918 of 4903 cases, zero failed cases, before the unchanged five-minute
+budget expires; it remains a failed acceptance gate under investigation. Its
+TRX reports 282.22 seconds of completed-case time across 3918 results; this
+is evidence of accumulated runtime, not a captured single stuck case. The
+existing five-minute suite
 budget and discovery floor of 4903 remain enforced; no assertions, counts,
 repeats or per-case deadlines are reduced.
 
