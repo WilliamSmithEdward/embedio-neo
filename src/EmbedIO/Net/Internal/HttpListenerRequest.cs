@@ -23,6 +23,7 @@ namespace EmbedIO.Net.Internal
 
         private readonly HttpConnection _connection;
         private CookieList? _cookies;
+        private NameValueCollection? _queryString;
         private Stream? _inputStream;
         internal bool HasBodyFramingFailure => _inputStream is RequestStream body && body.HasBodyFramingFailure;
         internal bool IsBodyFramingError(Exception error) => _inputStream is RequestStream body && body.IsFramingError(error);
@@ -129,7 +130,16 @@ namespace EmbedIO.Net.Internal
         public Version ProtocolVersion { get; private set; } = HttpVersion.Version11;
 
         /// <inheritdoc />
-        public NameValueCollection QueryString { get; } = new();
+        public NameValueCollection QueryString
+        {
+            get
+            {
+                var query = Volatile.Read(ref _queryString);
+                if (query != null) return query;
+                var created = new NameValueCollection();
+                return Interlocked.CompareExchange(ref _queryString, created, null) ?? created;
+            }
+        }
 
         /// <inheritdoc />
         public string RawTarget { get; private set; } = string.Empty;

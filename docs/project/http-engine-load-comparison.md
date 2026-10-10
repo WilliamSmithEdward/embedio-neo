@@ -289,3 +289,277 @@ is `HttpClient`; in several Kestrel rows client CPU was 85-93%, so Kestrel may b
 faster than shown. Profiling used thread-time sampling, which includes runnable time
 on contended locks, not hardware CPU counters. The Speedscope attribution is per
 nearest EmbedIO caller and does not identify lock objects.
+
+## Post-integration small-request checkpoint
+
+This checkpoint measures frozen candidate `ae80537fa6c5b3d85235f4171e619f29374aacfc`
+against baseline `1445c238afea7d5a237088e8f19c7a4e84eb43f1` and Kestrel
+10.0.12. The candidate production source is byte-identical to engine integration
+`e52f829` and `6ca91d4`; it predates PR #210's higher-minor HTTP/1 processing.
+It is not a measurement of every subsequent engine head.
+
+The Windows host, CPU partition and runtime match the earlier campaign. Each
+sample used fresh server/client processes, five seconds of warmup and fifteen
+seconds of measurement, with two alternating rounds. The baseline loads the
+same harness with only the core assembly replaced. Responses are byte-validated.
+No failures were retried and no OS socket limits were changed.
+
+Artifact root: `TestResults/load-candidate-ae80537`. Preparation manifests record
+runner SHA-256 `4bab11108325ff746253affbcc6ddfd0074e3ca949e323bf16db2b98b2b9c7b7`,
+candidate core `025e7e48d36d711c6183b880c699492f38d63d3345fe38f5dc95502e8cb8e915`,
+and baseline core `a7eb20216af2ff7efbacb9c38537902340da62921791b626dc4d7343b40c17fc`.
+Raw samples, environment, full histograms and summaries are retained under
+`results-small-protocols` in the owned profiling worktree.
+
+There were **36 samples, 35 valid and one failed**. Kestrel's second close-after-100
+sample failed with a client SocketException reporting insufficient socket buffer
+or queue space. The exact cause is not established. Its remaining single sample
+must not be treated as a two-round comparison. All recorded post-run open server
+socket counts were zero. These short loopback runs do not establish soak behavior
+or a universal performance ranking.
+| Scenario | Engine | Valid/total | Requests/s median (min-max) | p50 ms | p99 ms | Server CPU us/req | Server B/req | Server CPU util | Client CPU util | Open server sockets after (max) | Handle growth (max) | Retained heap KB (max) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| h1-plain-small-c64 | candidate | 2/2 | 383,201 (382,549-383,853) | 0.113 | 0.947 | 20.2 | 7,914 | 97 % | 89 % | 0 | 7 | 95 |
+| h1-plain-small-c64 | baseline | 2/2 | 325,637 (323,970-327,303) | 0.117 | 0.979 | 22.9 | 10,331 | 93 % | 85 % | 0 | 28 | 99 |
+| h1-plain-small-c64 | kestrel | 2/2 | 478,678 (478,540-478,816) | 0.128 | 0.301 | 16.1 | 32 | 96 % | 94 % | 0 | 9 | 118 |
+| h1-plain-pipe16-c16 | candidate | 2/2 | 479,717 (479,083-480,350) | 0.277 | 0.778 | 16.2 | 7,550 | 97 % | 71 % | 0 | 7 | 91 |
+| h1-plain-pipe16-c16 | baseline | 2/2 | 419,567 (419,554-419,579) | 0.285 | 0.896 | 17.9 | 10,360 | 94 % | 71 % | 0 | 14 | 863 |
+| h1-plain-pipe16-c16 | kestrel | 2/2 | 4,174,176 (4,146,251-4,202,100) | 0.056 | 0.161 | 1.8 | 32 | 95 % | 88 % | 0 | 10 | 119 |
+| h1-plain-small-c64-close100 | candidate | 2/2 | 336,128 (335,929-336,326) | 0.117 | 1.082 | 22.1 | 8,011 | 93 % | 84 % | 0 | 6 | 115 |
+| h1-plain-small-c64-close100 | baseline | 2/2 | 324,710 (321,677-327,744) | 0.116 | 1.011 | 22.7 | 10,377 | 92 % | 82 % | 0 | 22 | 111 |
+| h1-plain-small-c64-close100 | kestrel | 1/2 | 400,278 (400,278-400,278) | 0.138 | 0.454 | 17.6 | 126 | 88 % | 88 % | 0 | 9 | 190 |
+| h1-tls-small-c64 | candidate | 2/2 | 363,864 (362,261-365,467) | 0.149 | 0.864 | 21.1 | 8,045 | 96 % | 90 % | 0 | 16 | 108 |
+| h1-tls-small-c64 | baseline | 2/2 | 165,650 (157,921-173,378) | 0.288 | 1.318 | 34.9 | 10,601 | 72 % | 56 % | 0 | 15 | 122 |
+| h1-tls-small-c64 | kestrel | 2/2 | 440,186 (439,885-440,487) | 0.135 | 0.490 | 17.4 | 32 | 96 % | 94 % | 0 | 5 | 227 |
+| h2-plain-small-c8x32 | candidate | 2/2 | 301,603 (301,217-301,988) | 0.627 | 3.635 | 25.6 | 13,508 | 97 % | 78 % | 0 | 4 | 110 |
+| h2-plain-small-c8x32 | kestrel | 2/2 | 1,707,514 (1,674,543-1,740,484) | 0.136 | 0.522 | 3.9 | 32 | 84 % | 88 % | 0 | 9 | 118 |
+| h2-tls-small-c8x32 | candidate | 2/2 | 245,299 (239,591-251,007) | 0.736 | 5.478 | 30.1 | 14,102 | 92 % | 74 % | 0 | 4 | 179 |
+| h2-tls-small-c8x32 | kestrel | 2/2 | 1,350,466 (1,333,238-1,367,693) | 0.165 | 0.701 | 5.4 | 42 | 90 % | 91 % | 0 | 4 | 224 |
+| h3-small-c8x32 | candidate | 2/2 | 165,032 (156,120-173,944) | 0.947 | 15.155 | 42.4 | 16,341 | 87 % | 55 % | 0 | 31 | 123 |
+| h3-small-c8x32 | kestrel | 2/2 | 307,163 (288,918-325,408) | 0.560 | 10.547 | 21.1 | 2,536 | 81 % | 68 % | 0 | 37 | 266 |
+
+The candidate improves on the pinned baseline in these rows, but the extreme
+performance objective remains unmet. Kestrel is approximately 8.7 times faster
+on pipelining, 5.7 times on plaintext HTTP/2, 5.5 times on TLS HTTP/2 and 1.9 times
+on small HTTP/3 responses. Allocation remains about 7.5-8.0 KB per small HTTP/1
+request and 13.5-14.1 KB per small HTTP/2 request.
+
+A separate one-round profiling campaign (`profile-pipe-h2`) ran candidate and
+Kestrel for plaintext pipelining and HTTP/2: four valid samples, zero failures.
+It preserves nettrace files, inclusive/exclusive reports and candidate Speedscope
+exports. Candidate throughput was 449,472 pipelined requests/s and 282,702 HTTP/2
+requests/s; Kestrel achieved 4,119,626 and 1,587,553 respectively. Profiling samples
+are separate from the sustained medians above.
+
+Socket sends, thread-pool continuations and Monitor contention appear prominently.
+Caller attribution identifies HTTP/1 connection read/completion and AsyncWriteGate,
+and HTTP/2 application dispatch and frame transport, among lock callers. The
+reports contain sleeping threads, and the attribution tool's idle classification
+is heuristic: its percentages are sampled thread time, not a measured fraction
+of process CPU. This evidence does not justify assigning all contention to the
+listener admission lock or claim that one small change will remove the gap.
+The next optimization requires focused attribution and before/after measurements
+while preserving framing, cancellation, explicit flush and graceful drain.
+
+## HTTP/1 chunk-write prototype
+
+The bounded chunk-write prototype serializes the size line, payload slice and
+trailing CRLF into one awaited transport write for subsequent asynchronous chunks
+up to 64 KiB. The first response head and larger chunks retain the existing path.
+It does not defer writes across application calls or change HTTP framing, public
+APIs, defaults, target frameworks or production dependencies. The local pooled
+buffer is returned and cleared on success, cancellation and transport failure.
+
+A preliminary two-round, fresh-process comparison used the identical frozen
+load harness and swapped only the core DLL. The candidate was base `4c531fe`
+plus the preserved ResponseStream patch (SHA-256
+`C7739392449C0DF1797081E5B4BBAA33E8EC74D1135DAB61E57AED62DC5A6226`);
+the control was the frozen `ae80537` assembly from the checkpoint above.
+Both rounds byte-validated 1 MiB responses flushed every 16 KiB over 16 connections.
+All four samples completed without failures or retained open server sockets.
+Artifacts: `TestResults/chunk-batch-load/streaming-comparison`, with source patch,
+binary hashes, environment and per-sample JSON retained in the owned worktree.
+
+Candidate server CPU was 913 and 943 us/response; control was 2,189 and 2,203.
+Candidate throughput was 8,132 and 7,370 responses/s; control was 1,549 and 2,916.
+Allocation stayed approximately 31.6 KB/response on both. Competing host activity
+was substantial in the control windows, so these throughput numbers do not prove
+a clean speedup ratio. Further isolated comparisons and platform validation remain
+necessary; these measurements are not a release or general performance claim.
+
+The separate write-gate completed-task experiment reduced streaming allocation
+from approximately 31.6 KB to 27.1 KB/response but showed inconsistent throughput
+and no small-response allocation improvement. It is preserved as a development
+patch and is not included in the chunk-write prototype.
+
+Independent HTTP/1 validation of pushed source `ab0301d61b79a05afac9c1d1d740d78b879504f6`
+ran in the pinned Linux container with four CPUs and a 6 GiB memory limit, SDK
+10.0.401 and runtime 10.0.12. The loaded core SHA-256 was
+`82eba815932076736331df1d073f955a90884afbeb4063e5efd38ba10b69ac61`.
+The independent model reported 45 conforms, 12 permitted policy choices and no
+violations/errors. Seed 20261009 passed 2,000 stateful iterations: 5,029 valid
+requests, 473 invalid requests and 211 aborts. Handlers drained to zero; handles
+grew by two and managed memory by 2,097,832 bytes. This was the tooling's `self`
+mode, so client and server share a process; retained-memory figures cannot be
+assigned entirely to the engine. This short campaign is not soak evidence.
+Artifacts are under `TestResults/chunk-batch-conformance-linux`.
+
+The full local Windows suite discovered 4,475 cases: 4,469 passed, five expected
+skips and one failure in unchanged permanent-ban file replacement. That failure
+also reproduces with the frozen pre-change engine. Its Windows HRESULT is
+`0x80070497`; the underlying cause remains unconfirmed. No production persistence
+change, assertion weakening or quarantine is part of this prototype.
+
+## HTTP/1 unused collection allocation checkpoint
+
+The candidate defers creation of empty query collections and unused context item
+containers. Nonempty queries are still decoded before admission. First access
+publishes one stable mutable collection; concurrent readers receive the same
+instance, and retained references remain request-local. No public signature,
+query interpretation, default, target or production dependency changes.
+
+The comparison used base `0be7629` plus the preserved two-file production patch,
+core SHA-256 `80461A69BB8866DD081FD237C8310A580BC43A3B2C9CD7D6945484D72D1F7BE8`.
+The control is the frozen `ae80537` core used above. Both load the identical
+harness, with only EmbedIO.dll swapped. New strict-limit and chunk behavior is
+inactive for this fixed-length, valid HTTP/1.1 pipeline workload. Two alternating
+rounds used fresh processes, five-second warmup, fifteen-second measurement and
+disjoint server/client CPU sets. All four samples byte-validated every response
+and completed without failures; no samples were retried.
+
+| Metric, pipelined x16 over 16 connections | Candidate | Frozen control |
+| --- | --- | --- |
+| Median requests/s | 475,348 | 472,172 |
+| Server CPU us/request | 16.3 | 16.4 |
+| Allocation B/request | 7,203 | 7,548 |
+| p99 ms | 0.774 | 0.778 |
+| Maximum post-run open server sockets | 0 | 0 |
+| Maximum retained heap KiB | 92 | 107 |
+
+Allocation decreases about 4.6%; throughput and CPU are within noise. This is an
+allocation improvement, not a solution to the roughly ninefold pipelining gap.
+Short loopback samples do not prove soak or every query-heavy workload. Artifacts,
+source patch and binary hashes are under `TestResults/context-allocation-load`.
+
+The first local full suite discovered 4,495 cases: 4,488 passed, five expected
+skips and two failures with Windows socket error 10055. One failed in the fixture's
+bare free-port probe before constructing EmbedIO; the other failed at WebSocket
+connection establishment. All 37 affected-family cases passed afterward. A
+standalone .NET 10.0.12 control loading no EmbedIO assembly reproduced the error:
+one failure in 18,000 TCP bind/close operations, immediately after port 65533,
+followed by allocation at port 49252. This is evidence of a native/runtime port
+allocation exposure on this host, not an established OS root cause or a product
+fix. A preliminary 512-bind control had no failures. No OS limits, retries inside
+fixtures, assertions or quarantine rules were changed. Source and logs are
+retained under `TestResults/context-allocation-socket-probe`; original suite/TRX
+and affected-family results remain beside the allocation campaign.
+A subsequent unchanged-source full-suite confirmation passes all 4,495 cases (4,490 passed/five expected skips). This does not repair or erase the original native allocator failures.
+
+## HTTP/1 first-body buffer reservation experiment
+
+The response-header MemoryStream previously allocated exactly the header size,
+then grew when ResponseStream appended the bounded first-body prefix. The
+candidate reserves that prefix, including a chunk-size line when applicable,
+after deciding response framing. It preserves the 16 KiB first-write boundary,
+large-header behavior, wire bytes, immediate writes and cancellation. No public
+API, default, target or dependency changes are involved.
+
+Measured source is `00102bdfda311170d7bed8c132ddee9eacbe4638` plus the recorded
+production patch. Frozen runner SHA-256 is
+`4bab11108325ff746253affbcc6ddfd0074e3ca949e323bf16db2b98b2b9c7b7`.
+Candidate core SHA-256 is
+`04532e6dac74055b721d7d1de6303b3175394f1f03e784b3a55d7185d8e39233`;
+control is the prior collection candidate,
+`80461a69bb8866dd081fd237c8310a580bc43a3b2c9cd7d6945484d72d1f7be8`.
+Only the core DLL is swapped. Windows .NET 10.0.12 / Ryzen 9800X3D,
+fresh processes, alternating order, disjoint CPU sets 0-7 / 8-15,
+5 s warmup and 15 s measurement. Each campaign has four valid samples,
+no failures/retries and zero open server sockets after settlement.
+
+| Campaign / sample | Requests/s | p99 ms | CPU us/request | Bytes/request |
+| --- | --- | --- | --- | --- |
+| Initial candidate r1 | 284371 | 5.018 | 15.8 | 5726 |
+| Initial control r1 | 458400 | 0.960 | 16.5 | 7216 |
+| Initial control r2 | 476334 | 0.819 | 16.3 | 7201 |
+| Initial candidate r2 | 473485 | 0.909 | 16.2 | 6737 |
+| Follow-up candidate r1 | 313109 | 3.994 | 17.2 | 6788 |
+| Follow-up control r1 | 324569 | 3.737 | 16.2 | 5831 |
+| Follow-up control r2 | 475243 | 0.761 | 16.4 | 7202 |
+| Follow-up candidate r2 | 479424 | 0.755 | 16.3 | 6732 |
+
+The initial slow candidate window recorded 124.109 CPU seconds outside the
+server/client, versus 11.094-22.859 in the other initial windows. Both first
+follow-up windows also recorded substantial competing CPU. This supports host
+competition as a contributor; it does not prove sole causation. All samples
+remain evidence, including the poor tails and the follow-up allocation reversal.
+Do not infer an overall throughput gain or a universal allocation reduction.
+
+An isolated serializer comparison on the same candidate calls the real header
+writer with either no reservation or a 13-byte first-body hint, then appends and
+validates identical body bytes. Header-only budget rows are unchanged.
+
+| X-Text padding | Growth B/operation | Reserved B/operation |
+| --- | --- | --- |
+| 0 | 424 | 160 |
+| 1024 | 3352 | 1184 |
+| 16384 | 49432 | 49432 |
+
+The last row intentionally has no reserved body prefix because its headers exceed
+the existing first-write bound; the direct harness then appends bytes beyond that
+bound to check growth. It is not a production transport measurement. These rows
+prove a local allocation saving for fitting headers, not server throughput.
+The listener-specific `--verify-listener-allocations` gate passes. An earlier
+command used the general verification flag and produced measurements without
+enforcing this gate; its log is retained separately.
+
+Validation: 115 focused cases, both target builds, parser/suppression guards and
+changed-source formatting. Corrected full Windows suite: 4495 total,
+4490 passed, five expected skips, zero failures. The initial full run had eight
+TargetParameterCountException failures in private header-writer reflection calls;
+the callers were updated to supply the new internal argument without changing
+wire assertions. That failed run remains recorded. Independent campaign and
+exact-final-head hosted checks are still required before integration.
+
+Artifacts remain under ignored `TestResults/response-prefix-load`,
+`response-prefix-isolated-allocations.log`, and `response-prefix-corrected-full`.
+## Rejected request-dispatch scheduling experiment
+
+A prototype replaced the per-request Task.Run wrapper with a cached normal
+ThreadPool callback and one request state. Six preservation cases exercised
+ambient-state isolation across awaits and independent acceptance under synchronous
+and suspended handlers on both backends. The 45-case focused set and both target
+builds passed. This was an experiment, not an established fix.
+
+The source was PR216 head `4aca4b5c2eabb99c58bfdeaf13df331bf9310472` plus the
+recorded WebServer patch. Candidate core SHA-256
+`6e62594a8e2dc558bf028a5f2e36b5eb302d2dd0d127ec65547abb23c17c6522`;
+control capacity candidate
+`04532e6dac74055b721d7d1de6303b3175394f1f03e784b3a55d7185d8e39233`.
+The first frozen-harness run returned four paired pipeline samples and two
+candidate-only HTTP/2 samples: its historical-main baseline filter excludes
+HTTP/2. Those two samples cannot demonstrate a before/after effect.
+
+An explicit test-only `--modern-baseline` flag now permits paired comparisons
+against a recorded modern engine revision; its value is captured in environment
+metadata. It leaves historical-main filtering as the default and retains all byte,
+error, resource and process-exit checks. The corrected comparison uses identical
+new runner copies, swapping only the core DLL. Exact runner hashes and complete
+source patches are in ignored `TestResults/dispatch-scheduling-load`.
+
+The paired HTTP/2 small-response run, Windows .NET10.0.12 / Ryzen9800X3D,
+disjoint CPU sets, fresh processes, two alternating rounds and 5s warmup /15s
+measurement, produced four valid samples with no failures/retries and zero open
+server sockets after settlement:
+
+| Engine | Requests/s median (range) | CPU us/request | Bytes/request | p99 ms median |
+| --- | --- | --- | --- | --- |
+| Scheduling prototype | 231964 (216216-247712) | 27.4 | 13272 | 4.480 |
+| Capacity control | 233639 (217829-249448) | 27.3 | 13267 | 6.886 |
+
+These data do not establish a worthwhile throughput, CPU or allocation gain.
+Pipeline samples showed lower allocation but mixed paired throughput and substantial
+host competition. Tail differences from two rounds do not establish a general
+latency gain. The prototype production code and new tests were preserved under
+ignored evidence and restored out of the working source. No default, API,
+dependency or discovery floor changed. The broader performance target remains
+unmet; connection write serialization/batching needs further investigation.

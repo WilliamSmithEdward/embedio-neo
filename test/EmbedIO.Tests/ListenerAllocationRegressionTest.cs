@@ -81,7 +81,7 @@ namespace EmbedIO.Tests
             context.Response.Headers["X-Text"] = value;
             context.Response.Headers["X-Last"] = "tail";
             var expected = Encoding.UTF8.GetBytes($"HTTP/1.1 201 Created\r\nX-Text: {value}\r\nX-Last: tail\r\n\r\n");
-            using var wire = (MemoryStream)((((context).Response.GetType().GetMethod("WriteHeaders", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(context.Response, null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            using var wire = (MemoryStream)((((context).Response.GetType().GetMethod("WriteHeaders", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(context.Response, new object[] { bodyLength })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             Assert.That((wire).Position, Is.EqualTo(0), "Default encoding has no preamble.");
             Assert.That(wire.ToArray(), Is.EqualTo(expected));
             var body = Enumerable.Repeat((byte)'z', bodyLength).ToArray();

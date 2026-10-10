@@ -1135,3 +1135,23 @@ received minor version into a response.
 
 References: [HTTP version semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
 and [single-digit HTTP/1 version syntax](https://www.rfc-editor.org/rfc/rfc9112.html#section-2.3).
+## HTTP/1 request-head limit statuses (unreleased)
+
+The managed engine retains its 32,768-byte request-head budget, including the
+request line and CRLF terminators. Requests that exceed it are still rejected
+before application dispatch and cannot reuse their connection or dispatch a
+pipelined request.
+
+Oversized request targets now receive 414 (URI Too Long), as required by
+[RFC 9112 section 3](https://www.rfc-editor.org/rfc/rfc9112.html#section-3).
+Oversized field sections after a parsed request line receive 431 (Request Header
+Fields Too Large), following [RFC 6585 section 5](https://www.rfc-editor.org/rfc/rfc6585.html#section-5).
+Previously both returned 400. These fixed responses have an empty body,
+`Cache-Control: no-store` and `Connection: close`; parser diagnostics and request
+content are not reflected. Malformed method/version/line syntax remains 400.
+
+Clients that categorize all limit failures as 400 should also handle 414 and 431.
+No new target, header or body limit is introduced; valid APIs, HTTP/1.0/1.1,
+higher-minor handling, framing and request deadlines remain. HTTP/2, HTTP/3 and
+the Microsoft listener backend are unchanged. This increment does not settle
+separate method-length policy or every HTTP limit requirement.

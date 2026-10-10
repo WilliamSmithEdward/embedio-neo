@@ -6669,3 +6669,73 @@ ordinary CI and independent quarantine discovery floors are reconciled to 4,469,
 as are the native experiment's two full-suite guards. This increment does not
 establish complete protocol or shipping readiness; exact-head hosted gates remain
 required. See the [migration note](../compatibility/migration.md#higher-http1-minor-versions-unreleased).
+
+### Integrated engine status after PR #210, PR #211 and PR #212
+
+The engine development branch reached `e1add82`: HTTP/1 higher-minor processing
+(PR #210) and the current comparative performance checkpoint (PR #211) are
+integrated after every exact-head check passed. This is development-branch
+integration, not a main merge or release. The accepted core has a 4,475-case
+discovery floor. PR #212's bounded chunk batching is now integrated after every
+exact-head check passed; the merged tree matches the tested source. Its preliminary
+performance and independent Linux campaign retain their documented limits.
+
+HTTP/2 and HTTP/3 implementations now have independent-peer and regression
+evidence, including stream cancellation isolation, codec checks and bounded
+graceful drain. Earlier checkpoints saying those engines were not implemented
+are historical. Neither these tests nor available opt-in modes prove completion
+of the October 2026 applicability matrix or the final default/deprecation
+transition. The Microsoft backend and both existing target frameworks remain;
+HTTP/3 needs the .NET 10 asset and native QUIC/TLS support.
+
+Remaining acceptance includes applicable extension coverage, default-listener
+transition evidence, broader platform/browser interoperability, sustained
+resource/security campaigns and representative performance. Current small-request
+comparisons still show substantial pipelining, HTTP/2 and HTTP/3 gaps against
+Kestrel. The pending timeout and range behavior decisions remain separate from
+owner-approved strict framing and keep-alive cap removal.
+
+The Apple Silicon investigator reports no local reproduction of the original
+QUIC establishment timeout on a different macOS version. A separate listener-bind
+failure and the original hosted handshake phase remain unresolved. The raw
+MsQuic rebind quarantine does not cover either failure. An unchanged permanent-ban
+persistence test also fails locally on the pre-optimization engine; its Windows
+file replacement error remains unconfirmed and is not waived by HTTP validation.
+
+### Admission fixture cancellation during immediate Stop
+
+The macOS test leg of tooling PR #217 (run 38020076573, job 114118913230,
+head 14ffdf315ff80c9e5732279f260593149333f153) failed in
+`StopAndRestartUnderConcurrentLoadLeavesNoRequestStranded(true,false)`.
+The response helper propagated TaskCanceledException from the HTTP/2 header
+writer's semaphore wait. That fixture already allowed IOException,
+ObjectDisposedException and HttpListenerException when immediate Stop closes a
+request; it omitted the canceled-token outcome during stream shutdown.
+
+On unchanged integrated production code at 1f928303, a controlled accepted HTTP/2
+stream is canceled before the same fixture response helper runs. Direct dispatch
+reproduces the uncaught cancellation; the thread-pool control can reach disposal
+first and already passes via the existing ObjectDisposedException handling.
+These are controlled paths, not a claim of reproducing the natural macOS schedule.
+
+The test-only correction accepts OperationCanceledException only when the
+context's request token is demonstrably canceled. It leaves served-success
+accounting, client timeout/unexpected-outcome assertions, Stop/restart assertions,
+production behavior, timeout values and quarantine classification unchanged.
+Both new cases and all 18 admission cases pass locally. The discovery guards
+increase by two to 4497. Full-suite and exact-head hosted validation remain required.
+
+Original hosted log and controlled before/after TRX remain under ignored
+`TestResults/pr217-macos-failure.log`, `admission-cancellation-before` and
+`admission-cancellation-after`. This correction is separate from the uncommitted
+HTTP/2 output batching experiment, which is not present in this production tree.
+The first full validation of this fixture correction reported 4497 cases,
+4491 passed, five skips and one failure in the unchanged HTTP/1 request-limit
+fixture (`syntax`, fragment 17), with ConnectionReset during CopyToAsync. Its
+source started ReadReply before sending, but then started another CopyToAsync
+instead of awaiting that task. Two reads could compete on one NetworkStream and
+write one MemoryStream; the first task was also not joined before cleanup.
+The correction awaits the existing reader. It does not change the existing
+reset condition or any status, complete-error-head, body, pipeline, dispatch or
+healthy-follow-up assertion. The original failed full run remains under ignored
+`TestResults/admission-cancellation-full`; no production correction is claimed.

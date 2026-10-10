@@ -43,9 +43,10 @@ which these handlers do not use. On `31128c3` the 8 x 32 rows were 569,888 and
 | CPU sets | server logical CPUs 0-7, client 8-15, set at process creation |
 | Schedule | 3 rounds, engine order alternating; 5 s warmup, 15 s measurement, fresh processes per sample |
 
-The base runs through `--baseline-all-protocols`, added for this work so an
-earlier engine revision can serve as the HTTP/2 baseline in the same alternating
-schedule.
+The base engine ran as the harness baseline on HTTP/2 scenarios, in the same
+alternating schedule. These runs used a `--baseline-all-protocols` option written
+for this work; the integrated harness provides the same behavior as
+`--modern-baseline` (#217), which replaced it.
 
 Other agents shared the machine and did not all use the shared lock file. A
 watcher logged foreign benchmark and test processes every 10 seconds. A sample

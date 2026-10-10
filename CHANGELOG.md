@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+- Reserve the bounded first-body prefix in managed HTTP/1 response-header buffers,
+  preserving framing and write boundaries while avoiding fitting-header growth.
+- Defer unused managed HTTP/1 query/item collections while preserving populated
+  query initialization, stable mutable collections and request-local state.
+- Commit bounded asynchronous managed HTTP/1 chunks with one transport write,
+  preserving byte framing, immediate application writes and cancellation.
+- Distinguish managed HTTP/1 request-head limit failures with 414 for oversized
+  targets and 431 for oversized field sections, retaining limits and connection
+  closure; see the [migration note](docs/compatibility/migration.md#http1-request-head-limit-statuses-unreleased).
 - Process valid higher HTTP/1 minor versions using HTTP/1.1 framing while retaining
   received request metadata and advertising only the supported response version.
   Preserve strict framing and HTTP/1.0/1.1 behavior; see the
