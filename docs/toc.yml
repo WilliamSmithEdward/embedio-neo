@@ -230,6 +230,8 @@
       href: project/http3-native-lifetime-campaigns.md
     - name: Managed engine load comparison
       href: project/http-engine-load-comparison.md
+    - name: Managed TCP write latency
+      href: project/http-tcp-latency.md
     - name: HTTP/2 graceful output lifetime
       href: project/http2-drain-output-lifetime.md
     - name: HTTP/2 output and dispatch performance

@@ -17,7 +17,12 @@ internal sealed class ConformanceServer : IDisposable
     private static long _completed;
     private static long _capsuleAfterFinMessages;
     private static long _capsuleAfterFinByteSum;
+    private static long _drainsStarted;
+    private static long _drainsCompleted;
+    private static string? _drainFailure;
+    private static long _drainMilliseconds;
     private readonly List<WebServer> _servers = new();
+    private readonly Dictionary<string, WebServer> _byEndpoint = new(StringComparer.Ordinal);
     private readonly string _root;
 
     private ConformanceServer(string root) => _root = root;
@@ -52,6 +57,7 @@ internal sealed class ConformanceServer : IDisposable
         });
         Configure(server);
         _servers.Add(server);
+        _byEndpoint[mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined ? "h3" : tls ? "https" : "http"] = server;
         return server;
     }
 
@@ -64,6 +70,8 @@ internal sealed class ConformanceServer : IDisposable
                 context.SendStringAsync("get", "text/plain", WebServer.Utf8NoBomEncoding)))
             .WithModule(new ActionModule("/capsule", HttpVerbs.Any, CapsuleAsync))
             .WithModule(new ActionModule("/sections", HttpVerbs.Get, SectionsAsync))
+            .WithModule(new ActionModule("/lifecycle", HttpVerbs.Get, LifecycleAsync))
+            .WithModule(new ActionModule("/__drain", HttpVerbs.Post, StartDrainAsync))
             .WithModule(new ActionModule("/echo", HttpVerbs.Any, EchoAsync))
             .WithModule(new ActionModule("/query", HttpVerbs.Query, EchoAsync))
             .WithModule(new ActionModule("/stream", HttpVerbs.Get, StreamAsync))
@@ -97,6 +105,71 @@ internal sealed class ConformanceServer : IDisposable
             sections.SetTrailers(new WebHeaderCollection { ["Content-Digest"] = "sha-256=:" + digest + ":", ["X-Section-End"] = "finished" });
         }
         finally { Interlocked.Decrement(ref _active); Interlocked.Increment(ref _completed); }
+    }
+
+    // Lifecycle campaign resource: interim sections, a paced body and optional
+    // trailers carrying the body digest. /lifecycle?interim=0..3&size=N&chunk=N&delay=ms&trailers=0|1&fixed=0|1
+    private static async Task LifecycleAsync(IHttpContext context)
+    {
+        if (context.Response is not IHttpResponseSections sections)
+            throw new HttpException(HttpStatusCode.NotImplemented, "This backend has no response-section capability.");
+        int Query(string name, int fallback, int maximum)
+        {
+            var value = int.Parse(context.Request.QueryString[name] ?? fallback.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
+            return value < 0 || value > maximum ? throw HttpException.BadRequest("Unsupported lifecycle parameter " + name + ".") : value;
+        }
+        var interim = Query("interim", 0, 3);
+        var size = Query("size", 0, 4 << 20);
+        var chunk = Math.Max(1, Query("chunk", 16384, 1 << 20));
+        var delay = Query("delay", 0, 1000);
+        var trailers = Query("trailers", 0, 1) == 1;
+        var bytes = new byte[size];
+        for (var i = 0; i < bytes.Length; i++) bytes[i] = (byte)(i % 251);
+        Interlocked.Increment(ref _active);
+        try
+        {
+            for (var i = 0; i < interim; i++)
+                await sections.SendInformationalAsync(103, new WebHeaderCollection { ["Link"] = $"</i{i}>; rel=preload" }, context.CancellationToken);
+            if (trailers) sections.DeclareTrailers("x-lifecycle-sha256", "x-lifecycle-end");
+            if (Query("fixed", 0, 1) == 1 && (!trailers || context.Request.ProtocolVersion.Major >= 2)) context.Response.ContentLength64 = size;
+            context.Response.ContentType = "application/octet-stream";
+            for (var offset = 0; offset < bytes.Length; offset += chunk)
+            {
+                if (offset != 0 && delay != 0) await Task.Delay(delay, context.CancellationToken);
+                await context.Response.OutputStream.WriteAsync(bytes.AsMemory(offset, Math.Min(chunk, bytes.Length - offset)), context.CancellationToken);
+                await context.Response.OutputStream.FlushAsync(context.CancellationToken);
+            }
+            if (trailers)
+                sections.SetTrailers(new WebHeaderCollection { ["x-lifecycle-sha256"] = Convert.ToHexString(SHA256.HashData(bytes)), ["x-lifecycle-end"] = "done" });
+        }
+        finally { Interlocked.Decrement(ref _active); Interlocked.Increment(ref _completed); }
+    }
+
+    // Starts a graceful drain of one named endpoint (http, https or h3) without awaiting
+    // it inside the request. POST /__drain?endpoint=NAME&ms=DEADLINE. Outcomes appear in
+    // /__stats. Drain stops that endpoint, so a campaign uses it as its last phase.
+    private Task StartDrainAsync(IHttpContext context)
+    {
+        var name = context.Request.QueryString["endpoint"] ?? "";
+        if (!_byEndpoint.TryGetValue(name, out var target)) throw HttpException.BadRequest("Unknown endpoint.");
+        var deadline = TimeSpan.FromMilliseconds(int.Parse(context.Request.QueryString["ms"] ?? "10000", System.Globalization.CultureInfo.InvariantCulture));
+        Interlocked.Increment(ref _drainsStarted);
+        _ = Task.Run(async () =>
+        {
+            var watch = Stopwatch.StartNew();
+            try
+            {
+                await target.DrainAsync(deadline).ConfigureAwait(false);
+                Interlocked.Increment(ref _drainsCompleted);
+            }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                Volatile.Write(ref _drainFailure, error.GetType().Name + ": " + error.Message);
+            }
+            finally { Interlocked.Exchange(ref _drainMilliseconds, watch.ElapsedMilliseconds); }
+        });
+        context.Response.StatusCode = 202;
+        return context.SendStringAsync("draining " + name, "text/plain", WebServer.Utf8NoBomEncoding);
     }
 
     // A test-only extension carrier. Type 0 echoes opaque HTTP Datagram payloads;
@@ -268,6 +341,10 @@ internal sealed class ConformanceServer : IDisposable
             capsuleAfterFinMessages = Interlocked.Read(ref _capsuleAfterFinMessages),
             capsuleAfterFinByteSum = Interlocked.Read(ref _capsuleAfterFinByteSum),
             threadPoolPending = ThreadPool.PendingWorkItemCount,
+            drainsStarted = Interlocked.Read(ref _drainsStarted),
+            drainsCompleted = Interlocked.Read(ref _drainsCompleted),
+            drainFailure = Volatile.Read(ref _drainFailure),
+            drainMilliseconds = Interlocked.Read(ref _drainMilliseconds),
         });
     }
 
