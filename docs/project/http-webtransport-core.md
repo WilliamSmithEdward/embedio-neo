@@ -254,3 +254,8 @@ The earlier 2601cca hosted Windows failure was the admitted HTTP/2 response loss
 now corrected in merged PR #236; its failed evidence is retained in the drain
 lifetime guide. This updated source requires every new-head hosted check before
 integration. The core still advertises no application WebTransport capability.
+
+Final reconciliation onto callback base 048f06f passes 4897 Windows cases,
+4892 passed, five existing skips, zero failures (3m 21s), with warning-free
+complete builds for both targets. All new-head checks remain required; neither
+application WebTransport capability nor independent interoperability is claimed.

@@ -7126,3 +7126,8 @@ PR #237 is verified in development at 048f06f; the corrected WebTransport branch
 is reconciled onto it. Expected discovery is 4897 (4807 base plus 90 core cases).
 The integrated callback tree matches 48fa5d51519e9582ac1a56ba26269d86a91298a3.
 Fresh combined-source and hosted acceptance remain required.
+
+Final reconciliation onto callback base 048f06f passes 4897 Windows cases,
+4892 passed, five existing skips, zero failures (3m 21s), with warning-free
+complete builds for both targets. All new-head checks remain required; neither
+application WebTransport capability nor independent interoperability is claimed.
