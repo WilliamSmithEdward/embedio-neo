@@ -7081,3 +7081,27 @@ Windows cases, 4802 passed, five existing skips, zero failures (3m 22s). Both
 core targets build without warnings. The two additional callback cases retain
 their controlled-invocation scope; focused native Linux results above precede
 this H2-only base move. All new-head hosted checks remain required.
+
+Native stream direction completion is now implemented internally: read FIN waits
+for borrowed bytes to be consumed, send completion waits for the native graceful
+shutdown event, and RESET_STREAM/STOP_SENDING fault only their respective tasks
+with the peer application code. Task sources are allocated only when observed;
+absent unidirectional sides use completed tasks. Disposal resolves pending
+observers. Public runtime exception constructors are called behind actual
+supported-platform guards; no private runtime shim or reused implementation code
+is used. This still does not route application HTTP through the native provider.
+
+Three initial direction cases fail on unchanged code because completion signals
+are absent. Six new real-peer cases cover FIN, both peer abort directions,
+unidirectional absent sides and disposal. All 67 focused native cases pass on
+Windows and pinned Linux (same Windows-built IL); both targets build warning-free
+and source guards pass. Expected combined discovery is 4813 (4807 base plus six).
+Full-source and hosted acceptance, native adapter/application integration,
+explicit local abort/completion operations and datagram delivery remain required.
+
+Final native direction acceptance: 4813 Windows cases, 4808 passed, five existing
+skips, zero failures (3m 21s), with all 67 focused native cases passing on Windows
+and pinned Linux using the same Windows-built IL. Both-target builds and source
+guards pass. The earlier platform-analyzer failure was corrected with an actual
+supported-platform check before constructing public QUIC exceptions; no analyzer
+suppression was added. All final-head hosted checks remain required.
