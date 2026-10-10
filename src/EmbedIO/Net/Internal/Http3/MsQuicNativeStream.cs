@@ -238,6 +238,8 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly bool _local;
         internal long Id => _id;
         internal bool Unidirectional { get; }
+        internal bool CanRead => !IsClosed && !(_local && Unidirectional);
+        internal bool CanWrite => !IsClosed && (_local || !Unidirectional);
         internal Task ReadsClosed => _signals.ReadDirection(!(_local && Unidirectional));
         internal Task WritesClosed => _signals.WriteDirection(_local || !Unidirectional);
         private MsQuicNativeStream(MsQuicNativeConnection connection, MsQuicApi.StreamFunctions functions, Signals signals, long id, uint flags, bool local = false) : base(true)
@@ -499,6 +501,44 @@ namespace EmbedIO.Net.Internal.Http3
                 if (pooled != null) ArrayPool<byte>.Shared.Return(pooled, true);
                 if (retained) DangerousRelease();
             }
+        }
+        internal async ValueTask DisposeAsync()
+        {
+            bool started;
+            lock (_signals.Sync) started = _signals.StartSucceeded;
+            var retained = false;
+            try
+            {
+                try { DangerousAddRef(ref retained); }
+                catch (ObjectDisposedException)
+                {
+                    if (started) await _signals.Closed.Task.ConfigureAwait(false);
+                    return;
+                }
+                Task? graceful = null;
+                lock (_commitSync)
+                {
+                    lock (_signals.Sync)
+                    {
+                        if (_finQueued && !_signals.SendFinished && _signals.SendError == null)
+                            graceful = _signals.WriteDirection(true);
+                    }
+                }
+                try
+                {
+                    // SEND_COMPLETE releases payload ownership, not delivery of
+                    // a queued FIN. Do not reset a successful response here.
+                    if (graceful != null)
+                    {
+                        try { await graceful.ConfigureAwait(false); }
+                        catch (QuicException) { } // Peer/connection abort ends this wait.
+                    }
+                }
+                finally { Dispose(); }
+                // The last native lease closes only after SHUTDOWN_COMPLETE.
+                if (started) await _signals.Closed.Task.ConfigureAwait(false);
+            }
+            finally { if (retained) DangerousRelease(); }
         }
         private uint AbortFlags => _signals.PeerAccepted != null && !_signals.PeerAccepted.Task.IsCompletedSuccessfully ? 0x0eu : 6u;
         protected override void Dispose(bool disposing)

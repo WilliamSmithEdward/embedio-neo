@@ -805,6 +805,143 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public async Task NativeAsyncDisposalPreservesFinBeforePeerDrainsACommittedSend()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeAsyncFinDisposalCore();
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeAsyncFinDisposalCore()
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                await using var remote = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                await remote.WriteAsync(new byte[] { 91 }, true, token);
+                var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                await accepting.WaitAsync(token);
+                using var native = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                    ?? throw new AssertionException("Missing native stream."));
+                var bytes = new byte[8191];
+                Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.EqualTo(1));
+                Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.Zero);
+                var payload = new byte[8 * 1024 * 1024];
+                Array.Fill(payload, (byte)93);
+                var writing = ((ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)payload, true, token)).AsTask();
+                var disposing = ((ValueTask)ListenerCall(native, "DisposeAsync")).AsTask();
+                try
+                {
+                    Assert.That(disposing.IsCompleted, Is.False, "Async disposal must await queued FIN instead of resetting it.");
+                    var total = 0;
+                    while (true)
+                    {
+                        var count = await remote.ReadAsync(bytes, token);
+                        if (count == 0) break;
+                        Assert.That(total + count, Is.LessThanOrEqualTo(payload.Length));
+                        Assert.That(bytes.AsSpan(0, count).IndexOfAnyExcept((byte)93), Is.EqualTo(-1));
+                        total += count;
+                    }
+                    Assert.That(total, Is.EqualTo(payload.Length));
+                }
+                finally { await Task.WhenAll(writing, disposing).WaitAsync(token); }
+                Assert.That(native.IsClosed, Is.True);
+                Assert.That(NativeDirection(native, "WritesClosed").IsCompletedSuccessfully, Is.True);
+            });
+        }
+
+        [TestCase(0)]
+        [TestCase(1023)]
+        [TestCase(1048576)]
+        public async Task NativeTransportRunsTheSharedHttp3WorkerAndReturnsExactData(int length)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeHttp3WorkerCore(length);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeHttp3WorkerCore(int length)
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                var worker = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection")
+                    ?? throw new AssertionException("Missing HTTP/3 worker.");
+                var exchange = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicExchange")
+                    ?? throw new AssertionException("Missing HTTP/3 exchange.");
+                var run = worker.GetMethod("RunNativeAsync", BindingFlags.Static | BindingFlags.NonPublic)
+                    ?? throw new AssertionException("Missing native HTTP/3 worker integration.");
+                var payload = new byte[length];
+                for (var i = 0; i < length; i++) payload[i] = (byte)(i * 37);
+                var dispatched = 0;
+                Func<object, Task> reply = value =>
+                {
+                    Interlocked.Increment(ref dispatched);
+                    return (Task)(exchange.GetMethod("RespondAsync", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(value, new object[] { payload, token })
+                        ?? throw new AssertionException("Missing HTTP/3 response writer."));
+                };
+                var argument = System.Linq.Expressions.Expression.Parameter(exchange);
+                var handler = System.Linq.Expressions.Expression.Lambda(typeof(Func<,>).MakeGenericType(exchange, typeof(Task)),
+                    System.Linq.Expressions.Expression.Invoke(System.Linq.Expressions.Expression.Constant(reply),
+                        System.Linq.Expressions.Expression.Convert(argument, typeof(object))), argument).Compile();
+                using var stop = CancellationTokenSource.CreateLinkedTokenSource(token);
+                var serving = (Task)(run.Invoke(null, new object[] { connection, handler, stop.Token })
+                    ?? throw new AssertionException("Missing native HTTP/3 runner."));
+                QuicStream? control = null;
+                try
+                {
+                    control = await peer.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, token);
+                    await control.WriteAsync(new byte[] { 0, 4, 0 }, token);
+                    await using var request = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                    // Independent static QPACK request: GET, https, /, localhost.
+                    await request.WriteAsync(Convert.FromHexString("01100000D1D7C150096C6F63616C686F7374"), true, token);
+                    using var response = new System.IO.MemoryStream();
+                    await request.CopyToAsync(response, token);
+                    var wire = response.ToArray();
+                    var offset = 0;
+                    var headers = 0;
+                    using var body = new System.IO.MemoryStream();
+                    while (offset < wire.Length)
+                    {
+                        var type = NativePeerInteger(wire, ref offset);
+                        var size = NativePeerInteger(wire, ref offset);
+                        Assert.That(size, Is.LessThanOrEqualTo(wire.Length - offset));
+                        if (type == 1) { headers++; Assert.That(size, Is.GreaterThanOrEqualTo(2)); }
+                        else
+                        {
+                            Assert.That(type, Is.Zero, "Only final HEADERS and DATA are expected.");
+                            Assert.That(headers, Is.EqualTo(1), "DATA must follow final headers.");
+                            body.Write(wire, offset, checked((int)size));
+                        }
+                        offset += checked((int)size);
+                    }
+                    Assert.That(headers, Is.EqualTo(1));
+                    Assert.That(body.ToArray(), Is.EqualTo(payload));
+                    Assert.That(Volatile.Read(ref dispatched), Is.EqualTo(1));
+                }
+                finally
+                {
+                    stop.Cancel();
+                    try
+                    {
+                        await serving.WaitAsync(token);
+                        Assert.That(connection.IsClosed, Is.True, "The protocol runner owns and disposes its native connection.");
+                    }
+                    finally { if (control != null) await control.DisposeAsync(); }
+                }
+            });
+        }
+        private static long NativePeerInteger(byte[] wire, ref int offset)
+        {
+            Assert.That(offset, Is.LessThan(wire.Length));
+            var width = 1 << (wire[offset] >> 6);
+            Assert.That(width, Is.LessThanOrEqualTo(wire.Length - offset));
+            long result = wire[offset++] & 63;
+            for (var i = 1; i < width; i++) result = (result << 8) | wire[offset++];
+            return result;
+        }
+
+        [Test]
         public async Task NativeDisposalCompletesBothPendingDirectionObservers()
         {
             if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
@@ -978,7 +1115,8 @@ namespace EmbedIO.Tests
                 await ((Task)ListenerCall(listener, "StopAsync")).WaitAsync(deadline.Token);
                 listener.Dispose();
             }
-            await ((Task)ListenerCall(connection, "ShutdownAsync", 0x100L)).WaitAsync(deadline.Token);
+            if (!connection.IsClosed)
+                await ((Task)ListenerCall(connection, "ShutdownAsync", 0x100L)).WaitAsync(deadline.Token);
             connection.Dispose();
             Assert.That(connection.IsClosed, Is.True);
         }

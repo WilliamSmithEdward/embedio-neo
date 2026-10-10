@@ -7204,3 +7204,31 @@ API, listener default, target or dependency.
 Native abort reconciliation onto verified direction merge a4f7105 preserves the entire tested 28480e0 tree before this status note. Production source, tests, workflows and discovery floor are unchanged; the retained 4908-case full result applies to those identical bytes. Fresh exact-head hosted checks remain required after the history reconciliation.
 
 Final native graceful-completion acceptance reports 4912 Windows cases: 4907 passed, five existing skips, zero failures (3m 22s), with all 76 focused native cases passing on Windows and pinned Linux using the same Windows-built IL. Both-target builds and source guards pass. The reconciliation changes only documentation beyond the tested source; fresh hosted final-head checks remain required.
+
+The internal native HTTP/3 transport adapter now connects an already-configured
+native connection to the existing protocol worker. It exposes native stream
+read/write operations, direction signals, aborts and graceful completion through
+the provider-neutral transport contract. Async stream disposal retains a native
+lease and waits for a queued FIN to complete before disposing, so successful
+large responses are not reset at SEND_COMPLETE. Connection acceptance closure
+maps to a QUIC operation-aborted exception for the common worker's shutdown path.
+The adapter owns its connection; listener selection and public APIs are unchanged.
+
+Three raw .NET QUIC peer cases fail against the pre-adapter core because the
+native worker entry point is absent (core SHA-256
+1691E99B972ACBE63E682F84567FDB0231071997A9284D5DDF6B54949308CCA9).
+The first adapter reset large responses during disposal. Retained pre-correction
+core B8D40D27C83226EE959E683EE5C904F2EA553302A45BA636D2BAC5CE6A4BFA63
+fails both the 1 MiB worker response and the direct 8 MiB queued-FIN disposal case;
+empty and 1023-byte responses pass after correcting test connection ownership.
+The FIN correction passes all four cases. They validate independently encoded
+static QPACK requests, response frame ordering and exact DATA, not independent
+QPACK response decoding or an external HTTP/3 implementation.
+
+All 80 native cases pass on Windows and pinned Linux using the same Windows-built
+IL. Both target builds are warning-free. Combined discovery is 4916. Full-source
+and hosted final-head validation remain pending while another agent holds the
+shared campaign slot. The adapter has not been wired into listener startup or
+application routing, has no native external-drain entry point yet, and does not
+advertise datagrams or WebTransport. Existing BCL application paths are unchanged.
+Evidence and preserved failed attempts are under TestResults/native-http3-adapter.
