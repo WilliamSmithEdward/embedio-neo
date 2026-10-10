@@ -7287,7 +7287,17 @@ The regression fails against the saved baseline core (SHA-256
 `7AEF0B80CD0FD6D28F0E185940DC6EAD6C21199ECCEAD118D4024462BEADEA85`)
 and passes after the correction. The focused Windows set reports 36 cases:
 34 passed, two optional independent-peer cases skipped, zero failures. Both
-library targets build with zero warnings. Full-suite, Linux and fresh hosted
-checks remain pending for this correction; the earlier datagram evidence above
-is not evidence for these changed bytes. The discovery floor becomes 4939
+library targets build with zero warnings. Fresh hosted checks and independent-peer reruns remain pending for this correction; earlier peer evidence above is not evidence for these changed bytes. The discovery floor becomes 4939
 (4903 development-base cases, 35 datagram cases and this regression).
+
+Final local validation of the correction: the complete Windows suite reports
+4939 cases, 4932 passed, seven expected skips and zero failures in 3m 21s.
+The pinned Linux image runs the same Windows-built IL and reports 36 datagram
+cases, 34 passed, two optional peer skips and zero failures. Changed-source
+formatting and both analyzer guards pass. The tested core SHA-256 is
+`724C5423D76353E78BCBB6E4B3A589DAAA1633D06EAE9C304033C73E126CA819`.
+An initial unguarded full-suite attempt was stopped after about 17 seconds and
+retained as INVALID; it is not acceptance evidence. The accepted complete run
+held the shared lock and process inspection found no competing test or benchmark
+workload. The optional peer rerun was deferred when another owner acquired the
+lock; no competing run was launched.
