@@ -7240,8 +7240,18 @@ indicates `LOST_DISCARDED` for datagrams still unacknowledged at shutdown, so
 unsupported case confirmed the server reports `Unavailable` and sends nothing to a
 peer without datagram support.
 
-Not verified: Linux or macOS native datagrams (the independent peer has not run
-there and CI skips it), packet loss and Lost outcomes on a real path, MTU-change
+On Linux the same cases ran from a source build of 6b76423 (git archive extracted
+inside the container, not a bind mount) in the pinned conformance image built from
+`test/EmbedIO.Conformance/docker/Dockerfile`: SDK 10.0.401, runtime 10.0.12,
+MsQuic 2.6.2 (library SHA-256 6729b82d...6497cf), Python 3.12.3 and aioquic 1.3.0
+installed with `--require-hashes`, under WSL2 kernel 6.18 with two CPUs. The build
+had no warnings, and three runs each passed all 35 cases with none skipped and
+`EMBEDIO_REQUIRE_QUIC=1`. Every echo matched on the first attempt; each run reported
+6-7 Acknowledged and 1-2 Lost, the discard-at-close behavior described above.
+
+Not verified: macOS native datagrams with the independent peer (CI skips it),
+Linux CI runners (the local container is WSL2, not a hosted runner), packet loss
+and Lost outcomes on a real path, MTU-change
 indications, sustained throughput or retained memory, 32-bit processes, HTTP/3
 datagram association (SETTINGS_H3_DATAGRAM, quarter stream IDs, request/session
 lifetime) and WebTransport. Discovery rises by 35 cases (two skipped without the
