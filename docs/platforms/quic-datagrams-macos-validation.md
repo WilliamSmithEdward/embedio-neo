@@ -1,12 +1,25 @@
 # Native QUIC datagram validation on macOS
 
-Local validation of native QUIC datagrams (PR
-[#241](https://github.com/WilliamSmithEdward/embedio-neo/pull/241)) on Apple
-Silicon, using the independent aioquic peer. The setup mirrors CI's step
-"Install pinned macOS QUIC prerequisite" in `.github/workflows/ci.yml`.
+Local Apple Silicon validation of the internal native QUIC datagram owner
+(`MsQuicNativeDatagrams`), using the independent aioquic peer. The setup
+mirrors CI's step "Install pinned macOS QUIC prerequisite" in
+`.github/workflows/ci.yml`.
 
-Result: **pass, 3 of 3 runs** at head
-`5f08f9902291f27263d437bd8087edc7311014b9`. Run on 2026-10-10.
+Each result below applies only to the exact source commit it names. A later
+source change, including a correction, needs its own run. Editing this page
+does not change the tested bytes.
+
+| Source commit | Scope | Result |
+| --- | --- | --- |
+| `5f08f9902291f27263d437bd8087edc7311014b9` (PR [#241](https://github.com/WilliamSmithEdward/embedio-neo/pull/241)) | Focused datagram tests, 3 runs | 35 of 35 passed in each run |
+| `7b8aee59bb8caf817ce25e16b1d03b4df0c5a800` (PR [#243](https://github.com/WilliamSmithEdward/embedio-neo/pull/243), includes the send-preparation/disposal correction `f13c113`) | Focused datagram tests, 3 runs | 36 of 36 passed in each run |
+| `7b8aee59bb8caf817ce25e16b1d03b4df0c5a800` | Full suite, 1 run | 4939 total: 4907 passed, 31 platform skips, 1 failure in an unrelated shutdown fixture (see below) |
+
+The `5f08f99` runs predate the correction and do not validate it.
+
+This is local evidence, not a hosted CI result. It does not cover Intel Macs,
+other macOS versions, the .NET Standard 2.0 asset, HTTP/3 datagram association
+or WebTransport, none of which this provider integrates yet.
 
 ## Environment
 
@@ -25,18 +38,21 @@ Result: **pass, 3 of 3 runs** at head
 `otool -L` shows libcrypto resolved to
 `/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib`.
 `DYLD_FALLBACK_LIBRARY_PATH` pointed at the extracted bottle's `lib` folder.
+The same environment and library were used for both commits.
 
-## Build
+## Method
 
-`dotnet restore test/EmbedIO.Tests/EmbedIO.Tests.csproj --locked-mode`
-succeeded. The Release build with `--no-restore` produced 0 warnings and
-0 errors.
+For each commit: locked restore, then a Release build with `--no-restore`
+(0 warnings, 0 errors). Each focused run used `EMBEDIO_REQUIRE_QUIC=1`,
+`EMBEDIO_DATAGRAM_PEER_PYTHON` set to the venv, and
+`--filter "FullyQualifiedName~MsQuicNativeDatagramTest"`, with its own TRX
+results directory. The full-suite run used the same environment variables,
+`--timeout 5m` and `--minimum-expected-tests 4939`, the floor recorded at that
+commit.
 
-## Runs
+## Results at `5f08f99`
 
-Each run used `EMBEDIO_REQUIRE_QUIC=1`, `EMBEDIO_DATAGRAM_PEER_PYTHON` set to
-the venv, and `--filter "FullyQualifiedName~MsQuicNativeDatagramTest"`, with its
-own TRX results directory.
+Run on 2026-10-10. The locked restore covered `test/EmbedIO.Tests/EmbedIO.Tests.csproj`.
 
 | Run | Total | Succeeded | Failed | Skipped | Echo outcomes |
 | --- | --- | --- | --- | --- | --- |
@@ -44,7 +60,33 @@ own TRX results directory.
 | 2 | 35 | 35 | 0 | 0 | `echoed=7`, Acknowledged 4, Lost 4 |
 | 3 | 35 | 35 | 0 | 0 | `echoed=7`, Acknowledged 3, Lost 5 |
 
-The peer's lines were identical in every run.
+## Results at `7b8aee5`
+
+Run on 2026-10-10. The locked restore covered `EmbedIO.sln`. The tested
+`net10.0` `EmbedIO.dll` SHA-256 was
+`b03bd529adacbfc3c27fe1f7d77fb344742eb22cd0ff350605a8b4e795aafc62`.
+
+| Run | Total | Succeeded | Failed | Skipped | Echo outcomes |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 36 | 36 | 0 | 0 | `echoed=7`, Acknowledged 4, Lost 4 |
+| 2 | 36 | 36 | 0 | 0 | `echoed=7`, Acknowledged 5, Lost 3 |
+| 3 | 36 | 36 | 0 | 0 | `echoed=7`, Acknowledged 5, Lost 3 |
+
+The 36th case is the connection-lifetime regression added with the correction.
+
+The full-suite run (2m 09s) had one failure:
+`Issue595_TwoServers.ClosingDuringInFlightRequestsCompletesAcceptLoop(True)`
+with `SocketException: Invalid argument` from `HttpClient` reading a reset
+socket's peer address. That test file is unchanged by the datagram work. The
+same failure reproduces on the unmodified development branch at `a4f7105`
+(6 of 40 focused invocations). PR
+[#247](https://github.com/WilliamSmithEdward/embedio-neo/pull/247) proposes the
+fixture correction. All 31 skips are existing platform skips; no QUIC or
+datagram case was skipped.
+
+## Peer output
+
+The peer's lines were identical in every run at both commits.
 
 Echo case:
 
