@@ -214,6 +214,10 @@
       href: project/http-engine.md
     - name: QUIC lifetime and rebind
       href: project/quic-lifetime.md
+    - name: Managed engine load comparison
+      href: project/http-engine-load-comparison.md
+    - name: HTTP conformance audit
+      href: project/http-conformance.md
 
 - name: Suffix byte ranges
   href: user-reports/suffix-range-responses.md
