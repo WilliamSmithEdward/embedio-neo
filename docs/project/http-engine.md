@@ -7159,3 +7159,22 @@ application WebTransport capability nor independent interoperability is claimed.
 The native direction branch is reconciled onto verified WebTransport merge 90e84f1. Combined discovery is 4903 (4897 base plus six real-peer direction cases). Fresh combined-source and exact-head hosted validation remain required.
 
 Combined native direction acceptance on WebTransport development base 90e84f1 passes 4903 Windows cases: 4898 passed, five existing skips, zero failures (3m 23s), with complete warning-free builds for both targets. Fresh hosted checks on this reconciled head remain required.
+
+Native stream local abort operations are implemented internally. A validated
+read/write/both request sends STOP_SENDING/RESET_STREAM with the first supplied
+62-bit application code, resolves only the local aborted direction, and wakes a
+pending reader. Repeated aborts retain the original peer code; invalid direction
+or out-of-range code leaves the stream unchanged. A committed write still awaits
+native SEND_COMPLETE before releasing its pin and descriptor. Local cancellation
+errors are preserved when that committed send completes as cancelled.
+
+Three initial real-peer cases fail on the unchanged source because the explicit
+abort operation is absent. Five new cases now cover both independent directions,
+both-direction abort including the maximum code, invalid argument preservation,
+repeat aborts, a committed flow-blocked 8 MiB write, and a healthy sibling stream.
+All 72 native cases pass on Windows and pinned Linux with the same Windows-built
+IL; this is not a Linux source build or Apple runtime result. Both target builds
+pass without warnings. Combined discovery is 4908. Full-source and hosted checks
+remain required. Separate graceful write completion, the native HTTP/3 adapter,
+application integration and datagram delivery are still incomplete; no listener
+default or public API is changed by this increment.
