@@ -88,6 +88,15 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
+        internal bool CanSendReserved(int streamId)
+        {
+            lock (_sync)
+            {
+                ThrowIfFailed();
+                return _streams.TryGetValue(streamId, out var window) && window.Credit >= 0;
+            }
+        }
+
         internal void ReturnUnusedReservation(int streamId, int count)
         {
             if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));

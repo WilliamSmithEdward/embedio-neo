@@ -35,6 +35,8 @@ internal static class Orchestrator
         var profile = options.Has("--profile");
         var selected = SelectScenarios(options.Text("--scenarios", "all"));
         var engineFilter = options.Optional("--engines")?.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        // For a baseline core that also serves HTTP/2 and HTTP/3, such as an earlier engine revision.
+        var baselineAllProtocols = options.Has("--baseline-all-protocols");
 
         var targets = new List<EngineTarget> { new("candidate", "embedio", candidate) };
         if (baseline is not null) targets.Add(new("baseline", "embedio", baseline));
@@ -63,7 +65,7 @@ internal static class Orchestrator
             {
                 foreach (var scenario in selected)
                 {
-                    var engines = targets.Where(target => target.Name != "baseline" || scenario.BaselineApplies).ToList();
+                    var engines = targets.Where(target => target.Name != "baseline" || baselineAllProtocols || scenario.BaselineApplies).ToList();
                     if (round % 2 == 0) engines.Reverse();
                     foreach (var target in engines)
                     {
@@ -387,6 +389,7 @@ internal static class Orchestrator
                 .Select(key => KeyValuePair.Create(key, (JsonNode?)Environment.GetEnvironmentVariable(key)))),
             ["candidateRevision"] = options.Optional("--candidate-revision"),
             ["baselineRevision"] = options.Optional("--baseline-revision"),
+            ["baselineAllProtocols"] = options.Has("--baseline-all-protocols"),
             ["targets"] = new JsonArray([.. targets.Select(target => (JsonNode)new JsonObject
             {
                 ["name"] = target.Name,
