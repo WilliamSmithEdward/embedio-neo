@@ -311,10 +311,10 @@ namespace EmbedIO.Tests
             await reader.Next(stop.Token); reader.Headers(0);
             var (next, pending) = Probe(reader);
             Assert.That(next, Is.Null, "A FIN that has not arrived is not waited for.");
-            Assert.That(pending, Is.Not.Null);
-            Assert.That(pending!.IsCompleted, Is.False);
+            var read = pending ?? throw new AssertionException("The unfinished read must be returned.");
+            Assert.That(read.IsCompleted, Is.False);
             source.Resume.TrySetResult(true);
-            await pending.WaitAsync(stop.Token);
+            await read.WaitAsync(stop.Token);
         }
 
         [Test]

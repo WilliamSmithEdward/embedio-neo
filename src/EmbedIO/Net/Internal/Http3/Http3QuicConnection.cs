@@ -65,7 +65,7 @@ namespace EmbedIO.Net.Internal.Http3
             _token = _stop.Token;
             // One registration fans connection cancellation out to every active
             // request. Per-request linked sources would all contend on this token.
-            _stopRequests = _token.UnsafeRegister(static state => ((Http3QuicConnection)state!).CancelActiveRequests(), this);
+            _stopRequests = _token.UnsafeRegister(static state => (state as Http3QuicConnection)?.CancelActiveRequests(), this);
         }
         internal static async Task RunAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token)
         {
@@ -419,13 +419,16 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private void CancelDecode(long streamId)
         {
+            Http3ProtocolException? failure = null;
             lock (_decoderSync)
             {
                 if (_pending.Remove(streamId, out var pending)) pending.TrySetCanceled();
                 if (_token.IsCancellationRequested) return;
                 try { _decoder.Cancel(streamId); SignalFeedback(); }
-                catch (Http3ProtocolException error) { Fail(error); }
+                catch (Http3ProtocolException error) { failure = error; }
             }
+            // Connection cancellation runs request callbacks; never under the gate.
+            if (failure != null) Fail(failure);
         }
         private void SignalFeedback()
         { if (_feedbackReady.CurrentCount == 0) _feedbackReady.Release(); }

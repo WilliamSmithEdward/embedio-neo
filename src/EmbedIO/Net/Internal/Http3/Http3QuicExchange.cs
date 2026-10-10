@@ -152,7 +152,9 @@ namespace EmbedIO.Net.Internal.Http3
                 if (payload.Length <= CoalescedPayload)
                 {
                     // One transport submission (and completion) per small frame.
-                    // QuicStream copies the bytes when the write is submitted.
+                    // QuicStream copies the bytes into native memory before it submits
+                    // them (runtime 10.0.12 MsQuicBuffers.SetBuffer), so the rented
+                    // array is free once the write has completed or failed.
                     coalesced = ArrayPool<byte>.Shared.Rent(size + payload.Length);
                     _frameHeader.AsSpan(0, size).CopyTo(coalesced);
                     payload.Span.CopyTo(coalesced.AsSpan(size));
@@ -167,7 +169,11 @@ namespace EmbedIO.Net.Internal.Http3
             catch (ObjectDisposedException error) when (CancellationToken.IsCancellationRequested)
             { throw new OperationCanceledException("The HTTP/3 request was canceled during transport disposal.", error, CancellationToken); }
             catch (Exception error) when (error is IOException or OperationCanceledException) { _outputFailed = true; _owner.Failed(error); throw; }
-            finally { if (coalesced != null) ArrayPool<byte>.Shared.Return(coalesced); }
+            finally
+            {
+                // Response bytes must not linger in the shared pool.
+                if (coalesced != null) { coalesced.AsSpan(0, size + payload.Length).Clear(); ArrayPool<byte>.Shared.Return(coalesced); }
+            }
         }
         private async Task AcquireOutputAsync(CancellationToken token)
         {

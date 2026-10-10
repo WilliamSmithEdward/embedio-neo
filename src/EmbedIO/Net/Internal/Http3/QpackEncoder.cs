@@ -45,6 +45,8 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private static void ReturnOutput(MemoryStream output)
         {
+            // Encoded fields (cookies included) must not linger in the scratch buffer.
+            Array.Clear(output.GetBuffer(), 0, (int)output.Length);
             if (output.Capacity <= 4096) t_output = output;
         }
         private static void Validate(HpackField[] fields, int maximumEncodedBytes, int maximumDecodedBytes)
