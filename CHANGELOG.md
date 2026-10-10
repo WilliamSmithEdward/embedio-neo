@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+- Coalesce already queued HTTP/2 output within bounded writes, preserving
+  header-block order, stream cancellation and transport completion.
 - Reserve the bounded first-body prefix in managed HTTP/1 response-header buffers,
   preserving framing and write boundaries while avoiding fitting-header growth.
 - Defer unused managed HTTP/1 query/item collections while preserving populated

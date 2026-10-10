@@ -563,3 +563,66 @@ latency gain. The prototype production code and new tests were preserved under
 ignored evidence and restored out of the working source. No default, API,
 dependency or discovery floor changed. The broader performance target remains
 unmet; connection write serialization/batching needs further investigation.
+## Bounded shared HTTP/2 output experiment
+
+A connection-owned writer groups already queued complete operations into at most
+64 KiB and 16 operations per transport write. It adds no timer or delay to collect
+work. An uncontended write uses a leading path without allocating queue state.
+Header-block frames stay adjacent, queued request cancellation removes the pending
+operation before its borrowed payload can be read, and committed operations use
+connection cancellation. Each caller still awaits its transport completion.
+SETTINGS adjustment and ACK ordering remain part of the wire commitment; revoked
+DATA reservations are returned through the existing flow controller. A legal
+operation exceeding the coalescing bound retains the previous per-frame path.
+
+The initial always-queued prototype passed controlled semantics but regressed
+small responses. Its evidence remains separate. The refinement adds the leading
+path and hands pending writers to a cached normal thread-pool callback, so a
+finished leader need not wait for siblings. No public API, default, target or
+production dependency changes are involved.
+
+Measured base is `e435e334f75a2663f3b397143035fddc11f2d71b` plus the recorded
+transport patch and writer source. Both rounds use identical frozen runner
+SHA-256 `e2c96d34444d8630b24b93d1a0fc2288b887897bc69db51827997080098b5a15`.
+Initial core: `22c35d1b93b010f5c9d31d19e91e8bc9c8f4f23558278d6c2ca3de509ac8c865`.
+Refined core: `a66ec4c5db6603d11160d3802d6819130377fd86d559384b1c73cf80822eb9ee`.
+Control: `04532e6dac74055b721d7d1de6303b3175394f1f03e784b3a55d7185d8e39233`,
+the pre-batching capacity candidate. Only the core DLL is swapped; the explicit
+modern-baseline capability is recorded. Source/binary hashes are preserved with
+all samples. The later immutable validation snapshot is `3795c5a`, after
+formatting and integration reconciliation; measured hashes do not claim that
+snapshot's metadata-bearing binary was benchmarked.
+
+Windows .NET 10.0.12 / Ryzen 9800X3D, loopback, fresh processes, disjoint CPU sets
+0-7 / 8-15, two alternating rounds, 5 s warmup / 15 s measurement. Each campaign
+produced eight valid samples, zero failures/retries and zero open server sockets
+after settlement. Values below are medians of two samples per row.
+
+| Version/workload | Candidate/control requests/s | CPU us/request | B/request | p99 ms |
+| --- | --- | --- | --- | --- |
+| Initial, small h2c, 8 connections x 32 streams | 293096 / 306480 | 26.1 / 25.4 | 13704 / 13406 | 4.096 / 3.712 |
+| Initial, TLS 1 MiB, 4 connections x 4 streams | 5457 / 4278 | 1326.6 / 1682.9 | 89037 / 96055 | 4.761 / 6.042 |
+| Refined, small h2c, 8 connections x 32 streams | 304679 / 300139 | 25.1 / 25.6 | 12922 / 13426 | 3.865 / 3.917 |
+| Refined, TLS 1 MiB, 4 connections x 4 streams | 5833 / 4296 | 1275.9 / 1675.4 | 92839 / 96694 | 4.122 / 6.605 |
+
+The refined transfer workload shows about 36% more throughput and 24% less CPU
+per request. Small throughput remains roughly flat, with about 3.8% less
+allocation. This is a short loopback comparison with two rounds, not a general
+ranking or sustained-load acceptance. No initial sample is discarded. Refined
+retained managed-heap maxima are 87/87 KiB for small and 107/124 KiB for large
+(candidate/control); short settlement does not prove a long-term resource bound.
+The much larger small-response gap against Kestrel remains open.
+
+Validation: eight new controlled cases exercise operation/byte bounds, transport
+completion, canceled queued payload reuse, header adjacency and shared partial-write
+failure. Four batching-count cases fail on the frozen control; the other four
+preservation cases pass. The combined HTTP/2/admission set passes 437 cases.
+Both targets, parser/suppression guards and formatting pass. Full Windows suite:
+4505 total, 4500 passed, five expected skips, zero failures. The retained Windows
+Framework smoke passes 531 assertions loading .NET Standard, registry release
+533509 / CLR 4.0.30319.42000; this does not prove every legacy/TLS/platform case.
+Independent peer campaigns and final hosted checks are still required before
+integration. Discovery guards increase by eight to 4505.
+
+Artifacts: ignored `TestResults/http2-batch-load`, `http2-batch-fast-load`,
+`http2-batch-fast-full`, `http2-batch-legacy.json` and `http2-batch-peer-campaign`.
