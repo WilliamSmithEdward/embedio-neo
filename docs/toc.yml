@@ -225,3 +225,6 @@
 
 - name: Suffix byte ranges
   href: user-reports/suffix-range-responses.md
+
+- name: Capsule and tunnel carriers
+  href: guides/capsule-tunnels.md
