@@ -186,16 +186,16 @@ namespace EmbedIO.Tests
         }
 
         // Confirmed defect reproductions (docs/project/http3-native-lifetime-campaigns.md).
-        // They fail on a4f7105 and pass with the proposed deferred native close;
-        // promote them to ordinary cases when that correction is integrated.
-        [Test, Explicit("Reproduces a confirmed native connection disposal defect."), Category("NativeQuicLifetimeDefect")]
+        // They fail on a4f7105 and on the combined pre-correction native core;
+        // the deferred-close correction promotes them to ordinary regression coverage.
+        [Test, Category("NativeQuicLifetimeRegression")]
         public async Task DisposedEstablishedConnectionsNotifyEveryPeerWithTheApplicationCode()
         {
             if (!RequireQuic()) return;
             await DisposeEstablishedOnce(4, new Trace("established-dispose-defect", 0)).ConfigureAwait(false);
         }
 
-        [Test, Explicit("Reproduces a confirmed native connection disposal defect."), Category("NativeQuicLifetimeDefect")]
+        [Test, Category("NativeQuicLifetimeRegression")]
         public async Task ConnectionOverflowDrainByDisposalRefusesEachPeerOnce()
         {
             if (!RequireQuic()) return;
@@ -204,7 +204,7 @@ namespace EmbedIO.Tests
 
         // A completed final write (FIN) followed by disposal must not reset
         // the stream before the peer has read the committed bytes.
-        [Test, Explicit("Reproduces a confirmed native stream disposal defect."), Category("NativeQuicLifetimeDefect")]
+        [Test, Category("NativeQuicLifetimeRegression")]
         public async Task DisposalAfterACompletedFinalWriteDeliversEveryByte()
         {
             if (!RequireQuic()) return;

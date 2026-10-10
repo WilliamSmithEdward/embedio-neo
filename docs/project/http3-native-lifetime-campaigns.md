@@ -461,3 +461,30 @@ head discovered 4930 cases: 4889 passed, 41 skipped (platform skips and the two
 capability-gated cases on base), none failed. The CI and CONTRIBUTING floor of
 4903 is unchanged here and still passes; the integrating branch should set the
 floor from actual discovery.
+
+## Combined native close correction (development candidate)
+
+The owner's isolated candidate combines native drain d8e621e, datagram ownership
+7b8aee5 and lifetime campaign 3a6b515. It preserves connection-close classification
+and datagram shutdown/descriptor release in the merged native event handler.
+Discovery is 4981: base 4903 plus fifteen native drain/adapter cases, thirty-six
+datagram cases and twenty-seven lifetime cases (five remain explicit campaigns).
+No application listener is switched to the native provider.
+
+On the combined pre-correction core, all three disposal reproductions fail on
+Windows with zero skips: queued disposal times out, established disposal reports
+QUIC_STATUS_ABORTED, and FIN followed by disposal resets the peer. The candidate
+waits for the final native shutdown event before releasing native handles and
+parent leases, rooting callback owners until then. Connection handle release
+uses a separate native-completion signal: a managed callback error that faults
+Closed is not proof that native shutdown finished. A submitted FIN without a
+send failure is preserved during disposal; only the receive direction is aborted.
+The native close continuation runs off the MsQuic callback thread.
+
+Both targets build without warnings and formatting passes. The three failures
+now pass (zero skips). The remaining 137 native cases pass on Windows, including
+the existing hash-locked aioquic 1.3.0 peer, zero skips. An earlier run without
+EMBEDIO_DATAGRAM_PEER_PYTHON skipped its two independent-peer cases and is retained
+as incomplete coverage. The three reproductions are now ordinary regressions.
+Full suite, Linux/macOS, fault-injection/forced-GC and final-head hosted checks
+remain required. No release or application-level native support is claimed.

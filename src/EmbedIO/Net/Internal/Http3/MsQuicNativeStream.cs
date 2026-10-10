@@ -226,13 +226,13 @@ namespace EmbedIO.Net.Internal.Http3
                     return new QuicException(QuicError.ConnectionAborted, null, message);
                 return DirectionFailure(false, null, message);
             }
-            internal void StopReads()
+            internal void StopReads(bool preserveWrites = false)
             {
                 lock (Sync)
                 {
                     Disposed = true;
                     if (!Fin || Buffers != null) Error ??= DirectionFailure(false, null, "Native stream reads were disposed.");
-                    if (!SendFinished) SendError ??= DirectionFailure(false, null, "Native stream writes were disposed.");
+                    if (!preserveWrites && !SendFinished) SendError ??= DirectionFailure(false, null, "Native stream writes were disposed.");
                     UpdateDirections(); Available.TrySetResult();
                 }
             }
@@ -245,6 +245,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly object _commitSync = new();
         private int _disposeStarted;
         private bool _finQueued;
+        private bool _preserveFin;
         private long _id;
         private readonly bool _local;
         internal long Id => _id;
@@ -559,8 +560,16 @@ namespace EmbedIO.Net.Internal.Http3
             try
             {
                 if (!IsClosed && !IsInvalid) DangerousAddRef(ref retained);
-                _signals.StopReads(); _readGate.Dispose(); _writeGate.Dispose();
-                if (retained && _signals.StartSucceeded) _functions.Shutdown(handle, AbortFlags, 0x10c);
+                lock (_commitSync)
+                {
+                    lock (_signals.Sync) _preserveFin = _finQueued && _signals.SendError == null;
+                }
+                _signals.StopReads(_preserveFin); _readGate.Dispose(); _writeGate.Dispose();
+                if (retained && _signals.StartSucceeded)
+                {
+                    var flags = DisposalFlags;
+                    if (flags != 0) _functions.Shutdown(handle, flags, 0x10c);
+                }
             }
             finally
             {
@@ -570,18 +579,27 @@ namespace EmbedIO.Net.Internal.Http3
         }
         protected override bool ReleaseHandle()
         {
-            try
+            if (_signals.StartSucceeded && !_signals.Closed.Task.IsCompleted)
             {
-                if (_signals.StartSucceeded && !_signals.Closed.Task.IsCompleted)
+                var native = handle;
+                var root = GCHandle.Alloc(this);
+                _ = _signals.Closed.Task.ContinueWith(_ =>
                 {
-                    _functions.Shutdown(handle, AbortFlags, 0x10c);
-                    _signals.Closed.Task.GetAwaiter().GetResult();
-                }
-                _functions.Close(handle);
-                GC.KeepAlive(_signals);
+                    try { CloseNative(native); }
+                    finally { root.Free(); }
+                }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+                var flags = DisposalFlags;
+                if (flags != 0) _functions.Shutdown(native, flags, 0x10c);
+                return true;
             }
-            finally { _connection.DangerousRelease(); }
+            CloseNative(handle);
             return true;
+        }
+        private uint DisposalFlags => _preserveFin ? (_local && Unidirectional ? 0u : 4u) : AbortFlags;
+        private void CloseNative(IntPtr native)
+        {
+            try { _functions.Close(native); GC.KeepAlive(_signals); }
+            finally { _connection.DangerousRelease(); }
         }
     }
 }

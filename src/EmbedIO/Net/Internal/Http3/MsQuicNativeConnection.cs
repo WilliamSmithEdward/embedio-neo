@@ -58,6 +58,9 @@ namespace EmbedIO.Net.Internal.Http3
         {
             internal readonly TaskCompletionSource Connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly TaskCompletionSource Closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            // Callback failures can fault Closed before native shutdown finishes.
+            // Handle release must wait for the actual final native event.
+            internal readonly TaskCompletionSource NativeClosed = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal int Closing;
             internal readonly MsQuicApi.ConnectionFunctions.Callback Handler;
             internal readonly IntPtr Pointer;
@@ -124,7 +127,11 @@ namespace EmbedIO.Net.Internal.Http3
                         case 0: Datagrams?.OnConnected(_functions.Datagrams.QuerySendEnabled(connection)); Connected.TrySetResult(); break;
                         case 1:
                         case 2: Volatile.Write(ref Closing, 1); Connected.TrySetCanceled(); break;
-                        case 3: Volatile.Write(ref Closing, 1); Connected.TrySetCanceled(); StopStreams?.Invoke(); Datagrams?.OnConnectionShutdownComplete(); Closed.TrySetResult(); break;
+                        case 3:
+                            Volatile.Write(ref Closing, 1); Connected.TrySetCanceled();
+                            try { StopStreams?.Invoke(); Datagrams?.OnConnectionShutdownComplete(); Closed.TrySetResult(); }
+                            finally { NativeClosed.TrySetResult(); }
+                            break;
                         // DATAGRAM_STATE_CHANGED, DATAGRAM_RECEIVED, DATAGRAM_SEND_STATE_CHANGED.
                         case 10:
                         case 11:
@@ -256,9 +263,25 @@ namespace EmbedIO.Net.Internal.Http3
         }
         protected override bool ReleaseHandle()
         {
-            try { _functions.Close(handle); _signals.CloseRejectedAfterConnectionClose(); _signals.Datagrams?.ReleaseAfterConnectionClose(); _signals.Connected.TrySetCanceled(); _signals.Closed.TrySetResult(); GC.KeepAlive(_signals); }
-            finally { _registration.DangerousRelease(); }
+            if (Volatile.Read(ref _shutdown) != 0 && !_signals.NativeClosed.Task.IsCompleted)
+            {
+                var native = handle;
+                // Native code retains a function pointer, not the delegate owner.
+                var root = GCHandle.Alloc(this);
+                _ = _signals.NativeClosed.Task.ContinueWith(_ =>
+                {
+                    try { CloseNative(native); }
+                    finally { root.Free(); }
+                }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+                return true;
+            }
+            CloseNative(handle);
             return true;
+        }
+        private void CloseNative(IntPtr native)
+        {
+            try { _functions.Close(native); _signals.CloseRejectedAfterConnectionClose(); _signals.Datagrams?.ReleaseAfterConnectionClose(); _signals.Connected.TrySetCanceled(); _signals.Closed.TrySetResult(); GC.KeepAlive(_signals); }
+            finally { _registration.DangerousRelease(); }
         }
     }
 }
