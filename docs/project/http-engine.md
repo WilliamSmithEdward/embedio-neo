@@ -6637,3 +6637,21 @@ inside the narrow raw-runtime quarantine as well as by test discovery. Full
 Windows: 4,443 passed/five expected local skips, zero failures. Both targets,
 analyzers, source guards and four allocation budgets pass. Exact-head CI and
 comparative throughput/platform validation remain required before integration.
+
+### Retained asset on the legacy CLR
+
+A standalone test-only smoke in
+[test/EmbedIO.LegacyHttpEngineSmoke](../../test/EmbedIO.LegacyHttpEngineSmoke/README.md)
+loads the .NET Standard 2.0 core under the installed .NET Framework CLR. Its
+Windows compatibility CI step uses locked dependencies and retains the runtime
+release, loaded target, engine hash and source version with the result.
+
+On engine e52f829, the local run passed 531 assertions on CLR 4.0.30319.42000,
+Framework registry release 533509. The core SHA-256 was
+492CD10454C7A091C2AF640A4465299EE7596E4C2E666059261D229237439BB9.
+Coverage includes 256 HTTP/1 requests on one connection, a byte-exact chunked
+upload, rejection of conflicting framing with 400 and EOF, a complete
+prior-knowledge HTTP/2 response, and cancellation. It targets net472 but does not
+claim execution on exactly Framework 4.7.2. TLS/ALPN, full protocol conformance,
+and native QUIC are outside this focused fixture. Hosted exact-head validation
+remains required; production source, targets, dependencies and defaults are unchanged.
