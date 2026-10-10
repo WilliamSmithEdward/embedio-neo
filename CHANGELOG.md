@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+- Commit bounded asynchronous managed HTTP/1 chunks with one transport write,
+  preserving byte framing, immediate application writes and cancellation.
 - Distinguish managed HTTP/1 request-head limit failures with 414 for oversized
   targets and 431 for oversized field sections, retaining limits and connection
   closure; see the [migration note](docs/compatibility/migration.md#http1-request-head-limit-statuses-unreleased).

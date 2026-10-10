@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -84,6 +85,23 @@ namespace EmbedIO.Net.Internal
             using var headers = GetHeaders(false);
             var chunked = _response.SendChunked && !_response.SuppressesBody;
             var hasBody = count > 0;
+            if (headers == null && chunked && hasBody && count <= 65536)
+            {
+                // Bound the copy while committing this application write immediately.
+                // The local lease remains owned until transport completion or failure.
+                var size = GetChunkSizeBytes(count, false);
+                var length = size.Length + count + CrLf.Length;
+                var chunk = ArrayPool<byte>.Shared.Rent(length);
+                try
+                {
+                    Buffer.BlockCopy(size, 0, chunk, 0, size.Length);
+                    Buffer.BlockCopy(buffer, offset, chunk, size.Length, count);
+                    Buffer.BlockCopy(CrLf, 0, chunk, size.Length + count, CrLf.Length);
+                    await InternalWriteAsync(chunk, 0, length, cancellationToken).ConfigureAwait(false);
+                }
+                finally { ArrayPool<byte>.Shared.Return(chunk, true); }
+                return;
+            }
             if (headers != null)
             {
                 var start = headers.Position;
