@@ -18,6 +18,10 @@ namespace EmbedIO.Net.Internal
         private const int BufferSize = 8192;
         private static readonly byte[] BadRequestResponse = Encoding.ASCII.GetBytes(
             "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        private static readonly byte[] UriTooLongResponse = Encoding.ASCII.GetBytes(
+            "HTTP/1.1 414 URI Too Long\r\nCache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        private static readonly byte[] HeaderFieldsTooLargeResponse = Encoding.ASCII.GetBytes(
+            "HTTP/1.1 431 Request Header Fields Too Large\r\nCache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         private static readonly byte[] ContinueResponse = Encoding.ASCII.GetBytes("HTTP/1.1 100 Continue\r\n\r\n");
         private Http1HeadReader _headReader;
         private bool _http2;
@@ -357,7 +361,13 @@ namespace EmbedIO.Net.Internal
                         // Never reflect untrusted parser diagnostics or restart this connection.
                         try
                         {
-                            await Stream.WriteAsync(BadRequestResponse, 0, BadRequestResponse.Length).ConfigureAwait(false);
+                            var response = _headReader.ErrorStatusCode switch
+                            {
+                                414 => UriTooLongResponse,
+                                431 => HeaderFieldsTooLargeResponse,
+                                _ => BadRequestResponse,
+                            };
+                            await Stream.WriteAsync(response, 0, response.Length).ConfigureAwait(false);
                         }
                         finally { Close(true); }
                         return;

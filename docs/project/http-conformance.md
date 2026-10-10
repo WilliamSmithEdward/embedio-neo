@@ -323,3 +323,37 @@ stopped listener. The earliest campaign runs predate those corrections.
 4. Decide on F6 and O1 to O5 as conformance or policy items.
 5. Fix U2, then raise campaign scale and add Windows and macOS CI runs once the
    priority 1 findings are corrected. A CI workflow change needs coordination first.
+
+### HTTP/1 request-head limit status checkpoint
+
+The request-limit candidate based on accepted chunk integration `e1add82` retains
+its 32,768-byte head budget, returns 414 for oversized targets and 431 for field
+sections exceeding it after the request line, and keeps malformed syntax at 400.
+The response is empty, non-cacheable and closes the rejected pipeline without
+application dispatch. Classification scans already bounded input only on failure;
+it does not add an ordinary-request target copy. See the
+[migration note](../compatibility/migration.md#http1-request-head-limit-statuses-unreleased).
+
+The unchanged-engine duplex wire reproduction failed four status cases while all
+four malformed controls passed. Eighteen new unit/wire cases cover fragmentation,
+exact boundary overhead, reader reset, non-cacheable replies, pipeline rejection
+and healthy subsequent clients. Final focused validation passes 128 cases. The
+combined Windows suite passes 4,493: 4,488 passed, five expected skips, zero failures.
+Both target builds, guards, formatting, allocation budgets and the installed
+Framework smoke pass. This does not claim exact Framework 4.7.2 execution.
+
+An independent Linux campaign archived `be84c44ea96db81f20ba567d17e1cf5059b0074d`
+and loaded core SHA-256
+`e30785b9e39d4a9284c323015eebb9eb83738c895dd72cc70afcd06957fcb1d3`.
+On the pinned four-CPU/6-GiB container it reported 47 conforms, 10 policy choices,
+no violations/errors, and passed seed 20261009 with 2,000 iterations, 5,029 valid
+requests, 473 invalid requests and 211 aborts. Handlers drained; handles grew by
+two, managed memory by 2,084,232 bytes. Self-mode client and server share the
+process, so this is neither engine-only retained-memory attribution nor soak
+coverage. Logs, archive and JSON are retained under
+`TestResults/head-limit-conformance-linux` in the owned worktree.
+
+The independent model now identifies oversized-target 414 as MUST; other statuses
+fail instead of being labeled a policy choice. A missing response is an observation
+error, not proof of conformance. The optional 431 case is labeled MAY. Method-length
+policy and broader limits/resource behavior remain separate acceptance items.

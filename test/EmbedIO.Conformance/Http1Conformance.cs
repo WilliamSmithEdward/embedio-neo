@@ -5,7 +5,7 @@ using System.Text.Json;
 
 // Black-box HTTP/1.1 requirement checks against a running server. Each case cites
 // the requirement it checks. "policy" records behavior where the RFC permits a
-// choice; only "violation" outcomes are conformance failures.
+// choice; violations and observation errors fail the campaign.
 internal static class Http1Conformance
 {
     internal sealed record Outcome(string Id, string Reference, string Level, string Result, string Detail, double Milliseconds);
@@ -232,13 +232,13 @@ internal static class Http1Conformance
             if (r == null) return (Conforms, "closed: " + e);
             return Expect(r.Status == 400, Describe(r));
         }),
-        new("long-target", "RFC9112 3", "SHOULD", t =>
+        new("long-target", "RFC9112 3", "MUST", t =>
         {
             var (r, _, e) = Exchange(t, "GET /plain?" + new string('a', 40_000) + " HTTP/1.1\r\nHost: a\r\n\r\n");
-            if (r == null) return (Policy, "closed: " + e);
-            return (r.Status == 414 ? Conforms : Policy, Describe(r));
+            if (r == null) return ("error", "No required limit status received: " + e);
+            return Expect(r.Status == 414, Describe(r));
         }),
-        new("large-header", "RFC6585 5", "SHOULD", t =>
+        new("large-header", "RFC6585 5", "MAY", t =>
         {
             var (r, _, e) = Exchange(t, "GET /plain HTTP/1.1\r\nHost: a\r\nX-Big: " + new string('b', 40_000) + "\r\n\r\n");
             if (r == null) return (Policy, "closed: " + e);

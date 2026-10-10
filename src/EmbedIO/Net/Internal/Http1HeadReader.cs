@@ -19,6 +19,8 @@ namespace EmbedIO.Net.Internal
         private bool _complete;
         private bool _failed;
 
+        internal int ErrorStatusCode { get; private set; }
+
         internal void Reset() => this = default;
 
         internal Http1HeadReadResult Read(byte[] input, int offset, int count, out int consumed, out string? line)
@@ -61,7 +63,7 @@ namespace EmbedIO.Net.Internal
                 {
                     if (input[cr + 1] != 10) throw Fail("Invalid request head line ending.");
                     used = prefixLength + 2;
-                    Charge(used);
+                    Charge(used, input, offset, prefixLength);
                     return Latin1.GetString(input, offset, prefixLength);
                 }
             }
@@ -85,15 +87,46 @@ namespace EmbedIO.Net.Internal
             return null;
         }
 
-        private void Charge(int count)
+        private void Charge(int count, byte[]? input = null, int offset = 0, int length = 0)
         {
-            if (count > MaximumBytes - _bytes) throw Fail("Request headers exceed 32768 bytes.");
+            if (count > MaximumBytes - _bytes)
+            {
+                var status = _hasRequestLine ? 431 : RequestLineLimitStatus(input, offset, length);
+                throw Fail("Request head exceeds 32768 bytes.", status);
+            }
             _bytes += count;
         }
 
-        private InvalidDataException Fail(string message)
+        private int RequestLineLimitStatus(byte[]? input, int offset, int length)
+        {
+            // Inspect existing bounded storage only on failure: no target copy or
+            // additional classification work is needed for ordinary requests.
+            var prefixLength = input == null ? _partial?.Length ?? 0 : Math.Min(length, MaximumBytes);
+            var separator = 0;
+            while (separator < prefixLength && PrefixCharacter(input, offset, separator) != ' ')
+            {
+                if (!HttpRequestFraming.IsTokenCharacter(PrefixCharacter(input, offset, separator))) return 400;
+                separator++;
+            }
+            if (separator == 0 || separator == prefixLength) return 400;
+            var targetEnd = separator + 1;
+            while (targetEnd < prefixLength && PrefixCharacter(input, offset, targetEnd) != ' ')
+            {
+                var character = PrefixCharacter(input, offset, targetEnd);
+                if (character <= 32 || character == 127) return 400;
+                targetEnd++;
+            }
+            // Account for method SP, SP HTTP/1.x CRLF within the unchanged head budget.
+            return targetEnd - separator - 1 > MaximumBytes - separator - 12 ? 414 : 400;
+        }
+
+        private char PrefixCharacter(byte[]? input, int offset, int position)
+            => input != null ? (char)input[offset + position]
+                : (_partial ?? throw new InvalidOperationException("Missing request-line prefix."))[position];
+        private InvalidDataException Fail(string message, int status = 400)
         {
             _failed = true;
+            ErrorStatusCode = status;
             _partial = null;
             return new InvalidDataException(message);
         }
