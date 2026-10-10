@@ -1,7 +1,7 @@
 """Capture the HTTP standards baseline from primary sources (development-only).
 
 Fetches RFC Editor metadata for a seed list of RFCs, follows updated_by and
-obsoleted_by recursively, extracts the errata recorded for every captured RFC
+obsoleted_by recursively, records the datatracker state of tracked drafts, extracts the errata recorded for every captured RFC
 from the RFC Editor errata API, and downloads the IANA registries that govern
 HTTP/1.1, HTTP/2, HTTP/3, QPACK, QUIC and WebSocket. Every response is stored
 with its URL, UTC retrieval time and SHA-256 so the audit can cite exact bytes.
@@ -24,6 +24,8 @@ SEED_RFCS = [
     # Extensions and companion specifications
     9218, 9297, 8441, 9220, 6455, 7692, 7838, 9460, 8297, 8470, 9651,
     9412, 8336, 9298, 9484, 10008, 9931, 9530, 10036,
+    # Forwarding and intermediary signals referenced by RFC 10036
+    7239, 9209, 6585,
     # Content codings
     1950, 1951, 1952, 7932, 8878, 9659, 9841, 9842,
 ]
@@ -33,6 +35,16 @@ REGISTRIES = [
     "http2-parameters", "http3-parameters", "quic", "websocket",
     "tls-extensiontype-values", "http-upgrade-tokens", "http-alt-svc-parameters",
     "http-priority", "masque", "http-cache-directives",
+]
+
+# Internet-Drafts whose status bounds the audit's scope. Their datatracker
+# records give the current revision and IESG state; a draft is never a
+# requirement, but an approved one can become one within the audit horizon.
+DRAFTS = [
+    "draft-ietf-webtrans-overview", "draft-ietf-webtrans-http3",
+    "draft-ietf-webtrans-http2", "draft-ietf-httpbis-connect-tcp",
+    "draft-ietf-masque-connect-udp-listen", "draft-ietf-httpbis-resumable-upload",
+    "draft-ietf-quic-reliable-stream-reset", "draft-ietf-httpbis-unencoded-digest",
 ]
 
 RECENT_GROUPS = {"httpbis", "quic", "masque", "tls", "webtrans", "httpapi", "moq"}
@@ -132,10 +144,24 @@ def main():
         except Exception as error:  # Record the failure; never fabricate a registry.
             manifest["registries"][registry] = {"url": url, "error": repr(error)}
 
+    manifest["drafts"] = {}
+    for draft in DRAFTS:
+        url = f"https://datatracker.ietf.org/doc/{draft}/doc.json"
+        try:
+            entry = record(out, f"drafts/{draft}.json", url)
+        except Exception as error:  # Record the failure; never fabricate a status.
+            manifest["drafts"][draft] = {"url": url, "error": repr(error)}
+            continue
+        metadata = json.loads((out / entry["file"]).read_bytes())
+        for key in ("rev", "time", "state", "iesg_state", "intended_std_level"):
+            entry[key] = metadata.get(key)
+        manifest["drafts"][draft] = entry
+
     (out / "manifest.json").write_text(
         json.dumps(manifest, indent=1, sort_keys=True, ensure_ascii=True), encoding="utf-8", newline="\n")
     print(f"rfcs={len(manifest['rfcs'])} errata_rfcs={len(selected)} "
-          f"registries_ok={sum('sha256' in r for r in manifest['registries'].values())}/{len(REGISTRIES)}")
+          f"registries_ok={sum('sha256' in r for r in manifest['registries'].values())}/{len(REGISTRIES)} "
+          f"drafts_ok={sum('sha256' in d for d in manifest['drafts'].values())}/{len(DRAFTS)}")
 
 
 if __name__ == "__main__":
