@@ -134,10 +134,7 @@ namespace EmbedIO.Net.Internal
             set
             {
                 EnsureCanChangeHeaders();
-                if (value < 100 || value > 999)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(StatusCode), "StatusCode must be between 100 and 999.");
-                }
+                HttpResponseFieldSections.ValidateFinalStatus(value);
 
                 if (_trailerNames != null && (value < 200 || value is 204 or 205 or 304))
                     throw new InvalidOperationException("Reserved trailers require a body-capable final response.");
@@ -232,6 +229,9 @@ namespace EmbedIO.Net.Internal
         {
             EnsureCanChangeHeaders();
             if (_trailerNames != null) throw new InvalidOperationException("A trailer response cannot become a tunnel.");
+            // Only an accepted protocol handoff can commit Switching Protocols.
+            _statusCode = protocol == null ? 200 : 101;
+            StatusDescription = HttpListenerResponseHelper.GetStatusDescription(_statusCode);
             if (capsules)
             {
                 HttpCapsuleProtocol.ValidateCarrierHeaders(_request.Headers);

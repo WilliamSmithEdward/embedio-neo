@@ -11,12 +11,14 @@ The audit, results and prioritized findings are in
 
 | Path | Role |
 | --- | --- |
-| `ConformanceServer.cs` | Application surface: `/plain`, `/get-only`, `/echo` (any method, echoes body with SHA-256), `/query` (QUERY), `/stream` (unknown-length response), `/slow`, `/files/` (static files for ranges, validators and gzip), `/__stats` (GC, handles, threads and active-handler counters after a forced collection). |
+| `ConformanceServer.cs` | Application surface: `/plain`, `/get-only`, `/echo` (any method, echoes body with SHA-256), `/query` (QUERY), `/stream` (unknown-length response), `/slow`, `/files/` (static files for ranges, validators and gzip), `/lifecycle` (interim sections, paced body, digest trailers), `/__drain` (POST; starts a graceful drain of the named `http`, `https` or `h3` endpoint without awaiting it in the request), `/__stats` (GC, handles, threads, active-handler and drain counters after a forced collection). |
 | `RawHttp1.cs` | Independent HTTP/1.1 client and response parser written from RFC 9112 Section 6.3. Shares no code with EmbedIO. |
 | `Http1Conformance.cs` | HTTP/1.1 and HTTP semantics requirement checks, each citing its RFC section and level. A fresh-connection health check follows every case. |
 | `Http1Fuzz.cs` | Stateful HTTP/1.1 campaign: pipelined valid, invalid and aborted requests with random framing and fragmentation, checked against an independent model, plus resource settlement. |
 | `drivers/h2_campaign.py` | HTTP/2 cases and stateful campaign. The client is hyper-h2; malformed and abusive input is written as raw frames with hyperframe. |
 | `drivers/h3_campaign.py` | HTTP/3 cases and stateful campaign over aioquic, whose QPACK decoder also checks the server's dynamic encoding. |
+| `drivers/lifecycle_campaign.py` | Seeded HTTP/2 (hyper-h2) and HTTP/3 (aioquic) campaigns mixing interim/trailer responses (`/lifecycle`), uploads, capsule tunnels with half-close, client resets and malformed requests on one connection; and graceful-drain checks started through the test-only `/__drain` route. HTTP/2 drain uses raw hyperframe frames and the hpack decoder. |
+| `run-lifecycle-campaigns.sh` | The application lifecycle audit: response sections, capsules, lifecycle fuzz, ten drains per protocol on fresh servers and h2spec. `ONLY="phase ..."` limits a diagnostic rerun. |
 | `standards/capture_standards.py` | Captures RFC Editor metadata (with update and obsolescence chains), errata, the RFC index sweep, IANA registries and datatracker state of tracked drafts, with URLs, times and SHA-256. |
 | `ApplicabilityProbes.cs` | `applicability` mode: in-process minimal reproductions for the [standards applicability audit](../../docs/project/http-standards-applicability.md) (informational responses, trailers, Upgrade/CONNECT, QUERY, HTTP/2 SETTINGS). Uses the `/probe/*` routes. Outcome `gap` records a missing application capability the RFC permits; it does not fail a run. |
 | `docker/Dockerfile` | Pinned runner: .NET SDK 10.0.401 image by digest, MsQuic 2.6.2 by SHA-256, h2spec v2.6.0 built from its tag commit, Python packages by hash. |
