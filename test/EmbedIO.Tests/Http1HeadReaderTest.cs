@@ -20,6 +20,8 @@ namespace EmbedIO.Tests
                 ?? throw new AssertionException("Missing reader reset.");
             private readonly object _reader = Activator.CreateInstance(Target) ?? throw new AssertionException("Missing reader instance.");
             internal void Reset() => ResetMethod.Invoke(_reader, null);
+            internal int ErrorStatus => (int)(Target.GetProperty("ErrorStatusCode", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(_reader)
+                ?? throw new AssertionException("Missing reader error status."));
             internal (string Result, int Used, string? Line) Read(byte[] bytes, int offset, int count)
             {
                 object?[] args = { bytes, offset, count, 0, null };
@@ -163,6 +165,41 @@ namespace EmbedIO.Tests
             }
         }
 
+        [TestCase("target", 1, 414)]
+        [TestCase("target", 65536, 414)]
+        [TestCase("headers", 1, 431)]
+        [TestCase("headers", 65536, 431)]
+        [TestCase("version", 1, 400)]
+        [TestCase("version", 65536, 400)]
+        [TestCase("method-syntax", 1, 400)]
+        [TestCase("method-syntax", 65536, 400)]
+        public void LimitStatusIsFragmentationIndependentAndResetClearsIt(string kind, int fragment, int status)
+        {
+            var input = kind switch
+            {
+                "target" => "GET /" + new string('x', 33000) + " HTTP/1.1\r\n\r\n",
+                "headers" => "GET / HTTP/1.1\r\nX: " + new string('x', 33000) + "\r\n\r\n",
+                "version" => "GET / HTTP/" + new string('1', 33000) + "\r\n\r\n",
+                _ => "G?T /" + new string('x', 33000) + " HTTP/1.1\r\n\r\n",
+            };
+            var reader = new Reader();
+            Assert.Throws<InvalidDataException>(() => Parse(reader, Encoding.ASCII.GetBytes(input), fragment));
+            Assert.That(reader.ErrorStatus, Is.EqualTo(status));
+            var valid = Encoding.ASCII.GetBytes("GET / HTTP/1.1\r\n\r\n");
+            Assert.Throws<InvalidDataException>(() => Parse(reader, valid, fragment));
+            reader.Reset();
+            Assert.That(reader.ErrorStatus, Is.Zero);
+            Assert.That(Parse(reader, valid, fragment).Complete, Is.True);
+        }
+        [TestCase(1)]
+        [TestCase(65536)]
+        public void RequestLineLimitAccountsForBothSpacesVersionAndTerminator(int fragment)
+        {
+            var reader = new Reader();
+            var input = "GET /" + new string('x', 32753) + " HTTP/1.1\r\n\r\n";
+            Assert.Throws<InvalidDataException>(() => Parse(reader, Encoding.ASCII.GetBytes(input), fragment));
+            Assert.That(reader.ErrorStatus, Is.EqualTo(414));
+        }
         [Test]
         public void ResetDiscardsPartialLineAndRequestState()
         {
