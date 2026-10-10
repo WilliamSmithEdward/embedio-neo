@@ -43,9 +43,11 @@ which these handlers do not use. On `31128c3` the 8 x 32 rows were 569,888 and
 | CPU sets | server logical CPUs 0-7, client 8-15, set at process creation |
 | Schedule | 3 rounds, engine order alternating; 5 s warmup, 15 s measurement, fresh processes per sample |
 
-The base runs through `--baseline-all-protocols`, added for this work so an
-earlier engine revision can serve as the HTTP/2 baseline in the same alternating
-schedule.
+The base engine ran as the harness baseline on HTTP/2 scenarios, in the same
+alternating schedule. These runs used a `--baseline-all-protocols` option written
+for this work; the integrated harness provides the same behavior as
+`--modern-baseline` (#217). The integration also retains
+`--baseline-all-protocols` as an alias; both record the effective capability.
 
 Other agents shared the machine and did not all use the shared lock file. A
 watcher logged foreign benchmark and test processes every 10 seconds. A sample
@@ -180,7 +182,9 @@ All results are for the final source `f6e87fc` unless noted.
   visibility and non-blocking stream disposal. The four tests of new batching
   behavior fail against `4c531fe`, the two retirement cases and the disposal
   case fail against the source before their fixes, and the invariant tests pass
-  on both. The CI discovery floor stays at 4,469.
+  on both. After merging the engine branch at `3a45029`, the combined suite
+  discovered 4,508 tests (its floor is 4,497): 4,503 passed, 5 existing skips,
+  and 865 HTTP/2 and HTTP/3 cases passed.
 - Existing flow-control, SETTINGS-ordering, reset, framing, HPACK, interop,
   drain and HTTP/3 suites pass unchanged (863 HTTP/2 and HTTP/3 cases).
 - With the actual .NET Standard 2.0 core, 416 of 422 HTTP/2 cases pass. The six
@@ -197,6 +201,34 @@ All results are for the final source `f6e87fc` unless noted.
   retained managed growth 1.73 MB.
 - Formatting, the analyzer-suppression check and the null-forgiving parser
   guard pass.
+
+
+## Integration review
+
+The measurements above belong to the explicitly recorded agent revisions, not
+to every subsequent engine build. Integration onto `3a45029` preserves the
+current HTTP/1 and listener fixes and adds three writer safety regressions from
+PR #219: canceled queued payload reuse before shared I/O unblocks,
+HEADERS/CONTINUATION adjacency, and failure propagation to committed and waiting
+writers after a partial batch write.
+
+Review also reproduced an application-cancellation failure during HTTP/2
+cleanup. A throwing callback after response completion left the new application
+counter nonzero, so connection shutdown timed out although PING still worked.
+A separate test reproduced the callback exception escaping through parent-token
+connection cancellation. Both cancellation boundaries now log recoverable
+callback failures and continue cleanup. Exchange disposal releases its resources,
+and dispatcher completion accounting runs in a finally even if cleanup throws.
+The three regressions cover completed responses, reset streams and an active
+application during connection stop. Before/after evidence is retained locally;
+this is a cleanup correction, not a new performance claim.
+
+William explicitly approved nonblocking synchronous response-output stream
+disposal for HTTP/2 and HTTP/3. See the
+[migration guidance](../compatibility/migration.md#multiplexed-response-stream-disposal-unreleased)
+for completion/error timing and awaited alternatives. HTTP/3 shares this
+response adapter; its framing transport is not changed by the HTTP/2 output
+batching.
 
 ## Remaining bottlenecks
 

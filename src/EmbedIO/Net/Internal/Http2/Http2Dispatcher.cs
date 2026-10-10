@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal.Http2
 {
@@ -40,7 +41,7 @@ namespace EmbedIO.Net.Internal.Http2
             if (application == null) throw new ArgumentNullException(nameof(application));
             if (Interlocked.Exchange(ref _running, 1) != 0) throw new InvalidOperationException("Dispatcher already started.");
             _application = application;
-            using var registration = token.Register(() => _stop.Cancel());
+            using var registration = token.Register(CancelConnection);
             try
             {
                 while (!_stop.IsCancellationRequested)
@@ -133,7 +134,7 @@ namespace EmbedIO.Net.Internal.Http2
             }
             finally
             {
-                _stop.Cancel();
+                CancelConnection();
                 Task applications;
                 lock (_sync)
                 {
@@ -185,7 +186,7 @@ namespace EmbedIO.Net.Internal.Http2
                         lock (_sync)
                         {
                             Release(exchange, null);
-                            if (_drainSent && _exchanges.Count == 0) _stop.Cancel();
+                            if (_drainSent && _exchanges.Count == 0) CancelConnection();
                         }
                     }
                     finally { exchange.Dispose(); }
@@ -221,7 +222,7 @@ namespace EmbedIO.Net.Internal.Http2
                 _drainSent = true;
                 // An external drain can start with no applications, or the last
                 // stream can reset while GOAWAY waits for the output gate.
-                if (_exchanges.Count == 0) _stop.Cancel();
+                if (_exchanges.Count == 0) CancelConnection();
             }
         }
 
@@ -292,7 +293,15 @@ namespace EmbedIO.Net.Internal.Http2
             lock (_creditSync) _pumping = false;
         }
 
-        private void Abort(Exception error) { if (_stop.IsCancellationRequested) return; _failure = error; _stop.Cancel(); }
+        private void CancelConnection()
+        {
+            try { _stop.Cancel(); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                error.Log("HTTP/2 connection", "Exception thrown by an application cancellation callback.");
+            }
+        }
+        private void Abort(Exception error) { if (_stop.IsCancellationRequested) return; _failure = error; CancelConnection(); }
         internal static void WriteUInt32(byte[] bytes, int offset, uint value)
         { bytes[offset] = (byte)(value >> 24); bytes[offset + 1] = (byte)(value >> 16); bytes[offset + 2] = (byte)(value >> 8); bytes[offset + 3] = (byte)value; }
         public void Dispose() { _connection.OutputFailed = null; _stop.Dispose(); }

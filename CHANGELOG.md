@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+- Batch managed HTTP/2 output in wire order, coalesce initial headers with body
+  data and retire streams when END_STREAM commits. Guard application cancellation
+  callbacks so cleanup and connection shutdown continue after callback failures.
+- Start managed HTTP/2 and HTTP/3 response-output stream closure without blocking
+  synchronous Dispose, as explicitly approved. Context completion still awaits
+  closure; see the [migration note](docs/compatibility/migration.md#multiplexed-response-stream-disposal-unreleased).
 - Reserve the bounded first-body prefix in managed HTTP/1 response-header buffers,
   preserving framing and write boundaries while avoiding fitting-header growth.
 - Defer unused managed HTTP/1 query/item collections while preserving populated

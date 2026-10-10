@@ -7,6 +7,35 @@ namespace EmbedIO.Tests
 {
     public partial class Http2InteroperabilityTest
     {
+        [Test]
+        public async Task ThrowingApplicationCancellationCallbackDoesNotEscapeConnectionStop()
+        {
+            var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var callbackRan = false;
+            CancellationTokenRegistration callback = default;
+            try
+            {
+                await WithRawServer(Array.Empty<byte>(), async (wire, token) =>
+                {
+                    await SendWire(wire, 1, 5, 1, RequestBlock(), token);
+                    await ready.Task.WaitAsync(token);
+                    // Fixture teardown cancels the connection while its application is active.
+                }, app: async exchange =>
+                {
+                    var cancellation = (CancellationToken)(exchange.GetType().GetProperty("CancellationToken")?.GetValue(exchange)
+                        ?? throw new AssertionException("Missing exchange cancellation token."));
+                    callback = cancellation.Register(() =>
+                    {
+                        callbackRan = true;
+                        throw new InvalidOperationException("Injected callback failure during connection stop.");
+                    });
+                    ready.TrySetResult();
+                    await Task.Delay(Timeout.Infinite, cancellation);
+                });
+                Assert.That(callbackRan, Is.True, "The failing callback must actually run during cancellation.");
+            }
+            finally { callback.Dispose(); }
+        }
         [TestCase(false)]
         [TestCase(true)]
         public async Task ThrowingApplicationCancellationCallbackDoesNotStrandCompletedStreamShutdown(bool reset)
