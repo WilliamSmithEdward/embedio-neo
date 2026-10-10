@@ -203,3 +203,9 @@ post-transfer cleanup path is inspected rather than fault-injected. Stream and
 connection callback allocation failures, actual memory-pressure campaigns,
 finalizer/ABI/soak and native application traffic remain outstanding. Hosted
 final-head checks remain required before integration.
+
+Combined acceptance after integrating verified drain base 416e773 reports 4807
+Windows cases, 4802 passed, five existing skips, zero failures (3m 22s). Both
+core targets build without warnings. The two additional callback cases retain
+their controlled-invocation scope; focused native Linux results above precede
+this H2-only base move. All new-head hosted checks remain required.

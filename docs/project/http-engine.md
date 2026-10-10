@@ -7075,3 +7075,9 @@ tree, 851e7a5bb6125b06df7b193ad728e87ec398e19d, with an explicit clean squash
 message. The original macOS initial QUIC handshake failure is retained; unchanged
 failed-job rerun passed, and its cause remains unconfirmed. Program #181 remains
 open. Combined callback/drain acceptance and hosted checks remain required.
+
+Combined acceptance after integrating verified drain base 416e773 reports 4807
+Windows cases, 4802 passed, five existing skips, zero failures (3m 22s). Both
+core targets build without warnings. The two additional callback cases retain
+their controlled-invocation scope; focused native Linux results above precede
+this H2-only base move. All new-head hosted checks remain required.
