@@ -147,9 +147,11 @@ targets and dependency groups are unchanged.
 
 ## Validation
 
-- Focused tests: all 494 HTTP/3, QPACK, QUIC and multiplexed-context cases pass at
-  `b8759d3`, including request cancellation, multiplexing, framing, QPACK blocked
-  streams and feedback, drain, shutdown and resource cases.
+- Full Windows suite on the final source (production code identical to
+  `b8759d3`): 4,530 tests, 4,525 passed, 5 existing platform skips, no failures.
+  This includes every HTTP/3, QPACK and QUIC case for request cancellation,
+  multiplexing, framing, QPACK blocked streams and feedback, drain, shutdown and
+  resources.
 - New regressions:
   - `Http3RequestInputEndTest`: over real QUIC, a request read to FIN produces no
     Stream Cancellation while an abandoned body produces one for its own stream.
