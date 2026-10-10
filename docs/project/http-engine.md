@@ -786,7 +786,8 @@ To repeat it from the repository root, build both core target assemblies and
 restores. In a Python 3.10+ virtual environment, install with
 `python -m pip --isolated install --require-hashes --only-binary=:all: -r test/EmbedIO.QpackInterop/requirements.txt`.
 Run `python test/EmbedIO.QpackInterop/verify.py src/EmbedIO/bin/Release/net10.0/EmbedIO.dll`
-and repeat with `netstandard2.0` in the assembly path. The tool is not a server,
+and repeat with 
+etstandard2.0` in the assembly path. The tool is not a server,
 network interoperability test or QUIC-conformance claim.
 
 Solution builds, standalone probe build/locked restore, complete whitespace checks
@@ -2372,7 +2373,8 @@ diagnostics are the next investigation for the mixed-load timeout.
 The initial all-transport probe still failed during a second full run: successive
 TCP port-0 allocations can land inside long UDP exclusion ranges. A separate
 Windows socket probe reproduced 60 exclusive UDP bind failures in 64 distinct
-TCP-assigned candidates; `netsh` confirmed UDP exclusion ranges overlapping the
+TCP-assigned candidates; 
+etsh` confirmed UDP exclusion ranges overlapping the
 observed ports. Evidence is in `port-exclusion-observation.txt` and
 `udp-port-exclusions.txt`. The fixture now samples candidates from 10000-29999
 and checks both transports/address families before using one. The second failed
@@ -7262,3 +7264,32 @@ On development base a4f7105 the full Windows suite reports 4938 cases (4903 plus
 `EMBEDIO_DATAGRAM_PEER_PYTHON`), zero failures, in 3m 23s. Both targets build
 without warnings under enforced analyzers; formatting, suppression and parser
 guards pass, and the aioquic peer passes both modes on that build.
+
+### Native datagram submission versus connection disposal
+
+Review of the native datagram increment at `5f08f99` found that `TrySend`
+published its pending record before retaining the connection handle. Connection
+close could therefore inspect and release the record while the submitting thread
+was still initializing or copying its native payload. Removing a partially
+initialized record also prevented the submitting thread from releasing allocations
+created after that removal.
+
+The correction acquires a connection lease before publishing any pending record
+and holds it through allocation, payload copy and synchronous submission. A
+refused or failed submission is removed and cleared before releasing that lease.
+The native final-state callbacks continue to own successfully submitted records.
+No native API is called while holding the datagram state lock. The ownership
+contract follows the pinned [MsQuic ConnectionClose documentation](https://github.com/microsoft/msquic/blob/v2.6.2/docs/api/ConnectionClose.md);
+implementation and the regression are original.
+
+A controlled memory owner disposes the connection during payload preparation and
+then throws before copying into native memory. This safely reproduces premature
+connection release on the unchanged core without writing through freed storage.
+The regression fails against the saved baseline core (SHA-256
+`7AEF0B80CD0FD6D28F0E185940DC6EAD6C21199ECCEAD118D4024462BEADEA85`)
+and passes after the correction. The focused Windows set reports 36 cases:
+34 passed, two optional independent-peer cases skipped, zero failures. Both
+library targets build with zero warnings. Full-suite, Linux and fresh hosted
+checks remain pending for this correction; the earlier datagram evidence above
+is not evidence for these changed bytes. The discovery floor becomes 4939
+(4903 development-base cases, 35 datagram cases and this regression).

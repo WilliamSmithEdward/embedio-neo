@@ -210,22 +210,26 @@ namespace EmbedIO.Net.Internal.Http3
         internal MsQuicDatagramSendStatus TrySend(ReadOnlyMemory<byte> payload, out Task<MsQuicDatagramOutcome>? completion)
         {
             completion = null;
-            PendingSend record;
-            lock (_sync)
-            {
-                if (_disposed || _connectionEnded) return MsQuicDatagramSendStatus.Closed;
-                // MsQuic would queue before negotiation and cancel later; datagrams
-                // are submitted only once the peer's support is known.
-                if (!_sendEnabled) return MsQuicDatagramSendStatus.Unavailable;
-                if (payload.Length > _maxSendLength) return MsQuicDatagramSendStatus.TooLarge;
-                if (_pending.Count >= _sendCapacity) return MsQuicDatagramSendStatus.QueueFull;
-                record = new PendingSend { Length = payload.Length };
-                _pending.Add(record); // Reserves the slot before allocation.
-            }
+            PendingSend? record = null;
             var submitted = false;
             var retained = false;
             try
             {
+                // ConnectionClose inspects _pending and frees leftover records.
+                // Hold the handle before publishing a record, including while
+                // user-owned memory is copied and submission can still fail.
+                try { _connection.DangerousAddRef(ref retained); }
+                catch (ObjectDisposedException) { return MsQuicDatagramSendStatus.Closed; }
+                lock (_sync)
+                {
+                    if (_disposed || _connectionEnded) return MsQuicDatagramSendStatus.Closed;
+                    // Submit only once the peer's support is known.
+                    if (!_sendEnabled) return MsQuicDatagramSendStatus.Unavailable;
+                    if (payload.Length > _maxSendLength) return MsQuicDatagramSendStatus.TooLarge;
+                    if (_pending.Count >= _sendCapacity) return MsQuicDatagramSendStatus.QueueFull;
+                    record = new PendingSend { Length = payload.Length };
+                    _pending.Add(record); // Reserves the slot before allocation.
+                }
                 record.Memory = Marshal.AllocHGlobal(DescriptorSize + payload.Length);
                 var data = IntPtr.Add(record.Memory, DescriptorSize);
                 Marshal.WriteInt32(record.Memory, payload.Length);
@@ -234,8 +238,6 @@ namespace EmbedIO.Net.Internal.Http3
                 // A non-null context is required: MsQuic suppresses discard
                 // indications for frames whose context is null.
                 record.Handle = GCHandle.Alloc(record);
-                try { _connection.DangerousAddRef(ref retained); }
-                catch (ObjectDisposedException) { return MsQuicDatagramSendStatus.Closed; }
                 var status = _send(_connection.DangerousGetHandle(), record.Memory, 1, 0, GCHandle.ToIntPtr(record.Handle));
                 if (!MsQuicApi.Failed(status))
                 {
@@ -254,9 +256,11 @@ namespace EmbedIO.Net.Internal.Http3
             }
             finally
             {
-                if (retained) _connection.DangerousRelease();
                 // Synchronous failure: MsQuic freed its request and kept no pointer.
-                if (!submitted) Release(record, null);
+                // Remove it before releasing the lease: ConnectionClose must
+                // never encounter a partially initialized or refused record.
+                try { if (!submitted && record != null) Release(record, null); }
+                finally { if (retained) _connection.DangerousRelease(); }
             }
         }
 

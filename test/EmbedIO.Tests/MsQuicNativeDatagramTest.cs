@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -382,6 +383,27 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public void ConnectionCloseCannotReleaseASendWhileItsPayloadIsBeingPrepared()
+        {
+            var native = new FakeNative();
+            using var connection = new FakeConnection();
+            using var datagrams = Negotiated(native, 1200, connection: connection);
+            connection.OnRelease = () => Call(datagrams, "ReleaseAfterConnectionClose");
+            using var payload = new ClosingPayload(connection);
+            var memory = payload.Memory;
+            payload.Armed = true;
+
+            Assert.Throws<IOException>(() => TrySend(datagrams, memory, out _));
+            Assert.That(payload.ReleasedDuringCopy, Is.False,
+                "ConnectionClose must wait for payload preparation and synchronous-failure cleanup.");
+            Assert.That(connection.Released, Is.True);
+            Assert.That(native.Calls, Is.Empty);
+            Assert.That(Get<int>(datagrams, "PendingSendCount"), Is.Zero);
+            Assert.That(Get<long>(datagrams, "AbandonedSends"), Is.Zero,
+                "A send that never reached MsQuic must be released before ConnectionClose inspects pending sends.");
+        }
+
+        [Test]
         public async Task ConcurrentSubmissionAndCompletionNeverExceedTheSendBound()
         {
             const int capacity = 8;
@@ -646,7 +668,37 @@ namespace EmbedIO.Tests
         {
             public FakeConnection() : base(IntPtr.Zero, true) => SetHandle((IntPtr)1);
             public override bool IsInvalid => false;
-            protected override bool ReleaseHandle() => true;
+            internal Action? OnRelease;
+            internal bool Released;
+            protected override bool ReleaseHandle()
+            {
+                Released = true;
+                OnRelease?.Invoke();
+                return true;
+            }
+        }
+
+        private sealed class ClosingPayload : MemoryManager<byte>
+        {
+            private readonly FakeConnection _connection;
+            private readonly byte[] _bytes = new byte[4];
+            internal bool Armed;
+            internal bool ReleasedDuringCopy;
+            internal ClosingPayload(FakeConnection connection) => _connection = connection;
+            public override Span<byte> GetSpan()
+            {
+                if (Armed)
+                {
+                    _connection.Dispose();
+                    ReleasedDuringCopy = _connection.Released;
+                    // Never write through the old code's prematurely freed native pointer.
+                    throw new IOException("Controlled payload-copy failure.");
+                }
+                return _bytes;
+            }
+            public override MemoryHandle Pin(int elementIndex = 0) => throw new NotSupportedException();
+            public override void Unpin() { }
+            protected override void Dispose(bool disposing) { }
         }
 
         private sealed class FakeNative
