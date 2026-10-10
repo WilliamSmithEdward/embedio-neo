@@ -706,6 +706,104 @@ namespace EmbedIO.Tests
                 }
             });
         }
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task NativeCompleteWritesPreservesCommittedBytesAndTheReadDirection(int mode)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeCompleteWritesCore(mode);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeCompleteWritesCore(int mode)
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                SafeHandle native;
+                QuicStream remote;
+                if (mode == 2)
+                {
+                    var opening = (Task)ListenerCall(connection, "OpenStreamAsync", true, token);
+                    await opening.WaitAsync(token);
+                    native = (SafeHandle)(opening.GetType().GetProperty("Result")?.GetValue(opening)
+                        ?? throw new AssertionException("Missing native outgoing stream."));
+                    ListenerCall(native, "CompleteWrites");
+                    remote = await peer.AcceptInboundStreamAsync(token);
+                }
+                else
+                {
+                    remote = await peer.OpenOutboundStreamAsync(mode == 3 ? QuicStreamType.Unidirectional : QuicStreamType.Bidirectional, token);
+                    await remote.WriteAsync(new byte[] { 81 }, token);
+                    var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                    await accepting.WaitAsync(token);
+                    native = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                        ?? throw new AssertionException("Missing native accepted stream."));
+                }
+                using (native)
+                await using (remote)
+                {
+                    var bytes = new byte[1023];
+                    var reads = NativeDirection(native, "ReadsClosed");
+                    var writes = NativeDirection(native, "WritesClosed");
+                    if (mode != 2)
+                    {
+                        Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.EqualTo(1));
+                        Assert.That(bytes[0], Is.EqualTo(81));
+                        Assert.That(reads.IsCompleted, Is.False);
+                    }
+                    if (mode == 3)
+                    {
+                        Assert.Throws<InvalidOperationException>(() => ListenerCall(native, "CompleteWrites"));
+                        Assert.That(writes.IsCompletedSuccessfully, Is.True);
+                    }
+                    else
+                    {
+                        var length = mode == 1 ? 8 * 1024 * 1024 : 0;
+                        var payload = new byte[length];
+                        Array.Fill(payload, (byte)83);
+                        var sending = mode == 1
+                            ? ((ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)payload, false, token)).AsTask()
+                            : Task.CompletedTask;
+                        if (mode == 1)
+                        {
+                            await Task.Delay(50, token);
+                            Assert.That(sending.IsCompleted, Is.False, "The unread peer must block this unbuffered send.");
+                        }
+                        Parallel.For(0, 16, _ => ListenerCall(native, "CompleteWrites"));
+                        if (mode == 1) Assert.That(sending.IsCompleted, Is.False, "Queuing FIN must neither wait for nor cancel committed data.");
+                        var received = 0;
+                        while (true)
+                        {
+                            var count = await remote.ReadAsync(bytes, token);
+                            if (count == 0) break;
+                            Assert.That(received + count, Is.LessThanOrEqualTo(length));
+                            Assert.That(bytes.AsSpan(0, count).IndexOfAnyExcept((byte)83), Is.EqualTo(-1));
+                            received += count;
+                        }
+                        Assert.That(received, Is.EqualTo(length));
+                        await sending.WaitAsync(token);
+                        await writes.WaitAsync(token);
+                        ListenerCall(native, "CompleteWrites");
+                        await Assert.ThatAsync(async () => await (ValueTask)ListenerCall(native, "WriteAsync", ReadOnlyMemory<byte>.Empty, false, token),
+                            Throws.InstanceOf<System.IO.IOException>());
+                    }
+                    if (mode == 2) Assert.That(reads.IsCompletedSuccessfully, Is.True);
+                    else
+                    {
+                        Assert.That(reads.IsCompleted, Is.False);
+                        await remote.WriteAsync(new byte[] { 84 }, true, token);
+                        Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.EqualTo(1));
+                        Assert.That(bytes[0], Is.EqualTo(84));
+                        Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.Zero);
+                        await reads.WaitAsync(token);
+                    }
+                }
+            }, unbuffered: mode == 1);
+        }
+
         [Test]
         public async Task NativeDisposalCompletesBothPendingDirectionObservers()
         {

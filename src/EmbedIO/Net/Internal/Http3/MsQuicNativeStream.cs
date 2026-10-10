@@ -231,6 +231,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Signals _signals;
         private readonly EmbedIO.Internal.AsyncWriteGate _readGate = new();
         private readonly EmbedIO.Internal.AsyncWriteGate _writeGate = new();
+        private readonly object _commitSync = new();
         private int _disposeStarted;
         private bool _finQueued;
         private long _id;
@@ -350,10 +351,39 @@ namespace EmbedIO.Net.Internal.Http3
             }
             finally { if (retained) DangerousRelease(); }
         }
+        // Native callbacks never enter this commit gate. Keep their state gate
+        // outside native API submissions, which may trigger callbacks.
+        internal void CompleteWrites()
+        {
+            if (Unidirectional && !_local) throw new InvalidOperationException("A peer-initiated unidirectional stream is receive-only.");
+            var retained = false;
+            try
+            {
+                DangerousAddRef(ref retained);
+                lock (_commitSync)
+                {
+                    lock (_signals.Sync)
+                    {
+                        if (_signals.Disposed) throw new ObjectDisposedException(nameof(MsQuicNativeStream));
+                        if (_finQueued || _signals.SendFinished || _signals.SendError != null || _signals.SendAborted) return;
+                    }
+                    // GRACEFUL queues FIN after submissions already accepted by
+                    // MsQuic; it does not await acknowledgement or SEND_COMPLETE.
+                    var status = _functions.Shutdown(handle, 1, 0);
+                    if (MsQuicApi.Failed(status))
+                    {
+                        var error = new IOException("Native graceful stream completion failed with status 0x" + status.ToString("X8"));
+                        lock (_signals.Sync) { _signals.SendError ??= error; _signals.UpdateDirections(); }
+                        throw error;
+                    }
+                    _finQueued = true;
+                }
+            }
+            finally { if (retained) DangerousRelease(); }
+        }
         internal void Abort(QuicAbortDirection direction, long code)
         {
             if (code < 0 || code > QuicInteger.Maximum) throw new ArgumentOutOfRangeException(nameof(code));
-            // QuicAbortDirection is platform annotated, as are its named values.
             if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
                 throw new PlatformNotSupportedException();
             if (direction != QuicAbortDirection.Read && direction != QuicAbortDirection.Write && direction != QuicAbortDirection.Both)
@@ -362,32 +392,35 @@ namespace EmbedIO.Net.Internal.Http3
             try
             {
                 DangerousAddRef(ref retained);
-                uint flags = 0;
-                lock (_signals.Sync)
+                lock (_commitSync)
                 {
-                    if (_signals.Disposed) throw new ObjectDisposedException(nameof(MsQuicNativeStream));
-                    if (direction != QuicAbortDirection.Write && !(_local && Unidirectional)
-                        && _signals.Error == null && (!_signals.Fin || _signals.Buffers != null))
+                    uint flags = 0;
+                    lock (_signals.Sync)
                     {
-                        flags |= 4;
-                        _signals.Error = DirectionFailure(false, null, "Native stream reads were locally aborted.");
-                        _signals.Available.TrySetResult();
+                        if (_signals.Disposed) throw new ObjectDisposedException(nameof(MsQuicNativeStream));
+                        if (direction != QuicAbortDirection.Write && !(_local && Unidirectional)
+                            && _signals.Error == null && (!_signals.Fin || _signals.Buffers != null))
+                        {
+                            flags |= 4;
+                            _signals.Error = DirectionFailure(false, null, "Native stream reads were locally aborted.");
+                            _signals.Available.TrySetResult();
+                        }
+                        if (direction != QuicAbortDirection.Read && (_local || !Unidirectional)
+                            && _signals.SendError == null && !_signals.SendFinished)
+                        {
+                            flags |= 2;
+                            _signals.SendAborted = true;
+                            _signals.SendError = DirectionFailure(false, null, "Native stream writes were locally aborted.");
+                        }
+                        _signals.UpdateDirections();
                     }
-                    if (direction != QuicAbortDirection.Read && (_local || !Unidirectional)
-                        && _signals.SendError == null && !_signals.SendFinished)
+                    // Native SEND_COMPLETE still owns pending pins and descriptors.
+                    // An abort must never release them at the local cancellation point.
+                    if (flags != 0)
                     {
-                        flags |= 2;
-                        _signals.SendAborted = true;
-                        _signals.SendError = DirectionFailure(false, null, "Native stream writes were locally aborted.");
+                        var status = _functions.Shutdown(handle, flags, (ulong)code);
+                        if (MsQuicApi.Failed(status)) throw new IOException("Native stream abort failed with status 0x" + status.ToString("X8"));
                     }
-                    _signals.UpdateDirections();
-                }
-                // Native SEND_COMPLETE still owns pending pins and descriptors.
-                // An abort must never release them at the local cancellation point.
-                if (flags != 0)
-                {
-                    var status = _functions.Shutdown(handle, flags, (ulong)code);
-                    if (MsQuicApi.Failed(status)) throw new IOException("Native stream abort failed with status 0x" + status.ToString("X8"));
                 }
             }
             finally { if (retained) DangerousRelease(); }
@@ -409,7 +442,7 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     if (_signals.Disposed) throw new ObjectDisposedException(nameof(MsQuicNativeStream));
                     if (_signals.SendError != null) throw _signals.SendError;
-                    if (_finQueued || _signals.SendFinished || _signals.SendAborted) throw new IOException("Native stream send direction is closed.");
+                    if (_signals.SendFinished || _signals.SendAborted) throw new IOException("Native stream send direction is closed.");
                     pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     _signals.PendingSend = pending;
                 }
@@ -423,10 +456,19 @@ namespace EmbedIO.Net.Internal.Http3
                 descriptor = Marshal.AllocHGlobal(IntPtr.Size * 2);
                 Marshal.WriteInt32(descriptor, bytes.Count);
                 Marshal.WriteIntPtr(descriptor, IntPtr.Size, IntPtr.Add(pin.AddrOfPinnedObject(), bytes.Offset));
-                token.ThrowIfCancellationRequested();
-                var status = _functions.Send(handle, descriptor, 1, completeWrites ? 4u : 0u, IntPtr.Zero);
-                if (MsQuicApi.Failed(status)) throw new IOException("MsQuic send failed with status 0x" + status.ToString("X8"));
-                _finQueued = completeWrites;
+                lock (_commitSync)
+                {
+                    token.ThrowIfCancellationRequested();
+                    lock (_signals.Sync)
+                    {
+                        if (_signals.Disposed) throw new ObjectDisposedException(nameof(MsQuicNativeStream));
+                        if (_signals.SendError != null) throw _signals.SendError;
+                        if (_finQueued || _signals.SendFinished || _signals.SendAborted) throw new IOException("Native stream send direction is closed.");
+                    }
+                    var status = _functions.Send(handle, descriptor, 1, completeWrites ? 4u : 0u, IntPtr.Zero);
+                    if (MsQuicApi.Failed(status)) throw new IOException("MsQuic send failed with status 0x" + status.ToString("X8"));
+                    _finQueued = completeWrites;
+                }
                 bool cancelled;
                 try { cancelled = await pending.Task.WaitAsync(token).ConfigureAwait(false); }
                 catch (OperationCanceledException)

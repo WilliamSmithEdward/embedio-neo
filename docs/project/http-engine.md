@@ -7180,3 +7180,23 @@ application integration and datagram delivery are still incomplete; no listener
 default or public API is changed by this increment.
 
 Final combined native local-abort acceptance reports 4908 Windows cases: 4903 passed, five existing skips, zero failures (3m 21s). Complete builds for both targets and both source guards pass. Hosted checks on the final PR head remain required before integration.
+
+Native stream graceful write completion is implemented internally. A short
+submission gate orders native sends, local aborts and graceful shutdown without
+waiting for SEND_COMPLETE or peer acknowledgement. The native callback takes
+only the separate state gate; native API calls do not hold that state gate.
+FIN therefore follows data already committed to MsQuic, repeated completion
+requests are harmless, and later writes fail without entering native ownership.
+Read state remains independent. Missing peer-initiated unidirectional write
+sides reject completion; locally opened unidirectional streams can send empty FIN.
+
+All four new real-peer cases fail before implementation because CompleteWrites
+is absent. The corrected cases validate empty FIN, a committed flow-blocked
+8 MiB payload byte-for-byte followed by FIN, 16 concurrent completion calls,
+continued reads after send completion, and both unidirectional roles. All 76
+native cases pass on Windows and pinned Linux using the same Windows-built IL;
+both target builds are warning-free. Combined discovery is 4912. Full-source,
+source-guard and hosted final-head acceptance remain required. The original
+native adapter, application HTTP/3 integration, datagrams and WebTransport
+transport integration are still incomplete; this increment changes no public
+API, listener default, target or dependency.
