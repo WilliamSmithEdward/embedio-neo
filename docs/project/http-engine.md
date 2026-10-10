@@ -7178,3 +7178,5 @@ pass without warnings. Combined discovery is 4908. Full-source and hosted checks
 remain required. Separate graceful write completion, the native HTTP/3 adapter,
 application integration and datagram delivery are still incomplete; no listener
 default or public API is changed by this increment.
+
+Final combined native local-abort acceptance reports 4908 Windows cases: 4903 passed, five existing skips, zero failures (3m 21s). Complete builds for both targets and both source guards pass. Hosted checks on the final PR head remain required before integration.
