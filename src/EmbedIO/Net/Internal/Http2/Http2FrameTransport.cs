@@ -14,12 +14,12 @@ namespace EmbedIO.Net.Internal.Http2
     {
         private readonly EmbedIO.Internal.BorrowedResource<Stream> _stream;
         private readonly byte[] _header = new byte[9];
-        private readonly SemaphoreSlim _writeGate = new(1, 1);
+        private readonly Http2OutputWriter _writer;
         private readonly int _receiveMaximum;
         private readonly ArrayPool<byte>? _dataPool;
         private int _reading;
         private bool _readFailed;
-        private bool _writeFailed;
+
 
         internal Http2FrameTransport(Stream stream, int receiveMaximum = 16384)
             : this(stream, receiveMaximum, null) { }
@@ -28,6 +28,7 @@ namespace EmbedIO.Net.Internal.Http2
         {
             _dataPool = dataPool;
             _stream = new EmbedIO.Internal.BorrowedResource<Stream>(stream ?? throw new ArgumentNullException(nameof(stream)));
+            _writer = new Http2OutputWriter(_stream);
             ValidateMaximum(receiveMaximum);
             _receiveMaximum = receiveMaximum;
         }
@@ -82,7 +83,7 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
-        internal bool IsWriteFailed => Volatile.Read(ref _writeFailed);
+        internal bool IsWriteFailed => _writer.IsFailed;
 
         internal Task WriteAsync(Http2Frame[] frames, int peerMaximum, CancellationToken token)
             => WriteCoreAsync(frames, peerMaximum, token, token);
@@ -99,51 +100,19 @@ namespace EmbedIO.Net.Internal.Http2
         {
             if (frames == null) throw new ArgumentNullException(nameof(frames));
             ValidateMaximum(peerMaximum);
-            var capacity = 9;
+
             foreach (var frame in frames)
             {
                 if (frame == null) throw new ArgumentException("Missing frame.", nameof(frames));
                 if (frame.PayloadLength > peerMaximum) throw new ArgumentException("Outbound frame exceeds peer maximum.", nameof(frames));
                 frame.ValidateShape();
-                capacity = Math.Max(capacity, frame.PayloadLength + 9);
+
             }
-            await _writeGate.WaitAsync(requestToken).ConfigureAwait(false);
-            byte[]? buffer = null;
-            var writeStarted = false;
-            try
-            {
-                requestToken.ThrowIfCancellationRequested();
-                if (_writeFailed) throw new IOException("HTTP/2 output is no longer usable.");
-                // SETTINGS and its ACK form one wire-order transaction. DATA
-                // reserved before that transaction must still fit at commitment.
-                apply?.Invoke();
-                if (flow != null && !flow.CanSendReserved(frames)) return false;
-                buffer = ArrayPool<byte>.Shared.Rent(capacity);
-                foreach (var frame in frames)
-                {
-                    var length = frame.PayloadLength;
-                    buffer[0] = (byte)(length >> 16); buffer[1] = (byte)(length >> 8); buffer[2] = (byte)length;
-                    buffer[3] = frame.Type; buffer[4] = frame.Flags;
-                    buffer[5] = (byte)(frame.StreamId >> 24); buffer[6] = (byte)(frame.StreamId >> 16);
-                    buffer[7] = (byte)(frame.StreamId >> 8); buffer[8] = (byte)frame.StreamId;
-                    Buffer.BlockCopy(frame.Payload, frame.PayloadOffset, buffer, 9, length);
-                    // Once any bytes of a frame batch may be on the wire, only
-                    // the connection lifetime may interrupt its shared transport.
-                    writeStarted = true;
-                    await _stream.Value.WriteAsync(buffer, 0, length + 9, connectionToken).ConfigureAwait(false);
-                }
-                return true;
-            }
-            catch { if (writeStarted) _writeFailed = true; throw; }
-            finally
-            {
-                if (buffer != null) ArrayPool<byte>.Shared.Return(buffer, true);
-                _writeGate.Release();
-            }
+            return await _writer.WriteAsync(frames, requestToken, connectionToken, flow, apply).ConfigureAwait(false);
         }
 
         // The connection joins all I/O before disposing its serialization gate.
-        public void Dispose() => _writeGate.Dispose();
+        public void Dispose() => _writer.Dispose();
 
         private static void ValidateMaximum(int maximum)
         {
