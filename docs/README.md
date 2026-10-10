@@ -1,4 +1,4 @@
-# Documentation
+﻿# Documentation
 
 EmbedIO-Neo keeps the existing `EmbedIO` namespaces and offers a small modular
 HTTP/WebSocket server, integrated CLI, JsonServer, and testing helpers.
@@ -148,6 +148,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
 
 ## Compatibility
+
+- [Neo v1 to v2](compatibility/neo-v1-to-v2.md): living migration guide for the v2 engine release scope, approved behavior changes and remaining integration.
 
 - [Migration](compatibility/migration.md): approved SWAN/JSON changes and consumer migration.
 
