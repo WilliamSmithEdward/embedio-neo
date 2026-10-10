@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+- Defer unused managed HTTP/1 query/item collections while preserving populated
+  query initialization, stable mutable collections and request-local state.
 - Commit bounded asynchronous managed HTTP/1 chunks with one transport write,
   preserving byte framing, immediate application writes and cancellation.
 - Distinguish managed HTTP/1 request-head limit failures with 414 for oversized

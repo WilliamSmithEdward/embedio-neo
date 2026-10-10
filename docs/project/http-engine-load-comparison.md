@@ -409,3 +409,48 @@ skips and one failure in unchanged permanent-ban file replacement. That failure
 also reproduces with the frozen pre-change engine. Its Windows HRESULT is
 `0x80070497`; the underlying cause remains unconfirmed. No production persistence
 change, assertion weakening or quarantine is part of this prototype.
+
+## HTTP/1 unused collection allocation checkpoint
+
+The candidate defers creation of empty query collections and unused context item
+containers. Nonempty queries are still decoded before admission. First access
+publishes one stable mutable collection; concurrent readers receive the same
+instance, and retained references remain request-local. No public signature,
+query interpretation, default, target or production dependency changes.
+
+The comparison used base `0be7629` plus the preserved two-file production patch,
+core SHA-256 `80461A69BB8866DD081FD237C8310A580BC43A3B2C9CD7D6945484D72D1F7BE8`.
+The control is the frozen `ae80537` core used above. Both load the identical
+harness, with only EmbedIO.dll swapped. New strict-limit and chunk behavior is
+inactive for this fixed-length, valid HTTP/1.1 pipeline workload. Two alternating
+rounds used fresh processes, five-second warmup, fifteen-second measurement and
+disjoint server/client CPU sets. All four samples byte-validated every response
+and completed without failures; no samples were retried.
+
+| Metric, pipelined x16 over 16 connections | Candidate | Frozen control |
+| --- | --- | --- |
+| Median requests/s | 475,348 | 472,172 |
+| Server CPU us/request | 16.3 | 16.4 |
+| Allocation B/request | 7,203 | 7,548 |
+| p99 ms | 0.774 | 0.778 |
+| Maximum post-run open server sockets | 0 | 0 |
+| Maximum retained heap KiB | 92 | 107 |
+
+Allocation decreases about 4.6%; throughput and CPU are within noise. This is an
+allocation improvement, not a solution to the roughly ninefold pipelining gap.
+Short loopback samples do not prove soak or every query-heavy workload. Artifacts,
+source patch and binary hashes are under `TestResults/context-allocation-load`.
+
+The first local full suite discovered 4,495 cases: 4,488 passed, five expected
+skips and two failures with Windows socket error 10055. One failed in the fixture's
+bare free-port probe before constructing EmbedIO; the other failed at WebSocket
+connection establishment. All 37 affected-family cases passed afterward. A
+standalone .NET 10.0.12 control loading no EmbedIO assembly reproduced the error:
+one failure in 18,000 TCP bind/close operations, immediately after port 65533,
+followed by allocation at port 49252. This is evidence of a native/runtime port
+allocation exposure on this host, not an established OS root cause or a product
+fix. A preliminary 512-bind control had no failures. No OS limits, retries inside
+fixtures, assertions or quarantine rules were changed. Source and logs are
+retained under `TestResults/context-allocation-socket-probe`; original suite/TRX
+and affected-family results remain beside the allocation campaign.
+A subsequent unchanged-source full-suite confirmation passes all 4,495 cases (4,490 passed/five expected skips). This does not repair or erase the original native allocator failures.
