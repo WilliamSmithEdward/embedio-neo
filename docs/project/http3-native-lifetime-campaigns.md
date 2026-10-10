@@ -1,4 +1,4 @@
-# Native QUIC lifetime campaigns on Apple Silicon
+﻿# Native QUIC lifetime campaigns on Apple Silicon
 
 This record covers lifetime and resource validation of the internal MsQuic
 provider for [program #181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181),
@@ -527,3 +527,27 @@ the second exposed the same ordering assumption in ownership churn at iteration
 now run after that existing wait. Assertions, resource checks, iteration counts
 and deadlines remain unchanged. macOS correction campaigns and final combined
 engine acceptance are still outstanding.
+
+## Reconciled native candidate validation
+
+Candidate `b8f38ba` includes engine `b75ef19` and discovers 5,054 cases.
+The coverage-enabled Windows suite reports 5,044 passed, ten skipped and
+zero failures in 3m47s. The first fresh-source pinned Linux suite aborted
+after 356 reports (353 passed, three skipped, no failed test) with
+`free(): double free detected in tcache 2`. Its cause remains unconfirmed.
+Forty fresh focused lifetime runs (880 cases) did not reproduce it.
+
+A subsequent complete-source Linux run, with native crash-dump capture enabled,
+locked restore and both-target build (zero warnings), reports all 5,054 cases:
+5,020 passed, 34 skipped, zero failures in 2m57s. No crash dump was produced.
+It uses the same pinned image, runtime, MsQuic and independent peer as above.
+This positive run does not explain or establish repair of the prior abort.
+
+Two intermediate diagnostic attempts were invalid for acceptance: the first
+used a read-only binary directory and failed 38 filesystem cases; the second
+used a writable binary copy but omitted the datagram peer script, failing
+only its two independent-peer cases. Their reports are retained. No failure
+is quarantined or omitted from this evidence. Further reconciliation with
+engine `1b70377`, crash investigation, macOS proof and exact-head hosted
+checks remain required. The native application-provider switch remains
+unimplemented; these results do not establish shipping acceptance.
