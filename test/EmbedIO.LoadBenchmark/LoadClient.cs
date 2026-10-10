@@ -175,8 +175,22 @@ internal sealed class RunState(TimeSpan duration, CancellationToken cancellation
     internal void Fail(Exception exception)
     {
         if (exception is OperationCanceledException && _failed.IsCancellationRequested) return;
-        Interlocked.CompareExchange(ref _error, exception.GetType().FullName + ": " + exception.Message, null);
+        Interlocked.CompareExchange(ref _error, Describe(exception), null);
         _failed.Cancel();
+    }
+
+    // The whole inner chain: HTTP/2 aborts carry the protocol or socket cause inside.
+    private static string Describe(Exception exception)
+    {
+        var text = new System.Text.StringBuilder();
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (text.Length != 0) text.Append(" ---> ");
+            text.Append(current.GetType().FullName).Append(": ").Append(current.Message);
+            if (current is HttpProtocolException protocol) text.Append(" (HTTP/2 error code ").Append(protocol.ErrorCode).Append(')');
+            if (current is SocketException socket) text.Append(" (socket ").Append(socket.SocketErrorCode).Append(')');
+        }
+        return text.ToString();
     }
 }
 
