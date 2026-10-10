@@ -153,6 +153,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
+- [Capsule transport development](project/http-capsule-transport.md): streamed framing, negotiation constraints and remaining integration work.
+
 - [Neo baseline and direction](project/embed_io_neo.md): initial fork decisions and acknowledgments.
 - [Changelog](../CHANGELOG.md): released and unreleased changes.
 - [Contributing](../CONTRIBUTING.md): build, test, and compatibility policy.

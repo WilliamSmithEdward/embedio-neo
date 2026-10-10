@@ -142,6 +142,7 @@ namespace EmbedIO.Tests
             var pending = writing ? Invoke(codec, "WriteHeaderAsync", 0L, 3L, stop.Token)
                 : Invoke(codec, "ReadHeaderAsync", stop.Token);
             await stream.Entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            if (writing) Assert.Throws<InvalidOperationException>(() => Complete(codec));
             await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
                 if (writing) await Invoke(codec, "WriteHeaderAsync", 0L, 0L, CancellationToken.None);
@@ -169,6 +170,41 @@ namespace EmbedIO.Tests
             Assert.That((Value(header, "Type"), Value(header, "Length")), Is.EqualTo((0L, 0L)));
         }
 
+        private static void Complete(object codec)
+        {
+            try { (CodecType.GetMethod("CompleteOutput", Flags) ?? throw new AssertionException("Missing output completion.")).Invoke(codec, Array.Empty<object>()); }
+            catch (TargetInvocationException error) when (error.InnerException is Exception cause)
+            { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(cause).Throw(); }
+        }
+
+        [TestCase(0)]
+        [TestCase(3)]
+        public async Task CompleteOutputIsIdempotentAndPreventsFurtherFrames(int length)
+        {
+            using var stream = new MemoryStream();
+            var codec = Codec(stream);
+            await Invoke(codec, "WriteHeaderAsync", 0L, (long)length, CancellationToken.None);
+            await Invoke(codec, "WritePayloadAsync", new byte[length], 0, length, CancellationToken.None);
+            var completedBytes = stream.ToArray();
+            Complete(codec); Complete(codec);
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await Invoke(codec, "WriteHeaderAsync", 0L, 0L, CancellationToken.None));
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await Invoke(codec, "WritePayloadAsync", Array.Empty<byte>(), 0, 0, CancellationToken.None));
+            Assert.That(stream.ToArray(), Is.EqualTo(completedBytes));
+            Assert.That(stream.CanWrite, Is.True, "The caller still owns stream closure.");
+        }
+
+        [Test]
+        public async Task IncompleteOutputCannotBeDeclaredCompleteOrResumedAfterCompletionFailure()
+        {
+            using var stream = new MemoryStream();
+            var codec = Codec(stream);
+            await Invoke(codec, "WriteHeaderAsync", 0L, 3L, CancellationToken.None);
+            await Invoke(codec, "WritePayloadAsync", new byte[] { 1 }, 0, 1, CancellationToken.None);
+            Assert.Throws<InvalidDataException>(() => Complete(codec));
+            Assert.Throws<IOException>(() => Complete(codec));
+            await Assert.ThrowsAsync<IOException>(async () => await Invoke(codec, "WritePayloadAsync", new byte[] { 2 }, 0, 1, CancellationToken.None));
+            Assert.That(stream.ToArray(), Is.EqualTo(new byte[] { 0, 3, 1 }));
+        }
         private abstract class InterruptibleCarrier : MemoryStream
         {
             protected InterruptibleCarrier() { }

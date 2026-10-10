@@ -27,6 +27,7 @@ namespace EmbedIO.Net.Internal
         private int _writing;
         private bool _readFailed;
         private bool _writeFailed;
+        private bool _writeEnded;
         private bool _readEnded;
         private bool _readStarted;
         private bool _writeStarted;
@@ -137,6 +138,7 @@ namespace EmbedIO.Net.Internal
             try
             {
                 if (_writeFailed) throw new IOException("Capsule output is no longer usable.");
+                if (_writeEnded) throw new InvalidOperationException("Capsule output is complete.");
                 if (_writeRemaining != 0) throw new InvalidOperationException("Finish the current capsule before writing another header.");
                 var count = QuicInteger.Write(_writeHeader, 0, type);
                 count += QuicInteger.Write(_writeHeader, count, length);
@@ -158,6 +160,7 @@ namespace EmbedIO.Net.Internal
             try
             {
                 if (_writeFailed) throw new IOException("Capsule output is no longer usable.");
+                if (_writeEnded) throw new InvalidOperationException("Capsule output is complete.");
                 if (!_writeStarted) throw new InvalidOperationException("Write a capsule header first.");
                 if (count > _writeRemaining) throw new ArgumentException("Payload exceeds the declared capsule length.", nameof(count));
                 if (count == 0) return;
@@ -169,6 +172,23 @@ namespace EmbedIO.Net.Internal
             finally { Volatile.Write(ref _writing, 0); }
         }
 
+        // Validate before the caller finishes the carrier's send direction.
+        // This does not close or flush the borrowed stream.
+        internal void CompleteOutput()
+        {
+            Enter(ref _writing);
+            try
+            {
+                if (_writeFailed) throw new IOException("Capsule output is no longer usable.");
+                if (_writeRemaining != 0)
+                {
+                    _writeFailed = true;
+                    throw new InvalidDataException("Capsule output ended before its declared value was complete.");
+                }
+                _writeEnded = true;
+            }
+            finally { Volatile.Write(ref _writing, 0); }
+        }
         private static void Enter(ref int busy)
         {
             if (Interlocked.CompareExchange(ref busy, 1, 0) != 0)
