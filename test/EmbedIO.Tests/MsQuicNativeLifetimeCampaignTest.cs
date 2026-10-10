@@ -862,8 +862,10 @@ namespace EmbedIO.Tests
                     Assert.That(task.IsFaulted || task.IsCanceled || task.IsCompletedSuccessfully, Is.True, trace.ToString());
                 await stop.CancelAsync().ConfigureAwait(false);
                 await Within(Task.WhenAll(pumps), trace).ConfigureAwait(false);
-                Assert.That(natives.All(native => native.IsClosed) && connection.IsClosed, Is.True, trace.ToString());
                 await Eventually(() => server.Api.IsClosed, trace + ": the API owner was not released.").ConfigureAwait(false);
+                // Final native shutdown releases child leases asynchronously.
+                // The existing parent-close wait proves every lease is released.
+                Assert.That(natives.All(native => native.IsClosed) && connection.IsClosed, Is.True, trace.ToString());
             }
             finally
             {
@@ -958,8 +960,8 @@ namespace EmbedIO.Tests
                 Assert.That(References(connection), Is.EqualTo(1), trace + ": exactly the stream lease remains.");
                 trace.Phase = "retention-release";
                 await Within(Task.Run(stream.Dispose, token), trace).ConfigureAwait(false);
-                Assert.That(stream.IsClosed && connection.IsClosed, Is.True, trace + ": the last child releases its connection.");
                 await Eventually(() => server.Registration.IsClosed && server.Api.IsClosed, trace + ": the last child releases every retained parent.").ConfigureAwait(false);
+                Assert.That(stream.IsClosed && connection.IsClosed, Is.True, trace + ": the last child releases its connection.");
             }
             finally
             {
