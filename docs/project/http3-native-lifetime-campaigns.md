@@ -564,3 +564,11 @@ All six discovery minimums are raised to that measured 5,064 count only
 after this completed report. Fresh-source Linux validation is still running;
 no Linux correction acceptance, macOS proof or final hosted acceptance is
 claimed by this Windows result.
+
+The corresponding fresh-source pinned Linux suite on `b1e4ceb` also completes
+all 5,064 cases: 5,030 passed, 34 expected skips and zero failures in 3m00s.
+It rebuilt the archived source on Linux with zero warnings and kept native
+crash-dump capture and the configured independent peer enabled. No dump was
+produced. This verifies that combined source on both local platforms; it
+does not explain the earlier double-free, replace macOS validation, establish
+final hosted acceptance or wire the native provider into application startup.
