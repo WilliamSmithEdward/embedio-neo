@@ -320,7 +320,7 @@ internal static class Orchestrator
     // Every non-listening TCP connection by local port and state. On macOS .NET's
     // GetActiveTcpConnections omits TIME_WAIT, so the TIME_WAIT gate and the socket
     // census read netstat, which lists every protocol control block.
-    private static List<(int LocalPort, TcpState State)> TcpConnections()
+    internal static List<(int LocalPort, TcpState State)> TcpConnections()
     {
         if (!OperatingSystem.IsMacOS())
             return [.. IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections().Select(connection => (connection.LocalEndPoint.Port, connection.State))];
@@ -346,7 +346,7 @@ internal static class Orchestrator
     // Server-side TCP connections still known to the OS after the client has exited,
     // by state. TIME_WAIT is kernel bookkeeping; any other state is a socket the server
     // has not closed. QUIC connections are not visible here.
-    private static JsonObject ServerSockets(int port)
+    internal static JsonObject ServerSockets(int port)
     {
         var states = new JsonObject();
         foreach (var group in TcpConnections().Where(connection => connection.LocalPort == port).GroupBy(connection => connection.State))
@@ -359,7 +359,7 @@ internal static class Orchestrator
 
     // TCP and UDP must both be free because HTTP/3 binds UDP on the same number. Ports
     // come from below the OS dynamic range so client sockets in TIME_WAIT never collide.
-    private static int FreePort()
+    internal static int FreePort()
     {
         for (var attempt = 0; attempt < 200; attempt++)
         {
@@ -385,7 +385,7 @@ internal static class Orchestrator
         throw new InvalidOperationException("No free TCP/UDP port pair.");
     }
 
-    private static X509Certificate2 CreateCertificate()
+    internal static X509Certificate2 CreateCertificate()
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256);
