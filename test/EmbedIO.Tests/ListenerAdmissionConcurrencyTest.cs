@@ -369,6 +369,61 @@ namespace EmbedIO.Tests
             Assert.That(outcome.Succeeded, Is.EqualTo(Volatile.Read(ref handled)));
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task RequestsRefusedBeforeAdmissionDuringDrainReachATerminalOutcome(bool http2)
+        {
+            var prefix = Resources.GetServerAddress();
+            var lateHandled = 0;
+            var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var server = new WebServer(HttpListenerMode.EmbedIO, prefix)
+                .WithModule(new ActionModule("/held", HttpVerbs.Get, async context =>
+                {
+                    entered.TrySetResult(true);
+                    await release.Task.ConfigureAwait(false);
+                    await context.SendStringAsync("held", "text/plain", WebServer.Utf8NoBomEncoding);
+                }))
+                .WithModule(new ActionModule("/", HttpVerbs.Get, async context =>
+                {
+                    _ = Interlocked.Increment(ref lateHandled);
+                    await context.SendStringAsync("late", "text/plain", WebServer.Utf8NoBomEncoding);
+                }));
+            var running = server.RunAsync(timeout.Token);
+            using var client = Client(http2);
+            var held = client.GetStringAsync(prefix + "held", timeout.Token);
+            await entered.Task.WaitAsync(timeout.Token);
+
+            // The admitted request keeps the drain open while later requests are refused.
+            var drain = server.DrainAsync(TimeSpan.FromSeconds(20));
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var late = Enumerable.Range(0, 4).Select(async index =>
+            {
+                try
+                {
+                    var body = await client.GetStringAsync(prefix + "late/" + index, timeout.Token);
+                    return (index, clock.ElapsedMilliseconds, (Exception?)new InvalidOperationException($"Answered '{body}'."));
+                }
+                catch (Exception error) when (error is HttpRequestException or TaskCanceledException) { return (index, clock.ElapsedMilliseconds, (Exception?)error); }
+            }).ToArray();
+            var outcomes = await Task.WhenAll(late).WaitAsync(timeout.Token);
+            foreach (var (index, elapsed, error) in outcomes)
+                TestContext.Out.WriteLine($"late {index}: {elapsed} ms {error?.GetType().Name}: {error?.Message}");
+            release.TrySetResult(true);
+            string heldOutcome;
+            try { heldOutcome = await held.WaitAsync(timeout.Token); }
+            catch (Exception error) when (error is HttpRequestException or TaskCanceledException) { heldOutcome = error.GetType().Name; }
+            TestContext.Out.WriteLine($"held: {heldOutcome} at {clock.ElapsedMilliseconds} ms");
+            await drain.WaitAsync(timeout.Token);
+            await running.WaitAsync(timeout.Token);
+
+            Assert.That(lateHandled, Is.Zero, "A request sent after drain began was admitted.");
+            Assert.That(heldOutcome, Is.EqualTo("held"), "The admitted request must complete during drain.");
+            Assert.That(outcomes.Select(outcome => outcome.Item3), Is.All.InstanceOf<HttpRequestException>(),
+                "Every request refused before admission must observe a refusal, not the client timeout.");
+        }
+
         private static HttpClient Client(bool http2) => new(new SocketsHttpHandler { UseProxy = false })
         {
             DefaultRequestVersion = http2 ? HttpVersion.Version20 : HttpVersion.Version11,
