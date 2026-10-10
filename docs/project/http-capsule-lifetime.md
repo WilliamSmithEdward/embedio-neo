@@ -34,7 +34,7 @@ connection, so a passing sibling shows the failure stayed on one stream.
 | Incomplete outgoing capsule | Connection ends after the partial capsule | Peer sees RST_STREAM PROTOCOL_ERROR (1) | Peer sees H3_MESSAGE_ERROR (0x10e) |
 | Concurrent CompleteOutput/Close/Dispose | One shared task each; stream closed once | Not separately tested | Not separately tested |
 | Server stop with a pending operation | Backpressured write released; RunAsync finishes | Pending read released | Pending read released (raw and capsule) |
-| 1 MiB peer input after server send completion | SHA-256 match, plain and TLS, raw and capsule | SHA-256 match, raw and capsule | SHA-256 match, raw and capsule |
+| 1 MiB peer input around server send completion | SHA-256 match, plain and TLS, raw and capsule | SHA-256 match, raw and capsule | SHA-256 match, raw and capsule |
 | Retained objects after repeated tunnels | 64 tunnels; tunnel and stream collectable | 64 tunnels on one connection; collectable | Not separately tested |
 | Sibling isolation while a writer is parked | Not applicable | Four 256 KiB sibling responses complete | Not separately tested |
 
@@ -71,8 +71,14 @@ the production code.
 
 The runs used Windows 11 (build 26300) with .NET 10 runtimes 10.0.11 and 10.0.12
 installed; HTTP/3 used the Windows MsQuic stack. Linux and macOS, the netstandard2.0
-asset, HTTP/2 over TLS, and older TLS versions were not run for these cases. The
-HTTP/1 TLS cases use TLS 1.3 only.
+asset and HTTP/2 over TLS were not run for these cases.
+
+The HTTP/1 TLS peer negotiates the platform default, as the existing context tests
+do: TLS 1.3 on Windows and Linux, TLS 1.2 against the macOS server. TLS 1.2
+close_notify ends both directions, so under TLS 1.2 the bulk-input case sends all
+peer input before the server completes output. That branch was exercised on Windows
+by temporarily forcing a TLS 1.2 client; all six TLS cases passed. It has not run on
+macOS itself.
 
 Retention checks use weak references after forced collections. They show that
 closed tunnel and stream objects are not kept reachable. They are not a measure of

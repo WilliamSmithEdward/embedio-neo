@@ -210,12 +210,15 @@ namespace EmbedIO.Tests
         [TestCase(false, true)]
         [TestCase(true, false)]
         [TestCase(true, true)]
-        public async Task BulkPeerInputAfterSendCompletionIsObservedCompletely(bool tls, bool capsules)
+        public async Task BulkPeerInputIsObservedCompletelyAroundSendCompletion(bool tls, bool capsules)
         {
             var expected = Payload(1 << 20, 7);
+            // TLS 1.2 close_notify ends both directions, so there the peer sends first.
+            var halfClose = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             await using var host = await TunnelHost.StartAsync(tls, async (tunnel, probe, token) =>
             {
-                await tunnel.CompleteOutputAsync(token);
+                var independent = await halfClose.Task.WaitAsync(token);
+                if (independent) await tunnel.CompleteOutputAsync(token);
                 using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
                 long total = 0;
                 var buffer = new byte[8192];
@@ -236,10 +239,14 @@ namespace EmbedIO.Tests
                     while ((count = await tunnel.Stream.ReadAsync(buffer, 0, buffer.Length, token)) != 0)
                     { hash.AppendData(buffer, 0, count); total += count; }
                 }
+                if (!independent) await tunnel.CompleteOutputAsync(token);
                 probe.Observed.TrySetResult(total + ":" + Convert.ToHexString(hash.GetHashAndReset()));
             }, protocol: capsules ? "example-tunnel" : null, capsules: capsules);
             var peer = await host.ConnectAsync(capsules ? "example-tunnel" : null);
-            Assert.That(await peer.DrainToEndAsync(host.Token), Is.Zero, "Server send completion must precede peer input.");
+            var independentDirections = peer.Tls is null or SslProtocols.Tls13;
+            TestContext.Out.WriteLine($"Negotiated {peer.Tls?.ToString() ?? "plain TCP"}; peer input follows server send completion: {independentDirections}");
+            halfClose.TrySetResult(independentDirections);
+            if (independentDirections) Assert.That(await peer.DrainToEndAsync(host.Token), Is.Zero, "Server send completion must precede peer input.");
             var random = new Random(31);
             var offset = 0;
             while (offset < expected.Length)
@@ -256,6 +263,7 @@ namespace EmbedIO.Tests
                 offset += size;
             }
             await peer.CompleteSendAsync();
+            if (!independentDirections) Assert.That(await peer.DrainToEndAsync(host.Token), Is.Zero);
             var observed = await host.Probe.Observed.Task.WaitAsync(Settle, host.Token);
             TestContext.Out.WriteLine("Observed application outcome: " + observed);
             Assert.That(observed, Is.EqualTo(expected.Length + ":" + Convert.ToHexString(SHA256.HashData(expected))));
@@ -388,7 +396,8 @@ namespace EmbedIO.Tests
         private sealed class TunnelPeer : IDisposable
         {
             private readonly TcpClient _tcp;
-            internal TunnelPeer(TcpClient tcp, Stream wire) { _tcp = tcp; Wire = wire; }
+            internal TunnelPeer(TcpClient tcp, Stream wire) { _tcp = tcp; Wire = wire; Tls = (wire as SslStream)?.SslProtocol; }
+            internal SslProtocols? Tls { get; }
             internal Stream Wire { get; }
             internal void Reset()
             {
@@ -476,9 +485,10 @@ namespace EmbedIO.Tests
                     var fingerprint = _certificate.GetCertHashString(HashAlgorithmName.SHA256);
                     var ssl = new SslStream(wire, false, (_, peer, _, _) => peer?.GetCertHashString(HashAlgorithmName.SHA256) == fingerprint);
                     wire = ssl;
-                    // TLS 1.3 lets each side finish its send direction independently.
+                    // Platform default: Apple server-side SslStream negotiates TLS 1.2.
                     await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
-                    { TargetHost = "localhost", EnabledSslProtocols = SslProtocols.Tls13 }, Token);
+                    { TargetHost = "localhost", EnabledSslProtocols = SslProtocols.None }, Token);
+                    Assert.That(ssl.SslProtocol, Is.EqualTo(OperatingSystem.IsMacOS() ? SslProtocols.Tls12 : SslProtocols.Tls13));
                 }
                 var peer = new TunnelPeer(tcp, wire);
                 lock (_peers) _peers.Add(peer);
