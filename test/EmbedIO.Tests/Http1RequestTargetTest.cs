@@ -43,6 +43,19 @@ namespace EmbedIO.Tests
         public Task TargetSyntaxIsValidatedBeforeDispatch(string method, string target, bool valid)
             => CheckRequest(method, target, "127.0.0.1", valid);
 
+        [TestCase("127.0.0.1")]
+        [TestCase("127.0.0.1:")]
+        [TestCase("127.0.0.1:0")]
+        [TestCase("127.0.0.1:65536")]
+        [TestCase("127.0.0.1:abc")]
+        [TestCase("127.0.0.1:80/path")]
+        [TestCase("user@127.0.0.1:80")]
+        [TestCase("http://127.0.0.1:80/")]
+        [TestCase("/path")]
+        [TestCase("[::1]")]
+        [TestCase("[::1]:")]
+        public Task ConnectRequiresAuthorityWithAValidExplicitPort(string target)
+            => CheckRequest("CONNECT", target, "127.0.0.1", false);
         [TestCase("/x[0]", false)]
         [TestCase("http://127.0.0.1/x[0]", false)]
         [TestCase("/x?y={z}", false)]

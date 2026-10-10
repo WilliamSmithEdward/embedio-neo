@@ -16,13 +16,15 @@ using EmbedIO.WebSockets.Internal;
 
 namespace EmbedIO.Net.Internal
 {
-    internal sealed class MultiplexedContext : IHttpContextImpl, IDisposable
+    internal sealed class MultiplexedContext : IHttpContextImpl, IHttpTunnelContext, IDisposable
     {
         private readonly object _sync = new();
         private readonly Lazy<IDictionary<object, object>> _items = new(() => new Dictionary<object, object>(), true);
         private readonly Stack<Action<IHttpContext>> _callbacks = new();
         private readonly TimeKeeper _age = new();
         private readonly IMultiplexedExchange _exchange;
+        private HttpTunnel? _acceptedTunnel;
+        private IReadOnlyList<string>? _tunnelProtocols;
         private readonly TaskCompletionSource<bool> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private CancellationTokenSource? _linked;
         private CancellationToken _cancellation;
@@ -109,11 +111,23 @@ namespace EmbedIO.Net.Internal
             try
             {
                 PropagateCancellation();
-                await ((MultiplexedResponse)Response).CloseAsync(token).ConfigureAwait(false);
+                if (_acceptedTunnel != null) await _acceptedTunnel.DisposeOwnedStreamAsync(token).ConfigureAwait(false);
+                else await ((MultiplexedResponse)Response).CloseAsync(token).ConfigureAwait(false);
             }
             catch (Exception error) { failure = error; throw; }
             finally
             {
+                if (failure != null)
+                {
+                    // Failed capsule validation must not emit a successful FIN, but
+                    // the response still has to release its gate and output state.
+                    try { await ((MultiplexedResponse)Response).CloseAsync(new CancellationToken(true)).ConfigureAwait(false); }
+                    catch (Exception cleanup) when (ExceptionPolicy.IsRecoverable(cleanup))
+                    {
+                        if (!ReferenceEquals(cleanup, failure)) cleanup.Log("HTTP context", $"[{Id}] Exception thrown while releasing failed tunnel output.");
+                    }
+                }
+                _acceptedTunnel?.Dispose();
                 PropagateCancellation();
                 foreach (var callback in _callbacks)
                     try { callback(this); } catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback."); }
@@ -132,6 +146,47 @@ namespace EmbedIO.Net.Internal
             {
                 error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context cancellation callback.");
             }
+        }
+        internal bool HasAcceptedTunnel => _acceptedTunnel != null;
+        internal Task AbortTunnelAsync(Exception cause)
+            => _exchange.CancellationToken.IsCancellationRequested || _exchange.Ended
+                ? Task.CompletedTask
+                : (_exchange as IMultiplexedTunnelControl ?? throw new NotSupportedException("Tunnel control is unavailable.")).AbortTunnelAsync(cause, false);
+
+        public IReadOnlyList<string> RequestedTunnelProtocols => _exchange.Request.Protocol is string protocol
+            ? _tunnelProtocols ??= Array.AsReadOnly(new[] { protocol }) : Array.Empty<string>();
+
+        private bool TunnelProtocolMatches(string? selected)
+            => _exchange.Request.Protocol is string requested
+                ? selected != null && HttpUpgradeProtocols.Matches(requested, selected)
+                : selected == null;
+
+        public async Task<HttpTunnel> AcceptTunnelAsync(string? protocol, bool useCapsules = false, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (_exchange.Request.Method != "CONNECT" || !TunnelProtocolMatches(protocol))
+                throw new InvalidOperationException("Select the requested CONNECT protocol.");
+            if (string.Equals(protocol, "websocket", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Use AcceptWebSocketAsync for WebSocket negotiation.");
+            if (useCapsules && protocol == null) throw new InvalidOperationException("Capsules require a negotiated extension protocol.");
+            if (Interlocked.Exchange(ref _webSocketAccepted, 1) != 0) throw new InvalidOperationException("A protocol handoff was already accepted.");
+            lock (_sync) if (_closed) throw new ObjectDisposedException(nameof(MultiplexedContext));
+            var control = _exchange as IMultiplexedTunnelControl ?? throw new NotSupportedException("Tunnel control is unavailable.");
+            Response.StatusCode = 200;
+            try { ((MultiplexedResponse)Response).BeginTunnel(useCapsules); }
+            catch (System.IO.InvalidDataException error)
+            {
+                await control.AbortTunnelAsync(error, true).ConfigureAwait(false);
+                throw;
+            }
+            await Response.OutputStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            var stream = new Http2DuplexStream(Request.InputStream, Response.OutputStream);
+            var tunnel = new HttpTunnel(stream, ((MultiplexedResponse)Response).CloseAsync, protocol, useCapsules, error => control.AbortTunnelAsync(error, true));
+            lock (_sync)
+            {
+                if (_closed) { tunnel.Dispose(); throw new ObjectDisposedException(nameof(MultiplexedContext)); }
+                _acceptedTunnel = tunnel;
+            }
+            return tunnel;
         }
         public async Task<IWebSocketContext> AcceptWebSocketAsync(IEnumerable<string> requestedProtocols, string acceptedProtocol, int receiveBufferSize, TimeSpan keepAliveInterval, CancellationToken cancellationToken)
         {

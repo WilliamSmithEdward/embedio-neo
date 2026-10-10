@@ -284,9 +284,10 @@ namespace EmbedIO.Net.Internal.Http3
                 try
                 {
                     if (!Matches(context.Request.Url, local, prefixes)) { context.Response.StatusCode = 404; return; }
-                    if (exchange.Request.Protocol != null)
+                    // Generic extended CONNECT is authorized by the application.
+                    // Preserve the dedicated WebSocket version negotiation here.
+                    if (exchange.Request.Protocol == "websocket")
                     {
-                        if (exchange.Request.Protocol != "websocket") { context.Response.StatusCode = 501; return; }
                         if (context.Request.Headers[HttpHeaderNames.SecWebSocketVersion] != "13")
                         {
                             context.Response.StatusCode = 400;

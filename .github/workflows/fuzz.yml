@@ -2,9 +2,9 @@ name: Fuzz
 on:
   push:
     branches: [main]
-    paths: [src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
+    paths: [src/EmbedIO/HttpCapsule*.cs, src/EmbedIO/HttpTunnel.cs, src/EmbedIO/IHttpTunnelContext.cs, src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
   pull_request:
-    paths: [src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
+    paths: [src/EmbedIO/HttpCapsule*.cs, src/EmbedIO/HttpTunnel.cs, src/EmbedIO/IHttpTunnelContext.cs, src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
   schedule:
     - cron: '23 4 * * *'
   workflow_dispatch:
@@ -45,6 +45,11 @@ jobs:
         run: |
           seed=$((GITHUB_RUN_ID % 2147483647))
           dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --http3-transport "$seed" 100000 2>&1 | tee TestResults/fuzz/http3-transport.log
+      - name: Compare capsule framing with the batch oracle
+        shell: bash
+        run: |
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --capsule-transport "$seed" 100000 2>&1 | tee TestResults/fuzz/capsule-transport.log
       - name: Compare managed WebSocket sessions with the stateful oracle
         shell: bash
         run: |

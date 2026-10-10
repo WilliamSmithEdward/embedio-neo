@@ -15,7 +15,7 @@ namespace EmbedIO.Net.Internal.Http3
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("macos")]
-    internal sealed class Http3QuicExchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IDisposable
+    internal sealed class Http3QuicExchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedTunnelControl, IDisposable
     {
         private const int MaximumDataPayload = 256 * 1024;
         // Frames up to this payload size are submitted with their header in one
@@ -262,6 +262,13 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 if (--_outputUsers == 0 && _disposed != 0) _output.Dispose();
             }
+        }
+        public Task AbortTunnelAsync(Exception cause, bool malformed)
+        {
+            if (_outputFailed) return Task.CompletedTask;
+            _outputFailed = true;
+            _owner.Failed(malformed ? new Http3StreamException(Id, 0x10e, cause.Message) : cause);
+            return Task.CompletedTask;
         }
         public void Dispose()
         {

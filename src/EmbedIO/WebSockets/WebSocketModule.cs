@@ -155,6 +155,11 @@ namespace EmbedIO.WebSockets
             if (context.RequestedPath.Length > 1)
                 return;
 
+            // A generic CONNECT carrier routed here is not a WebSocket handshake.
+            // Reject it as an unsupported route before attempting socket acceptance.
+            if (context is IHttpTunnelContext && context.Request.HttpMethod == "CONNECT"
+                && !context.Request.IsWebSocketRequest)
+                throw HttpException.NotFound("This endpoint serves WebSocket connections only.");
             var requestedProtocols = context.Request.Headers.GetValues(HttpHeaderNames.SecWebSocketProtocol)
                                          ?.SelectMany(s => s.SplitByComma(StringSplitOptions.RemoveEmptyEntries))
                                          .Select(s => s.Trim())

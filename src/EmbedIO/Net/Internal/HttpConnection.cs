@@ -47,6 +47,7 @@ namespace EmbedIO.Net.Internal
         private RequestStream? _iStream;
         private ResponseStream? _oStream;
         private bool _contextBound;
+        private bool _tunnel;
         private int _sTimeout = 90000; // 90k ms for first request, 15k ms from then on
         private HttpListener? _lastListener;
         private string? _errorMessage;
@@ -177,6 +178,60 @@ namespace EmbedIO.Net.Internal
             return _iStream;
         }
 
+#if NETSTANDARD2_0
+        // Only public runtime API is queried: the older reference assembly does
+        // not expose this method. No private TLS state or native interop is used.
+        private static readonly Func<SslStream, Task>? ShutdownTls = GetTlsShutdown();
+        private static Func<SslStream, Task>? GetTlsShutdown()
+        {
+            try
+            {
+                var method = typeof(SslStream).GetMethod("ShutdownAsync", Type.EmptyTypes);
+                return method == null || method.ReturnType != typeof(Task) ? null
+                    : (Func<SslStream, Task>)method.CreateDelegate(typeof(Func<SslStream, Task>));
+            }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                // Unsupported public delegate binding disables only the additive
+                // TLS handoff, never initialization of ordinary legacy listeners.
+                return null;
+            }
+        }
+#endif
+        internal void BeginTunnel()
+        {
+#if NETSTANDARD2_0
+            if (IsSecure && ShutdownTls == null)
+                throw new NotSupportedException("This runtime has no public TLS send-shutdown API for HTTP/1 tunnels.");
+#endif
+            lock (_connectionSync)
+            {
+                if (_resourcesDisposed != 0 || _sock == null) throw new ObjectDisposedException(nameof(HttpConnection));
+                if (_tunnel) throw new InvalidOperationException("The connection was already handed off.");
+                _tunnel = true;
+            }
+        }
+        internal async Task CompleteTunnelOutputAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            using var cancellation = token.Register(ForceClose);
+            await Stream.FlushAsync(token).ConfigureAwait(false);
+            if (Stream is SslStream ssl)
+            {
+#if NET10_0_OR_GREATER
+                await ssl.ShutdownAsync().ConfigureAwait(false);
+#else
+                await (ShutdownTls ?? throw new NotSupportedException("TLS send-shutdown is unavailable."))(ssl).ConfigureAwait(false);
+#endif
+            }
+            token.ThrowIfCancellationRequested();
+            lock (_connectionSync)
+            {
+                if (_sock == null || _resourcesDisposed != 0) throw new ObjectDisposedException(nameof(HttpConnection));
+                _sock.Shutdown(SocketShutdown.Send);
+            }
+        }
+
         internal Stream TakeUpgradeStream()
         {
             lock (_connectionSync)
@@ -257,7 +312,7 @@ namespace EmbedIO.Net.Internal
             }
             if (_sock == null) return;
 
-            if (!_draining && Volatile.Read(ref _forceClosing) == 0 && _context.Request.KeepAlive
+            if (!_tunnel && !_draining && Volatile.Read(ref _forceClosing) == 0 && _context.Request.KeepAlive
                 && _context.Response.KeepAlive && _context.Response.Headers["connection"] != "close")
             {
                 _ = CompleteResponseAsync();

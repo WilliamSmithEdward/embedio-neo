@@ -50,8 +50,8 @@ namespace EmbedIO.Tests
             if (!QuicConnection.IsSupported) { Assert.Ignore("QUIC unavailable."); return; }
             await WebSocketWire(length, text, fragmented, abort);
         }
-        [TestCase("other", "13", "501")]
-        [TestCase("WebSocket", "13", "501")]
+        [TestCase("other", "13", "404")]
+        [TestCase("WebSocket", "13", "404")]
         [TestCase("websocket", "12", "400")]
         [TestCase("websocket", "", "400")]
         public async Task Http3RejectedWebSocketNegotiationPreservesSiblingRequests(string protocol, string version, string status)
