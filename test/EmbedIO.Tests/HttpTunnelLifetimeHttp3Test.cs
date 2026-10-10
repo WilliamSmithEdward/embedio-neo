@@ -132,11 +132,16 @@ namespace EmbedIO.Tests
         [SupportedOSPlatform("macos")]
         private static async Task IncompleteCapsuleCore()
         {
+            var headersReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             await WithTunnelAsync(true, async (tunnel, token) =>
             {
                 var channel = tunnel.Capsules ?? throw new AssertionException("Missing capsule channel.");
                 await channel.WriteHeaderAsync(0, 10, token);
                 await channel.WritePayloadAsync(new byte[] { 1, 2, 3 }, 0, 3, token);
+                // A QUIC reset can discard bytes not yet read by the peer,
+                // including response HEADERS. This case tests capsule cleanup
+                // after the peer has observed the successful tunnel response.
+                await headersReceived.Task.WaitAsync(token);
                 return "returned";
             }, async (request, data, token) =>
             {
@@ -150,7 +155,7 @@ namespace EmbedIO.Tests
                 TestContext.Out.WriteLine($"Peer outcome: {error.QuicError} 0x{error.ApplicationErrorCode:x}");
                 Assert.That(error.ApplicationErrorCode, Is.EqualTo(MessageError));
                 Assert.That(received, Is.LessThanOrEqualTo(5));
-            }, observed => Assert.That(observed, Is.EqualTo("returned")));
+            }, observed => Assert.That(observed, Is.EqualTo("returned")), onResponseHeaders: () => headersReceived.TrySetResult());
         }
 
         [Test]
@@ -237,7 +242,7 @@ namespace EmbedIO.Tests
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
         private static async Task WithTunnelAsync(bool capsules, Func<HttpTunnel, CancellationToken, Task<string>> application,
-            Func<QuicStream, ClientDataStream, CancellationToken, Task> peer, Action<string> verify, bool stopServerAfterPeer = false)
+            Func<QuicStream, ClientDataStream, CancellationToken, Task> peer, Action<string> verify, bool stopServerAfterPeer = false, Action? onResponseHeaders = null)
         {
             using var certificate = Certificate();
             var prefix = Prefix(); var uri = new Uri(prefix);
@@ -287,6 +292,7 @@ namespace EmbedIO.Tests
                 var headers = await ReadResponseFields(request, stop.Token);
                 Assert.That(headers[":status"], Is.EqualTo("200"));
                 Assert.That(headers["content-length"], Is.Null);
+                onResponseHeaders?.Invoke();
                 using var data = new ClientDataStream(request);
                 await peer(request, data, stop.Token);
                 if (stopServerAfterPeer)
