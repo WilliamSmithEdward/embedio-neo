@@ -7267,3 +7267,25 @@ failures in 3m 22s under the shared workload lock. The tested core SHA-256 is
 `09A897EABE2276ACD8F5B2BDD99DFC2859D2B2235139D9A28C5F787FE25A274B`.
 Hosted final-head checks remain required. The combined discovery floor is 4918
 (4916 adapter base plus two cases).
+
+Combined drain investigation: Windows PR 239 head ba4991b failed
+CombinedDrainPreservesEveryProtocolUntilItsResponseFinishes(True,True) in run
+38071451499, job 114269517877. The published listener error 995 points to the
+fixture's cleanup await at line 77 after about 30 seconds. That cleanup can
+replace an earlier failure; the original phase and protocol admission statuses
+were not recorded. The underlying cause is unconfirmed, and neither this test
+nor its application transports use the new native provider. The log is retained
+under ignored TestResults/native-abort-integration/windows-ba4991b.log.
+
+The diagnostic fixture now records the current phase, each protocol's handler
+entry, request-task status and exceptions before cleanup. If a primary failure
+already exists, known cancellation/listener/timeout cleanup failures are logged
+without replacing it. The test still fails with its primary exception; success
+assertions, deadlines and transport behavior are unchanged. No retry, quarantine
+or production correction is added. Locked restore, both-target warning-free builds, source guards and changed-file formatting pass. All four existing combined-drain cases pass locally. No natural failure was captured during that focused run, so the root cause remains unconfirmed; hosted phase evidence is still required.
+
+Native drain reconciliation onto diagnostic merge 38edf2d retains byte-identical
+native production source and native tests from b09c36a. The combined-drain fixture
+now retains its primary failure instead of replacing it during cleanup. Fresh
+focused and hosted checks remain required; the original root cause is not claimed
+resolved by this reconciliation.
