@@ -58,13 +58,13 @@ uv pip compile test/EmbedIO.Conformance/drivers/requirements.in --universal --ge
 To move h2spec, change the tag commit in the Dockerfile. To move the base image or
 MsQuic, update the digest or package hash in the Dockerfile, as for CI.
 
-## Known findings while campaigns run
+## Repaired findings are campaign failures
 
-Campaigns keep exploring past known defects instead of stopping at the first one.
-The HTTP/1.1 fuzz counts body-framing 500s (F2). The HTTP/2 fuzz counts silent
-closures after a client reset (F4). The HTTP/3 fuzz skips upload cancellation with
-`--avoid-known` (F3) and runs before the HTTP/3 cases, which can stop the listener.
-Remove each allowance with its fix.
+The current engine has corrections for body-framing 500s (F2), HTTP/2
+connection loss after a reset (F4), and HTTP/3 listener loss on upload
+cancellation (F3). These are no longer campaign allowances: malformed-body
+500s and HTTP/2 connection loss fail the run, and HTTP/3 upload cancellations
+are included. Reproduction scripts propagate the driver exit status.
 
 ## Windows sender pacing and current-engine check
 

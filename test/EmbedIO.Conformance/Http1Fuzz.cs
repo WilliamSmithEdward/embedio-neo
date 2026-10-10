@@ -1,4 +1,4 @@
-﻿using System.Net.Sockets;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -16,7 +16,6 @@ internal static class Http1Fuzz
     private sealed record Stats(long ManagedBytes, int Handles, int Threads, long ActiveHandlers, long CompletedHandlers);
 
     private static string _authority = "a";
-    private static int _bodyFramingAs500;
 
     private static byte[] Wire(string text) => Encoding.Latin1.GetBytes(RawHttp1.Bind(text, _authority));
 
@@ -48,7 +47,6 @@ internal static class Http1Fuzz
         var requests = 0;
         var invalid = 0;
         var aborts = 0;
-        _bodyFramingAs500 = 0;
         for (var iteration = 0; iteration < iterations; iteration++)
         {
             var script = Build(random);
@@ -97,7 +95,6 @@ internal static class Http1Fuzz
             requests,
             invalid,
             aborts,
-            bodyFramingAs500 = _bodyFramingAs500,
             checkpoints,
             handleGrowth = settled.Handles - baseline.Handles,
             managedGrowth = settled.ManagedBytes - baseline.ManagedBytes,
@@ -230,14 +227,10 @@ internal static class Http1Fuzz
                 try
                 {
                     var rejected = client.Read(false);
-                    // Known finding F2: body framing errors detected while the application
-                    // reads surface as 500. Counted, not fatal, so the campaign keeps exploring.
-                    if (rejected.Status == 500 && op.Bytes.Length > 0 && op.Label.StartsWith("POST", StringComparison.Ordinal))
-                        Interlocked.Increment(ref _bodyFramingAs500);
-                    else if (rejected.Status is < 400 or >= 500 and not (501 or 505))
+                    if (rejected.Status is < 400 or >= 500 and not (501 or 505))
                         throw new InvalidDataException($"Invalid request '{op.Label}' answered {rejected.Status}.");
                 }
-                catch (Exception error) when (error is IOException or EndOfStreamException) { }
+                catch (Exception error) when (error is IOException) { }
                 if (!client.WaitClosed(out var extra)) throw new InvalidDataException($"Connection stayed usable after '{op.Label}' ({extra} extra bytes).");
                 writer.Wait(TimeSpan.FromSeconds(5));
                 return;

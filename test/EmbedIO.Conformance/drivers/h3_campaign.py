@@ -307,7 +307,7 @@ async def settle(session, stats_port):
     return snapshot
 
 
-async def run_fuzz(session, seed, iterations, stats_port, avoid_known=False):
+async def run_fuzz(session, seed, iterations, stats_port):
     rng = random.Random(seed)
     data = file_bytes()
     before = stats(session.host, stats_port) if stats_port else None
@@ -342,9 +342,6 @@ async def run_fuzz(session, seed, iterations, stats_port, avoid_known=False):
                         log.append(("open", sid))
                     else:
                         sid = rng.choice(list(expected))
-                        # Known finding F3: cancelling an upload can stop the listener.
-                        if avoid_known and expected[sid][0] == "echo":
-                            continue
                         if client.cancel(sid):
                             totals["client_cancels"] += 1
                             log.append(("cancel", sid))
@@ -392,7 +389,6 @@ def main():
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--iterations", type=int, default=100)
     parser.add_argument("--out")
-    parser.add_argument("--avoid-known", action="store_true", help="skip upload cancellation (finding F3)")
     parser.add_argument("--only", help="run only cases whose id contains this text")
     args = parser.parse_args()
     global ONLY
@@ -404,7 +400,7 @@ def main():
         report = asyncio.run(run_cases(session, args.stats_port))
         failed = any(o["result"] in ("violation", "error") for o in report["outcomes"])
     else:
-        report = asyncio.run(run_fuzz(session, args.seed, args.iterations, args.stats_port, args.avoid_known))
+        report = asyncio.run(run_fuzz(session, args.seed, args.iterations, args.stats_port))
         failed = report["result"] != "PASS"
         print(json.dumps(report)[:4000])
     report["identity"] = identity

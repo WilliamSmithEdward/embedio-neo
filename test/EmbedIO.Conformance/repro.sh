@@ -18,3 +18,4 @@ code=${PIPESTATUS[0]}
 echo stop >&3
 while read -r -t 30 line <&"${SERVER[0]}"; do printf '%s\n' "$line" >> "$out/server.log"; done
 wait "$SERVER_PID"; echo "server exit=$? driver exit=$code"
+exit "$code"

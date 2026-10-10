@@ -88,7 +88,7 @@ step h2-fuzz py h2_campaign.py fuzz --port $http --seed "$seed" --iterations $((
 stop_server
 
 start_server h3-fuzz
-step h3-fuzz py h3_campaign.py fuzz --host localhost --port $h3 --avoid-known --seed "$seed" --iterations $((100 * scale)) --stats-port $http --out "$out/h3-fuzz.json"
+step h3-fuzz py h3_campaign.py fuzz --host localhost --port $h3 --seed "$seed" --iterations $((100 * scale)) --stats-port $http --out "$out/h3-fuzz.json"
 stop_server
 
 start_server h3-cases
