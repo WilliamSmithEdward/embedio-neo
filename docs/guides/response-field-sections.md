@@ -114,3 +114,10 @@ cleanup leaves service available. The listener does not promptly detect a peer
 disconnect while an HTTP/1 handler waits without transport activity; this case
 does not prove prompt disconnect cancellation. Applications should bound their
 own waits. These cases do not establish slow-reader backpressure or soak limits.
+
+Two HTTP/2 cases additionally observe a send-flow waiter while an unread 8 MiB
+response reserves trailers. A sibling request finishes while that writer remains
+blocked. Draining delivers the exact body and trailers; resetting interrupts the
+writer. Both paths leave a subsequent request usable and no pending send-flow
+waiters. This is bounded HTTP/2 backpressure evidence, not HTTP/1, HTTP/3 or soak
+acceptance.

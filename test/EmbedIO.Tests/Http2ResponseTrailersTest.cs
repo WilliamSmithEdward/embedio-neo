@@ -163,5 +163,69 @@ namespace EmbedIO.Tests
                 Assert.That(response.TrailingHeaders.GetValues("x-valid").Single(), Is.EqualTo("yes"));
             });
         }
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task ReservedTrailersUnderBackpressureDoNotBlockSiblingResponses(bool reset)
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var large = new byte[8 * 1024 * 1024];
+            new Random(739).NextBytes(large);
+            var pending = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var flowReady = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await WithServer(async exchange =>
+            {
+                if (Property<string>(Property<object>(exchange, "Request"), "Path") != "/slow-trailers")
+                { await Respond(exchange, new byte[] { 11, 12, 13 }); return; }
+                var context = Adapter(exchange);
+                try
+                {
+                    var connection = exchange.GetType().GetField("_connection", Flags)?.GetValue(exchange)
+                        ?? throw new AssertionException("Missing connection owner.");
+                    var flow = connection.GetType().GetProperty("SendFlow", Flags)?.GetValue(connection)
+                        ?? throw new AssertionException("Missing send flow control.");
+                    flowReady.TrySetResult(flow);
+                    context.Response.ContentLength64 = large.Length;
+                    var sections = context.Response as IHttpResponseSections
+                        ?? throw new AssertionException("Missing response capability.");
+                    sections.DeclareTrailers("x-finished");
+                    var write = context.Response.OutputStream.WriteAsync(large, context.CancellationToken).AsTask();
+                    pending.TrySetResult(write);
+                    await write;
+                    sections.SetTrailers(new System.Net.WebHeaderCollection { ["x-finished"] = "yes" });
+                    await context.Response.OutputStream.DisposeAsync();
+                    if (reset) throw new AssertionException("A reset must interrupt the backpressured response.");
+                    finished.TrySetResult();
+                }
+                catch (Exception error) when (reset && error is IOException or OperationCanceledException)
+                { finished.TrySetResult(); }
+                catch (Exception error) { finished.TrySetException(error); throw; }
+                finally { context.Close(); }
+            }, async client =>
+            {
+                using var response = await client.GetAsync("slow-trailers", System.Net.Http.HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+                var write = await pending.Task.WaitAsync(deadline.Token);
+                var flow = await flowReady.Task.WaitAsync(deadline.Token);
+                while (Property<int>(flow, "PendingCount") == 0)
+                {
+                    if (write.IsCompleted) await write;
+                    Assert.That(write.IsCompleted, Is.False, "Unread output must reach actual flow-control backpressure.");
+                    await Task.Delay(10, deadline.Token);
+                }
+                Assert.That(response.TrailingHeaders.Contains("x-finished"), Is.False);
+                Assert.That(await client.GetByteArrayAsync("sibling", deadline.Token), Is.EqualTo(new byte[] { 11, 12, 13 }));
+                Assert.That(write.IsCompleted, Is.False, "The sibling must finish while the large response is blocked.");
+                if (reset) response.Dispose();
+                else
+                {
+                    Assert.That(await response.Content.ReadAsByteArrayAsync(deadline.Token), Is.EqualTo(large));
+                    Assert.That(response.TrailingHeaders.GetValues("x-finished"), Is.EqualTo(new[] { "yes" }));
+                }
+                await finished.Task.WaitAsync(deadline.Token);
+                Assert.That(await client.GetByteArrayAsync("after", deadline.Token), Is.EqualTo(new byte[] { 11, 12, 13 }));
+                Assert.That(Property<int>(flow, "PendingCount"), Is.Zero);
+            });
+        }
+
     }
 }
