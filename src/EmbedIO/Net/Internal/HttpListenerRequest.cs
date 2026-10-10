@@ -159,7 +159,7 @@ namespace EmbedIO.Net.Internal
             && Headers.Contains(HttpHeaderNames.Upgrade, "websocket", StringComparison.OrdinalIgnoreCase)
             && Headers.Contains(HttpHeaderNames.Connection, "Upgrade", StringComparison.OrdinalIgnoreCase);
 
-        internal bool RequiresContinue => ProtocolVersion == HttpVersion.Version11 && HasEntityBody
+        internal bool RequiresContinue => ProtocolVersion >= HttpVersion.Version11 && HasEntityBody
             && HttpExpectations.ContainsContinue(Headers["Expect"]);
 
         internal void SetRequestLine(string req)
@@ -191,6 +191,11 @@ namespace EmbedIO.Net.Internal
                 ProtocolVersion = HttpVersion.Version11;
             else if (string.CompareOrdinal(req, second + 1, "HTTP/1.0", 0, 8) == 0)
                 ProtocolVersion = HttpVersion.Version10;
+            else if (string.CompareOrdinal(req, second + 1, "HTTP/1.", 0, 7) == 0
+                && req[second + 8] is >= '2' and <= '9')
+                // RFC 9110: process higher minor versions using supported semantics,
+                // while preserving the version actually received for applications.
+                ProtocolVersion = new Version(1, req[second + 8] - '0');
             else _connection.SetError("Unsupported HTTP version.");
         }
 
@@ -200,7 +205,7 @@ namespace EmbedIO.Net.Internal
             var length = Headers[HttpHeaderNames.ContentLength];
             if (transfer != null)
             {
-                if (length != null || ProtocolVersion != HttpVersion.Version11
+                if (length != null || ProtocolVersion < HttpVersion.Version11
                     || !string.Equals(transfer, "chunked", StringComparison.OrdinalIgnoreCase))
                 {
                     _connection.SetError("Unsupported or ambiguous request framing.");

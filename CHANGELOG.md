@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+- Process valid higher HTTP/1 minor versions using HTTP/1.1 framing while retaining
+  received request metadata and advertising only the supported response version.
+  Preserve strict framing and HTTP/1.0/1.1 behavior; see the
+  [migration note](docs/compatibility/migration.md#higher-http1-minor-versions-unreleased).
+
 - Remove the approved managed HTTP/1 keep-alive cap of 100 requests. Connections
   can remain reusable beyond that count; the 15-second idle timeout, explicit
   close, cancellation and graceful drain remain. The Keep-Alive header no longer

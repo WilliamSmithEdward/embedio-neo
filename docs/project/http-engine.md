@@ -6655,3 +6655,17 @@ prior-knowledge HTTP/2 response, and cancellation. It targets net472 but does no
 claim execution on exactly Framework 4.7.2. TLS/ALPN, full protocol conformance,
 and native QUIC are outside this focused fixture. Hosted exact-head validation
 remains required; production source, targets, dependencies and defaults are unchanged.
+### Higher HTTP/1 minor-version processing
+
+On d2a1635, eight new wire regressions reproduced rejection of valid HTTP/1.2 and
+HTTP/1.9, including body framing and 100-continue. The managed parser now retains
+the received version while using HTTP/1.1 framing; responses advertise supported
+HTTP/1.1. Existing HTTP/1.0/1.1 and unsupported-major behavior is preserved.
+Twenty-one new cases also retain strict Host/framing and version-syntax checks.
+
+The focused target/HTTP/1.0/continue set passes 101 cases. Full Windows validation
+passes 4,469 cases: 4,464 passed, five expected local skips, zero failures. The
+ordinary CI and independent quarantine discovery floors are reconciled to 4,469,
+as are the native experiment's two full-suite guards. This increment does not
+establish complete protocol or shipping readiness; exact-head hosted gates remain
+required. See the [migration note](../compatibility/migration.md#higher-http1-minor-versions-unreleased).
