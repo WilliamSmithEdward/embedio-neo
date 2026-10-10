@@ -588,8 +588,9 @@ namespace EmbedIO.Net.Internal.Http3
                     try { CloseNative(native); }
                     finally { root.Free(); }
                 }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
-                var flags = DisposalFlags;
-                if (flags != 0) _functions.Shutdown(native, flags, 0x10c);
+                // Dispose requested shutdown while retaining the handle. Once
+                // close is subscribed, it can run immediately: do not issue
+                // another native call that could race that final release.
                 return true;
             }
             CloseNative(handle);
