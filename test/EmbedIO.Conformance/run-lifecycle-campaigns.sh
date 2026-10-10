@@ -94,13 +94,15 @@ if want lifecycle-h3; then start_server lifecycle-h3
 step lifecycle-h3-fuzz py lifecycle_campaign.py h3 fuzz --host localhost --port $h3 --stats-port $http --seed "$seed" --iterations $((100 * scale)) --out "$out/lifecycle-h3-fuzz.json"
 stop_server; fi
 
-if want drain-h2; then start_server drain-h2
-step drain-h2-tls py lifecycle_campaign.py h2 drain --port $https --tls --stats-port $http --endpoint https --out "$out/drain-h2-tls.json"
-stop_server; fi
-
-if want drain-h3; then start_server drain-h3
-step drain-h3 py lifecycle_campaign.py h3 drain --host localhost --port $h3 --stats-port $http --endpoint h3 --out "$out/drain-h3.json"
-stop_server; fi
+# A drain stops its endpoint, so every repetition gets a fresh server process.
+for round in $(seq 1 $((10 * scale))); do
+  if want drain-h2; then start_server drain-h2-$round
+  step drain-h2-tls-$round py lifecycle_campaign.py h2 drain --port $https --tls --stats-port $http --endpoint https --out "$out/drain-h2-tls-$round.json"
+  stop_server; fi
+  if want drain-h3; then start_server drain-h3-$round
+  step drain-h3-$round py lifecycle_campaign.py h3 drain --host localhost --port $h3 --stats-port $http --endpoint h3 --out "$out/drain-h3-$round.json"
+  stop_server; fi
+done
 
 if want h2spec; then start_server h2spec
 step h2spec-h2c h2spec --host 127.0.0.1 --port $http --timeout 3 --junit-report "$out/h2spec-h2c.xml"

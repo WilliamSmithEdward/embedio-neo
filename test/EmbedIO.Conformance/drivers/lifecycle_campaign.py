@@ -486,9 +486,18 @@ def h2_drain(args):
     inbound = bytearray()
     observations = OBSERVATIONS
     observations["frames"] = []
+    goaways = []
 
     def send(frame):
-        sock.sendall(frame.serialize())
+        try:
+            sock.sendall(frame.serialize())
+        except (ssl.SSLError, OSError) as error:
+            # After GOAWAY the server may close once its admitted streams finish; a
+            # late WINDOW_UPDATE or ACK then meets a closed socket. Record it; stream
+            # completion is still checked. Before GOAWAY it is a failure.
+            if not goaways:
+                raise
+            observations.setdefault("sendsAfterClose", []).append(f"{type(frame).__name__}: {type(error).__name__}")
 
     def headers(sid, fields, end):
         frame = hf.HeadersFrame(sid, encoder.encode(fields))
@@ -536,7 +545,6 @@ def h2_drain(args):
                 (b":protocol", b"example-tunnel"), (b"capsule-protocol", b"?1")], False)
     data(7, capsule(0, tunnel_data), False)
     streams[7] = {"informational": [], "status": None, "headers": [], "trailers": [], "body": bytearray(), "ended": False, "reset": None}
-    goaways = []
     late = []
     drain_started = None
     before_stats = stats(args.host, args.stats_port)
