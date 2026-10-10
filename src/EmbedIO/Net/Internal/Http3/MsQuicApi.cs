@@ -11,7 +11,7 @@ namespace EmbedIO.Net.Internal.Http3
 {
     // Original managed binding to the public, stable MsQuic API v2. A child
     // handle holds a SafeHandle reference to its API table and loaded library.
-    internal sealed class MsQuicApi : SafeHandleZeroOrMinusOneIsInvalid
+    internal sealed partial class MsQuicApi : SafeHandleZeroOrMinusOneIsInvalid
     {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate uint OpenApi(uint version, out IntPtr table);
@@ -71,6 +71,7 @@ namespace EmbedIO.Net.Internal.Http3
             _configurationOpen = Marshal.GetDelegateForFunctionPointer<OpenConfiguration>(Marshal.ReadIntPtr(table, 8 * IntPtr.Size));
             _configurationClose = Marshal.GetDelegateForFunctionPointer<CloseConfiguration>(Marshal.ReadIntPtr(table, 9 * IntPtr.Size));
             _loadCredential = Marshal.GetDelegateForFunctionPointer<LoadCredential>(Marshal.ReadIntPtr(table, 10 * IntPtr.Size));
+            _listenerFunctions = new ListenerFunctions(table);
             SetHandle(table);
         }
 
@@ -209,6 +210,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly MsQuicApi.CloseRegistration _close;
         internal MsQuicRegistration(IntPtr registration, MsQuicApi api, MsQuicApi.CloseRegistration close) : base(true)
         { _api = api; _close = close; SetHandle(registration); }
+        internal MsQuicNativeListener CreateListener() => _api.CreateListener(this);
         internal MsQuicConfiguration CreateConfiguration(byte[] alpn) => _api.CreateConfiguration(this, alpn);
         internal void LoadServerCertificate(MsQuicConfiguration configuration, X509Certificate2 certificate)
             => _api.LoadServerCertificate(configuration, certificate);

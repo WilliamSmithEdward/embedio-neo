@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Net.Quic;
+using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
@@ -163,6 +165,90 @@ namespace EmbedIO.Tests
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
             configuration.Dispose();
             Assert.Throws<ObjectDisposedException>(() => LoadServerCertificate(configuration, certificate));
+        }
+        private static object ListenerCall(SafeHandle owner, string method, params object[] arguments)
+        {
+            try
+            {
+                var member = owner.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? throw new AssertionException("Missing native listener method.");
+                var result = member.Invoke(owner, arguments);
+                return member.ReturnType == typeof(void) ? typeof(void) : result ?? throw new AssertionException("Missing native listener result.");
+            }
+            catch (TargetInvocationException error) when (error.InnerException != null)
+            { ExceptionDispatchInfo.Capture(error.InnerException).Throw(); throw; }
+        }
+        private static SafeHandle Listen(SafeHandle registration)
+            => (SafeHandle)ListenerCall(registration, "CreateListener");
+
+        [TestCase(false, false)]
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        public async Task NativeListenerBindsAndStopsWithRetainedParents(bool ipv6, bool parentsFirst)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            if (ipv6 && !Socket.OSSupportsIPv6) { Assert.Ignore("IPv6 is unavailable."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var listener = Listen(registration);
+            if (parentsFirst) { api.Dispose(); registration.Dispose(); }
+            var address = ipv6 ? IPAddress.IPv6Loopback : IPAddress.Loopback;
+            ListenerCall(listener, "Start", new IPEndPoint(address, 0), new byte[] { (byte)'h', (byte)'3' });
+            var actual = (IPEndPoint)ListenerCall(listener, "LocalEndPoint");
+            Assert.That(actual.Address, Is.EqualTo(address));
+            Assert.That(actual.Port, Is.GreaterThan(0));
+            await ((Task)ListenerCall(listener, "StopAsync")).WaitAsync(TimeSpan.FromSeconds(5));
+            await ((Task)ListenerCall(listener, "StopAsync")).WaitAsync(TimeSpan.FromSeconds(5));
+            listener.Dispose();
+            Assert.That(listener.IsClosed, Is.True);
+        }
+
+        [Test]
+        public async Task InvalidListenerAlpnLeavesTheNativeListenerStartable()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var listener = Listen(registration);
+            Assert.Throws<ArgumentOutOfRangeException>(() => ListenerCall(listener, "Start", new IPEndPoint(IPAddress.Loopback, 0), Array.Empty<byte>()));
+            ListenerCall(listener, "Start", new IPEndPoint(IPAddress.Loopback, 0), new byte[] { 1 });
+            await ((Task)ListenerCall(listener, "StopAsync")).WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        [Test]
+        public void ClosedNativeListenerRejectsStartup()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var listener = Listen(registration);
+            listener.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => ListenerCall(listener, "Start", new IPEndPoint(IPAddress.Loopback, 0), new byte[] { 1 }));
+        }
+
+        [Test]
+        public async Task UnstartedNativeListenerStopsWithoutWaitingForAnEvent()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var listener = Listen(registration);
+            await ((Task)ListenerCall(listener, "StopAsync")).WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        [Test]
+        public async Task ConcurrentNativeListenerStopsJoinTheSameCompletion()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var listener = Listen(registration);
+            ListenerCall(listener, "Start", new IPEndPoint(IPAddress.Loopback, 0), new byte[] { 1 });
+            var stops = new Task[32];
+            Parallel.For(0, stops.Length, i => stops[i] = (Task)ListenerCall(listener, "StopAsync"));
+            await Task.WhenAll(stops).WaitAsync(TimeSpan.FromSeconds(5));
+            foreach (var stopped in stops) Assert.That(stopped, Is.SameAs(stops[0]));
         }
     }
 }

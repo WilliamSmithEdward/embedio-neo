@@ -6848,3 +6848,19 @@ TLS handshake, client-certificate authentication, native listener callbacks or
 datagram delivery. macOS credential loading remains unverified. Both targets
 build without warnings and guards pass. The discovery floor is now 4713 (base
 4669 plus 33 framing and 11 native cases). No protocol capability is advertised.
+
+Native listener lifecycle now owns its callback and registration lease, encodes
+platform IPv4/IPv6 socket addresses, queries the actual bound endpoint, and joins
+a single stop-completion task across concurrent callers. Callbacks are retained
+until native closure and recoverable managed failures cannot escape the callback
+boundary. Incoming connections are explicitly rejected until their native
+callback and ownership are implemented; this is not an HTTP listener provider
+ready for application requests.
+
+All 19 native ownership/lifecycle cases pass on Windows and the pinned
+network-isolated Linux runtime, including IPv4/IPv6 binding with parents disposed
+first, concurrent stop calls, invalid ALPN recovery and disposal rejection.
+Both library assets build without warnings and guards pass. These tests do not
+prove immediate UDP port release after stop, actual TLS handshakes, stream I/O,
+native datagrams, WebTransport or macOS lifecycle behavior. Discovery is 4721
+(base 4669 plus 33 framing and 19 native cases).
