@@ -20,6 +20,8 @@ namespace EmbedIO.Net.Internal.Http2
         private readonly object _creditSync = new();
         private readonly Dictionary<int, int> _credits = new();
         private readonly CancellationTokenSource _stop = new();
+        private readonly CancellationTokenSource _inputStop = new();
+        private bool _gracefulInputEnd;
         private Task _creditPump = Task.CompletedTask;
         private bool _pumping;
         private int _running;
@@ -46,13 +48,13 @@ namespace EmbedIO.Net.Internal.Http2
             using var registration = token.Register(CancelConnection);
             try
             {
-                while (!_stop.IsCancellationRequested)
+                while (!_inputStop.IsCancellationRequested)
                 {
                     Http2Frame? frame = null;
                     var dataAccounted = false;
                     try
                     {
-                        frame = await _connection.ReadFrameAsync(_stop.Token).ConfigureAwait(false);
+                        frame = await _connection.ReadFrameAsync(_inputStop.Token).ConfigureAwait(false);
                         if (frame == null) break;
                         if (await _connection.ProcessControlAsync(frame, _stop.Token).ConfigureAwait(false)) continue;
                         if (frame.Type == 8 && frame.StreamId == 0)
@@ -123,7 +125,7 @@ namespace EmbedIO.Net.Internal.Http2
                     finally { frame?.Dispose(); }
                 }
             }
-            catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+            catch (OperationCanceledException) when (_inputStop.IsCancellationRequested) { }
             catch (Http2ProtocolException error)
             {
                 _failure = error;
@@ -136,7 +138,9 @@ namespace EmbedIO.Net.Internal.Http2
             }
             finally
             {
-                CancelConnection();
+                bool graceful;
+                lock (_sync) graceful = _gracefulInputEnd && !_stop.IsCancellationRequested;
+                if (!graceful) CancelConnection();
                 Task applications;
                 lock (_sync)
                 {
@@ -152,6 +156,10 @@ namespace EmbedIO.Net.Internal.Http2
                 if (drain != null)
                     try { await drain.ConfigureAwait(false); }
                     catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+                // Queue a barrier behind controls already committed while the last
+                // application finished. Normal drain must not cancel shared output.
+                if (graceful && !_stop.IsCancellationRequested)
+                    await _connection.SendAsync(Array.Empty<Http2Frame>(), _stop.Token).ConfigureAwait(false);
             }
             if (_failure != null) throw new IOException("HTTP/2 connection failed.", _failure);
         }
@@ -188,7 +196,7 @@ namespace EmbedIO.Net.Internal.Http2
                         lock (_sync)
                         {
                             Release(exchange, null);
-                            if (_drainSent && _exchanges.Count == 0) CancelConnection();
+                            if (_drainSent && _exchanges.Count == 0) FinishDrainInput();
                         }
                     }
                     finally { exchange.Dispose(); }
@@ -224,7 +232,7 @@ namespace EmbedIO.Net.Internal.Http2
                 _drainSent = true;
                 // An external drain can start with no applications, or the last
                 // stream can reset while GOAWAY waits for the output gate.
-                if (_exchanges.Count == 0) CancelConnection();
+                if (_exchanges.Count == 0) FinishDrainInput();
             }
         }
 
@@ -297,6 +305,20 @@ namespace EmbedIO.Net.Internal.Http2
             lock (_creditSync) _pumping = false;
         }
 
+        // Called under _sync after every admitted response is complete.
+        private void FinishDrainInput()
+        {
+            _gracefulInputEnd = true;
+            StopInput();
+        }
+        private void StopInput()
+        {
+            try { _inputStop.Cancel(); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                error.Log("HTTP/2 connection", "Exception thrown by an input cancellation callback.");
+            }
+        }
         private void CancelConnection()
         {
             try { _stop.Cancel(); }
@@ -304,10 +326,11 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 error.Log("HTTP/2 connection", "Exception thrown by an application cancellation callback.");
             }
+            finally { StopInput(); }
         }
         private void Abort(Exception error) { if (_stop.IsCancellationRequested) return; _failure = error; CancelConnection(); }
         internal static void WriteUInt32(byte[] bytes, int offset, uint value)
         { bytes[offset] = (byte)(value >> 24); bytes[offset + 1] = (byte)(value >> 16); bytes[offset + 2] = (byte)(value >> 8); bytes[offset + 3] = (byte)value; }
-        public void Dispose() { _connection.OutputFailed = null; _stop.Dispose(); }
+        public void Dispose() { _connection.OutputFailed = null; _inputStop.Dispose(); _stop.Dispose(); }
     }
 }

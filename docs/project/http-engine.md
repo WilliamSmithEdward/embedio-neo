@@ -6780,6 +6780,285 @@ draining under load should expect clients to retry refused HTTP/2 requests on a
 new connection. On Windows, a SocketsHttpHandler client can take several seconds
 per queued request to report the refusal.
 
+## Native HTTP/3 datagram framing prerequisite
+
+The native-datagram development branch adds an original internal RFC 9297
+section 2.1 codec. It borrows packet storage, returns the request stream ID and
+payload offset, accepts all four legal QUIC integer widths, and rejects
+truncated or oversized quarter-stream IDs with H3_DATAGRAM_ERROR (0x33).
+Outgoing identifiers must be client-initiated bidirectional request streams.
+Thirty-three focused cases include explicit wire vectors, empty payloads,
+maximum IDs and slice boundaries. Both library targets build without warnings.
+
+This codec is not connected to a datagram transport and does not change
+SETTINGS or public APIs. Native MsQuic send/receive ownership, negotiation,
+request/session association, bounded receive policy, stream closure and
+WebTransport remain required development. The current System.Net.Quic provider
+still provides reliable streams only. No native datagram capability or completed
+WebTransport support is claimed. Source specification: [RFC 9297 section 2.1](https://www.rfc-editor.org/rfc/rfc9297.html#section-2.1).
+
+The next native-transport increment introduces internal connection and stream
+ownership abstractions and routes the existing System.Net.Quic provider through
+them. The protocol workers retain their stream IDs, FIN/reset notifications,
+async reads/writes and disposal ownership. The existing listener still selects
+System.Net.Quic; this increment does not enable datagrams or change public APIs.
+The 500-case HTTP/3 set passes; a subsequent 80-case QUIC/direction repeat passes
+after the constructor adjustment. Provider allocation/throughput impact and
+complete native-provider ownership remain unverified and required before
+integration. This branch is separate from response-field-section PR 230.
+
+Native-provider initialization now binds the public MsQuic API v2 entry points
+and stable registration slots. The original managed binding loads the installed
+platform library, owns its API table through SafeHandle, and transfers a retained
+API reference to each registration. Closing the API owner first cannot unload
+the library before its child registration closes. Failed initialization and
+registration paths release acquired resources; no BCL private handle is used.
+
+Three real native Windows cases pass, including both disposal orders over 16
+cycles each and concurrent repeated child disposal. Both library assets build
+without warnings, and repository guards pass. This does not validate native
+listener/connection callbacks, credentials, stream I/O, datagram delivery, or
+Linux/macOS loading; those remain required. Registration closure can block until
+its native children close, so subsequent providers must preserve explicit child
+shutdown ordering. No listener default, public API or dependency changed.
+The ABI reference is the [published MsQuic v2.6.2 header](https://github.com/microsoft/msquic/blob/v2.6.2/src/inc/msquic.h); no implementation code was copied.
+
+The native configuration owner now validates a single ALPN, creates the stable
+MsQuic configuration with borrowed setup buffers, and retains its registration
+until configuration closure. Invalid ALPN lengths do not acquire a native handle.
+Eight real native ownership cases pass on Windows and on Linux in the pinned
+image sha256:cad57be0903a303f62b6492f695d658256f0c728af9a9c5454c839093fb29df3
+with networking disabled. The Linux run uses the same Windows-built managed
+NET10 binaries against the container's Linux runtime and MsQuic; it is not a
+Linux source build. Credential loading, actual listener/connection callbacks,
+stream/datagram delivery, macOS native loading and complete failure-injection
+coverage remain required. Current native development discovery is 4710 cases
+(base 4669 plus 33 framing and eight native lifetime cases).
+
+The native configuration now loads server credentials synchronously through the
+public API: Windows uses a retained public certificate-context snapshot; the
+OpenSSL path exports temporary PKCS#12 bytes, pins them only for native loading
+and clears their contents in finally. Configuration ownership remains retained
+during the native call. Missing private keys and closed configurations are
+rejected; duplicate successful loading is prevented.
+
+All 11 native lifetime/credential initialization cases pass on Windows and in
+the pinned network-isolated Linux runtime. These results do not prove an actual
+TLS handshake, client-certificate authentication, native listener callbacks or
+datagram delivery. macOS credential loading remains unverified. Both targets
+build without warnings and guards pass. The discovery floor is now 4713 (base
+4669 plus 33 framing and 11 native cases). No protocol capability is advertised.
+
+Native listener lifecycle now owns its callback and registration lease, encodes
+platform IPv4/IPv6 socket addresses, queries the actual bound endpoint, and joins
+a single stop-completion task across concurrent callers. Callbacks are retained
+until native closure and recoverable managed failures cannot escape the callback
+boundary. Incoming connections are explicitly rejected until their native
+callback and ownership are implemented; this is not an HTTP listener provider
+ready for application requests.
+
+All 19 native ownership/lifecycle cases pass on Windows and the pinned
+network-isolated Linux runtime, including IPv4/IPv6 binding with parents disposed
+first, concurrent stop calls, invalid ALPN recovery and disposal rejection.
+Both library assets build without warnings and guards pass. These tests do not
+prove immediate UDP port release after stop, actual TLS handshakes, stream I/O,
+native datagrams, WebTransport or macOS lifecycle behavior. Discovery is 4721
+(base 4669 plus 33 framing and 19 native cases).
+
+Native connection acceptance is now opt-in within the internal listener. It
+installs a rooted callback before transferring ownership, queues at most 256
+unconfigured native connections, then applies server credentials after acceptance
+outside the listener callback. A full queue closes its accepted handle while
+returning native success, as required to avoid double-free rejection. Pending
+accepts are completed after native stop. Accepted connections own their parent
+registration and support handshake notification and shutdown completion.
+
+All 22 native cases pass on Windows and the pinned Linux runtime, including
+actual TLS/ALPN with a System.Net.Quic peer retaining hostname validation and leaf
+pinning, shutdown after listener disposal, and release of a pending accept. The
+first Windows handshake exposed incorrect treatment of the successful PENDING
+status; status classification now follows the documented Windows/POSIX ABI and
+the initial failure is retained. Native stream delivery is not implemented; peer
+streams are closed, and application HTTP/datagrams/WebTransport are not enabled.
+macOS connection validation and complete failure/resource coverage remain pending.
+Response PR 230 is integrated from verified development head e733402. The
+combined source discovered 4767 cases and passed the full Windows suite
+(4762 passed, five existing skips, zero failures) before stream-credit additions.
+
+
+The native configuration can now advertise explicit bidirectional and
+unidirectional peer stream counts. Its original binding supplies only the two
+selected public QUIC_SETTINGS fields; all other native defaults are inherited.
+Ordinary configuration remains at zero peer streams. The four new independent
+System.Net.Quic peer cases cover both stream types: positive credit permits
+opening, and zero credit leaves opening pending until cancellation.
+
+Native byte delivery is still disabled. A credited stream that reaches the
+connection callback is explicitly aborted with H3_REQUEST_CANCELLED (0x10c).
+Its callback is rooted until actual SHUTDOWN_COMPLETE, then StreamClose is the
+last native call. The first immediate-shutdown implementation produced code zero
+on the wire in both Windows stream cases; retaining the stream through actual
+shutdown completion preserves the explicit code. The initial failures remain in
+ignored TestResults. This is rejection lifecycle coverage, not native stream I/O.
+
+All 26 focused native cases pass on Windows and in the pinned network-isolated
+Linux container (the same Windows-built IL, not a Linux source build). The
+combined discovery floor is 4771: development base 4712, 33 framing cases and
+26 native cases. macOS stream-credit/rejection, native reads/writes/datagrams,
+complete failure/finalizer coverage and measured provider performance remain
+unverified. No application provider or protocol capability is enabled.
+
+
+Native-provider CI run 38041810051 at e52da5f retained two separate failures.
+The macOS incomplete-outgoing-capsule case received H3_MESSAGE_ERROR while
+reading the initial response field section, before entering its expected reset
+assertion. Its application returned and triggered an intentional reset before
+the peer consumed the successful response; QUIC reset does not preserve unread
+stream bytes. The fixture now waits for the peer to consume and assert the 200
+headers before returning with the incomplete capsule. The same reset code,
+partial-payload limit, close-callback count and healthy-sibling assertions remain.
+The correction passes once on Windows and in ten fresh pinned Linux processes;
+macOS and complete exact-head validation remain required.
+
+The Linux test process in that run crashed with an unhandled NullReferenceException
+in System.Net.HttpListenerResponse.FormatHeaders, called from the runtime's
+HttpConnection.OnRead shutdown path. It reported 3907 cases before exit 7.
+The macOS process reported only 3875 cases and violated the discovery floor.
+Neither failure qualifies for the raw QUIC rebind quarantine. The Linux crash's
+origin and the incomplete macOS run remain unconfirmed; no product correction,
+quarantine, reduced discovery floor or increased timeout is claimed for them.
+Logs and both TRX artifacts are retained under ignored TestResults/native-datagrams.
+
+
+Native stream acceptance and reads are now internal opt-in capabilities.
+A bounded queue admits at most 128 unclaimed streams, and each stream retains its
+connection's SafeHandle lease until native close finishes. Native calls and
+callback completion run outside the admission lock. Stream callbacks retain
+one pending receive indication: buffer descriptors are copied within the
+callback, while payload bytes remain borrowed from MsQuic. A matching
+StreamReceiveComplete returns credit only after the whole indication has been
+consumed; cancellation preserves unread data for a subsequent read. Shutdown
+marks pending receive data unusable before native buffers can be reclaimed.
+
+Forty focused native tests pass on Windows and the pinned Linux runtime before
+final formatting: eight new read/FIN cases cover empty, single-byte, 64 KiB and
+1 MiB payloads on both stream types; six pending-read cases cover cancellation
+and resumption, stream disposal and connection shutdown. Every payload byte and
+EOF is checked. The Linux run uses the same Windows-built IL, not a Linux source
+build. Combined discovery is expected at 4785 (4712 development base, 33 framing
+and 40 native cases); actual full-suite discovery remains to be checked.
+
+Native writes, outgoing stream creation, datagrams and application-provider
+selection remain unimplemented. Native finalizer/fault coverage, retained-memory
+soak, macOS stream validation and comparative performance remain unproven.
+The existing application listener continues to use System.Net.Quic.
+
+The initial local full-suite attempt for native reads is invalid: the shared
+coordination lock was acquired by the WebTransport agent between inspection and
+launch, and PowerShell continued after FileMode.CreateNew failed. This worktree's
+test processes were stopped after approximately 24 seconds; the other worktree's
+processes and lock were preserved. The interrupted run is retained, is not used
+as validation, and does not establish full discovery. Subsequent launch commands
+must set ErrorActionPreference=Stop before atomic lock acquisition. Native-read
+full-suite and hosted exact-head acceptance remain pending.
+
+
+Accepted native bidirectional streams now support original StreamSend bindings.
+A single writer retains the pinned payload and native buffer descriptor until
+SEND_COMPLETE. Caller cancellation after submission aborts the send direction
+and awaits native ownership return before either allocation is released. Stream
+disposal wakes pending sends as well as reads. FIN is supplied on the last send,
+and subsequent writes are rejected. Array-backed memory is borrowed with its
+actual offset; other memory is copied into a cleared pooled array.
+
+Six new real-peer cases cover empty through 1 MiB output, nonzero array offsets,
+exact bytes/EOF, post-FIN rejection, and cancellation or disposal of a committed
+8 MiB send blocked by unread peer flow control. The blocked-send fixture selects
+an explicit internal unbuffered configuration; ordinary native defaults remain
+unchanged. A sibling stream must still transfer bytes in both directions after
+either ending. All 46 focused native cases pass on Windows before final
+formatting; pinned Linux results and complete source validation are recorded
+separately. Expected combined discovery is 4791 (4712 base, 33 framing, 46 native).
+Outgoing stream creation, native datagrams, application-provider selection,
+macOS/finalizer/fault/soak coverage and comparative performance remain unfinished.
+
+Final native-send source validation: all 46 focused cases pass on Windows and
+pinned Linux (same Windows-built IL). The complete Windows suite reports 4791
+cases, 4786 passed, five existing skips, zero failures, in 3m 25s. Both retained
+library targets build with zero warnings/errors; formatting, the C# parser guard,
+suppression guard and diff checks pass. The shared lock was acquired atomically
+with terminating error handling and released by its owner after completion.
+These results do not establish native HTTP delivery, macOS sends, finalizer/fault
+coverage, independent datagram/WebTransport interoperability or performance.
+
+
+Native outgoing bidirectional and unidirectional streams now allocate through
+StreamOpen, start with IMMEDIATE and INDICATE_PEER_ACCEPT, and wait for actual
+peer credit before returning. START_COMPLETE establishes the stream ID;
+PEER_ACCEPTED releases a stream initially queued for credit. Only outgoing
+streams allocate these two completion sources. Local unidirectional streams are
+send-only, and peer unidirectional streams remain receive-only.
+
+Start failure or cancellation before start closes the unstarted handle directly:
+MsQuic does not deliver SHUTDOWN_COMPLETE in that state. A started stream that
+has never been peer-accepted uses immediate local abort for cancellation; the
+initial ordered-shutdown attempt otherwise blocked until the fixture deadline.
+Accepted streams retain ordered shutdown to preserve the wire error code.
+The regression now requires the caller's cancellation token, preventing the
+fixture-wide deadline from masquerading as successful cancellation. Original
+failed logs and TRX remain in ignored TestResults/native-datagrams/native-open.
+
+Eight new peer cases cover server stream IDs and types, empty/64 KiB output and
+FIN, bidirectional reverse data, send-only read rejection, zero-credit waits,
+caller cancellation with healthy incoming sibling traffic, and connection
+shutdown. All 54 focused native cases pass on Windows before final formatting;
+pinned Linux and complete-source results are recorded separately. Expected
+combined discovery is 4799 (4712 base, 33 framing, 54 native cases). Application
+HTTP/provider integration and native datagram delivery remain unfinished; no
+application capability is advertised. macOS, fault/finalizer/soak and comparative
+performance acceptance remain outstanding.
+
+Final outgoing-stream validation: all 54 focused native cases pass on Windows
+and pinned Linux (same Windows-built IL). The complete Windows suite reports
+4799 cases, 4794 passed, five existing skips, zero failures, in 3m 19s. Both
+retained targets and syntax/suppression/format guards pass. Native application
+HTTP integration and datagram delivery are still unavailable; these results do
+not establish macOS outgoing streams, fault/finalizer/soak coverage or native
+provider performance.
+
+Native listener audit follow-up: the two deterministic findings in PR #232 also
+fail on the unchanged 50fd2a7 binary. Reserving bounded accept capacity before
+ownership transfer restores prompt refusal, and unstarted stop now completes
+pending accepts. All five unchanged audit cases pass on Windows and pinned
+Linux with the independent correction. Audit tests/docs were brought into this
+development branch only after that before/after proof; PR #232 was not merged
+and its branch was not changed. Final combined validation passes 59 native cases
+on Windows and pinned Linux. The full Windows suite reports 4804 cases, 4799
+passed, five existing skips, zero failures, in 3m 23s. Locked restore, warning-free
+solution builds, whitespace, syntax and suppression guards pass. Hosted final-head
+acceptance remains required. Callback fault isolation and broader finalizer/ABI
+coverage remain open in the audit record.
+
+
+PR #231 is integrated into the development engine as 54f4c5c after all 35 checks
+passed or intentionally skipped on 33d65a6. The merged tree exactly matches the
+tested tree, d3d43df9459ddff2ec0ae9d1eed49bb15ebea8a3; the explicit squash message
+contains no AI co-author trailers. Its included audit tests/docs supersede #232,
+which is closed. Program #181 remains open, and application HTTP still uses the
+BCL QUIC provider. No release or main integration occurred.
+
+HTTP/2 drain investigation: the Windows failure on #234 recorded 221 handler
+entries but only 214 successful responses. The unchanged engine reproduced
+230 completed writes versus 217 responses without duplicate handling. A
+controlled regression proves that finishing the last application canceled a
+committed late-stream refusal write. Separate input cancellation and an output
+barrier make that case, five existing drain cases and a 100-iteration response
+preservation campaign pass. Combined acceptance reports 4805 Windows cases,
+4800 passed, five existing skips, zero failures, plus 493 passing Linux cases
+and six retained-asset cases on a .NET 10 host. The final GetStringAsync fixture
+also passes 100 drain iterations. Hosted final-head acceptance remains required;
+[HTTP/2 graceful output lifetime](http2-drain-output-lifetime.md) preserves the
+failures, exact mechanism, limits and validation scope.
 
 ### WebTransport session core (isolated, unintegrated)
 
@@ -6810,3 +7089,8 @@ pinned Linux. The full Windows suite reports 4802 cases, 4797 passed, five
 existing skips, zero failures. All hosted final-head checks remain required;
 docs/project/http-webtransport-core.md records the reproduction hash, scope,
 retained-asset setup failure and remaining interoperability gaps.
+
+The corrected isolated WebTransport branch is reconciled onto verified drain
+base 416e773. Expected combined discovery is 4895 (4805 base plus 90 core cases).
+Fresh combined and hosted acceptance remain required; existing capability and
+interoperability limits above remain unchanged.

@@ -20,7 +20,7 @@ namespace EmbedIO.Net.Internal.Http3
     [SupportedOSPlatform("macos")]
     internal sealed class Http3QuicConnection : IDisposable
     {
-        private readonly BorrowedResource<QuicConnection> _connection;
+        private readonly BorrowedResource<Http3TransportConnection> _connection;
         private readonly Func<Http3QuicExchange, Task> _dispatch;
         private readonly CancellationTokenSource _stop;
         private readonly CancellationToken _token;
@@ -56,8 +56,10 @@ namespace EmbedIO.Net.Internal.Http3
         private Http3QuicConnection(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token)
             : this(connection, dispatch, token, false) { }
         private Http3QuicConnection(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token, bool dispatchInline)
+            : this(new SystemQuicTransportConnection(connection), dispatch, token, dispatchInline) { }
+        private Http3QuicConnection(Http3TransportConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token, bool dispatchInline)
         {
-            _connection = new BorrowedResource<QuicConnection>(connection);
+            _connection = new BorrowedResource<Http3TransportConnection>(connection);
             _dispatch = dispatch;
             _dispatchInline = dispatchInline;
             _responseEncoder = new QpackResponseEncoder(_encoderFeedback, 4096, 65536);
@@ -101,8 +103,8 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private async Task RunCoreAsync()
         {
-            QuicStream? control = null;
-            QuicStream? feedback = null;
+            Http3TransportStream? control = null;
+            Http3TransportStream? feedback = null;
             var background = Array.Empty<Task>();
             try
             {
@@ -179,7 +181,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
             if (_failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(_failure).Throw();
         }
-        private async Task WatchDrainAsync(QuicStream control)
+        private async Task WatchDrainAsync(Http3TransportStream control)
         {
             using var requested = CancellationTokenSource.CreateLinkedTokenSource(_token, _drainToken, _applicationDrain.Token);
             try { await Task.Delay(Timeout.Infinite, requested.Token).ConfigureAwait(false); }
@@ -193,7 +195,7 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 long cutoff;
                 Task[] accepted;
-                QuicStream[] unprocessed;
+                Http3TransportStream[] unprocessed;
                 lock (_sync)
                 {
                     _draining = true;
@@ -223,7 +225,7 @@ namespace EmbedIO.Net.Internal.Http3
             { if (!_token.IsCancellationRequested) Fail(error); }
             finally { CancelRequests(_stop); }
         }
-        private async Task ProcessStreamAsync(QuicStream stream, RequestScope? scope)
+        private async Task ProcessStreamAsync(Http3TransportStream stream, RequestScope? scope)
         {
             var critical = false;
             var streamId = stream.Id;
@@ -289,7 +291,7 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
         }
-        private async Task ProcessRequestAsync(QuicStream stream, RequestScope scope)
+        private async Task ProcessRequestAsync(Http3TransportStream stream, RequestScope scope)
         {
             var requestStop = scope.Stop;
             var requestToken = requestStop.Token;
@@ -432,7 +434,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private void SignalFeedback()
         { if (_feedbackReady.CurrentCount == 0) _feedbackReady.Release(); }
-        private async Task ReadEncoderAsync(QuicStream stream)
+        private async Task ReadEncoderAsync(Http3TransportStream stream)
         {
             var bytes = new byte[4096];
             while (true)
@@ -451,7 +453,7 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
         }
-        private async Task ReadDecoderAsync(QuicStream stream)
+        private async Task ReadDecoderAsync(Http3TransportStream stream)
         {
             var bytes = new byte[1024];
             while (true)
@@ -461,7 +463,7 @@ namespace EmbedIO.Net.Internal.Http3
                 _encoderFeedback.Feed(bytes, 0, count);
             }
         }
-        private async Task ReadControlAsync(QuicStream stream)
+        private async Task ReadControlAsync(Http3TransportStream stream)
         {
             var control = new Http3ControlStream(stream, false);
             while (true)
@@ -488,7 +490,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private async Task WriteEncoderAsync()
         {
-            QuicStream? stream = null;
+            Http3TransportStream? stream = null;
             var watch = Task.CompletedTask;
             try
             {
@@ -521,7 +523,7 @@ namespace EmbedIO.Net.Internal.Http3
                 finally { await watch.ConfigureAwait(false); }
             }
         }
-        private async Task WriteFeedbackAsync(QuicStream stream)
+        private async Task WriteFeedbackAsync(Http3TransportStream stream)
         {
             try
             {
@@ -539,7 +541,7 @@ namespace EmbedIO.Net.Internal.Http3
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             { if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, error.Message)); }
         }
-        private async Task WatchCriticalOutputAsync(QuicStream stream)
+        private async Task WatchCriticalOutputAsync(Http3TransportStream stream)
         {
             try
             {
@@ -552,7 +554,7 @@ namespace EmbedIO.Net.Internal.Http3
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             { if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, error.Message)); }
         }
-        private async Task<long?> ReadStreamTypeAsync(QuicStream stream)
+        private async Task<long?> ReadStreamTypeAsync(Http3TransportStream stream)
         {
             var bytes = new byte[8];
             var count = await stream.ReadAsync(bytes.AsMemory(0, 1), _token).ConfigureAwait(false);
@@ -567,13 +569,13 @@ namespace EmbedIO.Net.Internal.Http3
             var offset = 0;
             return QuicInteger.Read(bytes, ref offset, length);
         }
-        private void RequestFailed(QuicStream stream, Exception error)
+        private void RequestFailed(Http3TransportStream stream, Exception error)
         {
             if (_token.IsCancellationRequested) return;
             if (error is Http3ProtocolException protocol) Fail(protocol);
             else AbortStream(stream, error is Http3StreamException scoped ? scoped.ErrorCode : 0x10c);
         }
-        private static void AbortStream(QuicStream stream, long code)
+        private static void AbortStream(Http3TransportStream stream, long code)
         {
             try { stream.Abort(QuicAbortDirection.Both, code); }
             catch (ObjectDisposedException) { }
@@ -598,8 +600,8 @@ namespace EmbedIO.Net.Internal.Http3
         internal sealed class RequestScope : IHttp3ExchangeOwner
         {
             private readonly Http3QuicConnection _connection;
-            internal RequestScope(Http3QuicConnection connection, QuicStream stream) { _connection = connection; Stream = stream; }
-            internal QuicStream Stream { get; }
+            internal RequestScope(Http3QuicConnection connection, Http3TransportStream stream) { _connection = connection; Stream = stream; }
+            internal Http3TransportStream Stream { get; }
             internal CancellationTokenSource Stop { get; } = new();
             // Set by the request worker when its input was read to FIN.
             internal bool InputComplete { get; set; }
