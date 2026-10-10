@@ -60,5 +60,58 @@ namespace EmbedIO.Tests
             Assert.That(registration.IsClosed, Is.True);
             Assert.Throws<ObjectDisposedException>(() => Register(api));
         }
+        private static SafeHandle Configure(SafeHandle registration, byte[] alpn)
+        {
+            try
+            {
+                return (SafeHandle)(registration.GetType().GetMethod("CreateConfiguration", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(registration, new object[] { alpn })
+                    ?? throw new AssertionException("Missing configuration owner."));
+            }
+            catch (TargetInvocationException error) when (error.InnerException != null)
+            { ExceptionDispatchInfo.Capture(error.InnerException).Throw(); throw; }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void NativeConfigurationRetainsItsParentsUntilClosure(bool parentsFirst)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var configuration = Configure(registration, new byte[] { (byte)'h', (byte)'3' });
+            Assert.That(configuration.IsInvalid, Is.False);
+            if (parentsFirst) { api.Dispose(); registration.Dispose(); }
+            configuration.Dispose();
+            configuration.Dispose();
+            registration.Dispose();
+            api.Dispose();
+            Assert.That(configuration.IsClosed, Is.True);
+            Assert.Throws<ObjectDisposedException>(() => Configure(registration, new byte[] { 1 }));
+        }
+
+        [TestCase(0)]
+        [TestCase(256)]
+        public void InvalidAlpnDoesNotPreventSubsequentConfiguration(int length)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            Assert.Throws<ArgumentOutOfRangeException>(() => Configure(registration, new byte[length]));
+            using var valid = Configure(registration, new byte[] { 1 });
+            Assert.That(valid.IsInvalid, Is.False);
+        }
+
+        [Test]
+        public void ConcurrentConfigurationDisposalPreservesParentLeases()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            using var api = OpenApi();
+            using var registration = Register(api);
+            using var configuration = Configure(registration, new byte[] { 1 });
+            api.Dispose();
+            registration.Dispose();
+            Parallel.For(0, 32, _ => configuration.Dispose());
+            Assert.That(configuration.IsClosed, Is.True);
+        }
     }
 }

@@ -6822,3 +6822,15 @@ Linux/macOS loading; those remain required. Registration closure can block until
 its native children close, so subsequent providers must preserve explicit child
 shutdown ordering. No listener default, public API or dependency changed.
 The ABI reference is the [published MsQuic v2.6.2 header](https://github.com/microsoft/msquic/blob/v2.6.2/src/inc/msquic.h); no implementation code was copied.
+
+The native configuration owner now validates a single ALPN, creates the stable
+MsQuic configuration with borrowed setup buffers, and retains its registration
+until configuration closure. Invalid ALPN lengths do not acquire a native handle.
+Eight real native ownership cases pass on Windows and on Linux in the pinned
+image sha256:cad57be0903a303f62b6492f695d658256f0c728af9a9c5454c839093fb29df3
+with networking disabled. The Linux run uses the same Windows-built managed
+NET10 binaries against the container's Linux runtime and MsQuic; it is not a
+Linux source build. Credential loading, actual listener/connection callbacks,
+stream/datagram delivery, macOS native loading and complete failure-injection
+coverage remain required. Current native development discovery is 4710 cases
+(base 4669 plus 33 framing and eight native lifetime cases).

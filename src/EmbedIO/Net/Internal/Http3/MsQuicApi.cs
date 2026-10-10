@@ -20,6 +20,18 @@ namespace EmbedIO.Net.Internal.Http3
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate void CloseRegistration(IntPtr registration);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate uint OpenConfiguration(IntPtr registration, IntPtr alpn, uint count, IntPtr settings, uint settingsSize, IntPtr context, out IntPtr configuration);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate void CloseConfiguration(IntPtr configuration);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeBuffer
+        {
+            internal uint Length;
+            internal IntPtr Bytes;
+        }
+        private readonly OpenConfiguration _configurationOpen;
+        private readonly CloseConfiguration _configurationClose;
         private readonly IntPtr _library;
         private readonly CloseApi _close;
         private readonly OpenRegistration _registrationOpen;
@@ -32,6 +44,8 @@ namespace EmbedIO.Net.Internal.Http3
             // Stable API v2 slots, confirmed against the published msquic.h ABI.
             _registrationOpen = Marshal.GetDelegateForFunctionPointer<OpenRegistration>(Marshal.ReadIntPtr(table, 5 * IntPtr.Size));
             _registrationClose = Marshal.GetDelegateForFunctionPointer<CloseRegistration>(Marshal.ReadIntPtr(table, 6 * IntPtr.Size));
+            _configurationOpen = Marshal.GetDelegateForFunctionPointer<OpenConfiguration>(Marshal.ReadIntPtr(table, 8 * IntPtr.Size));
+            _configurationClose = Marshal.GetDelegateForFunctionPointer<CloseConfiguration>(Marshal.ReadIntPtr(table, 9 * IntPtr.Size));
             SetHandle(table);
         }
 
@@ -80,6 +94,37 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
 
+        internal MsQuicConfiguration CreateConfiguration(MsQuicRegistration registration, byte[] alpn)
+        {
+            if (alpn == null) throw new ArgumentNullException(nameof(alpn));
+            if (alpn.Length == 0 || alpn.Length > 255) throw new ArgumentOutOfRangeException(nameof(alpn));
+            var retained = false;
+            registration.DangerousAddRef(ref retained);
+            var pin = default(GCHandle);
+            var buffer = IntPtr.Zero;
+            var configuration = IntPtr.Zero;
+            try
+            {
+                pin = GCHandle.Alloc(alpn, GCHandleType.Pinned);
+                buffer = Marshal.AllocHGlobal(Marshal.SizeOf<NativeBuffer>());
+                Marshal.StructureToPtr(new NativeBuffer { Length = (uint)alpn.Length, Bytes = pin.AddrOfPinnedObject() }, buffer, false);
+                var status = _configurationOpen(registration.DangerousGetHandle(), buffer, 1, IntPtr.Zero, 0, IntPtr.Zero, out configuration);
+                if (status != 0) throw new IOException("MsQuic configuration failed with status 0x" + status.ToString("X8"));
+                if (configuration == IntPtr.Zero) throw new IOException("MsQuic returned an empty configuration.");
+                var result = new MsQuicConfiguration(configuration, registration, _configurationClose);
+                configuration = IntPtr.Zero;
+                retained = false;
+                return result;
+            }
+            finally
+            {
+                if (configuration != IntPtr.Zero) _configurationClose(configuration);
+                if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+                if (pin.IsAllocated) pin.Free();
+                if (retained) registration.DangerousRelease();
+            }
+        }
+
         protected override bool ReleaseHandle()
         {
             try { _close(handle); }
@@ -94,10 +139,24 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly MsQuicApi.CloseRegistration _close;
         internal MsQuicRegistration(IntPtr registration, MsQuicApi api, MsQuicApi.CloseRegistration close) : base(true)
         { _api = api; _close = close; SetHandle(registration); }
+        internal MsQuicConfiguration CreateConfiguration(byte[] alpn) => _api.CreateConfiguration(this, alpn);
         protected override bool ReleaseHandle()
         {
             try { _close(handle); }
             finally { _api.DangerousRelease(); }
+            return true;
+        }
+    }
+    internal sealed class MsQuicConfiguration : SafeHandleZeroOrMinusOneIsInvalid
+    {
+        private readonly MsQuicRegistration _registration;
+        private readonly MsQuicApi.CloseConfiguration _close;
+        internal MsQuicConfiguration(IntPtr configuration, MsQuicRegistration registration, MsQuicApi.CloseConfiguration close) : base(true)
+        { _registration = registration; _close = close; SetHandle(configuration); }
+        protected override bool ReleaseHandle()
+        {
+            try { _close(handle); }
+            finally { _registration.DangerousRelease(); }
             return true;
         }
     }
