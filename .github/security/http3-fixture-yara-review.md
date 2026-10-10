@@ -34,10 +34,8 @@ to avoid detection.
 Proposed acceptance is limited to this rule and these two fixture paths. Any change
 to executable behavior, reflection targets, input origins or scanner pins requires
 re-review. Other findings, scanner errors and stale acceptances remain fatal.
-The accepted list has not been changed; fresh full scans remain required.
+William explicitly approved this narrow acceptance after reviewing the explanation. Fresh full scans remain required.
 
 A paginated query of open GitHub code-scanning alerts found no corresponding alert.
 The malware workflow supplies artifacts rather than creating code-scanning alerts,
-so no matching dismissal can be performed or claimed. The owner's matching-alert
-pre-merge requirement remains outstanding. PR #222 must remain unmerged until the
-owner resolves that specific requirement and every check on the final head is green.
+so no matching dismissal can be performed or claimed. William explicitly waived matching-alert dismissal only for these two findings because no matching alerts exist. The exception does not cover other findings or the all-green-checks rule. The original red PR remains unmerged; integration requires every check on the final corrected head to pass.
