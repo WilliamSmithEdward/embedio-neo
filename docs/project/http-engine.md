@@ -16,6 +16,9 @@ independently tested behavior, not a codec or roadmap alone.
 - [ ] Freeze the October 2026 RFC/errata/registry inventory and map mandatory core
   requirements and applicable extensions to implementations and tests. Record
   optional application extensions and platform restrictions explicitly.
+  The 2026-10-10 inventory, extension matrix and open findings are in the
+  [standards applicability audit](http-standards-applicability.md); this gate
+  stays open until those findings are decided.
 - [ ] Complete HTTP/1 request/response semantics, framing, streaming, upgrades,
   bounded resource policies and compatibility/migration coverage.
 - [ ] Implement HTTP/2 negotiation, HPACK, frame/state validation, multiplexed
@@ -6739,3 +6742,40 @@ The correction awaits the existing reader. It does not change the existing
 reset condition or any status, complete-error-head, body, pipeline, dispatch or
 healthy-follow-up assertion. The original failed full run remains under ignored
 `TestResults/admission-cancellation-full`; no production correction is claimed.
+
+### HTTP/2 drain: client refusal latency after GOAWAY
+
+CI run 38032113377 attempt 1 (Windows, runtime 10.0.12) failed
+`DrainUnderConcurrentLoadCompletesEveryAdmittedRequest(True)` with three requests
+reaching the 10-second client timeout. All three stacks were waiting in
+`HttpConnectionPool.SendWithVersionDetectionAndRetryAsync` for a connection, not
+for a response: they were never admitted.
+
+The server side behaves as designed. Drain records the GOAWAY cutoff when it
+starts, answers later streams with REFUSED_STREAM and closes the listening
+socket. The client treats both as safe to retry and queues those requests for a
+new HTTP/2 connection. In runtime 10.0.12, `HttpConnectionPool.Http2.cs` allows
+one pending HTTP/2 connection at a time, and `HandleHttp2ConnectionFailure` fails
+only the request that started the attempt before starting the next one. On
+Windows, a refused connect to `localhost` takes about 4.1 s (about 2 s each for
+::1 and 127.0.0.1). Queued requests therefore fail at about 4, 8, 12 s, and the
+later ones reach the client timeout first. HTTP/1 opens its connections in
+parallel, so all of them are refused at about 4 s. Linux reports the refusal
+immediately, which explains the Windows-only HTTP/2 failure. Setting
+`TCP_MAXRTMS` on the client socket did not shorten the refused connect.
+
+`RequestsRefusedBeforeAdmissionDuringDrainReachATerminalOutcome` reproduces this
+deterministically. One admitted request holds the drain open while four later
+requests are sent. Before the correction, HTTP/2 refusals arrived at about 4.1 s
+and 8.2 s and the other two requests timed out, in two of two local runs.
+HTTP/1 passed.
+
+The correction is test-only. The drain fixtures' client refuses connections it
+opens after drain begins, so a request refused before admission gets a prompt
+terminal outcome. Each test then checks once, with a real socket, that the
+drained port refuses connections. Timeouts, served-request accounting, the
+admitted-request assertions and production behavior are unchanged. The two new
+cases raise the discovery guards to 4532. Applications
+draining under load should expect clients to retry refused HTTP/2 requests on a
+new connection. On Windows, a SocketsHttpHandler client can take several seconds
+per queued request to report the refusal.

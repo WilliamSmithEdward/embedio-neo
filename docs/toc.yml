@@ -212,8 +212,12 @@
       href: project/embed_io_neo.md
     - name: Modern HTTP engine program
       href: project/http-engine.md
+    - name: Completed response cleanup
+      href: project/http-completed-response-cleanup.md
     - name: Capsule transport development
       href: project/http-capsule-transport.md
+    - name: Capsule and tunnel lifetime validation
+      href: project/http-capsule-lifetime.md
     - name: QUIC lifetime and rebind
       href: project/quic-lifetime.md
     - name: Managed engine load comparison
@@ -224,6 +228,8 @@
       href: project/http3-performance.md
     - name: HTTP conformance audit
       href: project/http-conformance.md
+    - name: HTTP standards applicability audit
+      href: project/http-standards-applicability.md
 
 - name: Suffix byte ranges
   href: user-reports/suffix-range-responses.md

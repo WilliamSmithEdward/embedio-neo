@@ -141,6 +141,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [HTTP/3 request path performance](project/http3-performance.md): profiled HTTP/3 request costs, request scopes, write coalescing and QPACK feedback, before/after measurements and remaining bottlenecks.
 
 - [HTTP conformance audit](project/http-conformance.md): October 2026 standards baseline, black-box conformance and stateful campaigns, and prioritized findings.
+- [HTTP standards applicability audit](project/http-standards-applicability.md): frozen October 2026 RFC, errata, registry and draft inventory, requirement-to-evidence matrix for extensions and application APIs, and reproduced gaps.
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
 
@@ -158,7 +159,10 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
+- [Cleanup after committed response completion](project/http-completed-response-cleanup.md): late cancellation, complete-wire state and preserved incomplete-response handling.
+
 - [Capsule transport development](project/http-capsule-transport.md): streamed framing, negotiation constraints and remaining integration work.
+- [Capsule and tunnel lifetime validation](project/http-capsule-lifetime.md): independent-peer cancellation, reset, drain and retention checks on HTTP/1, HTTP/2 and HTTP/3, with findings and limits.
 
 - [Neo baseline and direction](project/embed_io_neo.md): initial fork decisions and acknowledgments.
 - [Changelog](../CHANGELOG.md): released and unreleased changes.
