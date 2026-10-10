@@ -121,21 +121,30 @@ namespace EmbedIO.Net.Internal.Http3
             internal readonly TaskCompletionSource Stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly MsQuicApi.ListenerFunctions.Callback Handler;
             internal Func<IntPtr, uint>? Accept;
+            internal Exception? AdmissionFailure;
             internal Action? StopAcceptance;
             internal Signals() { Handler = OnEvent; }
             private uint OnEvent(IntPtr listener, IntPtr context, IntPtr eventData)
             {
-                try
+                var eventType = Marshal.ReadInt32(eventData);
+                if (eventType == 0)
                 {
-                    if (Marshal.ReadInt32(eventData) == 1) { StopAcceptance?.Invoke(); Stopped.TrySetResult(); }
-                    // Acceptance transfers ownership only after installing the
-                    // native connection callback and its retained parent lifetime.
-                    if (Marshal.ReadInt32(eventData) == 0)
+                    try
                     {
                         var accept = Accept;
                         if (accept != null) return accept(Marshal.ReadIntPtr(eventData, IntPtr.Size * 2));
-                        return OperatingSystem.IsWindows() ? 0x80004004u : OperatingSystem.IsMacOS() ? 89u : 125u;
                     }
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error) || error is OutOfMemoryException)
+                    {
+                        Volatile.Write(ref AdmissionFailure, error);
+                        // Admission exceptions can escape only before native ownership
+                        // transfers. Refuse without allocating/logging or faulting stop.
+                    }
+                    return OperatingSystem.IsWindows() ? 0x80004004u : OperatingSystem.IsMacOS() ? 89u : 125u;
+                }
+                try
+                {
+                    if (eventType == 1) { StopAcceptance?.Invoke(); Stopped.TrySetResult(); }
                     return 0;
                 }
                 catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
@@ -180,22 +189,35 @@ namespace EmbedIO.Net.Internal.Http3
                     var refusal = OperatingSystem.IsWindows() ? 0x80004004u : OperatingSystem.IsMacOS() ? 89u : 125u;
                     if (Volatile.Read(ref _acceptanceStopped) != 0 || Volatile.Read(ref _stopping) || !TryReserveAcceptSlot()) return refusal;
                     var queued = false;
+                    MsQuicNativeConnection? owned = null;
                     try
                     {
                         if (Volatile.Read(ref _acceptanceStopped) != 0 || Volatile.Read(ref _stopping)) return refusal;
                         // Refuse overload before installing a callback or taking
                         // ownership. MsQuic then sends CONNECTION_REFUSED.
-                        var owned = _registration.AcceptConnection(connection);
+                        owned = _registration.AcceptConnection(connection);
                         queued = queue.Writer.TryWrite(owned);
                         if (!queued) owned.Dispose();
                         // A stop racing ownership transfer still belongs to us;
                         // never return failure after closing the accepted handle.
                         return 0;
                     }
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error) || error is OutOfMemoryException)
+                    {
+                        if (owned == null) throw;
+                        Volatile.Write(ref _signals.AdmissionFailure, error);
+                        // After transfer, closing and returning refusal would double-free
+                        // the handle in MsQuic. Release our handle and return success.
+                        try { owned.Dispose(); }
+                        catch (Exception cleanup) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(cleanup) || cleanup is OutOfMemoryException)
+                        { Volatile.Write(ref _signals.AdmissionFailure, cleanup); }
+                        return 0;
+                    }
                     finally { if (!queued) Interlocked.Decrement(ref _queuedConnections); }
                 };
             }
         }
+        internal Exception? LastAdmissionFailure => Volatile.Read(ref _signals.AdmissionFailure);
         internal async Task<MsQuicNativeConnection> AcceptAsync(CancellationToken token)
         {
             var connection = await (_accepted ?? throw new InvalidOperationException("Acceptance is not enabled.")).Reader.ReadAsync(token).ConfigureAwait(false);
