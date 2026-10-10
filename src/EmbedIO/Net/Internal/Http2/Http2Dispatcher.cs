@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -178,15 +178,25 @@ namespace EmbedIO.Net.Internal.Http2
             }
             finally
             {
-                lock (_sync)
+                try
                 {
-                    Release(exchange, null);
-                    if (_drainSent && _exchanges.Count == 0) _stop.Cancel();
+                    try
+                    {
+                        lock (_sync)
+                        {
+                            Release(exchange, null);
+                            if (_drainSent && _exchanges.Count == 0) _stop.Cancel();
+                        }
+                    }
+                    finally { exchange.Dispose(); }
                 }
-                exchange.Dispose();
-                // RunAsync reads the count and creates the signal under _sync.
-                if (Interlocked.Decrement(ref _runningApplications) == 0)
-                    lock (_sync) _applicationsDone?.TrySetResult(true);
+                finally
+                {
+                    // Cleanup failures must not strand connection shutdown.
+                    // RunAsync reads the count and creates the signal under _sync.
+                    if (Interlocked.Decrement(ref _runningApplications) == 0)
+                        lock (_sync) _applicationsDone?.TrySetResult(true);
+                }
             }
         }
 

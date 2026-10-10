@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal.Http2
 {
@@ -171,11 +172,24 @@ namespace EmbedIO.Net.Internal.Http2
 
         private void EndByLength() { _endedByLength = true; EndLocal(); }
         private void EndLocal() { _ended = true; _connection.Streams.EndLocal(Id); _connection.SendFlow.Close(Id); }
-        internal void Cancel(Exception error) { _stop.Cancel(); Body.Fail(error); }
+        private void CancelApplication()
+        {
+            try { _stop.Cancel(); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                error.Log("HTTP/2 stream", "Exception thrown by an application cancellation callback.");
+            }
+        }
+        internal void Cancel(Exception error) { CancelApplication(); Body.Fail(error); }
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            _stop.Cancel(); Body.Dispose(); _stop.Dispose(); _response.Dispose();
+            try { CancelApplication(); }
+            finally
+            {
+                try { Body.Dispose(); }
+                finally { _stop.Dispose(); _response.Dispose(); }
+            }
         }
     }
 }
