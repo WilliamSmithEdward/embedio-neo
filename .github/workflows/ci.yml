@@ -312,6 +312,15 @@ jobs:
           dotnet restore test/EmbedIO.LegacyCookieSmoke/EmbedIO.LegacyCookieSmoke.csproj --locked-mode
           dotnet build test/EmbedIO.LegacyCookieSmoke/EmbedIO.LegacyCookieSmoke.csproj -c Release --no-restore
           test/EmbedIO.LegacyCookieSmoke/bin/Release/net472/EmbedIO.LegacyCookieSmoke.exe
+      - name: Verify the managed HTTP engine on .NET Framework
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore test/EmbedIO.LegacyHttpEngineSmoke/EmbedIO.LegacyHttpEngineSmoke.csproj --locked-mode
+          dotnet build test/EmbedIO.LegacyHttpEngineSmoke/EmbedIO.LegacyHttpEngineSmoke.csproj -c Release --no-restore
+          dotnet format whitespace test/EmbedIO.LegacyHttpEngineSmoke/EmbedIO.LegacyHttpEngineSmoke.csproj --no-restore --verify-no-changes
+          test/EmbedIO.LegacyHttpEngineSmoke/bin/Release/net472/EmbedIO.LegacyHttpEngineSmoke.exe > TestResults/legacy-http-engine.log
       - name: Check hot-path and cold-start allocation budgets
         run: |
           dotnet restore test/EmbedIO.Performance/EmbedIO.Performance.csproj --locked-mode
