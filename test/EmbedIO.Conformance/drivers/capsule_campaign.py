@@ -51,7 +51,7 @@ def vectors():
 def check_headers(state):
     fields = dict(state["headers"])
     if state["status"] != 200 or fields.get(b"capsule-protocol") != b"?1":
-        raise AssertionError("Capsule carrier was not accepted")
+        raise AssertionError(f"Capsule carrier was not accepted: status={state['status']} headers={state['headers']} reset={state['reset']}")
     for name in (b"content-type", b"content-length", b"transfer-encoding"):
         if name in fields:
             raise AssertionError("Forbidden capsule carrier field: " + name.decode())
