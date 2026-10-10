@@ -271,7 +271,7 @@ namespace EmbedIO.Net.Internal
                         var start = ms.Position;
                         if (chunked && !_trailerSent)
                         {
-                            bytes = GetChunkSizeBytes(0, true);
+                            bytes = _response.EndingChunk ?? GetChunkSizeBytes(0, true);
                             ms.Position = ms.Length;
                             ms.Write(bytes, 0, bytes.Length);
                         }
@@ -281,7 +281,7 @@ namespace EmbedIO.Net.Internal
                     }
                     else if (chunked && !_trailerSent)
                     {
-                        bytes = GetChunkSizeBytes(0, true);
+                        bytes = _response.EndingChunk ?? GetChunkSizeBytes(0, true);
                         InternalWrite(bytes, 0, bytes.Length);
                         _trailerSent = true;
                     }

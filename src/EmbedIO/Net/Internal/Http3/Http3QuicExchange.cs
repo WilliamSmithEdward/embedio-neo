@@ -147,10 +147,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (!_headers || !_bodyAllowed || _tunnel)
                     throw new InvalidOperationException("Response cannot contain trailers.");
                 if (_length.HasValue && _sent != _length.Value) throw new InvalidDataException("Response does not match Content-Length.");
-                try { Http2RequestHeaders.ValidateTrailers(new Http2HeaderBlock(0, true, fields, 0)); }
-                catch (Http2ProtocolException error) { throw new InvalidDataException(error.Message, error); }
-                if (Array.Exists(fields, field => field.Name == "te"))
-                    throw new InvalidDataException("TE is only valid in requests.");
+                HttpResponseTrailerFields.Validate(fields);
                 var encoded = _owner.Encode(fields);
                 await FrameAsync(1, encoded, true, token).ConfigureAwait(false);
                 _ended = true;

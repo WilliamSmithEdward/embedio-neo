@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Globalization;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -30,6 +31,9 @@ namespace EmbedIO.Net.Internal
         private bool _tunnel;
         private bool _capsuleCarrier;
         private bool _contentTypeConfigured;
+        private HashSet<string>? _trailerNames;
+        private byte[]? _endingChunk;
+        internal byte[]? EndingChunk => Volatile.Read(ref _endingChunk);
 
         internal HttpListenerResponse(HttpListenerContext context)
         {
@@ -181,6 +185,46 @@ namespace EmbedIO.Net.Internal
             _cookies.Add(cookie);
         }
 
+        internal void PrepareTrailers(string[] names)
+        {
+            EnsureCanChangeHeaders();
+            if (names == null) throw new ArgumentNullException(nameof(names));
+            if (ProtocolVersion < HttpVersion.Version11 || SuppressesBody || _statusCode == 205 || _tunnel
+                || (_request.HttpMethod == "CONNECT" && _statusCode >= 200 && _statusCode < 300))
+                throw new InvalidOperationException("This response cannot carry trailers.");
+            if (Headers[HttpHeaderNames.ContentLength] != null)
+                throw new InvalidOperationException("HTTP/1 trailers require chunked framing without Content-Length.");
+            var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in names)
+            {
+                if (name == null) throw new ArgumentException("Trailer names cannot be null.", nameof(names));
+                var field = new Http2.HpackField(HttpResponseTrailerFields.LowercaseName(name), "");
+                HttpResponseTrailerFields.Validate(new[] { field });
+                declared.Add(field.Name);
+            }
+            if (declared.Count == 0) throw new ArgumentException("Declare at least one trailer field.", nameof(names));
+            Headers["Trailer"] = string.Join(", ", declared);
+            _trailerNames = declared;
+            _chunked = true;
+        }
+
+        internal void SetTrailers(WebHeaderCollection trailers)
+        {
+            if (trailers == null) throw new ArgumentNullException(nameof(trailers));
+            if (_disposed != 0 || _tunnel || _trailerNames == null || !_chunked || SuppressesBody || _statusCode == 205)
+                throw new InvalidOperationException("Trailers were not reserved for an open response.");
+            var fields = new List<Http2.HpackField>();
+            foreach (var name in trailers.AllKeys)
+            {
+                if (name == null || !_trailerNames.Contains(name))
+                    throw new InvalidDataException("Trailer field was not declared before response headers.");
+                foreach (var value in trailers.GetValues(name) ?? Array.Empty<string>())
+                    fields.Add(new Http2.HpackField(HttpResponseTrailerFields.LowercaseName(name), value));
+            }
+            var ending = HttpResponseTrailerFields.ChunkEnd(fields.ToArray());
+            Volatile.Write(ref _endingChunk, ending);
+        }
+
         internal void BeginTunnel(string? protocol, bool capsules)
         {
             EnsureCanChangeHeaders();
@@ -208,6 +252,9 @@ namespace EmbedIO.Net.Internal
 
         internal MemoryStream SendHeaders(bool closing, int bodyCount)
         {
+            if (_trailerNames != null && (!_chunked || SuppressesBody || _statusCode == 205
+                || _tunnel || Headers[HttpHeaderNames.ContentLength] != null))
+                throw new InvalidOperationException("Reserved trailers require a body-capable chunked response.");
             if (_capsuleCarrier) HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _statusCode);
             if (_contentType != null && (!_tunnel || (_contentTypeConfigured && !_capsuleCarrier)))
             {
@@ -245,7 +292,7 @@ namespace EmbedIO.Net.Internal
                 }
                 _chunked = false;
             }
-            else if (closing)
+            else if (closing && _trailerNames == null)
             {
                 if (_request.HttpVerb != HttpVerbs.Head)
                     Headers[HttpHeaderNames.ContentLength] = "0";

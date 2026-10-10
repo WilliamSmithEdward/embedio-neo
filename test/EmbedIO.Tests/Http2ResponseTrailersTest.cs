@@ -112,6 +112,11 @@ namespace EmbedIO.Tests
         [TestCase(":status", "200")]
         [TestCase("connection", "close")]
         [TestCase("te", "trailers")]
+        [TestCase("content-type", "text/plain")]
+        [TestCase("authorization", "Bearer example")]
+        [TestCase("set-cookie", "name=value")]
+        [TestCase("location", "/other")]
+        [TestCase("x-invalid", "value\r\ninjected: true")]
         public async Task InvalidResponseTrailersDoNotCommitOrPoisonTheEncoder(string name, string value)
         {
             await WithServer(async exchange =>
