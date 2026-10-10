@@ -101,3 +101,16 @@ The initial failure and adapted run are preserved under ignored
 No production implementation code was copied or changed to accommodate the peer.
 These vectors do not prove browser, soak, reset/backpressure or whole-engine fuzz
 acceptance. Hosted final-head checks remain required.
+## Delayed completion and abandonment
+
+Four real-client cases cover HTTP/1.1 and HTTP/2. A handler can send its body,
+wait before setting trailers, and finish with exactly one ending section. Before
+completion, the client sees no trailer fields. An HTTP/2 client abandoning an
+incomplete body resets the stream, cancels the waiting handler and leaves the
+server available for a subsequent request.
+
+HTTP/1 abandonment is tested separately: the handler is allowed to finish and
+cleanup leaves service available. The listener does not promptly detect a peer
+disconnect while an HTTP/1 handler waits without transport activity; this case
+does not prove prompt disconnect cancellation. Applications should bound their
+own waits. These cases do not establish slow-reader backpressure or soak limits.
