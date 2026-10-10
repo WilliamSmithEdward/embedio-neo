@@ -30,6 +30,9 @@ namespace EmbedIO.Net.Internal.Http2
         private readonly List<Http2OutputWrite> _batch = new();
         private readonly Http2OutputBuffer _output = new();
         private bool _flushing;
+        // Set when the last batch was shared; the next flush then waits one
+        // thread-pool hop for siblings instead of writing inline.
+        private bool _deferFlush;
         private bool _outputClosed;
         private int _reading;
         private bool _readFailed;
@@ -126,13 +129,18 @@ namespace EmbedIO.Net.Internal.Http2
                 if (_writeFailed || _outputClosed) return Task.FromException<bool>(new IOException("HTTP/2 output is no longer usable."));
                 if (write.Token.IsCancellationRequested) return Task.FromCanceled<bool>(write.Token);
                 if (write.StreamToken.IsCancellationRequested) return Task.FromCanceled<bool>(write.StreamToken);
-                if (!_flushing)
+                if (!_flushing && !_deferFlush)
                 {
                     _flushing = true;
                     _batch.Add(write);
                 }
                 else
                 {
+                    // While siblings keep the previous batch busy, the first writer
+                    // also queues and the flush runs on the thread pool, so writes
+                    // arriving meanwhile share its transport write.
+                    var schedule = !_flushing;
+                    _flushing = true;
                     write.Owner = this;
                     write.Completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     // A cancellation racing this registration runs inline on this
@@ -150,12 +158,19 @@ namespace EmbedIO.Net.Internal.Http2
                             queued.Owner?.CancelQueued(queued, queued.StreamToken);
                         }, write);
                     _queue.Enqueue(write);
+                    if (schedule) ScheduleFlush();
                     return write.Completion.Task;
                 }
             }
             // The first writer flushes inline, so uncontended output takes no thread hop.
             return FlushAsync(write);
         }
+
+        private static readonly WaitCallback FlushQueued = static state =>
+            _ = ((Http2FrameTransport)(state ?? throw new InvalidOperationException("Missing transport."))).FlushAsync(null);
+
+        // The flush owns no caller context; queued completions resume their own.
+        private void ScheduleFlush() => ThreadPool.UnsafeQueueUserWorkItem(FlushQueued, this);
 
         private void CancelQueued(Http2OutputWrite write, CancellationToken token)
         {
@@ -174,6 +189,7 @@ namespace EmbedIO.Net.Internal.Http2
         {
             var leadingResult = false;
             Exception? leadingFailure = null;
+            var previousBatch = 0;
             while (true)
             {
                 lock (_outputSync)
@@ -193,6 +209,7 @@ namespace EmbedIO.Net.Internal.Http2
                     if (_batch.Count == 0)
                     {
                         _flushing = false;
+                        _deferFlush = previousBatch > 1;
                         _output.Release();
                         break;
                     }
@@ -254,6 +271,7 @@ namespace EmbedIO.Net.Internal.Http2
                     if (write.Failure != null) write.Completion?.TrySetException(write.Failure);
                     else write.Completion?.TrySetResult(write.Result);
                 }
+                previousBatch = _batch.Count;
                 _batch.Clear();
                 if (leading != null)
                 {
@@ -265,9 +283,10 @@ namespace EmbedIO.Net.Internal.Http2
                         if (_queue.Count == 0 || _writeFailed)
                         {
                             _flushing = false;
+                            _deferFlush = previousBatch > 1;
                             _output.Release();
                         }
-                        else _ = Task.Run(() => FlushAsync(null));
+                        else ScheduleFlush();
                     }
                     break;
                 }
