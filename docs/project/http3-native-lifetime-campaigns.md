@@ -551,3 +551,16 @@ is quarantined or omitted from this evidence. Further reconciliation with
 engine `1b70377`, crash investigation, macOS proof and exact-head hosted
 checks remain required. The native application-provider switch remains
 unimplemented; these results do not establish shipping acceptance.
+
+Reconciliation at `b1e4ceb` brings in verified engine `57d4a19`, including
+PR #245's final HTTP/2 barrier cancellation correction. The B8 repeat had
+stopped after its first full run on that exact uncorrected barrier, with
+5,054 reported, 5,019 passed, 34 skipped and one failed; it did not reproduce
+the double-free and its other two planned runs were not executed.
+
+The complete Windows coverage suite on reconciled `b1e4ceb` now proves
+5,064 cases: 5,054 passed, ten expected skips and zero failures in 3m48s.
+All six discovery minimums are raised to that measured 5,064 count only
+after this completed report. Fresh-source Linux validation is still running;
+no Linux correction acceptance, macOS proof or final hosted acceptance is
+claimed by this Windows result.
