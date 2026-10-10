@@ -101,8 +101,8 @@ use the old request count or Keep-Alive max value as a signal.
 
 ## Response statuses, output and shutdown
 
-William approved final-response StatusCode validation for v2: only 200-599 are
-valid assignments. The correction is under development and has not shipped.
+Neo v2 restricts final-response StatusCode assignments to 200-599. The correction
+is implemented on the engine development branch and remains unreleased.
 Manual assignments of 100-199 or 600-999 will throw before changing the response.
 Valid unregistered codes such as 471 remain supported. Map internal error codes
 to a valid HTTP status and carry the internal identifier in the payload.
@@ -130,13 +130,20 @@ cancels its own pending body or tunnel read. Input remains unusable after that
 in-flight cancellation because a frame may have been partly consumed; catch the
 cancellation, answer or complete output, and finish the request. Peer reset,
 connection failure and output cancellation still end the request. This correction
-is proposed in [PR #252](https://github.com/WilliamSmithEdward/embedio-neo/pull/252),
-not released. A token canceled before a read begins does not abandon input.
+is integrated through [PR #254](https://github.com/WilliamSmithEdward/embedio-neo/pull/254)
+on the engine development branch and remains unreleased. A token canceled before
+a read begins does not abandon input.
 
 Use DrainAsync for bounded graceful shutdown instead of assuming Stop waits for
 active responses. Stop/disposal and forced drain cancellation terminate remaining
 work. HTTP/2 and HTTP/3 have different peer-close policies within that deadline;
 test uploads, streams and tunnels against your shutdown policy.
+
+Explicit WebServer.Dispose may race a pending accept. The server run task ends
+normally for the expected disposed-listener or stopped-listener error in that
+race; unrelated listener errors still propagate. Await RunAsync during cleanup
+to observe completion. Disposal still aborts active work; use DrainAsync when
+responses must finish within a deadline.
 
 ## WebSocket applications
 

@@ -15,6 +15,8 @@ namespace EmbedIO
     /// </summary>
     public partial class WebServer : WebServerBase<WebServerOptions>
     {
+        private int _disposeStarted;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer"/> class,
         /// that will respond on HTTP port 80 on all network interfaces.
@@ -144,6 +146,7 @@ namespace EmbedIO
         {
             if (disposing)
             {
+                Interlocked.Exchange(ref _disposeStarted, 1);
                 try
                 {
                     Listener.Dispose();
@@ -177,6 +180,10 @@ namespace EmbedIO
                 IHttpContextImpl context;
                 try { context = await Listener.GetContextAsync(cancellationToken).ConfigureAwait(false); }
                 catch (ListenerDrainedException) { return; }
+                // Explicit disposal may win after the listening snapshot but
+                // before accept starts. Only expected stop failures end this loop.
+                catch (ObjectDisposedException) when (Volatile.Read(ref _disposeStarted) != 0) { return; }
+                catch (System.Net.HttpListenerException error) when (error.ErrorCode == 995 && Volatile.Read(ref _disposeStarted) != 0) { return; }
                 context.CancellationToken = cancellationToken;
                 context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
 

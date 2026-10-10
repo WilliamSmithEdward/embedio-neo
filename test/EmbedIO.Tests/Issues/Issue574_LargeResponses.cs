@@ -124,6 +124,23 @@ namespace EmbedIO.Tests.Issues
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var diagnosticStop = new CancellationTokenSource();
+            var diagnostic = ObserveSlowResponseAsync();
+            async Task ObserveSlowResponseAsync()
+            {
+                if (!OperatingSystem.IsLinux()) return;
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(9), diagnosticStop.Token);
+                    TestContext.Error.WriteLine($"Large-response pre-deadline: mode={mode}, buffered={buffered}, serializationPhase={Volatile.Read(ref serializationPhase)}, serialization={serialization?.Status}, jsonClosed={Volatile.Read(ref jsonClosed)}.");
+                    await CaptureLargeResponseTransportState(url);
+                }
+                catch (OperationCanceledException) when (diagnosticStop.IsCancellationRequested) { }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                {
+                    TestContext.Error.WriteLine($"Pre-deadline diagnostic unavailable: {error.GetType().Name}.");
+                }
+            }
             try
             {
                 var bytes = client.GetByteArrayAsync(url + "large");
@@ -148,7 +165,13 @@ namespace EmbedIO.Tests.Issues
                 await CaptureLargeResponseTransportState(url);
                 throw;
             }
-            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
+            finally
+            {
+                diagnosticStop.Cancel();
+                await diagnostic;
+                stop.Cancel();
+                await running.WaitAsync(TimeSpan.FromSeconds(10));
+            }
         }
 
         private static async Task CaptureLargeResponseTransportState(string url)
