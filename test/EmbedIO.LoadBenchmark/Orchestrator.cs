@@ -33,6 +33,7 @@ internal static class Orchestrator
         var serverCpus = options.Optional("--server-cpus");
         var clientCpus = options.Optional("--client-cpus");
         var profile = options.Has("--profile");
+        var modernBaseline = options.Has("--modern-baseline");
         var selected = SelectScenarios(options.Text("--scenarios", "all"));
         var engineFilter = options.Optional("--engines")?.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
@@ -53,6 +54,7 @@ internal static class Orchestrator
         }
 
         var environment = DescribeEnvironment(options, targets, serverCpus, clientCpus, warmup, duration, idle, rounds, profile);
+        environment["modernBaseline"] = modernBaseline;
         await File.WriteAllTextAsync(Path.Combine(output, "environment.json"), environment.ToJsonString(Indented)).ConfigureAwait(false);
 
         var samples = new List<JsonObject>();
@@ -63,7 +65,7 @@ internal static class Orchestrator
             {
                 foreach (var scenario in selected)
                 {
-                    var engines = targets.Where(target => target.Name != "baseline" || scenario.BaselineApplies).ToList();
+                    var engines = targets.Where(target => target.Name != "baseline" || scenario.BaselineApplies || modernBaseline).ToList();
                     if (round % 2 == 0) engines.Reverse();
                     foreach (var target in engines)
                     {
