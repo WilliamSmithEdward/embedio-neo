@@ -6806,3 +6806,19 @@ The 500-case HTTP/3 set passes; a subsequent 80-case QUIC/direction repeat passe
 after the constructor adjustment. Provider allocation/throughput impact and
 complete native-provider ownership remain unverified and required before
 integration. This branch is separate from response-field-section PR 230.
+
+Native-provider initialization now binds the public MsQuic API v2 entry points
+and stable registration slots. The original managed binding loads the installed
+platform library, owns its API table through SafeHandle, and transfers a retained
+API reference to each registration. Closing the API owner first cannot unload
+the library before its child registration closes. Failed initialization and
+registration paths release acquired resources; no BCL private handle is used.
+
+Three real native Windows cases pass, including both disposal orders over 16
+cycles each and concurrent repeated child disposal. Both library assets build
+without warnings, and repository guards pass. This does not validate native
+listener/connection callbacks, credentials, stream I/O, datagram delivery, or
+Linux/macOS loading; those remain required. Registration closure can block until
+its native children close, so subsequent providers must preserve explicit child
+shutdown ordering. No listener default, public API or dependency changed.
+The ABI reference is the [published MsQuic v2.6.2 header](https://github.com/microsoft/msquic/blob/v2.6.2/src/inc/msquic.h); no implementation code was copied.
