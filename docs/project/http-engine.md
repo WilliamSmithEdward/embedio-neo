@@ -6961,3 +6961,32 @@ processes and lock were preserved. The interrupted run is retained, is not used
 as validation, and does not establish full discovery. Subsequent launch commands
 must set ErrorActionPreference=Stop before atomic lock acquisition. Native-read
 full-suite and hosted exact-head acceptance remain pending.
+
+
+Accepted native bidirectional streams now support original StreamSend bindings.
+A single writer retains the pinned payload and native buffer descriptor until
+SEND_COMPLETE. Caller cancellation after submission aborts the send direction
+and awaits native ownership return before either allocation is released. Stream
+disposal wakes pending sends as well as reads. FIN is supplied on the last send,
+and subsequent writes are rejected. Array-backed memory is borrowed with its
+actual offset; other memory is copied into a cleared pooled array.
+
+Six new real-peer cases cover empty through 1 MiB output, nonzero array offsets,
+exact bytes/EOF, post-FIN rejection, and cancellation or disposal of a committed
+8 MiB send blocked by unread peer flow control. The blocked-send fixture selects
+an explicit internal unbuffered configuration; ordinary native defaults remain
+unchanged. A sibling stream must still transfer bytes in both directions after
+either ending. All 46 focused native cases pass on Windows before final
+formatting; pinned Linux results and complete source validation are recorded
+separately. Expected combined discovery is 4791 (4712 base, 33 framing, 46 native).
+Outgoing stream creation, native datagrams, application-provider selection,
+macOS/finalizer/fault/soak coverage and comparative performance remain unfinished.
+
+Final native-send source validation: all 46 focused cases pass on Windows and
+pinned Linux (same Windows-built IL). The complete Windows suite reports 4791
+cases, 4786 passed, five existing skips, zero failures, in 3m 25s. Both retained
+library targets build with zero warnings/errors; formatting, the C# parser guard,
+suppression guard and diff checks pass. The shared lock was acquired atomically
+with terminating error handling and released by its owner after completion.
+These results do not establish native HTTP delivery, macOS sends, finalizer/fault
+coverage, independent datagram/WebTransport interoperability or performance.

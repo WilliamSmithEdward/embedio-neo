@@ -18,6 +18,9 @@ namespace EmbedIO.Net.Internal.Http3
             private delegate uint GetParameter(IntPtr stream, uint parameter, ref uint size, IntPtr buffer);
             [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
             internal delegate void CompleteReceive(IntPtr stream, ulong length);
+            [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+            internal delegate uint SendStream(IntPtr stream, IntPtr buffers, uint count, uint flags, IntPtr context);
+            internal readonly SendStream Send;
             private readonly GetParameter _get;
             internal readonly CompleteReceive ReceiveComplete;
             internal readonly ConnectionFunctions.SetCallback SetHandler;
@@ -29,6 +32,7 @@ namespace EmbedIO.Net.Internal.Http3
                 SetHandler = Marshal.GetDelegateForFunctionPointer<ConnectionFunctions.SetCallback>(Marshal.ReadIntPtr(table, 2 * IntPtr.Size));
                 Close = Marshal.GetDelegateForFunctionPointer<ConnectionFunctions.CloseStream>(Marshal.ReadIntPtr(table, 22 * IntPtr.Size));
                 Shutdown = Marshal.GetDelegateForFunctionPointer<ConnectionFunctions.ShutdownStream>(Marshal.ReadIntPtr(table, 24 * IntPtr.Size));
+                Send = Marshal.GetDelegateForFunctionPointer<SendStream>(Marshal.ReadIntPtr(table, 25 * IntPtr.Size));
                 ReceiveComplete = Marshal.GetDelegateForFunctionPointer<CompleteReceive>(Marshal.ReadIntPtr(table, 26 * IntPtr.Size));
             }
             internal long Id(IntPtr stream)
@@ -71,6 +75,9 @@ namespace EmbedIO.Net.Internal.Http3
             internal bool Fin;
             internal bool Disposed;
             internal Exception? Error;
+            internal TaskCompletionSource<bool>? PendingSend;
+            internal bool SendFinished;
+            internal bool SendAborted;
             private readonly MsQuicApi.StreamFunctions _functions;
             internal Signals(MsQuicApi.StreamFunctions functions)
             { _functions = functions; Handler = OnEvent; Pointer = Marshal.GetFunctionPointerForDelegate(Handler); }
@@ -104,6 +111,12 @@ namespace EmbedIO.Net.Internal.Http3
                                 Buffers = buffers; Length = length; Index = 0; Offset = 0;
                                 Available.TrySetResult();
                                 return OperatingSystem.IsWindows() ? 0x000703e5u : unchecked((uint)-2);
+                            case 2:
+                                var pending = PendingSend; PendingSend = null;
+                                pending?.TrySetResult(Marshal.ReadByte(eventData, 8) != 0);
+                                break;
+                            case 5: SendAborted = true; break;
+                            case 6: SendFinished = true; break;
                             case 3: Fin = true; Available.TrySetResult(); break;
                             case 4: Error = new IOException("Native peer aborted its stream send direction."); Available.TrySetResult(); break;
                             case 7:
@@ -127,6 +140,9 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly MsQuicApi.StreamFunctions _functions;
         private readonly Signals _signals;
         private readonly EmbedIO.Internal.AsyncWriteGate _readGate = new();
+        private readonly EmbedIO.Internal.AsyncWriteGate _writeGate = new();
+        private int _disposeStarted;
+        private bool _finQueued;
         internal long Id { get; }
         internal bool Unidirectional { get; }
         private MsQuicNativeStream(MsQuicNativeConnection connection, MsQuicApi.StreamFunctions functions, Signals signals, long id, uint flags) : base(true)
@@ -201,15 +217,87 @@ namespace EmbedIO.Net.Internal.Http3
             }
             finally { if (retained) DangerousRelease(); }
         }
+        internal async ValueTask WriteAsync(ReadOnlyMemory<byte> payload, bool completeWrites, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (Unidirectional) throw new InvalidOperationException("A peer-initiated unidirectional stream is receive-only.");
+            using var scope = await _writeGate.EnterAsync(token).ConfigureAwait(false);
+            var retained = false;
+            var pin = default(GCHandle);
+            byte[]? pooled = null;
+            var descriptor = IntPtr.Zero;
+            TaskCompletionSource<bool>? pending = null;
+            try
+            {
+                DangerousAddRef(ref retained);
+                lock (_signals.Sync)
+                {
+                    if (_signals.Disposed) throw new ObjectDisposedException(nameof(MsQuicNativeStream));
+                    if (_finQueued || _signals.SendFinished || _signals.SendAborted) throw new IOException("Native stream send direction is closed.");
+                    pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _signals.PendingSend = pending;
+                }
+                ArraySegment<byte> bytes;
+                if (!MemoryMarshal.TryGetArray(payload, out bytes) || bytes.Array == null)
+                {
+                    pooled = ArrayPool<byte>.Shared.Rent(payload.Length);
+                    payload.Span.CopyTo(pooled); bytes = new ArraySegment<byte>(pooled, 0, payload.Length);
+                }
+                pin = GCHandle.Alloc(bytes.Array, GCHandleType.Pinned);
+                descriptor = Marshal.AllocHGlobal(IntPtr.Size * 2);
+                Marshal.WriteInt32(descriptor, bytes.Count);
+                Marshal.WriteIntPtr(descriptor, IntPtr.Size, IntPtr.Add(pin.AddrOfPinnedObject(), bytes.Offset));
+                token.ThrowIfCancellationRequested();
+                var status = _functions.Send(handle, descriptor, 1, completeWrites ? 4u : 0u, IntPtr.Zero);
+                if (MsQuicApi.Failed(status)) throw new IOException("MsQuic send failed with status 0x" + status.ToString("X8"));
+                _finQueued = completeWrites;
+                bool cancelled;
+                try { cancelled = await pending.Task.WaitAsync(token).ConfigureAwait(false); }
+                catch (OperationCanceledException)
+                {
+                    // A committed send retains its pin/descriptor until SEND_COMPLETE,
+                    // even when the caller cancels while waiting for native ownership.
+                    _functions.Shutdown(handle, 2, 0x10c);
+                    await pending.Task.ConfigureAwait(false);
+                    throw;
+                }
+                if (cancelled) throw new IOException("Native stream send was cancelled by shutdown.");
+            }
+            finally
+            {
+                lock (_signals.Sync)
+                {
+                    if (ReferenceEquals(_signals.PendingSend, pending)) _signals.PendingSend = null;
+                }
+                if (descriptor != IntPtr.Zero) Marshal.FreeHGlobal(descriptor);
+                if (pin.IsAllocated) pin.Free();
+                if (pooled != null) ArrayPool<byte>.Shared.Return(pooled, true);
+                if (retained) DangerousRelease();
+            }
+        }
         protected override void Dispose(bool disposing)
-        { _signals.StopReads(); _readGate.Dispose(); base.Dispose(disposing); }
+        {
+            if (Interlocked.Exchange(ref _disposeStarted, 1) != 0) return;
+            var retained = false;
+            try
+            {
+                if (!IsClosed && !IsInvalid) DangerousAddRef(ref retained);
+                _signals.StopReads(); _readGate.Dispose(); _writeGate.Dispose();
+                if (retained) _functions.Shutdown(handle, 6, 0x10c);
+            }
+            finally
+            {
+                try { base.Dispose(disposing); }
+                finally { if (retained) DangerousRelease(); }
+            }
+        }
         protected override bool ReleaseHandle()
         {
             try
             {
                 if (!_signals.Closed.Task.IsCompleted)
                 {
-                    _functions.Shutdown(handle, 0x0e, 0x10c);
+                    _functions.Shutdown(handle, 6, 0x10c);
                     _signals.Closed.Task.GetAwaiter().GetResult();
                 }
                 _functions.Close(handle);

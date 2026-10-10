@@ -40,6 +40,7 @@ namespace EmbedIO.Net.Internal.Http3
             [FieldOffset(0)] internal ulong IsSet;
             [FieldOffset(94)] internal ushort PeerBidirectional;
             [FieldOffset(96)] internal ushort PeerUnidirectional;
+            [FieldOffset(106)] internal byte BooleanFlags;
         }
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate uint LoadCredential(IntPtr configuration, IntPtr credentials);
@@ -133,7 +134,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
 
-        internal MsQuicConfiguration CreateConfiguration(MsQuicRegistration registration, byte[] alpn, ushort bidirectional = 0, ushort unidirectional = 0)
+        internal MsQuicConfiguration CreateConfiguration(MsQuicRegistration registration, byte[] alpn, ushort bidirectional = 0, ushort unidirectional = 0, bool sendBuffering = true)
         {
             if (alpn == null) throw new ArgumentNullException(nameof(alpn));
             if (alpn.Length == 0 || alpn.Length > 255) throw new ArgumentOutOfRangeException(nameof(alpn));
@@ -151,9 +152,10 @@ namespace EmbedIO.Net.Internal.Http3
                 settings = Marshal.AllocHGlobal(Marshal.SizeOf<StreamSettings>());
                 Marshal.StructureToPtr(new StreamSettings
                 {
-                    IsSet = (1UL << 18) | (1UL << 19),
+                    IsSet = (1UL << 18) | (1UL << 19) | (sendBuffering ? 0 : 1UL << 24),
                     PeerBidirectional = bidirectional,
                     PeerUnidirectional = unidirectional,
+                    BooleanFlags = 0,
                 }, settings, false);
                 var status = _configurationOpen(registration.DangerousGetHandle(), buffer, 1, settings, (uint)Marshal.SizeOf<StreamSettings>(), IntPtr.Zero, out configuration);
                 if (Failed(status)) throw new IOException("MsQuic configuration failed with status 0x" + status.ToString("X8"));
@@ -237,6 +239,8 @@ namespace EmbedIO.Net.Internal.Http3
         internal MsQuicConfiguration CreateConfiguration(byte[] alpn) => _api.CreateConfiguration(this, alpn);
         internal MsQuicConfiguration CreateStreamConfiguration(byte[] alpn, ushort bidirectional, ushort unidirectional)
             => _api.CreateConfiguration(this, alpn, bidirectional, unidirectional);
+        internal MsQuicConfiguration CreateUnbufferedStreamConfiguration(byte[] alpn, ushort bidirectional, ushort unidirectional)
+            => _api.CreateConfiguration(this, alpn, bidirectional, unidirectional, false);
         internal void LoadServerCertificate(MsQuicConfiguration configuration, X509Certificate2 certificate)
             => _api.LoadServerCertificate(configuration, certificate);
         protected override bool ReleaseHandle()

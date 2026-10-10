@@ -335,6 +335,106 @@ namespace EmbedIO.Tests
                 }
             });
         }
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(65536)]
+        [TestCase(1048576)]
+        public async Task NativeAcceptedBidirectionalStreamSendsExactBytesAndFin(int length)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeSendCore(length);
+        }
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task NativeCommittedBlockedSendRetainsOwnershipUntilCancellationOrDisposal(bool dispose)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeBlockedSendCore(dispose);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeBlockedSendCore(bool dispose)
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                await using var stream = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                await stream.WriteAsync(new byte[] { 42 }, true, token);
+                var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                await accepting.WaitAsync(token);
+                using var native = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                    ?? throw new AssertionException("Missing native stream."));
+                var input = new byte[8];
+                Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", input.AsMemory(), token), Is.EqualTo(1));
+                Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", input.AsMemory(), token), Is.Zero);
+                using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+                var payload = new byte[8 * 1024 * 1024];
+                Array.Fill(payload, (byte)93);
+                var writing = ((ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)payload, false, cancellation.Token)).AsTask();
+                await Task.Delay(50, token);
+                Assert.That(writing.IsCompleted, Is.False, "The committed unbuffered write must remain blocked by unread peer flow control.");
+                if (dispose)
+                {
+                    native.Dispose();
+                    await Assert.ThatAsync(async () => await writing.WaitAsync(token), Throws.InstanceOf<System.IO.IOException>());
+                }
+                else
+                {
+                    cancellation.Cancel();
+                    await Assert.ThatAsync(async () => await writing.WaitAsync(token), Throws.InstanceOf<OperationCanceledException>());
+                }
+                // Cancellation is stream-local: a new stream still transfers both ways.
+                await using var sibling = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                await sibling.WriteAsync(new byte[] { 71 }, true, token);
+                var siblingAccept = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                await siblingAccept.WaitAsync(token);
+                using var owned = (SafeHandle)(siblingAccept.GetType().GetProperty("Result")?.GetValue(siblingAccept)
+                    ?? throw new AssertionException("Missing sibling native stream."));
+                Assert.That(await (ValueTask<int>)ListenerCall(owned, "ReadAsync", input.AsMemory(), token), Is.EqualTo(1));
+                Assert.That(input[0], Is.EqualTo(71));
+                Assert.That(await (ValueTask<int>)ListenerCall(owned, "ReadAsync", input.AsMemory(), token), Is.Zero);
+                await (ValueTask)ListenerCall(owned, "WriteAsync", new ReadOnlyMemory<byte>(new byte[] { 72 }), true, token);
+                Assert.That(await sibling.ReadAsync(input, token), Is.EqualTo(1));
+                Assert.That(input[0], Is.EqualTo(72));
+                Assert.That(await sibling.ReadAsync(input, token), Is.Zero);
+            }, unbuffered: true);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeSendCore(int length)
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                await using var stream = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                await stream.WriteAsync(new byte[] { 42 }, true, token);
+                var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                await accepting.WaitAsync(token);
+                using var native = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                    ?? throw new AssertionException("Missing native stream."));
+                var input = new byte[8];
+                Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", input.AsMemory(), token), Is.EqualTo(1));
+                Assert.That(input[0], Is.EqualTo(42));
+                Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", input.AsMemory(), token), Is.Zero);
+                var payload = new byte[length + 6];
+                for (var i = 0; i < length; i++) payload[i + 3] = (byte)(i * 53);
+                var writing = ((ValueTask)ListenerCall(native, "WriteAsync", new ReadOnlyMemory<byte>(payload, 3, length), true, token)).AsTask();
+                var readback = new byte[length];
+                var chunk = new byte[1023]; var total = 0;
+                while (true)
+                {
+                    var count = await stream.ReadAsync(chunk, token);
+                    if (count == 0) break;
+                    Assert.That(total + count, Is.LessThanOrEqualTo(length));
+                    chunk.AsSpan(0, count).CopyTo(readback.AsSpan(total)); total += count;
+                }
+                await writing.WaitAsync(token);
+                Assert.That(total, Is.EqualTo(length));
+                Assert.That(readback, Is.EqualTo(payload.AsSpan(3, length).ToArray()));
+                await Assert.ThatAsync(async () => await (ValueTask)ListenerCall(native, "WriteAsync", ReadOnlyMemory<byte>.Empty, false, token),
+                    Throws.InstanceOf<System.IO.IOException>());
+            });
+        }
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
@@ -370,13 +470,13 @@ namespace EmbedIO.Tests
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task ExerciseNativeHandshake(bool stopListenerFirst, QuicStreamType? streamType = null, bool credit = false, Func<SafeHandle, QuicConnection, CancellationToken, Task>? streams = null)
+        private static async Task ExerciseNativeHandshake(bool stopListenerFirst, QuicStreamType? streamType = null, bool credit = false, Func<SafeHandle, QuicConnection, CancellationToken, Task>? streams = null, bool unbuffered = false)
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             using var api = OpenApi();
             using var registration = Register(api);
             using var configuration = streamType.HasValue || streams != null
-                ? (SafeHandle)ListenerCall(registration, "CreateStreamConfiguration", new byte[] { (byte)'h', (byte)'3' },
+                ? (SafeHandle)ListenerCall(registration, unbuffered ? "CreateUnbufferedStreamConfiguration" : "CreateStreamConfiguration", new byte[] { (byte)'h', (byte)'3' },
                     streams != null || (credit && streamType == QuicStreamType.Bidirectional) ? (ushort)8 : (ushort)0,
                     streams != null || (credit && streamType == QuicStreamType.Unidirectional) ? (ushort)8 : (ushort)0)
                 : Configure(registration, new byte[] { (byte)'h', (byte)'3' });
