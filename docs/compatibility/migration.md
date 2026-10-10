@@ -1116,3 +1116,22 @@ Malformed QPACK syntax/references and encoder instructions still fail the
 connection. Aggregate blocked-storage and decoder-feedback exhaustion also retain
 their connection-wide policy. Applications should handle the rejected request
 stream independently instead of assuming all requests on the connection failed.
+
+## Higher HTTP/1 minor versions (unreleased)
+
+The managed listener now processes syntactically valid higher HTTP/1 minor
+versions, such as HTTP/1.2 or HTTP/1.9, using its HTTP/1.1 semantics. These requests
+previously received 400. Request.ProtocolVersion preserves the received version;
+Response.ProtocolVersion and the response status line advertise the implemented
+HTTP/1.1 version. This does not claim implementation of hypothetical future features.
+
+Fixed-length and chunked bodies, Host validation, and 100-continue use the same
+rules as HTTP/1.1. Conflicting framing, duplicate/missing Host, malformed version
+syntax and unsupported major versions remain rejected. HTTP/1.0 and HTTP/1.1
+behavior is unchanged. This correction applies to the managed listener; native
+Microsoft-backend behavior is unchanged. Applications should use response metadata
+to identify the version the server actually sends, rather than echoing a higher
+received minor version into a response.
+
+References: [HTTP version semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
+and [single-digit HTTP/1 version syntax](https://www.rfc-editor.org/rfc/rfc9112.html#section-2.3).

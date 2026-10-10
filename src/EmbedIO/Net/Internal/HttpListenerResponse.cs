@@ -97,7 +97,7 @@ namespace EmbedIO.Net.Internal
         public Stream OutputStream => _outputStream ??= _connection.GetResponseStream();
 
         /// <inheritdoc />
-        public Version ProtocolVersion => _request.ProtocolVersion;
+        public Version ProtocolVersion => _request.ProtocolVersion.Minor == 0 ? HttpVersion.Version10 : HttpVersion.Version11;
 
         /// <inheritdoc />
         /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
@@ -274,7 +274,7 @@ namespace EmbedIO.Net.Internal
 
             // RFC 9931 section 8: bytes after a rejected HTTP/1.1 CONNECT
             // might already belong to the requested tunnel, never a successor.
-            if (_request.ProtocolVersion == HttpVersion.Version11 && _request.HttpMethod == "CONNECT" && _statusCode >= 300)
+            if (ProtocolVersion == HttpVersion.Version11 && _request.HttpMethod == "CONNECT" && _statusCode >= 300)
                 keepAlive = false;
 
             _keepAlive = keepAlive;
