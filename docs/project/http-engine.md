@@ -7159,3 +7159,31 @@ application WebTransport capability nor independent interoperability is claimed.
 The native direction branch is reconciled onto verified WebTransport merge 90e84f1. Combined discovery is 4903 (4897 base plus six real-peer direction cases). Fresh combined-source and exact-head hosted validation remain required.
 
 Combined native direction acceptance on WebTransport development base 90e84f1 passes 4903 Windows cases: 4898 passed, five existing skips, zero failures (3m 23s), with complete warning-free builds for both targets. Fresh hosted checks on this reconciled head remain required.
+
+### HTTP/2 cancellation while the final drain barrier is queued
+
+PR #241's Windows regression run 38073076144 failed
+`InFlightRefusedUploadPreservesDrainedResponseAndConnectionCredit(False)` during
+cleanup: `TaskCanceledException` escaped `Http2Dispatcher.RunAsync`'s final empty
+output barrier. The helper cancels its server token after wire verification;
+that cancellation can occur after the dispatcher's cancellation check and while
+the barrier is still queued. This is distinct from the combined-listener
+admission/drain failure and the HTTP/1.1 upload-churn timeout.
+
+A controlled fixture holds the credit pump and output flusher, observes the real
+empty barrier in the output queue, and then cancels the connection. That case
+fails on unchanged production source at a4f7105. A companion case injects an
+IOException into the same queued barrier before cancellation and verifies that
+the original output error still propagates. These are controlled internal-state
+fixtures, not independent wire-conformance cases.
+
+The correction handles only OperationCanceledException when the connection's
+stop token is canceled, matching the existing read-loop and drain-task cleanup
+paths. It changes no successful drain ordering or application response writes.
+Other failures still propagate. Both target builds have zero warnings; all 126
+focused HTTP/2 interoperability/drain/cancellation cases pass on Windows. The
+discovery floor becomes 4905 (4903 base plus two cases). The full Windows suite reports 4905 cases, 4900 passed, five expected skips
+and zero failures in 3m 21s. All 126 focused cases also pass on pinned Linux,
+using the same Windows-built IL. Formatting and both source guards pass.
+Fresh hosted checks remain required. The tested core SHA-256 is
+`5B155800B43D8BBF090966B2067C3E36790C29260BC0D67753FBC9FDCDFE2BE2`.
