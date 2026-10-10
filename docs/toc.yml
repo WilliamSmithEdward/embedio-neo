@@ -212,6 +212,8 @@
       href: project/embed_io_neo.md
     - name: Modern HTTP engine program
       href: project/http-engine.md
+    - name: Completed response cleanup
+      href: project/http-completed-response-cleanup.md
     - name: Capsule transport development
       href: project/http-capsule-transport.md
     - name: QUIC lifetime and rebind

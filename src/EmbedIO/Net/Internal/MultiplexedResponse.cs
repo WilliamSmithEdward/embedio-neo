@@ -249,6 +249,13 @@ namespace EmbedIO.Net.Internal
             {
                 if (_closed) return;
                 _closed = true;
+                // No further wire operation remains after a committed final end.
+                // Drain or peer cancellation cannot undo that successful response.
+                if (_headersSent && _exchange.Ended)
+                {
+                    _exchange.CloseConnectionAfterResponse = !_keepAlive;
+                    return;
+                }
                 if (!token.CanBeCanceled) token = _exchange.CancellationToken;
                 token.ThrowIfCancellationRequested();
                 _exchange.CloseConnectionAfterResponse = !_keepAlive;

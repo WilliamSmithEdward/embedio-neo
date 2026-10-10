@@ -156,6 +156,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
+- [Cleanup after committed response completion](project/http-completed-response-cleanup.md): late cancellation, complete-wire state and preserved incomplete-response handling.
+
 - [Capsule transport development](project/http-capsule-transport.md): streamed framing, negotiation constraints and remaining integration work.
 
 - [Neo baseline and direction](project/embed_io_neo.md): initial fork decisions and acknowledgments.
