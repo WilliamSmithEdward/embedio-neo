@@ -155,6 +155,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [MAUI Android](platforms/maui-android.md): background work, listener ownership, and restart diagnostics.
 - [MAUI Mac Catalyst](platforms/maui-mac-catalyst.md): listener startup and sandbox entitlements.
 
+- [Informational responses and response trailers](guides/response-field-sections.md): optional managed response sections and ownership rules.
+
 ## Project and contribution
 
 - [Cleanup after committed response completion](project/http-completed-response-cleanup.md): late cancellation, complete-wire state and preserved incomplete-response handling.

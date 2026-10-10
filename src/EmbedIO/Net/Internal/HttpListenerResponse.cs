@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Globalization;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using EmbedIO.Internal;
 using EmbedIO.Utilities;
 
@@ -15,7 +17,7 @@ namespace EmbedIO.Net.Internal
     /// Represents an HTTP Listener's response.
     /// </summary>
     /// <seealso cref="IDisposable" />
-    internal sealed class HttpListenerResponse : IHttpResponse, IDisposable
+    internal sealed class HttpListenerResponse : IHttpResponseSections, IDisposable
     {
         private readonly HttpConnection _connection;
         private readonly HttpListenerRequest _request;
@@ -30,6 +32,9 @@ namespace EmbedIO.Net.Internal
         private bool _tunnel;
         private bool _capsuleCarrier;
         private bool _contentTypeConfigured;
+        private HashSet<string>? _trailerNames;
+        private byte[]? _endingChunk;
+        internal byte[]? EndingChunk => Volatile.Read(ref _endingChunk);
 
         internal HttpListenerResponse(HttpListenerContext context)
         {
@@ -56,6 +61,7 @@ namespace EmbedIO.Net.Internal
                     throw new ArgumentOutOfRangeException(nameof(value), "Must be >= 0");
                 }
 
+                if (_trailerNames != null) throw new InvalidOperationException("Reserved HTTP/1 trailers require chunked framing without Content-Length.");
                 Headers[HttpHeaderNames.ContentLength] = value.ToString(CultureInfo.InvariantCulture);
             }
         }
@@ -113,6 +119,7 @@ namespace EmbedIO.Net.Internal
             set
             {
                 EnsureCanChangeHeaders();
+                if (_trailerNames != null && !value) throw new InvalidOperationException("Reserved HTTP/1 trailers require chunked framing.");
                 _chunked = value;
             }
         }
@@ -132,6 +139,8 @@ namespace EmbedIO.Net.Internal
                     throw new ArgumentOutOfRangeException(nameof(StatusCode), "StatusCode must be between 100 and 999.");
                 }
 
+                if (_trailerNames != null && (value < 200 || value is 204 or 205 or 304))
+                    throw new InvalidOperationException("Reserved trailers require a body-capable final response.");
                 _statusCode = value;
                 StatusDescription = HttpListenerResponseHelper.GetStatusDescription(value);
             }
@@ -181,9 +190,48 @@ namespace EmbedIO.Net.Internal
             _cookies.Add(cookie);
         }
 
+        public Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken cancellationToken = default)
+        {
+            var token = cancellationToken;
+            EnsureCanChangeHeaders();
+            if (ProtocolVersion < HttpVersion.Version11 || _tunnel)
+                throw new InvalidOperationException("This response cannot carry informational sections.");
+            var fields = HttpResponseFieldSections.Informational(statusCode, headers);
+            var bytes = HttpResponseFieldSections.Http1Informational(statusCode, fields);
+            return ((ResponseStream)OutputStream).WriteInformationalAsync(bytes, token);
+        }
+
+        public void DeclareTrailers(params string[] fieldNames) => PrepareTrailers(fieldNames);
+
+        internal void PrepareTrailers(string[] names)
+        {
+            EnsureCanChangeHeaders();
+            if (names == null) throw new ArgumentNullException(nameof(names));
+            if (ProtocolVersion < HttpVersion.Version11 || SuppressesBody || _statusCode == 205 || _tunnel
+                || (_request.HttpMethod == "CONNECT" && _statusCode >= 200 && _statusCode < 300))
+                throw new InvalidOperationException("This response cannot carry trailers.");
+            if (Headers[HttpHeaderNames.ContentLength] != null)
+                throw new InvalidOperationException("HTTP/1 trailers require chunked framing without Content-Length.");
+            var declared = HttpResponseTrailerFields.Declaration(names);
+            Headers["Trailer"] = string.Join(", ", declared);
+            _trailerNames = declared;
+            _chunked = true;
+        }
+
+        public void SetTrailers(WebHeaderCollection trailers)
+        {
+            if (trailers == null) throw new ArgumentNullException(nameof(trailers));
+            if (_disposed != 0 || _tunnel || _trailerNames == null || !_chunked || SuppressesBody || _statusCode == 205)
+                throw new InvalidOperationException("Trailers were not reserved for an open response.");
+            var fields = HttpResponseTrailerFields.Snapshot(trailers, _trailerNames);
+            var ending = HttpResponseTrailerFields.ChunkEnd(fields);
+            Volatile.Write(ref _endingChunk, ending);
+        }
+
         internal void BeginTunnel(string? protocol, bool capsules)
         {
             EnsureCanChangeHeaders();
+            if (_trailerNames != null) throw new InvalidOperationException("A trailer response cannot become a tunnel.");
             if (capsules)
             {
                 HttpCapsuleProtocol.ValidateCarrierHeaders(_request.Headers);
@@ -208,6 +256,9 @@ namespace EmbedIO.Net.Internal
 
         internal MemoryStream SendHeaders(bool closing, int bodyCount)
         {
+            if (_trailerNames != null && (!_chunked || SuppressesBody || _statusCode == 205
+                || _tunnel || Headers[HttpHeaderNames.ContentLength] != null))
+                throw new InvalidOperationException("Reserved trailers require a body-capable chunked response.");
             if (_capsuleCarrier) HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _statusCode);
             if (_contentType != null && (!_tunnel || (_contentTypeConfigured && !_capsuleCarrier)))
             {
@@ -245,7 +296,7 @@ namespace EmbedIO.Net.Internal
                 }
                 _chunked = false;
             }
-            else if (closing)
+            else if (closing && _trailerNames == null)
             {
                 if (_request.HttpVerb != HttpVerbs.Head)
                     Headers[HttpHeaderNames.ContentLength] = "0";
