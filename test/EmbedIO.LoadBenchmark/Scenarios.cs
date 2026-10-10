@@ -31,10 +31,16 @@
         new("h1-plain-large1m-c16", Protocol.Http1, false, "/bytes/1048576", 0, 16, 1, 1, 0, "1 MiB Content-Length response, 16 connections"),
         new("h1-plain-upload1m-c16", Protocol.Http1, false, "/upload", Mebibyte, 16, 1, 1, 0, "1 MiB POST validated by the server, 16 connections"),
         new("h1-plain-stream1m-c16", Protocol.Http1, false, "/stream/1048576/16384", 0, 16, 1, 1, 0, "1 MiB chunked response flushed every 16 KiB, 16 connections"),
+        // Response-write paths the fixed-length scenarios do not reach: a small chunked
+        // response (one write, flush, terminator) and one chunked write above the batching bound.
+        new("h1-plain-chunk13-c64", Protocol.Http1, false, "/stream/13/13", 0, 64, 1, 1, 0, "13-byte chunked response in one write, 64 keep-alive connections"),
+        new("h1-plain-chunked1m-c16", Protocol.Http1, false, "/stream/1048576/1048576", 0, 16, 1, 1, 0, "1 MiB chunked response in one write, 16 connections"),
         new("h1-tls-small-c64", Protocol.Http1, true, "/plaintext", 0, 64, 1, 1, 0, "TLS 13-byte GET, 64 keep-alive connections"),
         new("h1-tls-churn-c32", Protocol.Http1, true, "/plaintext", 0, 32, 1, 1, 1, "TLS handshake plus one request per connection, 32 concurrent; 5 s cap (host TIME_WAIT capacity)", MaxSeconds: 5),
         new("h1-tls-large1m-c16", Protocol.Http1, true, "/bytes/1048576", 0, 16, 1, 1, 0, "TLS 1 MiB response, 16 connections"),
         new("h1-tls-upload1m-c16", Protocol.Http1, true, "/upload", Mebibyte, 16, 1, 1, 0, "TLS 1 MiB POST, 16 connections"),
+        new("h1-tls-chunk13-c64", Protocol.Http1, true, "/stream/13/13", 0, 64, 1, 1, 0, "TLS 13-byte chunked response in one write, 64 keep-alive connections"),
+        new("h1-tls-stream1m-c16", Protocol.Http1, true, "/stream/1048576/16384", 0, 16, 1, 1, 0, "TLS 1 MiB chunked response flushed every 16 KiB, 16 connections"),
         new("h2-plain-small-c8x32", Protocol.Http2, false, "/plaintext", 0, 8, 32, 1, 0, "h2c prior knowledge, 8 connections x 32 streams"),
         new("h2-tls-small-c8x32", Protocol.Http2, true, "/plaintext", 0, 8, 32, 1, 0, "h2 over TLS ALPN, 8 connections x 32 streams"),
         new("h2-tls-small-c64x1", Protocol.Http2, true, "/plaintext", 0, 64, 1, 1, 0, "h2 over TLS, 64 connections x 1 stream"),

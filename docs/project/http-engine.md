@@ -1,5 +1,10 @@
 # Modern HTTP engine program
 
+Release scope: William designated this modern engine program for **EmbedIO-Neo v2**
+on 2026-10-10. Maintain the [Neo v1 to v2 migration guide](../compatibility/neo-v1-to-v2.md)
+as the implementation and approved behavior changes settle. V2 is not released;
+this designation does not authorize publication.
+
 The owner authorized a replacement managed transport on 2026-10-08, with extreme
 performance as a core requirement, incremental delivery, and HTTP support through
 the October 2026 standards baseline. Strict rejection of malformed and ambiguous
@@ -7082,6 +7087,30 @@ core targets build without warnings. The two additional callback cases retain
 their controlled-invocation scope; focused native Linux results above precede
 this H2-only base move. All new-head hosted checks remain required.
 
+Native stream direction completion is now implemented internally: read FIN waits
+for borrowed bytes to be consumed, send completion waits for the native graceful
+shutdown event, and RESET_STREAM/STOP_SENDING fault only their respective tasks
+with the peer application code. Task sources are allocated only when observed;
+absent unidirectional sides use completed tasks. Disposal resolves pending
+observers. Public runtime exception constructors are called behind actual
+supported-platform guards; no private runtime shim or reused implementation code
+is used. This still does not route application HTTP through the native provider.
+
+Three initial direction cases fail on unchanged code because completion signals
+are absent. Six new real-peer cases cover FIN, both peer abort directions,
+unidirectional absent sides and disposal. All 67 focused native cases pass on
+Windows and pinned Linux (same Windows-built IL); both targets build warning-free
+and source guards pass. Expected combined discovery is 4813 (4807 base plus six).
+Full-source and hosted acceptance, native adapter/application integration,
+explicit local abort/completion operations and datagram delivery remain required.
+
+Final native direction acceptance: 4813 Windows cases, 4808 passed, five existing
+skips, zero failures (3m 21s), with all 67 focused native cases passing on Windows
+and pinned Linux using the same Windows-built IL. Both-target builds and source
+guards pass. The earlier platform-analyzer failure was corrected with an actual
+supported-platform check before constructing public QUIC exceptions; no analyzer
+suppression was added. All final-head hosted checks remain required.
+
 ### WebTransport session core (isolated, unintegrated)
 
 An original internal framing and session core for WebTransport over HTTP/3 now
@@ -7131,3 +7160,72 @@ Final reconciliation onto callback base 048f06f passes 4897 Windows cases,
 4892 passed, five existing skips, zero failures (3m 21s), with warning-free
 complete builds for both targets. All new-head checks remain required; neither
 application WebTransport capability nor independent interoperability is claimed.
+
+The native direction branch is reconciled onto verified WebTransport merge 90e84f1. Combined discovery is 4903 (4897 base plus six real-peer direction cases). Fresh combined-source and exact-head hosted validation remain required.
+
+Combined native direction acceptance on WebTransport development base 90e84f1 passes 4903 Windows cases: 4898 passed, five existing skips, zero failures (3m 23s), with complete warning-free builds for both targets. Fresh hosted checks on this reconciled head remain required.
+
+Combined drain investigation: Windows PR 239 head ba4991b failed
+CombinedDrainPreservesEveryProtocolUntilItsResponseFinishes(True,True) in run
+38071451499, job 114269517877. The published listener error 995 points to the
+fixture's cleanup await at line 77 after about 30 seconds. That cleanup can
+replace an earlier failure; the original phase and protocol admission statuses
+were not recorded. The underlying cause is unconfirmed, and neither this test
+nor its application transports use the new native provider. The log is retained
+under ignored TestResults/native-abort-integration/windows-ba4991b.log.
+
+The diagnostic fixture now records the current phase, each protocol's handler
+entry, request-task status and exceptions before cleanup. If a primary failure
+already exists, known cancellation/listener/timeout cleanup failures are logged
+without replacing it. The test still fails with its primary exception; success
+assertions, deadlines and transport behavior are unchanged. No retry, quarantine
+or production correction is added. Locked restore, both-target warning-free builds, source guards and changed-file formatting pass. All four existing combined-drain cases pass locally. No natural failure was captured during that focused run, so the root cause remains unconfirmed; hosted phase evidence is still required.
+
+### HTTP/1 response-write first-segment batching
+
+The managed HTTP/1 response stream now commits the first write of a response as
+one pooled transport segment: head, chunk-size line, up to 64 KiB of body and
+the chunk CRLF. Bodies beyond 64 KiB merge a 16 KiB prefix with the head and send
+the remainder directly, as before. The head buffer no longer reserves a fresh
+copy of the first body bytes, bounded subsequent chunks format their size line
+in place and clear only the bytes they wrote, and the synchronous write path
+batches bounded chunks like the asynchronous one. The change is confined to
+`ResponseStream.cs`; wire bytes, flush behavior, cancellation,
+`IgnoreWriteExceptions`, HEAD and bodyless suppression, trailers, disposal and
+graceful drain are unchanged, and no public API, default, target or dependency
+moved.
+
+A dotnet-trace profile of the base engine on flushed 1 MiB streaming attributes
+42 of the response stream's 46 points of sampled thread time to the socket send
+itself; pool clearing, copying and the write gate add about 3 points together.
+The socket-free `--response-write` component benchmark on the base showed the
+remaining waste directly: a 16 KiB fixed-length response needed two transport
+writes and a 16 KiB first chunk three, a complete small chunked response three,
+each batched chunk allocated 104 B and every response of 16 KiB or more
+allocated a fresh 16 KiB head buffer. The candidate removes those writes and
+allocations with exact wire bytes.
+
+Paired separate-process comparison against the exact base (66 samples, zero
+failures, three alternating rounds, fresh processes, every byte validated):
+small chunked responses use about 25% less server CPU per response and complete
+about 30% more responses per second on plain and TLS; flushed 1 MiB streaming
+uses 3-5% less CPU and 60% less allocation per response in every round; 1 MiB
+fixed-length and single-chunk responses keep their CPU within noise with two
+thirds less allocation; small fixed-length, pipelined and TLS small responses
+are unchanged within noise. Every sample carried 8-30 CPU-seconds of unrelated
+host activity per 15 s window, the client ran near saturation on the small
+chunked scenarios, and TLS streaming tails were noisy in both directions.
+Method, tables, per-round values and limits are recorded in the
+[load comparison](http-engine-load-comparison.md#http1-response-write-first-segment-batching-2026-10-10).
+
+Thirty-two regression cases cover first-write merging, bounded and oversized
+bodies and heads, synchronous batching, mid-write cancellation of the merged
+segment, transport failure under both write policies, 204 suppression, reserved
+trailers and exact 20,000-byte responses over HTTP and HTTPS. Both targets
+build; formatting, both source guards, the allocation and cleanup gates, the
+full Windows suite (4,935 cases, 4,930 passed, five existing skips) and the
+net472 engine smoke against the netstandard2.0 asset pass. The discovery floor
+rises by 32 once the shared floors are reconciled. Not addressed here: the
+synchronous terminator written when the pipeline closes a chunked response
+(`HttpConnection` closes synchronously), the write gate's task per write,
+batching across pipelined responses, and `NoDelay` on accepted sockets.

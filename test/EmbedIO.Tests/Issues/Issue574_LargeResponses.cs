@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
@@ -90,8 +91,30 @@ namespace EmbedIO.Tests.Issues
             var url = Resources.GetServerAddress();
             var payload = MakePayload(6 * 1024 * 1024);
             var jsonValue = Encoding.ASCII.GetString(payload);
+            var serialize = ResponseSerializer.Json(buffered);
+            Task? serialization = null;
+            IHttpContext? jsonContext = null;
+            var serializationPhase = "not entered";
+            var jsonClosed = 0;
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(mode))
-                .WithWebApi("/api", ResponseSerializer.Json(buffered), m => m.WithController(() => new LargeController(jsonValue)))
+                .WithWebApi("/api", async (context, value) =>
+                {
+                    jsonContext = context;
+                    context.OnClose(_ => Interlocked.Increment(ref jsonClosed));
+                    Volatile.Write(ref serializationPhase, "serialize invoked");
+                    try
+                    {
+                        serialization = serialize(context, value);
+                        Volatile.Write(ref serializationPhase, "await serialization");
+                        await serialization;
+                        Volatile.Write(ref serializationPhase, "serialization completed");
+                    }
+                    catch
+                    {
+                        Volatile.Write(ref serializationPhase, "serialization failed");
+                        throw;
+                    }
+                }, m => m.WithController(() => new LargeController(jsonValue)))
                 .WithModule(new ActionModule("/large", HttpVerbs.Get, async context =>
                 {
                     using var output = context.OpenResponseStream(buffered, preferCompression: false);
@@ -110,7 +133,62 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(JsonSerializer.Deserialize<string>(await json), Is.EqualTo(jsonValue));
                 Assert.That(await client.GetStringAsync(url + "health"), Is.EqualTo("healthy"));
             }
+            catch (Exception error)
+            {
+                TestContext.Error.WriteLine($"Large-response failure: mode={mode}, buffered={buffered}, server={server.State}, run={running.Status}, serializationPhase={Volatile.Read(ref serializationPhase)}, serialization={serialization?.Status}, jsonClosed={Volatile.Read(ref jsonClosed)}, clientError={error.GetType().Name}.");
+                try
+                {
+                    if (jsonContext != null)
+                        TestContext.Error.WriteLine($"JSON context: id={jsonContext.Id}, cancellation={jsonContext.CancellationToken.IsCancellationRequested}, status={jsonContext.Response.StatusCode}, chunked={jsonContext.Response.SendChunked}, declaredLength={jsonContext.Response.ContentLength64}.");
+                }
+                catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError))
+                {
+                    TestContext.Error.WriteLine($"JSON context diagnostic unavailable: {diagnosticError.GetType().Name}.");
+                }
+                await CaptureLargeResponseTransportState(url);
+                throw;
+            }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
+        }
+
+        private static async Task CaptureLargeResponseTransportState(string url)
+        {
+            try
+            {
+                ThreadPool.GetAvailableThreads(out var workers, out var completions);
+                TestContext.Error.WriteLine($"Thread pool: threads={ThreadPool.ThreadCount}, pending={ThreadPool.PendingWorkItemCount}, completed={ThreadPool.CompletedWorkItemCount}, availableWorkers={workers}, availableCompletions={completions}.");
+                if (!OperatingSystem.IsLinux()) return;
+                var start = new ProcessStartInfo("ss")
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                };
+                start.ArgumentList.Add("-tinmp");
+                start.ArgumentList.Add($"( sport = :{new Uri(url).Port} or dport = :{new Uri(url).Port} )");
+                using var process = Process.Start(start);
+                if (process == null) return;
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                try
+                {
+                    var output = process.StandardOutput.ReadToEndAsync(deadline.Token);
+                    var errors = process.StandardError.ReadToEndAsync(deadline.Token);
+                    await process.WaitForExitAsync(deadline.Token);
+                    var snapshot = await output;
+                    TestContext.Error.WriteLine($"TCP snapshot: exit={process.ExitCode}, {snapshot[..Math.Min(snapshot.Length, 8192)]}");
+                    var error = await errors;
+                    if (error.Length != 0) TestContext.Error.WriteLine($"TCP diagnostic: {error[..Math.Min(error.Length, 1024)]}");
+                }
+                finally
+                {
+                    if (!process.HasExited) process.Kill();
+                }
+            }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                TestContext.Error.WriteLine($"Transport diagnostic unavailable: {error.GetType().Name}.");
+            }
         }
 
         [Test]
