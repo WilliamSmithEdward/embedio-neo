@@ -21,7 +21,7 @@ namespace EmbedIO.Net.Internal.Http3
         // Frames up to this payload size are submitted with their header in one
         // transport write; larger payloads are written in place without a copy.
         private const int CoalescedPayload = 16 * 1024;
-        private readonly BorrowedResource<QuicStream> _stream;
+        private readonly BorrowedResource<Http3TransportStream> _stream;
         private readonly Http3RequestStream _reader;
         private readonly IHttp3ExchangeOwner _owner;
         private readonly SemaphoreSlim _output = new(1, 1);
@@ -39,8 +39,11 @@ namespace EmbedIO.Net.Internal.Http3
         private int _disposed;
         internal Http3QuicExchange(QuicStream stream, Http3RequestStream reader, Http2RequestHeaders request,
             IHttp3ExchangeOwner owner, CancellationToken token)
+            : this(new SystemQuicTransportStream(stream), reader, request, owner, token) { }
+        internal Http3QuicExchange(Http3TransportStream stream, Http3RequestStream reader, Http2RequestHeaders request,
+            IHttp3ExchangeOwner owner, CancellationToken token)
         {
-            _stream = new BorrowedResource<QuicStream>(stream); _reader = reader; Request = request;
+            _stream = new BorrowedResource<Http3TransportStream>(stream); _reader = reader; Request = request;
             _owner = owner; CancellationToken = token;
             Body = new Http3RequestBody(stream.Id, reader, owner);
         }
