@@ -6796,3 +6796,13 @@ request/session association, bounded receive policy, stream closure and
 WebTransport remain required development. The current System.Net.Quic provider
 still provides reliable streams only. No native datagram capability or completed
 WebTransport support is claimed. Source specification: [RFC 9297 section 2.1](https://www.rfc-editor.org/rfc/rfc9297.html#section-2.1).
+
+The next native-transport increment introduces internal connection and stream
+ownership abstractions and routes the existing System.Net.Quic provider through
+them. The protocol workers retain their stream IDs, FIN/reset notifications,
+async reads/writes and disposal ownership. The existing listener still selects
+System.Net.Quic; this increment does not enable datagrams or change public APIs.
+The 500-case HTTP/3 set passes; a subsequent 80-case QUIC/direction repeat passes
+after the constructor adjustment. Provider allocation/throughput impact and
+complete native-provider ownership remain unverified and required before
+integration. This branch is separate from response-field-section PR 230.
