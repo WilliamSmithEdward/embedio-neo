@@ -1179,3 +1179,36 @@ The shared close operation remains idempotent; writes after stream disposal
 fail, and cancellation and graceful drain still join completion. HTTP/1 and the
 Microsoft listener backend are unchanged. No new public API or dependency is
 introduced.
+## Generic tunnel and capsule carriers (unreleased)
+
+William approved the optional `IHttpTunnelContext`, `HttpTunnel` and
+`HttpCapsuleChannel` APIs. Existing context interfaces are unchanged. The managed
+HTTP/1 listener accepts valid authority-form CONNECT for application-controlled
+handoff, or a selected offered Upgrade protocol. Invalid CONNECT authority forms,
+including an absent/empty/zero/out-of-range port, are rejected before dispatch.
+Use `Request.RawTarget` to inspect and authorize a CONNECT destination; accepting
+this carrier never opens a connection to that destination automatically.
+
+William separately approved dispatching valid non-WebSocket HTTP/3 extended
+CONNECT requests to application handlers. The earlier staging implementation
+returned 501 for every such protocol before dispatch. They now follow normal
+prefix matching and route authorization. A route without a matching handler can
+return its ordinary 404; applications wanting 501 should reject explicitly.
+Handlers must call `AcceptTunnelAsync` to negotiate a carrier. Nothing is accepted
+or forwarded automatically. The dedicated WebSocket version check and existing
+WebSocket acceptance API remain intact.
+
+Capsule mode validates the negotiated Boolean Item and excludes representation
+and HTTP framing headers. It streams declared payloads without allocating their
+length. Applications supply resource policy and cancellation. Unknown capsule
+types can be skipped incrementally by an endpoint. This does not advertise native
+unreliable QUIC datagrams or implement a UDP/TCP proxy or WebTransport session.
+
+`HttpCapsuleChannel` borrows its stream; `HttpTunnel` owns its accepted stream.
+Await `CompleteOutputAsync` to finish sending while still reading the peer.
+Await `CloseAsync` (or .NET 10 asynchronous disposal) to observe completion and
+cleanup errors. Synchronous disposal starts the same operation without blocking.
+The server joins completion when the handler ends, so retain handler lifetime
+while consuming peer input after send completion. See
+[capsule development and current validation](../project/http-capsule-transport.md)
+for platform and runtime limits. These APIs remain under validation and unreleased.
