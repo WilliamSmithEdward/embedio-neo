@@ -1230,3 +1230,26 @@ returns false and another read throws IOException. Catch the canceled read,
 write the intended response (for example, 408 for a timed-out upload), and
 complete output. A token canceled before a read begins does not abandon input.
 Peer resets, connection failure and canceled output still end the request.
+## Final response status validation (unreleased)
+
+William approved limiting the public Response.StatusCode setter to final
+statuses, 200 through 599. Assigning 100 through 199 or 600 through 999 now throws
+ArgumentOutOfRangeException before changing the status, description or headers.
+The managed HTTP/1, HTTP/2 and HTTP/3 responses and the Microsoft response adapter
+apply this validation. Unknown final status codes within that range remain
+accepted. RFC 9110 section 15 defines 600 through 999 as invalid HTTP status
+codes. Applications using them for internal error identifiers must map them to a
+valid HTTP status and carry their internal identifier in the response payload.
+
+Previously, assigning an informational status such as 103 could finish the
+response without a final status, leaving an HTTP/1.1 client waiting; HTTP/1.0
+must not receive informational responses at all. Use the optional
+IHttpResponseSections.SendInformationalAsync for supported interim responses,
+then send a final response. A backend that does not advertise the optional
+interface cannot send interim responses through it.
+
+For a 101 protocol switch, use AcceptWebSocketAsync or an application-authorized
+AcceptTunnelAsync handoff instead of assigning the property manually. Negotiated
+HTTP/1 handshakes keep their 101 response; HTTP/2 and HTTP/3 do not use 101.
+Automatic 100 Continue remains supported. No informational assignment is silently
+rewritten into a different final status.

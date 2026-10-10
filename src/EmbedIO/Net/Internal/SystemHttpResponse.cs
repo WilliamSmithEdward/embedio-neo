@@ -43,7 +43,11 @@ namespace EmbedIO.Net.Internal
         public int StatusCode
         {
             get => _response.StatusCode;
-            set => _response.StatusCode = value;
+            set
+            {
+                HttpResponseFieldSections.ValidateFinalStatus(value);
+                _response.StatusCode = value;
+            }
         }
 
         /// <inheritdoc />

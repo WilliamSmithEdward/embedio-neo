@@ -115,10 +115,10 @@ Ports come from the operating system, not the shared test counter.
 | HTTP/3 client abort after the interim section | RFC 9114 4.1.1, 8.1 | Pass |
 | HTTP/3 drain with interim, body and trailers, then client close | RFC 9114 5.2 | Pass |
 | HTTP/3 tunnel handler failure with a read in flight | RFC 9114 4.1.1 | Pass: stream aborted, sibling healthy |
-| F1 public `StatusCode` setter with 1xx, HTTP/1.0 and 1.1 (2) | RFC 9110 15.2 | Explicit reproduction, fails as recorded below |
-| A1 HTTP/3 application read cancellation, tunnel and request body (2) | Contract consistency | Explicit reproduction, fails as recorded below |
+| F1 public `StatusCode` setter with 1xx, HTTP/1.0 and 1.1 (2) | RFC 9110 15.2 | Reproduced on the original core; now an ordinary regression |
+| A1 HTTP/3 application read cancellation, tunnel and request body (2) | Contract consistency | Reproduced on the original core; now an ordinary regression |
 
-Discovery rises by 27 cases: 23 run in the ordinary suite and 4 `Explicit`
+The original audit added 27 cases: 23 ran in the ordinary suite and 4 `Explicit`
 reproductions are reported as not executed. With base floor 4,903 the reconciled
 floor is 4,930. CI and CONTRIBUTING floors are not changed here; the engine owner
 reconciles them.
@@ -184,7 +184,7 @@ retained.
 
 ### Findings
 
-**F1, rechecked, unresolved (MUST).** The applicability audit's F1 still
+**F1, reproduced and corrected in the candidate (MUST).** The applicability audit's F1 still
 reproduces through the public `StatusCode` setter, now alongside the supported
 `IHttpResponseSections.SendInformationalAsync`. HTTP/1.0 receives `HTTP/1.0 103`
 then EOF (RFC 9110 section 15.2: a server MUST NOT send 1xx to an HTTP/1.0 client).
@@ -192,7 +192,26 @@ HTTP/1.1 receives `HTTP/1.1 103` and no final response within 5 s. Identical on
 Windows and Linux. The guide tells applications not to use the setter for interim
 responses; the setter still accepts 100 to 199. Reproduction:
 `Http1StatusSetterNeverSendsAnInformationalStatusAsTheFinalResponse`, `Explicit`,
-category `AuditFinding`.
+category `AuditFinding` on the original audit head.
+
+William approved final-status validation and its migration impact on 2026-10-10,
+including rejecting invalid 600-999 status codes. Built-in public response setters
+now accept 200-599; optional informational APIs and negotiated HTTP/1 handoffs
+retain their authorized 1xx paths. Validation precedes status/description/header
+mutation. Both F1 cases are ordinary tests, requesting connection closure so a
+correct final response finishes without a five-second observation delay. Four
+additional cases exercise every rejected 1xx and 600-999 code on managed HTTP/1,
+Microsoft HTTP/1, HTTP/2 and HTTP/3; valid unregistered codes remain supported.
+All six status cases fail with the preserved original core. The corrected status,
+section, tunnel, WebSocket and Continue set passes 140 cases on Windows and
+pinned Linux with zero skips, using the same Windows-built IL on Linux. Both
+targets build without warnings. Source guards and changed-file formatting pass.
+The full Windows suite reports 4944 cases: 4939 passed, five existing platform
+skips, zero failures in 3m27s under the shared workload lock. The tested core
+SHA-256 is `B348E9B0AEC885CFBE340A9856EB50180839ED4274865CF2A0D2F6BE3527D575`.
+Hosted exact-head checks remain required. Evidence: ignored
+TestResults/final-status. See the
+[final-status migration note](../compatibility/migration.md#final-response-status-validation-unreleased).
 
 **A1, reproduced and corrected in the candidate (contract consistency).** On HTTP/3, an application that
 cancels its own pending request-body or tunnel read loses the whole stream:

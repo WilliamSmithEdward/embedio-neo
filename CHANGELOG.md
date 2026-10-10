@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Restrict public response StatusCode assignments to final statuses (200-599),
+  as explicitly approved. Use informational-response and protocol-handoff APIs
+  for 1xx; automatic Continue and negotiated 101 remain supported. See the
+  [migration note](docs/compatibility/migration.md#final-response-status-validation-unreleased).
 - Add an isolated internal WebTransport over HTTP/3 session core (draft-ietf-webtrans-http3-16 framing, session association, capsules, flow control and bounded buffering) with unit coverage only. No listener advertises it, no public API or dependency changes; see [WebTransport session core development](docs/project/http-webtransport-core.md).
 - Preserve committed managed HTTP/2 control output when the last admitted response
   completes during graceful drain. Stop input separately and wait for queued output;

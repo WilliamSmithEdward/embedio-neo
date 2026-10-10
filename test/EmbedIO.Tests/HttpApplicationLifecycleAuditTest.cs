@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Net.Quic;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -86,12 +87,10 @@ namespace EmbedIO.Tests
 
         // Finding F1 of the applicability audit, rechecked on the current engine. RFC 9110
         // section 15.2: a server MUST NOT send a 1xx response to an HTTP/1.0 client, and a
-        // 1xx is never a final response. The public StatusCode setter still accepts 100-199.
+        // 1xx is never a final response. The approved setter validation rejects 100-199.
         // The interim API (IHttpResponseSections) is the supported route; this case records
-        // the remaining public-setter path. Unresolved: marked Explicit so the ordinary run
-        // stays green; run it explicitly to reproduce.
-        [Explicit("Audit finding F1 (unresolved): the public StatusCode setter accepts 1xx as a final status.")]
-        [Category("AuditFinding")]
+        // the public-setter path. Request closure makes a correct final response finish
+        // immediately while retaining the missing-final-status assertion.
         [TestCase("1.0")]
         [TestCase("1.1")]
         public async Task Http1StatusSetterNeverSendsAnInformationalStatusAsTheFinalResponse(string version)
@@ -110,7 +109,7 @@ namespace EmbedIO.Tests
             });
             using var tcp = new TcpClient { NoDelay = true };
             await tcp.ConnectAsync(IPAddress.Loopback, host.Port, host.Token);
-            await tcp.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"GET /status HTTP/{version}\r\nHost: localhost:{host.Port}\r\n\r\n"), host.Token);
+            await tcp.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"GET /status HTTP/{version}\r\nHost: localhost:{host.Port}\r\nConnection: close\r\n\r\n"), host.Token);
             // Collect everything sent within five seconds or until EOF, then classify the
             // status lines, so the observation is recorded whatever the framing.
             using var wait = CancellationTokenSource.CreateLinkedTokenSource(host.Token);
@@ -132,6 +131,52 @@ namespace EmbedIO.Tests
             Assert.That(statuses.Count(s => s >= 200), Is.EqualTo(1), "Every request needs exactly one final response.");
         }
 
+        [TestCase(HttpListenerMode.EmbedIO, 1)]
+        [TestCase(HttpListenerMode.Microsoft, 1)]
+        [TestCase(HttpListenerMode.EmbedIO, 2)]
+        [TestCase(HttpListenerMode.EmbedIOHttp3, 3)]
+        public async Task FinalStatusSetterRejectsEveryNonFinalOrInvalidCodeWithoutChangingResponse(HttpListenerMode mode, int version)
+        {
+            if (version == 3)
+            {
+                RequireQuic();
+                if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            }
+            using var certificate = Certificate();
+            await using var host = await Host.StartAsync(mode, version == 3 ? certificate : null, async context =>
+            {
+                foreach (var code in new[] { 200, 201, 204, 205, 304, 400, 471, 499, 500, 599 })
+                {
+                    context.Response.StatusCode = code;
+                    Assert.That(context.Response.StatusCode, Is.EqualTo(code));
+                }
+                context.Response.StatusCode = 201;
+                context.Response.StatusDescription = "retained";
+                context.Response.Headers["x-retained"] = "yes";
+                foreach (var code in Enumerable.Range(100, 100).Concat(Enumerable.Range(600, 400)))
+                {
+                    var rejected = code;
+                    Assert.Throws<ArgumentOutOfRangeException>(() => context.Response.StatusCode = rejected);
+                    Assert.That(context.Response.StatusCode, Is.EqualTo(201));
+                    Assert.That(context.Response.StatusDescription, Is.EqualTo("retained"));
+                    Assert.That(context.Response.Headers["x-retained"], Is.EqualTo("yes"));
+                }
+                Assert.Throws<ArgumentOutOfRangeException>(() => context.Response.StatusCode = 99);
+                Assert.Throws<ArgumentOutOfRangeException>(() => context.Response.StatusCode = 1000);
+                await context.SendStringAsync("valid-final", "text/plain", WebServer.Utf8NoBomEncoding);
+            });
+            using var handler = new SocketsHttpHandler
+            {
+                SslOptions = new SslClientAuthenticationOptions { RemoteCertificateValidationCallback = (_, _, _, _) => true },
+            };
+            using var client = new HttpClient(handler);
+            using var request = new HttpRequestMessage(HttpMethod.Get, (version == 3 ? "https" : "http") + "://localhost:" + host.Port + "/")
+            { Version = new Version(version, version == 1 ? 1 : 0), VersionPolicy = HttpVersionPolicy.RequestVersionExact };
+            using var response = await client.SendAsync(request, host.Token);
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+            Assert.That(response.Version.Major, Is.EqualTo(version));
+            Assert.That(await response.Content.ReadAsStringAsync(host.Token), Is.EqualTo("valid-final"));
+        }
         // ---------------------------------------------------------------- HTTP/2
 
         // RFC 9113 section 8.1: interim HEADERS, the final HEADERS, DATA and one ending
