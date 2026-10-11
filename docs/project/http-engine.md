@@ -7875,6 +7875,26 @@ All ten existing allocation, body-consumption, wire and HTTP/HTTPS cleanup gates
 pass with unchanged budgets, as do both source guards and changed-source
 formatting. Exact-head hosted checks still precede integration. No comparative
 whole-server throughput improvement is claimed.
+The first hosted frontend head passed Windows, Linux, security, malware and
+resource-budget checks, but macOS reported a late HTTP/2 admission during drain
+alongside the known raw MsQuic rebind failure. The two-failure run remains
+recorded; the narrow native-rebind quarantine correctly refused to hide the
+additional admission failure. Protocol drain initiation had been scheduled on a
+worker, as in the previous frontend, leaving a window before the HTTP/2 cutoff.
+The coordinator now publishes the shared drain completion under its state gate,
+then enters protocol drain outside that gate before returning to the caller.
+It awaits all admitted response cleanup through the same shared completion.
+The unchanged focused ownership/admission/drain set passes 78/78 after this
+correction. Final corrected-source full and hosted validation follow separately.
+Final corrected-source Windows validation reports 4,669 cases: 4,662 passed,
+seven expected skips and zero failures in 3m51s, requiring QUIC and the independent
+datagram peer. The corrected focused modern and actual netstandard2.0 core sets
+both pass 78/78 on the installed .NET 10 host. Both core target builds and the
+rebuilt standalone performance harness have zero warnings/errors. All ten
+unchanged resource, allocation, body and wire gates pass again; formatting and
+both source guards pass. Fresh hosted checks are required for this correction;
+the earlier failed macOS head is not accepted as final validation.
+
 ### Independent HTTP/1 request head and application view
 
 The HTTP/1 request now has an independently authored wire-head owner and an

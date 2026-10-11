@@ -134,6 +134,8 @@ namespace EmbedIO.Net.Internal
             cancellationToken.ThrowIfCancellationRequested();
             Task drain;
             HashSet<HttpConnection>? sessions;
+            TaskCompletionSource<bool>? completion = null;
+            CancellationTokenSource? deadline = null;
             lock (_gate)
             {
                 if (_stage == Disposed) throw new ObjectDisposedException(nameof(HttpListener));
@@ -147,11 +149,30 @@ namespace EmbedIO.Net.Internal
                     _drainAdmissions = new HashSet<HttpConnection>(owned.Where(connection => exclusive.Contains(connection.Endpoint)));
                     _epoch.Graceful = true;
                     Volatile.Write(ref _stage, Draining);
-                    var deadline = new CancellationTokenSource(timeout);
-                    _drain = Task.Run(() => FinishDrainAsync(owned, deadline));
+                    deadline = new CancellationTokenSource(timeout);
+                    completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _drain = completion.Task;
                 }
                 drain = _drain;
                 sessions = _drainSessions;
+            }
+            if (completion != null && deadline != null && sessions != null)
+            {
+                // Enter each protocol's drain before returning to the caller, but
+                // outside the listener gate: protocol dispatch can register here.
+                // Scheduling this entry as a worker left a window for new streams.
+                var protocolDrain = FinishDrainAsync(sessions, deadline);
+                _ = protocolDrain.ContinueWith(static (task, state) =>
+                {
+                    var result = (TaskCompletionSource<bool>)(state ?? throw new InvalidOperationException("Missing drain completion."));
+                    if (task.IsFaulted)
+                    {
+                        var failure = task.Exception ?? new AggregateException("Drain fault did not expose its cause.");
+                        result.TrySetException(failure.InnerExceptions);
+                    }
+                    else if (task.IsCanceled) result.TrySetCanceled();
+                    else result.TrySetResult(true);
+                }, completion, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             }
             return ObserveDrainAsync(drain, sessions, cancellationToken);
         }
