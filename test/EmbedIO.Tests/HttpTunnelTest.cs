@@ -74,8 +74,8 @@ namespace EmbedIO.Tests
             var stream = new DisposalProbe();
             var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var tunnel = new HttpTunnel(stream, _ => release.Task);
-            var first = tunnel.DisposeAsync().AsTask();
-            Assert.That(tunnel.DisposeAsync().AsTask(), Is.SameAs(first));
+            var first = TestObjects.TunnelDisposal.BeginAsync(tunnel);
+            Assert.That(TestObjects.TunnelDisposal.BeginAsync(tunnel), Is.SameAs(first));
             tunnel.Dispose();
             Assert.That(stream.Closed.Task.IsCompleted, Is.False);
             release.TrySetResult();
@@ -89,7 +89,7 @@ namespace EmbedIO.Tests
             var stream = new DisposalProbe();
             var failure = new IOException("completion failed");
             var tunnel = new HttpTunnel(stream, _ => Task.FromException(failure));
-            var error = await Assert.ThrowsAsync<IOException>(async () => await tunnel.DisposeAsync());
+            var error = await Assert.ThrowsAsync<IOException>(async () => await TestObjects.TunnelDisposal.BeginAsync(tunnel));
             Assert.That(error, Is.SameAs(failure));
             Assert.That(stream.CloseCount, Is.EqualTo(1));
             tunnel.Dispose();
@@ -101,9 +101,9 @@ namespace EmbedIO.Tests
         {
             var stream = new ThrowingDisposalProbe();
             var tunnel = new HttpTunnel(stream, _ => Task.CompletedTask);
-            var first = tunnel.DisposeAsync().AsTask();
+            var first = TestObjects.TunnelDisposal.BeginAsync(tunnel);
             await Assert.ThrowsAsync<IOException>(async () => await first);
-            Assert.That(tunnel.DisposeAsync().AsTask(), Is.SameAs(first));
+            Assert.That(TestObjects.TunnelDisposal.BeginAsync(tunnel), Is.SameAs(first));
             tunnel.Dispose();
             Assert.That(stream.CloseCount, Is.EqualTo(1));
         }

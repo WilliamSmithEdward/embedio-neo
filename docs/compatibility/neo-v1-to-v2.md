@@ -173,6 +173,14 @@ is integrated through [PR #254](https://github.com/WilliamSmithEdward/embedio-ne
 on the engine development branch and remains unreleased. A token canceled before
 a read begins does not abandon input.
 
+The HTTP/1 context replacement claims request completion callbacks once, even
+when infrastructure or a plug-in closes the same context repeatedly or
+concurrently. Their existing last-registered-first order remains. Do not use
+repeated context Close calls as an application notification mechanism; use an
+explicit application callback for that purpose. Registration after completion
+has begun remains invalid. This context increment is under validation and is
+unreleased.
+
 Use DrainAsync for bounded graceful shutdown instead of assuming Stop waits for
 active responses. Stop/disposal and forced drain cancellation terminate remaining
 work. HTTP/2 and HTTP/3 have different peer-close policies within that deadline;

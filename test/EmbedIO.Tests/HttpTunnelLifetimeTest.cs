@@ -120,7 +120,7 @@ namespace EmbedIO.Tests
                         switch (index % 3)
                         {
                             case 0: closes[index] = tunnel.CloseAsync(); break;
-                            case 1: closes[index] = tunnel.DisposeAsync().AsTask(); break;
+                            case 1: closes[index] = TestObjects.TunnelDisposal.BeginAsync(tunnel); break;
                             default: tunnel.Dispose(); closes[index] = tunnel.CloseAsync(); break;
                         }
                     }, token));
