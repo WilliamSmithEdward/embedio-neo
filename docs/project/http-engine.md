@@ -8130,8 +8130,9 @@ same-endpoint restarts, rejected-client-certificate-trust isolation followed by 
 healthy request, drain preserving an admitted response, multi-endpoint startup
 rollback and completion of a pending context accept on stop. The existing native
 lifetime/handshake and default-provider listener set passes 169/169 with QUIC
-required. Both targets build without warnings. Full 4,685-case, resource, platform
-and exact-head hosted validation remain pending. The first IPv6 smoke assertion
+required. Both targets build without warnings. The initial Windows full suite
+reported 4,687 cases with zero failures; all ten unchanged resource gates passed.
+Final platform and exact-head hosted validation remain required. The first IPv6 smoke assertion
 incorrectly required scope zero; Windows returned loopback ::1%1. The context
 retains that native scope; the fixture verifies address bytes and exact port.
 Initial log/TRX and the corrected passing run are retained.
@@ -8140,3 +8141,65 @@ This is an internal candidate, not default-provider or release acceptance. No
 public APIs, default provider or target/dependency group changes here. Datagrams
 and WebTransport still require application wiring. The separate Windows Native
 ABI result is not macOS/Linux or older-runtime proof. Program #181 remains open.
+
+#### Unix HTTP/3 client identity investigation
+
+The first hosted native binding revision, `f5f23f6`, failed five application
+cases on Linux and macOS while Windows passed. The fixture waited for an
+application context before observing the concurrent client request, so a failed
+client handshake appeared as a context-accept timeout. The revised fixture
+observes both tasks and surfaces the client exception immediately, with the
+original deadlines and application assertions retained.
+
+In the pinned Linux environment (.NET 10.0.12, MsQuic 2.6.2), the exact IP-literal
+HttpClient requests fail with `QUIC_STATUS_TLS_ERROR` against both the native
+candidate and the existing System.Net.Quic provider. Four controlled IPv4/IPv6
+cases reproduce this before any application context arrives. Native acceptance
+is therefore not the distinguishing cause of that failure. The upstream
+[hostname validation change](https://github.com/microsoft/msquic/pull/6274)
+affects the OpenSSL/QuicTLS client identity path; attributing the precise failing
+instruction requires further upstream evidence.
+
+IP transport and HTTP authority coverage remains in ordinary tests: a raw
+System.Net.Quic peer connects to the exact IPv4 or IPv6 endpoint, authenticates
+the pinned certificate under its `localhost` DNS identity, sends the literal
+HTTP authority and path, and verifies final status 200, exact body bytes,
+endpoints, restart, drain and rollback. Certificate hostname checks remain
+enabled; only the expected self-signed chain is accepted by the pin. Separate
+DNS HttpClient cases exercise both listener providers. All ten binding cases
+pass locally in the same pinned Linux image after this fixture correction.
+No production TLS policy, native dependency, quarantine or deadline changed.
+
+#### Native WebServer candidate and independent Linux campaign
+
+The separate internal native-host continuation wires normal WebServer modules
+and the combined TCP/QUIC endpoint to the candidate binding. Public constructors
+still select the existing provider. The conformance host's `--native-http3`
+selector and campaign's optional `native` provider argument identify the actual
+provider and assembly hash in the recorded server identity; default campaigns
+remain on the existing provider.
+
+An immutable source archive of `7bf7367b2b76238e85ee506e1daff24bc1d35697`
+(SHA-256 `26F70C2C35FD82B3B8B9A613EA2A333722F88A5617A6FEC9285966BB600284B2`)
+completed the pinned Linux campaign with four CPUs and six GiB on 2026-10-11.
+SDK 10.0.401/runtime 10.0.12, MsQuic 2.6.2, aioquic 1.3.0 and hyper-h2 4.4.1
+were recorded. The actual native-candidate core hash was
+`5181BD9D52063AA8064C2C8B16F82318D63B5E8093487F1104F2229FB3B4AA5F`.
+
+HTTP/3 stateful fuzz passed 100 connections and 714 streams, including 79 client
+cancellations, with zero server resets and zero active handlers after settlement.
+The application cases report seven conforming outcomes and one documented
+rapid-cancellation policy outcome: exact multiplexed echo, upload/download
+cancellation isolation, ranges/QUERY/gzip, repeated QPACK headers, 400 streams,
+and 200 rounds of four canceled uploads. The server remained healthy. Retained
+handles grew by 16 in the fuzz phase; this short campaign is not leak attribution
+or a sustained-memory acceptance result.
+
+H1 requirements and 2,000-iteration fuzz, H2 application cases on both transports,
+and H2 fuzz also passed. Overall campaign exit was 1 because h2spec retained the
+previously documented 141/146 cleartext and 142/146 TLS outcomes. Those results
+are preserved rather than reported as an overall passing campaign. The embedded
+h2spec version identifies itself as `2.0.0Unknown`; the recorded binary SHA-256
+is `e6ff68a74716e61866b3c2e47d0183c26549a216a796dc27382b52202c1eb325`.
+This is Linux native application interoperability evidence, not macOS coverage,
+default activation, datagram/WebTransport integration or comparative performance.

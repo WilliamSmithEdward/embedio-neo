@@ -26,7 +26,7 @@ namespace EmbedIO.Tests
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3Listener") == null)
                 Assert.Ignore("HTTP/3 is unavailable in the selected asset.");
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
-            var address = "https://127.0.0.1:" + new Uri(Resources.GetServerAddress()).Port + "/";
+            var address = "https://localhost:" + new Uri(Resources.GetServerAddress()).Port + "/";
             var options = new WebServerOptions().WithUrlPrefix(address).WithCertificate(certificate)
                 .WithMode(combined ? HttpListenerMode.EmbedIOCombined : HttpListenerMode.EmbedIOHttp3);
             using var server = (WebServer)(Activator.CreateInstance(typeof(WebServer), BindingFlags.Instance | BindingFlags.NonPublic,
