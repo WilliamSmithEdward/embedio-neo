@@ -1,6 +1,14 @@
 ﻿# Changelog
 
 ## [Unreleased]
+- Give the server its own lifetime token, evaluated in Neo #43. Modules, session
+  managers and request contexts now receive a token that is canceled when the
+  server is disposed or its run completes, not only when the caller cancels, so
+  disposal no longer leaves session purging or in-flight HTTP/1 handlers running.
+  Stopping the listener directly ends `RunAsync` normally, disposal is idempotent
+  and a restart attempt reports that a stopped server is final; see the
+  [Neo v2 migration guide](docs/compatibility/neo-v1-to-v2.md#response-statuses-output-and-shutdown)
+  and [server lifetime](docs/user-reports/server-lifetime.md).
 - Correct response-time diagnostics to measure WebServer handling rather than
   context lifetime, excluding HTTP/1 keep-alive idle/header waiting while preserving
   public context age and included handler/completion work.

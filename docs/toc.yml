@@ -189,6 +189,9 @@
     - name: Deferred responses
       href: user-reports/deferred-responses.md
 
+    - name: Server lifetime
+      href: user-reports/server-lifetime.md
+
     - name: Fluent Basic authentication
       href: user-reports/fluent-basic-authentication.md
 

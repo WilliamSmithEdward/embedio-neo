@@ -89,7 +89,10 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)), Is.EqualTo("data: ready"));
                 await scenario.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
                 Assert.That(scenario.Closed.Task.IsCompleted, Is.False, "OnClose is not a signal to terminate an active handler.");
-                Assert.That(scenario.Token, Is.EqualTo(stop.Token), "The context token belongs to RunAsync.");
+                // The context token belongs to the server run (linked to the RunAsync token),
+                // not to the client connection; cancelServer below proves the link.
+                Assert.That(scenario.Token.CanBeCanceled, Is.True, "The context token belongs to RunAsync.");
+                Assert.That(scenario.Token.IsCancellationRequested, Is.False, "The context token belongs to RunAsync.");
                 if (cancelServer) stop.Cancel();
                 else scenario.Release.TrySetResult();
                 await scenario.Exited.Task.WaitAsync(TimeSpan.FromSeconds(5));

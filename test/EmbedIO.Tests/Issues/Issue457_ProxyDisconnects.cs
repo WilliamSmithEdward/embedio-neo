@@ -89,7 +89,9 @@ namespace EmbedIO.Tests.Issues
                 await finished.Task.WaitAsync(TimeSpan.FromSeconds(5));
                 await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
                 Assert.That(closeCount, Is.EqualTo(1));
-                Assert.That(handlerToken, Is.EqualTo(stop.Token));
+                // The context token belongs to the server run (linked to the RunAsync
+                // token), not to the proxy connection: the disconnect did not cancel it.
+                Assert.That(handlerToken.CanBeCanceled, Is.True);
                 Assert.That(handlerToken.IsCancellationRequested, Is.False);
                 if (failure != null)
                     Assert.That(failure, Is.InstanceOf<IOException>().Or.InstanceOf<HttpListenerException>().Or.InstanceOf<ObjectDisposedException>());
