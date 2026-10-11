@@ -65,10 +65,13 @@ namespace EmbedIO.Tests
             var destination = new byte[7];
             Assert.That(await Read(input, destination, initialKind), Is.EqualTo(2));
             var failure = await Assert.ThrowsAsync<EndOfStreamException>(async () => await Read(input, destination, initialKind));
+            var origin = (failure?.StackTrace ?? throw new AssertionException("Missing initial framing failure stack."))
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
             foreach (var kind in Enum.GetValues<ReadKind>())
             {
                 var repeated = await Assert.ThrowsAsync<EndOfStreamException>(async () => await Read(input, destination, kind));
                 Assert.That(repeated, Is.SameAs(failure));
+                Assert.That(repeated?.StackTrace, Does.Contain(origin), "Repeated reads must preserve the original failure location.");
             }
             var wrapped = new IOException("Application read wrapper", failure);
             var recognized = input.GetType().GetMethod("IsFramingError", Hidden)?.Invoke(input, new object[] { wrapped });

@@ -7585,3 +7585,25 @@ for a one-KiB input, 535,886.4 to 269,064.3 for 64 KiB and 8,401,737.5 to
 copies. The legacy callback is reconstructed with public APIs on the same
 core; this is not a baseline-package comparison or production network
 throughput result. Short CPU windows and clock quantization limit CPU claims.
+
+### Independent HTTP/1 body reader: current integration validation
+
+The independently written fixed-length body reader replaces the inherited
+`RequestStream.cs`; it retains the internal stream contract used by chunked
+framing. This component does not complete replacement of the connection,
+response writer, endpoint ownership or application adapters.
+
+On the reconciled engine sources, four additional assertions reproduced loss
+of the original failure location on repeated reads of a truncated body. The
+reader now captures the framing exception after its first throw establishes
+that location. Repeated synchronous, array-async, memory-async and span reads
+preserve both the same exception and its original failure location.
+
+The complete current Windows suite reports 4,607 cases: 4,600 passed, seven
+expected skips and zero failures, in 3m25s. Independent native datagram peer
+validation was enabled. Both library targets build with zero warnings, and
+solution formatting and source guards pass. Discovery minimums are reconciled
+to 4,607. Hosted checks on the final published revision remain required.
+Historical component timings in the performance README describe their recorded
+source revisions; they are not measurements of this reconciled engine or a
+whole-server performance claim.

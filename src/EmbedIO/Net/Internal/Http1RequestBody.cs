@@ -134,9 +134,13 @@ namespace EmbedIO.Net.Internal
         {
             if (count == 0 && _bytesLeft > 0)
             {
-                var failure = new EndOfStreamException("Incomplete fixed-length request body.");
-                RememberFramingError(failure);
-                throw failure;
+                try { throw new EndOfStreamException("Incomplete fixed-length request body."); }
+                catch (EndOfStreamException failure)
+                {
+                    // Capture after the first throw has established its origin.
+                    RememberFramingError(failure);
+                    throw;
+                }
             }
             if (_bytesLeft >= 0) _bytesLeft -= count;
             return count;
