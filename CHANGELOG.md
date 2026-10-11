@@ -1,6 +1,9 @@
 ﻿# Changelog
 
 ## [Unreleased]
+- Preserve reusable HTTP/1 connections when one logical listener stops on a
+  shared endpoint. Active incomplete requests still abort, and retiring the final
+  listener still releases idle TCP/TLS transports.
 - Enforce the response commitment contract evaluated in Neo #42. Exception
   handlers run only while the response is replaceable and start from a response
   without the failed handler's representation fields, so a stale Content-Length

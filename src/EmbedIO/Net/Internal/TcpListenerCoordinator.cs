@@ -215,7 +215,7 @@ namespace EmbedIO.Net.Internal
             _sessions.Clear();
             foreach (var connection in sessions) Attempt(() => connection.CloseForListener(_owner));
             foreach (var context in _epoch.DetachPending())
-                if (context is HttpListenerContext http1) Attempt(http1.Connection.ForceClose);
+                if (context is HttpListenerContext http1) Attempt(() => http1.Connection.CloseForListener(_owner));
             failure?.Throw();
             void Attempt(Action release)
             {
