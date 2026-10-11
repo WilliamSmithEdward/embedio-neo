@@ -13,8 +13,9 @@ namespace EmbedIO.Net.Internal
     internal class RequestStream : Stream
     {
         private readonly EmbedIO.Internal.BorrowedResource<Stream> _connectionInput;
-        private readonly ArraySegment<byte> _readAhead;
-        private int _readAheadConsumed;
+        private readonly byte[] _readAheadBytes;
+        private readonly int _readEnd;
+        private int _readCursor;
         private long _bytesLeft;
         private ExceptionDispatchInfo? _bodyFailure;
 
@@ -24,18 +25,16 @@ namespace EmbedIO.Net.Internal
             ValidateDestination(buffer, offset, length);
             if (contentLength < -1) throw new ArgumentOutOfRangeException(nameof(contentLength));
             _connectionInput = new EmbedIO.Internal.BorrowedResource<Stream>(stream);
-            _readAhead = new ArraySegment<byte>(buffer, offset, length);
+            _readAheadBytes = buffer;
+            _readCursor = offset;
+            _readEnd = offset + length;
             _bytesLeft = contentLength;
         }
 
         internal virtual bool IsBodyConsumed => _bytesLeft == 0;
 
         internal virtual ArraySegment<byte> BufferedRemainder => IsBodyConsumed
-            ? new ArraySegment<byte>(ReadAheadArray, _readAhead.Offset + _readAheadConsumed,
-                _readAhead.Count - _readAheadConsumed)
-            : default;
-
-        private byte[] ReadAheadArray => _readAhead.Array ?? Array.Empty<byte>();
+            ? new ArraySegment<byte>(_readAheadBytes, _readCursor, _readEnd - _readCursor) : default;
         internal bool HasBodyFramingFailure => _bodyFailure != null;
         protected bool HasFramingFailure => HasBodyFramingFailure;
 
@@ -93,10 +92,10 @@ namespace EmbedIO.Net.Internal
             if (cancellationToken.IsCancellationRequested) return ValueTask.FromCanceled<int>(cancellationToken);
             var limit = ReadLimit(buffer.Length);
             if (limit == 0) return new ValueTask<int>(0);
-            var buffered = Math.Min(limit, _readAhead.Count - _readAheadConsumed);
+            var buffered = Math.Min(limit, _readEnd - _readCursor);
             if (buffered != 0)
             {
-                ReadAheadArray.AsMemory(_readAhead.Offset + _readAheadConsumed, buffered).CopyTo(buffer);
+                _readAheadBytes.AsMemory(_readCursor, buffered).CopyTo(buffer);
                 AccountReadAhead(buffered);
                 return new ValueTask<int>(buffered);
             }
@@ -109,17 +108,17 @@ namespace EmbedIO.Net.Internal
 
         private int ReadLimit(int requested)
         {
-            if (requested == 0) return 0;
+            if (requested == 0 || _bytesLeft == 0) return 0;
             _bodyFailure?.Throw();
             return _bytesLeft < 0 ? requested : (int)Math.Min(requested, _bytesLeft);
         }
 
         private int CopyReadAhead(byte[] destination, int offset, int limit)
         {
-            var copied = Math.Min(limit, _readAhead.Count - _readAheadConsumed);
+            var copied = Math.Min(limit, _readEnd - _readCursor);
             if (copied != 0)
             {
-                Buffer.BlockCopy(ReadAheadArray, _readAhead.Offset + _readAheadConsumed, destination, offset, copied);
+                Buffer.BlockCopy(_readAheadBytes, _readCursor, destination, offset, copied);
                 AccountReadAhead(copied);
             }
             return copied;
@@ -127,7 +126,7 @@ namespace EmbedIO.Net.Internal
 
         private void AccountReadAhead(int count)
         {
-            _readAheadConsumed += count;
+            _readCursor += count;
             if (_bytesLeft >= 0) _bytesLeft -= count;
         }
 
