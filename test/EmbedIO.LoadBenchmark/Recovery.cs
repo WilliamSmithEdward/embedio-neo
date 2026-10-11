@@ -39,6 +39,13 @@ internal static class Recovery
         var healthyPath = options.Text("--path", "/plaintext");
         var stormMode = options.Text("--storm-mode", "both");
         if (stormMode is not ("both" or "upload" or "download")) throw new ArgumentException("--storm-mode is both, upload or download.");
+        if (connections <= 0 || streams <= 0 || stormWorkers <= 0
+            || !double.IsFinite(healthySeconds) || healthySeconds <= 0
+            || !double.IsFinite(stormSeconds) || stormSeconds <= 0
+            || !double.IsFinite(idleSeconds) || idleSeconds < 0
+            || !double.IsFinite(sustainMinutes) || sustainMinutes < 0
+            || !double.IsFinite(snapshotSeconds) || snapshotSeconds <= 0)
+            throw new ArgumentException("Connections, streams, workers and sample durations must be positive and finite; idle and sustain durations may be zero.");
 
         var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
         var certificatePath = Path.Combine(output, "localhost.pfx");
@@ -117,21 +124,29 @@ internal static class Recovery
                 };
                 if (tls) arguments.Add("--tls");
                 var client = ChildProcess.Start(AppContext.BaseDirectory, arguments, null, Path.Combine(output, name + ".client.stderr.log"));
-                var wait = TimeSpan.FromSeconds(seconds + 120);
-                var warm = await client.ReadLineAsync(wait).ConfigureAwait(false);
-                JsonNode? result = null;
-                if (warm is not null && warm.StartsWith("WARM ", StringComparison.Ordinal) && JsonNode.Parse(warm[5..])?["error"] is null)
+                try
                 {
-                    if (await client.RequestAsync("start", wait).ConfigureAwait(false) == "DONE")
-                        result = await client.RequestJsonAsync("report", wait).ConfigureAwait(false);
+                    var wait = TimeSpan.FromSeconds(seconds + 120);
+                    var warm = await client.ReadLineAsync(wait).ConfigureAwait(false);
+                    JsonNode? result = null;
+                    if (warm is not null && warm.StartsWith("WARM ", StringComparison.Ordinal) && JsonNode.Parse(warm[5..])?["error"] is null)
+                    {
+                        if (await client.RequestAsync("start", wait).ConfigureAwait(false) == "DONE")
+                            result = await client.RequestJsonAsync("report", wait).ConfigureAwait(false);
+                    }
+                    result ??= new JsonObject { ["error"] = "client did not complete: " + warm };
+                    result.AsObject().Remove("histogram");
+                    await client.WaitForExitAsync(wait).ConfigureAwait(false);
+                    phases.Add(new JsonObject { ["phase"] = name, ["utc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture), ["client"] = result.DeepClone() });
+                    if (result["error"] is { } error) verdict.Add($"{name}: healthy client failed: {error}");
+                    return result;
                 }
-                result ??= new JsonObject { ["error"] = "client did not complete: " + warm };
-                result.AsObject().Remove("histogram");
-                await client.WaitForExitAsync(wait).ConfigureAwait(false);
-                await client.DisposeAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-                phases.Add(new JsonObject { ["phase"] = name, ["utc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture), ["client"] = result.DeepClone() });
-                if (result["error"] is { } error) verdict.Add($"{name}: healthy client failed: {error}");
-                return result;
+                finally
+                {
+                    var killed = await client.DisposeAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                    report[name + "ClientKilled"] = killed;
+                    if (killed) verdict.Add(name + ": client required forced cleanup");
+                }
             }
 
             var initial = await Snapshot("start").ConfigureAwait(false);
@@ -140,6 +155,8 @@ internal static class Recovery
 
             var storm = await Storm.RunAsync(protocol, tls, port, thumbprint, stormWorkers, TimeSpan.FromSeconds(stormSeconds), stormMode).ConfigureAwait(false);
             phases.Add(new JsonObject { ["phase"] = "abort-storm", ["utc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture), ["storm"] = storm });
+            if (storm["abortedAsIntended"]?.GetValue<long>() is not > 0)
+                verdict.Add("no completed client-abandonment attempt; recovery was not exercised");
             await Snapshot("after-storm-drain").ConfigureAwait(false);
 
             var after = await Healthy("healthy-after", healthySeconds).ConfigureAwait(false);
@@ -253,6 +270,7 @@ internal static class Storm
         long attempts = 0, aborted = 0, connectFailures = 0, unexpected = 0;
         var errors = new System.Collections.Concurrent.ConcurrentDictionary<string, long>(StringComparer.Ordinal);
         var clock = Stopwatch.StartNew();
+        using var stop = new CancellationTokenSource(duration);
         void Unexpected(Exception error)
         {
             Interlocked.Increment(ref unexpected);
@@ -269,10 +287,11 @@ internal static class Storm
                 var upload = mode == "upload" || (mode == "both" && (iteration + worker) % 2 == 0);
                 try
                 {
-                    if (protocol == Protocol.Http1) await Http1AbortAsync(tls, port, thumbprint, upload).ConfigureAwait(false);
-                    else await MultiplexedAbortAsync(protocol, tls, port, thumbprint, upload, dropConnection: iteration % 16 == 0).ConfigureAwait(false);
+                    if (protocol == Protocol.Http1) await Http1AbortAsync(tls, port, thumbprint, upload, stop.Token).ConfigureAwait(false);
+                    else await MultiplexedAbortAsync(protocol, tls, port, thumbprint, upload, dropConnection: iteration % 16 == 0, stop.Token).ConfigureAwait(false);
                     Interlocked.Increment(ref aborted);
                 }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested) { break; }
                 catch (SocketException error) when (error.SocketErrorCode == SocketError.ConnectionRefused)
                 {
                     Interlocked.Increment(ref connectFailures);
@@ -298,10 +317,10 @@ internal static class Storm
         };
     }
 
-    private static async Task Http1AbortAsync(bool tls, int port, string thumbprint, bool upload)
+    private static async Task Http1AbortAsync(bool tls, int port, string thumbprint, bool upload, CancellationToken token)
     {
         using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
-        await socket.ConnectAsync(IPAddress.Loopback, port).ConfigureAwait(false);
+        await socket.ConnectAsync(IPAddress.Loopback, port, token).ConfigureAwait(false);
         try
         {
             await using var network = new NetworkStream(socket, ownsSocket: false);
@@ -310,7 +329,7 @@ internal static class Storm
             if (tls)
             {
                 secure = new SslStream(network, leaveInnerStreamOpen: true, LoadClient.Pinned(thumbprint));
-                await secure.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "localhost", ApplicationProtocols = [SslApplicationProtocol.Http11] }).ConfigureAwait(false);
+                await secure.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "localhost", ApplicationProtocols = [SslApplicationProtocol.Http11] }, token).ConfigureAwait(false);
                 stream = secure;
             }
 
@@ -320,18 +339,18 @@ internal static class Storm
                 if (upload)
                 {
                     var head = Encoding.ASCII.GetBytes($"POST /upload HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/octet-stream\r\nContent-Length: {Mebibyte}\r\n\r\n");
-                    await stream.WriteAsync(head).ConfigureAwait(false);
-                    await stream.WriteAsync(Payloads.Get(Mebibyte).AsMemory(0, Partial * 4)).ConfigureAwait(false);
-                    await stream.FlushAsync().ConfigureAwait(false);
+                    await stream.WriteAsync(head, token).ConfigureAwait(false);
+                    await stream.WriteAsync(Payloads.Get(Mebibyte).AsMemory(0, Partial * 4), token).ConfigureAwait(false);
+                    await stream.FlushAsync(token).ConfigureAwait(false);
                 }
                 else
                 {
-                    await stream.WriteAsync(Encoding.ASCII.GetBytes($"GET /bytes/{Mebibyte} HTTP/1.1\r\nHost: {host}\r\n\r\n")).ConfigureAwait(false);
+                    await stream.WriteAsync(Encoding.ASCII.GetBytes($"GET /bytes/{Mebibyte} HTTP/1.1\r\nHost: {host}\r\n\r\n"), token).ConfigureAwait(false);
                     var buffer = new byte[16384];
                     long received = 0;
                     while (received < Partial)
                     {
-                        var read = await stream.ReadAsync(buffer).ConfigureAwait(false);
+                        var read = await stream.ReadAsync(buffer, token).ConfigureAwait(false);
                         if (read == 0) throw new IOException("Server closed before the partial response.");
                         received += read;
                     }
@@ -346,7 +365,7 @@ internal static class Storm
         }
     }
 
-    private static async Task MultiplexedAbortAsync(Protocol protocol, bool tls, int port, string thumbprint, bool upload, bool dropConnection)
+    private static async Task MultiplexedAbortAsync(Protocol protocol, bool tls, int port, string thumbprint, bool upload, bool dropConnection, CancellationToken token)
     {
         var version = protocol == Protocol.Http3 ? HttpVersion.Version30 : HttpVersion.Version20;
         using var handler = new SocketsHttpHandler
@@ -361,7 +380,7 @@ internal static class Storm
         // Several streams per connection, each abandoned midway.
         await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
         {
-            using var cancel = new CancellationTokenSource();
+            using var cancel = CancellationTokenSource.CreateLinkedTokenSource(token);
             // One Uri per request: a shared instance raised NullReferenceException inside
             // HttpClient (Uri.EnsureHostString) under concurrent HTTP/3 sends on .NET 10.0.12.
             using var request = new HttpRequestMessage(upload ? HttpMethod.Post : HttpMethod.Get, new Uri(target)) { Version = version, VersionPolicy = HttpVersionPolicy.RequestVersionExact };
@@ -369,8 +388,8 @@ internal static class Storm
             {
                 request.Content = new StallingContent(Payloads.Get(Mebibyte).AsMemory(0, Partial * 4), cancel);
                 try { using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel.Token).ConfigureAwait(false); }
-                catch (OperationCanceledException) { }
-                catch (HttpRequestException) when (cancel.IsCancellationRequested) { }
+                catch (OperationCanceledException) when (!token.IsCancellationRequested) { }
+                catch (HttpRequestException) when (cancel.IsCancellationRequested && !token.IsCancellationRequested) { }
                 return;
             }
 
@@ -396,8 +415,8 @@ internal static class Storm
     {
         protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
         {
-            await stream.WriteAsync(prefix).ConfigureAwait(false);
-            await stream.FlushAsync().ConfigureAwait(false);
+            await stream.WriteAsync(prefix, cancel.Token).ConfigureAwait(false);
+            await stream.FlushAsync(cancel.Token).ConfigureAwait(false);
             await cancel.CancelAsync().ConfigureAwait(false);
             await Task.Delay(Timeout.Infinite, cancel.Token).ConfigureAwait(false);
         }

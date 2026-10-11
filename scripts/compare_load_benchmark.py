@@ -5,7 +5,8 @@ and server bytes per request relative to a reference engine. A ratio is marked
 "beyond noise" only when it exceeds every one of: the largest median ratio seen
 between two identical runners in the A/A directories (same scenario and metric),
 the min-max spread of either engine's own samples, and a fixed floor (--floor,
-default 3%). Medians and spreads use valid samples only; failed samples are counted.
+default 3%). Medians and spreads require all three finite, nonnegative metrics
+(throughput must be positive); failed and incomplete samples remain in the total.
 
 usage:
   python -I scripts/compare_load_benchmark.py <comparison dir> --reference candidate \
@@ -13,6 +14,7 @@ usage:
 """
 import argparse
 import json
+import math
 from pathlib import Path
 import statistics
 
@@ -33,8 +35,27 @@ def samples(directory):
     return rows
 
 
+def valid_sample(sample):
+    if sample.get("error") is not None:
+        return False
+    derived = sample.get("derived") or {}
+    for metric, _ in METRICS:
+        value = derived.get(metric)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return False
+        if value < 0 or (metric == "requestsPerSecond" and value == 0):
+            return False
+    return True
+
+
 def values(rows, metric):
-    return [s["derived"][metric] for s in rows if s.get("error") is None and (s.get("derived") or {}).get(metric) is not None]
+    return [s["derived"][metric] for s in rows if valid_sample(s)]
+
+
+def ratio_magnitude(a, b):
+    if a == b:
+        return 1.0
+    return max(a / b, b / a) if a and b else math.inf
 
 
 def median(rows, metric):
@@ -43,8 +64,8 @@ def median(rows, metric):
 
 
 def spread(rows, metric):
-    found = [value for value in values(rows, metric) if value > 0]
-    return max(found) / min(found) if len(found) > 1 else 1.0
+    found = values(rows, metric)
+    return ratio_magnitude(max(found), min(found)) if len(found) > 1 else 1.0
 
 
 def noise(aa_dirs):
@@ -57,8 +78,8 @@ def noise(aa_dirs):
             for metric, _ in METRICS:
                 ma, _ = median(a, metric)
                 mb, _ = median(b, metric)
-                if ma and mb:
-                    ratio = max(ma / mb, mb / ma)
+                if ma is not None and mb is not None:
+                    ratio = ratio_magnitude(ma, mb)
                     band[(scenario, metric)] = max(band.get((scenario, metric), 1.0), ratio)
     return band
 
@@ -71,6 +92,8 @@ def main():
     parser.add_argument("--markdown", type=Path)
     parser.add_argument("--floor", type=float, default=0.03)
     args = parser.parse_args()
+    if not math.isfinite(args.floor) or args.floor < 0:
+        parser.error("--floor must be finite and nonnegative")
     rows = samples(args.comparison)
     band = noise(args.aa)
     scenarios = sorted({key[0] for key in rows}, key=lambda name: min(
@@ -93,7 +116,7 @@ def main():
                 else:
                     ratio = value / ref
                     limit = max(band.get((scenario, metric), 1.0), spread(group, metric), spread(reference, metric), 1 + args.floor)
-                    beyond = max(ratio, 1 / ratio) > limit
+                    beyond = ratio_magnitude(value, ref) > limit
                     marker = f" **beyond ±{(limit - 1) * 100:.0f}%**" if beyond else f" (within ±{(limit - 1) * 100:.0f}%)"
                     cells.append(f"{value:,.0f} ({ratio:.2f}x){marker}" if value >= 100 else f"{value:,.1f} ({ratio:.2f}x){marker}")
             limit = band.get((scenario, "requestsPerSecond"))

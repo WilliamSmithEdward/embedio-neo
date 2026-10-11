@@ -114,6 +114,15 @@ that is a Kestrel-on-macOS observation, not evidence about EmbedIO, and was not 
 
 ## Cancellation, recovery and sustained load
 
+The measurements below describe the agent's recorded revisions, not the current
+engine tip. Integration review subsequently added bounded phase cancellation,
+child-process cleanup on driver errors, and a rejection of runs with no completed
+client-abandonment attempt. Those tooling changes passed build and source checks;
+the recovery campaign has not been rerun on the reviewed tooling. The comparison
+helper also rejects incomplete/nonfinite samples consistently across metrics and
+handles zero allocation or CPU measurements without division by zero. Invalid
+samples remain visible in each row's total.
+
 `EmbedIO.LoadBenchmark recovery` (added on this branch) drives one long-lived server: 10 s of
 validated healthy load, a 20 s abort storm, idle drain, healthy load again, 8 x 60 s of sustained
 load with a snapshot (after forced GC) between runs, then a timed shutdown. The HTTP/1.1 storm
