@@ -8169,3 +8169,37 @@ enabled; only the expected self-signed chain is accepted by the pin. Separate
 DNS HttpClient cases exercise both listener providers. All ten binding cases
 pass locally in the same pinned Linux image after this fixture correction.
 No production TLS policy, native dependency, quarantine or deadline changed.
+
+#### Native WebServer candidate and independent Linux campaign
+
+The separate internal native-host continuation wires normal WebServer modules
+and the combined TCP/QUIC endpoint to the candidate binding. Public constructors
+still select the existing provider. The conformance host's `--native-http3`
+selector and campaign's optional `native` provider argument identify the actual
+provider and assembly hash in the recorded server identity; default campaigns
+remain on the existing provider.
+
+An immutable source archive of `7bf7367b2b76238e85ee506e1daff24bc1d35697`
+(SHA-256 `26F70C2C35FD82B3B8B9A613EA2A333722F88A5617A6FEC9285966BB600284B2`)
+completed the pinned Linux campaign with four CPUs and six GiB on 2026-10-11.
+SDK 10.0.401/runtime 10.0.12, MsQuic 2.6.2, aioquic 1.3.0 and hyper-h2 4.4.1
+were recorded. The actual native-candidate core hash was
+`5181BD9D52063AA8064C2C8B16F82318D63B5E8093487F1104F2229FB3B4AA5F`.
+
+HTTP/3 stateful fuzz passed 100 connections and 714 streams, including 79 client
+cancellations, with zero server resets and zero active handlers after settlement.
+The application cases report seven conforming outcomes and one documented
+rapid-cancellation policy outcome: exact multiplexed echo, upload/download
+cancellation isolation, ranges/QUERY/gzip, repeated QPACK headers, 400 streams,
+and 200 rounds of four canceled uploads. The server remained healthy. Retained
+handles grew by 16 in the fuzz phase; this short campaign is not leak attribution
+or a sustained-memory acceptance result.
+
+H1 requirements and 2,000-iteration fuzz, H2 application cases on both transports,
+and H2 fuzz also passed. Overall campaign exit was 1 because h2spec retained the
+previously documented 141/146 cleartext and 142/146 TLS outcomes. Those results
+are preserved rather than reported as an overall passing campaign. The embedded
+h2spec version identifies itself as `2.0.0Unknown`; the recorded binary SHA-256
+is `e6ff68a74716e61866b3c2e47d0183c26549a216a796dc27382b52202c1eb325`.
+This is Linux native application interoperability evidence, not macOS coverage,
+default activation, datagram/WebTransport integration or comparative performance.

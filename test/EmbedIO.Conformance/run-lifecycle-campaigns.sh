@@ -9,11 +9,19 @@ src=$1
 out=$2
 seed=$3
 scale=${4:-1}
+provider=${5:-system}
+provider_args=()
+case "$provider" in
+  system) ;;
+  native) provider_args=(--native-http3) ;;
+  *) echo "Unknown HTTP/3 provider: $provider" >&2; exit 2 ;;
+esac
 mkdir -p "$out"
 status=0
 record() { printf '%s\n' "$*" | tee -a "$out/summary.txt"; }
 
 record "source=${SOURCE_SHA:-unknown} (git archive snapshot)"
+record "http3_provider=$provider"
 record "seed=$seed scale=$scale cpus=$(nproc) kernel=$(uname -r) started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 record "dotnet=$(dotnet --version) msquic=$(dpkg-query --show --showformat='${Version}' libmsquic 2>/dev/null || echo missing)"
 record "h2spec=$(h2spec --version 2>&1 | head -1) python=$(python3 --version)"
@@ -27,7 +35,7 @@ phase=""
 
 start_server() {
   phase=$1
-  coproc SERVER { cd "$out" && exec dotnet /tmp/conformance/EmbedIO.Conformance.dll serve --http $http --https $https --h3 $h3 --log --cert-out "$out/conformance-cert.pem" 2> "$out/server-$phase.stderr.log"; }
+  coproc SERVER { cd "$out" && exec dotnet /tmp/conformance/EmbedIO.Conformance.dll serve --http $http --https $https --h3 $h3 "${provider_args[@]}" --log --cert-out "$out/conformance-cert.pem" 2> "$out/server-$phase.stderr.log"; }
   exec 3>&"${SERVER[1]}" 4<&"${SERVER[0]}"
   local ready=""
   while read -r -t 60 line <&4; do
