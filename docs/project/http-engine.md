@@ -7607,3 +7607,32 @@ to 4,607. Hosted checks on the final published revision remain required.
 Historical component timings in the performance README describe their recorded
 source revisions; they are not measurements of this reconciled engine or a
 whole-server performance claim.
+### Independent TCP protocol input selection
+
+`TcpProtocolInput` borrows the session transport and read buffer. It performs
+TLS authentication and initial HTTP/2 selection separately from the remaining
+connection coordinator. Cleartext preface matching examines each candidate
+byte once. A mismatch returns every accumulated byte to HTTP/1; an HTTP/2
+selection replays the entire accumulated prefix, including following frames.
+The session retains transport ownership and its existing admission deadline.
+Certificate access remains lazy and occurs only for unauthenticated TLS.
+
+Eleven component cases cover fragmented prefaces, following-frame bytes,
+HTTP/1 method/version mismatches and truncated prefaces. The first full run
+caught eager certificate access preventing the existing controlled plain
+read/cleanup fixture from starting; its assertion was retained and the lookup
+was restored to the authentication path. The corrected complete Windows suite
+reports 4,618 cases, 4,611 passed, seven expected skips and zero failures in
+3m26s, with the required independent datagram peer enabled. Both targets build
+without warnings; formatting and both source guards pass. Eighty-five focused
+cases also pass against the actual netstandard2.0 core asset, hosted on the
+installed .NET 10 runtime; this is not .NET Framework runtime validation.
+
+Discovery minimums are reconciled to the measured 4,618 count. Hosted final-head
+checks remain required. This step makes no throughput or allocation improvement
+claim; comparative performance validation remains outstanding. Endpoint and
+session lifetime coordination, response output and inherited application
+adapters still require independent replacements.
+The existing body/header allocation, wire-allocation and HTTP/HTTPS terminal
+cleanup verification modes also pass with the corrected compatibility fixtures.
+Their budgets and assertions are unchanged.
