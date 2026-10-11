@@ -39,6 +39,13 @@ namespace EmbedIO.Tests
 
         private void Record(IPEndPoint endpoint) => Call("Record", null, endpoint);
 
+        private long Retries()
+        {
+            var releases = _releases ?? throw new AssertionException("Missing tracker instance.");
+            var property = releases.GetType().GetProperty("Retries", Hidden) ?? throw new AssertionException("Missing retry counter.");
+            return (long)(property.GetValue(releases) ?? throw new AssertionException("Missing retry count."));
+        }
+
         // Fails with each error in turn, advancing the clock after every failure, then binds.
         private int _attempts;
         private void Bind(IPEndPoint endpoint, double advance, params SocketError[] failures)
@@ -101,6 +108,23 @@ namespace EmbedIO.Tests
             Record(Released);
             Bind(Released, 0.001, SocketError.AddressAlreadyInUse);
             Assert.That(_attempts, Is.EqualTo(2));
+        }
+
+        // The retirement gate relies on this count: only bridged binds are counted,
+        // never rejected errors, foreign endpoints or expired windows.
+        [Test]
+        public void CountsOnlyTheBindsItRetried()
+        {
+            Assert.That(Retries(), Is.Zero);
+            Record(Released);
+            Bind(Released, 0.001, SocketError.AddressAlreadyInUse, SocketError.AddressAlreadyInUse);
+            Assert.That(Retries(), Is.EqualTo(2));
+            Rejects(SocketError.AccessDenied, 1, Released, 0.001, SocketError.AccessDenied);
+            var other = new IPEndPoint(IPAddress.Loopback, Released.Port + 1);
+            Rejects(SocketError.AddressAlreadyInUse, 1, other, 0.001, SocketError.AddressAlreadyInUse);
+            _now += Seconds(5);
+            Rejects(SocketError.AddressAlreadyInUse, 1, Released, 0.001, SocketError.AddressAlreadyInUse);
+            Assert.That(Retries(), Is.EqualTo(2));
         }
     }
 }
