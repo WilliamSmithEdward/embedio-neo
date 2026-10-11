@@ -44,6 +44,29 @@ mismatched property. Body framing is read but HasEntityBody is not required to b
 false over HTTP/3, where a GET without content-length reports an unknown length. Churn scenarios are capped (5 s for HTTP/1.1,
 1.5 s for HTTP/2) to stay within the host's TIME_WAIT and ephemeral-port capacity.
 
+## Cancellation and recovery
+
+`recovery` keeps one server process alive through healthy load, an abort storm, idle drain,
+healthy load again, optional sustained load and a timed shutdown, and writes `recovery.json`
+with every phase's resource snapshot, open server sockets, the recovery throughput ratio,
+sustained growth slopes and shutdown time. It exits non-zero with its findings listed when
+descriptors, open sockets, working set or managed heap keep growing, recovery throughput drops
+below 80 %, or shutdown does not complete.
+
+```sh
+dotnet <runner>/EmbedIO.LoadBenchmark.dll recovery --output <fresh dir> --engine embedio|kestrel \
+  --protocol Http1|Http2|Http3 [--tls] [--connections 16] [--streams 8] [--healthy-seconds 10] \
+  [--storm-seconds 20] [--storm-workers 32] [--storm-mode both|upload|download] [--idle 5] \
+  [--sustain-minutes 0] [--snapshot-interval 60] [--server-dir <runner copy>]
+```
+
+## Comparing results against A/A noise
+
+`scripts/compare_load_benchmark.py <result dir> --reference baseline --aa <A/A dir>` prints each
+engine's median requests/s, CPU and bytes per request against a reference and calls a
+difference real only when it exceeds the identical-runner (A/A) ratio, both engines' own sample
+spread and a 3 % floor (`--floor`).
+
 ## Profiling
 
 Profile separately from comparisons. `--profile` aggregates runtime events in the
@@ -66,6 +89,9 @@ python scripts/attribute_trace_frames.py <sample>.speedscope.json --target Monit
 - One fresh server process and one fresh client process per sample. On Windows the
   children inherit their CPU set at creation (so server GC heaps and the thread pool
   are sized for it); on Linux they start under `taskset`. Use disjoint physical cores.
+  macOS cannot pin processes: `--server-cpus`/`--client-cpus` are refused there,
+  `environment.json` records `cpuAffinity: none`, and server and client share every
+  core, including Apple Silicon's separate performance levels (`processorTopology`).
 - Every engine runs the same handler work: route parse, a cached static body or a
   server-validated upload, and asynchronous writes. Bodies use a non-periodic byte
   pattern; the client checks status, protocol version, framing, length and every
@@ -82,8 +108,9 @@ python scripts/attribute_trace_frames.py <sample>.speedscope.json --target Monit
 - Client metrics: completed requests, every latency in a log-linear histogram
   (p50/p90/p95/p99/p99.9/max, raw buckets kept), connections opened, server-initiated
   closes, client CPU and allocation.
-- Machine busy CPU minus server and client CPU estimates background load per sample.
-- Server GC (concurrent) for every engine. Runtime, OS, CPU, power scheme, `DOTNET_*`
+- Machine busy CPU minus server and client CPU estimates background load per sample
+  (Windows `GetSystemTimes`, Linux `/proc/stat`, macOS `host_statistics`).
+- Server GC (concurrent) for every engine. Runtime, OS, CPU and topology, power scheme (Windows) or `pmset` state (macOS), `DOTNET_*`
   variables and hashes of the runner, both cores, Kestrel and QUIC assemblies go in
   `environment.json`.
 
@@ -110,6 +137,12 @@ the candidate. HTTP/3 uses QUIC-only listeners on both engines (`EmbedIOHttp3`).
 - `--profile` adds runtime event listeners (allocation ticks, contention, exceptions)
   and perturbs timing. Profile runs are separate from comparison runs.
 - QUIC connections are not visible to the socket-cleanup check.
+- macOS: .NET's `GetActiveTcpConnections` omits TIME_WAIT there, so the TIME_WAIT gate and
+  socket census parse `netstat -an -p tcp`. `HandleCount` and `PrivateMemorySize64` read 0, so
+  `handles` is the open file-descriptor count (`/dev/fd`) and private bytes is reported as
+  unavailable (null). macOS keeps TIME_WAIT for 30 s (`net.inet.tcp.msl` 15000) and has 16,384
+  ephemeral ports, so HTTP/1.1 churn at tens of thousands of connections per second can reuse a
+  4-tuple the server still holds in TIME_WAIT; compare every engine before reading churn failures.
 
 ## Comparing two modern engine revisions
 
