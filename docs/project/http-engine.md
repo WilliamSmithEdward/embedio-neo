@@ -8203,3 +8203,64 @@ h2spec version identifies itself as `2.0.0Unknown`; the recorded binary SHA-256
 is `e6ff68a74716e61866b3c2e47d0183c26549a216a796dc27382b52202c1eb325`.
 This is Linux native application interoperability evidence, not macOS coverage,
 default activation, datagram/WebTransport integration or comparative performance.
+
+#### Request-scoped native HTTP datagram continuation
+
+The internal native binding now enables QUIC datagram reception before applying
+the connection configuration. Its shared HTTP/3 worker advertises
+SETTINGS_H3_DATAGRAM=1 and routes RFC 9297 packets by quarter-stream identifier to
+the corresponding extended CONNECT exchange. The existing provider does not
+advertise this capability. This continuation does not change public provider
+selection or expose a public datagram API yet.
+
+Routing retains the transport's owned receive storage and slices off the stream
+identifier without another payload copy. Delivery requires peer HTTP settings
+to enable datagrams and the request receive direction to remain open. Unknown
+requests, closed receive directions and excess queued packets are silently
+discarded, with storage released. Truncated or oversized identifiers fail only
+that connection with H3_DATAGRAM_ERROR (0x33), as required by
+[RFC 9297 section 2.1](https://www.rfc-editor.org/rfc/rfc9297.html#section-2.1).
+Outgoing packets require an accepted tunnel, an open send direction and both
+HTTP/QUIC negotiation. The path limit includes the stream identifier. Submission
+copies the borrowed outgoing payload before its temporary packet storage is
+cleared and returned; queued submission does not promise delivery.
+
+Each request queue holds at most 16 packets. The router additionally bounds all
+queued requests on one connection to 128 packets and 256 KiB, separate from the
+existing native transport receive budget. Cancellation leaves unread packets
+available to another receive. Receive FIN releases queued owners and completes
+incoming delivery while permitting output on a still-open direction. Request
+and connection closure release all remaining queued owners. Application-owned
+packets already received remain the application's responsibility.
+
+Seventeen new ordinary regressions cover identifier widths, retained storage,
+unknown/closed/unnegotiated requests, count/byte budgets, malformed identifiers,
+canceled receives, receive-FIN cleanup, outgoing wire limits, stale channel
+ownership and an independent application exchange. The pinned-certificate
+aioquic peer negotiates extended CONNECT through an ordinary application context
+and returns seven exact payloads, including an empty one. This live exchange
+passes on Windows and pinned Linux. The first peer attempt omitted its HTTP
+datagram setting and correctly received no echoes; its failed result is retained.
+Only the peer's public capability flag changed to advertise support on both ends.
+
+The corrected production source passes the full Windows suite: 4,710 reported,
+4,703 passed, seven expected skips and zero failures (3m51.773s). Its combined
+codec/datagram/application set passes 98/98 on Windows and pinned Linux. The
+first full attempt reported 27 codec fixture failures because a newly added
+span overload made name-only reflection ambiguous. The new helper now has a
+distinct name, preserving the original entry point and every original assertion;
+both failed and corrected log/TRX evidence are retained.
+
+The actual .NET Standard 2.0 core on a .NET 10 host reports 435 selected cases:
+369 pass, 66 expected unsupported-feature skips, zero failures (42.740s). This
+does not establish an older-CLR or native-datagram capability. Three existing
+native argument cases initially caught their own missing-provider skip inside
+Assert.Throws; capability detection now happens before the unchanged assertion.
+All 98 native-enabled cases still pass after that fixture correction. Both
+targets build warning-free, source guards pass, and the ten unchanged resource
+gates pass on the initial production candidate. Final exact-head hosted gates
+remain required before integration.
+
+The additive application surface, capsule fallback/selection contract,
+WebTransport integration, broader native performance/memory acceptance and
+exact-head platform/security checks remain unfinished. Program #181 remains open.

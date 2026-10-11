@@ -15,8 +15,12 @@ namespace EmbedIO.Net.Internal.Http3
     internal sealed class MsQuicTransportConnection : Http3TransportConnection
     {
         private readonly MsQuicNativeConnection _connection;
+        private readonly Http3DatagramTransport? _datagrams;
         internal MsQuicTransportConnection(MsQuicNativeConnection connection)
         { _connection = connection ?? throw new ArgumentNullException(nameof(connection)); }
+        internal MsQuicTransportConnection(MsQuicNativeConnection connection, MsQuicNativeDatagrams datagrams)
+            : this(connection) { _datagrams = new MsQuicHttp3DatagramTransport(datagrams); }
+        internal override Http3DatagramTransport? Datagrams => _datagrams;
         internal override async ValueTask<Http3TransportStream> OpenOutboundStreamAsync(QuicStreamType type, CancellationToken token)
         {
             if (type != QuicStreamType.Bidirectional && type != QuicStreamType.Unidirectional) throw new ArgumentOutOfRangeException(nameof(type));

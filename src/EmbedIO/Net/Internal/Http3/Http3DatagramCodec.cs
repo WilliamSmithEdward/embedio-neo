@@ -29,5 +29,18 @@ namespace EmbedIO.Net.Internal.Http3
                 throw new ArgumentOutOfRangeException(nameof(streamId), "Datagrams require a client-initiated bidirectional request stream.");
             return QuicInteger.Write(packet, offset, streamId >> 2);
         }
+#if NET10_0_OR_GREATER
+        internal static long ReadPacketHeader(ReadOnlySpan<byte> packet, out int payloadOffset)
+        {
+            if (packet.IsEmpty) throw new Http3ProtocolException(0x33, "Truncated HTTP/3 datagram stream identifier.");
+            var width = 1 << (packet[0] >> 6);
+            if (packet.Length < width) throw new Http3ProtocolException(0x33, "Truncated HTTP/3 datagram stream identifier.");
+            long quarter = packet[0] & 63;
+            for (var index = 1; index < width; index++) quarter = (quarter << 8) | packet[index];
+            if (quarter >= 1L << 60) throw new Http3ProtocolException(0x33, "HTTP/3 datagram stream identifier exceeds the QUIC stream limit.");
+            payloadOffset = width;
+            return quarter << 2;
+        }
+#endif
     }
 }

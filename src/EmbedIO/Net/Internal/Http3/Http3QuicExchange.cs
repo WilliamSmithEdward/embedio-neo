@@ -48,6 +48,9 @@ namespace EmbedIO.Net.Internal.Http3
             Body = new Http3RequestBody(stream.Id, reader, owner);
         }
         internal Http3PriorityState.Entry? PriorityState { get; set; }
+        internal Http3DatagramChannel? Datagrams { get; set; }
+        internal bool CanSendDatagrams => Volatile.Read(ref _headers) && Volatile.Read(ref _tunnel)
+            && !Volatile.Read(ref _ended) && !Volatile.Read(ref _outputFailed) && Volatile.Read(ref _disposed) == 0;
         internal HttpPriority Priority => PriorityState?.Value ?? new HttpPriority(3, false);
         public long Id => _stream.Value.Id;
         public Http2RequestHeaders Request { get; }
