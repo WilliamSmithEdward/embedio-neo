@@ -196,15 +196,18 @@ internal sealed class RunState(TimeSpan duration, CancellationToken cancellation
 
 internal static class Http1Worker
 {
+    private static string InspectHeaderLines(BenchmarkRoute route)
+        => route.Kind == RouteKind.Inspect ? string.Concat(InspectRequest.Headers.Select(header => header.Name + ": " + header.Value + "\r\n")) : string.Empty;
+
     internal static async Task RunAsync(LoadSettings settings, RunState state)
     {
         var histogram = state.CreateHistogram();
         var expected = settings.IsUpload ? Payloads.UploadAcknowledgement(settings.UploadBytes) : Payloads.Get(settings.Route.ResponseLength);
-        if (settings.Route.Kind == RouteKind.Plaintext) expected = Payloads.Plaintext;
+        if (settings.Route.Kind is RouteKind.Plaintext or RouteKind.Inspect) expected = Payloads.Plaintext;
         var host = "localhost:" + settings.Port.ToString(CultureInfo.InvariantCulture);
         var head = settings.IsUpload
             ? $"POST /upload HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/octet-stream\r\nContent-Length: {settings.UploadBytes}\r\n\r\n"
-            : $"GET {settings.Route.Path} HTTP/1.1\r\nHost: {host}\r\n\r\n";
+            : $"GET {settings.Route.Path} HTTP/1.1\r\nHost: {host}\r\n{InspectHeaderLines(settings.Route)}\r\n";
         var body = settings.IsUpload ? Payloads.Get(settings.UploadBytes) : [];
         var single = Encoding.ASCII.GetBytes(head).Concat(body).ToArray();
         var closing = Encoding.ASCII.GetBytes(head.Replace("\r\n\r\n", "\r\nConnection: close\r\n\r\n", StringComparison.Ordinal)).Concat(body).ToArray();
@@ -430,7 +433,7 @@ internal static class MultiplexedWorker
         var histogram = state.CreateHistogram();
         var version = settings.Protocol == Protocol.Http3 ? HttpVersion.Version30 : HttpVersion.Version20;
         var expected = settings.IsUpload ? Payloads.UploadAcknowledgement(settings.UploadBytes) : Payloads.Get(settings.Route.ResponseLength);
-        if (settings.Route.Kind == RouteKind.Plaintext) expected = Payloads.Plaintext;
+        if (settings.Route.Kind is RouteKind.Plaintext or RouteKind.Inspect) expected = Payloads.Plaintext;
         var uploadBody = settings.IsUpload ? Payloads.Get(settings.UploadBytes) : null;
         var uri = new Uri($"{(settings.Tls ? "https" : "http")}://localhost:{settings.Port}{settings.Route.Path}");
         try
@@ -469,8 +472,17 @@ internal static class MultiplexedWorker
                             VersionPolicy = HttpVersionPolicy.RequestVersionExact,
                         };
                         if (uploadBody is not null) request.Content = new ByteArrayContent(uploadBody);
+                        if (settings.Route.Kind == RouteKind.Inspect)
+                        {
+                            foreach (var (name, value) in InspectRequest.Headers) request.Headers.TryAddWithoutValidation(name, value);
+                        }
+
                         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, state.Token).ConfigureAwait(false);
-                        if (response.StatusCode != HttpStatusCode.OK) throw new InvalidDataException("Unexpected status " + (int)response.StatusCode);
+                        if (response.StatusCode != HttpStatusCode.OK)
+                        {
+                            var detail = await response.Content.ReadAsStringAsync(state.Token).ConfigureAwait(false);
+                            throw new InvalidDataException("Unexpected status " + (int)response.StatusCode + ": " + detail[..Math.Min(detail.Length, 200)]);
+                        }
                         if (response.Version != version) throw new InvalidDataException("Negotiated HTTP/" + response.Version);
                         if (response.Content.Headers.ContentEncoding.Count != 0) throw new InvalidDataException("Unexpected content coding.");
                         await using var content = await response.Content.ReadAsStreamAsync(state.Token).ConfigureAwait(false);

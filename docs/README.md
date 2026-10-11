@@ -147,6 +147,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [HTTP/2 graceful output lifetime](project/http2-drain-output-lifetime.md): response-loss evidence, committed control-write reproduction and shutdown cancellation boundaries.
 - [HTTP/2 output and dispatch performance](project/http2-performance.md): profiled small-response costs, output batching and response coalescing, before/after measurements and remaining bottlenecks.
 - [HTTP/3 request path performance](project/http3-performance.md): profiled HTTP/3 request costs, request scopes, write coalescing and QPACK feedback, before/after measurements and remaining bottlenecks.
+- [Multiplexed request-model allocation](project/http-request-model-allocations.md): profiled HTTP/2 and HTTP/3 request-model allocation, deferred query and referrer parsing, before/after load and in-process measurements and remaining contributors.
 
 - [HTTP conformance audit](project/http-conformance.md): October 2026 standards baseline, black-box conformance and stateful campaigns, and prioritized findings.
 - [HTTP standards applicability audit](project/http-standards-applicability.md): frozen October 2026 RFC, errata, registry and draft inventory, requirement-to-evidence matrix for extensions and application APIs, and reproduced gaps.
