@@ -34,8 +34,9 @@ counts by message and write the first stack trace per key to its stderr log; lea
 unset for comparison runs.
 
 Scenarios ending in `-close100` are controls: the client closes every connection
-after 100 requests, matching the managed listener's per-connection cap, so all
-engines pay the same reconnect cost.
+after 100 requests, so all engines pay the same reconnect cost. (They were added when
+the managed listener capped keep-alive connections at 100 requests; the current
+engine has no such cap.)
 
 Scenarios named `-inspect-` request `/inspect?id=42&name=neo%20bench&tag=a&tag=b`
 with User-Agent, Accept, Cookie, Referer and X-Request-Id headers. The handler
@@ -199,3 +200,87 @@ modern-engine revision that supports the selected protocols, pass
 response validation and failure handling remain unchanged. Do not use this flag
 with the historical main baseline. Build identical runner copies and swap only
 the core DLL, retaining revision and binary hashes for both.
+
+## Endurance mode
+
+`endurance` keeps one server process alive for a whole plan, so retained state
+accumulates as it would in a long-running application. The server hosts two
+listeners with the comparison handler plus a WebSocket echo endpoint at `/ws`:
+a cleartext `EmbedIO` listener (HTTP/1.1 and HTTP/2 prior knowledge) and an
+`EmbedIOCombined` TLS listener (HTTP/1.1 and HTTP/2 by ALPN, HTTP/3 over QUIC).
+Every step uses a fresh client process.
+
+```sh
+dotnet <runner>/EmbedIO.LoadBenchmark.dll endurance --output TestResults/endurance/<label>   --plan idle:60,load:steady:300,load:faults:240,load:ws:120,drain:mixed:60:3,restart:5,load:mixed:420,idle:60   --settle 20 --server-cpus 0-7 --client-cpus 8-19 --revision <sha>
+python scripts/analyze_endurance.py TestResults/endurance/<label>
+```
+
+Plan steps, comma separated:
+
+- `idle:<s>`: wait, then take a quiesced snapshot (the baseline).
+- `load:<mix>:<s>`: run a client mix for `<s>` seconds.
+- `drain:<mix>:<s>:<n>`: `n` cycles of load; at the midpoint the server drains both
+  listeners with `WebServer.DrainAsync`, is disposed and is replaced by new instances
+  on the same ports while the client keeps running.
+- `restart:<n>`: `n` idle drain-and-replace cycles.
+
+After every load step the client stops, the orchestrator waits for zero in-flight
+requests and WebSockets (at most two minutes, otherwise the step fails), waits
+`--settle` seconds, takes a forced, compacting GC snapshot and then runs a 10-second
+validated health check on every protocol plus WebSocket echo. Retention is judged
+only from these quiesced snapshots; `analyze_endurance.py` compares early and late
+values and fits a least-squares slope after excluding warm-up snapshots.
+
+Mixes (`--rate-scale` multiplies paced rates):
+
+| Mix | Workloads |
+| --- | --- |
+| `steady` | Paced small GETs, 1 MiB responses, 1 MiB uploads and 1 MiB flushed streams on HTTP/1.1, HTTP/1.1+TLS, h2c, h2 and HTTP/3; rate-limited new-connection churn on HTTP/1.1, HTTP/1.1+TLS, h2 and HTTP/3. |
+| `faults` | Client cancellations (HTTP/1.1 connection reset mid-body; HTTP/2 and HTTP/3 stream cancellation before and during the body, each followed by a validated request on the same connection), abrupt disconnects (resets mid-head, mid-upload and mid-TLS-handshake, a partial h2c HEADERS frame, abandoned HTTP/2 and HTTP/3 connections with streams in flight), slow readers (1 MiB at about 160 KiB/s) and slow writers (256 KiB at about 160 KiB/s), byte-at-a-time request heads, and idle connections held until the server's 90 s initial or 15 s keep-alive timeout. |
+| `ws` | WebSocket connect/echo/close churn and long-lived echo connections over HTTP/1.1, HTTP/1.1+TLS, h2c and h2 (RFC 8441), with validated text (including multibyte UTF-8) and binary messages up to 64 KiB. |
+| `mixed` | All of the above concurrently. |
+| `saturate` | Unpaced small GETs on every protocol, for short stress segments. |
+| `health` | One closed-loop small GET worker per protocol plus WebSocket churn over HTTP/1.1 and h2. |
+
+Validation is the same as in comparisons: status, protocol version, framing, length
+and every body byte; uploads are checked by the server; WebSocket echoes are compared
+byte for byte with their message type. Failures are counted and the first 20 per
+workload are kept with timestamps; the worker then opens a new connection, so one
+failure does not hide later ones. Nothing is retried into a pass: any unexpected
+failure fails the step. Client-initiated cancellations and resets are counted as
+`clientAborts` with outcome categories, not as successes. Failures inside the
+drain/restart window (and 3 s after it) are counted separately as `disrupted`;
+validation failures are never excused.
+
+Attribution options: `--transports h1,h1tls,h2c,h2tls,h3` and `--kinds small,large,...`
+restrict every load step to those workloads (health checks keep the transport filter).
+`--engine kestrel` hosts ASP.NET Core Kestrel from the shared framework instead, with
+the same handler: cleartext HTTP/1.1 on the plain port and HTTP/1.1, HTTP/2 and HTTP/3
+on the TLS port, without h2c or WebSockets, so plans for it must filter those out. It
+separates engine retention from runtime, TLS and MsQuic retention. Set
+`EMBEDIO_BENCH_EXCEPTION_DETAIL=1` for diagnostic runs to key first-chance exceptions by
+message and log the first stack per key to `server.stderr.log` (written at exit).
+`scripts/summarize_minidump_memory.py <dump>` summarizes committed memory in a full
+dump (for example from `dotnet-dump collect --type Full`) by region type and
+allocation, without a debugger.
+
+Evidence in the output directory:
+
+- `environment.json`: revision, runner/core/msquic hashes, runtime, CPU, memory, plan.
+- `server-samples.jsonl`: every 5 s (`--sample-seconds`), non-forcing: CPU, allocation,
+  GC counts/pause/generation sizes/fragmentation, managed heap, working set, private
+  bytes, handles, threads, thread-pool threads/pending/completed, lock contention,
+  active timers, in-flight requests, active WebSockets, first-chance exceptions by type,
+  server TCP connections by state, available physical memory and machine busy CPU.
+  `staleGenerationRequests` counts requests or WebSocket messages handled by a server
+  instance that had already been drained and replaced; any nonzero value fails the step.
+- `steps.jsonl`: per step the samples at load start and stop, the drain/restart
+  results, the quiesced snapshot, quiesce time, the machine TCP census and health.
+- `clients/<step>-<mix>.report.json` and `.intervals.jsonl`: per-workload counts,
+  outcomes, first errors and full latency histograms, plus per-interval p50/p99/max.
+
+The endurance client paces load so throughput stays constant across hours (missed
+slots are skipped rather than replayed), so its latency excludes queueing delay that
+a fixed-schedule open-loop generator would attribute to the server. QUIC connections
+are not visible in the TCP census. Absolute rates depend on the host and must not be
+compared across machines; compare revisions only on the same host with the same plan.
