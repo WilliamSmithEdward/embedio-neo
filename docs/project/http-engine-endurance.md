@@ -340,8 +340,19 @@ returns to baseline after freeing them (82 -> 146 -> 82). Fresh 64-stream
 provider runs with the revised census complete: runtime write rounds retain
 64 arrays each (block deltas +66/+65), while native write rounds have block
 deltas +2/0 and close all owners. Empty controls stay within +1 block. These
-are bounded functional checks; the larger paired experiment with the revised
-census remains pending. No production allocation or native release is altered.
+are bounded functional checks. The subsequent full pair with the revised census
+completed in separate fresh processes on one harness binary: runtime write
+rounds retained 2,000 arrays each (heap deltas +1,998/+2,002); native write rounds
+had heap deltas +2/0 and closed all 2,000 stream owners each. Empty controls
+changed by +2/+1 on the runtime and 0/+1 on native. Harness SHA-256:
+`F38F56DD8D820C9428F42F73D9ECB60A6C994036F38B51F8F5F278BE661E0C6E`;
+core SHA-256:
+`08B55E71D2F3F1A43F0248FC3B43CBCBB425028EC670E981362715384B9487DE`.
+Both providers used the same bundled MsQuic file hash recorded above. Raw
+`corrected-pair-*` results, per-process exit records and progress logs are
+retained beside the earlier attempts. This supports the specific ownership
+attribution, without proving complete native HTTP/3 endurance. No production
+allocation or native release is altered.
 
 ### Repeating the attribution
 
