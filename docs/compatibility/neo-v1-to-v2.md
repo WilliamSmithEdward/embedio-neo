@@ -40,18 +40,36 @@ response bytes against the final v2 package. The
 records the audited behavior and its limits.
 ## Listener selection and deployment
 
-The intended v2 outcome is for the new managed engine to become the default and
-for the inherited Mono implementation to be deprecated. That transition is still
-in development; its final support and removal policy must be documented before
-shipping. Do not assume that deprecation means immediate removal, or that keeping
-the EmbedIO mode name provides the old parser's permissive behavior.
+William approved removal of both the Microsoft backend and the inherited Mono
+implementation on 2026-10-10. The retirement is being implemented incrementally;
+the replacement engine must pass the complete platform and protocol checks before
+shipping. This approval supersedes the earlier plan to retain Microsoft mode and
+only deprecate Mono.
+
+Remove `WithMicrosoftHttpListener()` and `HttpListenerMode.Microsoft` from source
+configuration. Applications that persisted its numeric value, 1, must migrate
+their configuration explicitly: v2 rejects that selection instead of silently
+choosing another implementation. The remaining mode values stay 0, 2 and 3.
+The public runtime adapters `EmbedIO.Net.Internal.SystemHttpRequest` and
+`SystemHttpResponse` are also removed. Use `IHttpRequest` and `IHttpResponse`
+instead of constructing adapters around a `System.Net.HttpListenerContext`.
+HTTP.sys URL reservations and kernel certificate bindings are specific to the
+removed backend; use the replacement engine's HTTPS certificate configuration and
+validate deployment guidance for your application model.
+
+The intended v2 outcome is for the replacement engine to be the supported listener
+family, with both old implementations removed. On the retirement branch, the
+Microsoft factory and its adapters are removed; replacing the inherited Mono
+HTTP/1 implementation remains in progress. This intermediate state is not shipping
+acceptance. Keeping the EmbedIO mode name does not retain the old parser's
+permissive behavior.
 
 The current engine branch has these modes:
 
 | Mode | Current development behavior | Migration action |
 | --- | --- | --- |
 | EmbedIO | Managed HTTP/1 and HTTP/2 over TCP; replacement work remains in progress. | Exercise existing routes and clients against the new engine. |
-| Microsoft | Explicit System.Net.HttpListener backend. | Keep explicit selection if your application requires that backend; modern capabilities are not identical. |
+| Microsoft (v1 only) | Removed on the v2 retirement branch. | Remove the mode selection and migrate backend-specific deployment configuration. |
 | EmbedIOHttp3 | Opt-in HTTP/3 over UDP, without a TCP listener. | Use the .NET 10 asset, supported native QUIC, HTTPS and a certificate with its private key. |
 | EmbedIOCombined | HTTP/1 and HTTP/2 over TCP alongside HTTP/3 over UDP on the same HTTPS prefixes. | Permit both transports; startup requires both bindings and has no silent TCP-only fallback. |
 

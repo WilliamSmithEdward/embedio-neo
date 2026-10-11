@@ -169,8 +169,22 @@ The freeing frame is unknown, so no cause is claimed. CoreCLR handles SIGABRT,
 which glibc raises for this error, and writes a crash dump before restoring the
 default action when `DOTNET_DbgEnableMiniDump=1` is set (`signal.cpp` lines 184
 and 427-438). A full dump (`DOTNET_DbgMiniDumpType=4`) from the Linux test step,
-retained on failure, would identify the native stack. Enabling it is a workflow
-change for the owner to approve.
+retained on failure, could identify the native stack; it is not enabled.
+
+William approved crash-report-only capture on 2026-10-10. The Linux/macOS
+regression step enables `DOTNET_DbgEnableMiniDump=1` with
+`DOTNET_EnableCrashReportOnly=1` and a process-specific name under
+`RUNNER_TEMP/embedio-crash-reports`. JSON reports from failed jobs are uploaded
+as `test-host-crash-reports-<OS>` and retained for seven days. Full heap dumps
+are not enabled. This observes ordinary CI; no forced crash or extra campaign
+is added, and assertions, discovery minimums and failure handling are unchanged.
+Capture is configured, not yet demonstrated by a new report from a crash.
+
+The newer retirement-branch run 38101741496 at `2ba2113` reports a host crash
+(PID 3122) after 359 passed cases in nine seconds. It has no native stack or
+malloc message in the uploaded artifact, so it is not classified as a confirmed
+recurrence of the glibc double free. Its incomplete discovery count is a
+consequence of termination, not evidence that the minimum should be lowered.
 
 ## Evidence locations
 

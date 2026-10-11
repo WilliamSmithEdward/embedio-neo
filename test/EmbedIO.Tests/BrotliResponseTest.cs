@@ -21,7 +21,7 @@ namespace EmbedIO.Tests
 
         public static IEnumerable ResponseCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var buffered in new[] { false, true })
                     foreach (var text in new[] { false, true })
                         yield return new object[] { mode, buffered, text };
@@ -75,8 +75,6 @@ namespace EmbedIO.Tests
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task StaticVariantsRemainDistinctAcrossColdWarmHeadAndConditionalResponses(HttpListenerMode mode, bool cached)
         {
             var directory = Path.Combine(Path.GetTempPath(), "embedio-br-" + Guid.NewGuid().ToString("N"));

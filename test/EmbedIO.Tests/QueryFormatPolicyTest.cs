@@ -70,19 +70,12 @@ namespace EmbedIO.Tests
             => Assert.Throws<ArgumentException>(() => _ = new QueryFormatPolicy(Array.Empty<string>()));
 
         [TestCase(HttpListenerMode.EmbedIO, "GET", "text/plain", HttpStatusCode.OK)]
-        [TestCase(HttpListenerMode.Microsoft, "GET", "text/plain", HttpStatusCode.OK)]
         [TestCase(HttpListenerMode.EmbedIO, "HEAD", "text/plain", HttpStatusCode.OK)]
-        [TestCase(HttpListenerMode.Microsoft, "HEAD", "text/plain", HttpStatusCode.OK)]
         [TestCase(HttpListenerMode.EmbedIO, "OPTIONS", "text/plain", HttpStatusCode.OK)]
-        [TestCase(HttpListenerMode.Microsoft, "OPTIONS", "text/plain", HttpStatusCode.OK)]
         [TestCase(HttpListenerMode.EmbedIO, "POST", "application/json", HttpStatusCode.OK)]
-        [TestCase(HttpListenerMode.Microsoft, "POST", "application/json", HttpStatusCode.OK)]
         [TestCase(HttpListenerMode.EmbedIO, "query", "application/json", HttpStatusCode.OK)]
-        [TestCase(HttpListenerMode.Microsoft, "query", "application/json", HttpStatusCode.OK)]
         [TestCase(HttpListenerMode.EmbedIO, "QUERY", "text/plain", HttpStatusCode.OK)]
-        [TestCase(HttpListenerMode.Microsoft, "QUERY", "text/plain", HttpStatusCode.OK)]
         [TestCase(HttpListenerMode.EmbedIO, "QUERY", "application/json", HttpStatusCode.UnsupportedMediaType)]
-        [TestCase(HttpListenerMode.Microsoft, "QUERY", "application/json", HttpStatusCode.UnsupportedMediaType)]
         public async Task Http1DiscoveryAndUnsupportedMediaAreResourceScoped(HttpListenerMode mode, string method, string mediaType, HttpStatusCode expected)
         {
             var url = HttpsSmoke.GetUrl().Replace("https://", "http://", StringComparison.Ordinal);

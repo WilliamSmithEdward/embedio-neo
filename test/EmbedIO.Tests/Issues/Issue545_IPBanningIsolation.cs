@@ -17,7 +17,6 @@ namespace EmbedIO.Tests.Issues
     public class Issue545_IPBanningIsolation
     {
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task SameRouteServersKeepCriteriaWhitelistAndDisposalIndependent(HttpListenerMode mode)
         {
             using var first = new IPBanningModule();
@@ -36,7 +35,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task SiblingGroupsWithSameRelativeRouteKeepExplicitBansIndependent(HttpListenerMode mode)
         {
             using var left = new IPBanningModule();

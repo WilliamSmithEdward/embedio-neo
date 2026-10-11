@@ -63,7 +63,6 @@ namespace EmbedIO.Tests
             Assert.That(healthy.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         }
         [TestCase(HttpListenerMode.EmbedIO, 1)]
-        [TestCase(HttpListenerMode.Microsoft, 1)]
         [TestCase(HttpListenerMode.EmbedIO, 2)]
         public async Task QueryValidatorsDescribeResultsAndNegotiation(HttpListenerMode mode, int protocol)
         {

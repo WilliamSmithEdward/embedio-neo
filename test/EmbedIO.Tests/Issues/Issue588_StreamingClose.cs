@@ -17,7 +17,6 @@ namespace EmbedIO.Tests.Issues
     public class Issue588_StreamingClose
     {
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task RepeatedResponseClosePreservesCallbacksAndHealthyConnections(HttpListenerMode mode)
         {
             var count = 0;
@@ -73,8 +72,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task CloseCallbackFollowsStreamingHandlerCompletion(HttpListenerMode mode, bool cancelServer)
         {
             var scenario = new Scenario();
@@ -111,8 +108,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task ClientResetDoesNotCancelServerTokenAndWriteErrorsRespectConfiguration(HttpListenerMode mode, bool ignoreWrites)
         {
             var scenario = new Scenario { WriteAfterRelease = true };

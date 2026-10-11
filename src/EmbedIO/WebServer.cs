@@ -210,9 +210,8 @@ namespace EmbedIO
             {
                 HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(Options.Certificate),
                 HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(Options.Certificate, true),
-                HttpListenerMode.Microsoft => System.Net.HttpListener.IsSupported
-                    ? new SystemHttpListener(new System.Net.HttpListener()) as IHttpListener
-                    : new Net.HttpListener(Options.Certificate),
+                _ when (int)Options.Mode == 1 => throw new NotSupportedException(
+                    "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."),
                 _ => new Net.HttpListener(Options.Certificate)
             };
 
