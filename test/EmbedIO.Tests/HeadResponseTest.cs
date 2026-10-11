@@ -61,14 +61,15 @@ namespace EmbedIO.Tests
             }
         }
 
-        [TestCase(HttpListenerMode.EmbedIO)]
-        public async Task EmptyOrdinaryResponseDoesNotAdvertiseUnsentBytes(HttpListenerMode mode)
+        [TestCase(HttpListenerMode.EmbedIO, false)]
+        [TestCase(HttpListenerMode.EmbedIO, true)]
+        public async Task EmptyOrdinaryResponseHonorsItsDeclaredLength(HttpListenerMode mode, bool incomplete)
         {
             var url = Resources.GetServerAddress();
             using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(mode))
                 .OnGet("/empty", context =>
                 {
-                    if (mode == HttpListenerMode.EmbedIO)
+                    if (incomplete)
                         context.Response.ContentLength64 = 123;
                     return Task.CompletedTask;
                 })
@@ -78,9 +79,14 @@ namespace EmbedIO.Tests
             try
             {
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-                using var response = await client.GetAsync(url + "empty");
-                Assert.That(response.Content.Headers.ContentLength, Is.EqualTo(0));
-                Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.Empty);
+                if (incomplete)
+                    await Assert.ThrowsAsync<HttpRequestException>(async () => await client.GetAsync(url + "empty"));
+                else
+                {
+                    using var response = await client.GetAsync(url + "empty");
+                    Assert.That(response.Content.Headers.ContentLength, Is.EqualTo(0));
+                    Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.Empty);
+                }
                 Assert.That(await client.GetStringAsync(url + "next"), Is.EqualTo("next"));
             }
             finally
