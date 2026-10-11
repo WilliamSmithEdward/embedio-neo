@@ -108,6 +108,28 @@ namespace EmbedIO.Tests
             finally { if (Retire(owner, false)) Finish(owner, null, () => { }); }
         }
 
+        [Test]
+        public async Task DeadlineCleanupFaultRemainsObservableWithoutEscapingTheTimer()
+        {
+            var failure = new IOException("controlled deadline cleanup failure");
+            var stream = new ObservedStream(failure);
+            object? owner = null;
+            owner = Create(stream, () =>
+            {
+                var current = owner ?? throw new AssertionException("Missing deadline owner.");
+                if (Retire(current, true)) Finish(current, null, () => { });
+            });
+            var completion = Completion(owner);
+            try
+            {
+                Method(owner, "ArmDeadline").CreateDelegate<Action<int>>(owner)(1);
+                Assert.That(await Assert.ThrowsAsync<IOException>(async () => await completion.WaitAsync(TimeSpan.FromSeconds(5))), Is.SameAs(failure));
+                Assert.That(Closed(owner), Is.True);
+                Assert.That(stream.Disposals, Is.EqualTo(1));
+            }
+            finally { if (Retire(owner, false)) Finish(owner, null, () => { }); }
+        }
+
         private static object Create(Stream stream, Action? expired = null)
             => Activator.CreateInstance(OwnerType, Hidden, null, new object[]
             {

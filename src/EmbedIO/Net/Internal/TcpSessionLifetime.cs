@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal
 {
@@ -26,7 +27,24 @@ namespace EmbedIO.Net.Internal
             _gate = gate;
             _socket = socket;
             _stream = stream;
-            DeadlineTimer = new Timer(_ => expired(), null, Timeout.Infinite, Timeout.Infinite);
+            DeadlineTimer = new Timer(InvokeExpiry, expired, Timeout.Infinite, Timeout.Infinite);
+        }
+
+        private static void InvokeExpiry(object? state)
+        {
+            if (state is not Action expired) return;
+            try { expired(); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                // Retirement has already recorded its failure for drain. A
+                // callback has no synchronous caller to receive that exception.
+                try { error.Log("TCP deadline cleanup"); }
+                catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError))
+                {
+                    // A failing application trace observer cannot turn an
+                    // already-observable teardown fault into an unhandled timer.
+                }
+            }
         }
 
         internal Timer DeadlineTimer { get; }
