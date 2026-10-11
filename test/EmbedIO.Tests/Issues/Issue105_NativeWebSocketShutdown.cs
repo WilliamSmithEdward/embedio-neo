@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Linq;
 using System.Net.WebSockets;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,161 +11,6 @@ namespace EmbedIO.Tests.Issues
 {
     public class Issue105_NativeWebSocketShutdown
     {
-        private static IWebSocket Wrap(System.Net.WebSockets.WebSocket socket)
-            => (IWebSocket)(Activator.CreateInstance((typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.SystemWebSocket", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), socket) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-
-        private static Task<WebSocketReceiveResult> Receive(IWebSocket socket, CancellationToken token)
-            => (Task<WebSocketReceiveResult>)((((socket).GetType().GetMethod("ReceiveAsync", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, new object[] { new ArraySegment<byte>(new byte[16]), token })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task FullCloseWaitsForPeerWithoutCallingNativeCloseAsync(bool pendingReceive)
-        {
-            if (!OperatingSystem.IsWindows()) Assert.Ignore("Windows native workaround");
-            using var native = new ControlledSocket();
-            using var socket = Wrap(native);
-            var receive = pendingReceive ? Receive(socket, CancellationToken.None) : null;
-            var close = socket.CloseAsync(CloseStatusCode.PolicyViolation, "policy");
-            await native.Output.Task.WaitAsync(TimeSpan.FromSeconds(3));
-            Assert.That(close.IsCompleted, Is.False, "Sending a close frame alone must not complete full close.");
-            native.PeerClose();
-            await close.WaitAsync(TimeSpan.FromSeconds(3));
-            if (receive != null) await receive.WaitAsync(TimeSpan.FromSeconds(3));
-            Assert.That(native.OutputCount, Is.EqualTo(1));
-            Assert.That(native.MaximumReaders, Is.EqualTo(1));
-            Assert.That(native.SentStatus, Is.EqualTo(WebSocketCloseStatus.PolicyViolation));
-            Assert.That(native.SentReason, Is.EqualTo("policy"));
-            Assert.That(socket.State, Is.EqualTo(WebSocketState.Closed));
-        }
-
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task DisposalReleasesGatesAfterPendingOperationsFinish(bool pendingReceive)
-        {
-            if (!OperatingSystem.IsWindows()) Assert.Ignore("Windows native workaround");
-            using var native = new ControlledSocket();
-            using var socket = Wrap(native);
-            var receive = pendingReceive ? Receive(socket, CancellationToken.None) : null;
-            var close = socket.CloseAsync();
-            await native.Output.Task.WaitAsync(TimeSpan.FromSeconds(3));
-            socket.Dispose();
-            await FinishInterrupted(close);
-            if (receive != null) await FinishInterrupted(receive);
-            foreach (var name in new[] { "_receiveGate", "_closeGate" })
-            {
-                var gate = (SemaphoreSlim)((((socket).GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-                Assert.That(() => (gate).Wait(0), Throws.InstanceOf<ObjectDisposedException>());
-            }
-        }
-
-        private static async Task FinishInterrupted(Task task)
-        {
-            try { await task.WaitAsync(TimeSpan.FromSeconds(3)); }
-            catch (OperationCanceledException) { }
-            catch (ObjectDisposedException) { }
-        }
-
-        [Test]
-        public async Task UnexpectedDataDuringFullCloseAbortsTheConnection()
-        {
-            if (!OperatingSystem.IsWindows()) Assert.Ignore("Windows native workaround");
-            using var native = new ControlledSocket { ResultType = WebSocketMessageType.Text };
-            using var socket = Wrap(native);
-            var close = socket.CloseAsync();
-            await native.Output.Task.WaitAsync(TimeSpan.FromSeconds(3));
-            native.PeerClose();
-            await Assert.ThatAsync(async () => await close.WaitAsync(TimeSpan.FromSeconds(3)), Throws.InstanceOf<System.Net.WebSockets.WebSocketException>());
-            Assert.That(native.AbortCount, Is.EqualTo(1));
-        }
-
-        [Test]
-        public async Task ConcurrentCloseCallsShareOneCompletedHandshake()
-        {
-            if (!OperatingSystem.IsWindows()) Assert.Ignore("Windows native workaround");
-            using var native = new ControlledSocket();
-            using var socket = Wrap(native);
-            var closes = Enumerable.Range(0, 8).Select(_ => socket.CloseAsync()).ToArray();
-            await native.Output.Task.WaitAsync(TimeSpan.FromSeconds(3));
-            Assert.That(closes.All(t => !t.IsCompleted), Is.True);
-            native.PeerClose();
-            await Task.WhenAll(closes).WaitAsync(TimeSpan.FromSeconds(3));
-            Assert.That(native.OutputCount, Is.EqualTo(1));
-        }
-
-        [Test]
-        public async Task CancellationAbortsAnUnansweredHandshake()
-        {
-            if (!OperatingSystem.IsWindows()) Assert.Ignore("Windows native workaround");
-            using var native = new ControlledSocket();
-            using var socket = Wrap(native);
-            using var cancellation = new CancellationTokenSource();
-            var close = socket.CloseAsync(cancellation.Token);
-            await native.Output.Task.WaitAsync(TimeSpan.FromSeconds(3));
-            cancellation.Cancel();
-            await Assert.ThatAsync(async () => await close.WaitAsync(TimeSpan.FromSeconds(3)), Throws.InstanceOf<OperationCanceledException>());
-            Assert.That(native.AbortCount, Is.EqualTo(1));
-            Assert.That(socket.State, Is.EqualTo(WebSocketState.Aborted));
-        }
-
-        [Test]
-        public async Task CancelingAQueuedCloseDoesNotAbortTheExistingClose()
-        {
-            if (!OperatingSystem.IsWindows()) Assert.Ignore("Windows native workaround");
-            using var native = new ControlledSocket();
-            using var socket = Wrap(native);
-            var first = socket.CloseAsync();
-            await native.Output.Task.WaitAsync(TimeSpan.FromSeconds(3));
-            using var cancellation = new CancellationTokenSource();
-            var second = socket.CloseAsync(cancellation.Token);
-            cancellation.Cancel();
-            await Assert.ThatAsync(async () => await second, Throws.InstanceOf<OperationCanceledException>());
-            Assert.That(native.AbortCount, Is.Zero);
-            native.PeerClose();
-            await first.WaitAsync(TimeSpan.FromSeconds(3));
-        }
-
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task CancellationReleasesAPendingReceiver(bool pendingReceive)
-        {
-            if (!OperatingSystem.IsWindows()) Assert.Ignore("Windows native workaround");
-            using var native = new ControlledSocket();
-            using var socket = Wrap(native);
-            var receive = pendingReceive ? Receive(socket, CancellationToken.None) : null;
-            using var cancellation = new CancellationTokenSource();
-            var close = socket.CloseAsync(cancellation.Token);
-            await native.Output.Task.WaitAsync(TimeSpan.FromSeconds(3));
-            cancellation.Cancel();
-            await Assert.ThatAsync(async () => await close.WaitAsync(TimeSpan.FromSeconds(3)), Throws.InstanceOf<OperationCanceledException>());
-            if (receive != null)
-                await Assert.ThatAsync(async () => await receive.WaitAsync(TimeSpan.FromSeconds(3)), Throws.InstanceOf<OperationCanceledException>());
-            Assert.That(native.MaximumReaders, Is.EqualTo(1));
-        }
-
-        [Test]
-        public void InvalidCloseReasonThrowsSynchronously()
-        {
-            if (!OperatingSystem.IsWindows()) Assert.Ignore("Windows native workaround");
-            using var native = new ControlledSocket();
-            using var socket = Wrap(native);
-            Assert.That(() => socket.CloseAsync(CloseStatusCode.Normal, new string('é', 62)), Throws.InstanceOf<ArgumentException>());
-            Assert.That(native.AbortCount, Is.Zero);
-        }
-
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task InvalidCloseReasonIsRejectedBeforeAborting(bool terminal)
-        {
-            if (!OperatingSystem.IsWindows()) Assert.Ignore("Windows native workaround");
-            using var native = new ControlledSocket();
-            using var socket = Wrap(native);
-            if (terminal) native.Abort();
-            var before = native.AbortCount;
-            await Assert.ThatAsync(async () => await socket.CloseAsync(CloseStatusCode.Normal, new string('é', 62)), Throws.InstanceOf<ArgumentException>());
-            Assert.That(native.AbortCount, Is.EqualTo(before));
-            Assert.That(native.OutputCount, Is.Zero);
-        }
-
         [TestCase(HttpListenerMode.EmbedIO)]
         public async Task SilentPeerCanBeCanceledAndTheServerRemainsHealthy(HttpListenerMode mode)
         {
@@ -189,14 +32,6 @@ namespace EmbedIO.Tests.Issues
                 cancellation.Cancel();
                 try { await close.WaitAsync(timeout.Token); }
                 catch (OperationCanceledException) { }
-                if (mode == HttpListenerMode.Microsoft)
-                {
-                    if (OperatingSystem.IsWindows())
-                        Assert.That(context.WebSocket.State, Is.EqualTo(WebSocketState.Aborted));
-                    else
-                        // Unix's unchanged canceled close does not promise to abort its separate receive.
-                        context.WebSocket.Dispose();
-                }
                 await module.Disconnected.Task.WaitAsync(timeout.Token);
                 Assert.That(module.ActiveCount, Is.Zero);
                 module.Reset();
@@ -228,7 +63,7 @@ namespace EmbedIO.Tests.Issues
             var running = server.RunAsync(stop.Token);
             try
             {
-                var iterations = scenario == "simultaneous" ? (mode == HttpListenerMode.Microsoft ? 100 : 10) : 3;
+                var iterations = scenario == "simultaneous" ? 10 : 3;
                 var random = new Random(42);
                 for (var i = 0; i < iterations; i++)
                 {
@@ -246,11 +81,7 @@ namespace EmbedIO.Tests.Issues
                         Thread.SpinWait(random.Next(200_000));
                         var serverClose = Task.Run(async () =>
                         {
-                            try { await context.WebSocket.CloseAsync(timeout.Token); }
-                            catch (System.Net.WebSockets.WebSocketException) when (mode == HttpListenerMode.Microsoft && !OperatingSystem.IsWindows() && context.WebSocket.State == WebSocketState.Closed)
-                            {
-                                // Unix's unchanged BCL close can lose the race to a completed peer close.
-                            }
+                            await context.WebSocket.CloseAsync(timeout.Token);
                         });
                         var reply = await client.ReceiveAsync(new ArraySegment<byte>(new byte[64]), timeout.Token);
                         Assert.That(reply.MessageType, Is.EqualTo(WebSocketMessageType.Close));
@@ -335,54 +166,5 @@ namespace EmbedIO.Tests.Issues
         }
 
         private static TaskCompletionSource<T> NewSource<T>() => new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        private sealed class ControlledSocket : System.Net.WebSockets.WebSocket
-        {
-            private int _state = (int)WebSocketState.Open;
-            private int _readers;
-            private readonly TaskCompletionSource<bool> _peer = NewSource<bool>();
-            public TaskCompletionSource<bool> Output { get; } = NewSource<bool>();
-            public WebSocketMessageType ResultType = WebSocketMessageType.Close;
-            public int OutputCount;
-            public int MaximumReaders;
-            public int AbortCount;
-            public WebSocketCloseStatus SentStatus;
-            public string? SentReason;
-            public override WebSocketCloseStatus? CloseStatus => WebSocketCloseStatus.NormalClosure;
-            public override string? CloseStatusDescription => "peer";
-            public override string? SubProtocol => null;
-            public override WebSocketState State => (WebSocketState)Volatile.Read(ref _state);
-            public override void Abort() { Interlocked.Increment(ref AbortCount); Volatile.Write(ref _state, (int)WebSocketState.Aborted); _peer.TrySetCanceled(); }
-            public override void Dispose()
-            {
-                if (State != WebSocketState.Closed) Volatile.Write(ref _state, (int)WebSocketState.Aborted);
-                _peer.TrySetCanceled();
-            }
-            public void PeerClose() => _peer.TrySetResult(true);
-            public override Task CloseAsync(WebSocketCloseStatus code, string? reason, CancellationToken token) => throw new InvalidOperationException("The defective native full-close path must not be called.");
-            public override Task CloseOutputAsync(WebSocketCloseStatus code, string? reason, CancellationToken token)
-            {
-                token.ThrowIfCancellationRequested();
-                Interlocked.Increment(ref OutputCount);
-                SentStatus = code; SentReason = reason;
-                Volatile.Write(ref _state, (int)WebSocketState.CloseSent);
-                Output.TrySetResult(true);
-                return Task.CompletedTask;
-            }
-            public override async Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken token)
-            {
-                var readers = Interlocked.Increment(ref _readers);
-                MaximumReaders = Math.Max(MaximumReaders, readers);
-                try
-                {
-                    Assert.That(readers, Is.EqualTo(1), "Native receives must not overlap.");
-                    await _peer.Task.WaitAsync(token);
-                    Volatile.Write(ref _state, (int)(ResultType == WebSocketMessageType.Close ? WebSocketState.Closed : WebSocketState.CloseSent));
-                    return new WebSocketReceiveResult(0, ResultType, true);
-                }
-                finally { Interlocked.Decrement(ref _readers); }
-            }
-            public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType type, bool end, CancellationToken token) => Task.CompletedTask;
-        }
     }
 }

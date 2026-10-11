@@ -176,10 +176,10 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(false)]
         [TestCase(true)]
-        public async Task NativeListenerHandlesChunkedUploadsWithoutMandatoryBodyReading(bool read)
+        public async Task ListenerHandlesChunkedUploadsWithoutMandatoryBodyReading(bool read)
         {
             var url = Resources.GetServerAddress();
-            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.Microsoft))
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new ActionModule("/", HttpVerbs.Any, async c =>
                 {
                     if (read && c.Request.HttpVerb == HttpVerbs.Post)

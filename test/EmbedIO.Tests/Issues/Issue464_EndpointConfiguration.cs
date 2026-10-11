@@ -98,13 +98,6 @@ namespace EmbedIO.Tests.Issues
             using var server = CreateServer($"http://{host}:{port}/", "wildcard", mode);
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
-            if (mode == HttpListenerMode.Microsoft && OperatingSystem.IsWindows()
-                && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true"
-                && running.IsFaulted && running.Exception?.GetBaseException() is HttpListenerException denied
-                && denied.NativeErrorCode == 5)
-            {
-                Assert.Ignore("Local HTTP.sys wildcard registration needs a URL reservation or elevation; CI must execute this case.");
-            }
             using var client = CreateClient();
             client.DefaultRequestHeaders.Host = $"unregistered.invalid:{port}";
             try { Assert.That(await client.GetStringAsync(target + "hello"), Is.EqualTo("wildcard")); }
@@ -114,23 +107,13 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.EmbedIO)]
         public async Task ExplicitIpv6LoopbackPrefixPreservesListenerPlatformBehavior(HttpListenerMode mode)
         {
-            if (!System.Net.Sockets.Socket.OSSupportsIPv6
-                && (mode != HttpListenerMode.Microsoft || OperatingSystem.IsWindows()))
+            if (!System.Net.Sockets.Socket.OSSupportsIPv6)
                 Assert.Ignore("IPv6 is unavailable.");
             var port = new Uri(Resources.GetServerAddress()).Port;
             var target = $"http://[::1]:{port}/";
             using var server = CreateServer(target, "ipv6", mode);
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
-            if (mode == HttpListenerMode.Microsoft && !OperatingSystem.IsWindows())
-            {
-                // .NET 10's Unix prefix parser mistakes the first IPv6 colon
-                // for a port separator. Verify and document that native limit;
-                // selecting the managed listener remains an explicit choice.
-                await Assert.ThatAsync(() => running, Throws.TypeOf<HttpListenerException>()
-                    .With.Property(nameof(HttpListenerException.NativeErrorCode)).EqualTo(400));
-                return;
-            }
             using var client = CreateClient();
             try { Assert.That(await client.GetStringAsync(target + "hello"), Is.EqualTo("ipv6")); }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }

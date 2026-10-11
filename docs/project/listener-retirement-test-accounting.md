@@ -76,3 +76,40 @@ Removed only the Microsoft iteration from 14 explicit two-mode arrays. These are
 | Issues/Issue567_ResponseCharset.cs | 1 |
 | Issues/Issue574_LargeResponses.cs | 1 |
 | Issues/Issue575_XmlResponses.cs | 1 |
+
+## Adapter-specific retirement
+
+These 43 cases instantiate or specifically inspect internal adapters that no
+longer exist. They are retired with those implementations; they are not relabeled
+as managed cases or added to the retained engine's coverage count.
+
+| Fixture | Cases retired | Removed implementation exercised |
+| --- | ---: | --- |
+| NativeResponseDisposalTest | 6 | SystemResponseStream header preparation/disposal wrapper |
+| Issue534_NativeSends | 6 | SystemWebSocket send/close gates over a controlled runtime socket |
+| Issue105_NativeWebSocketShutdown | 13 | SystemWebSocket controlled shutdown and validation; its seven real managed cases remain |
+| Issue502_CloseAdmission | 5 | SystemWebSocket and ProcessSystemContext admission/receive paths |
+| Issue547_MessageCallbacks | 9 | Private SystemWebSocket.MapCloseStatus; shared module cases remain |
+| Issue59_CookieAttributes | 4 | Native Set-Cookie2/version-one cloning and implicit native scope flags |
+
+Native cookie version-one cloning and implicit scope flags were properties of
+the removed backend. Do not claim equivalent support from the retained listener;
+applications should set the intended cookie scope explicitly and validate their
+wire contract during v2 migration. Shared cookie flag, handshake and rejection
+coverage remains in this fixture.
+
+## Ported shared contracts
+
+Five formerly Microsoft-only cases now exercise the retained engine: pre-canceled
+accept (one), no HTTP serialization after an upgrade during shutdown (one),
+chunked uploads with optional body consumption (two), and rejected writes that
+must not commit cookie headers (one). Their assertions and per-case deadlines
+are unchanged. Dead Microsoft-only platform skips and exception allowances are
+removed; all surviving managed assertions and simultaneous-close iterations
+remain in place.
+
+The ordinary solution builds with zero warnings. The nine directly affected
+fixtures report 76 focused cases on Windows, all passed, none skipped. This is
+focused evidence; full-suite discovery, Linux/macOS, standalone tools and every
+final-head hosted check remain outstanding. The discovery floor is unchanged
+until the full supported suite is actually accounted and reported.

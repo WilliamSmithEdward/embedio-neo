@@ -107,7 +107,7 @@ namespace EmbedIO.Tests
             {
                 using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false, AutomaticDecompression = DecompressionMethods.None });
                 await Verify(client, url, protocol == 2 ? HttpVersion.Version20 : HttpVersion.Version11, stop.Token,
-                    mode == HttpListenerMode.Microsoft && System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows));
+                    false);
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
         }
