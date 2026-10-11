@@ -160,6 +160,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
 
+- [Controller base routes](guides/controller-base-routes.md): scoped catch-all handlers, parameterized prefixes and fallback order.
+
 ## Compatibility
 
 - [Neo v1 to v2](compatibility/neo-v1-to-v2.md): living migration guide for the v2 engine release scope, approved behavior changes and remaining integration.
