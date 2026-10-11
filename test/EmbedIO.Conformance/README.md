@@ -121,3 +121,16 @@ opens a 1 MiB stream window (larger than every generated response) while preserv
 all randomized window changes before completion. A peer-only wire regression
 reproduces the zero window and verifies that explicit reopening permits the final
 payload. The 30-second completion deadline and byte validation remain unchanged.
+## Internal native HTTP/3 candidate
+
+On an engine revision containing the internal native host constructor, `serve
+--native-http3 --h3 PORT` selects that candidate explicitly. Public WebServer
+constructors and production provider defaults remain unchanged. The host's
+IDENTITY record names the selected HTTP/3 provider and exact core hash; a flag
+without an HTTP/3 endpoint records `not-hosted`.
+
+The fifth optional argument to `run-campaigns.sh` and `run-lifecycle-campaigns.sh`
+is `system` (default) or `native`. It is recorded in the campaign summary and
+passed only as a test-host selector. Preserve failed phases and compare separate
+fresh processes/source archives; direct native-core tests do not establish
+application-provider conformance or a performance improvement.

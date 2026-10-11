@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -47,14 +47,16 @@ internal sealed class ConformanceServer : IDisposable
         return new ConformanceServer(root);
     }
 
-    internal WebServer Add(string prefix, HttpListenerMode mode, bool tls)
+    internal WebServer Add(string prefix, HttpListenerMode mode, bool tls, bool nativeHttp3 = false)
     {
         var certificate = tls ? Certificate ??= HttpsSmoke.CreateCertificate() : null;
-        var server = new WebServer(options =>
-        {
-            options.WithUrlPrefix(prefix).WithMode(mode);
-            if (certificate != null) options.WithCertificate(certificate);
-        });
+        var options = new WebServerOptions().WithUrlPrefix(prefix).WithMode(mode);
+        if (certificate != null) options.WithCertificate(certificate);
+        var native = nativeHttp3 && mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined;
+        var server = native
+            ? (WebServer)(Activator.CreateInstance(typeof(WebServer), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+                null, new object[] { options, true }, null) ?? throw new InvalidOperationException("The selected core has no native host constructor."))
+            : new WebServer(options);
         Configure(server);
         _servers.Add(server);
         _byEndpoint[mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined ? "h3" : tls ? "https" : "http"] = server;
