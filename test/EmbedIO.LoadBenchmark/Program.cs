@@ -9,6 +9,7 @@ return args.FirstOrDefault() switch
     "recovery" => await Recovery.RunAsync(options).ConfigureAwait(false),
     "quic-churn" => await QuicChurn.RunAsync(options).ConfigureAwait(false),
     "burn" => await QuicChurn.BurnAsync(options).ConfigureAwait(false),
+    "exception-accounting-check" => await ExceptionAccountingCheck.RunAsync().ConfigureAwait(false),
     _ => Usage(),
 };
 

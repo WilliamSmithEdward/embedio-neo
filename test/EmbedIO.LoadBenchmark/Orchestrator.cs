@@ -39,6 +39,19 @@ internal static class Orchestrator
         var profile = options.Has("--profile");
         var modernBaseline = options.Has("--modern-baseline") || options.Has("--baseline-all-protocols");
         var selected = SelectScenarios(options.Text("--scenarios", "all"));
+        // Diagnostic passes can use a smaller, identical workload for each engine.
+        var connections = options.Integer("--connections", 0);
+        var streams = options.Integer("--streams", 0);
+        if (connections < 0 || streams < 0) throw new ArgumentOutOfRangeException(nameof(options), "Concurrency overrides must be positive, or zero to retain the scenario defaults.");
+        if (streams > 1 && selected.Any(scenario => scenario.Protocol == Protocol.Http1))
+            throw new ArgumentException("HTTP/1.1 uses one stream per connection.", nameof(options));
+        if (connections > 0 || streams > 0)
+            selected = [.. selected.Select(scenario => scenario with
+            {
+                Connections = connections > 0 ? connections : scenario.Connections,
+                Streams = streams > 0 ? streams : scenario.Streams,
+                Description = scenario.Description + $"; overrides: connections={connections}, streams={streams} (0 retains default)",
+            })];
         if (selected.Any(scenario => scenario.Protocol == Protocol.Http3)
             && !((OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) && System.Net.Quic.QuicListener.IsSupported))
             throw new InvalidOperationException("HTTP/3 scenarios were selected but QUIC is unavailable (no loadable MsQuic). On macOS/Linux put libmsquic on DYLD_FALLBACK_LIBRARY_PATH / LD_LIBRARY_PATH, or exclude h3 scenarios.");
@@ -123,6 +136,8 @@ internal static class Orchestrator
         {
             ["scenario"] = scenario.Name,
             ["description"] = scenario.Description,
+            ["connections"] = scenario.Connections,
+            ["streams"] = scenario.Streams,
             ["engine"] = context.Target.Name,
             ["round"] = context.Round,
             ["startedUtc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
@@ -176,6 +191,7 @@ internal static class Orchestrator
             var ready = await server.ReadLineAsync(timeout).ConfigureAwait(false);
             if (ready is null || !ready.StartsWith("READY ", StringComparison.Ordinal)) throw new InvalidOperationException("Server did not start: " + ready);
             sample["server"] = JsonNode.Parse(ready[6..]);
+            sample["exceptionsAtReady"] = await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false);
 
             // The client always runs from the candidate directory; it never loads EmbedIO.
             client = ChildProcess.Start(AppContext.BaseDirectory, clientArguments, context.ClientCpus, stem + ".client.stderr.log");
@@ -187,6 +203,7 @@ internal static class Orchestrator
             await Task.Delay(TimeSpan.FromSeconds(context.Idle)).ConfigureAwait(false);
             sample["serverSocketsBefore"] = ServerSockets(port);
             sample["serverBefore"] = await server.RequestJsonAsync("snapshot", timeout).ConfigureAwait(false);
+            sample["exceptionsBeforeLoad"] = await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false);
             var busyBefore = SystemCpu.BusyTime();
             using var trace = context.TraceTool is null ? null : StartTrace(context, sample, stem);
             if (await server.RequestAsync("start", timeout).ConfigureAwait(false) != "MEASURING") throw new InvalidOperationException("Server measurement handshake failed.");
@@ -195,6 +212,7 @@ internal static class Orchestrator
             var busyAfter = SystemCpu.BusyTime();
             if (done != "DONE") throw new InvalidOperationException("Client measurement did not complete: " + done);
             sample["serverWindow"] = window;
+            sample["exceptionsAfterLoad"] = await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false);
             if (trace is not null) sample["trace"] = await FinishTraceAsync(context, trace, stem).ConfigureAwait(false);
             sample["client"] = await client.RequestJsonAsync("report", timeout).ConfigureAwait(false);
             sample["clientExitCode"] = await client.WaitForExitAsync(timeout).ConfigureAwait(false);
@@ -203,6 +221,7 @@ internal static class Orchestrator
             await Task.Delay(TimeSpan.FromSeconds(context.Idle)).ConfigureAwait(false);
             sample["serverSocketsAfter"] = ServerSockets(port);
             sample["serverAfter"] = await server.RequestJsonAsync("snapshot", timeout).ConfigureAwait(false);
+            sample["exceptionsBeforeStop"] = await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false);
             sample["serverStop"] = await server.RequestJsonAsync("exit", timeout).ConfigureAwait(false);
             sample["serverExitCode"] = await server.WaitForExitAsync(timeout).ConfigureAwait(false);
             Derive(sample, context);

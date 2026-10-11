@@ -33,6 +33,43 @@ Set `EMBEDIO_BENCH_EXCEPTION_DETAIL=1` to key the server's first-chance exceptio
 counts by message and write the first stack trace per key to its stderr log; leave it
 unset for comparison runs.
 
+Exception attribution now records cumulative censuses after startup, after warmup
+and idle, after load and client cleanup, after post-load idle, and after server
+stop **and disposal**. `serverStop.stopMilliseconds` includes disposal; older
+reports stopped that clock before disposal. Warmup reports also include opened
+connections and server-initiated closes. Use
+`python scripts/summarize_teardown_exceptions.py <results-directory>` to print
+each phase, every exception key, throws per 1,000 completed requests and throws
+per opened client connection. Failed samples, incomplete snapshots, unsuccessful
+child exits and nonzero open server TCP sockets fail the summary. QUIC cleanup
+is outside the TCP census. Missing denominators are reported as unavailable.
+
+`--connections N` and `--streams N` override scenario concurrency identically for
+all engines; zero retains each default. The actual values appear in every sample.
+HTTP/1.1 requires one stream per connection. This is useful for short diagnostic
+passes; overrides do not make a busy host quiet. For example:
+
+```sh
+EMBEDIO_BENCH_EXCEPTION_DETAIL=1 dotnet <runner>/EmbedIO.LoadBenchmark.dll run \
+  --output <fresh-directory> --engines candidate,kestrel \
+  --scenarios h1-plain-small-c64-close100,h2-tls-churn-c32,h3-churn-c16 \
+  --connections 1 --streams 1 --rounds 2 --warmup 2 --duration 5 --idle 2
+python scripts/summarize_teardown_exceptions.py <fresh-directory>
+dotnet <runner>/EmbedIO.LoadBenchmark.dll exception-accounting-check
+```
+
+Use the equivalent process environment assignment in PowerShell. Detailed
+first-chance stacks perturb timing and may include runtime rethrows. Opened
+connections are a client-side denominator; they are **not** a server close census
+or a count of distinct errors. The load phase includes the client's connection
+disposal, so persistent versus churn comparisons help distinguish request work
+from teardown. Deliberate fault workloads must remain separate. The resource
+sampler stops by disposing its timer, which completes a pending tick normally;
+it no longer injects a benchmark-owned cancellation into the exception census.
+Its executable regression retains genuine caught-error and caller-cancellation
+controls. See [the initial attribution report](../../docs/project/http-teardown-exceptions.md)
+for evidence and remaining work under issue #282.
+
 Scenarios ending in `-close100` are controls: the client closes every connection
 after 100 requests, matching the managed listener's per-connection cap, so all
 engines pay the same reconnect cost.
