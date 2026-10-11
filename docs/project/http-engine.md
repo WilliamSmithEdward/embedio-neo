@@ -7533,3 +7533,39 @@ now 4,986. The prior Linux CI failure at `0abf879` was the explicit server
 disposal/accept race corrected by the engine's PR #261; fresh checks on the
 reconciled head remain required. This does not establish a correction for
 the separate HTTP/2 response/trailer loss or HTTP/3 TLS failures.
+
+### HTTP JSON UTF-8 response representation
+
+HTTP JSON now serializes directly to a UTF-8 byte array and uses the existing
+binary response output path. It avoids a complete intermediate UTF-16 string
+and the text writer's repeated small body writes. The same default options
+and copied custom options are used; public string serialization and the
+general text-response API are unchanged. JSON bytes, UTF-8 metadata, optional
+compression, buffering and synchronous serialization errors are preserved.
+HTTP transfer chunk boundaries may differ and are not JSON record boundaries.
+
+Eight real HTTP cases cover both backends, buffering and custom options, with
+exact Unicode/null/large-value bytes and options snapshot behavior. On source
+`1409cc2`, 115 focused Linux cases pass with zero skips. The complete pinned
+Linux coverage suite reports 4,994 cases, 4,965 passed, 29 existing skips and
+zero failures in 2m43s. Both targets build without warnings; formatting and
+both source guards pass. All six discovery minimums now require that measured
+4,994 count. Final-head hosted checks and comparative measurements remain
+required.
+
+The engine's Ubuntu run 38093558390 at `ba253fa` timed out in the unbuffered
+six-MiB JSON case. Its existing nine-second diagnostic recorded serialization
+still pending and about two MiB queued on the server TCP socket. This change
+reduces representation and small-write overhead; the prior timeout's exact
+mechanism remains unconfirmed, so these passing runs do not establish its
+repair. No timeout, assertion, retry or quarantine is changed.
+
+The reproducible component tool is `test/EmbedIO.JsonResponseBenchmark`;
+its README records commands, source/binary hashes and measurement limits.
+Eighteen fresh in-memory processes in three alternating rounds validate every
+response byte. Median allocation changes from 19,424.5 to 11,008.4 B/request
+for a one-KiB input, 535,886.4 to 269,064.3 for 64 KiB and 8,401,737.5 to
+4,203,032.0 for one MiB. These include simulated-stream growth and response
+copies. The legacy callback is reconstructed with public APIs on the same
+core; this is not a baseline-package comparison or production network
+throughput result. Short CPU windows and clock quantization limit CPU claims.
