@@ -136,6 +136,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Modern HTTP engine program](project/http-engine.md): protocol roadmap, compatibility changes and performance acceptance.
 - [QUIC lifetime and rebind](project/quic-lifetime.md): native disposal evidence, bounded retry, quarantine limits and retirement gates.
+- [Native QUIC abort disposal](project/native-quic-abort-disposal.md): preserve explicit read/write abort codes through cleanup, with real-peer regressions.
 - [Linux test-host terminations](project/linux-test-host-terminations.md): native listener stop race diagnosis, unattributed glibc abort evidence and next diagnostics.
 - [Native HTTP/3 provider ownership audit](project/http3-native-provider-audit.md): MsQuic acceptance, callback and ownership findings, reproductions and proposed fixes.
 - [Native QUIC lifetime campaigns](project/http3-native-lifetime-campaigns.md): Apple Silicon lifetime and resource campaigns for the native MsQuic provider, confirmed native disposal defects and proposed fixes.

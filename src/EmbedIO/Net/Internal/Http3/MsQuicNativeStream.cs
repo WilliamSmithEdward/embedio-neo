@@ -245,6 +245,8 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly object _commitSync = new();
         private int _disposeStarted;
         private bool _finQueued;
+        // Disposal must not replace the error code of an abort already queued.
+        private uint _queuedAbortDirections;
         private bool _preserveFin;
         private long _id;
         private readonly bool _local;
@@ -434,6 +436,7 @@ namespace EmbedIO.Net.Internal.Http3
                     {
                         var status = _functions.Shutdown(handle, flags, (ulong)code);
                         if (MsQuicApi.Failed(status)) throw new IOException("Native stream abort failed with status 0x" + status.ToString("X8"));
+                        _queuedAbortDirections |= flags & 6u;
                     }
                 }
             }
@@ -596,7 +599,18 @@ namespace EmbedIO.Net.Internal.Http3
             CloseNative(handle);
             return true;
         }
-        private uint DisposalFlags => _preserveFin ? (_local && Unidirectional ? 0u : 4u) : AbortFlags;
+        private uint DisposalFlags
+        {
+            get
+            {
+                lock (_commitSync)
+                {
+                    var flags = _preserveFin ? (_local && Unidirectional ? 0u : 4u) : AbortFlags;
+                    flags &= ~_queuedAbortDirections;
+                    return (flags & 6u) == 0 ? 0 : flags;
+                }
+            }
+        }
         private void CloseNative(IntPtr native)
         {
             try { _functions.Close(native); GC.KeepAlive(_signals); }

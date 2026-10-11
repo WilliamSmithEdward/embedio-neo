@@ -15,7 +15,7 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    public sealed class MsQuicApiLifetimeTest
+    public sealed partial class MsQuicApiLifetimeTest
     {
         private static SafeHandle OpenApi()
         {
