@@ -20,10 +20,6 @@ namespace EmbedIO.Tests
         [TestCase(HttpListenerMode.EmbedIO, false, true)]
         [TestCase(HttpListenerMode.EmbedIO, true, false)]
         [TestCase(HttpListenerMode.EmbedIO, true, true)]
-        [TestCase(HttpListenerMode.Microsoft, false, false)]
-        [TestCase(HttpListenerMode.Microsoft, false, true)]
-        [TestCase(HttpListenerMode.Microsoft, true, false)]
-        [TestCase(HttpListenerMode.Microsoft, true, true)]
         public Task RawDeflateTruncationAndTrailingBytesAreBadRequests(HttpListenerMode mode, bool truncated, bool text)
         {
             var body = Encoding.UTF8.GetBytes("strict raw deflate envelope boundaries");
@@ -40,7 +36,7 @@ namespace EmbedIO.Tests
         }
         public static IEnumerable CodingCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var coding in new[] { "gzip, deflate", "deflate, gzip", "gzip, gzip", "br, gzip", "gzip, br", "gzip, br, deflate" })
                     foreach (var text in new[] { false, true })
                         foreach (var delta in new[] { -1, 0, 1 })
@@ -57,7 +53,7 @@ namespace EmbedIO.Tests
 
         public static IEnumerable ListCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var enabled in new[] { false, true })
                     foreach (var coding in new[] { "", "identity, identity", ",,", " , identity, " })
                         yield return new object[] { mode, enabled, coding };
@@ -70,16 +66,12 @@ namespace EmbedIO.Tests
         }
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public Task EmptyDecodedChainWorksWithZeroLimit(HttpListenerMode mode, bool text)
             => Exchange(mode, "gzip, gzip", Encode(Array.Empty<byte>(), "gzip, gzip"), Array.Empty<byte>(), true, 0, text, HttpStatusCode.OK);
 
         [TestCase(HttpListenerMode.EmbedIO, 8)]
         [TestCase(HttpListenerMode.EmbedIO, 9)]
-        [TestCase(HttpListenerMode.Microsoft, 8)]
-        [TestCase(HttpListenerMode.Microsoft, 9)]
         public Task CodecDepthIsBoundedBeforeOpeningThePipeline(HttpListenerMode mode, int depth)
         {
             var coding = string.Join(",", System.Linq.Enumerable.Repeat("gzip", depth));
@@ -89,20 +81,14 @@ namespace EmbedIO.Tests
         }
 
         [TestCase(HttpListenerMode.EmbedIO, "gzip, unknown")]
-        [TestCase(HttpListenerMode.Microsoft, "gzip, unknown")]
         [TestCase(HttpListenerMode.EmbedIO, "unknown, gzip")]
-        [TestCase(HttpListenerMode.Microsoft, "unknown, gzip")]
         [TestCase(HttpListenerMode.EmbedIO, "gzip;level=1, gzip")]
-        [TestCase(HttpListenerMode.Microsoft, "gzip;level=1, gzip")]
         [TestCase(HttpListenerMode.EmbedIO, "gzip, br;q=1")]
-        [TestCase(HttpListenerMode.Microsoft, "gzip, br;q=1")]
         public Task UnsupportedAndParameterizedCodingsAreRejected(HttpListenerMode mode, string coding)
             => Exchange(mode, coding, new byte[] { 1, 2, 3 }, Array.Empty<byte>(), true, null, false, HttpStatusCode.BadRequest);
 
         [TestCase(HttpListenerMode.EmbedIO, "gzip, gzip")]
-        [TestCase(HttpListenerMode.Microsoft, "gzip, gzip")]
         [TestCase(HttpListenerMode.EmbedIO, "gzip, br")]
-        [TestCase(HttpListenerMode.Microsoft, "gzip, br")]
         public Task CompressedChainsStillRequireExplicitOptIn(HttpListenerMode mode, string coding)
         {
             ArgumentNullException.ThrowIfNull(coding);
@@ -111,7 +97,7 @@ namespace EmbedIO.Tests
 
         public static IEnumerable MalformedCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var text in new[] { false, true })
                     foreach (var corruption in new[] { "outer-truncated", "outer-trailing", "inner-truncated", "inner-trailing" })
                         yield return new object[] { mode, text, corruption };
@@ -137,7 +123,6 @@ namespace EmbedIO.Tests
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task MixedCaseAndEmptyElementsWorkWithChunkedFraming(HttpListenerMode mode)
         {
             const string coding = " GZIP , , DeFlAtE, ";

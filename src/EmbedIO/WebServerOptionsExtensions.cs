@@ -109,21 +109,6 @@ namespace EmbedIO
         }
 
         /// <summary>
-        /// Sets the type of HTTP listener to <see cref="HttpListenerMode.Microsoft"/>.
-        /// </summary>
-        /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
-        /// <returns><paramref name="this"/> with its <see cref="WebServerOptions.Mode">Mode</see> property
-        /// set to <see cref="HttpListenerMode.Microsoft"/>.</returns>
-        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
-        /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
-        public static WebServerOptions WithMicrosoftHttpListener(this WebServerOptions @this)
-        {
-            if (@this is null) throw new System.NullReferenceException();
-            @this.Mode = HttpListenerMode.Microsoft;
-            return @this;
-        }
-
-        /// <summary>
         /// Sets the X.509 certificate to use for SSL connections.
         /// </summary>
         /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>

@@ -179,8 +179,6 @@ namespace EmbedIO.Tests
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task MaxMessageSizeClosesOversizedMessagesWith1009BeforeCallbacks(HttpListenerMode mode, bool fragmented)
         {
             const int Maximum = 1024;
@@ -323,6 +321,80 @@ namespace EmbedIO.Tests
                 Received.Enqueue(Encoding.UTF8.GetString(buffer));
                 return Task.CompletedTask;
             }
+        }
+
+        private sealed class InitializingRecorder(bool fail) : WebSocketModule("/ws", false)
+        {
+            internal readonly TaskCompletionSource<bool> Initializing = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal readonly TaskCompletionSource<bool> Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal readonly TaskCompletionSource<bool> Disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal readonly TaskCompletionSource<bool> SecondConnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal readonly System.Collections.Concurrent.ConcurrentQueue<string> Received = new();
+            internal Task CloseCompleted { get; private set; } = Task.CompletedTask;
+            internal int ActiveCount => ActiveContexts.Count;
+            private int _connections;
+            private string? _initializingId;
+
+            protected override async Task OnClientConnectedAsync(IWebSocketContext context)
+            {
+                if (Interlocked.Increment(ref _connections) != 1)
+                {
+                    SecondConnected.TrySetResult(true);
+                    return;
+                }
+                _initializingId = context.Id;
+                var wait = context.WebSocket.GetType().GetMethod("WaitForCloseAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    ?? throw new MissingMethodException("WaitForCloseAsync");
+                CloseCompleted = wait.CreateDelegate<Func<CancellationToken, Task>>(context.WebSocket)(CancellationToken.None);
+                Initializing.TrySetResult(true);
+                await Release.Task;
+                if (fail) throw new InvalidOperationException("Controlled connection initialization failure.");
+            }
+
+            protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
+            {
+                Received.Enqueue(Encoding.UTF8.GetString(buffer));
+                return Task.CompletedTask;
+            }
+
+            protected override Task OnClientDisconnectedAsync(IWebSocketContext context)
+            {
+                if (context.Id == _initializingId) Disconnected.TrySetResult(true);
+                return Task.CompletedTask;
+            }
+        }
+
+        [TestCase(false, false)]
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        public async Task PeerCloseDuringInitializationPreservesDataUntilInitializationSettles(bool fail, bool sendMessage)
+        {
+            var module = new InitializingRecorder(fail);
+            await WithServerAsync(module, async (url, token) =>
+            {
+                using var client = await RawClient.ConnectAsync(url, token);
+                await module.Initializing.Task.WaitAsync(token);
+                try
+                {
+                    var burst = (sendMessage ? RawClient.Frame(0x81, Encoding.UTF8.GetBytes("before-close")) : Array.Empty<byte>())
+                        .Concat(RawClient.Frame(0x88, new byte[] { 3, 232 })).ToArray();
+                    await client.Stream.WriteAsync(burst, token);
+                    Assert.That((await client.ReadFrameAsync(token)).Flags, Is.EqualTo(0x88));
+                    Assert.That(await client.Stream.ReadAsync(new byte[1], token), Is.Zero);
+                    await Assert.ThrowsAsync<TimeoutException>(async () =>
+                        await module.CloseCompleted.WaitAsync(TimeSpan.FromMilliseconds(100), token));
+                    Assert.That(module.Received, Is.Empty, "Application messages wait for connection initialization.");
+                    using var second = await RawClient.ConnectAsync(url, token);
+                    await module.SecondConnected.Task.WaitAsync(token);
+                    Assert.That(module.ActiveCount, Is.EqualTo(2), "Purging on another accept must retain the initializing context.");
+                    Assert.That(module.Disconnected.Task.IsCompleted, Is.False);
+                }
+                finally { module.Release.TrySetResult(true); }
+                await module.Disconnected.Task.WaitAsync(token);
+                Assert.That(module.Received.ToArray(), Is.EqualTo(fail || !sendMessage ? Array.Empty<string>() : new[] { "before-close" }));
+                Assert.That(module.CloseCompleted.IsCompletedSuccessfully, Is.True);
+            });
         }
 
         // A message completed on the wire before the peer's close frame was received

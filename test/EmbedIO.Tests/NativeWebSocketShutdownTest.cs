@@ -31,10 +31,10 @@ namespace EmbedIO.Tests
         }
 
         [Test]
-        public async Task NativePreCanceledAcceptDoesNotWaitForAConnection()
+        public async Task PreCanceledAcceptDoesNotWaitForAConnection()
         {
             var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
-            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.Microsoft));
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO));
             using var canceled = new CancellationTokenSource();
             canceled.Cancel();
             server.Listener.Start();
@@ -53,7 +53,6 @@ namespace EmbedIO.Tests
             }
         }
 
-        [TestCase(HttpListenerMode.Microsoft)]
         [TestCase(HttpListenerMode.EmbedIO)]
         public async Task CancellationDuringUpgradeReleasesAcceptAndAllConnectedTransports(HttpListenerMode mode)
         {
@@ -169,7 +168,7 @@ namespace EmbedIO.Tests
         {
             var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
             var module = new PendingInitialization();
-            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.Microsoft)).WithModule(module);
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO)).WithModule(module);
             using var stop = new CancellationTokenSource();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var running = server.RunAsync(stop.Token);

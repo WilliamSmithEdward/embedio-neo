@@ -132,7 +132,6 @@ namespace EmbedIO.Tests
         }
 
         [TestCase(HttpListenerMode.EmbedIO, 1)]
-        [TestCase(HttpListenerMode.Microsoft, 1)]
         [TestCase(HttpListenerMode.EmbedIO, 2)]
         [TestCase(HttpListenerMode.EmbedIOHttp3, 3)]
         public async Task FinalStatusSetterRejectsEveryNonFinalOrInvalidCodeWithoutChangingResponse(HttpListenerMode mode, int version)

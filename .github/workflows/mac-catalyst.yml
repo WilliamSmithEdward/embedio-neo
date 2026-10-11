@@ -10,6 +10,8 @@ permissions:
   contents: read
 jobs:
   smoke:
+    # Owner-requested temporary MAUI pause, including manual dispatch.
+    if: false
     name: MAUI Mac Catalyst smoke
     runs-on: macos-26
     timeout-minutes: 30

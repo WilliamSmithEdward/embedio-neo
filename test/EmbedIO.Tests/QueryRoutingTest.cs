@@ -15,15 +15,10 @@ namespace EmbedIO.Tests
     public class QueryRoutingTest
     {
         [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.OK, "text/plain")]
-        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.OK, "text/plain")]
         [TestCase(HttpListenerMode.EmbedIO, "query", HttpStatusCode.NotFound, "text/plain")]
-        [TestCase(HttpListenerMode.Microsoft, "query", HttpStatusCode.NotFound, "text/plain")]
         [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.BadRequest, null)]
-        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.BadRequest, null)]
         [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.BadRequest, "text")]
-        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.BadRequest, "text")]
         [TestCase(HttpListenerMode.EmbedIO, "QUERY", HttpStatusCode.BadRequest, "text/plain, application/json")]
-        [TestCase(HttpListenerMode.Microsoft, "QUERY", HttpStatusCode.BadRequest, "text/plain, application/json")]
         public async Task RealListenerRoutesExactQuery(HttpListenerMode mode, string method, HttpStatusCode expected, string? mediaType)
         {
             var url = HttpsSmoke.GetUrl().Replace("https://", "http://", StringComparison.Ordinal);

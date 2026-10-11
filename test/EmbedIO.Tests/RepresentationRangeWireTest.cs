@@ -65,10 +65,8 @@ namespace EmbedIO.Tests
             Assert.That(await successor.Content.ReadAsByteArrayAsync(token), Is.EqualTo(bytes.AsSpan(4, 4).ToArray()));
         }
         [TestCase(HttpListenerMode.EmbedIO, 1, false)]
-        [TestCase(HttpListenerMode.Microsoft, 1, false)]
         [TestCase(HttpListenerMode.EmbedIO, 2, false)]
         [TestCase(HttpListenerMode.EmbedIO, 1, true)]
-        [TestCase(HttpListenerMode.Microsoft, 1, true)]
         [TestCase(HttpListenerMode.EmbedIO, 2, true)]
         public async Task MultipartQueryRangesStreamSelectedRepresentation(HttpListenerMode mode, int protocol, bool gzip)
         {

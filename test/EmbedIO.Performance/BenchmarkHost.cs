@@ -17,8 +17,9 @@ internal static class BenchmarkHost
         var index = Array.IndexOf(args, "--url");
         var url = index < 0 ? "http://127.0.0.1:8080/" : index + 1 < args.Length
             ? args[index + 1] : throw new ArgumentException("--url requires a listener prefix.");
-        var mode = args.Contains("--microsoft", StringComparer.Ordinal)
-            ? HttpListenerMode.Microsoft : HttpListenerMode.EmbedIO;
+        if (args.Contains("--microsoft", StringComparer.Ordinal))
+            throw new NotSupportedException("Neo v2 no longer benchmarks the removed Microsoft listener. Omit --microsoft to use the retained engine.");
+        var mode = HttpListenerMode.EmbedIO;
         EmbedIO.Diagnostics.Log.Source.Switch.Level = System.Diagnostics.SourceLevels.Off;
         using var stop = new CancellationTokenSource();
         using var server = BenchmarkEndpoints.CreateServer(url, mode);

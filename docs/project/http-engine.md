@@ -2361,6 +2361,15 @@ Ubuntu suite in run 37847220707, job 113550991817, with an unhandled runtime
 test. It is retained as `combined-ci-linux-failed.log`; no repair or successful
 retry is claimed. This separate native-backend failure remains to investigate.
 
+Follow-up: the same termination recurred in PR #260 CI run 38088528912 and in a
+pinned local reproduction. Both CI TRX files stop at the fixture before
+`NativeWebSocketShutdownTest`. A crash dump traces it to a .NET 10.0.12 managed
+`HttpListener` race: `Stop` serializes a closing response for a connection not
+yet bound to a listener while that connection's read callback writes its 404.
+The concurrent header writes damage the runtime's header list. No public API
+avoids it and no production change is made. See
+[Linux test-host terminations](linux-test-host-terminations.md).
+
 
 The downloaded CI TRX artifacts provide additional evidence: both Ubuntu and
 macOS failed `CombinedListenerDispatchesEveryProtocol(96)` at the existing

@@ -67,7 +67,7 @@ def validate_outcomes(report, upstream, contract):
         if name.startswith("lifecycle/") or name == "https/cancel":
             if value != "Stopped":
                 errors.append(f"{name}: listener did not stop")
-    for mode in ("EmbedIO", "Microsoft"):
+    for mode in ("EmbedIO",):
         if f"http/{mode}/dto" not in cases:
             continue
         for phase, expected in (("first", "1"), ("second", "2")):
@@ -82,16 +82,6 @@ def validate_outcomes(report, upstream, contract):
                            ("hostname-rejected", True), ("healthy-after-rejections", "encrypted")):
         if cases[f"https/{name}"] != expected:
             errors.append(f"https/{name}: incorrect TLS outcome")
-    if "native/unix-response-lifetime" in cases:
-        expected = {"status": 200, "body": {"Id": 42, "Name": "ordinary", "Amount": 12.5},
-                    "runError": "System.ObjectDisposedException" if upstream else None,
-                    "cancelError": "System.AggregateException" if upstream else None,
-                    "secondStatus": None if upstream else 200,
-                    "secondBody": None if upstream else {"Id": 42, "Name": "ordinary", "Amount": 12.5},
-                    "state": "Stopped"}
-        alternatives = contract.get("upstreamOutcomeAlternatives", {}).get("native/unix-response-lifetime", []) if upstream else []
-        if cases["native/unix-response-lifetime"] != expected and cases["native/unix-response-lifetime"] not in alternatives:
-            errors.append("Unix native listener did not exhibit an exact reviewed response-lifetime outcome")
     return errors
 
 
@@ -169,15 +159,6 @@ def verify_guards(reports, contract):
         mutation(sample)
         if not compare(sample, contract)["errors"]:
             raise RuntimeError("Comparator accepted a deliberately introduced regression")
-    if "native/unix-response-lifetime" in reports["Upstream"]["cases"]:
-        for variant, field, value in (("Upstream", "runError", "UnreviewedFailure"),
-                                      ("Upstream", "body", {"Id": 0}),
-                                      ("Neo", "runError", "UnexpectedCompletion"),
-                                      ("NeoStandard", "secondStatus", None)):
-            sample = copy.deepcopy(reports)
-            sample[variant]["cases"]["native/unix-response-lifetime"][field] = value
-            if not compare(sample, contract)["errors"]:
-                raise RuntimeError("Comparator accepted unreviewed native lifetime behavior")
     stale = copy.deepcopy(contract)
     stale["differences"].pop()
     if not compare(reports, stale)["errors"]:

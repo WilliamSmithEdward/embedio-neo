@@ -16,21 +16,15 @@ namespace EmbedIO.Tests.Issues
     public class Issue59_CookieAttributes
     {
         [TestCase(HttpListenerMode.EmbedIO, false, false)]
-        [TestCase(HttpListenerMode.Microsoft, false, false)]
         [TestCase(HttpListenerMode.EmbedIO, true, false)]
-        [TestCase(HttpListenerMode.Microsoft, true, false)]
         [TestCase(HttpListenerMode.EmbedIO, false, true)]
-        [TestCase(HttpListenerMode.Microsoft, false, true)]
         [TestCase(HttpListenerMode.EmbedIO, true, true)]
-        [TestCase(HttpListenerMode.Microsoft, true, true)]
         public Task CookieFlagsAndMetadataSurviveLateConfiguration(HttpListenerMode mode, bool httpOnly, bool secure)
             => UseServerAsync(mode, server => server.OnAny(async context =>
             {
                 // Acquiring the stream must not commit headers or snapshot cookies.
                 var output = context.Response.OutputStream;
                 await output.FlushAsync();
-                if (mode == HttpListenerMode.Microsoft && !OperatingSystem.IsWindows())
-                    output.Write(Array.Empty<byte>(), 0, 0);
                 context.Response.Cookies.Add(new Cookie("primary", "old", "/area"));
                 context.Response.Cookies.Add(new Cookie("primary", "new", "/area")
                 {
@@ -67,9 +61,7 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         public Task SessionPolicyAndPersistenceSurviveSerialization(HttpListenerMode mode, bool httpOnly)
             => UseServerAsync(mode, server => server.WithSessionManager(new LocalSessionManager { CookieHttpOnly = httpOnly })
                 .OnAny(context =>
@@ -86,9 +78,7 @@ namespace EmbedIO.Tests.Issues
                 });
 
         [TestCase(HttpListenerMode.EmbedIO, "GET")]
-        [TestCase(HttpListenerMode.Microsoft, "GET")]
         [TestCase(HttpListenerMode.EmbedIO, "HEAD")]
-        [TestCase(HttpListenerMode.Microsoft, "HEAD")]
         public Task EmptyResponsesEmitCookieAttributes(HttpListenerMode mode, string method)
             => UseServerAsync(mode, server => server.OnAny(context =>
             {
@@ -105,51 +95,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.Empty);
             });
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public Task NativeLegacyAttributesAndSetCookieCloningRemainIntact(bool portCookie)
-            => UseServerAsync(HttpListenerMode.Microsoft, server => server.OnAny(async context =>
-            {
-                var cookie = new Cookie("legacy", "original", "/area", "localhost")
-                {
-                    Version = 1,
-                    Comment = "retained",
-                    CommentUri = new Uri("https://example.com/cookie"),
-                    Discard = true,
-                    HttpOnly = true,
-                    Secure = true,
-                    Expires = DateTime.UtcNow.AddMinutes(-1)
-                };
-                if (portCookie)
-                    cookie.Port = "\"80\"";
-                else
-                    cookie.Port = string.Empty;
-                context.Response.SetCookie(cookie);
-                cookie.Value = "changed-after-set";
-                context.Response.Headers.Add("Set-Cookie", "manual=preserved; Path=/; HttpOnly");
-                await context.SendStringAsync("ok", "text/plain", Encoding.UTF8);
-            }), async (client, url) =>
-            {
-                using var response = await client.GetAsync(url);
-                var name = portCookie ? "Set-Cookie2" : "Set-Cookie";
-                var header = response.Headers.GetValues(name).Single(h => h.StartsWith("legacy=", StringComparison.Ordinal));
-                Assert.That(header, Does.StartWith("legacy=original;"));
-                Assert.That(header, Does.Contain("Comment=retained"));
-                Assert.That(header, Does.Contain("CommentURL=\"https://example.com/cookie\""));
-                Assert.That(header, Does.Contain("Domain=localhost"));
-                Assert.That(header, Does.Contain("Path=/area"));
-                Assert.That(header, Does.Contain("Max-Age=0"));
-                Assert.That(header, Does.Contain("Version=1"));
-                Assert.That(HasAttribute(header, "Discard"), Is.True);
-                Assert.That(HasAttribute(header, "HttpOnly"), Is.True);
-                Assert.That(HasAttribute(header, "Secure"), Is.True);
-                if (portCookie)
-                    Assert.That(header, Does.Contain("Port=\"80\""));
-                Assert.That(response.Headers.GetValues("Set-Cookie").Count(h => h.StartsWith("manual=", StringComparison.Ordinal)), Is.EqualTo(1));
-            });
-
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task WebSocketHandshakeEmitsProtectedCookies(HttpListenerMode mode)
             => UseServerAsync(mode, server => server.WithModule(new CookieMiddleware())
                 .WithModule(new CookieSocket()), async (_, url) =>
@@ -183,7 +129,7 @@ namespace EmbedIO.Tests.Issues
         }
         [Test]
         public Task RejectedWritesDoNotCommitCookieHeaders()
-            => UseServerAsync(HttpListenerMode.Microsoft, server => server.OnAny(async context =>
+            => UseServerAsync(HttpListenerMode.EmbedIO, server => server.OnAny(async context =>
             {
                 var output = context.Response.OutputStream;
                 Assert.Throws<ArgumentException>(() => output.Write(new byte[1], 1, 1));
@@ -199,31 +145,6 @@ namespace EmbedIO.Tests.Issues
                 using var response = await client.GetAsync(url);
                 Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("ok"));
                 Assert.That(HasAttribute(response.Headers.GetValues("Set-Cookie").Single(), "HttpOnly"), Is.True);
-            });
-        [TestCase(false)]
-        [TestCase(true)]
-        public Task NativeCookieScopeRetainsImplicitAndExplicitAttributes(bool explicitScope)
-            => UseServerAsync(HttpListenerMode.Microsoft, server => server.OnAny(async context =>
-            {
-                var cookie = new Cookie("scoped", "yes") { HttpOnly = true };
-                if (explicitScope)
-                {
-                    cookie.Domain = context.Request.Url.Host;
-                    cookie.Path = "/";
-                }
-                var jar = new CookieContainer();
-                jar.Add(context.Request.Url, cookie);
-                context.Response.Cookies.Add((jar.GetCookies(context.Request.Url)["scoped"] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
-                await context.SendStringAsync("ok", "text/plain", Encoding.UTF8);
-            }), async (client, url) =>
-            {
-                using var response = await client.GetAsync(url);
-                var header = response.Headers.GetValues("Set-Cookie").Single();
-                Assert.That(HasAttribute(header, "HttpOnly"), Is.True);
-                Assert.That(header.Contains("; Domain=", StringComparison.OrdinalIgnoreCase), Is.EqualTo(explicitScope));
-                Assert.That(header.Contains("; Path=", StringComparison.OrdinalIgnoreCase), Is.EqualTo(explicitScope));
-                Assert.That(header, Does.Not.Contain("Version="));
-                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("ok"));
             });
         private static bool HasAttribute(string header, string attribute)
             => header.Split(';').Any(value => value.Trim().Equals(attribute, StringComparison.OrdinalIgnoreCase));

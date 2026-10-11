@@ -89,7 +89,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task CookieBearingUpgradePreservesCookiesAndMessageExchange(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();

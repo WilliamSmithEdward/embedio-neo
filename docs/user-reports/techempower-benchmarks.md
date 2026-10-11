@@ -41,8 +41,9 @@ retain their behavior; this host is a separate opt-in command. Its shared
 endpoint fixture and regression tests are outside every production package.
 There are no new runtime packages.
 
-To select the native listener, add `--microsoft`. Platform support and Windows
-HTTP.sys permissions still apply. To select another prefix, add
+Neo v2 removes the Microsoft listener. The host rejects the retired `--microsoft`
+selector; omit it to use the retained engine. Historical native results below
+describe their recorded revisions, not current v2 support. To select another prefix, add
 `--url http://127.0.0.1:8081/`. Binding beyond loopback is an explicit deployment
 choice; plan network access controls rather than copying a wildcard by default.
 
