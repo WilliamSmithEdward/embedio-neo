@@ -96,6 +96,12 @@ jobs:
         run: dotnet restore EmbedIO.sln --locked-mode
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=true
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+      - name: Provision the pinned independent QUIC datagram peer
+        shell: bash
+        run: python scripts/setup_datagram_peer.py
       - name: Run the regression suite with coverage
         shell: bash
         env:
@@ -112,7 +118,7 @@ jobs:
             export DOTNET_EnableCrashReportOnly=1
             export DOTNET_DbgMiniDumpName="$RUNNER_TEMP/embedio-crash-reports/crash.%p"
           fi
-          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 4521 --coverlet || status=$?
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 4599 --coverlet || status=$?
           if test "$status" = 0; then exit 0; fi
           # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
           # disposal returns (a deferred close on macOS; accepted connections on every
@@ -123,7 +129,7 @@ jobs:
           counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
           read -r total passed failed defect <<< "$counts"
           # The owner-approved exception cannot hide discovery loss.
-          test "$total" -ge 4521 || exit "$status"
+          test "$total" -ge 4599 || exit "$status"
           if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
             echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
             exit 0

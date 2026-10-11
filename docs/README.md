@@ -138,6 +138,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [QUIC lifetime and rebind](project/quic-lifetime.md): native disposal evidence, bounded retry, quarantine limits and retirement gates.
 - [Linux test-host terminations](project/linux-test-host-terminations.md): native listener stop race diagnosis, unattributed glibc abort evidence and next diagnostics.
 - [Native HTTP/3 provider ownership audit](project/http3-native-provider-audit.md): MsQuic acceptance, callback and ownership findings, reproductions and proposed fixes.
+- [Native QUIC lifetime campaigns](project/http3-native-lifetime-campaigns.md): Apple Silicon lifetime and resource campaigns for the native MsQuic provider, confirmed native disposal defects and proposed fixes.
 - [Managed TCP write latency](project/http-tcp-latency.md): controlled socket-delay comparison with unchanged keep-alive and HTTP/2 reset regressions.
 - [Managed engine load comparison](project/http-engine-load-comparison.md): separate-process HTTP/1.1, HTTP/2 and HTTP/3 measurements against main and Kestrel, profiled bottlenecks and prioritized improvements.
 - [Managed engine load baseline on a second host](project/http-engine-load-baseline-evo-x1.md): noise-controlled engine baseline against main and Kestrel on a Ryzen AI 9 HX 370 host, including request-inspection routes, failures and bottleneck evidence.
@@ -166,6 +167,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [MAUI HTTPS validation](platforms/maui-https-validation.md): native client, WebView and external-client fixtures.
 - [MAUI Android](platforms/maui-android.md): background work, listener ownership, and restart diagnostics.
 - [MAUI Mac Catalyst](platforms/maui-mac-catalyst.md): listener startup and sandbox entitlements.
+- [Native QUIC datagrams on macOS](platforms/quic-datagrams-macos-validation.md): local Apple Silicon evidence for the internal datagram owner, scoped to the exact tested commits.
 
 - [Informational responses and response trailers](guides/response-field-sections.md): optional managed response sections and ownership rules.
 
