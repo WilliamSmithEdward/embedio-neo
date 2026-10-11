@@ -258,6 +258,102 @@ An empty write never allocates the array, which is the toggle that isolates it.
   [dotnet/runtime#135583](https://github.com/dotnet/runtime/issues/135583), with a
   standalone repro.
 
+### Current-runtime recheck (11 October 2026)
+
+A fresh coordinated process on .NET 10.0.12 / bundled MsQuic 2.5.10 repeated the
+standalone probe with two 2,000-stream write rounds alternating with empty-write
+controls. Each write round found exactly 2,000 disposed streams still owning the
+send-buffer array; live 16-byte heap blocks increased by 2,002 and 2,001. Empty
+controls found zero retained arrays and heap-block changes of +2 and +1. This
+reproduces the runtime retention directly; it is not a new per-protocol endurance
+or comparative throughput campaign, and no quiet-host latency result is claimed.
+
+The probe now pins its generated certificate, validates every response byte and
+length, applies a bounded operation deadline, and disposes streams/connections
+on failure. Unknown private-field shapes are reported as inconclusive (null
+retention count and nonzero exit), rather than zero retained arrays. An
+unavailable native heap census fails the measurement instead of subtracting
+unavailable counters. No private field is modified and no native allocation is
+freed through reflection.
+
+Evidence is retained under the isolated worktree's ignored
+`TestResults/reliable-reset/memory-probe-current.json`, with the measured source
+snapshot and full source/runner/core SHA-256 records. The measured runner hash
+is `6F24EE0676C00EC074BB336F9AF846C01DD96C3455C991FC89DF69143FA5430B`.
+Final source additionally rejects unavailable heap counters; its bounded
+64-stream functional run and source checks are recorded separately. The
+2000-stream measurements are not relabeled as having used that later build.
+
+Issue #278 remains open for runtime-fix verification and native-provider
+endurance acceptance. [dotnet/runtime#135583](https://github.com/dotnet/runtime/issues/135583)
+is still open at this recheck; no fixed runtime has been verified. The original
+native adapter bypasses this particular `QuicStream` ownership path, but that
+does not by itself prove bounded memory for the complete native HTTP/3 engine.
+
+### Original native binding comparison
+
+The same standalone workload can now select `--provider native`. It sends no
+client payload and invokes EmbedIO's original native server binding; it does
+not select or change a production listener. A Windows .NET 10.0.12 run against
+the bundled MsQuic 2.5.10 completed all 8,000 measured streams after a 500-stream
+warm-up. Alternating write/empty rounds of 2,000 streams produced live 16-byte
+block changes of **+3, +1, +1, 0**. Each round closed all 2,000 native stream
+owners. The native provider has no runtime-private send-buffer field to inspect;
+the report explicitly labels that inspection not applicable rather than
+inventing a zero retained-array count.
+
+Loaded library SHA-256:
+`B7158D427B01C70483BB3D80C5211E387DD98E9471C8A70E4484D449DE9157E8`.
+The measured harness SHA-256 is
+`EF5EE9359AE3A0BE2FAEB0A39830C7CC8EDC360BD8369AE80E8C4F18F9D88753`;
+core SHA-256 is
+`228C4F746DBD319059D92ED56407ECA9293D9577C8147B979FC0718E025BF8BF`.
+Native/runtime modes remain separate fresh processes. This is evidence that the
+particular per-stream 16-byte retention path is absent in this completed native
+run; it does not prove bounded total native memory or HTTP/3 endurance.
+
+Failed attempts remain part of the evidence. The initial fixture used the wrong
+endpoint accessor and failed before traffic. A corrected 64-stream attempt
+stalled without a result and was deliberately stopped after process-state
+capture; a stack-only diagnostic also failed to return. No dump was taken and
+the stall's cause is unconfirmed. Reduced four-stream and phase-instrumented
+64-stream diagnostics subsequently completed, followed by the 2,000-stream
+comparison above. Those successes do not erase the stalled attempt. Native
+acceptance still requires diagnosing or reproducing that stall, broader
+resource measurements and an actual HTTP/3 soak.
+
+Raw results, progress logs, failed-attempt records and hashes are retained under
+`TestResults/reliable-reset/native-memory-*` in the isolated worktree. Progress
+records go to stderr; a separate owned-process watchdog bounds diagnostic
+attempts when asynchronous disposal cannot observe an operation token.
+The same-binary 2,000-stream runtime control subsequently reached its
+five-minute process watchdog without producing a measurement. It is retained
+as an incomplete attempt, not a passing comparison. Review identified managed
+dictionary operations under the process heap lock as a first-use/JIT/type-load
+risk; the census now accumulates counts in fixed primitive arrays and builds
+its dictionary after unlocking. Interop stubs are primed on a disposable
+private heap before the process heap is locked. This removes those lock-region
+risks but does not establish the cause of either earlier stall.
+
+A real-allocation counter check detects exactly 64 added 16-byte blocks and
+returns to baseline after freeing them (82 -> 146 -> 82). Fresh 64-stream
+provider runs with the revised census complete: runtime write rounds retain
+64 arrays each (block deltas +66/+65), while native write rounds have block
+deltas +2/0 and close all owners. Empty controls stay within +1 block. These
+are bounded functional checks. The subsequent full pair with the revised census
+completed in separate fresh processes on one harness binary: runtime write
+rounds retained 2,000 arrays each (heap deltas +1,998/+2,002); native write rounds
+had heap deltas +2/0 and closed all 2,000 stream owners each. Empty controls
+changed by +2/+1 on the runtime and 0/+1 on native. Harness SHA-256:
+`F38F56DD8D820C9428F42F73D9ECB60A6C994036F38B51F8F5F278BE661E0C6E`;
+core SHA-256:
+`08B55E71D2F3F1A43F0248FC3B43CBCBB425028EC670E981362715384B9487DE`.
+Both providers used the same bundled MsQuic file hash recorded above. Raw
+`corrected-pair-*` results, per-process exit records and progress logs are
+retained beside the earlier attempts. This supports the specific ownership
+attribution, without proving complete native HTTP/3 endurance. No production
+allocation or native release is altered.
+
 ### Repeating the attribution
 
 ```sh

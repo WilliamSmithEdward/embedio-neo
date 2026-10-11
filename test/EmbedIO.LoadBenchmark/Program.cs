@@ -12,6 +12,7 @@ return args.FirstOrDefault() switch
     "endurance-client" => await EnduranceClient.RunAsync(options).ConfigureAwait(false),
     "endurance-verdict-check" => EnduranceVerdictCheck.Run(),
     "quic-send-buffer-probe" => await QuicSendBufferProbe.RunAsync(options).ConfigureAwait(false),
+    "native-heap-census-check" => NativeHeaps.CheckCounter(),
     "quic-churn" => await QuicChurn.RunAsync(options).ConfigureAwait(false),
     "burn" => await QuicChurn.BurnAsync(options).ConfigureAwait(false),
     "exception-accounting-check" => await ExceptionAccountingCheck.RunAsync().ConfigureAwait(false),
