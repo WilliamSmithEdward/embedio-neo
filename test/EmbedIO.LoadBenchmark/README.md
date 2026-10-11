@@ -276,6 +276,15 @@ Evidence in the output directory:
   instance that had already been drained and replaced; any nonzero value fails the step.
 - `steps.jsonl`: per step the samples at load start and stop, the drain/restart
   results, the quiesced snapshot, quiesce time, the machine TCP census and health.
+  On Windows each quiesced snapshot also has `nativeHeaps`: allocated, committed and
+  reserved bytes of every Win32 heap (`HeapSummary`) and, in `defaultHeapBlocks`, live
+  block counts by size in the default process heap (`HeapWalk`, sizes only, the 80
+  largest totals). A size whose count grows with requests fingerprints retained native
+  allocations without a dump. The walk runs inside a GC no-GC region because it holds
+  the heap lock; it is skipped (null) when the region cannot be entered.
+- The server's `READY` record (first line of `steps.jsonl`) names the msquic.dll actually
+  loaded, with its version and SHA-256, which differs from `environment.json`'s runtime
+  copy when `System.Net.Quic.AppLocalMsQuic` selects an application-local build.
 - `clients/<step>-<mix>.report.json` and `.intervals.jsonl`: per-workload counts,
   outcomes, first errors and full latency histograms, plus per-interval p50/p99/max.
 
@@ -284,3 +293,15 @@ slots are skipped rather than replayed), so its latency excludes queueing delay 
 a fixed-schedule open-loop generator would attribute to the server. QUIC connections
 are not visible in the TCP census. Absolute rates depend on the host and must not be
 compared across machines; compare revisions only on the same host with the same plan.
+
+## QUIC send-buffer probe
+
+`quic-send-buffer-probe [--streams 2000]` isolates the System.Net.Quic leak found in
+issue #278 (see docs/project/http-engine-endurance.md) without HTTP. One process hosts a
+loopback QUIC listener and client; the server answers each stream with one byte or
+with an empty, completing write, in alternating rounds. After all streams and both
+connections are disposed it reports the change in live 16-byte blocks in the default
+process heap and how many disposed streams still own their `QUIC_BUFFER` array. On an
+affected runtime the one-byte rounds grow by one block per stream and every stream
+still owns its array; the empty rounds do not grow. Windows only; elsewhere it prints
+a skip record.

@@ -10,6 +10,7 @@ return args.FirstOrDefault() switch
     "endurance" => await Endurance.RunAsync(options).ConfigureAwait(false),
     "endurance-server" => await EnduranceServer.RunAsync(options).ConfigureAwait(false),
     "endurance-client" => await EnduranceClient.RunAsync(options).ConfigureAwait(false),
+    "quic-send-buffer-probe" => await QuicSendBufferProbe.RunAsync(options).ConfigureAwait(false),
     _ => Usage(),
 };
 
