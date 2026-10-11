@@ -119,8 +119,10 @@ internal static class ResourceSnapshot
             managedHeapBytes = GC.GetTotalMemory(false),
             gcCommittedBytes = info.TotalCommittedBytes,
             workingSetBytes = process.WorkingSet64,
-            privateBytes = process.PrivateMemorySize64,
-            handles = process.HandleCount,
+            // macOS reports 0 for both: private bytes is unavailable (null), and open
+            // file descriptors stand in for handles.
+            privateBytes = OperatingSystem.IsMacOS() ? (long?)null : process.PrivateMemorySize64,
+            handles = OperatingSystem.IsMacOS() ? Directory.GetFileSystemEntries("/dev/fd").Length : process.HandleCount,
             threads = process.Threads.Count,
             threadPoolThreads = ThreadPool.ThreadCount,
         };
@@ -251,7 +253,9 @@ internal sealed class RuntimeEventProfile : EventListener
         return new
         {
             note = "AllocationTick events sample roughly every 100 KB per heap; amounts are sampled totals, not exact.",
-            sampledAllocationBytesByType = _allocations.OrderByDescending(pair => pair.Value).Take(30).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
+            // Keep every sampled type: a per-request object of a few dozen bytes sits far
+            // below the largest thirty types yet is exactly what a before/after diff needs.
+            sampledAllocationBytesByType = _allocations.OrderByDescending(pair => pair.Value).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
             exceptionsByType = _exceptions.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
             contentions = Interlocked.Read(ref _contentions),
             contentionMilliseconds = _contentionNanoseconds / 1_000_000,

@@ -9,6 +9,7 @@ internal enum RouteKind
     Bytes,
     Stream,
     Upload,
+    Inspect,
 }
 
 internal readonly record struct BenchmarkRoute(RouteKind Kind, int Length, int Chunk)
@@ -20,13 +21,14 @@ internal readonly record struct BenchmarkRoute(RouteKind Kind, int Length, int C
         RouteKind.Plaintext => "/plaintext",
         RouteKind.Bytes => "/bytes/" + Length.ToString(CultureInfo.InvariantCulture),
         RouteKind.Stream => "/stream/" + Length.ToString(CultureInfo.InvariantCulture) + "/" + Chunk.ToString(CultureInfo.InvariantCulture),
+        RouteKind.Inspect => InspectRequest.Target,
         _ => "/upload",
     };
 
     // Expected response body length for the client's validation.
     internal int ResponseLength => Kind switch
     {
-        RouteKind.Plaintext => Payloads.Plaintext.Length,
+        RouteKind.Plaintext or RouteKind.Inspect => Payloads.Plaintext.Length,
         RouteKind.Upload => Payloads.UploadAcknowledgement(Length).Length,
         _ => Length,
     };
@@ -37,6 +39,12 @@ internal readonly record struct BenchmarkRoute(RouteKind Kind, int Length, int C
         if (path == "/plaintext")
         {
             route = new(RouteKind.Plaintext, 0, 0);
+            return true;
+        }
+
+        if (path is InspectRequest.Path or InspectRequest.Target)
+        {
+            route = new(RouteKind.Inspect, 0, 0);
             return true;
         }
 
@@ -65,6 +73,32 @@ internal readonly record struct BenchmarkRoute(RouteKind Kind, int Length, int C
 
     private static bool TryLength(string text, out int value)
         => int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value) && value <= MaxLength;
+}
+
+// The inspect route reads the request properties and headers an ordinary
+// application touches. Every engine answers with the plaintext body only when all
+// values match, so a wrong value fails the client's status check.
+internal static class InspectRequest
+{
+    internal const string Path = "/inspect";
+    internal const string Target = "/inspect?id=42&name=neo%20bench&tag=a&tag=b";
+    internal const string UserAgent = "EmbedIO.LoadBenchmark/1.0";
+    internal const string Accept = "text/plain";
+    internal const string Cookie = "session=abc123; theme=dark";
+    internal const string Referer = "https://localhost/origin";
+    internal const string RequestId = "bench-0001";
+
+    internal static readonly (string Name, string Value)[] Headers =
+    [
+        ("User-Agent", UserAgent),
+        ("Accept", Accept),
+        ("Cookie", Cookie),
+        ("Referer", Referer),
+        ("X-Request-Id", RequestId),
+    ];
+
+    // The 400 body names the mismatched property; the client reports it.
+    internal static byte[] Rejection(string failure) => System.Text.Encoding.UTF8.GetBytes("mismatch: " + failure);
 }
 
 internal static class Payloads

@@ -351,10 +351,16 @@ namespace EmbedIO.Tests
             if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
             await NativeBlockedSendCore(dispose);
         }
+        [Test]
+        public async Task NativeLocalWriteAbortReleasesACommittedFlowBlockedSend()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeBlockedSendCore(false, true);
+        }
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task NativeBlockedSendCore(bool dispose)
+        private static async Task NativeBlockedSendCore(bool dispose, bool localAbort = false)
         {
             await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
             {
@@ -373,7 +379,18 @@ namespace EmbedIO.Tests
                 var writing = ((ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)payload, false, cancellation.Token)).AsTask();
                 await Task.Delay(50, token);
                 Assert.That(writing.IsCompleted, Is.False, "The committed unbuffered write must remain blocked by unread peer flow control.");
-                if (dispose)
+                if (localAbort)
+                {
+                    var closed = NativeDirection(native, "WritesClosed");
+                    ListenerCall(native, "Abort", QuicAbortDirection.Write, 0x127L);
+                    await Assert.ThatAsync(async () => await writing.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.QuicError)).EqualTo(QuicError.OperationAborted));
+                    await Assert.ThatAsync(async () => await closed.WaitAsync(token), Throws.TypeOf<QuicException>());
+                    await Assert.ThatAsync(async () => await stream.ReadsClosed.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.ApplicationErrorCode)).EqualTo(0x127));
+                    Assert.That(NativeDirection(native, "ReadsClosed").IsCompletedSuccessfully, Is.True);
+                }
+                else if (dispose)
                 {
                     native.Dispose();
                     await Assert.ThatAsync(async () => await writing.WaitAsync(token), Throws.InstanceOf<System.IO.IOException>());
@@ -561,6 +578,83 @@ namespace EmbedIO.Tests
             });
         }
 
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task NativeLocalAbortPreservesTheOtherDirectionAndPeerErrorCode(int direction)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeLocalAbortCore(direction);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeLocalAbortCore(int choice)
+        {
+            var direction = choice == 0 ? QuicAbortDirection.Read : choice == 1 ? QuicAbortDirection.Write : QuicAbortDirection.Both;
+            var firstCode = choice == 3 ? 0x3fffffffffffffffL : 0x125L;
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                await using var remote = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                await remote.WriteAsync(new byte[] { 71 }, token);
+                var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                await accepting.WaitAsync(token);
+                using var native = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                    ?? throw new AssertionException("Missing native stream."));
+                var bytes = new byte[8];
+                Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.EqualTo(1));
+                var reads = NativeDirection(native, "ReadsClosed");
+                var writes = NativeDirection(native, "WritesClosed");
+                var readAborted = direction != QuicAbortDirection.Write;
+                var writeAborted = direction != QuicAbortDirection.Read;
+                var pendingRead = ((ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token)).AsTask();
+                Assert.That(pendingRead.IsCompleted, Is.False);
+                Assert.Throws<ArgumentOutOfRangeException>(() => ListenerCall(native, "Abort", direction, -1L));
+                Assert.Throws<ArgumentOutOfRangeException>(() => ListenerCall(native, "Abort", direction, 0x4000000000000000L));
+                Assert.Throws<ArgumentOutOfRangeException>(() => ListenerCall(native, "Abort", (QuicAbortDirection)99, 0L));
+                Assert.That(reads.IsCompleted, Is.False, "Rejected arguments must not change stream state.");
+                Assert.That(writes.IsCompleted, Is.False);
+                ListenerCall(native, "Abort", direction, firstCode);
+                ListenerCall(native, "Abort", direction, 0x126L);
+                if (readAborted)
+                {
+                    await Assert.ThatAsync(async () => await reads.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.QuicError)).EqualTo(QuicError.OperationAborted));
+                    await Assert.ThatAsync(async () => await pendingRead.WaitAsync(token), Throws.TypeOf<QuicException>());
+                    await Assert.ThatAsync(async () => await remote.WritesClosed.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.ApplicationErrorCode)).EqualTo(firstCode));
+                }
+                else
+                {
+                    Assert.That(reads.IsCompleted, Is.False);
+                    await remote.WriteAsync(new byte[] { 72 }, true, token);
+                    Assert.That(await pendingRead.WaitAsync(token), Is.EqualTo(1));
+                    Assert.That(bytes[0], Is.EqualTo(72));
+                    Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.Zero);
+                    await reads.WaitAsync(token);
+                }
+                if (writeAborted)
+                {
+                    await Assert.ThatAsync(async () => await writes.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.QuicError)).EqualTo(QuicError.OperationAborted));
+                    await Assert.ThatAsync(async () => await remote.ReadsClosed.WaitAsync(token),
+                        Throws.TypeOf<QuicException>().With.Property(nameof(QuicException.ApplicationErrorCode)).EqualTo(firstCode));
+                    await Assert.ThatAsync(async () => await (ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)new byte[] { 73 }, false, token),
+                        Throws.TypeOf<QuicException>());
+                }
+                else
+                {
+                    Assert.That(writes.IsCompleted, Is.False);
+                    await (ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)new byte[] { 74 }, true, token);
+                    Assert.That(await remote.ReadAsync(bytes, token), Is.EqualTo(1));
+                    Assert.That(bytes[0], Is.EqualTo(74));
+                    Assert.That(await remote.ReadAsync(bytes, token), Is.Zero);
+                    await writes.WaitAsync(token);
+                }
+            });
+        }
+
         [TestCase(false)]
         [TestCase(true)]
         public async Task NativeUnidirectionalCompletionTreatsOnlyTheMissingSideAsClosed(bool local)
@@ -612,6 +706,316 @@ namespace EmbedIO.Tests
                 }
             });
         }
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task NativeCompleteWritesPreservesCommittedBytesAndTheReadDirection(int mode)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeCompleteWritesCore(mode);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeCompleteWritesCore(int mode)
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                SafeHandle native;
+                QuicStream remote;
+                if (mode == 2)
+                {
+                    var opening = (Task)ListenerCall(connection, "OpenStreamAsync", true, token);
+                    await opening.WaitAsync(token);
+                    native = (SafeHandle)(opening.GetType().GetProperty("Result")?.GetValue(opening)
+                        ?? throw new AssertionException("Missing native outgoing stream."));
+                    ListenerCall(native, "CompleteWrites");
+                    remote = await peer.AcceptInboundStreamAsync(token);
+                }
+                else
+                {
+                    remote = await peer.OpenOutboundStreamAsync(mode == 3 ? QuicStreamType.Unidirectional : QuicStreamType.Bidirectional, token);
+                    await remote.WriteAsync(new byte[] { 81 }, token);
+                    var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                    await accepting.WaitAsync(token);
+                    native = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                        ?? throw new AssertionException("Missing native accepted stream."));
+                }
+                using (native)
+                await using (remote)
+                {
+                    var bytes = new byte[1023];
+                    var reads = NativeDirection(native, "ReadsClosed");
+                    var writes = NativeDirection(native, "WritesClosed");
+                    if (mode != 2)
+                    {
+                        Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.EqualTo(1));
+                        Assert.That(bytes[0], Is.EqualTo(81));
+                        Assert.That(reads.IsCompleted, Is.False);
+                    }
+                    if (mode == 3)
+                    {
+                        Assert.Throws<InvalidOperationException>(() => ListenerCall(native, "CompleteWrites"));
+                        Assert.That(writes.IsCompletedSuccessfully, Is.True);
+                    }
+                    else
+                    {
+                        var length = mode == 1 ? 8 * 1024 * 1024 : 0;
+                        var payload = new byte[length];
+                        Array.Fill(payload, (byte)83);
+                        var sending = mode == 1
+                            ? ((ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)payload, false, token)).AsTask()
+                            : Task.CompletedTask;
+                        if (mode == 1)
+                        {
+                            await Task.Delay(50, token);
+                            Assert.That(sending.IsCompleted, Is.False, "The unread peer must block this unbuffered send.");
+                        }
+                        Parallel.For(0, 16, _ => ListenerCall(native, "CompleteWrites"));
+                        if (mode == 1) Assert.That(sending.IsCompleted, Is.False, "Queuing FIN must neither wait for nor cancel committed data.");
+                        var received = 0;
+                        while (true)
+                        {
+                            var count = await remote.ReadAsync(bytes, token);
+                            if (count == 0) break;
+                            Assert.That(received + count, Is.LessThanOrEqualTo(length));
+                            Assert.That(bytes.AsSpan(0, count).IndexOfAnyExcept((byte)83), Is.EqualTo(-1));
+                            received += count;
+                        }
+                        Assert.That(received, Is.EqualTo(length));
+                        await sending.WaitAsync(token);
+                        await writes.WaitAsync(token);
+                        ListenerCall(native, "CompleteWrites");
+                        await Assert.ThatAsync(async () => await (ValueTask)ListenerCall(native, "WriteAsync", ReadOnlyMemory<byte>.Empty, false, token),
+                            Throws.InstanceOf<System.IO.IOException>());
+                    }
+                    if (mode == 2) Assert.That(reads.IsCompletedSuccessfully, Is.True);
+                    else
+                    {
+                        Assert.That(reads.IsCompleted, Is.False);
+                        await remote.WriteAsync(new byte[] { 84 }, true, token);
+                        Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.EqualTo(1));
+                        Assert.That(bytes[0], Is.EqualTo(84));
+                        Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.Zero);
+                        await reads.WaitAsync(token);
+                    }
+                }
+            }, unbuffered: mode == 1);
+        }
+
+        [Test]
+        public async Task NativeAsyncDisposalPreservesFinBeforePeerDrainsACommittedSend()
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeAsyncFinDisposalCore();
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeAsyncFinDisposalCore()
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                await using var remote = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                await remote.WriteAsync(new byte[] { 91 }, true, token);
+                var accepting = (Task)ListenerCall(connection, "AcceptStreamAsync", token);
+                await accepting.WaitAsync(token);
+                using var native = (SafeHandle)(accepting.GetType().GetProperty("Result")?.GetValue(accepting)
+                    ?? throw new AssertionException("Missing native stream."));
+                var bytes = new byte[8191];
+                Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.EqualTo(1));
+                Assert.That(await (ValueTask<int>)ListenerCall(native, "ReadAsync", bytes.AsMemory(), token), Is.Zero);
+                var payload = new byte[8 * 1024 * 1024];
+                Array.Fill(payload, (byte)93);
+                var writing = ((ValueTask)ListenerCall(native, "WriteAsync", (ReadOnlyMemory<byte>)payload, true, token)).AsTask();
+                var disposing = ((ValueTask)ListenerCall(native, "DisposeAsync")).AsTask();
+                try
+                {
+                    Assert.That(disposing.IsCompleted, Is.False, "Async disposal must await queued FIN instead of resetting it.");
+                    var total = 0;
+                    while (true)
+                    {
+                        var count = await remote.ReadAsync(bytes, token);
+                        if (count == 0) break;
+                        Assert.That(total + count, Is.LessThanOrEqualTo(payload.Length));
+                        Assert.That(bytes.AsSpan(0, count).IndexOfAnyExcept((byte)93), Is.EqualTo(-1));
+                        total += count;
+                    }
+                    Assert.That(total, Is.EqualTo(payload.Length));
+                }
+                finally { await Task.WhenAll(writing, disposing).WaitAsync(token); }
+                Assert.That(native.IsClosed, Is.True);
+                Assert.That(NativeDirection(native, "WritesClosed").IsCompletedSuccessfully, Is.True);
+            });
+        }
+
+        [TestCase(0)]
+        [TestCase(1023)]
+        [TestCase(1048576)]
+        public async Task NativeTransportRunsTheSharedHttp3WorkerAndReturnsExactData(int length)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeHttp3WorkerCore(length);
+        }
+        [TestCase(0)]
+        [TestCase(1048576)]
+        public async Task NativeTransportDrainPreservesAcceptedResponsesAndRefusesLaterRequests(int length)
+        {
+            if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
+            await NativeHttp3WorkerCore(length, true);
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task NativeHttp3WorkerCore(int length, bool graceful = false)
+        {
+            await ExerciseNativeHandshake(false, streams: async (connection, peer, token) =>
+            {
+                var worker = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection")
+                    ?? throw new AssertionException("Missing HTTP/3 worker.");
+                var exchange = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicExchange")
+                    ?? throw new AssertionException("Missing HTTP/3 exchange.");
+                var run = worker.GetMethod(graceful ? "RunNativeForListenerAsync" : "RunNativeAsync", BindingFlags.Static | BindingFlags.NonPublic)
+                    ?? throw new AssertionException("Missing native HTTP/3 worker integration.");
+                var payload = new byte[length];
+                for (var i = 0; i < length; i++) payload[i] = (byte)(i * 37);
+                var dispatched = 0;
+                var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                Func<object, Task> reply = async value =>
+                {
+                    Interlocked.Increment(ref dispatched);
+                    entered.TrySetResult();
+                    if (graceful) await release.Task.WaitAsync(token);
+                    await (Task)(exchange.GetMethod("RespondAsync", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(value, new object[] { payload, token })
+                        ?? throw new AssertionException("Missing HTTP/3 response writer."));
+                };
+                var argument = System.Linq.Expressions.Expression.Parameter(exchange);
+                var handler = System.Linq.Expressions.Expression.Lambda(typeof(Func<,>).MakeGenericType(exchange, typeof(Task)),
+                    System.Linq.Expressions.Expression.Invoke(System.Linq.Expressions.Expression.Constant(reply),
+                        System.Linq.Expressions.Expression.Convert(argument, typeof(object))), argument).Compile();
+                using var stop = CancellationTokenSource.CreateLinkedTokenSource(token);
+                using var drain = new CancellationTokenSource();
+                var arguments = graceful
+                    ? new object[] { connection, handler, stop.Token, drain.Token, TimeSpan.FromSeconds(5) }
+                    : new object[] { connection, handler, stop.Token };
+                var serving = (Task)(run.Invoke(null, arguments)
+                    ?? throw new AssertionException("Missing native HTTP/3 runner."));
+                QuicStream? control = null;
+                var serverStreams = new System.Collections.Generic.List<QuicStream>();
+                try
+                {
+                    control = await peer.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, token);
+                    await control.WriteAsync(new byte[] { 0, 4, 0 }, token);
+                    await using var request = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                    // Independent static QPACK request: GET, https, /, localhost.
+                    await request.WriteAsync(Convert.FromHexString("01100000D1D7C150096C6F63616C686F7374"), true, token);
+                    if (graceful)
+                    {
+                        await entered.Task.WaitAsync(token);
+                        QuicStream? serverControl = null;
+                        for (var index = 0; index < 3 && serverControl == null; index++)
+                        {
+                            var incoming = await peer.AcceptInboundStreamAsync(token);
+                            serverStreams.Add(incoming);
+                            if (await ReadNativePeerIntegerAsync(incoming, token) == 0) serverControl = incoming;
+                        }
+                        Assert.That(serverControl, Is.Not.Null);
+                        var readable = serverControl ?? throw new AssertionException("Missing native server control stream.");
+                        Assert.That(await ReadNativePeerIntegerAsync(readable, token), Is.EqualTo(4));
+                        var settingsLength = await ReadNativePeerIntegerAsync(readable, token);
+                        Assert.That(settingsLength, Is.LessThanOrEqualTo(65536));
+                        await readable.ReadExactlyAsync(new byte[checked((int)settingsLength)], token);
+                        drain.Cancel();
+                        Assert.That(await ReadNativePeerIntegerAsync(readable, token), Is.EqualTo(7));
+                        var goAwayLength = await ReadNativePeerIntegerAsync(readable, token);
+                        Assert.That(goAwayLength, Is.InRange(1, 8));
+                        var goAway = new byte[checked((int)goAwayLength)];
+                        await readable.ReadExactlyAsync(goAway, token);
+                        var goAwayOffset = 0;
+                        Assert.That(NativePeerInteger(goAway, ref goAwayOffset), Is.EqualTo(4));
+                        Assert.That(goAwayOffset, Is.EqualTo(goAway.Length));
+                        Assert.That(serving.IsCompleted, Is.False, "Drain must preserve the admitted response.");
+                        await using var rejected = await peer.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, token);
+                        var error = await Assert.ThrowsAsync<QuicException>(async () =>
+                        {
+                            await rejected.WriteAsync(Convert.FromHexString("01100000D1D7C150096C6F63616C686F7374"), true, token);
+                            _ = await rejected.ReadAsync(new byte[1], token);
+                        });
+                        Assert.That(error?.QuicError, Is.EqualTo(QuicError.StreamAborted));
+                        Assert.That(error?.ApplicationErrorCode, Is.EqualTo(0x10b));
+                        release.TrySetResult();
+                    }
+                    using var response = new System.IO.MemoryStream();
+                    await request.CopyToAsync(response, token);
+                    var wire = response.ToArray();
+                    var offset = 0;
+                    var headers = 0;
+                    using var body = new System.IO.MemoryStream();
+                    while (offset < wire.Length)
+                    {
+                        var type = NativePeerInteger(wire, ref offset);
+                        var size = NativePeerInteger(wire, ref offset);
+                        Assert.That(size, Is.LessThanOrEqualTo(wire.Length - offset));
+                        if (type == 1) { headers++; Assert.That(size, Is.GreaterThanOrEqualTo(2)); }
+                        else
+                        {
+                            Assert.That(type, Is.Zero, "Only final HEADERS and DATA are expected.");
+                            Assert.That(headers, Is.EqualTo(1), "DATA must follow final headers.");
+                            body.Write(wire, offset, checked((int)size));
+                        }
+                        offset += checked((int)size);
+                    }
+                    Assert.That(headers, Is.EqualTo(1));
+                    Assert.That(body.ToArray(), Is.EqualTo(payload));
+                    Assert.That(Volatile.Read(ref dispatched), Is.EqualTo(1));
+                    if (graceful)
+                    {
+                        await peer.CloseAsync(0x100, token);
+                        await serving.WaitAsync(token);
+                        Assert.That(stop.IsCancellationRequested, Is.False, "Graceful completion must not require the caller's abort token.");
+                    }
+                }
+                finally
+                {
+                    release.TrySetResult();
+                    stop.Cancel();
+                    try
+                    {
+                        await serving.WaitAsync(token);
+                        Assert.That(connection.IsClosed, Is.True, "The protocol runner owns and disposes its native connection.");
+                    }
+                    finally
+                    {
+                        foreach (var incoming in serverStreams) await incoming.DisposeAsync();
+                        if (control != null) await control.DisposeAsync();
+                    }
+                }
+            });
+        }
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task<long> ReadNativePeerIntegerAsync(QuicStream stream, CancellationToken token)
+        {
+            var bytes = new byte[8];
+            await stream.ReadExactlyAsync(bytes.AsMemory(0, 1), token);
+            var width = 1 << (bytes[0] >> 6);
+            if (width != 1) await stream.ReadExactlyAsync(bytes.AsMemory(1, width - 1), token);
+            var offset = 0;
+            return NativePeerInteger(bytes, ref offset);
+        }
+        private static long NativePeerInteger(byte[] wire, ref int offset)
+        {
+            Assert.That(offset, Is.LessThan(wire.Length));
+            var width = 1 << (wire[offset] >> 6);
+            Assert.That(width, Is.LessThanOrEqualTo(wire.Length - offset));
+            long result = wire[offset++] & 63;
+            for (var i = 1; i < width; i++) result = (result << 8) | wire[offset++];
+            return result;
+        }
+
         [Test]
         public async Task NativeDisposalCompletesBothPendingDirectionObservers()
         {
@@ -786,8 +1190,13 @@ namespace EmbedIO.Tests
                 await ((Task)ListenerCall(listener, "StopAsync")).WaitAsync(deadline.Token);
                 listener.Dispose();
             }
-            await ((Task)ListenerCall(connection, "ShutdownAsync", 0x100L)).WaitAsync(deadline.Token);
+            if (!connection.IsClosed)
+                await ((Task)ListenerCall(connection, "ShutdownAsync", 0x100L)).WaitAsync(deadline.Token);
             connection.Dispose();
+            // Disposed streams retain the connection until their native shutdown
+            // callbacks finish. Verify final release within the existing deadline.
+            while (!connection.IsClosed)
+                await Task.Delay(1, deadline.Token);
             Assert.That(connection.IsClosed, Is.True);
         }
         [Test]

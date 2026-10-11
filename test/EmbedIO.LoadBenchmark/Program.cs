@@ -6,6 +6,7 @@ return args.FirstOrDefault() switch
     "run" => await Orchestrator.RunAsync(options).ConfigureAwait(false),
     "server" => await ServerHost.RunAsync(options).ConfigureAwait(false),
     "client" => await LoadClient.RunAsync(options).ConfigureAwait(false),
+    "recovery" => await Recovery.RunAsync(options).ConfigureAwait(false),
     _ => Usage(),
 };
 

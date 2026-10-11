@@ -15,10 +15,11 @@ dotnet TestResults/load-benchmark/runners/candidate/EmbedIO.LoadBenchmark.dll ru
 The prepare script builds this runner from the checkout, builds the baseline core
 from a pinned revision exported with `git archive` (default `1445c23`, the main
 commit PR #182 last merged), and copies the runner twice, swapping only
-`EmbedIO.dll` in the baseline copy. Builds use `ContinuousIntegrationBuild` so
-hashes do not depend on the build directory. The core's informational version
-embeds the current commit, so its hash changes with every commit even when the
-source does not. `runners.json` records revisions, uncommitted paths and SHA-256
+`EmbedIO.dll` in the baseline copy. Builds use `ContinuousIntegrationBuild`, but the core's hash still
+changed between two builds of the same commit in different output directories, and
+its informational version embeds the current commit, so its hash changes with every
+commit even when the source does not. Treat `runners.json` as the record of the
+binaries actually run, not as a reproducibility proof. `runners.json` records revisions, uncommitted paths and SHA-256
 hashes.
 
 `run` options: `--scenarios all|<prefix>,...`, `--engines candidate,baseline,kestrel`,
@@ -34,13 +35,88 @@ unset for comparison runs.
 
 Scenarios ending in `-close100` are controls: the client closes every connection
 after 100 requests, matching the managed listener's per-connection cap, so all
-engines pay the same reconnect cost. Churn scenarios are capped (5 s for HTTP/1.1,
+engines pay the same reconnect cost.
+
+Scenarios named `-inspect-` request `/inspect?id=42&name=neo%20bench&tag=a&tag=b`
+with User-Agent, Accept, Cookie, Referer and X-Request-Id headers. The handler
+reads the query (including the repeated `tag`), those headers, both cookies, the
+referrer, body framing and the endpoints, and answers 400 naming the first
+mismatched property. Body framing is read but HasEntityBody is not required to be
+false over HTTP/3, where a GET without content-length reports an unknown length. Churn scenarios are capped (5 s for HTTP/1.1,
 1.5 s for HTTP/2) to stay within the host's TIME_WAIT and ephemeral-port capacity.
+
+## Cancellation and recovery
+
+`recovery` keeps one server process alive through healthy load, an abort storm, idle drain,
+healthy load again, optional sustained load and a timed shutdown, and writes `recovery.json`
+with every phase's resource snapshot, open server sockets, the recovery throughput ratio,
+sustained growth slopes and shutdown time. It exits non-zero with its findings listed when
+descriptors, open sockets, working set or managed heap keep growing, recovery throughput drops
+below 80 %, or shutdown does not complete.
+
+```sh
+dotnet <runner>/EmbedIO.LoadBenchmark.dll recovery --output <fresh dir> --engine embedio|kestrel \
+  --protocol Http1|Http2|Http3 [--tls] [--connections 16] [--streams 8] [--healthy-seconds 10] \
+  [--storm-seconds 20] [--storm-workers 32] [--storm-mode both|upload|download] [--idle 5] \
+  [--sustain-minutes 0] [--snapshot-interval 60] [--server-dir <runner copy>]
+```
+
+## Comparing results against A/A noise
+
+`scripts/compare_load_benchmark.py <result dir> --reference baseline --aa <A/A dir>` prints each
+engine's median requests/s, CPU and bytes per request against a reference and calls a
+difference real only when it exceeds the identical-runner (A/A) ratio, both engines' own sample
+spread and a 3 % floor (`--floor`).
+
+## Running on a shared machine
+
+Two scripts turn one orchestrator invocation into evidence that can be checked
+after the fact:
+
+```sh
+python -I scripts/guarded_load_benchmark.py --owner "<agent and branch>" \
+    --output TestResults/load-benchmark/results-<label> \
+    --own-marker <absolute path of this checkout> -- \
+    dotnet TestResults/load-benchmark/runners/candidate/EmbedIO.LoadBenchmark.dll run \
+    --output TestResults/load-benchmark/results-<label> --baseline-dir TestResults/load-benchmark/runners/baseline \
+    --modern-baseline --scenarios h3- --rounds 3 --server-cpus 0-7 --client-cpus 8-15
+python -I scripts/summarize_load_benchmark.py TestResults/load-benchmark/results-<label>-a1 --compare baseline candidate
+```
+
+`guarded_load_benchmark.py` waits until `TestResults/BENCHMARK-LOCK.txt` is absent
+and no foreign `EmbedIO.Tests`, load-benchmark, `dotnet test`, conformance or fuzz
+process has been seen for `--idle-seconds` (120), creates the lock with
+`O_CREAT | O_EXCL` (a lock written by another owner is never overwritten), then
+starts the command and checks every `--watch-interval` seconds that the lock is still
+its own and that no foreign process appeared. On either event it kills the command's
+process tree, writes `INVALID.txt` and `attempt.json` into that attempt's output and
+retries in a fresh `-a<n>` directory after the idle gate. Invalid attempts are kept.
+The command's own `--output` is rewritten to the attempt directory; a command that
+fails on its own (for example a failed sample) is not retried, because the failure is
+the result. The script's own shells and the command's descendants are excluded from the
+foreign check; pass `--own-marker` for any other process of this checkout whose command
+line would otherwise match, such as a build.
+
+`summarize_load_benchmark.py` prints every sample of the given result directories,
+failed and invalid ones included, with per-engine medians of accepted samples, and
+with `--compare baseline candidate` a table of candidate-to-baseline ratios per
+scenario (requests per second, server CPU and allocated bytes per request, client p50
+and p99). A result directory carrying `INVALID.txt` or `ABORTED.txt` is listed and
+contributes no accepted samples.
+
+The reviewed watchdog excludes its ancestor processes themselves and expands only
+owned descendants, so sibling jobs remain visible. Monitoring errors clean up the
+owned live child before releasing the lock; failed cleanup retains its lock.
+The summary uses the same complete, finite core-metric policy as the comparison
+helper and displays missing client CPU as unavailable. Historical runs made with
+the earlier ancestor-expansion bug need independent isolation evidence or a rerun.
 
 ## Profiling
 
 Profile separately from comparisons. `--profile` aggregates runtime events in the
-server (sampled allocation by type, exceptions, contention). `--trace-tool` runs
+server (sampled allocation by every type seen, exceptions, contention); a
+before/after diff of the per-type totals divided by completed requests attributes
+an allocation change to its type even when it is a few dozen bytes per request. `--trace-tool` runs
 dotnet-trace (`dotnet-sampled-thread-time`) against the server during the
 measurement window and writes the `.nettrace` plus top-60 exclusive and inclusive
 method reports next to each sample. The tool is not a project dependency; install a
@@ -59,6 +135,9 @@ python scripts/attribute_trace_frames.py <sample>.speedscope.json --target Monit
 - One fresh server process and one fresh client process per sample. On Windows the
   children inherit their CPU set at creation (so server GC heaps and the thread pool
   are sized for it); on Linux they start under `taskset`. Use disjoint physical cores.
+  macOS cannot pin processes: `--server-cpus`/`--client-cpus` are refused there,
+  `environment.json` records `cpuAffinity: none`, and server and client share every
+  core, including Apple Silicon's separate performance levels (`processorTopology`).
 - Every engine runs the same handler work: route parse, a cached static body or a
   server-validated upload, and asynchronous writes. Bodies use a non-periodic byte
   pattern; the client checks status, protocol version, framing, length and every
@@ -75,8 +154,9 @@ python scripts/attribute_trace_frames.py <sample>.speedscope.json --target Monit
 - Client metrics: completed requests, every latency in a log-linear histogram
   (p50/p90/p95/p99/p99.9/max, raw buckets kept), connections opened, server-initiated
   closes, client CPU and allocation.
-- Machine busy CPU minus server and client CPU estimates background load per sample.
-- Server GC (concurrent) for every engine. Runtime, OS, CPU, power scheme, `DOTNET_*`
+- Machine busy CPU minus server and client CPU estimates background load per sample
+  (Windows `GetSystemTimes`, Linux `/proc/stat`, macOS `host_statistics`).
+- Server GC (concurrent) for every engine. Runtime, OS, CPU and topology, power scheme (Windows) or `pmset` state (macOS), `DOTNET_*`
   variables and hashes of the runner, both cores, Kestrel and QUIC assemblies go in
   `environment.json`.
 
@@ -103,6 +183,12 @@ the candidate. HTTP/3 uses QUIC-only listeners on both engines (`EmbedIOHttp3`).
 - `--profile` adds runtime event listeners (allocation ticks, contention, exceptions)
   and perturbs timing. Profile runs are separate from comparison runs.
 - QUIC connections are not visible to the socket-cleanup check.
+- macOS: .NET's `GetActiveTcpConnections` omits TIME_WAIT there, so the TIME_WAIT gate and
+  socket census parse `netstat -an -p tcp`. `HandleCount` and `PrivateMemorySize64` read 0, so
+  `handles` is the open file-descriptor count (`/dev/fd`) and private bytes is reported as
+  unavailable (null). macOS keeps TIME_WAIT for 30 s (`net.inet.tcp.msl` 15000) and has 16,384
+  ephemeral ports, so HTTP/1.1 churn at tens of thousands of connections per second can reuse a
+  4-tuple the server still holds in TIME_WAIT; compare every engine before reading churn failures.
 
 ## Comparing two modern engine revisions
 

@@ -126,6 +126,11 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
                 }
 
                 break;
+            case RouteKind.Inspect:
+                var failure = InspectFailure(context.Request);
+                if (failure is not null) response.StatusCode = 400;
+                await WriteAsync(failure is null ? Payloads.Plaintext : InspectRequest.Rejection(failure)).ConfigureAwait(false);
+                break;
             default:
                 if (context.Request.HttpVerb != HttpVerbs.Post) throw HttpException.MethodNotAllowed();
                 var acknowledgement = await Application.ReadUploadAsync(context.Request.InputStream, cancellation).ConfigureAwait(false);
@@ -139,6 +144,26 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
             response.ContentLength64 = payload.Length;
             await response.OutputStream.WriteAsync(payload, cancellation).ConfigureAwait(false);
         }
+    }
+
+    // Returns the name of the first property that does not match, or null.
+    private static string? InspectFailure(IHttpRequest request)
+    {
+        if (request.HttpVerb != HttpVerbs.Get) return "method";
+        if (request.Url.Host != "localhost") return "host";
+        if (request.IsSecureConnection != (request.Url.Scheme == Uri.UriSchemeHttps)) return "scheme";
+        if (request.QueryString["id"] != "42" || request.QueryString["name"] != "neo bench") return "query";
+        if (request.QueryString.GetValues("tag") is not ["a", "b"]) return "repeated-query";
+        if (request.UserAgent != InspectRequest.UserAgent) return "user-agent";
+        if (request.Headers["Accept"] != InspectRequest.Accept || request.Headers["X-Request-Id"] != InspectRequest.RequestId) return "headers";
+        if (request.Cookies.Count != 2 || request.Cookies["theme"]?.Value != "dark") return "cookies";
+        if (request.UrlReferrer?.AbsolutePath != "/origin") return "referrer";
+        // Body framing is read but not validated: an HTTP/3 GET without content-length
+        // reports an unknown length and HasEntityBody true in this engine.
+        if (request.ContentType is not null || request.ContentLength64 < -1 || (request.HasEntityBody && request.ProtocolVersion.Major < 3)) return "body";
+        if (!IPAddress.IsLoopback(request.RemoteEndPoint.Address)) return "remote";
+        if (!request.IsLocal) return $"is-local ({request.LocalEndPoint} {request.RemoteEndPoint})";
+        return null;
     }
 }
 
@@ -205,6 +230,11 @@ internal sealed class KestrelServer(ServerSettings settings) : IBenchmarkServer
                 }
 
                 break;
+            case RouteKind.Inspect:
+                var failure = InspectFailure(context);
+                if (failure is not null) response.StatusCode = (int)HttpStatusCode.BadRequest;
+                await WriteAsync(failure is null ? Payloads.Plaintext : InspectRequest.Rejection(failure)).ConfigureAwait(false);
+                break;
             default:
                 if (!HttpMethods.IsPost(context.Request.Method))
                 {
@@ -223,5 +253,25 @@ internal sealed class KestrelServer(ServerSettings settings) : IBenchmarkServer
             response.ContentLength = payload.Length;
             await response.Body.WriteAsync(payload, cancellation).ConfigureAwait(false);
         }
+    }
+
+    // Returns the name of the first property that does not match, or null.
+    private static string? InspectFailure(HttpContext context)
+    {
+        var request = context.Request;
+        var remote = context.Connection.RemoteIpAddress;
+        if (!HttpMethods.IsGet(request.Method)) return "method";
+        if (request.Host.Host != "localhost") return "host";
+        if (request.IsHttps != (request.Scheme == Uri.UriSchemeHttps)) return "scheme";
+        if (request.Query["id"] != "42" || request.Query["name"] != "neo bench") return "query";
+        if (request.Query["tag"] is not ["a", "b"]) return "repeated-query";
+        if (request.Headers.UserAgent != InspectRequest.UserAgent) return "user-agent";
+        if (request.Headers.Accept != InspectRequest.Accept || request.Headers["X-Request-Id"] != InspectRequest.RequestId) return "headers";
+        if (request.Cookies.Count != 2 || request.Cookies["theme"] != "dark") return "cookies";
+        if (!Uri.TryCreate(request.Headers.Referer, UriKind.Absolute, out var referer) || referer.AbsolutePath != "/origin") return "referrer";
+        if (request.ContentType is not null || request.ContentLength is not (null or 0)) return "body";
+        if (remote is null || !IPAddress.IsLoopback(remote)) return "remote";
+        if (!remote.Equals(context.Connection.LocalIpAddress)) return $"is-local ({context.Connection.LocalIpAddress} {remote})";
+        return null;
     }
 }
