@@ -226,6 +226,16 @@ interfaces do not require every implementation to advertise optional features.
 See the [capsule/tunnel guide](../guides/capsule-tunnels.md) and
 [response field-section guide](../guides/response-field-sections.md).
 
+
+## Cookie attribute parsing corrections
+
+The original v2 cookie parser distinguishes CommentURL from Comment. Applications
+reading Cookie.CommentUri now receive the supplied URI instead of finding that
+text in Cookie.Comment. An Expires date without a weekday comma no longer consumes
+the following Path attribute; that path and the actual expiry are retained.
+Check application assertions or workarounds that depended on either parsing bug.
+Cookie replacement identity, lookup ranking and mutation visibility are retained.
+This helper replacement adds no public API or runtime dependency.
 ## Validate an application upgrade
 
 1. Rebuild the application and custom adapters against the selected v2 candidate.

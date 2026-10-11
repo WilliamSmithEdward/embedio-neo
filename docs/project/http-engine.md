@@ -8015,3 +8015,49 @@ retained asset's public CloseAsync operation. Task identity, failure propagation
 disposal counts, assertions, iterations and deadlines remain unchanged. The
 modern and actual netstandard2.0 focused sets both pass 132/132 without skips.
 This changes test targeting, not the shipped tunnel API.
+### Independent prefix and cookie helpers
+
+The inherited prefix, cookie collection/parser and string-header helpers are
+replaced by independently authored code. Prefix configuration retains wildcard
+normalization, URI canonicalization, root-path requirements and port validation.
+Cookie replacement retains its slot and identity rules; name lookup preserves
+version/name/path ordering, including historical equal-rank selection, without
+sorting the application collection. Mutating a cookie remains visible to the
+next lookup. Header scanning walks quote-aware delimiter boundaries directly.
+No public API, target, runtime dependency or listener selection changes here.
+
+Two controlled cases fail with the preceding helpers: CommentURL is consumed as
+Comment, and an expiry date without a weekday comma consumes the next Path
+attribute. The new parser distinguishes exact attribute names and joins an
+expiry continuation only across an actual comma. Both findings and the affected
+cookie-consumer migration are recorded in the Neo v1-to-v2 guide.
+
+Focused Windows validation passes 276/276 cases, including cookies, prefixes,
+endpoint ownership, shared HTTP/1 and HTTP/2, coding-chain and wire coverage. Full
+regression reports 4,679 cases: 4,672 passed, seven expected skips, zero failures
+in 3m50s, with QUIC and the independent datagram peer required. The actual
+netstandard2.0 core reports 276 focused cases: 267 passed, nine unsupported HTTP/3
+transport skips and zero failures on the .NET 10 host. This is not older-CLR
+validation. Both targets build without warnings; source guards and changed-source
+formatting pass. All ten allocation, body-consumption, wire and HTTP/HTTPS cleanup
+gates pass with unchanged budgets. This
+increment does not establish full inherited coordinator retirement or native
+HTTP/3 extension application integration. Program #181 remains open.
+
+The first full run reported 4,679 cases with two failures in established malformed
+charset-quote behavior. The original helper restores that contract without changing
+the assertions; both cases pass in the expanded 276-case set. The initial failure
+evidence is retained. No whole-server comparative speedup is claimed.
+
+The first resource-gate pass found quote extraction allocating 376 B against the
+360 B wire budget. Single-result extraction retains the same quote behavior and
+passes at 336 B; budgets and assertions are unchanged. The final-source full suite
+passes 4,679 reported / 4,672 passed / seven expected skips / zero failures in
+3m50.459s. The actual retained core confirms 267 passed / nine unsupported HTTP/3
+transport skips / zero failures (276 reported).
+
+One retained run inherited the modern-only EMBEDIO_REQUIRE_QUIC=1 environment
+and failed four capability checks because that asset has no HTTP/3 provider.
+Its log/TRX are preserved. The subsequent retained run uses the existing target
+capability policy and passes; no filter, assertion or fixture was changed. Both
+modern full runs retain required QUIC and independent-peer coverage.

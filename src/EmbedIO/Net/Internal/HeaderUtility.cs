@@ -23,7 +23,7 @@ namespace EmbedIO.Net.Internal
         {
             var idx = nameAndValue.IndexOf("=", System.StringComparison.Ordinal);
 
-            return idx < 0 || idx == nameAndValue.Length - 1 ? null : nameAndValue.Substring(idx + 1).Trim().Unquote();
+            return idx < 0 || idx == nameAndValue.Length - 1 ? null : HeaderValueCursor.Unquote(nameAndValue.Substring(idx + 1));
         }
     }
 }
