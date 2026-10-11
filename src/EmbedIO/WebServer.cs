@@ -190,7 +190,9 @@ namespace EmbedIO
                 // Explicit disposal may win after the listening snapshot but
                 // before accept starts. Only expected stop failures end this loop.
                 catch (ObjectDisposedException) when (Volatile.Read(ref _disposeStarted) != 0) { return; }
-                catch (System.Net.HttpListenerException error) when (error.ErrorCode == 995 && Volatile.Read(ref _disposeStarted) != 0) { return; }
+                // An application stopping the listener, directly or through disposal,
+                // ends the run normally; other listener failures still propagate.
+                catch (System.Net.HttpListenerException error) when (error.ErrorCode == 995 && (Volatile.Read(ref _disposeStarted) != 0 || !(Listener?.IsListening ?? false))) { return; }
                 context.CancellationToken = cancellationToken;
                 context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
 

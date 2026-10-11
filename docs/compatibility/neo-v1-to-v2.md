@@ -196,6 +196,19 @@ explicit application callback for that purpose. Registration after completion
 has begun remains invalid. This context increment is under validation and is
 unreleased.
 
+The token that modules receive in `OnStart`, that a session manager receives in
+`Start` and that `IHttpContext.CancellationToken` exposes is now a server-owned
+token linked to the one passed to `RunAsync`. It is also canceled when the server
+is disposed and when `RunAsync` completes, so a handler that awaits only its
+context token ends with the server instead of running after its connection was
+aborted, and `LocalSessionManager` purging stops with the server. The caller's
+token is never canceled by the server. Work that must outlive the server needs
+its own token. `Listener.Stop()` on a running server now ends `RunAsync`
+normally rather than faulting it with `HttpListenerException` 995, repeated
+disposal is a no-op, and `RunAsync` on a stopped server reports that it cannot
+be restarted. See [server lifetime](../user-reports/server-lifetime.md). This
+correction is on the engine development branch and is unreleased.
+
 Use DrainAsync for bounded graceful shutdown instead of assuming Stop waits for
 active responses. Stop/disposal and forced drain cancellation terminate remaining
 work. HTTP/2 and HTTP/3 have different peer-close policies within that deadline;

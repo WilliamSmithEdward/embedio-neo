@@ -30,6 +30,13 @@ namespace EmbedIO
 
         private WebServerState _state = WebServerState.Created;
         private int _runStarted;
+        private int _disposed;
+        private int _lifetimeReleased;
+
+        // Owned by the server: linked to the RunAsync token and canceled when the
+        // server is disposed or RunAsync completes, so modules, session purging and
+        // in-flight contexts observe every way the server can end.
+        private CancellationTokenSource? _lifetime;
 
         private ISessionManager? _sessionManager;
 
@@ -195,27 +202,41 @@ namespace EmbedIO
         /// <exception cref="OperationCanceledException">Cancellation was requested.</exception>
         public async Task RunAsync(CancellationToken cancellationToken = default)
         {
+            if (Volatile.Read(ref _disposed) != 0)
+                throw new ObjectDisposedException(GetType().Name);
+
             // A second invocation must not reprepare or change the state of an active server.
+            // A stopped server is final: its listener, modules and token are spent.
             if (Interlocked.Exchange(ref _runStarted, 1) != 0)
-                throw new InvalidOperationException("The web server has already been started.");
+            {
+                throw new InvalidOperationException(State == WebServerState.Stopped
+                    ? "The web server has been stopped and cannot be restarted; create a new instance."
+                    : "The web server has already been started.");
+            }
+
+            var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _lifetime = lifetime;
+            if (Volatile.Read(ref _disposed) != 0)
+                lifetime.Cancel();
+            var lifetimeToken = lifetime.Token;
 
             var startupCompleted = false;
             try
             {
                 State = WebServerState.Loading;
-                cancellationToken.ThrowIfCancellationRequested();
-                Prepare(cancellationToken);
+                lifetimeToken.ThrowIfCancellationRequested();
+                Prepare(lifetimeToken);
 
-                cancellationToken.ThrowIfCancellationRequested();
-                _sessionManager?.Start(cancellationToken);
-                _modules.StartAll(cancellationToken);
+                lifetimeToken.ThrowIfCancellationRequested();
+                _sessionManager?.Start(lifetimeToken);
+                _modules.StartAll(lifetimeToken);
 
-                cancellationToken.ThrowIfCancellationRequested();
+                lifetimeToken.ThrowIfCancellationRequested();
                 State = WebServerState.Listening;
                 startupCompleted = true;
-                await ProcessRequestsAsync(cancellationToken).ConfigureAwait(false);
+                await ProcessRequestsAsync(lifetimeToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (lifetimeToken.IsCancellationRequested)
             {
                 "Operation canceled.".Debug(LogSource);
             }
@@ -233,8 +254,32 @@ namespace EmbedIO
             finally
             {
                 "Cleaning up".Info(LogSource);
+                // Work the accept loop left behind, such as a handler awaiting its
+                // context token, ends with the server rather than running unobserved.
+                CancelLifetime(lifetime);
                 State = WebServerState.Stopped;
+                if (Volatile.Read(ref _disposed) != 0) ReleaseLifetime();
             }
+        }
+
+        private void CancelLifetime(CancellationTokenSource? lifetime)
+        {
+            if (lifetime == null) return;
+            try { lifetime.Cancel(); }
+            catch (AggregateException error) when (error.InnerExceptions.All(EmbedIO.Internal.ExceptionPolicy.IsRecoverable))
+            {
+                error.Log(LogSource, "Exception thrown by a server lifetime cancellation callback.");
+            }
+        }
+
+        // The last of disposal and run completion releases the link to the caller's
+        // token. The source is canceled first, so tokens already handed out keep
+        // reporting cancellation after release.
+        private void ReleaseLifetime()
+        {
+            var lifetime = _lifetime;
+            if (lifetime == null || Interlocked.Exchange(ref _lifetimeReleased, 1) != 0) return;
+            lifetime.Dispose();
         }
 
         /// <inheritdoc />
@@ -411,7 +456,13 @@ namespace EmbedIO
             if (!disposing)
                 return;
 
+            // Repeated or concurrent disposal is a no-op after the first call.
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+
+            CancelLifetime(_lifetime);
             _modules.Dispose();
+            if (Volatile.Read(ref _runStarted) == 0 || State == WebServerState.Stopped) ReleaseLifetime();
         }
 
         /// <summary>
