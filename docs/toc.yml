@@ -218,6 +218,8 @@
       href: project/http-engine.md
     - name: Completed response cleanup
       href: project/http-completed-response-cleanup.md
+    - name: HTTP/1 idle closure investigation
+      href: project/http1-idle-closure.md
     - name: Capsule transport development
       href: project/http-capsule-transport.md
     - name: Capsule and tunnel lifetime validation
