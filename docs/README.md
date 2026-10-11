@@ -14,6 +14,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Usage guides
 
+- [Response-time diagnostics](guides/response-timing.md): server handling duration, preserved context age and the difference from client latency.
+
 - [Capsule and tunnel carriers](guides/capsule-tunnels.md): unreleased optional APIs, authorization, streamed values, native datagram packet ownership and carrier lifetime.
 
 - [HTTP/3 listener](guides/http3.md): unreleased QUIC mode, certificates, usage and current limits.

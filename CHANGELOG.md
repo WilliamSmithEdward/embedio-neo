@@ -9,6 +9,9 @@
   and a restart attempt reports that a stopped server is final; see the
   [Neo v2 migration guide](docs/compatibility/neo-v1-to-v2.md#response-statuses-output-and-shutdown)
   and [server lifetime](docs/user-reports/server-lifetime.md).
+- Correct response-time diagnostics to measure WebServer handling rather than
+  context lifetime, excluding HTTP/1 keep-alive idle/header waiting while preserving
+  public context age and included handler/completion work.
 - Preserve reusable HTTP/1 connections when one logical listener stops on a
   shared endpoint. Active incomplete requests still abort, and retiring the final
   listener still releases idle TCP/TLS transports.

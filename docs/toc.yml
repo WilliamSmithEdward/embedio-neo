@@ -290,3 +290,6 @@
 
 - name: Shared HTTP/1 listener shutdown
   href: project/shared-http1-owner-shutdown.md
+
+- name: Response-time diagnostics
+  href: guides/response-timing.md
