@@ -76,14 +76,43 @@ were handshakes that the server refused with QUIC `CONNECTION_REFUSED` (transpor
 - Saturating the CPUs reproduces multi-hundred-millisecond to multi-second handshake and
   stream stalls, consistent with the stalls in #276. It did not reproduce the 10 s
   timeouts at this rate and duration.
-- **Open:** the `CONNECTION_REFUSED` handshakes under saturation are a new observation.
-  Whether EmbedIO's listener admission or MsQuic's own handshake limits refuse them, and
-  whether Kestrel refuses too, is not yet established. No handshake deadline was changed.
+- The `CONNECTION_REFUSED` handshakes came from the listen backlog. See the next section.
+
+## Handshake refusals: listen backlog
+
+`System.Net.Quic` (v10.0.12 `QuicListener.HandleEventNewConnection`) reserves one unit of
+`ListenBacklog` for each new connection and returns it only when `AcceptConnectionAsync`
+dequeues that connection. The backlog therefore counts handshakes in progress as well as
+connections waiting to be accepted, and a connection beyond it is answered with
+`QUIC_STATUS_CONNECTION_REFUSED`. EmbedIO's accept loop dequeues right away, so in-progress
+handshakes fill the backlog. EmbedIO's HTTP/3 listener set `ListenBacklog = 128`. The
+runtime default (`QuicDefaults.DefaultListenBacklog`) and Kestrel's
+`QuicTransportOptions.Backlog` are both 512. Under saturation, 64 handshakes/s taking about
+2 s each keep roughly 128 in progress, which matches where refusals began.
+
+The refusals reproduce without saturating the machine. The server is pinned to one CPU
+and the client to four, with churn at 128, 256 and 512 connections/s for 20 s each
+(`constrained-128`, `constrained-512`):
+
+| backlog | engine | 128/s failed | 256/s failed | 512/s failed | 512/s handshake p99 ms |
+|---|---|---:|---:|---:|---:|
+| 128 | EmbedIO | 0 | 0 | 1,075 of 10,240, all `CONNECTION_REFUSED` | 1,049 |
+| 128 | Kestrel (512) | 0 | 0 | 0 | 25 |
+| 512 | EmbedIO | 0 | 0 | 0 | 15 |
+| 512 | Kestrel (512) | 0 | 0 | 0 | 1,009 |
+
+The listener now uses 512. Background CPU from other work was 6 to 12.5 CPUs during these
+runs, so tail latency varies between runs (the Kestrel 512/s tail in the second run
+included client cap skips during a background burst, with no failures). The handshake
+deadline and the 256-connection active limit are unchanged. A burst that outlasts 512
+in-progress handshakes is still refused; that refusal is the intended overload response.
+The opt-in native MsQuic listener has its own accept queue (256 queued connections) and was
+not part of these runs.
 
 ## Remaining work for #283
 
-1. Repeat the saturation control with Kestrel (`--burn-threads 16 --engines kestrel,embedio`)
-   and attribute the refusals (EmbedIO admission counters, MsQuic handshake limits).
+1. Repeat the saturation control with Kestrel and with the 512 backlog on a disposable
+   host or CI runner. Do not saturate every core on a workstation.
 2. Repeat on an idle host with no other agents running, and on Linux where practical.
 3. Longer runs at the endurance campaign's mixed load if refusals or timeouts recur.
 
