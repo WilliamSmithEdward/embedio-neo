@@ -27,7 +27,7 @@ namespace EmbedIO.Net.Internal
         private async Task RunHttp1Async(int count, bool prefetched)
         {
             var inlineCycles = 0;
-            while (Volatile.Read(ref _resourcesDisposed) == 0)
+            while (Volatile.Read(ref _protocolEnded) == 0)
             {
                 if (!await ReadAndAdmitHeadAsync(count, prefetched).ConfigureAwait(false)) return;
                 if (!await WaitForResponseEndAsync().ConfigureAwait(false)) return;
@@ -78,7 +78,7 @@ namespace EmbedIO.Net.Internal
                 var owner = _context.Listener ?? throw new InvalidOperationException("Missing request owner.");
                 lock (_connectionSync)
                 {
-                    if (_sock == null || _resourcesDisposed != 0 || _forceClosing != 0 || _draining)
+                    if (_protocolSocket == null || _protocolEnded != 0 || _forceClosing != 0 || _draining)
                         return false;
                     if (!ReferenceEquals(_lastListener, owner))
                     {
@@ -121,7 +121,7 @@ namespace EmbedIO.Net.Internal
                 var notify = !_responseEnded;
 #endif
                 _responseEnded = true;
-                _responseCanReuse = reuse && _sock != null && _resourcesDisposed == 0 && _forceClosing == 0 && !_draining;
+                _responseCanReuse = reuse && _protocolSocket != null && _protocolEnded == 0 && _forceClosing == 0 && !_draining;
 #if NET10_0_OR_GREATER
                 if (notify && _responseWaitRequested) _responseCompletion.SetResult(_responseCanReuse);
 #else
@@ -154,13 +154,13 @@ namespace EmbedIO.Net.Internal
         {
             lock (_connectionSync)
             {
-                if (_sock == null || _resourcesDisposed != 0 || _forceClosing != 0 || _draining) return false;
+                if (_protocolSocket == null || _protocolEnded != 0 || _forceClosing != 0 || _draining) return false;
                 var tail = _iStream?.BufferedRemainder ?? _pendingInput;
                 Unbind();
                 InitWithPendingInput(tail);
                 if (Reuses < int.MaxValue) Reuses++;
                 _sTimeout = 15000;
-                _timer.Change(_sTimeout, Timeout.Infinite);
+                _lifetime.ArmDeadline(_sTimeout);
                 return true;
             }
         }

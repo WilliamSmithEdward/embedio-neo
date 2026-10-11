@@ -166,7 +166,10 @@ internal static class ListenerHttp
                         {
                             var type = connection.GetType();
                             if (((Stream)((((type.GetProperty("Stream")) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).GetValue(connection)) ?? throw new System.InvalidOperationException("Expected a non-null test value."))).CanRead) openStreams++;
-                            var timer = (Timer)((((type.GetField("_timer", BindingFlags.Instance | BindingFlags.NonPublic)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).GetValue(connection)) ?? throw new System.InvalidOperationException("Expected a non-null test value."));
+                            var lifetime = type.GetField("_lifetime", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(connection)
+                                ?? throw new InvalidOperationException("Missing transport lifetime owner.");
+                            var timer = lifetime.GetType().GetProperty("DeadlineTimer", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(lifetime) as Timer
+                                ?? throw new InvalidOperationException("Missing owned deadline timer.");
                             try { if (((timer) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).Change(Timeout.Infinite, Timeout.Infinite)) activeTimers++; }
                             catch (ObjectDisposedException) { }
                         }
@@ -283,14 +286,14 @@ internal static class ListenerHttp
                         listenerSocketError
                     });
                 }
-            var live = connections.Where(connection => Field(connection, "_resourcesDisposed") is not 1).Take(32)
+            var live = connections.Where(connection => Field(connection, "_protocolEnded") is not 1).Take(32)
                 .Select(connection =>
                 {
                     var stream = connection.GetType().GetProperty("Stream")?.GetValue(connection) as Stream;
                     var input = Field(connection, "_iStream");
                     return new
                     {
-                        resourcesDisposed = Field(connection, "_resourcesDisposed"),
+                        resourcesDisposed = Field(connection, "_protocolEnded"),
                         contextBound = Field(connection, "_contextBound"),
                         readBufferAllocated = Field(connection, "_buffer") is byte[],
                         reuses = connection.GetType().GetProperty("Reuses")?.GetValue(connection),

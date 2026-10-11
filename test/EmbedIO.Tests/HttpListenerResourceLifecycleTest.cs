@@ -59,7 +59,8 @@ namespace EmbedIO.Tests
         public async Task DisposingConnectionWhileReadFailsCompletesCleanupTask()
         {
             using var source = new ControlledFailingReadStream();
-            var connection = NewConnection(source);
+            using var listener = new Net.HttpListener();
+            var connection = NewConnection(source, listener);
             var reading = (Task)((((ConnectionType).GetMethod("BeginReadRequest") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             Assert.That(source.ReadStarted, Is.True);
             ((IDisposable)connection).Dispose();
@@ -74,8 +75,7 @@ namespace EmbedIO.Tests
             using var owner = new Net.HttpListener();
             owner.Start(); // No prefixes are needed for this isolated ownership check.
             using var source = new MemoryStream();
-            var connection = NewConnection(source);
-            Field("_lastListener").SetValue(connection, owner);
+            var connection = NewConnection(source, owner);
             ((IDisposable)connection).Dispose();
             Assert.That(owner.IsListening, Is.True);
         }
@@ -179,12 +179,19 @@ namespace EmbedIO.Tests
             => (Stream)(Activator.CreateInstance((Core.GetType("EmbedIO.Net.Internal.RequestStream", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
                 PrivateInstance, null, new object[] { source, buffer, offset, length, contentLength }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
-        private static object NewConnection(Stream source)
+        private static object NewConnection(Stream source, Net.HttpListener listener)
         {
             var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
             ((ConnectionType).GetField("_connectionSync", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, new object());
             Field("<Stream>k__BackingField").SetValue(connection, source);
-            Field("_timer").SetValue(connection, new Timer(_ => { }, null, Timeout.Infinite, Timeout.Infinite));
+            var gate = Field("_connectionSync").GetValue(connection) ?? throw new AssertionException("Missing session gate.");
+            var lifetimeType = Core.GetType("EmbedIO.Net.Internal.TcpSessionLifetime", true) ?? throw new AssertionException("Missing lifetime type.");
+            var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork,
+                System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+            var lifetime = Activator.CreateInstance(lifetimeType, PrivateInstance, null,
+                new object[] { gate, socket, source, (Action)(() => { }) }, null) ?? throw new AssertionException("Missing lifetime instance.");
+            Field("_lifetime").SetValue(connection, lifetime);
+            Field("_lastListener").SetValue(connection, listener);
             Field("_sTimeout").SetValue(connection, 90000);
             ((ConnectionType).GetMethod("Init", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
             return connection;
