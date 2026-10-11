@@ -290,6 +290,59 @@ is still open at this recheck; no fixed runtime has been verified. The original
 native adapter bypasses this particular `QuicStream` ownership path, but that
 does not by itself prove bounded memory for the complete native HTTP/3 engine.
 
+### Original native binding comparison
+
+The same standalone workload can now select `--provider native`. It sends no
+client payload and invokes EmbedIO's original native server binding; it does
+not select or change a production listener. A Windows .NET 10.0.12 run against
+the bundled MsQuic 2.5.10 completed all 8,000 measured streams after a 500-stream
+warm-up. Alternating write/empty rounds of 2,000 streams produced live 16-byte
+block changes of **+3, +1, +1, 0**. Each round closed all 2,000 native stream
+owners. The native provider has no runtime-private send-buffer field to inspect;
+the report explicitly labels that inspection not applicable rather than
+inventing a zero retained-array count.
+
+Loaded library SHA-256:
+`B7158D427B01C70483BB3D80C5211E387DD98E9471C8A70E4484D449DE9157E8`.
+The measured harness SHA-256 is
+`EF5EE9359AE3A0BE2FAEB0A39830C7CC8EDC360BD8369AE80E8C4F18F9D88753`;
+core SHA-256 is
+`228C4F746DBD319059D92ED56407ECA9293D9577C8147B979FC0718E025BF8BF`.
+Native/runtime modes remain separate fresh processes. This is evidence that the
+particular per-stream 16-byte retention path is absent in this completed native
+run; it does not prove bounded total native memory or HTTP/3 endurance.
+
+Failed attempts remain part of the evidence. The initial fixture used the wrong
+endpoint accessor and failed before traffic. A corrected 64-stream attempt
+stalled without a result and was deliberately stopped after process-state
+capture; a stack-only diagnostic also failed to return. No dump was taken and
+the stall's cause is unconfirmed. Reduced four-stream and phase-instrumented
+64-stream diagnostics subsequently completed, followed by the 2,000-stream
+comparison above. Those successes do not erase the stalled attempt. Native
+acceptance still requires diagnosing or reproducing that stall, broader
+resource measurements and an actual HTTP/3 soak.
+
+Raw results, progress logs, failed-attempt records and hashes are retained under
+`TestResults/reliable-reset/native-memory-*` in the isolated worktree. Progress
+records go to stderr; a separate owned-process watchdog bounds diagnostic
+attempts when asynchronous disposal cannot observe an operation token.
+The same-binary 2,000-stream runtime control subsequently reached its
+five-minute process watchdog without producing a measurement. It is retained
+as an incomplete attempt, not a passing comparison. Review identified managed
+dictionary operations under the process heap lock as a first-use/JIT/type-load
+risk; the census now accumulates counts in fixed primitive arrays and builds
+its dictionary after unlocking. Interop stubs are primed on a disposable
+private heap before the process heap is locked. This removes those lock-region
+risks but does not establish the cause of either earlier stall.
+
+A real-allocation counter check detects exactly 64 added 16-byte blocks and
+returns to baseline after freeing them (82 -> 146 -> 82). Fresh 64-stream
+provider runs with the revised census complete: runtime write rounds retain
+64 arrays each (block deltas +66/+65), while native write rounds have block
+deltas +2/0 and close all owners. Empty controls stay within +1 block. These
+are bounded functional checks; the larger paired experiment with the revised
+census remains pending. No production allocation or native release is altered.
+
 ### Repeating the attribution
 
 ```sh

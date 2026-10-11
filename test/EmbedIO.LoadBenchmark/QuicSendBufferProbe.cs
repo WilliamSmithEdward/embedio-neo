@@ -21,6 +21,9 @@ internal static class QuicSendBufferProbe
 
     internal static async Task<int> RunAsync(CommandLine options)
     {
+        var provider = options.Text("--provider", "runtime");
+        if (provider == "native") return await NativeQuicRetentionProbe.RunAsync(options).ConfigureAwait(false);
+        if (provider != "runtime") throw new ArgumentException("Provider must be runtime or native.", nameof(options));
         if (!OperatingSystem.IsWindows() || !QuicListener.IsSupported)
         {
             Control.Write("{\"skipped\":\"requires Windows with QUIC support\"}");
@@ -155,7 +158,7 @@ internal static class QuicSendBufferProbe
         return value?.GetType().GetField("_count", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(value) as int? ?? -1;
     }
 
-    private static void Settle()
+    internal static void Settle()
     {
         for (var i = 0; i < 3; i++)
         {
