@@ -118,7 +118,7 @@ jobs:
             export DOTNET_EnableCrashReportOnly=1
             export DOTNET_DbgMiniDumpName="$RUNNER_TEMP/embedio-crash-reports/crash.%p"
           fi
-          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 4634 --coverlet || status=$?
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 4648 --coverlet || status=$?
           if test "$status" = 0; then exit 0; fi
           # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
           # disposal returns (a deferred close on macOS; accepted connections on every
@@ -129,7 +129,7 @@ jobs:
           counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
           read -r total passed failed defect <<< "$counts"
           # The owner-approved exception cannot hide discovery loss.
-          test "$total" -ge 4634 || exit "$status"
+          test "$total" -ge 4648 || exit "$status"
           if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
             echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
             exit 0
@@ -399,9 +399,11 @@ jobs:
         run: |
           python3 scripts/test_compare_load_benchmark.py
           python3 scripts/test_guarded_load_benchmark.py
+          python3 scripts/test_summarize_teardown_exceptions.py
           dotnet restore test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --locked-mode
           dotnet format whitespace test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --no-restore --verify-no-changes
           dotnet build test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
+          dotnet test/EmbedIO.LoadBenchmark/bin/Release/net10.0/EmbedIO.LoadBenchmark.dll exception-accounting-check
 
   build:
     name: Build and check the NuGet packages

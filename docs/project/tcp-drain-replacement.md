@@ -141,3 +141,13 @@ post-phase health checks. It recorded 316 direct TCP connection completions, inc
 173 refusals during deliberate disruption and no timeout; its maximum recorded
 connect duration was 2.06 seconds. The longer campaign is still in progress; final
 results will be recorded here without claiming the historical cause was identified.
+
+### Integration reconciliation
+
+While the longer campaign ran, the integration branch advanced to
+`3f86edf004f246961968e0d7e936a42593ef4ea0` with separate idle-closure and teardown
+accounting work. The TCP endpoint/admission/accept actor source is unchanged.
+Both documentation entries are preserved and both discovery guards combine the new
+base's 4,639 cases with these nine cases, for a 4,648 minimum. The running campaign
+keeps its originally recorded binary, hashes and source identity. Reconciliation
+does not replace its evidence with results from an untested binary.
