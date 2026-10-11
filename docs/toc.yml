@@ -218,6 +218,8 @@
       href: project/http-engine.md
     - name: Completed response cleanup
       href: project/http-completed-response-cleanup.md
+    - name: HTTP/1 idle closure investigation
+      href: project/http1-idle-closure.md
     - name: Capsule transport development
       href: project/http-capsule-transport.md
     - name: Capsule and tunnel lifetime validation
@@ -234,6 +236,8 @@
       href: project/http3-native-lifetime-campaigns.md
     - name: Managed engine load comparison
       href: project/http-engine-load-comparison.md
+    - name: HTTP teardown exception attribution
+      href: project/http-teardown-exceptions.md
     - name: Managed engine load baseline on a second host
       href: project/http-engine-load-baseline-evo-x1.md
     - name: Listener retirement test accounting

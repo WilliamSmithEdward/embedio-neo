@@ -141,6 +141,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Native QUIC lifetime campaigns](project/http3-native-lifetime-campaigns.md): Apple Silicon lifetime and resource campaigns for the native MsQuic provider, confirmed native disposal defects and proposed fixes.
 - [Managed TCP write latency](project/http-tcp-latency.md): controlled socket-delay comparison with unchanged keep-alive and HTTP/2 reset regressions.
 - [Managed engine load comparison](project/http-engine-load-comparison.md): separate-process HTTP/1.1, HTTP/2 and HTTP/3 measurements against main and Kestrel, profiled bottlenecks and prioritized improvements.
+- [HTTP teardown exception attribution](project/http-teardown-exceptions.md): phase accounting, profiler correction and bounded protocol comparisons for issue #282.
 - [Managed engine load baseline on a second host](project/http-engine-load-baseline-evo-x1.md): noise-controlled engine baseline against main and Kestrel on a Ryzen AI 9 HX 370 host, including request-inspection routes, failures and bottleneck evidence.
 - [Listener retirement test accounting](project/listener-retirement-test-accounting.md): owner-approved v2 backend removal, retained equivalent managed cases and remaining coverage migration.
 - [Apple Silicon load and interoperability evidence](project/macos-performance.md): macOS harness portability, A/A noise, candidate versus main and Kestrel on one M5 Pro, and macOS-specific defects.
@@ -172,6 +173,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Informational responses and response trailers](guides/response-field-sections.md): optional managed response sections and ownership rules.
 
 ## Project and contribution
+
+- [HTTP/1 idle closure investigation](project/http1-idle-closure.md): TCP/TLS timeout observations, released/main controls and the pending orderly-closure policy decision.
 
 - [Cleanup after committed response completion](project/http-completed-response-cleanup.md): late cancellation, complete-wire state and preserved incomplete-response handling.
 
