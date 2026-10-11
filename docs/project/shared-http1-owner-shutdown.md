@@ -12,6 +12,8 @@ Unfinished responses, unread request bodies, tunnels and draining/closing connec
 
 ## Validation and limits
 
-Twenty-four focused cases pass locally across TCP/TLS, Stop/Dispose/graceful drain, idle/response-completion boundaries and final-owner/unfinished-response/unread-body cleanup. Shared cases issue the next request on the original connection and check its remote port; a fresh-connection retry cannot conceal closure. The existing two-server cases pass unchanged locally. Exact-head full-suite and hosted macOS validation remain required before acceptance; local results do not establish the precise timing of the captured macOS failure.
+Twenty-eight focused cases pass locally across TCP/TLS, Stop/Dispose/graceful drain, idle/response-completion boundaries active surviving-owner handoff and final-owner/unfinished-response/unread-body cleanup. Shared cases issue the next request on the original connection and check its remote port; a fresh-connection retry cannot conceal closure. The existing two-server cases pass unchanged locally. Exact-head full-suite and hosted macOS validation remain required before acceptance; local results do not establish the precise timing of the captured macOS failure.
 
 No public API, default, target, dependency, timer, retry policy, coverage setting or CI deadline changes. The discovery floor changes only to account for the added regression cases. This change targets the PR #182 integration branch and is not a release.
+
+The initial full Windows coverage run passed all 4,744 cases (zero failures, 10 expected skips) before reconciliation with the updated integration base. The reconciled solution builds both targets with zero warnings/errors; all 28 final focused controls pass. Final-source full coverage and hosted platform checks remain pending.

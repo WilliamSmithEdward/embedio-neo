@@ -1,4 +1,4 @@
-# Documentation
+﻿# Documentation
 
 EmbedIO-Neo keeps the existing `EmbedIO` namespaces and offers a small modular
 HTTP/WebSocket server, integrated CLI, JsonServer, and testing helpers.

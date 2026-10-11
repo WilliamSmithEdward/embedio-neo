@@ -41,6 +41,10 @@ namespace EmbedIO.Tests
         [TestCase(false, false, true, "drain")]
         [TestCase(true, false, false, "drain")]
         [TestCase(true, false, true, "drain")]
+        [TestCase(false, false, false, "survivor")]
+        [TestCase(false, true, false, "survivor")]
+        [TestCase(true, false, false, "survivor")]
+        [TestCase(true, true, false, "survivor")]
         public async Task RetiringAnIdleOwnerPreservesSharedTransportButFinalOwnerClosesIt(bool secure, bool dispose, bool finalOwner, string phase)
         {
             using var certificate = secure ? HttpsSmoke.CreateCertificate() : null;
@@ -61,7 +65,7 @@ namespace EmbedIO.Tests
                     && Convert.ToHexString(presented.GetRawCertData()) == Convert.ToHexString(certificate.RawData))
                 : peer.GetStream();
             if (wire is SslStream tls)
-                await tls.AuthenticateAsClientAsync("localhost");
+                await tls.AuthenticateAsClientAsync("localhost").WaitAsync(timeout.Token);
 
             var accepting = api.GetContextAsync(timeout.Token);
             if (phase == "unread")
@@ -111,6 +115,23 @@ namespace EmbedIO.Tests
                 first.Close();
                 await Head(wire, timeout.Token);
                 if (phase is "idle" or "drain") await Idle(session, timeout.Token);
+                if (phase == "survivor")
+                {
+                    accepting = front.GetContextAsync(timeout.Token);
+                    await Request(wire, prefix, "/front/value", timeout.Token);
+                    var surviving = await accepting;
+                    Assert.That(surviving.Request.RemoteEndPoint.Port, Is.EqualTo(first.Request.RemoteEndPoint.Port));
+                    Retire();
+                    Assert.That(TcpSessionProbe.Closed(session), Is.False,
+                        "A retired owner's snapshot must not abort the surviving owner's active request.");
+                    surviving.Response.StatusCode = 204;
+                    surviving.Response.ContentLength64 = 0;
+                    surviving.Close();
+                    await Head(wire, timeout.Token);
+                    front.Dispose();
+                    Assert.That(TcpSessionProbe.Closed(session), Is.True);
+                    return;
+                }
                 Retire();
             }
 
