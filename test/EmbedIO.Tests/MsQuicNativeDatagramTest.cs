@@ -461,8 +461,11 @@ namespace EmbedIO.Tests
         [TestCase("unsupported")]
         public async Task NativeDatagramsInteroperateWithAnIndependentAioquicPeer(string mode)
         {
+            var required = Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_DATAGRAM_PEER") == "1";
+            if (required) Assert.That(QuicListener.IsSupported, Is.True, "Required independent QUIC peer needs a supported native runtime.");
             if (!QuicListener.IsSupported) { Assert.Ignore("The host does not provide MsQuic."); return; }
             var python = Environment.GetEnvironmentVariable("EMBEDIO_DATAGRAM_PEER_PYTHON");
+            if (required) Assert.That(python, Is.Not.Null.And.Not.Empty, "Required independent QUIC peer is not provisioned.");
             if (string.IsNullOrEmpty(python)) { Assert.Ignore("EMBEDIO_DATAGRAM_PEER_PYTHON is not set."); return; }
             await NativeAioquicCore(python, mode);
         }

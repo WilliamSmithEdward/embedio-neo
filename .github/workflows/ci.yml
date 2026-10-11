@@ -96,6 +96,21 @@ jobs:
         run: dotnet restore EmbedIO.sln --locked-mode
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=true
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12.14'
+      - name: Provision the pinned independent QUIC datagram peer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $peerRoot = Join-Path $env:RUNNER_TEMP 'embedio-datagram-peer'
+          python -m venv $peerRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Peer environment creation failed.' }
+          $peerPython = Join-Path $peerRoot $(if ($IsWindows) { 'Scripts/python.exe' } else { 'bin/python' })
+          & $peerPython -m pip install --require-hashes --only-binary=:all: -r test/EmbedIO.Conformance/drivers/requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned peer installation failed.' }
+          "EMBEDIO_DATAGRAM_PEER_PYTHON=$peerPython" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          'EMBEDIO_REQUIRE_DATAGRAM_PEER=1' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Run the regression suite with coverage
         shell: bash
         env:
