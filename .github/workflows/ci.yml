@@ -389,6 +389,12 @@ jobs:
         run: dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes
       - name: Run the SDK and NUnit analyzers
         run: dotnet build EmbedIO.sln -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
+      - name: Validate standalone load benchmark tooling
+        run: |
+          python3 scripts/test_compare_load_benchmark.py
+          dotnet restore test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --locked-mode
+          dotnet format whitespace test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --no-restore --verify-no-changes
+          dotnet build test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
 
   build:
     name: Build and check the NuGet packages

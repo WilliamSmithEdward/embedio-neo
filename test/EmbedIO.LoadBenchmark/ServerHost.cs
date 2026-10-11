@@ -119,8 +119,10 @@ internal static class ResourceSnapshot
             managedHeapBytes = GC.GetTotalMemory(false),
             gcCommittedBytes = info.TotalCommittedBytes,
             workingSetBytes = process.WorkingSet64,
-            privateBytes = process.PrivateMemorySize64,
-            handles = process.HandleCount,
+            // macOS reports 0 for both: private bytes is unavailable (null), and open
+            // file descriptors stand in for handles.
+            privateBytes = OperatingSystem.IsMacOS() ? (long?)null : process.PrivateMemorySize64,
+            handles = OperatingSystem.IsMacOS() ? Directory.GetFileSystemEntries("/dev/fd").Length : process.HandleCount,
             threads = process.Threads.Count,
             threadPoolThreads = ThreadPool.ThreadCount,
         };

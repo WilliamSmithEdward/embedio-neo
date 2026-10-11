@@ -142,12 +142,14 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Managed engine load comparison](project/http-engine-load-comparison.md): separate-process HTTP/1.1, HTTP/2 and HTTP/3 measurements against main and Kestrel, profiled bottlenecks and prioritized improvements.
 - [Managed engine load baseline on a second host](project/http-engine-load-baseline-evo-x1.md): noise-controlled engine baseline against main and Kestrel on a Ryzen AI 9 HX 370 host, including request-inspection routes, failures and bottleneck evidence.
 - [Listener retirement test accounting](project/listener-retirement-test-accounting.md): owner-approved v2 backend removal, retained equivalent managed cases and remaining coverage migration.
+- [Apple Silicon load and interoperability evidence](project/macos-performance.md): macOS harness portability, A/A noise, candidate versus main and Kestrel on one M5 Pro, and macOS-specific defects.
 - [HTTP/2 graceful output lifetime](project/http2-drain-output-lifetime.md): response-loss evidence, committed control-write reproduction and shutdown cancellation boundaries.
 - [HTTP/2 output and dispatch performance](project/http2-performance.md): profiled small-response costs, output batching and response coalescing, before/after measurements and remaining bottlenecks.
 - [HTTP/3 request path performance](project/http3-performance.md): profiled HTTP/3 request costs, request scopes, write coalescing and QPACK feedback, before/after measurements and remaining bottlenecks.
 
 - [HTTP conformance audit](project/http-conformance.md): October 2026 standards baseline, black-box conformance and stateful campaigns, and prioritized findings.
 - [HTTP standards applicability audit](project/http-standards-applicability.md): frozen October 2026 RFC, errata, registry and draft inventory, requirement-to-evidence matrix for extensions and application APIs, and reproduced gaps.
+- [Linux glibc heap aborts](project/linux-glibc-heap-aborts.md): inconclusive double-free investigation, checked runs, CI scan, limits of attribution and configured crash capture.
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
 
