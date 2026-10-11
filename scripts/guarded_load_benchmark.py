@@ -85,12 +85,15 @@ def related(table, own_pids):
     children = {}
     for pid, ppid, _ in table:
         children.setdefault(ppid, set()).add(pid)
-    result = set(own_pids) | {os.getpid()}
+    descendants = set(own_pids) | {os.getpid()}
+    result = set(descendants)
     pid = os.getpid()
     while pid in parents and parents[pid] not in result:
         pid = parents[pid]
         result.add(pid)
-    pending = list(result)
+    # Ancestors are excluded themselves, but their other children are foreign.
+    # Expanding descendants of an ancestor would hide sibling agent jobs.
+    pending = list(descendants)
     while pending:
         for child in children.get(pending.pop(), ()):
             if child not in result:
@@ -146,6 +149,8 @@ def release(lock, owner_line):
 
 
 def kill_tree(process):
+    if process.poll() is not None:
+        return
     if platform.system() == "Windows":
         subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False)
     else:
@@ -185,6 +190,8 @@ def main():
     command = args.command[1:] if args.command and args.command[0] == "--" else args.command
     if not command:
         parser.error("a command is required after --")
+    if args.idle_seconds < 0 or args.watch_interval <= 0 or args.attempts <= 0 or args.expected_minutes <= 0:
+        parser.error("idle seconds must be nonnegative; watch interval, attempts and expected minutes must be positive")
     owner_line = f"owner: {args.owner}"
     prefix = args.output.resolve()
     prefix.parent.mkdir(parents=True, exist_ok=True)
@@ -208,6 +215,7 @@ def main():
         stdout = out.parent / (out.name + ".log")
         verdict = {"attempt": attempt, "output": str(out), "startedUtc": utc_now(), "command": attempt_command}
         reason = None
+        process = None
         try:
             with stdout.open("w", encoding="utf-8") as stream:
                 popen_kwargs = {"stdout": stream, "stderr": subprocess.STDOUT, "cwd": str(ROOT)}
@@ -229,6 +237,11 @@ def main():
                         break
                 verdict["exitCode"] = process.returncode
         finally:
+            # An exception in monitoring must not leave our child running after
+            # releasing the coordination lock. If cleanup fails, retain our lock.
+            if process is not None and process.poll() is None:
+                kill_tree(process)
+                process.wait(timeout=15)
             release(args.lock, owner_line)
         verdict["endedUtc"] = utc_now()
         if reason is None and verdict.get("exitCode") == 0:

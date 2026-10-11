@@ -12,9 +12,12 @@ client p50/p99 latency.
 """
 import argparse
 import json
+import math
 from pathlib import Path
 import statistics
 import sys
+
+from compare_load_benchmark import valid_sample
 
 METRICS = (("rps", 0), ("cpu", 1), ("alloc", 0), ("p50", 3), ("p99", 3), ("p999", 3), ("workitems", 2), ("contentions", 0))
 
@@ -36,6 +39,8 @@ def load(roots):
             seconds = window.get("elapsedSeconds") or 1
             workitems = window.get("threadPoolWorkItems")
             error = sample.get("error")
+            if error is None and not valid_sample(sample):
+                error = "incomplete or invalid core metrics"
             if markers:
                 error = (error + "; " if error else "") + "run marked " + markers[0].name
             rows.setdefault((sample["scenario"], sample["engine"]), []).append({
@@ -67,7 +72,8 @@ def fmt(value, digits=1):
 
 
 def median(samples, key):
-    values = [s[key] for s in samples if not s["error"] and s[key] is not None]
+    values = [s[key] for s in samples if not s["error"] and isinstance(s[key], (int, float))
+              and not isinstance(s[key], bool) and math.isfinite(s[key]) and s[key] >= 0]
     return statistics.median(values) if values else None
 
 
@@ -85,7 +91,7 @@ def main():
         print("round | rps | cpu us/req | alloc B/req | p50 ms | p99 ms | p99.9 ms | client cpu | background s | work items/req | contentions/s | exceptions | retained heap/handles/threads | error")
         for s in sorted(samples, key=lambda item: item["round"] or 0):
             print(f"{s['round']} | {fmt(s['rps'], 0)} | {fmt(s['cpu'])} | {fmt(s['alloc'], 0)} | {fmt(s['p50'], 3)} | {fmt(s['p99'], 3)} | {fmt(s['p999'], 3)} | "
-                  f"{fmt((s['clientcpu'] or 0) * 100, 0)}% | {fmt(s['background'])} | {fmt(s['workitems'], 2)} | {fmt(s['contentions'], 0)} | "
+                  f"{fmt(None if s['clientcpu'] is None else s['clientcpu'] * 100, 0)}% | {fmt(s['background'])} | {fmt(s['workitems'], 2)} | {fmt(s['contentions'], 0)} | "
                   f"{json.dumps(s['exceptions'], separators=(',', ':'))} | {s['heap']}/{s['handles']}/{s['threads']} | {s['error'] or ''}")
         accepted = [s for s in samples if not s["error"]]
         print("median | " + " | ".join(fmt(median(samples, key), digits) for key, digits in METRICS[:5]) + f" | accepted {len(accepted)}/{len(samples)}")
