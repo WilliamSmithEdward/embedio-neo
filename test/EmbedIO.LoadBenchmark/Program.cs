@@ -7,6 +7,9 @@ return args.FirstOrDefault() switch
     "server" => await ServerHost.RunAsync(options).ConfigureAwait(false),
     "client" => await LoadClient.RunAsync(options).ConfigureAwait(false),
     "recovery" => await Recovery.RunAsync(options).ConfigureAwait(false),
+    "endurance" => await Endurance.RunAsync(options).ConfigureAwait(false),
+    "endurance-server" => await EnduranceServer.RunAsync(options).ConfigureAwait(false),
+    "endurance-client" => await EnduranceClient.RunAsync(options).ConfigureAwait(false),
     _ => Usage(),
 };
 

@@ -313,7 +313,7 @@ internal static class Orchestrator
 
     // Only client-side TIME_WAIT (local port outside the server port range) holds
     // ephemeral ports; server-side entries do not limit new client connections.
-    private static int TimeWaitCount(bool clientSide = true)
+    internal static int TimeWaitCount(bool clientSide = true)
         => TcpConnections().Count(connection => connection.State == TcpState.TimeWait
             && (!clientSide || connection.LocalPort is < ServerPortFirst or >= ServerPortLast));
 
@@ -521,6 +521,8 @@ internal sealed class ChildProcess
 
         return new ChildProcess(process, stderrPath);
     }
+
+    internal bool HasExited => _process.HasExited;
 
     internal async Task<string?> ReadLineAsync(TimeSpan timeout)
         => await _process.StandardOutput.ReadLineAsync().WaitAsync(timeout).ConfigureAwait(false);
