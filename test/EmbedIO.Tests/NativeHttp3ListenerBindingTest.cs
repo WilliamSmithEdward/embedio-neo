@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net;
+using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Quic;
 using System.Net.Security;
@@ -20,6 +21,24 @@ namespace EmbedIO.Tests
     [SupportedOSPlatform("macos")]
     public class NativeHttp3ListenerBindingTest
     {
+        private SourceLevels _priorLevel;
+        private ConsoleTraceListener? _trace;
+        [SetUp]
+        public void CaptureCandidateConnectionFailures()
+        {
+            var source = EmbedIO.Diagnostics.Log.Source;
+            _priorLevel = source.Switch.Level;
+            _trace = new ConsoleTraceListener(true);
+            source.Listeners.Add(_trace);
+            source.Switch.Level = SourceLevels.Warning;
+        }
+        [TearDown]
+        public void RestoreCandidateDiagnostics()
+        {
+            var source = EmbedIO.Diagnostics.Log.Source;
+            source.Switch.Level = _priorLevel;
+            if (_trace != null) { source.Listeners.Remove(_trace); _trace.Dispose(); _trace = null; }
+        }
         private static IHttpListener Create(X509Certificate2 certificate)
         {
             var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3Listener");
