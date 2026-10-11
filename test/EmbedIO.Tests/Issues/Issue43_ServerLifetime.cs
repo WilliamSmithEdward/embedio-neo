@@ -172,10 +172,10 @@ namespace EmbedIO.Tests.Issues
                 server.Dispose();
                 await running.WaitAsync(Deadline);
                 Assert.That(await exited.Task.WaitAsync(Deadline), Is.True, "The handler observes disposal through its context token.");
-                if (pending != null)
+                if (raw != null)
+                    Assert.That(await ConnectionClosedAsync(raw), Is.True, "The aborted connection closes without a response.");
+                else if (pending != null)
                     Assert.That(async () => await pending, Throws.InstanceOf<HttpRequestException>().Or.InstanceOf<OperationCanceledException>());
-                else
-                    Assert.That(await ConnectionClosedAsync(raw!), Is.True, "The aborted connection closes without a response.");
             }
             finally
             {
