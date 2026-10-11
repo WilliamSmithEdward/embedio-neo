@@ -31,6 +31,14 @@ on:
         description: Run the independent .NET 10.0.12 close diagnostic on all three desktop platforms
         type: boolean
         default: false
+      quic-retirement-gate:
+        description: Run the QUIC lifetime retirement gate (raw rebind and owned restart cases, no retry tolerance or quarantine) on all three desktop platforms
+        type: boolean
+        default: false
+      quic-retirement-gate-repetitions:
+        description: Test processes the retirement gate runs per platform
+        type: number
+        default: 10
 
 permissions:
   contents: read
@@ -118,7 +126,7 @@ jobs:
             export DOTNET_EnableCrashReportOnly=1
             export DOTNET_DbgMiniDumpName="$RUNNER_TEMP/embedio-crash-reports/crash.%p"
           fi
-          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 4738 --coverlet || status=$?
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 4743 --coverlet || status=$?
           if test "$status" = 0; then exit 0; fi
           # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
           # disposal returns (a deferred close on macOS; accepted connections on every
@@ -129,7 +137,7 @@ jobs:
           counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
           read -r total passed failed defect <<< "$counts"
           # The owner-approved exception cannot hide discovery loss.
-          test "$total" -ge 4738 || exit "$status"
+          test "$total" -ge 4743 || exit "$status"
           if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
             echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
             exit 0
@@ -276,6 +284,124 @@ jobs:
         with:
           name: runtime-close-probe-${{ matrix.os }}
           path: TestResults/runtime-close-probe/
+          if-no-files-found: error
+
+  quic-retirement-gate:
+    name: QUIC lifetime retirement gate (${{ matrix.os }})
+    # Retirement evidence for issue #202: the raw runtime rebind cases and EmbedIO's
+    # own idle, served, drained and contended restart cases, repeated in separate
+    # processes, with no retry tolerance and no quarantine. A stock runtime that
+    # still keeps a disposed listener's port bound fails here by design; the
+    # retry and the quarantine may be removed only once every platform passes.
+    if: inputs.quic-retirement-gate == true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      EMBEDIO_REQUIRE_QUIC: '1'
+      EMBEDIO_QUIC_RETIREMENT_GATE: '1'
+      EMBEDIO_QUIC_RETIREMENT_GATE_OUTPUT: ${{ github.workspace }}/TestResults/quic-retirement-gate
+      EMBEDIO_SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Install pinned Linux QUIC prerequisite
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$RUNNER_TEMP/libmsquic_2.6.2_amd64.deb"
+          curl --fail --location --retry 3 --output "$package" https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/libm/libmsquic/libmsquic_2.6.2_amd64.deb
+          printf '%s  %s\n' 9ac90841ad45d99c1ff85b427d6dc7f0849291d596f0049d13db779a5a66ba4e "$package" | sha256sum --check
+          sudo apt-get update
+          sudo apt-get install --yes "$package"
+          dpkg-query --show libmsquic
+      - name: Install pinned macOS QUIC prerequisite
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_INSTALL_CLEANUP: '1'
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          bottle="$RUNNER_TEMP/libmsquic--2.6.2.arm64_sequoia.bottle.tar.gz"
+          curl --fail --location --retry 3 --header 'Authorization: Bearer QQ==' --output "$bottle" https://ghcr.io/v2/homebrew/core/libmsquic/blobs/sha256:c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55
+          printf '%s  %s\n' c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55 "$bottle" | shasum -a 256 --check
+          # Keep the pinned bottle isolated, exactly as the regression job does.
+          brew install openssl@3
+          quic_root="$RUNNER_TEMP/embedio-msquic"
+          mkdir -p "$quic_root" TestResults/quic-retirement-gate
+          tar -xzf "$bottle" -C "$quic_root"
+          quic_lib="$quic_root/libmsquic/2.6.2/lib"
+          install_name_tool -id "$quic_lib/libmsquic.2.dylib" -change '@@HOMEBREW_PREFIX@@/opt/openssl@3/lib/libcrypto.3.dylib' "$(brew --prefix openssl@3)/lib/libcrypto.3.dylib" "$quic_lib/libmsquic.2.6.2.dylib"
+          codesign --force --sign - "$quic_lib/libmsquic.2.6.2.dylib"
+          otool -L "$quic_lib/libmsquic.2.6.2.dylib" | tee TestResults/quic-retirement-gate/quic-native-macos.log
+          shasum -a 256 "$quic_lib/libmsquic.2.6.2.dylib" >> TestResults/quic-retirement-gate/quic-native-macos.log
+          printf 'DYLD_FALLBACK_LIBRARY_PATH=%s\n' "$quic_lib" >> "$GITHUB_ENV"
+      - name: Restore from the lock files
+        run: dotnet restore EmbedIO.sln --locked-mode
+      - name: Build the tests
+        run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=true
+      - name: Record the runtime and the native QUIC dependency
+        shell: bash
+        env:
+          MATRIX_OS: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          results=TestResults/quic-retirement-gate
+          mkdir -p "$results"
+          {
+            echo "source $GITHUB_SHA"
+            echo "runner $RUNNER_OS $MATRIX_OS"
+            uname -a
+            dotnet --version
+            dotnet --list-runtimes
+          } > "$results/environment.txt"
+          case "$RUNNER_OS" in
+            Linux) dpkg-query --show libmsquic >> "$results/environment.txt" ;;
+            macOS) shasum -a 256 "$DYLD_FALLBACK_LIBRARY_PATH/libmsquic.2.6.2.dylib" >> "$results/environment.txt" ;;
+            Windows)
+              # The Windows runtime bundles msquic.dll; record every copy the SDK installed.
+              pwsh -NoProfile -Command 'Get-ChildItem -Path (Join-Path (Split-Path (Get-Command dotnet).Source) "shared/Microsoft.NETCore.App") -Recurse -Filter msquic.dll | ForEach-Object { "{0} {1}" -f $_.FullName, $_.VersionInfo.ProductVersion }' >> "$results/environment.txt" ;;
+          esac
+          cat "$results/environment.txt"
+      - name: Run the retirement gate without retry tolerance or quarantine
+        shell: bash
+        env:
+          GATE_REPETITIONS: ${{ inputs.quic-retirement-gate-repetitions }}
+        run: |
+          set -euo pipefail
+          results=TestResults/quic-retirement-gate
+          printf 'repetition\texit\n' > "$results/repetitions.tsv"
+          failed=0
+          for repetition in $(seq 1 "$GATE_REPETITIONS"); do
+            status=0
+            # Four owned gate cases plus the two raw runtime cases must all be discovered.
+            dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
+              --filter 'TestCategory=QuicLifetimeRetirementGate|FullyQualifiedName~QuicRuntimeRebindTest' \
+              --minimum-expected-tests 6 --timeout 15m --report-trx --results-directory "$results/repetition-$repetition" \
+              > "$results/repetition-$repetition.log" 2>&1 || status=$?
+            printf '%s\t%s\n' "$repetition" "$status" >> "$results/repetitions.tsv"
+            if test "$status" -ne 0; then failed=1; fi
+          done
+          cat "$results/repetitions.tsv"
+          # Every repetition must pass. No exit code is tolerated and no failure is classified away.
+          test "$failed" = 0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: quic-retirement-gate-${{ matrix.os }}
+          path: TestResults/quic-retirement-gate/
           if-no-files-found: error
 
   compatibility:
@@ -457,7 +583,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [test, runtime-close-probe, compatibility, static-analysis, build, mac-catalyst, android, maui-https, appcontainer]
+    needs: [test, runtime-close-probe, quic-retirement-gate, compatibility, static-analysis, build, mac-catalyst, android, maui-https, appcontainer]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -465,15 +591,18 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
           RUNTIME_PROBE_REQUESTED: ${{ inputs.runtime-close-probe == true }}
+          RETIREMENT_GATE_REQUESTED: ${{ inputs.quic-retirement-gate == true }}
         run: |
           python3 - <<'PY'
           import json, os
           results = json.loads(os.environ['RESULTS'])
           requested = os.environ['RUNTIME_PROBE_REQUESTED'] == 'true'
+          gate_requested = os.environ['RETIREMENT_GATE_REQUESTED'] == 'true'
           for name, job in results.items():
               # All MAUI jobs are explicitly paused by the owner until re-enabled.
               paused_maui = name in {'maui-https', 'mac-catalyst', 'android'}
-              expected = 'skipped' if paused_maui or (name == 'runtime-close-probe' and not requested) else 'success'
+              optional = (name == 'runtime-close-probe' and not requested) or (name == 'quic-retirement-gate' and not gate_requested)
+              expected = 'skipped' if paused_maui or optional else 'success'
               assert job['result'] == expected, f"{name}: {job['result']}; required {expected}"
           print('All required CI jobs passed.')
           PY

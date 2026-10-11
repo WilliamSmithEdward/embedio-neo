@@ -120,6 +120,16 @@ are internal defaults in this increment, not tuned performance recommendations.
 bindings. A directly used `IHttpListener` can restart after Stop; WebServer itself
 retains its existing one-run lifecycle. Prefix changes require a stopped listener.
 A simultaneous restart while cleanup is running is rejected explicitly.
+
+Restarting on an endpoint this process released moments ago is bridged by a
+bounded retry: the native QUIC library can keep the UDP port bound briefly after
+disposal returns (a deferred socket close on macOS, and recently accepted
+connections on every platform), so a bind that fails with `AddressAlreadyInUse`
+for an endpoint released within the last second is retried every millisecond
+until that second ends. Other errors, endpoints this process did not release and
+conflicts that persist beyond the window fail as before. This is an unreleased
+workaround for a native dependency limit, tracked for retirement in
+[QUIC listener disposal, rebind and workaround retirement](../project/quic-lifetime.md).
 Application response `KeepAlive=false` initiates the connection driver's bounded
 GOAWAY drain with its existing 30-second application-triggered deadline. A
 listener drain has a separate host-specified abort deadline.
