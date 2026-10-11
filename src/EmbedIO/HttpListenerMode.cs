@@ -6,8 +6,8 @@
     public enum HttpListenerMode
     {
         /// <summary>
-        /// Use EmbedIO's internal HTTP listener implementation,
-        /// based on Mono's <c>System.Net.HttpListener</c>.
+        /// Use EmbedIO's internal HTTP/1.1 and HTTP/2 TCP engine.
+        /// TLS negotiation capabilities depend on the selected target and runtime.
         /// </summary>
         EmbedIO = 0,
 

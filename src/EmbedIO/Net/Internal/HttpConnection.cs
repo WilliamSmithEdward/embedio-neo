@@ -128,18 +128,17 @@ namespace EmbedIO.Net.Internal
 
         public RequestStream GetRequestStream(long contentLength, bool chunked = false)
         {
-            if (_iStream == null)
+            lock (_connectionSync)
             {
-                if (Volatile.Read(ref _protocolEnded) != 0)
-                    throw new ObjectDisposedException(nameof(HttpConnection));
+                if (_iStream != null) return _iStream;
+                if (_protocolEnded != 0) throw new ObjectDisposedException(nameof(HttpConnection));
                 var pending = _pendingInput;
-                _pendingInput = default;
                 var buffer = pending.Array ?? Array.Empty<byte>();
                 _iStream = chunked ? new ChunkedRequestStream(Stream, buffer, pending.Offset, pending.Count)
                     : new RequestStream(Stream, buffer, pending.Offset, pending.Count, contentLength);
+                _pendingInput = default;
+                return _iStream;
             }
-
-            return _iStream;
         }
 
 #if NETSTANDARD2_0
@@ -214,16 +213,35 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        public ResponseStream GetResponseStream() => _oStream ??= new ResponseStream(Stream, _context.HttpListenerResponse, _context.Listener?.IgnoreWriteExceptions ?? true);
+        public ResponseStream GetResponseStream()
+        {
+            lock (_connectionSync)
+            {
+                if (_oStream != null) return _oStream;
+                // Request cleanup can acquire this no-op flush view after an
+                // upgraded peer has retired the transport. Preserve that view;
+                // actual output writes still use the output owner's guards.
+                var owner = new ResponseStream(Stream, _context.HttpListenerResponse,
+                    _context.Listener?.IgnoreWriteExceptions ?? true);
+                _oStream = owner;
+                return owner;
+            }
+        }
 
         internal void SetError(string message) => _errorMessage = message;
 
         internal void ForceClose()
         {
             Volatile.Write(ref _forceClosing, 1);
-            // Abort before response disposal can synthesize headers or a final chunk.
             try { CloseTransport(true); }
-            finally { _oStream?.Dispose(); _oStream = null; }
+            finally
+            {
+                ResponseStream? output;
+                lock (_connectionSync) { output = _oStream; _oStream = null; }
+                // Retire the transport before completing the output owner so an
+                // abort cannot manufacture headers or a final chunk.
+                output?.Dispose();
+            }
         }
 
         internal Task DrainAsync() => DrainCoreAsync(null);
@@ -265,29 +283,45 @@ namespace EmbedIO.Net.Internal
         {
             if (forceClose) Volatile.Write(ref _forceClosing, 1);
             if (_http2) { CloseTransport(true); return; }
-            if (!forceClose && Interlocked.Exchange(ref _responseFinishing, 1) != 0) return;
-            if (_protocolSocket != null)
+            if (Interlocked.Exchange(ref _responseFinishing, 1) != 0)
             {
-                // Normal empty/HEAD responses must emit their final head even when
-                // an application never asks for OutputStream. Abort and upgrade
-                // cleanup do not manufacture another HTTP response.
-                if (_oStream == null && !forceClose && Volatile.Read(ref _forceClosing) == 0 && !_tunnel
-                    && _context.Response.StatusCode >= 200)
-                    _oStream ??= GetResponseStream();
-                // Dispose may call Response.Close recursively. A forced close is
-                // recorded first so that callback cannot restart the request reader.
-                var output = _oStream;
-                output?.Dispose();
-                if (output != null && !output.OutputCompleted) Volatile.Write(ref _forceClosing, 1);
-                _oStream = null;
-            }
-            if (_protocolSocket == null) return;
-
-            if (!_tunnel && !_draining && Volatile.Read(ref _forceClosing) == 0 && _context.Request.KeepAlive
-                && _context.Response.KeepAlive && _context.Response.Headers["connection"] != "close")
-            {
-                EndResponse(true);
+                if (forceClose) ForceClose();
                 return;
+            }
+            ResponseStream? output;
+            try
+            {
+                lock (_connectionSync)
+                {
+                    if (_protocolEnded != 0) return;
+                    // An unwritten ordinary response still owes its final head.
+                    // Handoffs and forced termination owe no synthetic response.
+                    if (_oStream == null && !forceClose && _forceClosing == 0 && !_tunnel
+                        && _context.Response.StatusCode >= 200)
+                        GetResponseStream();
+                    output = _oStream;
+                }
+                // Output completion can call Response.Close again. Its published
+                // claim above rejects recursion, and no application callback or
+                // transport write runs while the connection gate is held.
+                output?.Dispose();
+            }
+            catch
+            {
+                // A failed final head/output cannot leave the actor waiting for
+                // completion or allow another request onto incomplete framing.
+                CloseTransport(true);
+                throw;
+            }
+            lock (_connectionSync)
+            {
+                if (ReferenceEquals(_oStream, output)) _oStream = null;
+                if (_protocolEnded != 0) return;
+                if (output != null && !output.OutputCompleted) _forceClosing = 1;
+                var reusable = !_tunnel && !_draining && _forceClosing == 0
+                    && _context.Request.KeepAlive && _context.Response.KeepAlive
+                    && _context.Response.Headers["connection"] != "close";
+                if (reusable) { EndResponse(true); return; }
             }
             CloseTransport(true);
         }
@@ -363,13 +397,14 @@ namespace EmbedIO.Net.Internal
 
         private void Unbind()
         {
-            if (!_contextBound)
+            HttpListenerContext context;
+            lock (_connectionSync)
             {
-                return;
+                if (!_contextBound) return;
+                context = _context;
+                _contextBound = false;
             }
-
-            _epl.UnbindContext(_context);
-            _contextBound = false;
+            _epl.UnbindContext(context);
         }
 
         private void CloseSocket() => CloseTransport(false);
