@@ -256,3 +256,14 @@ HTTP/2 shutdown correction and UTF8 JSON path. The prior measured 5,018-case
 minimum remains until the new combined discovery is actually reported. Fresh
 combined-source validation and every exact-head check are still required before
 integration.
+
+The current review is reconciled with engine `d10dedc`, including the approved
+Microsoft-backend removal and the WebSocket initialization correction. Its
+full Windows coverage run reports 4,521 cases (4,519 passed, two existing skips,
+zero failures, 3m13s). This verifies the new floor as the current 4,487 cases
+plus these 34 ordinary regressions. Both library targets and the solution build
+with zero warnings/errors; formatting and source guards pass. The retired
+Microsoft path is no longer part of this combined source, while the historical
+glibc heap-abort cause remains unconfirmed. Historical allocation measurements
+above do not measure this refreshed head. Fresh exact-head hosted checks remain
+required before integration.
