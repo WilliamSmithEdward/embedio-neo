@@ -14,8 +14,7 @@ internal static class ListenerQueue
         {
             using var listener = new EmbedIO.Net.HttpListener();
             listener.Start(); // No prefixes: exercise the accept queue without opening sockets.
-            var queue = (System.Collections.IDictionary)((((typeof(EmbedIO.Net.HttpListener)
-                .GetField("_ctxQueue", BindingFlags.Instance | BindingFlags.NonPublic)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).GetValue(listener)) ?? throw new System.InvalidOperationException("Expected a non-null test value."));
+            var queue = ListenerInventory.Pending(listener);
             // Register through the listener so the gate measures its real admission path.
             var register = ((typeof(EmbedIO.Net.HttpListener).GetMethod("RegisterContext", BindingFlags.Instance | BindingFlags.NonPublic))
                 ?? throw new System.InvalidOperationException("Expected a non-null test value."))

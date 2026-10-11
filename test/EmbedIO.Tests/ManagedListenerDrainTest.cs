@@ -130,8 +130,7 @@ namespace EmbedIO.Tests
             server.Listener.Start();
             using var client = Client(http2);
             var requests = Enumerable.Range(0, http2 ? 8 : 1).Select(_ => client.GetStringAsync(prefix)).ToArray();
-            var queue = (IDictionary)(typeof(Net.HttpListener).GetField("_ctxQueue", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(server.Listener)
-                ?? throw new AssertionException("Missing pending context queue."));
+            var queue = TestObjects.ListenerFrontendProbe.Pending(server.Listener);
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             while (queue.Count != requests.Length) await Task.Delay(10, stop.Token);
             var drain = server.DrainAsync(TimeSpan.FromSeconds(5));

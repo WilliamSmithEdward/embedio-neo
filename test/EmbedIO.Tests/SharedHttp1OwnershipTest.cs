@@ -26,8 +26,7 @@ namespace EmbedIO.Tests
             using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false, MaxConnectionsPerServer = 1 });
             var firstRequest = client.GetStringAsync(prefix, deadline.Token);
             var first = await owner.GetContextAsync(deadline.Token);
-            var connections = (IDictionary)(typeof(Net.HttpListener).GetField("_connections", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(owner)
-                ?? throw new AssertionException("Missing connection ownership table."));
+            var connections = TestObjects.ListenerFrontendProbe.Sessions(owner);
             var captured = connections.Keys.Cast<object>().Single();
             await first.SendStringAsync("owner", "text/plain", WebServer.Utf8NoBomEncoding);
             first.Close();

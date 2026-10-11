@@ -1,6 +1,10 @@
-# Changelog
+﻿# Changelog
 
 ## [Unreleased]
+- Replace the inherited listener frontend and prefix adapter with independently
+  authored lifecycle coordination and accept generations. Preserve valid public
+  behavior while preventing a stopped accept from claiming a restarted listener's
+  request, and a stale context withdrawal from removing a different context.
 - Replace inherited per-connection transport cleanup with an independently authored
   lifetime owner. Drain waits for transport and protocol detachment, recoverable
   cleanup faults do not skip later resources, and stopped or renewed request
