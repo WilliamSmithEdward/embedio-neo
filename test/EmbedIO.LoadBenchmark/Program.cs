@@ -7,6 +7,7 @@ return args.FirstOrDefault() switch
     "server" => await ServerHost.RunAsync(options).ConfigureAwait(false),
     "client" => await LoadClient.RunAsync(options).ConfigureAwait(false),
     "recovery" => await Recovery.RunAsync(options).ConfigureAwait(false),
+    "exception-accounting-check" => await ExceptionAccountingCheck.RunAsync().ConfigureAwait(false),
     _ => Usage(),
 };
 

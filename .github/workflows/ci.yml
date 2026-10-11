@@ -399,9 +399,11 @@ jobs:
         run: |
           python3 scripts/test_compare_load_benchmark.py
           python3 scripts/test_guarded_load_benchmark.py
+          python3 scripts/test_summarize_teardown_exceptions.py
           dotnet restore test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --locked-mode
           dotnet format whitespace test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --no-restore --verify-no-changes
           dotnet build test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
+          dotnet test/EmbedIO.LoadBenchmark/bin/Release/net10.0/EmbedIO.LoadBenchmark.dll exception-accounting-check
 
   build:
     name: Build and check the NuGet packages
