@@ -35,9 +35,13 @@ namespace EmbedIO.Net.Internal
         }
         internal static string Unquote(string value)
         {
-            var trimmed = value.Trim();
-            return trimmed.Length >= 2 && trimmed[0] == '"' && trimmed[trimmed.Length - 1] == '"'
-                ? trimmed.Substring(1, trimmed.Length - 2).Trim() : trimmed;
+            var opening = value.IndexOf("\"", StringComparison.Ordinal);
+            if (opening < 0) return value.Trim();
+            // Attribute consumers historically use the closing quote's absolute
+            // offset as the retained length. Preserve malformed-input behavior,
+            // including the range error for a lone quote at the start.
+            var retainedLength = value.LastIndexOf('"') - 1;
+            return value.Substring(opening + 1, retainedLength).Trim();
         }
     }
 }

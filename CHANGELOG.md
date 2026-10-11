@@ -1,6 +1,9 @@
 ﻿# Changelog
 
 ## [Unreleased]
+- Replace inherited prefix, cookie and header-string helpers with original code.
+  Correct CommentURL and comma-free Expires attribute parsing while preserving
+  cookie identity and lookup ordering; see the Neo v1-to-v2 migration guide.
 - Replace inherited HTTP/1 context completion with independently authored
   ownership. Repeated/concurrent close dispatches completion callbacks once,
   preserving their order and awaited tunnel cleanup; see the
