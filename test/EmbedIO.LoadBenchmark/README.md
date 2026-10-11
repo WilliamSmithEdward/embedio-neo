@@ -98,6 +98,26 @@ dotnet <runner>/EmbedIO.LoadBenchmark.dll recovery --output <fresh dir> --engine
   [--sustain-minutes 0] [--snapshot-interval 60] [--server-dir <runner copy>]
 ```
 
+## Paced QUIC churn
+
+`quic-churn` starts one HTTP/3 server process per engine and schedules QUIC connections
+open-loop at each `--rates` value. Every attempt is timed separately for the handshake,
+one validated `GET /plaintext` on a new request stream (a minimal static-table QPACK
+client), and the graceful close. Failures are kept with their phase, and nothing is
+retried. `--mixed-rate`/`--large-rate` add paced small and 1 MiB GETs on warm
+`HttpClient` HTTP/3 connections. `--burn-threads` runs a separate CPU-spinning process as
+a contention control. Each run writes `environment.json` (hashes, idle baseline), one JSON
+per engine run with a per-second CPU timeline, and `summary.md`.
+
+```sh
+dotnet <runner>/EmbedIO.LoadBenchmark.dll quic-churn --output <fresh dir> [--engines embedio,kestrel] \
+  [--rates 4,16,64] [--phase-seconds 30] [--idle 5] [--rounds 1] [--mixed-rate 0] [--large-rate 0] \
+  [--mixed-connections 4] [--max-outstanding 512] [--handshake-timeout <seconds>] [--burn-threads 0] \
+  [--server-cpus 0-7] [--client-cpus 8-15] [--source-revision <text>] [--server-dir <runner copy>]
+```
+
+See [HTTP/3 handshake and latency on a less loaded host](../../docs/project/http3-quiet-host-validation.md).
+
 ## Comparing results against A/A noise
 
 `scripts/compare_load_benchmark.py <result dir> --reference baseline --aa <A/A dir>` prints each
