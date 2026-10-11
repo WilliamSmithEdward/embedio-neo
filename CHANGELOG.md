@@ -1,6 +1,10 @@
 ﻿# Changelog
 
 ## [Unreleased]
+- Replace inherited HTTP/1 context completion with independently authored
+  ownership. Repeated/concurrent close dispatches completion callbacks once,
+  preserving their order and awaited tunnel cleanup; see the
+  [Neo v2 migration guide](docs/compatibility/neo-v1-to-v2.md#response-statuses-output-and-shutdown).
 - Replace inherited HTTP/1 response metadata with independently authored state
   and cookie formatting while retaining the bounded header encoder. Suppress
   attempted 205 response content and send zero-length framing, matching HTTP/2

@@ -7973,3 +7973,45 @@ integration. Discovery minimums are reconciled to 4,673.
 This replaces response metadata, not the remaining context/prefix/cookie-parser
 helpers or native HTTP/3 extension application integration. Program #181 remains
 open; no release or comparative whole-server speedup is claimed.
+### Independent HTTP/1 request completion and handoff
+
+The independently authored context now coordinates completion, callback
+registration and protocol handoff under one private state gate. Ordinary close
+claims completion once and detaches the callback stack. Response closure and
+callbacks run outside that gate, retaining the existing last-registered-first
+order. Repeated or concurrent close cannot dispatch the same callbacks again;
+late registration still fails. Request-local item publication, route/session/user,
+cancellation, MIME providers and borrowed endpoint/transport views remain.
+
+Tunnel completion is published once before its worker begins outside the gate.
+It awaits handshake and owned-stream cleanup before response/callback completion;
+failed or canceled handshakes still reach cleanup. WebSocket and tunnel handoffs
+share one acceptance claim. The request identity is assigned before constructing
+the response, so disposed-response guards retain the actual context identity.
+No receive queue cap, backpressure policy, body deadline or public signature is
+introduced by this replacement.
+
+Two controlled real-listener cases fail on the preceding context: repeated close
+runs callbacks twice, and a concurrent close runs them while the first completion
+callback is still pending. Both pass with the new ownership transition. Existing
+callback order, collection, tunnel, WebSocket, shared HTTP/1 and allocation
+regressions pass in the 132-case focused set. Both core targets build without
+warnings. Final full Windows validation reports 4,675 cases: 4,668 passed, seven
+expected skips and zero failures in 3m50s, with QUIC and the independent datagram
+peer required. Both focused assets pass 132/132 on the installed .NET 10 host;
+this is not .NET Framework runtime evidence. The rebuilt standalone performance
+harness, formatting and both source guards pass. All ten unchanged allocation,
+body-consumption, wire and HTTP/HTTPS cleanup gates pass. Fresh exact-head hosted
+checks still precede integration; discovery minimums are 4,675.
+
+This replaces the context lifecycle, not the remaining prefix/cookie-parser/string
+helpers or native HTTP/3 extension application integration. Program #181 remains
+open. No release or comparative whole-server speedup is claimed.
+The first retained-asset run exposed five existing fixture failures: three direct
+calls to the modern-only HttpTunnel.DisposeAsync entry point and two related
+handler timeouts. The preceding core reproduces the same five failures. The test
+fixture now resolves that public modern operation when present, or uses the
+retained asset's public CloseAsync operation. Task identity, failure propagation,
+disposal counts, assertions, iterations and deadlines remain unchanged. The
+modern and actual netstandard2.0 focused sets both pass 132/132 without skips.
+This changes test targeting, not the shipped tunnel API.
