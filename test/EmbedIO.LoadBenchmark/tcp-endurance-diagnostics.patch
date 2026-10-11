@@ -1,0 +1,165 @@
+--- a/EnduranceClient.cs
++++ b/EnduranceClient.cs
+@@ -165,6 +165,7 @@
+ 
+     internal void Failed(Exception exception, bool disrupted, double atSeconds)
+     {
++        TcpEvidence.Write(new { kind = "workload-error", workload = Workload.Name, utc = DateTime.UtcNow, disrupted, atSeconds, error = exception.ToString() });
+         lock (_gate)
+         {
+             if (disrupted)
+@@ -469,7 +470,20 @@
+         var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+         try
+         {
+-            await socket.ConnectAsync(IPAddress.Loopback, tls ? run.TlsPort : run.PlainPort, cancellation).ConfigureAwait(false);
++            var id = TcpEvidence.Next();
++            var began = Stopwatch.GetTimestamp();
++            var port = tls ? run.TlsPort : run.PlainPort;
++            TcpEvidence.Write(new { kind = "tcp-connect-start", id, utc = DateTime.UtcNow, port, tls, disrupted = run.Disrupted });
++            try
++            {
++                await socket.ConnectAsync(IPAddress.Loopback, port, cancellation).ConfigureAwait(false);
++                TcpEvidence.Write(new { kind = "tcp-connect-end", id, utc = DateTime.UtcNow, port, tls, elapsedMs = Stopwatch.GetElapsedTime(began).TotalMilliseconds, outcome = "connected", local = socket.LocalEndPoint?.ToString(), disrupted = run.Disrupted });
++            }
++            catch (Exception error)
++            {
++                TcpEvidence.Write(new { kind = "tcp-connect-end", id, utc = DateTime.UtcNow, port, tls, elapsedMs = Stopwatch.GetElapsedTime(began).TotalMilliseconds, outcome = error.ToString(), disrupted = run.Disrupted });
++                throw;
++            }
+             Stream stream = new NetworkStream(socket, ownsSocket: false);
+             if (tls)
+             {
+--- a/EnduranceServer.cs
++++ b/EnduranceServer.cs
+@@ -281,6 +281,7 @@
+             }
+         }
+ 
++        foreach (var entry in _servers) TcpEvidence.Remember(entry.Server.Listener, Generation, "started");
+         return clock.Elapsed.TotalMilliseconds;
+     }
+ 
+@@ -289,6 +290,7 @@
+     public async Task<object> DrainAsync(TimeSpan timeout)
+     {
+         var clock = Stopwatch.StartNew();
++        TcpEvidence.Record("before-drain");
+         var inFlightAtStart = counters.InFlight;
+         var drains = _servers.Select(async entry =>
+         {
+@@ -318,6 +320,7 @@
+         }).ToArray();
+         var results = await Task.WhenAll(drains).ConfigureAwait(false);
+         var drainedAt = clock.Elapsed.TotalMilliseconds;
++        TcpEvidence.Record("drain-completed");
+         var inFlightAfter = counters.InFlight;
+         Dispose();
+         return new { timeoutSeconds = timeout.TotalSeconds, inFlightAtStart, inFlightAfterDrain = inFlightAfter, totalMilliseconds = drainedAt, disposedMilliseconds = clock.Elapsed.TotalMilliseconds, listeners = results };
+@@ -358,6 +361,7 @@
+         foreach (var entry in _servers)
+         {
+             entry.Server.Dispose();
++            TcpEvidence.Record("owner-disposed");
+             entry.Stop.Dispose();
+         }
+ 
+@@ -407,6 +411,7 @@
+     public async Task<object> DrainAsync(TimeSpan timeout)
+     {
+         var clock = Stopwatch.StartNew();
++        TcpEvidence.Record("before-drain");
+         var inFlightAtStart = counters.InFlight;
+         string? error = null;
+         using (var deadline = new CancellationTokenSource(timeout))
+@@ -422,6 +427,7 @@
+         }
+ 
+         var drained = clock.Elapsed.TotalMilliseconds;
++        TcpEvidence.Record("drain-completed");
+         var inFlightAfter = counters.InFlight;
+         await StopAsync().ConfigureAwait(false);
+         return new
+@@ -469,6 +475,7 @@
+ 
+     internal object Capture(bool forced = false)
+     {
++        TcpEvidence.Record("resource-sample");
+         using var process = Process.GetCurrentProcess();
+         var info = GC.GetGCMemoryInfo(GCKind.Any);
+         var sockets = new Dictionary<string, int>(StringComparer.Ordinal);
+--- /dev/null
++++ b/TcpEvidence.cs
+@@ -0,0 +1,72 @@
++using System.Collections;
++using System.Collections.Concurrent;
++using System.Diagnostics;
++using System.Reflection;
++using System.Net.Sockets;
++using System.Text.Json;
++using EmbedIO;
++
++internal static class TcpEvidence
++{
++    private static long _next;
++    private static readonly ConcurrentDictionary<object, int> Owners = new();
++    internal static long Next() => Interlocked.Increment(ref _next);
++    internal static void Write(object value) => Console.Error.WriteLine(JsonSerializer.Serialize(value));
++    internal static void Remember(IHttpListener listener, int generation, string phase)
++    {
++        var owner = (object)listener;
++        var sessionField = owner.GetType().GetField("_session", BindingFlags.Instance | BindingFlags.NonPublic);
++        if (sessionField != null)
++        {
++            var session = sessionField.GetValue(owner) ?? throw new InvalidOperationException("No combined session.");
++            owner = session.GetType().GetField("_tcp", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(session)
++                ?? throw new InvalidOperationException("No combined TCP owner.");
++        }
++        var type = typeof(EmbedIO.Net.EndPointManager);
++        var gate = type.GetField("RegistrationLock", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
++            ?? throw new InvalidOperationException("Missing registration gate.");
++        lock (gate)
++        {
++            var map = (IDictionary)(type.GetField("Registrations", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
++                ?? throw new InvalidOperationException("Missing registration map."));
++            var prefixes = (IDictionary)(map[owner] ?? throw new InvalidOperationException("Missing registered owner."));
++            foreach (IEnumerable endpoints in prefixes.Values)
++                foreach (var endpoint in endpoints) Owners[endpoint] = generation;
++        }
++        Record(phase);
++    }
++    private static string? Local(Socket socket)
++    {
++        try { return socket.SafeHandle.IsClosed ? "closed" : socket.LocalEndPoint?.ToString(); }
++        catch (ObjectDisposedException) { return "closed-during-snapshot"; }
++    }
++    internal static void Record(string phase)
++    {
++        ThreadPool.GetAvailableThreads(out var workers, out var io);
++        foreach (var (endpoint, generation) in Owners)
++        {
++            var type = endpoint.GetType();
++            var socket = (Socket)(type.GetProperty("ListeningSocket", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint)
++                ?? throw new InvalidOperationException("Missing TCP socket."));
++            var task = (Task)(type.GetField("_acceptWorker", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint)
++                ?? throw new InvalidOperationException("Missing TCP worker."));
++            var args = new object?[] { null };
++            var gotPending = type.GetMethod("TryPendingConnections", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(endpoint, args) as bool?;
++            Write(new
++            {
++                kind = "tcp-endpoint",
++                utc = DateTime.UtcNow,
++                phase,
++                generation,
++                id = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(endpoint),
++                local = Local(socket),
++                closed = socket.SafeHandle.IsClosed,
++                worker = task.Status.ToString(),
++                fault = task.Exception?.ToString(),
++                pending = gotPending == true && args[0] is Array pending ? pending.Length : -1,
++                availableWorkers = workers,
++                availableIo = io
++            });
++        }
++    }
++}

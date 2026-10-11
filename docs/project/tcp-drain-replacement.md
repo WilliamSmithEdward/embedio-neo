@@ -92,3 +92,52 @@ TCP/backlog evidence and host scheduling/resource evidence. If it recurs, identi
 the mechanism and add its deterministic regression before changing production
 behavior. A bounded clean run is useful coverage, not proof that intermittent
 connect timeouts have been eliminated.
+
+## Longer mixed-load campaign
+
+The owner authorized a longer current-engine investigation after the bounded
+regressions did not reproduce the reported timeouts. The test-only staging script
+`scripts/prepare_tcp_endurance.py` copies the existing PR #276 harness from pinned
+commit `d6097ea7a28f40266171e77537e10f8160c1bda9` and applies the committed
+`test/EmbedIO.LoadBenchmark/tcp-endurance-diagnostics.patch`. It references the
+checkout's core without changing production code or modifying the original harness
+branch. A new output label is required; previous evidence is never overwritten.
+
+```powershell
+git fetch origin d6097ea7a28f40266171e77537e10f8160c1bda9
+python scripts/prepare_tcp_endurance.py tcp-investigation
+dotnet restore TestResults/tcp-investigation/EnduranceHarness/EmbedIO.LoadBenchmark.csproj --locked-mode
+dotnet build TestResults/tcp-investigation/EnduranceHarness/EmbedIO.LoadBenchmark.csproj -c Release --no-restore
+dotnet TestResults/tcp-investigation/EnduranceHarness/bin/Release/net10.0/EmbedIO.LoadBenchmark.dll endurance --output TestResults/tcp-investigation/campaign --plan "idle:10,load:steady:120,drain:mixed:90:16,load:steady:120,idle:40,load:health:10" --settle 10 --rate-scale 0.25 --interval-seconds 10 --revision <tested-checkout-commit>
+```
+
+This deliberately exercises HTTP/1.1, HTTP/1.1 over TLS, HTTP/2 cleartext/TLS and
+HTTP/3 concurrently, plus cancellations, resets, slow readers/writers, partial
+heads, idle connections and WebSocket traffic. Each cycle replaces listeners while
+the client workload is still running, then validates healthy subsequent exchanges.
+The harness preserves its original request limits and drain/operation deadlines.
+Separate failed exchanges are retained; continuing the workload is not an automatic
+retry of a failed exchange. It does not infer resolution from a green aggregate.
+
+Extra JSON records in the client stderr artifacts pair every direct HTTP/1 TCP
+connect start/end, including exact destination port, local endpoint on success,
+UTC timestamp, monotonic duration, TLS/disruption state and full failure stack.
+Every workload error is recorded, including errors that the original harness
+categorizes as occurring during intentional disruption. A TCP timeout must be
+investigated even in that category. Server stderr contains listener-generation,
+endpoint identity, bound address, pending-session count, accept-worker state,
+thread-pool availability and stop/drain/dispose snapshots. The normal five-second
+resource samples retain per-port TCP states and host CPU/resource evidence.
+
+Instrumentation deliberately retains endpoint objects to inspect their completed
+workers after retirement. This makes the campaign unsuitable for attributing
+retained-memory growth or drawing allocation/throughput conclusions. Timing may also
+be affected by tracing and other activity on the shared host. Server stderr is
+collected when the server exits; resource samples and completed client reports are
+available during the run. This is runtime/ownership evidence, not a TCP packet capture.
+
+The local smoke campaign passed one twenty-second mixed-load drain cycle plus
+post-phase health checks. It recorded 316 direct TCP connection completions, including
+173 refusals during deliberate disruption and no timeout; its maximum recorded
+connect duration was 2.06 seconds. The longer campaign is still in progress; final
+results will be recorded here without claiming the historical cause was identified.
