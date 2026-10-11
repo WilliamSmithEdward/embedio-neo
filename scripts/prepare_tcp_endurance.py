@@ -42,7 +42,9 @@ def prepare(label):
     project.write_text(text.replace("../../src/EmbedIO/EmbedIO.csproj", "../../../src/EmbedIO/EmbedIO.csproj"), encoding="utf-8-sig")
     patch = ROOT / "test" / "EmbedIO.LoadBenchmark" / "tcp-endurance-diagnostics.patch"
     directory = destination.relative_to(ROOT).as_posix()
-    command = ["git", "apply", f"--directory={directory}", "--whitespace=error", str(patch)]
+    normalized_patch = destination / "tcp-endurance-diagnostics.patch"
+    normalized_patch.write_bytes(patch.read_text(encoding="utf-8").encode("utf-8"))
+    command = ["git", "apply", f"--directory={directory}", "--whitespace=error", str(normalized_patch)]
     subprocess.run(command[:2] + ["--check"] + command[2:], cwd=ROOT, check=True)
     subprocess.run(command, cwd=ROOT, check=True)
     print(destination)
