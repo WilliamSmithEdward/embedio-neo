@@ -8052,4 +8052,12 @@ evidence is retained. No whole-server comparative speedup is claimed.
 The first resource-gate pass found quote extraction allocating 376 B against the
 360 B wire budget. Single-result extraction retains the same quote behavior and
 passes at 336 B; budgets and assertions are unchanged. The final-source full suite
-is being rechecked after that allocation correction.
+passes 4,679 reported / 4,672 passed / seven expected skips / zero failures in
+3m50.459s. The actual retained core confirms 267 passed / nine unsupported HTTP/3
+transport skips / zero failures (276 reported).
+
+One retained run inherited the modern-only EMBEDIO_REQUIRE_QUIC=1 environment
+and failed four capability checks because that asset has no HTTP/3 provider.
+Its log/TRX are preserved. The subsequent retained run uses the existing target
+capability policy and passes; no filter, assertion or fixture was changed. Both
+modern full runs retain required QUIC and independent-peer coverage.
