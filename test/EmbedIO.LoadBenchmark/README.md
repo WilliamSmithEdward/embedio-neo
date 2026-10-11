@@ -357,7 +357,7 @@ compared across machines; compare revisions only on the same host with the same 
 
 ## QUIC send-buffer probe
 
-`quic-send-buffer-probe [--streams 2000]` isolates the System.Net.Quic leak found in
+`quic-send-buffer-probe [--provider runtime] [--streams 2000]` isolates the System.Net.Quic leak found in
 issue #278 (see docs/project/http-engine-endurance.md) without HTTP. One process hosts a
 loopback QUIC listener and client; the server answers each stream with one byte or
 with an empty, completing write, in alternating rounds. After all streams and both
@@ -366,3 +366,14 @@ process heap and how many disposed streams still own their `QUIC_BUFFER` array. 
 affected runtime the one-byte rounds grow by one block per stream and every stream
 still owns its array; the empty rounds do not grow. Windows only; elsewhere it prints
 a skip record.
+
+`--provider native` runs the same empty-client and write-or-empty-server pattern
+through EmbedIO's original native binding. This requires the .NET 10 core and
+Windows. It records closed native streams, live 16-byte block deltas and the
+loaded MsQuic path/version/hash; runtime-private send-buffer inspection is
+explicitly not applicable to this provider. It does not select a production
+listener or constitute an HTTP/3 endurance campaign. Use `--progress` for phase
+records on stderr and `--warmup-streams 4` for a reduced diagnostic warm-up; the
+native default remains 500 warm-up streams. Preserve failed or stalled attempts
+alongside subsequent runs. Missing native heap counters fail the measurement;
+unknown runtime-private fields produce an inconclusive count and nonzero exit.

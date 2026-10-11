@@ -657,6 +657,41 @@ internal static class NativeHeaps
     internal static long DefaultHeapBusyBlocks(uint size)
         => WalkBusyBlocks(NativeMethods.GetProcessHeap()) is { } sizes ? sizes.GetValueOrDefault(size) : -1;
 
+    internal static int CheckCounter()
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Heap counter check requires Windows.");
+        var heap = NativeMethods.GetProcessHeap();
+        var allocations = new IntPtr[64];
+        // Warm census and allocation stubs before the measured baseline.
+        var warm = NativeMethods.HeapAlloc(heap, 0, 16);
+        if (warm == IntPtr.Zero) throw new OutOfMemoryException();
+        if (!NativeMethods.HeapFree(heap, 0, warm)) throw new InvalidOperationException("Warm allocation was not freed.");
+        _ = DefaultHeapBusyBlocks(16);
+        var before = DefaultHeapBusyBlocks(16);
+        long during;
+        try
+        {
+            for (var index = 0; index < allocations.Length; index++)
+            {
+                allocations[index] = NativeMethods.HeapAlloc(heap, 0, 16);
+                if (allocations[index] == IntPtr.Zero) throw new OutOfMemoryException();
+            }
+            during = DefaultHeapBusyBlocks(16);
+        }
+        finally
+        {
+            var freeFailed = false;
+            foreach (var allocation in allocations)
+                if (allocation != IntPtr.Zero && !NativeMethods.HeapFree(heap, 0, allocation))
+                    freeFailed = true;
+            if (freeFailed) throw new InvalidOperationException("Counter-check allocation was not freed.");
+        }
+        var after = DefaultHeapBusyBlocks(16);
+        var passed = before >= 0 && during >= before + allocations.Length && after >= 0 && during - after >= allocations.Length;
+        Control.Write(JsonSerializer.Serialize(new { before, during, after, allocations = allocations.Length, passed }));
+        return passed ? 0 : 1;
+    }
+
     // The walk holds the heap lock. If a GC suspended this thread meanwhile and the runtime
     // needed the same heap during that GC, the process would deadlock; one quiesced
     // snapshot stalled every managed thread that way. No GC may start during the walk, so
@@ -665,7 +700,23 @@ internal static class NativeHeaps
     // the region, which is why only quiesced snapshots walk.
     private static Dictionary<uint, long>? WalkBusyBlocks(IntPtr heap)
     {
-        var sizes = new Dictionary<uint, long>(8192);
+        // No collection growth, comparer initialization or generic method calls
+        // while the process heap is locked. Build the dictionary after unlock.
+        const int capacity = 16384;
+        var keys = new uint[capacity];
+        var counts = new long[capacity];
+        var overflow = false;
+        // Resolve P/Invoke stubs on a private heap before locking the process
+        // heap; a first-use loader allocation must not participate in that lock.
+        var scratch = NativeMethods.HeapCreate(0, 0, 0);
+        if (scratch == IntPtr.Zero) return null;
+        try
+        {
+            if (!NativeMethods.HeapLock(scratch)) return null;
+            try { var entry = default(NativeMethods.HeapEntry); _ = NativeMethods.HeapWalk(scratch, ref entry); }
+            finally { _ = NativeMethods.HeapUnlock(scratch); }
+        }
+        finally { _ = NativeMethods.HeapDestroy(scratch); }
         if (!GC.TryStartNoGCRegion(16 * 1024 * 1024)) return null;
         try
         {
@@ -676,7 +727,16 @@ internal static class NativeHeaps
                 while (NativeMethods.HeapWalk(heap, ref entry))
                 {
                     if ((entry.Flags & NativeMethods.BusyFlag) == 0) continue;
-                    sizes[entry.DataSize] = sizes.GetValueOrDefault(entry.DataSize) + 1;
+                    var slot = (int)(unchecked(entry.DataSize * 2654435761u) & (capacity - 1));
+                    var start = slot;
+                    while (counts[slot] != 0 && keys[slot] != entry.DataSize)
+                    {
+                        slot = (slot + 1) & (capacity - 1);
+                        if (slot == start) { overflow = true; break; }
+                    }
+                    if (overflow) break;
+                    keys[slot] = entry.DataSize;
+                    counts[slot]++;
                 }
             }
             finally
@@ -689,6 +749,10 @@ internal static class NativeHeaps
             if (GCSettings.LatencyMode == GCLatencyMode.NoGCRegion) GC.EndNoGCRegion();
         }
 
+        if (overflow) return null; // An incomplete census is unavailable.
+        var sizes = new Dictionary<uint, long>();
+        for (var index = 0; index < capacity; index++)
+            if (counts[index] != 0) sizes.Add(keys[index], counts[index]);
         return sizes;
     }
 
@@ -696,6 +760,24 @@ internal static class NativeHeaps
 
     private static class NativeMethods
     {
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern IntPtr HeapAlloc(IntPtr heap, uint flags, nuint bytes);
+
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool HeapFree(IntPtr heap, uint flags, IntPtr allocation);
+
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern IntPtr HeapCreate(uint flags, nuint initial, nuint maximum);
+
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool HeapDestroy(IntPtr heap);
+
         [StructLayout(LayoutKind.Sequential)]
         internal struct HeapSummaryData
         {
