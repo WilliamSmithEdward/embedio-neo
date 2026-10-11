@@ -102,7 +102,7 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
         }
     }
 
-    private static async Task HandleAsync(IHttpContext context)
+    internal static async Task HandleAsync(IHttpContext context)
     {
         var response = context.Response;
         if (!BenchmarkRoute.TryParse(context.Request.Url.AbsolutePath, out var route)) throw HttpException.NotFound();
@@ -202,7 +202,7 @@ internal sealed class KestrelServer(ServerSettings settings) : IBenchmarkServer
         if (_application is not null) await _application.DisposeAsync().ConfigureAwait(false);
     }
 
-    private static async Task HandleAsync(HttpContext context)
+    internal static async Task HandleAsync(HttpContext context)
     {
         var response = context.Response;
         if (!BenchmarkRoute.TryParse(context.Request.Path.Value ?? string.Empty, out var route))
