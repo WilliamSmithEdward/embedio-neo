@@ -94,6 +94,7 @@ restart reported the wrong reason.
 | In-flight handler after token cancellation | Handler observes cancellation before `RunAsync` completes |
 | In-flight handler after `Listener.Stop()` | `RunAsync` completes normally; the handler is canceled afterwards |
 | Drain with one in-flight request | New connection refused, in-flight response delivered, drain and run complete |
+| `TestWebServer` started and disposed 100 times | Disposal racing run completion never throws; the lifetime source is released only after both have canceled it |
 
 Independent servers and shutdown during concurrent traffic remain covered by the
 existing Neo #595 fixtures. MAUI platform validation is paused in CI, so no app

@@ -31,7 +31,7 @@ namespace EmbedIO
         private WebServerState _state = WebServerState.Created;
         private int _runStarted;
         private int _disposed;
-        private int _lifetimeReleased;
+        private int _lifetimeArrivals;
 
         // Owned by the server: linked to the RunAsync token and canceled when the
         // server is disposed or RunAsync completes, so modules, session purging and
@@ -258,7 +258,7 @@ namespace EmbedIO
                 // context token, ends with the server rather than running unobserved.
                 CancelLifetime(lifetime);
                 State = WebServerState.Stopped;
-                if (Volatile.Read(ref _disposed) != 0) ReleaseLifetime();
+                ArriveAtLifetimeEnd();
             }
         }
 
@@ -272,14 +272,14 @@ namespace EmbedIO
             }
         }
 
-        // The last of disposal and run completion releases the link to the caller's
-        // token. The source is canceled first, so tokens already handed out keep
-        // reporting cancellation after release.
-        private void ReleaseLifetime()
+        // Disposal and run completion each arrive here once, after their own cancel
+        // call returned. The second arrival releases the link to the caller's token,
+        // so neither path can dispose the source while the other is still canceling
+        // it. Tokens already handed out keep reporting cancellation after release.
+        private void ArriveAtLifetimeEnd()
         {
-            var lifetime = _lifetime;
-            if (lifetime == null || Interlocked.Exchange(ref _lifetimeReleased, 1) != 0) return;
-            lifetime.Dispose();
+            if (Interlocked.Increment(ref _lifetimeArrivals) == 2)
+                _lifetime?.Dispose();
         }
 
         /// <inheritdoc />
@@ -462,7 +462,10 @@ namespace EmbedIO
 
             CancelLifetime(_lifetime);
             _modules.Dispose();
-            if (Volatile.Read(ref _runStarted) == 0 || State == WebServerState.Stopped) ReleaseLifetime();
+            // A run that never started cannot start now (RunAsync throws), so count
+            // its arrival here and release whatever lifetime exists.
+            if (Volatile.Read(ref _runStarted) == 0) ArriveAtLifetimeEnd();
+            ArriveAtLifetimeEnd();
         }
 
         /// <summary>

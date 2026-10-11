@@ -292,6 +292,21 @@ namespace EmbedIO.Tests.Issues
             }
         }
 
+        [Test]
+        public void DisposalRacingRunCompletionNeverThrows()
+        {
+            // TestWebServer blocks its run on a wait handle that its own disposal
+            // releases, so disposal and run completion end the lifetime concurrently.
+            // Neither side may dispose the lifetime source while the other cancels it.
+            for (var iteration = 0; iteration < 100; iteration++)
+            {
+                var server = new EmbedIO.Testing.TestWebServer();
+                server.Start();
+                Assert.That(server.State, Is.EqualTo(WebServerState.Listening), "iteration " + iteration);
+                Assert.That(server.Dispose, Throws.Nothing, "iteration " + iteration);
+            }
+        }
+
         private static HttpClient CreateClient(int protocol) => new(new SocketsHttpHandler { UseProxy = false })
         {
             DefaultRequestVersion = protocol == 2 ? HttpVersion.Version20 : HttpVersion.Version11,
