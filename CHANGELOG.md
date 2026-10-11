@@ -1,6 +1,10 @@
 ﻿# Changelog
 
 ## [Unreleased]
+- Replace inherited HTTP/1 response metadata with independently authored state
+  and cookie formatting while retaining the bounded header encoder. Suppress
+  attempted 205 response content and send zero-length framing, matching HTTP/2
+  and HTTP/3; see the [Neo v2 migration guide](docs/compatibility/neo-v1-to-v2.md#response-statuses-output-and-shutdown).
 - Replace the inherited HTTP/1 request model with independently authored parsed
   head ownership and an application view, preserving request-local collections,
   strict framing, target/version semantics and borrowed body transport behavior.

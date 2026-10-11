@@ -1,4 +1,4 @@
-# Migrating from EmbedIO-Neo v1 to v2
+﻿# Migrating from EmbedIO-Neo v1 to v2
 
 This guide tracks the owner-designated **Neo v2** release scope for the modern
 HTTP engine program [#181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181)
@@ -135,6 +135,13 @@ informational responses, and HTTP/2/HTTP/3 do not use 101. This follows
 Bodyless statuses and HEAD cannot emit representation bytes. Configure metadata
 before committing output; a 304 representation length must describe the selected
 representation rather than a body sent with that response.
+
+The HTTP/1 response-model replacement also suppresses attempted content writes
+for 205 Reset Content and commits Content-Length: 0 without chunk framing. The
+previous HTTP/1 model emitted those bytes, unlike HTTP/2 and HTTP/3. Applications
+which used 205 with a payload should use a body-capable status such as 200 instead.
+This candidate remains under validation on the development branch; no release
+is implied. See [RFC 9110 section 15.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.6).
 
 For HTTP/1 responses, declare Content-Length only when it matches the encoded
 bytes actually sent, including any transformation, or use automatic/chunked
