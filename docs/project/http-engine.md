@@ -26,6 +26,10 @@ independently tested behavior, not a codec or roadmap alone.
   stays open until those findings are decided.
 - [ ] Complete HTTP/1 request/response semantics, framing, streaming, upgrades,
   bounded resource policies and compatibility/migration coverage.
+- [ ] Complete the owner-approved Neo v2 removal of the Microsoft backend and
+  inherited Mono implementation. Preserve applicable consumer contracts with
+  independently written replacements; do not treat renamed source or deleted
+  provenance as replacement evidence.
 - [ ] Implement HTTP/2 negotiation, HPACK, frame/state validation, multiplexed
   request lifecycles, flow control, cancellation and graceful shutdown.
 - [ ] Implement HTTP/3 negotiation/discovery, QUIC integration, QPACK, control
@@ -44,9 +48,9 @@ independently tested behavior, not a codec or roadmap alone.
 - [ ] Validate retained APIs, target assets and platform applications; finish
   migration/support documentation and green checks on every final PR head.
 - [ ] Make the completed replacement engine the default managed listener and
-  deprecate the Mono-derived implementation. Verify default construction, explicit
-  listener selection, retained target assets and migration behavior; preserve the
-  Microsoft backend as an explicit compatibility option.
+  remove the Mono-derived implementation. Verify default construction, explicit
+  listener selection, retained target assets and migration behavior. The owner
+  approved removal of the Microsoft backend too on 2026-10-10.
 - [ ] Update the README HTTP support badges when the new engine is ready, using
   validated protocol support and documented target/platform limits. Preserve the
   existing badges until their replacement claims are supported.
@@ -77,7 +81,7 @@ System.Net.Quic/MsQuic; its native prerequisites and platform capability must be
 detected and documented. The retained .NET Standard 2.0 and .NET 10 assets cannot
 be assumed to expose identical protocol capabilities. Target removal, hidden
 fallback, and a new native dependency in the legacy asset are not implied by this
-plan. The Microsoft listener remains available.
+plan. The Microsoft listener is removed on the v2 retirement branch.
 
 The HTTP/1 continue handshake is written asynchronously by the connection after
 request initialization. HTTP/1.0 ignores the expectation and bodyless requests
@@ -139,7 +143,8 @@ stress and investigation of every reproducible finding remain outstanding.
 ## Default listener transition
 
 The owner confirmed on 2026-10-08 that the completed replacement must become the
-default and the old Mono-derived managed implementation must be deprecated.
+default. On 2026-10-10, explicit approval to remove both the Microsoft backend
+and inherited Mono implementation superseded the earlier deprecation plan.
 This is a final delivery requirement, not a claim that the transition is complete.
 The current `WebServerOptions.Mode` defaults to `HttpListenerMode.EmbedIO`, which
 constructs `Net.HttpListener`; HTTP/3 currently requires an explicit
@@ -147,11 +152,13 @@ constructs `Net.HttpListener`; HTTP/3 currently requires an explicit
 of the underlying implementation.
 
 Preserve existing public names and enum values where they remain valid entry
-points to the replacement. Deprecation concerns the old implementation; do not
+points to the replacement. Retirement concerns the old implementation; do not
 mark `HttpListenerMode.EmbedIO` obsolete merely because its implementation changes.
-Document any explicit legacy selection and its support policy before deprecation;
-immediate removal is not part of this transition. Keep the Microsoft backend
-available as an explicit compatibility option.
+Microsoft mode, its selection helper and public runtime adapters are removed in
+the first retirement increment. Persisted numeric mode 1 is rejected explicitly.
+The Mono HTTP/1 components are being replaced incrementally; they are not removed
+merely by deleting the Microsoft adapters. See the
+[v1-to-v2 guide](../compatibility/neo-v1-to-v2.md) for migration requirements.
 
 Acceptance requires real listener tests for default constructors, unconfigured
 options and explicit modes, plus retained target/platform coverage. Demonstrate
@@ -7578,3 +7585,25 @@ for a one-KiB input, 535,886.4 to 269,064.3 for 64 KiB and 8,401,737.5 to
 copies. The legacy callback is reconstructed with public APIs on the same
 core; this is not a baseline-package comparison or production network
 throughput result. Short CPU windows and clock quantization limit CPU claims.
+
+### Independent HTTP/1 body reader: current integration validation
+
+The independently written fixed-length body reader replaces the inherited
+`RequestStream.cs`; it retains the internal stream contract used by chunked
+framing. This component does not complete replacement of the connection,
+response writer, endpoint ownership or application adapters.
+
+On the reconciled engine sources, four additional assertions reproduced loss
+of the original failure location on repeated reads of a truncated body. The
+reader now captures the framing exception after its first throw establishes
+that location. Repeated synchronous, array-async, memory-async and span reads
+preserve both the same exception and its original failure location.
+
+The complete current Windows suite reports 4,607 cases: 4,600 passed, seven
+expected skips and zero failures, in 3m25s. Independent native datagram peer
+validation was enabled. Both library targets build with zero warnings, and
+solution formatting and source guards pass. Discovery minimums are reconciled
+to 4,607. Hosted checks on the final published revision remain required.
+Historical component timings in the performance README describe their recorded
+source revisions; they are not measurements of this reconciled engine or a
+whole-server performance claim.

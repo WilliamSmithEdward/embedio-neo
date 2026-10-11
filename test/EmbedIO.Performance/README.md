@@ -335,3 +335,49 @@ The reusable bulk output buffer is outside measurement. Native allocations,
 transport and application work are excluded. Timings are informational and
 require repeated, controlled process comparisons; this is a codec component
 measurement and does not establish server throughput or retained-memory behavior.
+# HTTP/1 request-body component comparison
+
+Run `dotnet run --project test/EmbedIO.Performance -c Release -- --request-body-read`.
+This measures construction, synchronous/array-async/memory-async reads, byte
+validation, next-request boundary handoff and disposal. Transport fixtures and
+constructor-delegate compilation are outside each sample. It is an in-memory,
+single-thread component comparison, not network throughput or server acceptance.
+
+The original replacement reader was compared with `dbe36c0` on Windows x64,
+.NET 10.0.12, using one harness with only EmbedIO.dll swapped. Three fresh
+processes per core alternated order; each process recorded three rounds for
+every zero/64/65,536-byte buffered/split/transport and read-path combination.
+Every body and following-request sentinel was validated; no sample failed.
+The shared benchmark lock was held. Runtime defaults, including tiered JIT,
+were retained; zero-body rows show substantial warmup sensitivity.
+
+Allocations are identical in all 27 combinations. Selected medians over nine
+samples per row, baseline to replacement:
+
+| Body / placement / path | ns per body | Bytes per body |
+| --- | ---: | ---: |
+| 64 B / buffered / synchronous | 19.3 -> 20.0 | 64 -> 64 |
+| 64 B / buffered / array async | 25.2 -> 27.1 | 136 -> 136 |
+| 64 B / buffered / memory async | 21.2 -> 23.7 | 64 -> 64 |
+| 64 B / transport / memory async | 50.9 -> 46.7 | 64 -> 64 |
+| 64 KiB / buffered / synchronous | 982.4 -> 969.0 | 64 -> 64 |
+| 64 KiB / transport / array async | 1,307.4 -> 1,285.1 | 640 -> 640 |
+
+Small buffered async rows remain slightly slower; these results do not establish
+a server speedup or the absence of a whole-server regression. An initial reader
+revalidated an ArraySegment on every buffered read and was slower; it was
+replaced with a validated end/cursor representation before these final samples.
+Initial and optimized raw samples remain under ignored
+`TestResults/body-replacement/comparison*` in the replacement worktree.
+
+Measured core SHA-256, baseline:
+`3DFBAE2DB378777E2BB0BB367573D2CD4075EE61B97DC58C97F8ED36093B5977`;
+replacement:
+`5DA087AAAC575FA61C833CA12B8391DC40CCC4648BF47F1AFA97521649861E2A`.
+Identical runner SHA-256:
+`9866C37B81ECFC4986C3B7A6CB5D9D7C9189D1739564B6E10265E46EE4D9077C`.
+The replacement was measured with uncommitted source edits on `2eec5f1`;
+its normalized Http1RequestBody.cs blob is
+`e2a930e69a0d4b53e5f19b864e9d67ee66f4b767`. Source snapshots and raw metadata
+are retained with the results. Assembly revision metadata alone does not
+identify those edited sources.
