@@ -255,7 +255,7 @@ internal static class ListenerHttp
                     catch (Exception error) when (error is System.Net.Sockets.SocketException or ObjectDisposedException)
                     { listenerSocketError = error.GetType().Name; }
                     var owner = endpoint.GetType().GetProperty("Listener", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint);
-                    if (owner != null && Field(owner, "_connections") is System.Collections.IEnumerable registered)
+                    if (owner != null && ListenerInventory.Sessions(owner) is System.Collections.IEnumerable registered)
                     {
                         registeredCount = (int?)registered.GetType().GetProperty("Count")?.GetValue(registered);
                         var sampled = 0;

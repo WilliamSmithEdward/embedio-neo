@@ -65,7 +65,7 @@ namespace EmbedIO.Tests
         }
 
         private static IDictionary Queue(Net.HttpListener listener)
-            => (IDictionary)((((typeof(Net.HttpListener)).GetField("_ctxQueue", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(listener)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            => TestObjects.ListenerFrontendProbe.Pending(listener);
 
         private static void Register(Net.HttpListener listener, IHttpContextImpl context)
             => ((typeof(Net.HttpListener)).GetMethod("RegisterContext", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(listener, new object[] { context });

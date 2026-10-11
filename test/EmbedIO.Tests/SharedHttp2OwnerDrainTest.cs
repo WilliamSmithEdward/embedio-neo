@@ -37,8 +37,7 @@ namespace EmbedIO.Tests
             var siblingRequest = client.GetStringAsync(prefix + "sibling/", deadline.Token);
             var second = await sibling.GetContextAsync(deadline.Token);
             Assert.That(second.RemoteEndPoint, Is.EqualTo(first.RemoteEndPoint));
-            var connections = (IDictionary)(typeof(Net.HttpListener).GetField("_connections", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(owner)
-                ?? throw new AssertionException("Missing connection ownership table."));
+            var connections = TestObjects.ListenerFrontendProbe.Sessions(owner);
             var connection = connections.Keys.Cast<object>().Single();
             var drain = (Task)(connection.GetType().GetMethod("DrainForListenerAsync", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(connection, new object[] { owner })
                 ?? throw new AssertionException("Missing owner drain operation."));

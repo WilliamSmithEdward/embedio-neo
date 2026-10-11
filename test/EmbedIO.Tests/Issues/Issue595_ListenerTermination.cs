@@ -64,8 +64,7 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(listener.IsListening, Is.False);
                 if (dispose)
                 {
-                    var semaphore = (SemaphoreSlim)((((typeof(Net.HttpListener))
-                        .GetField("_ctxQueueSem", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(listener)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                    var semaphore = TestObjects.ListenerFrontendProbe.Wake(listener);
                     Assert.Throws<ObjectDisposedException>(() => (semaphore).Wait(0));
                 }
             }
@@ -194,7 +193,7 @@ namespace EmbedIO.Tests.Issues
             ((connection ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetMethod("CloseSocket", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
             ((connection).GetType().GetMethod("Unbind", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
             ((typeof(Net.HttpListener)).GetMethod("RegisterContext", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(listener, new object[] { context });
-            var queue = (System.Collections.IDictionary)((((typeof(Net.HttpListener)).GetField("_ctxQueue", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(listener)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            var queue = TestObjects.ListenerFrontendProbe.Pending(listener);
             var disposing = Task.Run(() =>
             {
                 if (dispose) listener.Dispose();

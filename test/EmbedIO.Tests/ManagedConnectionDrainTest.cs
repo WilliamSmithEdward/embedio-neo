@@ -17,8 +17,7 @@ namespace EmbedIO.Tests
     public class ManagedConnectionDrainTest
     {
         private static object Connection(Net.HttpListener listener)
-            => ((IDictionary)(typeof(Net.HttpListener).GetField("_connections", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(listener)
-                ?? throw new AssertionException("Missing connection ownership table."))).Keys.Cast<object>().Single();
+            => ListenerFrontendProbe.Sessions(listener).Keys.Cast<object>().Single();
         private static Task Drain(object connection)
             => (Task)(connection.GetType().GetMethod("DrainAsync", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(connection, null)
                 ?? throw new AssertionException("Missing connection drain operation."));

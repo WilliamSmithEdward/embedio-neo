@@ -106,8 +106,7 @@ namespace EmbedIO.Tests
                 Assert.That(await receiving.WaitAsync(timeout.Token), Is.SameAs(first));
                 for (var index = 0; index < 1024; index++)
                     Assert.That((await listener.GetContextAsync(timeout.Token)).Id, Is.EqualTo("burst:" + index));
-                var semaphore = (SemaphoreSlim)(typeof(Net.HttpListener).GetField("_ctxQueueSem", PrivateInstance)?.GetValue(listener)
-                    ?? throw new AssertionException("Missing accept wakeup semaphore."));
+                var semaphore = TestObjects.ListenerFrontendProbe.Wake(listener);
                 Assert.That(semaphore.CurrentCount, Is.LessThanOrEqualTo(1),
                     "Wakeups must not accumulate independently of pending work.");
             }
@@ -623,12 +622,10 @@ namespace EmbedIO.Tests
         }
 
         private static IDictionary Pending(Net.HttpListener listener)
-            => (IDictionary)(typeof(Net.HttpListener).GetField("_ctxQueue", PrivateInstance)?.GetValue(listener)
-                ?? throw new AssertionException("Missing pending context map."));
+            => TestObjects.ListenerFrontendProbe.Pending(listener);
 
         private static int Order(Net.HttpListener listener)
-            => ((ICollection)(typeof(Net.HttpListener).GetField("_ctxOrder", PrivateInstance)?.GetValue(listener)
-                ?? throw new AssertionException("Missing pending context order."))).Count;
+            => TestObjects.ListenerFrontendProbe.Order(listener).Count;
 
         // A context with only an identifier; anything else returns its default.
         public class FakeContext : DispatchProxy

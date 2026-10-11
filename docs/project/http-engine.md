@@ -1,4 +1,4 @@
-# Modern HTTP engine program
+﻿# Modern HTTP engine program
 
 Release scope: William designated this modern engine program for **EmbedIO-Neo v2**
 on 2026-10-10. Maintain the [Neo v1 to v2 migration guide](../compatibility/neo-v1-to-v2.md)
@@ -7836,3 +7836,61 @@ skipped, on the installed .NET 10 host; this is not a .NET Framework runtime cla
 Both target builds, standalone performance build, formatting and both source
 guards pass. All ten existing allocation, body-consumption, wire and HTTP/HTTPS
 cleanup gates pass with unchanged budgets. Discovery minimums are 4,665.
+
+### Independent listener frontend and accept generations
+
+The public HttpListener facade now delegates to an independently authored TCP
+listener coordinator. The coordinator owns cold prefix/start/stop/drain
+transitions; a separate accept generation owns its pending-context map, arrival
+queue, stop token and wake semaphore. Ready accepts and running publications do
+not take the lifecycle monitor. Waiting accepts borrow their generation until
+completion, so retirement cancels them before the final borrower releases wait
+resources. A restarted listener uses a new generation.
+
+Context withdrawal checks both the identifier and object identity. An old context
+cannot remove another context which happens to have the same identifier, and an
+accept already waiting on a stopped listener cannot take a request from its
+restart. Two controlled regression cases fail against the previous engine core
+and pass with the replacement. Pending-queue compaction retains the existing
+bounded stale-reference policy; resource and admission assertions inspect the new
+owners rather than recreating retired fields.
+
+The public listener name, certificate ownership, IgnoreWriteExceptions default,
+prefix snapshot, accept-before-first-start behavior, cancellation identity,
+shared endpoint ownership and graceful-drain rules are preserved. The old
+List-derived prefix adapter is removed. This replaces the listener frontend,
+not the remaining inherited request/response application models. Program #181
+remains open; this is not a release or a native HTTP/3 provider activation.
+
+The focused Windows set passes 78/78. The initial cancellation regression caught
+a TaskCanceledException where callers previously received an
+OperationCanceledException; the corrected path preserves that exception, its
+caller token and the task's canceled state. The complete Windows SDK suite
+reports 4,669 cases: 4,662 passed, seven expected skips and zero failures in
+3m50s, requiring QUIC and the independent datagram peer. Discovery minimums are
+reconciled to 4,669. The actual netstandard2.0 core passes the same 78 cases on
+the installed .NET 10 host; this does not claim .NET Framework runtime coverage.
+Both target builds and the standalone performance build pass without warnings.
+All ten existing allocation, body-consumption, wire and HTTP/HTTPS cleanup gates
+pass with unchanged budgets, as do both source guards and changed-source
+formatting. Exact-head hosted checks still precede integration. No comparative
+whole-server throughput improvement is claimed.
+The first hosted frontend head passed Windows, Linux, security, malware and
+resource-budget checks, but macOS reported a late HTTP/2 admission during drain
+alongside the known raw MsQuic rebind failure. The two-failure run remains
+recorded; the narrow native-rebind quarantine correctly refused to hide the
+additional admission failure. Protocol drain initiation had been scheduled on a
+worker, as in the previous frontend, leaving a window before the HTTP/2 cutoff.
+The coordinator now publishes the shared drain completion under its state gate,
+then enters protocol drain outside that gate before returning to the caller.
+It awaits all admitted response cleanup through the same shared completion.
+The unchanged focused ownership/admission/drain set passes 78/78 after this
+correction. Final corrected-source full and hosted validation follow separately.
+Final corrected-source Windows validation reports 4,669 cases: 4,662 passed,
+seven expected skips and zero failures in 3m51s, requiring QUIC and the independent
+datagram peer. The corrected focused modern and actual netstandard2.0 core sets
+both pass 78/78 on the installed .NET 10 host. Both core target builds and the
+rebuilt standalone performance harness have zero warnings/errors. All ten
+unchanged resource, allocation, body and wire gates pass again; formatting and
+both source guards pass. Fresh hosted checks are required for this correction;
+the earlier failed macOS head is not accepted as final validation.
