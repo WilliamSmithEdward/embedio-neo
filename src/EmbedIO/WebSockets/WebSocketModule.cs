@@ -195,12 +195,18 @@ namespace EmbedIO.WebSockets
             $"{BaseRoute} - Accepting WebSocket connection with subprotocol \"{acceptedProtocol}\"".Debug(nameof(WebSocketModule));
             // The managed socket enforces the limit from its first frame.
             Internal.WebSocket.SetAcceptedMaxMessageSize(_maxMessageSize);
-            var webSocketContext = await contextImpl.AcceptWebSocketAsync(
+            Internal.WebSocket.SetAcceptedMessageConsumerPending(true);
+            IWebSocketContext webSocketContext;
+            try
+            {
+                webSocketContext = await contextImpl.AcceptWebSocketAsync(
                     requestedProtocols,
                     acceptedProtocol,
                     ReceiveBufferSize,
                     KeepAliveInterval,
                     context.CancellationToken).ConfigureAwait(false);
+            }
+            finally { Internal.WebSocket.SetAcceptedMessageConsumerPending(false); }
 
             PurgeDisconnectedContexts();
             _ = _contexts.TryAdd(webSocketContext.Id, webSocketContext);
@@ -224,6 +230,7 @@ namespace EmbedIO.WebSockets
             }
             finally
             {
+                ((Internal.WebSocket)webSocketContext.WebSocket).AbandonPendingMessageConsumer();
                 // once the loop is completed or connection aborted, remove the WebSocket
                 RemoveWebSocket(webSocketContext);
             }
@@ -542,6 +549,10 @@ namespace EmbedIO.WebSockets
             foreach (var context in contexts)
             {
                 if (context.WebSocket == null || context.WebSocket.State == WebSocketState.Open)
+                    continue;
+                // Transport closure can precede initialization and the delivery of
+                // already received messages. Leave that context to its handler.
+                if (context.WebSocket is Internal.WebSocket managed && !managed.IsApplicationCloseCompleted)
                     continue;
 
                 RemoveWebSocket(context);
