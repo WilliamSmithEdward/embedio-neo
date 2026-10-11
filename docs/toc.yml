@@ -277,3 +277,6 @@
 
 - name: Informational responses and response trailers
   href: guides/response-field-sections.md
+
+- name: Shared HTTP/1 listener shutdown
+  href: project/shared-http1-owner-shutdown.md

@@ -1,4 +1,4 @@
-﻿# Documentation
+# Documentation
 
 EmbedIO-Neo keeps the existing `EmbedIO` namespaces and offers a small modular
 HTTP/WebSocket server, integrated CLI, JsonServer, and testing helpers.
@@ -176,6 +176,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Informational responses and response trailers](guides/response-field-sections.md): optional managed response sections and ownership rules.
 
 ## Project and contribution
+
+- [Shared HTTP/1 listener shutdown](project/shared-http1-owner-shutdown.md): logical-owner retirement, idle transport handoff and final-endpoint cleanup.
 
 - [HTTP/1 idle closure investigation](project/http1-idle-closure.md): TCP/TLS timeout observations, released/main controls and the pending orderly-closure policy decision.
 

@@ -85,6 +85,7 @@ namespace EmbedIO.Net.Internal
             if (_routes.IsExclusiveTo(owner)) _admission.Stop();
         }
         internal HttpConnection[] StopAcceptingForDrain() => _admission.StopAndSnapshot();
+        internal bool RetainIdleConnection(HttpConnection connection) => _admission.RetainIdle(connection);
         internal void RemoveConnection(HttpConnection connection) => _admission.Release(connection);
 
         public void Dispose()
