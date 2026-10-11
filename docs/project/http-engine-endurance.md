@@ -258,6 +258,38 @@ An empty write never allocates the array, which is the toggle that isolates it.
   [dotnet/runtime#135583](https://github.com/dotnet/runtime/issues/135583), with a
   standalone repro.
 
+### Current-runtime recheck (11 October 2026)
+
+A fresh coordinated process on .NET 10.0.12 / bundled MsQuic 2.5.10 repeated the
+standalone probe with two 2,000-stream write rounds alternating with empty-write
+controls. Each write round found exactly 2,000 disposed streams still owning the
+send-buffer array; live 16-byte heap blocks increased by 2,002 and 2,001. Empty
+controls found zero retained arrays and heap-block changes of +2 and +1. This
+reproduces the runtime retention directly; it is not a new per-protocol endurance
+or comparative throughput campaign, and no quiet-host latency result is claimed.
+
+The probe now pins its generated certificate, validates every response byte and
+length, applies a bounded operation deadline, and disposes streams/connections
+on failure. Unknown private-field shapes are reported as inconclusive (null
+retention count and nonzero exit), rather than zero retained arrays. An
+unavailable native heap census fails the measurement instead of subtracting
+unavailable counters. No private field is modified and no native allocation is
+freed through reflection.
+
+Evidence is retained under the isolated worktree's ignored
+`TestResults/reliable-reset/memory-probe-current.json`, with the measured source
+snapshot and full source/runner/core SHA-256 records. The measured runner hash
+is `6F24EE0676C00EC074BB336F9AF846C01DD96C3455C991FC89DF69143FA5430B`.
+Final source additionally rejects unavailable heap counters; its bounded
+64-stream functional run and source checks are recorded separately. The
+2000-stream measurements are not relabeled as having used that later build.
+
+Issue #278 remains open for runtime-fix verification and native-provider
+endurance acceptance. [dotnet/runtime#135583](https://github.com/dotnet/runtime/issues/135583)
+is still open at this recheck; no fixed runtime has been verified. The original
+native adapter bypasses this particular `QuicStream` ownership path, but that
+does not by itself prove bounded memory for the complete native HTTP/3 engine.
+
 ### Repeating the attribution
 
 ```sh

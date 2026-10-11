@@ -16,6 +16,8 @@ using System.Text.Json;
 internal static class QuicSendBufferProbe
 {
     private static readonly SslApplicationProtocol Protocol = new("embedio-probe");
+    private sealed record Measurement(string Mode, int Streams, long Busy16Before, long Busy16After,
+        long Busy16Delta, int? DisposedStreamsWithUnfreedSendBuffer, bool SendBufferInspectionSupported);
 
     internal static async Task<int> RunAsync(CommandLine options)
     {
@@ -25,11 +27,14 @@ internal static class QuicSendBufferProbe
             return 0;
         }
 
-        var streams = (int)options.Number("--streams", 2000);
+        var requestedStreams = options.Number("--streams", 2000);
+        if (requestedStreams < 1 || requestedStreams > 1_000_000 || requestedStreams != Math.Truncate(requestedStreams))
+            throw new ArgumentOutOfRangeException(nameof(options), "Stream count must be an integer between 1 and 1000000.");
+        var streams = (int)requestedStreams;
         // Schannel cannot use an ephemeral key, so reload the certificate from PKCS#12.
         using var generated = Orchestrator.CreateCertificate();
         using var certificate = X509CertificateLoader.LoadPkcs12(generated.Export(X509ContentType.Pkcs12), null, X509KeyStorageFlags.Exportable);
-        var results = new List<object>();
+        var results = new List<Measurement>();
         _ = await MeasureAsync(certificate, write: true, 500).ConfigureAwait(false); // Warm-up.
         foreach (var write in new[] { true, false, true, false })
             results.Add(await MeasureAsync(certificate, write, streams).ConfigureAwait(false));
@@ -41,16 +46,19 @@ internal static class QuicSendBufferProbe
                 .GetProperty("MsQuicLibraryVersion", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null),
             streams,
             results,
-        }));
-        return 0;
+        }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+        return results.TrueForAll(result => result.SendBufferInspectionSupported) ? 0 : 1;
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private static async Task<object> MeasureAsync(X509Certificate2 certificate, bool write, int count)
+    private static async Task<Measurement> MeasureAsync(X509Certificate2 certificate, bool write, int count)
     {
         Settle();
         var before = NativeHeaps.DefaultHeapBusyBlocks(16);
+        if (before < 0) throw new InvalidOperationException("Native heap census is unavailable before the probe.");
         var retainedArrays = 0;
+        var inspectionSupported = true;
+        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2));
 
         var listener = await QuicListener.ListenAsync(new QuicListenerOptions
         {
@@ -67,11 +75,13 @@ internal static class QuicSendBufferProbe
                     ServerCertificate = certificate,
                 },
             }),
-        }).ConfigureAwait(false);
+        }, deadline.Token).ConfigureAwait(false);
+        QuicConnection? client = null;
+        QuicConnection? server = null;
         try
         {
-            var accept = listener.AcceptConnectionAsync().AsTask();
-            var client = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
+            var accept = listener.AcceptConnectionAsync(deadline.Token).AsTask();
+            client = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
             {
                 RemoteEndPoint = listener.LocalEndPoint,
                 DefaultStreamErrorCode = 1,
@@ -80,54 +90,58 @@ internal static class QuicSendBufferProbe
                 {
                     ApplicationProtocols = [Protocol],
                     TargetHost = "localhost",
-                    RemoteCertificateValidationCallback = (_, _, _, _) => true,
+                    RemoteCertificateValidationCallback = (_, peer, _, _) => peer?.GetCertHashString() == certificate.GetCertHashString(),
                 },
-            }).ConfigureAwait(false);
-            var server = await accept.ConfigureAwait(false);
+            }, deadline.Token).ConfigureAwait(false);
+            server = await accept.ConfigureAwait(false);
             var buffer = new byte[16];
 
             for (var i = 0; i < count; i++)
             {
-                await using (var outbound = await client.OpenOutboundStreamAsync(QuicStreamType.Bidirectional).ConfigureAwait(false))
+                await using (var outbound = await client.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, deadline.Token).ConfigureAwait(false))
                 {
                     outbound.CompleteWrites(); // The client never sends data.
-                    var inbound = await server.AcceptInboundStreamAsync().ConfigureAwait(false);
-                    while (await inbound.ReadAsync(buffer).ConfigureAwait(false) > 0)
+                    await using var inbound = await server.AcceptInboundStreamAsync(deadline.Token).ConfigureAwait(false);
+                    while (await inbound.ReadAsync(buffer, deadline.Token).ConfigureAwait(false) > 0)
                     {
-                        // Drain the empty request.
+                        throw new InvalidDataException("Probe client unexpectedly sent request data.");
                     }
 
-                    if (write) await inbound.WriteAsync(new byte[] { 42 }, completeWrites: true).ConfigureAwait(false);
+                    if (write) await inbound.WriteAsync(new byte[] { 42 }, completeWrites: true, deadline.Token).ConfigureAwait(false);
                     else inbound.CompleteWrites();
-                    while (await outbound.ReadAsync(buffer).ConfigureAwait(false) > 0)
+                    var received = 0;
+                    int read;
+                    while ((read = await outbound.ReadAsync(buffer, deadline.Token).ConfigureAwait(false)) > 0)
                     {
-                        // Read the response to its end.
+                        for (var index = 0; index < read; index++)
+                            if (buffer[index] != 42) throw new InvalidDataException("Probe response byte differs.");
+                        received += read;
                     }
 
+                    if (received != (write ? 1 : 0)) throw new InvalidDataException("Probe response length differs.");
                     await inbound.DisposeAsync().ConfigureAwait(false);
-                    if (SendBufferCount(inbound) > 0) retainedArrays++;
+                    var buffers = SendBufferCount(inbound);
+                    if (buffers < 0) inspectionSupported = false;
+                    else if (buffers > 0) retainedArrays++;
                 }
             }
 
-            await client.DisposeAsync().ConfigureAwait(false);
-            await server.DisposeAsync().ConfigureAwait(false);
         }
         finally
         {
-            await listener.DisposeAsync().ConfigureAwait(false);
+            try
+            {
+                try { if (client != null) await client.DisposeAsync().ConfigureAwait(false); }
+                finally { if (server != null) await server.DisposeAsync().ConfigureAwait(false); }
+            }
+            finally { await listener.DisposeAsync().ConfigureAwait(false); }
         }
 
         Settle();
         var after = NativeHeaps.DefaultHeapBusyBlocks(16);
-        return new
-        {
-            mode = write ? "write" : "empty",
-            streams = count,
-            busy16Before = before,
-            busy16After = after,
-            busy16Delta = after - before,
-            disposedStreamsWithUnfreedSendBuffer = retainedArrays,
-        };
+        if (after < 0) throw new InvalidOperationException("Native heap census is unavailable after the probe.");
+        return new Measurement(write ? "write" : "empty", count, before, after, after - before,
+            inspectionSupported ? retainedArrays : null, inspectionSupported);
     }
 
     // QuicStream._sendBuffers (a MsQuicBuffers struct)._count, read after disposal.
