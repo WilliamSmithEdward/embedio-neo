@@ -9,6 +9,9 @@
   and a restart attempt reports that a stopped server is final; see the
   [Neo v2 migration guide](docs/compatibility/neo-v1-to-v2.md#response-statuses-output-and-shutdown)
   and [server lifetime](docs/user-reports/server-lifetime.md).
+- Preserve reusable HTTP/1 connections when one logical listener stops on a
+  shared endpoint. Active incomplete requests still abort, and retiring the final
+  listener still releases idle TCP/TLS transports.
 - Enforce the response commitment contract evaluated in Neo #42. Exception
   handlers run only while the response is replaceable and start from a response
   without the failed handler's representation fields, so a stale Content-Length

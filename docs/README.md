@@ -163,6 +163,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
 
+- [Controller base routes](guides/controller-base-routes.md): scoped catch-all handlers, parameterized prefixes and fallback order.
+
 ## Compatibility
 
 - [Neo v1 to v2](compatibility/neo-v1-to-v2.md): living migration guide for the v2 engine release scope, approved behavior changes and remaining integration.
@@ -179,6 +181,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Informational responses and response trailers](guides/response-field-sections.md): optional managed response sections and ownership rules.
 
 ## Project and contribution
+
+- [Shared HTTP/1 listener shutdown](project/shared-http1-owner-shutdown.md): logical-owner retirement, idle transport handoff and final-endpoint cleanup.
 
 - [HTTP/1 idle closure investigation](project/http1-idle-closure.md): TCP/TLS timeout observations, released/main controls and the pending orderly-closure policy decision.
 

@@ -48,6 +48,16 @@ namespace EmbedIO.Net.Internal
             }
         }
 
+        internal bool RetainIdle(HttpConnection connection)
+        {
+            lock (_sync)
+            {
+                if (_phase != 0) return false;
+                _pending.Add(connection);
+                return true;
+            }
+        }
+
         internal void Release(HttpConnection connection)
         {
             lock (_sync) _pending.Remove(connection);

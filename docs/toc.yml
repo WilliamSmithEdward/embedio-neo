@@ -38,6 +38,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Controller base routes and fallback
+      href: guides/controller-base-routes.md
     - name: HTTPS
       href: guides/https.md
     - name: HTTP/3 listener (unreleased)
@@ -285,3 +287,6 @@
 
 - name: Informational responses and response trailers
   href: guides/response-field-sections.md
+
+- name: Shared HTTP/1 listener shutdown
+  href: project/shared-http1-owner-shutdown.md
