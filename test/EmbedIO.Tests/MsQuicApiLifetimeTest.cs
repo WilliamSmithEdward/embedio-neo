@@ -1160,6 +1160,17 @@ namespace EmbedIO.Tests
                 ?? throw new AssertionException("Missing handshake completion."));
             await ready.WaitAsync(deadline.Token);
             Assert.That(peer.NegotiatedApplicationProtocol, Is.EqualTo(new SslApplicationProtocol("h3")));
+            var nativeLocal = (IPEndPoint)(connection.GetType().GetProperty("LocalEndPoint", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(connection)
+                ?? throw new AssertionException("Missing native local endpoint."));
+            var nativeRemote = (IPEndPoint)(connection.GetType().GetProperty("RemoteEndPoint", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(connection)
+                ?? throw new AssertionException("Missing native remote endpoint."));
+            Assert.Multiple(() =>
+            {
+                Assert.That(nativeLocal.Port, Is.EqualTo(peer.RemoteEndPoint.Port));
+                Assert.That(nativeLocal.Address.MapToIPv6(), Is.EqualTo(peer.RemoteEndPoint.Address.MapToIPv6()));
+                Assert.That(nativeRemote.Port, Is.EqualTo(peer.LocalEndPoint.Port));
+                Assert.That(nativeRemote.Address.MapToIPv6(), Is.EqualTo(peer.LocalEndPoint.Address.MapToIPv6()));
+            });
             if (streams != null) await streams(connection, peer, deadline.Token);
             if (streamType.HasValue)
             {

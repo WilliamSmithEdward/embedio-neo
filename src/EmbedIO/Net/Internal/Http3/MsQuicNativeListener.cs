@@ -26,22 +26,20 @@ namespace EmbedIO.Net.Internal.Http3
             private delegate uint StartListener(IntPtr listener, IntPtr alpn, uint count, IntPtr address);
             [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
             internal delegate void StopListener(IntPtr listener);
-            [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-            private delegate uint GetParameter(IntPtr handle, uint parameter, ref uint size, IntPtr buffer);
             internal readonly OpenListener Open;
             internal readonly CloseListener Close;
             internal readonly StopListener Stop;
             private readonly StartListener _start;
-            private readonly GetParameter _get;
+            private readonly MsQuicAddress.GetParameter _get;
             internal ListenerFunctions(IntPtr table)
             {
                 Open = Marshal.GetDelegateForFunctionPointer<OpenListener>(Marshal.ReadIntPtr(table, 11 * IntPtr.Size));
                 Close = Marshal.GetDelegateForFunctionPointer<CloseListener>(Marshal.ReadIntPtr(table, 12 * IntPtr.Size));
                 _start = Marshal.GetDelegateForFunctionPointer<StartListener>(Marshal.ReadIntPtr(table, 13 * IntPtr.Size));
                 Stop = Marshal.GetDelegateForFunctionPointer<StopListener>(Marshal.ReadIntPtr(table, 14 * IntPtr.Size));
-                _get = Marshal.GetDelegateForFunctionPointer<GetParameter>(Marshal.ReadIntPtr(table, 4 * IntPtr.Size));
+                _get = Marshal.GetDelegateForFunctionPointer<MsQuicAddress.GetParameter>(Marshal.ReadIntPtr(table, 4 * IntPtr.Size));
             }
-            internal void Start(IntPtr listener, IPEndPoint endpoint, byte[] alpn)
+            internal void Start(IntPtr listener, IPEndPoint endpoint, byte[] alpn, bool mapBindError = false)
             {
                 if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
                 if (alpn == null) throw new ArgumentNullException(nameof(alpn));
@@ -64,6 +62,8 @@ namespace EmbedIO.Net.Internal.Http3
                     buffer = Marshal.AllocHGlobal(Marshal.SizeOf<NativeBuffer>());
                     Marshal.StructureToPtr(new NativeBuffer { Length = (uint)alpn.Length, Bytes = pin.AddrOfPinnedObject() }, buffer, false);
                     var status = _start(listener, buffer, 1, nativeAddress);
+                    var addressInUse = OperatingSystem.IsWindows() ? 0x80072740u : OperatingSystem.IsMacOS() ? 48u : 98u;
+                    if (mapBindError && status == addressInUse) throw new SocketException((int)SocketError.AddressAlreadyInUse);
                     if (MsQuicApi.Failed(status)) throw new IOException("MsQuic listener start failed with status 0x" + status.ToString("X8"));
                 }
                 finally
@@ -74,23 +74,7 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
             internal IPEndPoint LocalEndPoint(IntPtr listener)
-            {
-                var buffer = Marshal.AllocHGlobal(28);
-                try
-                {
-                    uint size = 28;
-                    var status = _get(listener, 0x04000000, ref size, buffer);
-                    if (MsQuicApi.Failed(status) || size > 28 || size < 16) throw new IOException("MsQuic listener address query failed.");
-                    var address = new byte[28]; Marshal.Copy(buffer, address, 0, (int)size);
-                    var family = OperatingSystem.IsMacOS() ? address[1] : BitConverter.ToUInt16(address, 0);
-                    var port = (address[2] << 8) | address[3];
-                    if (family == 2) return new IPEndPoint(new IPAddress(address.AsSpan(4, 4)), port);
-                    var expected = OperatingSystem.IsWindows() ? 23 : OperatingSystem.IsMacOS() ? 30 : 10;
-                    if (family != expected || size < 28) throw new IOException("MsQuic returned an invalid listener address family.");
-                    return new IPEndPoint(new IPAddress(address.AsSpan(8, 16), BitConverter.ToUInt32(address, 24)), port);
-                }
-                finally { Marshal.FreeHGlobal(buffer); }
-            }
+                => MsQuicAddress.Read(_get, listener, 0x04000000);
         }
         internal MsQuicNativeListener CreateListener(MsQuicRegistration registration)
         {
@@ -160,6 +144,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Signals _signals;
         private Channel<MsQuicNativeConnection>? _accepted;
         private const int AcceptQueueCapacity = 256;
+        private int _acceptQueueCapacity = AcceptQueueCapacity;
         private int _queuedConnections;
         private int _acceptanceStopped;
         private bool TryReserveAcceptSlot()
@@ -167,17 +152,20 @@ namespace EmbedIO.Net.Internal.Http3
             while (true)
             {
                 var count = Volatile.Read(ref _queuedConnections);
-                if (count >= AcceptQueueCapacity) return false;
+                if (count >= _acceptQueueCapacity) return false;
                 if (Interlocked.CompareExchange(ref _queuedConnections, count + 1, count) == count) return true;
             }
         }
-        internal void EnableAcceptance()
+        internal void EnableAcceptance() => EnableAcceptanceCore(AcceptQueueCapacity);
+        internal void EnableHttp3Acceptance() => EnableAcceptanceCore(512);
+        private void EnableAcceptanceCore(int capacity)
         {
             lock (_sync)
             {
                 if (_started || IsClosed) throw new InvalidOperationException("Acceptance must be enabled before startup.");
                 if (_accepted != null) return;
-                var queue = Channel.CreateBounded<MsQuicNativeConnection>(AcceptQueueCapacity);
+                var queue = Channel.CreateBounded<MsQuicNativeConnection>(capacity);
+                _acceptQueueCapacity = capacity;
                 _accepted = queue;
                 _signals.StopAcceptance = () =>
                 {
@@ -224,17 +212,22 @@ namespace EmbedIO.Net.Internal.Http3
             Interlocked.Decrement(ref _queuedConnections);
             return connection;
         }
+        internal ValueTask<MsQuicNativeConnection> AcceptForHttp3Async(CancellationToken token)
+            => (_accepted ?? throw new InvalidOperationException("Acceptance is not enabled.")).Reader.ReadAsync(token);
+        internal void ReleaseHttp3Admission() => Interlocked.Decrement(ref _queuedConnections);
         private bool _started;
         private bool _stopping;
         internal MsQuicNativeListener(IntPtr listener, MsQuicRegistration registration, MsQuicApi.ListenerFunctions functions, Signals signals) : base(true)
         { _registration = registration; _functions = functions; _signals = signals; SetHandle(listener); }
-        internal void Start(IPEndPoint endpoint, byte[] alpn)
+        internal void Start(IPEndPoint endpoint, byte[] alpn) => StartCore(endpoint, alpn, false);
+        internal void StartHttp3(IPEndPoint endpoint, byte[] alpn) => StartCore(endpoint, alpn, true);
+        private void StartCore(IPEndPoint endpoint, byte[] alpn, bool mapBindError)
         {
             lock (_sync)
             {
                 if (_started) throw new InvalidOperationException("Listener already started.");
                 var retained = false; DangerousAddRef(ref retained);
-                try { _functions.Start(handle, endpoint, alpn); _started = true; }
+                try { _functions.Start(handle, endpoint, alpn, mapBindError); _started = true; }
                 finally { if (retained) DangerousRelease(); }
             }
         }
