@@ -65,7 +65,10 @@ Linux campaign passed in 41.9 seconds in the installed SDK image
 Final Linux validation, including accept-worker completion and actual bound-address
 snapshots, passed all nine cases in 42.0 seconds. Its retained TRX records 2,033
 successful disruption connects and 15 resets, all 2,307 validated exchanges, and no
-unanswered connect. Final Windows full-suite results are recorded in the PR.
+unanswered connect. The final Windows full suite passed 4,634 reported cases (4,625 passed, nine explicit
+platform/campaign skips, zero failures) in 4m15s under the existing five-minute
+budget. All nine new cases passed; their retained client traces show no unanswered
+connect and all 2,307 validated exchanges.
 
 Local evidence is retained under the dedicated worktree's ignored
 `TestResults/issue-279`. The first fixture attempt mistakenly sent a localhost Host
