@@ -7801,3 +7801,27 @@ ten existing allocation and HTTP/HTTPS cleanup gates pass with unchanged budgets
 An initial full run found eight obsolete fixture method lookups; their retained
 routing and stale-generation assertions now use the new ownership boundary.
 Discovery minimums are reconciled to 4,659; program #181 remains open.
+
+### Independent TCP session lifetime
+
+An independently authored lifetime owner now retires each accepted socket,
+transport stream and request deadline once. Protocol actors borrow these resources;
+terminal protocol state is recorded before retirement, and drain completion is
+published after all recoverable resource releases and protocol detachment have
+been attempted. A failed release remains the close task's failure even when later
+releases succeed. Ordinary disposal retains its synchronous exception behavior.
+
+Request deadlines use a monotonic clock under the session gate. A queued callback
+cannot retire a deadline stopped for an admitted request or renewed for a later
+request. An early timer wakeup re-arms the remaining interval, preserving one-shot
+expiry. Initial and keep-alive header deadlines remain 90 and 15 seconds; body,
+upgrade, tunnel and HTTP/2 ownership contracts are retained.
+
+Five new cases cover cleanup faults, a single retirement claimant, drain waiting
+for protocol detachment, stale stopped/renewed deadlines and real expiry after
+an early attempt. Existing physical stream/timer release checks observe the new
+owner. A first focused run exposed an early one-shot wakeup being discarded; its
+TLS partial-head timeout is retained, and the corrected focused set passes 96/96.
+This replaces transport retirement, not the remaining request/response application
+models, and does not claim a whole-server performance improvement or complete
+legacy implementation retirement. Program #181 remains open.

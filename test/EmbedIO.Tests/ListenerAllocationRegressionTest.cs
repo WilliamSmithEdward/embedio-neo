@@ -60,7 +60,7 @@ namespace EmbedIO.Tests
             var connection = NewConnection(source);
             var context = Context(connection);
             context.Request.Headers["Content-Length"] = "4096";
-            if (failure == "getter-disposed") Field("_resourcesDisposed").SetValue(connection, 1);
+            if (failure == "getter-disposed") Field("_protocolEnded").SetValue(connection, 1);
             Assert.That(Flush(context), Is.EqualTo(expected));
             foreach (var bytes in source.Buffers) Assert.That(bytes, Is.All.Zero);
         }

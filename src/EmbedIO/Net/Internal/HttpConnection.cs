@@ -27,18 +27,15 @@ namespace EmbedIO.Net.Internal
         private Dictionary<HttpListener, Dictionary<Http2Exchange, MultiplexedContext>>? _http2Listeners;
         private int _responseFinishing;
         private volatile bool _draining;
-        private bool _closeFinished;
-        private Exception? _closeError;
-        private TaskCompletionSource<bool>? _closedSignal;
         private EmbedIO.Internal.BorrowedResource<Http2Dispatcher>? _http2Dispatcher;
 
-        private readonly Timer _timer;
+        private readonly TcpSessionLifetime _lifetime;
         private readonly object _connectionSync = new();
         private int _forceClosing;
-        private int _resourcesDisposed;
+        private int _protocolEnded;
         private readonly EndPointListener _epl;
         internal EndPointListener Endpoint => _epl;
-        private Socket? _sock;
+        private Socket? _protocolSocket;
         private ArraySegment<byte> _pendingInput;
         private byte[]? _buffer;
         private HttpListenerContext _context;
@@ -55,7 +52,7 @@ namespace EmbedIO.Net.Internal
         {
             if (initialHeaderTimeout <= 0) throw new ArgumentOutOfRangeException(nameof(initialHeaderTimeout));
             _sTimeout = initialHeaderTimeout;
-            _sock = sock;
+            _protocolSocket = sock;
             _epl = epl;
             IsSecure = epl.Secure;
             LocalEndPoint = (IPEndPoint)(sock.LocalEndPoint ?? throw new ArgumentException("The socket has no local endpoint.", nameof(sock)));
@@ -69,10 +66,10 @@ namespace EmbedIO.Net.Internal
                 Stream = new SslStream(Stream, false);
             }
 
-            _timer = new Timer(OnTimeout, null, Timeout.Infinite, Timeout.Infinite);
+            _lifetime = new TcpSessionLifetime(_connectionSync, sock, Stream, () => CloseTransport(false, true));
             Init();
             // Admission can queue initialization. Bound that wait as well as head/TLS reads.
-            _ = _timer.Change(_sTimeout, Timeout.Infinite);
+            _lifetime.ArmDeadline(_sTimeout);
         }
 
         public int Reuses { get; private set; }
@@ -91,8 +88,7 @@ namespace EmbedIO.Net.Internal
 
         public void Dispose()
         {
-            try { ForceClose(); }
-            finally { DisposeTransportResources(); }
+            ForceClose();
         }
         public async Task BeginReadRequest()
         {
@@ -102,11 +98,11 @@ namespace EmbedIO.Net.Internal
             {
                 lock (_connectionSync)
                 {
-                    if (_resourcesDisposed != 0) return;
+                    if (_protocolEnded != 0) return;
                     buffer = _buffer ??= new byte[BufferSize];
                     bufferedInput = _pendingInput.Count > 0;
                     if (Reuses == 1) _sTimeout = 15000;
-                    if (Reuses != 0) _ = _timer.Change(_sTimeout, Timeout.Infinite);
+                    if (Reuses != 0) _lifetime.ArmDeadline(_sTimeout);
                 }
                 var selection = await TcpProtocolInput.ReadAsync(Stream, buffer, bufferedInput,
                     Reuses == 0, IsSecure,
@@ -134,7 +130,7 @@ namespace EmbedIO.Net.Internal
         {
             if (_iStream == null)
             {
-                if (Volatile.Read(ref _resourcesDisposed) != 0)
+                if (Volatile.Read(ref _protocolEnded) != 0)
                     throw new ObjectDisposedException(nameof(HttpConnection));
                 var pending = _pendingInput;
                 _pendingInput = default;
@@ -174,7 +170,7 @@ namespace EmbedIO.Net.Internal
 #endif
             lock (_connectionSync)
             {
-                if (_resourcesDisposed != 0 || _sock == null) throw new ObjectDisposedException(nameof(HttpConnection));
+                if (_protocolEnded != 0 || _protocolSocket == null) throw new ObjectDisposedException(nameof(HttpConnection));
                 if (_tunnel) throw new InvalidOperationException("The connection was already handed off.");
                 _tunnel = true;
             }
@@ -195,8 +191,8 @@ namespace EmbedIO.Net.Internal
             token.ThrowIfCancellationRequested();
             lock (_connectionSync)
             {
-                if (_sock == null || _resourcesDisposed != 0) throw new ObjectDisposedException(nameof(HttpConnection));
-                _sock.Shutdown(SocketShutdown.Send);
+                if (_protocolSocket == null || _protocolEnded != 0) throw new ObjectDisposedException(nameof(HttpConnection));
+                _protocolSocket.Shutdown(SocketShutdown.Send);
             }
         }
 
@@ -204,7 +200,7 @@ namespace EmbedIO.Net.Internal
         {
             lock (_connectionSync)
             {
-                if (_resourcesDisposed != 0 || _sock == null)
+                if (_protocolEnded != 0 || _protocolSocket == null)
                     throw new ObjectDisposedException(nameof(HttpConnection));
                 var pending = _iStream != null ? _iStream.BufferedRemainder : _pendingInput;
                 _pendingInput = default;
@@ -241,9 +237,8 @@ namespace EmbedIO.Net.Internal
             {
                 if (owner != null && !_epl.AdmissionStopped && !_http2 && _lastListener != owner)
                     return Task.CompletedTask;
-                if (_closeFinished) return _closeError == null ? Task.CompletedTask : Task.FromException(_closeError);
-                _closedSignal ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                completion = _closedSignal.Task;
+                completion = _lifetime.Completion;
+                if (_lifetime.CloseFinished) return completion;
                 if (_draining) return completion;
                 _draining = true;
                 dispatcher = _http2Dispatcher?.Value;
@@ -271,7 +266,7 @@ namespace EmbedIO.Net.Internal
             if (forceClose) Volatile.Write(ref _forceClosing, 1);
             if (_http2) { CloseTransport(true); return; }
             if (!forceClose && Interlocked.Exchange(ref _responseFinishing, 1) != 0) return;
-            if (_sock != null)
+            if (_protocolSocket != null)
             {
                 // Normal empty/HEAD responses must emit their final head even when
                 // an application never asks for OutputStream. Abort and upgrade
@@ -286,7 +281,7 @@ namespace EmbedIO.Net.Internal
                 if (output != null && !output.OutputCompleted) Volatile.Write(ref _forceClosing, 1);
                 _oStream = null;
             }
-            if (_sock == null) return;
+            if (_protocolSocket == null) return;
 
             if (!_tunnel && !_draining && Volatile.Read(ref _forceClosing) == 0 && _context.Request.KeepAlive
                 && _context.Response.KeepAlive && _context.Response.Headers["connection"] != "close")
@@ -315,11 +310,6 @@ namespace EmbedIO.Net.Internal
             ResetResponseCompletion();
             _errorMessage = null;
             _context = new HttpListenerContext(this);
-        }
-
-        private void OnTimeout(object? unused)
-        {
-            CloseSocket();
         }
 
         private void RemoveConnection()
@@ -384,87 +374,42 @@ namespace EmbedIO.Net.Internal
 
         private void CloseSocket() => CloseTransport(false);
 
-        private void CloseTransport(bool shutdown)
+        private void CloseTransport(bool shutdown, bool deadlineOnly = false)
         {
-            Socket? socket;
             CancellationTokenSource? protocolStop;
             HttpListener[] protocolListeners;
+            RequestStream? input;
             lock (_connectionSync)
             {
-                socket = _sock;
-                _sock = null;
+                if (!_lifetime.TryRetire(deadlineOnly)) return;
+                _protocolSocket = null;
+                _protocolEnded = 1;
                 EndResponse(false);
                 protocolStop = _http2Stop?.Value;
                 protocolListeners = _http2Listeners == null ? Array.Empty<HttpListener>() : new List<HttpListener>(_http2Listeners.Keys).ToArray();
                 _http2Listeners?.Clear();
-            }
-            if (socket == null) return;
-            try
-            {
-                if (shutdown)
-                {
-                    try { socket.Shutdown(SocketShutdown.Both); }
-                    catch (Exception error) when (error is SocketException or ObjectDisposedException)
-                    { /* A disconnected socket has nothing left to shut down. */ }
-                }
-            }
-            finally
-            {
-                socket.Dispose();
-                try { protocolStop?.Cancel(); } catch (ObjectDisposedException) { } catch (AggregateException) { /* Complete transport cleanup even if a cancellation callback fails. */ }
-                foreach (var listener in protocolListeners) listener.RemoveConnection(this);
-                try
-                {
-                    Unbind();
-                    RemoveConnection();
-                }
-                finally { DisposeTransportResources(); }
-            }
-        }
-
-        private void DisposeTransportResources()
-        {
-            RequestStream? input;
-            lock (_connectionSync)
-            {
-                if (_resourcesDisposed != 0) return;
-                _resourcesDisposed = 1;
-                EndResponse(false);
                 input = _iStream;
                 _pendingInput = default;
                 _iStream = null;
                 _buffer = null;
                 _headReader.Reset();
             }
-            try
+            _lifetime.FinishRetirement(shutdown, input, () =>
             {
-                _timer.Dispose();
-                input?.Dispose();
-                Stream.Dispose();
-            }
-            catch (Exception error)
-            {
-                lock (_connectionSync) _closeError = error;
-                throw;
-            }
-            finally
-            {
-                lock (_connectionSync)
+                try
                 {
-                    _closeFinished = true;
-                    if (_closeError == null) _closedSignal?.TrySetResult(true);
-                    else _closedSignal?.TrySetException(_closeError);
+                    try { protocolStop?.Cancel(); }
+                    catch (Exception error) when (error is ObjectDisposedException or AggregateException) { }
+                    foreach (var listener in protocolListeners) listener.RemoveConnection(this);
                 }
-            }
+                finally
+                {
+                    try { Unbind(); }
+                    finally { RemoveConnection(); }
+                }
+            });
         }
 
-        private void StopRequestTimer()
-        {
-            try { _ = _timer.Change(Timeout.Infinite, Timeout.Infinite); }
-            catch (ObjectDisposedException) when (Volatile.Read(ref _resourcesDisposed) != 0)
-            {
-                // Terminal cleanup can race a reader completing or failing.
-            }
-        }
+        private void StopRequestTimer() => _lifetime.StopDeadline();
     }
 }
