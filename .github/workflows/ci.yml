@@ -104,6 +104,14 @@ jobs:
         run: |
           set -euo pipefail
           status=0
+          if test "$RUNNER_OS" != Windows; then
+            # Owner-approved ordinary CI diagnostics: JSON crash reports only,
+            # without heap dumps or changes to regression/failure policy.
+            mkdir -p "$RUNNER_TEMP/embedio-crash-reports"
+            export DOTNET_DbgEnableMiniDump=1
+            export DOTNET_EnableCrashReportOnly=1
+            export DOTNET_DbgMiniDumpName="$RUNNER_TEMP/embedio-crash-reports/crash.%p"
+          fi
           dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 4483 --coverlet || status=$?
           if test "$status" = 0; then exit 0; fi
           # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
@@ -189,6 +197,14 @@ jobs:
           name: test-results-${{ matrix.os }}
           path: TestResults/
           if-no-files-found: error
+      - name: Retain Unix test-host crash reports
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure() && runner.os != 'Windows'
+        with:
+          name: test-host-crash-reports-${{ matrix.os }}
+          path: ${{ runner.temp }}/embedio-crash-reports/*.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   quic-cleanup-experiment:
     name: Compare macOS native socket cleanup (${{ matrix.rid }})
