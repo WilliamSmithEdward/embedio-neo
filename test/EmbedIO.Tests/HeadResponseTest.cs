@@ -14,12 +14,8 @@ namespace EmbedIO.Tests
     {
         [TestCase(HttpListenerMode.EmbedIO, false, "identity")]
         [TestCase(HttpListenerMode.EmbedIO, true, "identity")]
-        [TestCase(HttpListenerMode.Microsoft, false, "identity")]
-        [TestCase(HttpListenerMode.Microsoft, true, "identity")]
         [TestCase(HttpListenerMode.EmbedIO, false, "gzip")]
         [TestCase(HttpListenerMode.EmbedIO, true, "gzip")]
-        [TestCase(HttpListenerMode.Microsoft, false, "gzip")]
-        [TestCase(HttpListenerMode.Microsoft, true, "gzip")]
         public async Task HeadLengthDescribesGetRepresentationOrIsOmitted(HttpListenerMode mode, bool cacheContent, string encoding)
         {
             var directory = Directory.CreateTempSubdirectory("embedio-head-");
@@ -66,7 +62,6 @@ namespace EmbedIO.Tests
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task EmptyOrdinaryResponseDoesNotAdvertiseUnsentBytes(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();

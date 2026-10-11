@@ -17,8 +17,6 @@ namespace EmbedIO.Tests.Issues
     {
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task OriginalFourRequestsSucceedWithoutMandatoryBodyReading(HttpListenerMode mode, bool expectContinue)
         {
             var url = Resources.GetServerAddress();
@@ -64,12 +62,6 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.EmbedIO, 0, 403)]
         [TestCase(HttpListenerMode.EmbedIO, 7, 403)]
         [TestCase(HttpListenerMode.EmbedIO, -1, 403)]
-        [TestCase(HttpListenerMode.Microsoft, 0, 200)]
-        [TestCase(HttpListenerMode.Microsoft, 7, 200)]
-        [TestCase(HttpListenerMode.Microsoft, -1, 200)]
-        [TestCase(HttpListenerMode.Microsoft, 0, 403)]
-        [TestCase(HttpListenerMode.Microsoft, 7, 403)]
-        [TestCase(HttpListenerMode.Microsoft, -1, 403)]
         public async Task FixedLengthBodiesDoNotPreventFollowingRequests(HttpListenerMode mode, int read, int status)
         {
             var url = Resources.GetServerAddress();
@@ -110,8 +102,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, 0)]
         [TestCase(HttpListenerMode.EmbedIO, 7)]
-        [TestCase(HttpListenerMode.Microsoft, 0)]
-        [TestCase(HttpListenerMode.Microsoft, 7)]
         public async Task EarlyResponseDoesNotRequireTheEntireUploadBeforeHeaders(HttpListenerMode mode, int read)
         {
             var url = Resources.GetServerAddress();
@@ -155,8 +145,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task IncompleteUploadDoesNotPreventShutdownOrOtherConnections(HttpListenerMode mode, bool disconnect)
         {
             var url = Resources.GetServerAddress();

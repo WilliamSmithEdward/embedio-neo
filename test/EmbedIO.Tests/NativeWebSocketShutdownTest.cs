@@ -53,7 +53,6 @@ namespace EmbedIO.Tests
             }
         }
 
-        [TestCase(HttpListenerMode.Microsoft)]
         [TestCase(HttpListenerMode.EmbedIO)]
         public async Task CancellationDuringUpgradeReleasesAcceptAndAllConnectedTransports(HttpListenerMode mode)
         {

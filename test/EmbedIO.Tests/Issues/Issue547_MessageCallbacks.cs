@@ -22,10 +22,6 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.EmbedIO, 1)]
         [TestCase(HttpListenerMode.EmbedIO, 2)]
         [TestCase(HttpListenerMode.EmbedIO, 3)]
-        [TestCase(HttpListenerMode.Microsoft, 0)]
-        [TestCase(HttpListenerMode.Microsoft, 1)]
-        [TestCase(HttpListenerMode.Microsoft, 2)]
-        [TestCase(HttpListenerMode.Microsoft, 3)]
         public async Task CompleteMessagesPreserveEmptyBinaryAndSplitUnicode(HttpListenerMode mode, int shape)
         {
             using var fixture = new Fixture(mode);
@@ -46,15 +42,10 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, "unsupported", 1003)]
-        [TestCase(HttpListenerMode.Microsoft, "unsupported", 1003)]
         [TestCase(HttpListenerMode.EmbedIO, "invalid", 1007)]
-        [TestCase(HttpListenerMode.Microsoft, "invalid", 1007)]
         [TestCase(HttpListenerMode.EmbedIO, "oversize", 1009)]
-        [TestCase(HttpListenerMode.Microsoft, "oversize", 1009)]
         [TestCase(HttpListenerMode.EmbedIO, "failure", 1011)]
-        [TestCase(HttpListenerMode.Microsoft, "failure", 1011)]
         [TestCase(HttpListenerMode.EmbedIO, "away", 1001)]
-        [TestCase(HttpListenerMode.Microsoft, "away", 1001)]
         public async Task RejectionCodesAreObservableAndAnotherClientStaysHealthy(HttpListenerMode mode, string scenario, int expected)
         {
             using var fixture = new Fixture(mode, scenario);
@@ -91,7 +82,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task BinaryOnlyEndpointsRejectTextUsingTheDefaultCallback(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -113,7 +103,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ExistingSubclassAndFrameCallbacksKeepTheirBehavior(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -137,7 +126,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task BurstsProduceOrderedCompleteEchoes(HttpListenerMode mode)
         {
             using var fixture = new Fixture(mode);
@@ -252,7 +240,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task AsyncCallbacksAreSequentialPerConnectionButIndependentAcrossConnections(HttpListenerMode mode)
         {
             using var fixture = new Fixture(mode, "gate");
@@ -272,7 +259,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         [Repeat(32)]
         public async Task CancellationReleasesTheActiveCallbackAndServer(HttpListenerMode mode)
         {

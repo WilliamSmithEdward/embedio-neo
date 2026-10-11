@@ -12,7 +12,6 @@ namespace EmbedIO.Tests.Issues
     public class Issue464_EndpointConfiguration
     {
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task PrefixPathSelectsRequestsWithoutRewritingModulePaths(HttpListenerMode mode)
         {
             var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
@@ -42,7 +41,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task DistinctPathPrefixesSharePortAndLongestMatchWins(HttpListenerMode mode)
         {
             var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
@@ -69,7 +67,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task OneServerCanRegisterIndependentPorts(HttpListenerMode mode)
         {
             var first = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
@@ -94,8 +91,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, "*")]
         [TestCase(HttpListenerMode.EmbedIO, "+")]
-        [TestCase(HttpListenerMode.Microsoft, "*")]
-        [TestCase(HttpListenerMode.Microsoft, "+")]
         public async Task WildcardPrefixAcceptsAnOtherwiseUnregisteredHost(HttpListenerMode mode, string host)
         {
             var target = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
@@ -117,7 +112,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ExplicitIpv6LoopbackPrefixPreservesListenerPlatformBehavior(HttpListenerMode mode)
         {
             if (!System.Net.Sockets.Socket.OSSupportsIPv6

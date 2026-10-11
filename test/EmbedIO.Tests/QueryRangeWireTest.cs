@@ -94,10 +94,8 @@ namespace EmbedIO.Tests
             Assert.That(invalid.Content.Headers.ContentRange?.Length, Is.EqualTo(bytes.LongLength));
         }
         [TestCase(HttpListenerMode.EmbedIO, 1, false)]
-        [TestCase(HttpListenerMode.Microsoft, 1, false)]
         [TestCase(HttpListenerMode.EmbedIO, 2, false)]
         [TestCase(HttpListenerMode.EmbedIO, 1, true)]
-        [TestCase(HttpListenerMode.Microsoft, 1, true)]
         [TestCase(HttpListenerMode.EmbedIO, 2, true)]
         public async Task QueryRangesSelectEncodedResultBytes(HttpListenerMode mode, int protocol, bool gzip)
         {

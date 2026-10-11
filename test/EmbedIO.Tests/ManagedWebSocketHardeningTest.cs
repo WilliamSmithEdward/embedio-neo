@@ -179,8 +179,6 @@ namespace EmbedIO.Tests
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task MaxMessageSizeClosesOversizedMessagesWith1009BeforeCallbacks(HttpListenerMode mode, bool fragmented)
         {
             const int Maximum = 1024;

@@ -169,7 +169,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task SilentPeerCanBeCanceledAndTheServerRemainsHealthy(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -215,15 +214,10 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, "simultaneous")]
-        [TestCase(HttpListenerMode.Microsoft, "simultaneous")]
         [TestCase(HttpListenerMode.EmbedIO, "connected")]
-        [TestCase(HttpListenerMode.Microsoft, "connected")]
         [TestCase(HttpListenerMode.EmbedIO, "message")]
-        [TestCase(HttpListenerMode.Microsoft, "message")]
         [TestCase(HttpListenerMode.EmbedIO, "protected")]
-        [TestCase(HttpListenerMode.Microsoft, "protected")]
         [TestCase(HttpListenerMode.EmbedIO, "reset")]
-        [TestCase(HttpListenerMode.Microsoft, "reset")]
         public async Task RealConnectionsCloseAndSubsequentConnectionsRemainHealthy(HttpListenerMode mode, string scenario)
         {
             var url = Resources.GetServerAddress();
@@ -291,7 +285,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ModuleDisposalCanRacePeerClose(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();

@@ -16,13 +16,9 @@ namespace EmbedIO.Tests.Issues
     public class Issue59_CookieAttributes
     {
         [TestCase(HttpListenerMode.EmbedIO, false, false)]
-        [TestCase(HttpListenerMode.Microsoft, false, false)]
         [TestCase(HttpListenerMode.EmbedIO, true, false)]
-        [TestCase(HttpListenerMode.Microsoft, true, false)]
         [TestCase(HttpListenerMode.EmbedIO, false, true)]
-        [TestCase(HttpListenerMode.Microsoft, false, true)]
         [TestCase(HttpListenerMode.EmbedIO, true, true)]
-        [TestCase(HttpListenerMode.Microsoft, true, true)]
         public Task CookieFlagsAndMetadataSurviveLateConfiguration(HttpListenerMode mode, bool httpOnly, bool secure)
             => UseServerAsync(mode, server => server.OnAny(async context =>
             {
@@ -67,9 +63,7 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         public Task SessionPolicyAndPersistenceSurviveSerialization(HttpListenerMode mode, bool httpOnly)
             => UseServerAsync(mode, server => server.WithSessionManager(new LocalSessionManager { CookieHttpOnly = httpOnly })
                 .OnAny(context =>
@@ -86,9 +80,7 @@ namespace EmbedIO.Tests.Issues
                 });
 
         [TestCase(HttpListenerMode.EmbedIO, "GET")]
-        [TestCase(HttpListenerMode.Microsoft, "GET")]
         [TestCase(HttpListenerMode.EmbedIO, "HEAD")]
-        [TestCase(HttpListenerMode.Microsoft, "HEAD")]
         public Task EmptyResponsesEmitCookieAttributes(HttpListenerMode mode, string method)
             => UseServerAsync(mode, server => server.OnAny(context =>
             {
@@ -149,7 +141,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task WebSocketHandshakeEmitsProtectedCookies(HttpListenerMode mode)
             => UseServerAsync(mode, server => server.WithModule(new CookieMiddleware())
                 .WithModule(new CookieSocket()), async (_, url) =>

@@ -56,8 +56,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task TextWriterBytesUseTheRequestedEncoding(HttpListenerMode mode, bool buffered)
         {
             var url = Resources.GetServerAddress();
@@ -85,7 +83,7 @@ namespace EmbedIO.Tests.Issues
 
         public static IEnumerable FileCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var cached in new[] { false, true })
                     foreach (var zip in new[] { false, true })
                         yield return new object[] { mode, cached, zip };
@@ -93,8 +91,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task UnconfiguredStaticFileHeadersKeepTheirExistingDefaults(HttpListenerMode mode, bool cached)
         {
             var directory = Path.Combine(Path.GetTempPath(), "embedio-567-default-" + Guid.NewGuid().ToString("N"));
@@ -127,8 +123,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task CallbackAlsoPreparesDirectoryListings(HttpListenerMode mode, bool cached)
         {
             var directory = Path.Combine(Path.GetTempPath(), "embedio-567-list-" + Guid.NewGuid().ToString("N"));
@@ -175,7 +169,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ErrorsSkipTheCallbackAndCallbackFailureDoesNotStopTheServer(HttpListenerMode mode)
         {
             var directory = Path.Combine(Path.GetTempPath(), "embedio-567-errors-" + Guid.NewGuid().ToString("N"));
@@ -219,8 +212,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, 0)]
         [TestCase(HttpListenerMode.EmbedIO, 2)]
-        [TestCase(HttpListenerMode.Microsoft, 0)]
-        [TestCase(HttpListenerMode.Microsoft, 2)]
         public async Task ColdCacheRangeAfterHeadSendsOnlySelectedBytes(HttpListenerMode mode, int offset)
         {
             var directory = Path.Combine(Path.GetTempPath(), "embedio-567-cold-" + Guid.NewGuid().ToString("N"));

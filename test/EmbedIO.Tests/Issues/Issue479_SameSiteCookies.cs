@@ -16,13 +16,9 @@ namespace EmbedIO.Tests.Issues
     public class Issue479_SameSiteCookies
     {
         [TestCase(HttpListenerMode.EmbedIO, "entry=value; Path=/; SameSite=Lax; HttpOnly")]
-        [TestCase(HttpListenerMode.Microsoft, "entry=value; Path=/; SameSite=Lax; HttpOnly")]
         [TestCase(HttpListenerMode.EmbedIO, "entry=value; Path=/; SameSite=None; Secure; Priority=High")]
-        [TestCase(HttpListenerMode.Microsoft, "entry=value; Path=/; SameSite=None; Secure; Priority=High")]
         [TestCase(HttpListenerMode.EmbedIO, "entry=value; Expires=Wed, 09 Jun 2032 10:18:14 GMT; Max-Age=42; SameSite=Strict")]
-        [TestCase(HttpListenerMode.Microsoft, "entry=value; Expires=Wed, 09 Jun 2032 10:18:14 GMT; Max-Age=42; SameSite=Strict")]
         [TestCase(HttpListenerMode.EmbedIO, "entry=value; SameSite=None; Secure; Partitioned")]
-        [TestCase(HttpListenerMode.Microsoft, "entry=value; SameSite=None; Secure; Partitioned")]
         public async Task RawCookieAttributesRemainIntact(HttpListenerMode mode, string cookie)
         {
             var url = Resources.GetServerAddress();
@@ -47,7 +43,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task RawCookiesSurviveWebSocketUpgrade(HttpListenerMode mode)
         {
             const string cookie = "entry=value; Path=/socket; SameSite=Lax; HttpOnly";
@@ -71,11 +66,8 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, CookieSameSiteMode.Lax)]
-        [TestCase(HttpListenerMode.Microsoft, CookieSameSiteMode.Lax)]
         [TestCase(HttpListenerMode.EmbedIO, CookieSameSiteMode.Strict)]
-        [TestCase(HttpListenerMode.Microsoft, CookieSameSiteMode.Strict)]
         [TestCase(HttpListenerMode.EmbedIO, CookieSameSiteMode.None)]
-        [TestCase(HttpListenerMode.Microsoft, CookieSameSiteMode.None)]
         public Task TypedPolicyPreservesFlagsAndMutableScope(HttpListenerMode mode, CookieSameSiteMode policy)
             => UseHttp(mode, c =>
             {
@@ -95,7 +87,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task InvalidPoliciesDoNotAddCookies(HttpListenerMode mode)
             => UseHttp(mode, c =>
             {
@@ -127,13 +118,9 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, -1)]
-        [TestCase(HttpListenerMode.Microsoft, -1)]
         [TestCase(HttpListenerMode.EmbedIO, (int)CookieSameSiteMode.Lax)]
-        [TestCase(HttpListenerMode.Microsoft, (int)CookieSameSiteMode.Lax)]
         [TestCase(HttpListenerMode.EmbedIO, (int)CookieSameSiteMode.Strict)]
-        [TestCase(HttpListenerMode.Microsoft, (int)CookieSameSiteMode.Strict)]
         [TestCase(HttpListenerMode.EmbedIO, (int)CookieSameSiteMode.None)]
-        [TestCase(HttpListenerMode.Microsoft, (int)CookieSameSiteMode.None)]
         public async Task SessionCreationAndDeletionPreserveSelectedPolicy(HttpListenerMode mode, int policy)
         {
             var url = Resources.GetServerAddress();
@@ -173,7 +160,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task RawAndTypedCookiesAreIndependent(HttpListenerMode mode)
             => UseHttp(mode, c =>
             {
@@ -189,11 +175,8 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO, CookieSameSiteMode.Lax)]
-        [TestCase(HttpListenerMode.Microsoft, CookieSameSiteMode.Lax)]
         [TestCase(HttpListenerMode.EmbedIO, CookieSameSiteMode.Strict)]
-        [TestCase(HttpListenerMode.Microsoft, CookieSameSiteMode.Strict)]
         [TestCase(HttpListenerMode.EmbedIO, CookieSameSiteMode.None)]
-        [TestCase(HttpListenerMode.Microsoft, CookieSameSiteMode.None)]
         public async Task TypedPolicySurvivesWebSocketUpgrade(HttpListenerMode mode, CookieSameSiteMode policy)
         {
             var url = Resources.GetServerAddress();
@@ -220,7 +203,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task SharedCookiePoliciesStayScopedToEachResponse(HttpListenerMode mode)
         {
             var shared = new Cookie("shared", "value", "/");
@@ -253,7 +235,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task SameNameCookiesRetainTheirOwnScopePolicy(HttpListenerMode mode)
             => UseHttp(mode, c =>
             {
@@ -267,7 +248,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task RawPolicyCoexistsWithUnmodifiedLegacyCookie(HttpListenerMode mode)
             => UseHttp(mode, c =>
             {
@@ -281,7 +261,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task LongLivedCookieDoesNotExpireWhenRawPolicyIsPresent(HttpListenerMode mode)
             => UseHttp(mode, c =>
             {

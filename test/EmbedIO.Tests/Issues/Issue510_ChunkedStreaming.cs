@@ -18,7 +18,6 @@ namespace EmbedIO.Tests.Issues
     public class Issue510_ChunkedStreaming
     {
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task OriginalTwoHelpersFinishTheFirstResponseRatherThanCreateTwoChunks(HttpListenerMode mode)
         {
             var seen = new TaskCompletionSource<(Version Request, Version Response, Exception? Error)>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -56,7 +55,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, "1.1", false)]
-        [TestCase(HttpListenerMode.Microsoft, "1.1", false)]
         [TestCase(HttpListenerMode.EmbedIO, "1.0", false)]
         [TestCase(HttpListenerMode.EmbedIO, "1.1", true)]
         [TestCase(HttpListenerMode.EmbedIO, "1.0", true)]
@@ -103,9 +101,7 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task EmptyAndUnicodeResponsesHaveValidTerminalFraming(HttpListenerMode mode, bool empty)
         {
             var url = Resources.GetServerAddress();

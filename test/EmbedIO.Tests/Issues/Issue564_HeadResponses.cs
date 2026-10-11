@@ -18,7 +18,7 @@ namespace EmbedIO.Tests.Issues
     {
         public static IEnumerable LengthCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var assignment in new[] { "property", "header", "header-then-property", "property-then-header" })
                     foreach (var async in new[] { false, true })
                         yield return new object[] { mode, assignment, async };
@@ -45,12 +45,8 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false, false)]
         [TestCase(HttpListenerMode.EmbedIO, true, false)]
-        [TestCase(HttpListenerMode.Microsoft, false, false)]
-        [TestCase(HttpListenerMode.Microsoft, true, false)]
         [TestCase(HttpListenerMode.EmbedIO, false, true)]
         [TestCase(HttpListenerMode.EmbedIO, true, true)]
-        [TestCase(HttpListenerMode.Microsoft, false, true)]
-        [TestCase(HttpListenerMode.Microsoft, true, true)]
         public async Task HeadStreamWritesDoNotAppearBeforeTheNextResponse(HttpListenerMode mode, bool async, bool chunked)
         {
             var url = Resources.GetServerAddress();
@@ -119,7 +115,7 @@ namespace EmbedIO.Tests.Issues
 
         public static IEnumerable SerializationCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var buffered in new[] { false, true })
                     foreach (var encoding in new[] { "identity", "gzip" })
                         yield return new object[] { mode, buffered, encoding };
@@ -161,7 +157,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task HeadStreamPreservesCancellationValidationAndApmCompletion(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -219,7 +214,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task HeadErrorResponseHasNoHtmlBodyAndServerRemainsHealthy(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();

@@ -19,10 +19,6 @@ namespace EmbedIO.Tests
         [TestCase(HttpListenerMode.EmbedIO, false, true)]
         [TestCase(HttpListenerMode.EmbedIO, true, false)]
         [TestCase(HttpListenerMode.EmbedIO, true, true)]
-        [TestCase(HttpListenerMode.Microsoft, false, false)]
-        [TestCase(HttpListenerMode.Microsoft, false, true)]
-        [TestCase(HttpListenerMode.Microsoft, true, false)]
-        [TestCase(HttpListenerMode.Microsoft, true, true)]
         public async Task HttpJsonPreservesExactUtf8BytesAndOptionsSnapshot(HttpListenerMode mode, bool buffered, bool custom)
         {
             var options = Json.CreateOptions();

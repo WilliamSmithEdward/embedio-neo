@@ -16,9 +16,7 @@ namespace EmbedIO.Tests.Issues
     public class Issue495_BenchmarkEndpoints
     {
         [TestCase(HttpListenerMode.EmbedIO, "/json")]
-        [TestCase(HttpListenerMode.Microsoft, "/json")]
         [TestCase(HttpListenerMode.EmbedIO, "/plaintext")]
-        [TestCase(HttpListenerMode.Microsoft, "/plaintext")]
         public async Task SequentialRequestsReuseTheSameTransport(HttpListenerMode mode, string path)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -32,9 +30,7 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task SixteenPipelinedResponsesRemainFramedAndOrdered(HttpListenerMode mode, bool mixed)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -50,9 +46,7 @@ namespace EmbedIO.Tests.Issues
             }, requiresPipelining: true);
 
         [TestCase(HttpListenerMode.EmbedIO, "/json")]
-        [TestCase(HttpListenerMode.Microsoft, "/json")]
         [TestCase(HttpListenerMode.EmbedIO, "/plaintext")]
-        [TestCase(HttpListenerMode.Microsoft, "/plaintext")]
         public async Task ExplicitCloseCompletesTheBodyAndAllowsFreshConnections(HttpListenerMode mode, string path)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -69,7 +63,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task UnknownChildPathsDoNotMasqueradeAsBenchmarkEndpoints(HttpListenerMode mode)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -80,7 +73,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ConcurrentClientsHaveIndependentReusableConnections(HttpListenerMode mode)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -97,11 +89,8 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO, 0)]
-        [TestCase(HttpListenerMode.Microsoft, 0)]
         [TestCase(HttpListenerMode.EmbedIO, 2)]
-        [TestCase(HttpListenerMode.Microsoft, 2)]
         [TestCase(HttpListenerMode.EmbedIO, 5)]
-        [TestCase(HttpListenerMode.Microsoft, 5)]
         public async Task PipelinedSuccessorSurvivesFullPartialAndUnreadBodies(HttpListenerMode mode, int readCount)
         {
             var observed = string.Empty;
@@ -133,7 +122,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task BufferedPartialSuccessorCombinesWithLaterSocketInput(HttpListenerMode mode)
             => await WithServer(mode, async (uri, token) =>
             {

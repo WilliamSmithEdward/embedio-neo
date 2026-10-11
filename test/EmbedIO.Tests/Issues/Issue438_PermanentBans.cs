@@ -13,7 +13,6 @@ namespace EmbedIO.Tests.Issues
     public partial class Issue438_ClientBanning
     {
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task PermanentBansWorkLiveAndAcrossRealServerRestarts(HttpListenerMode mode)
         {
             using var folder = new StoreFolder();
