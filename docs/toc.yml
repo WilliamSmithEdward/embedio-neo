@@ -254,6 +254,8 @@
       href: project/http3-performance.md
     - name: Multiplexed request-model allocation
       href: project/http-request-model-allocations.md
+    - name: HTTP/3 handshake and latency on a less loaded host
+      href: project/http3-quiet-host-validation.md
     - name: HTTP/3 transport abstraction cost
       href: project/http3-abstraction-cost.md
     - name: HTTP conformance audit

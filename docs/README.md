@@ -149,6 +149,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [HTTP/2 output and dispatch performance](project/http2-performance.md): profiled small-response costs, output batching and response coalescing, before/after measurements and remaining bottlenecks.
 - [HTTP/3 request path performance](project/http3-performance.md): profiled HTTP/3 request costs, request scopes, write coalescing and QPACK feedback, before/after measurements and remaining bottlenecks.
 - [Multiplexed request-model allocation](project/http-request-model-allocations.md): profiled HTTP/2 and HTTP/3 request-model allocation, deferred query and referrer parsing, before/after load and in-process measurements and remaining contributors.
+- [HTTP/3 handshake and latency on a less loaded host](project/http3-quiet-host-validation.md): paced QUIC churn with separate handshake and stream latency against Kestrel, a CPU-saturation control and the open handshake-refusal finding.
 - [HTTP/3 transport abstraction cost](project/http3-abstraction-cost.md): cost of the provider-neutral transport boundary on the System.Net.Quic listener, guarded shared-machine procedure and how to repeat it for the native provider.
 
 - [HTTP conformance audit](project/http-conformance.md): October 2026 standards baseline, black-box conformance and stateful campaigns, and prioritized findings.

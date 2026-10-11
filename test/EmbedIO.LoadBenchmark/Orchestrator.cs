@@ -583,7 +583,7 @@ internal sealed class ChildProcess
         return killed;
     }
 
-    private static IntPtr Mask(string cpus)
+    internal static IntPtr Mask(string cpus)
     {
         long mask = 0;
         foreach (var part in cpus.Split(',', StringSplitOptions.RemoveEmptyEntries))
