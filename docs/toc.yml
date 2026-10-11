@@ -40,6 +40,8 @@
   items:
     - name: HTTPS
       href: guides/https.md
+    - name: HTTP/3 listener (unreleased)
+      href: guides/http3.md
     - name: Command-line server
       href: guides/cli.md
     - name: Static folders
@@ -194,6 +196,8 @@
       href: architecture/dependency-injection.md
 - name: Compatibility
   items:
+    - name: Neo v1 to v2
+      href: compatibility/neo-v1-to-v2.md
     - name: Migration
       href: compatibility/migration.md
 - name: Platforms
@@ -204,10 +208,68 @@
       href: platforms/maui-android.md
     - name: MAUI Mac Catalyst
       href: platforms/maui-mac-catalyst.md
+    - name: Native QUIC datagrams on macOS
+      href: platforms/quic-datagrams-macos-validation.md
 - name: Project
   items:
     - name: Baseline and direction
       href: project/embed_io_neo.md
+    - name: Modern HTTP engine program
+      href: project/http-engine.md
+    - name: Completed response cleanup
+      href: project/http-completed-response-cleanup.md
+    - name: HTTP/1 idle closure investigation
+      href: project/http1-idle-closure.md
+    - name: Capsule transport development
+      href: project/http-capsule-transport.md
+    - name: Capsule and tunnel lifetime validation
+      href: project/http-capsule-lifetime.md
+    - name: WebTransport session core development
+      href: project/http-webtransport-core.md
+    - name: QUIC lifetime and rebind
+      href: project/quic-lifetime.md
+    - name: Linux test-host terminations
+      href: project/linux-test-host-terminations.md
+    - name: Native HTTP/3 provider ownership audit
+      href: project/http3-native-provider-audit.md
+    - name: Native QUIC lifetime campaigns
+      href: project/http3-native-lifetime-campaigns.md
+    - name: Managed engine load comparison
+      href: project/http-engine-load-comparison.md
+    - name: HTTP teardown exception attribution
+      href: project/http-teardown-exceptions.md
+    - name: Managed engine load baseline on a second host
+      href: project/http-engine-load-baseline-evo-x1.md
+    - name: Listener retirement test accounting
+      href: project/listener-retirement-test-accounting.md
+    - name: Managed TCP write latency
+      href: project/http-tcp-latency.md
+    - name: Apple Silicon load evidence
+      href: project/macos-performance.md
+    - name: HTTP/2 graceful output lifetime
+      href: project/http2-drain-output-lifetime.md
+    - name: HTTP/2 output and dispatch performance
+      href: project/http2-performance.md
+    - name: HTTP/3 request path performance
+      href: project/http3-performance.md
+    - name: Multiplexed request-model allocation
+      href: project/http-request-model-allocations.md
+    - name: HTTP/3 handshake and latency on a less loaded host
+      href: project/http3-quiet-host-validation.md
+    - name: HTTP/3 transport abstraction cost
+      href: project/http3-abstraction-cost.md
+    - name: HTTP conformance audit
+      href: project/http-conformance.md
+    - name: HTTP standards applicability audit
+      href: project/http-standards-applicability.md
+    - name: Linux glibc heap aborts
+      href: project/linux-glibc-heap-aborts.md
 
 - name: Suffix byte ranges
   href: user-reports/suffix-range-responses.md
+
+- name: Capsule and tunnel carriers
+  href: guides/capsule-tunnels.md
+
+- name: Informational responses and response trailers
+  href: guides/response-field-sections.md

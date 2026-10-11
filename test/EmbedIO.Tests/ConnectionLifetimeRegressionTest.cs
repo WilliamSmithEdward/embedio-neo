@@ -1,18 +1,18 @@
 ﻿using System;
-using System.IO;
 using System.Collections;
+using System.Collections.Concurrent;
+using System.IO;
 using System.Linq;
-using System.Net.Sockets;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Net.WebSockets;
-using System.Collections.Concurrent;
-using System.Text;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using EmbedIO.PlatformTests;
 using EmbedIO.Actions;
+using EmbedIO.PlatformTests;
 using EmbedIO.WebSockets;
 using NUnit.Framework;
 
@@ -118,11 +118,14 @@ namespace EmbedIO.Tests
             using var client = secure ? HttpsSmoke.CreateClient((certificate ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))) : new HttpClient();
             try
             {
-                for (var index = 0; index < 40; index++)
+                // Exceed the removed legacy cap on the same plain/TLS transport.
+                for (var index = 0; index < 256; index++)
                 {
                     using var body = new ByteArrayContent(new byte[8192]);
                     using var response = await client.PostAsync(url, body);
                     Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("ok"));
+                    Assert.That(response.Headers.ConnectionClose, Is.Not.True, $"Request {index + 1} must not reach a fixed reuse limit.");
+                    if (index == 255) Assert.That(string.Join(",", response.Headers.GetValues("Keep-Alive")), Does.Not.Contain("max="));
                 }
                 Assert.That(connections.Count, Is.EqualTo(1), "Sequential requests should reuse the existing live transport.");
                 var connection = System.Linq.Enumerable.Single(connections.Keys);
@@ -236,28 +239,96 @@ namespace EmbedIO.Tests
             var registrations = (IDictionary)((((typeof(Net.EndPointManager)).GetField("Registrations", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var prefixes = (IDictionary)((registrations)[listener] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var endpoint = ((IEnumerable)((prefixes)[url] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).Cast<object>().Single();
-            var pending = (IEnumerable)((((endpoint).GetType().GetField("_unregistered", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(endpoint)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             object? connection = null;
             var deadline = DateTime.UtcNow.AddSeconds(2);
             while (connection == null && DateTime.UtcNow < deadline)
             {
-                lock (pending) { connection = pending.Cast<object>().SingleOrDefault(); }
+                connection = PendingConnections(endpoint).SingleOrDefault();
                 if (connection == null) await Task.Delay(10);
             }
             Assert.That(connection, Is.Not.Null);
             if (shutdown) listener.Stop();
             else client.Dispose();
+            // The buffer is cleared before the timer and streams are disposed, so only the
+            // close-finished flag proves terminal cleanup has completed.
             deadline = DateTime.UtcNow.AddSeconds(2);
-            while (((connection ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetField("_buffer", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection) != null
+            while (!CloseFinished(connection ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
                 && DateTime.UtcNow < deadline) await Task.Delay(10);
+            Assert.That(CloseFinished(connection), Is.True, "Terminal cleanup must finish.");
             Assert.That(TimerDisposed(RequestTimer(connection)), Is.True);
             Assert.That(Transport(connection).CanRead, Is.False);
             Assert.That(listener.IsListening, Is.EqualTo(!shutdown));
         }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task PendingConnectionBurstReleasesEveryTransportBeforeRestart(bool secure)
+        {
+            using var certificate = secure ? HttpsSmoke.CreateCertificate() : null;
+            var address = new UriBuilder(HttpsSmoke.GetUrl())
+            { Host = "127.0.0.1", Scheme = secure ? "https" : "http" }.Uri;
+            var url = address.ToString();
+            using var listener = new Net.HttpListener(certificate);
+            listener.AddPrefix(url);
+            listener.Start();
+            var registrations = typeof(Net.EndPointManager).GetField("Registrations", BindingFlags.Static | BindingFlags.NonPublic)
+                ?.GetValue(null) as IDictionary ?? throw new AssertionException("Missing endpoint registrations.");
+            var prefixes = registrations[listener] as IDictionary ?? throw new AssertionException("Missing owner registrations.");
+            var endpoint = (prefixes[url] as IEnumerable ?? throw new AssertionException("Missing endpoint."))
+                .Cast<object>().Single();
+            var peers = Enumerable.Range(0, 32).Select(_ => new TcpClient()).ToArray();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                await Task.WhenAll(peers.Select(peer => peer.ConnectAsync(IPAddress.Loopback, address.Port, timeout.Token).AsTask()));
+                var deadline = DateTime.UtcNow.AddSeconds(2);
+                var pending = PendingConnections(endpoint);
+                while (pending.Length != peers.Length && DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(10, timeout.Token);
+                    pending = PendingConnections(endpoint);
+                }
+                Assert.That(pending, Has.Length.EqualTo(peers.Length), "Every accepted idle/TLS session must have an owner.");
+                listener.Stop();
+                deadline = DateTime.UtcNow.AddSeconds(2);
+                while (pending.Any(connection => !CloseFinished(connection)) && DateTime.UtcNow < deadline)
+                    await Task.Delay(10, timeout.Token);
+                foreach (var connection in pending)
+                {
+                    Assert.That(CloseFinished(connection), Is.True, "Terminal cleanup must finish for every pending session.");
+                    Assert.That(TimerDisposed(RequestTimer(connection)), Is.True);
+                    Assert.That(Transport(connection).CanRead, Is.False);
+                }
+                Assert.That(PendingConnections(endpoint), Is.Empty);
+                listener.Start();
+                using var client = secure ? HttpsSmoke.CreateClient(certificate ?? throw new AssertionException("Missing certificate.")) : new HttpClient();
+                var accepted = listener.GetContextAsync(timeout.Token);
+                var received = client.GetAsync(url, timeout.Token);
+                var context = await accepted;
+                context.Response.StatusCode = 204;
+                context.Response.ContentLength64 = 0;
+                context.Response.OutputStream.Write(Array.Empty<byte>(), 0, 0);
+                context.Close();
+                using var response = await received;
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+            }
+            finally { foreach (var peer in peers) peer.Dispose(); }
+        }
+
+        private static object[] PendingConnections(object endpoint)
+            => (endpoint.GetType().GetMethod("PendingConnections", PrivateInstance)?.Invoke(endpoint, null) as IEnumerable
+                ?? throw new AssertionException("Missing pending-session snapshot.")).Cast<object>().ToArray();
         private static object Connection(IHttpContext context)
             => ((((context).GetType().GetProperty("Connection", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(context)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         private static Stream Transport(object connection)
             => (Stream)((((connection).GetType().GetProperty("Stream") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static bool CloseFinished(object connection)
+        {
+            var type = connection.GetType();
+            var sync = ((type.GetField("_connectionSync", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
+            var finished = type.GetField("_closeFinished", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
+            lock (sync) return (bool)(finished.GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        }
         private static Timer RequestTimer(object connection)
             => (Timer)((((connection).GetType().GetField("_timer", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 

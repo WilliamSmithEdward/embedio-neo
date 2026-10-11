@@ -38,7 +38,7 @@ namespace EmbedIO
         {
             context.Response.ContentType = MimeType.Json;
             context.Response.ContentEncoding = WebServer.Utf8NoBomEncoding;
-            var json = options == null ? Serialization.Json.Serialize(data) : Serialization.Json.Serialize(data, options);
+            var json = Serialization.Json.SerializeUtf8(data, options);
             return None(bufferResponse)(context, json);
         }
 

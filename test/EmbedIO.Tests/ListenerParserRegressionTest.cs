@@ -12,15 +12,15 @@ namespace EmbedIO.Tests
     public class ListenerParserRegressionTest
     {
         private static readonly Type ConnectionType = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-        private static readonly MethodInfo ReadLine = ((ConnectionType).GetMethod("ReadLine", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+        private static readonly Type HeadReaderType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http1HeadReader", true) ?? throw new AssertionException("Missing HTTP/1 head reader.");
+        private static readonly MethodInfo ReadLine = ((HeadReaderType).GetMethod("ReadLine", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
         [TestCaseSource(nameof(LineCases))]
         public void LinesPreserveByteMappingAndFragmentBoundaries(byte[] bytes, int fragmentSize, string[] expectedLines, string expectedPartial)
         {
             if (bytes is null) throw new System.NullReferenceException();
             // Exercise the real line parser without creating sockets or changing listener timing.
-            var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
-            ((ConnectionType).GetField("_connectionSync", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, new object());
+            var reader = Activator.CreateInstance(HeadReaderType) ?? throw new AssertionException("Missing reader instance.");
             var lines = new List<string>();
             for (var start = 0; start < bytes.Length; start += fragmentSize)
             {
@@ -29,7 +29,13 @@ namespace EmbedIO.Tests
                 while (offset < count)
                 {
                     var args = new object[] { bytes, start + offset, count - offset, 0 };
-                    var line = (string?)ReadLine.Invoke(connection, args);
+                    string? line;
+                    try { line = (string?)ReadLine.Invoke(reader, args); }
+                    catch (TargetInvocationException exception) when (exception.InnerException is InvalidDataException)
+                    {
+                        Assert.That(expectedPartial, Is.EqualTo("INVALID"));
+                        return;
+                    }
                     var used = (int)args[3];
                     Assert.That(used, Is.InRange(1, count - offset));
                     offset += used;
@@ -37,8 +43,9 @@ namespace EmbedIO.Tests
                 }
             }
 
+            Assert.That(expectedPartial, Is.Not.EqualTo("INVALID"), "Malformed line must be rejected.");
             Assert.That(lines, Is.EqualTo(expectedLines));
-            var partial = ((ConnectionType).GetField("_currentLine", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)?.ToString() ?? string.Empty;
+            var partial = ((HeadReaderType).GetField("_partial", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(reader)?.ToString() ?? string.Empty;
             Assert.That(partial, Is.EqualTo(expectedPartial));
         }
 
@@ -54,9 +61,6 @@ namespace EmbedIO.Tests
             var transportField = ConnectionType.GetField("<Stream>k__BackingField", fieldFlags);
             (transportField ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, Stream.Null);
             ((ConnectionType).GetMethod("Init", fieldFlags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
-            var buffered = (MemoryStream)((((ConnectionType).GetField("_ms", fieldFlags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            (buffered).Capacity = 8192;
-            Array.Fill(buffered.GetBuffer(), (byte)'X');
             var bytes = Encoding.Latin1.GetBytes("\r\nPOST /items?q=42 HTTP/1.1\r\nHost: localhost\r\nX-Value: caf\u00e9\r\nContent-Length: 6\r\n\r\nabcdefignored");
             var process = ConnectionType.GetMethod("ProcessInput", fieldFlags);
             var offset = 0;
@@ -64,9 +68,9 @@ namespace EmbedIO.Tests
             while (offset < bytes.Length && !complete)
             {
                 var count = Math.Min(fragmentSize, bytes.Length - offset);
-                buffered.Write(bytes, offset, count);
+                var segment = new ArraySegment<byte>(bytes, offset, count);
                 offset += count;
-                complete = (bool)((process ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, new object[] { buffered }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                complete = (bool)((process ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, new object[] { segment }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
 
             Assert.That(complete, Is.True);
@@ -95,16 +99,14 @@ namespace EmbedIO.Tests
             ((ConnectionType).GetField("_connectionSync", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, new object());
             ((ConnectionType).GetField("<Stream>k__BackingField", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, Stream.Null);
             ((ConnectionType).GetMethod("Init", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
-            using var buffered = (MemoryStream)((((ConnectionType).GetField("_ms", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var value = new string('a', valueLength);
             var bytes = Encoding.ASCII.GetBytes($"GET / HTTP/1.1\r\nHost: localhost\r\nX-Value: {value}\r\n\r\n");
             var process = ConnectionType.GetMethod("ProcessInput", fields);
             var complete = false;
             for (var offset = 0; offset < bytes.Length && !complete; offset += fragment)
             {
-                (buffered).Write(bytes, offset, Math.Min(fragment, bytes.Length - offset));
-                Assert.That(buffered.Length, Is.LessThanOrEqualTo(32768));
-                complete = (bool)((process ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, new object[] { buffered }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                var segment = new ArraySegment<byte>(bytes, offset, Math.Min(fragment, bytes.Length - offset));
+                complete = (bool)((process ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, new object[] { segment }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
             Assert.That(complete, Is.True);
             Assert.That(((ConnectionType).GetField("_errorMessage", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection), Is.Null);
@@ -117,12 +119,12 @@ namespace EmbedIO.Tests
             var cases = new[]
             {
                 ("crlf", "header: value\r\n", new[] { "header: value" }, string.Empty),
-                ("lf", "header: value\n", new[] { "header: value" }, string.Empty),
-                ("empty", "\r\n\n", new[] { string.Empty, string.Empty }, string.Empty),
-                ("embedded-cr", "ab\rcd\r\r\n", new[] { "abcd" }, string.Empty),
-                ("leading-cr", "\rX\rY\nz\n", new[] { "XY", "z" }, string.Empty),
+                ("lf", "header: value\n", Array.Empty<string>(), "INVALID"),
+                ("empty", "\r\n\r\n", new[] { string.Empty, string.Empty }, string.Empty),
+                ("embedded-cr", "ab\rcd\r\r\n", Array.Empty<string>(), "INVALID"),
+                ("leading-cr", "\rX\rY\nz\n", Array.Empty<string>(), "INVALID"),
                 ("partial", "partial\r", Array.Empty<string>(), "partial"),
-                ("consecutive", "foo\r\n\r\nbar\n", new[] { "foo", string.Empty, "bar" }, string.Empty),
+                ("consecutive", "foo\r\n\r\nbar\r\n", new[] { "foo", string.Empty, "bar" }, string.Empty),
             };
             foreach (var fragmentSize in new[] { 1, 2, 3, 7, 8192 })
             {

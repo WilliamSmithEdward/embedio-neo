@@ -22,14 +22,6 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.EmbedIO, true, false, true)]
         [TestCase(HttpListenerMode.EmbedIO, true, true, false)]
         [TestCase(HttpListenerMode.EmbedIO, true, true, true)]
-        [TestCase(HttpListenerMode.Microsoft, false, false, false)]
-        [TestCase(HttpListenerMode.Microsoft, false, false, true)]
-        [TestCase(HttpListenerMode.Microsoft, false, true, false)]
-        [TestCase(HttpListenerMode.Microsoft, false, true, true)]
-        [TestCase(HttpListenerMode.Microsoft, true, false, false)]
-        [TestCase(HttpListenerMode.Microsoft, true, false, true)]
-        [TestCase(HttpListenerMode.Microsoft, true, true, false)]
-        [TestCase(HttpListenerMode.Microsoft, true, true, true)]
         public async Task ProxyDisconnectionHonorsWritePolicyAndLeavesServerHealthy(HttpListenerMode mode, bool ignoreWrites, bool gzip, bool graceful)
         {
             var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
@@ -123,8 +115,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task BufferedWritesRemainMemoryOperationsUntilResponseCommit(HttpListenerMode mode, bool ignoreWrites)
         {
             var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);

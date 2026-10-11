@@ -155,6 +155,11 @@ namespace EmbedIO.WebSockets
             if (context.RequestedPath.Length > 1)
                 return;
 
+            // A generic CONNECT carrier routed here is not a WebSocket handshake.
+            // Reject it as an unsupported route before attempting socket acceptance.
+            if (context is IHttpTunnelContext && context.Request.HttpMethod == "CONNECT"
+                && !context.Request.IsWebSocketRequest)
+                throw HttpException.NotFound("This endpoint serves WebSocket connections only.");
             var requestedProtocols = context.Request.Headers.GetValues(HttpHeaderNames.SecWebSocketProtocol)
                                          ?.SelectMany(s => s.SplitByComma(StringSplitOptions.RemoveEmptyEntries))
                                          .Select(s => s.Trim())
@@ -188,12 +193,20 @@ namespace EmbedIO.WebSockets
 
             var contextImpl = context.GetImplementation();
             $"{BaseRoute} - Accepting WebSocket connection with subprotocol \"{acceptedProtocol}\"".Debug(nameof(WebSocketModule));
-            var webSocketContext = await contextImpl.AcceptWebSocketAsync(
+            // The managed socket enforces the limit from its first frame.
+            Internal.WebSocket.SetAcceptedMaxMessageSize(_maxMessageSize);
+            Internal.WebSocket.SetAcceptedMessageConsumerPending(true);
+            IWebSocketContext webSocketContext;
+            try
+            {
+                webSocketContext = await contextImpl.AcceptWebSocketAsync(
                     requestedProtocols,
                     acceptedProtocol,
                     ReceiveBufferSize,
                     KeepAliveInterval,
                     context.CancellationToken).ConfigureAwait(false);
+            }
+            finally { Internal.WebSocket.SetAcceptedMessageConsumerPending(false); }
 
             PurgeDisconnectedContexts();
             _ = _contexts.TryAdd(webSocketContext.Id, webSocketContext);
@@ -204,18 +217,8 @@ namespace EmbedIO.WebSockets
             try
             {
                 await OnClientConnectedAsync(webSocketContext).ConfigureAwait(false);
-                if (webSocketContext.WebSocket is SystemWebSocket systemWebSocket)
-                {
-                    await ProcessSystemContext(
-                            webSocketContext,
-                            systemWebSocket,
-                            context.CancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    await ProcessEmbedIOContext(webSocketContext, context.CancellationToken)
-                        .ConfigureAwait(false);
-                }
+                await ProcessEmbedIOContext(webSocketContext, context.CancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (TaskCanceledException)
             {
@@ -227,6 +230,7 @@ namespace EmbedIO.WebSockets
             }
             finally
             {
+                ((Internal.WebSocket)webSocketContext.WebSocket).AbandonPendingMessageConsumer();
                 // once the loop is completed or connection aborted, remove the WebSocket
                 RemoveWebSocket(webSocketContext);
             }
@@ -546,6 +550,10 @@ namespace EmbedIO.WebSockets
             {
                 if (context.WebSocket == null || context.WebSocket.State == WebSocketState.Open)
                     continue;
+                // Transport closure can precede initialization and the delivery of
+                // already received messages. Leave that context to its handler.
+                if (context.WebSocket is Internal.WebSocket managed && !managed.IsApplicationCloseCompleted)
+                    continue;
 
                 RemoveWebSocket(context);
                 purgedCount++;
@@ -578,73 +586,7 @@ namespace EmbedIO.WebSockets
                 catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { ex.Log(nameof(WebSocketModule)); }
             };
 
-            while (context.WebSocket.State == WebSocketState.Open
-                || context.WebSocket.State == WebSocketState.CloseReceived
-                || context.WebSocket.State == WebSocketState.CloseSent)
-            {
-                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
-            }
-        }
-
-        private async Task ProcessSystemContext(IWebSocketContext context, SystemWebSocket webSocket, CancellationToken cancellationToken)
-        {
-            // define a receive buffer
-            var receiveBuffer = new byte[ReceiveBufferSize];
-
-            // define a dynamic buffer that holds multi-part receptions
-            var receivedMessage = new List<byte>(receiveBuffer.Length * 2);
-
-            // poll the WebSocket connections for reception
-            while (webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseSent)
-            {
-                // retrieve the result (blocking)
-                var receiveResult = new SystemWebSocketReceiveResult(
-                    await webSocket.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), cancellationToken)
-                        .ConfigureAwait(false));
-
-                if (receiveResult.MessageType == (int)WebSocketMessageType.Close)
-                {
-                    // close the connection if requested by the client
-                    await webSocket
-                        .CloseAsync(CloseStatusCode.Normal, string.Empty, cancellationToken)
-                        .ConfigureAwait(false);
-                    return;
-                }
-
-                // Keep receiving the closing handshake, but no longer dispatch application data.
-                if (webSocket.IsCloseRequested)
-                {
-                    receivedMessage.Clear();
-                    continue;
-                }
-
-                var frameBytes = new byte[receiveResult.Count];
-                Array.Copy(receiveBuffer, frameBytes, frameBytes.Length);
-                await OnFrameReceivedAsync(context, frameBytes, receiveResult).ConfigureAwait(false);
-
-                // add the response to the multi-part response
-                receivedMessage.AddRange(frameBytes);
-
-                if (_maxMessageSize > 0 && receivedMessage.Count > _maxMessageSize)
-                {
-                    // close the connection if message exceeds max length
-                    await webSocket.CloseAsync(
-                        CloseStatusCode.TooBig,
-                        $"Message too big. Maximum is {_maxMessageSize} bytes.",
-                        cancellationToken).ConfigureAwait(false);
-
-                    // exit the loop; we're done
-                    return;
-                }
-
-                // if we're at the end of the message, process the message
-                if (!receiveResult.EndOfMessage) continue;
-
-                if (!webSocket.IsCloseRequested)
-                    await OnMessageReceivedAsync(context, receivedMessage.ToArray(), receiveResult)
-                        .ConfigureAwait(false);
-                receivedMessage.Clear();
-            }
+            await ((Internal.WebSocket)context.WebSocket).WaitForCloseAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

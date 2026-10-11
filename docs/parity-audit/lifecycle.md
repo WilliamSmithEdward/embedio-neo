@@ -18,7 +18,7 @@ workloads aborted in this baseline cleanup path.
 Neo's existing `SystemHttpResponse` caches the acquired stream. Both Neo assets
 remain live after the first DTO, serve a second DTO, and complete cancellation
 without either exception. The Unix profile independently requires those exact
-Neo outcomes and the characterized upstream errors. A changed error or weakened
+Neo outcomes and the exact reviewed upstream failure outcomes. An unreviewed error or weakened
 Neo liveness fails the audit. This is verified improvement on the tested host,
 not evidence that the complete old native workload passes on Unix. The Windows
 profile continues to compare that complete native workload.
@@ -39,3 +39,15 @@ Evidence: `lifecycle/`, `https/cancel` and `healthy-after-errors` cases.
 The Unix observation is `native/unix-response-lifetime`, with its original
 exception details in the Upstream run log.
 See the [audit method](README.md).
+
+macOS CI 37935808167 also observed an upstream RunAsync task completing normally
+after the first DTO, with Stopped state, no successor request and the same
+AggregateException cancellation. The contract records this complete alternative
+as UnexpectedCompletion, rather than pretending it was ObjectDisposedException.
+All fields must match one reviewed upstream outcome; mixed combinations still
+fail. The added alternative applies only to the pinned upstream failure
+characterization. Both Neo assets still require the second DTO, live processing
+before cancellation, no run/cancellation error and Stopped state afterward.
+Comparator mutations verify rejection of unknown errors, changed payloads,
+premature Neo completion and a missing Neo successor. The raw original artifact
+and reviewed comparison are retained separately under TestResults/http-engine.

@@ -17,11 +17,6 @@ namespace EmbedIO.Tests.TestObjects
             File.WriteAllText(PathOf("sub", FileModule.DefaultDocumentName), Resources.SubIndex);
         }
 
-        ~StaticFolder()
-        {
-            Dispose(false);
-        }
-
         public string RootPath { get; }
 
         public static string RootPathOf(string folderName)
@@ -38,7 +33,7 @@ namespace EmbedIO.Tests.TestObjects
 
         protected virtual void Dispose(bool disposing)
         {
-            Directory.Delete(RootPath, true);
+            if (disposing && Directory.Exists(RootPath)) Directory.Delete(RootPath, true);
         }
 
         protected string PathOf(string path) => Path.Combine(RootPath, path);

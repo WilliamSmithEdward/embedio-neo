@@ -41,14 +41,20 @@ namespace EmbedIO.Tests
             }
         }
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task ExpectContinuePrecedesBodyAndAllowsNextRequest(bool secure)
+        [TestCase(false, "100-continue")]
+        [TestCase(true, "100-continue")]
+        [TestCase(false, "100-continue, 100-continue")]
+        [TestCase(true, "100-continue, 100-continue")]
+        [TestCase(false, " , 100-CoNtInUe , ")]
+        [TestCase(true, " , 100-CoNtInUe , ")]
+        [TestCase(false, "custom=\"x,100-continue,y\", 100-continue")]
+        [TestCase(true, "custom=\"x,100-continue,y\", 100-continue")]
+        public async Task ExpectContinuePrecedesBodyAndAllowsNextRequest(bool secure, string expectation)
         {
             using var fixture = new RawListener(secure);
             await fixture.Connect();
             var accept = fixture.Listener.GetContextAsync(fixture.Token);
-            await fixture.Write("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 6\r\nExpect: 100-continue\r\n\r\n", 7);
+            await fixture.Write("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 6\r\nExpect: " + expectation + "\r\n\r\n", 7);
             Assert.That(await fixture.ReadHeaders(), Is.EqualTo("HTTP/1.1 100 Continue\r\n\r\n"));
             await fixture.Write("abcdef", 1);
             var context = await accept;
@@ -65,6 +71,31 @@ namespace EmbedIO.Tests
             Assert.That(await fixture.ReadHeaders(), Does.StartWith("HTTP/1.1 204 "));
         }
 
+        [TestCase(false, "POST", "1.0", "abcdef")]
+        [TestCase(true, "POST", "1.0", "abcdef")]
+        [TestCase(false, "GET", "1.1", "")]
+        [TestCase(true, "GET", "1.1", "")]
+        [TestCase(false, "POST", "1.1", "")]
+        [TestCase(true, "POST", "1.1", "")]
+        [TestCase(false, "PUT", "1.1", "")]
+        [TestCase(true, "PUT", "1.1", "")]
+        public async Task Http10AndBodylessRequestsDoNotSendContinue(bool secure, string method, string version, string payload)
+        {
+            ArgumentNullException.ThrowIfNull(payload);
+            using var fixture = new RawListener(secure);
+            await fixture.Connect();
+            var accept = fixture.Listener.GetContextAsync(fixture.Token);
+            await fixture.Write($"{method} / HTTP/{version}\r\nHost: 127.0.0.1\r\nContent-Length: {payload.Length}\r\nExpect: 100-continue\r\n\r\n{payload}", 7);
+            var context = await accept;
+            using var body = new MemoryStream();
+            await context.Request.InputStream.CopyToAsync(body, fixture.Token);
+            Assert.That(Encoding.ASCII.GetString(body.ToArray()), Is.EqualTo(payload));
+            Respond(context, false);
+            var response = await fixture.ReadHeaders();
+            Assert.That(response, Does.Contain(" 204 "));
+            Assert.That(response, Does.Not.Contain("100 Continue"));
+        }
+
         [TestCase(false)]
         [TestCase(true)]
         public async Task TruncatedBodyTerminatesReadAndListenerStillServes(bool secure)
@@ -76,10 +107,12 @@ namespace EmbedIO.Tests
             var context = await accept;
             fixture.Client.Client.Shutdown(SocketShutdown.Send);
             using var body = new MemoryStream();
-            try { await context.Request.InputStream.CopyToAsync(body, fixture.Token); }
-            catch (IOException) when (secure) { }
+            var failure = await Assert.CatchAsync<IOException>(async () => await context.Request.InputStream.CopyToAsync(body, fixture.Token));
+            if (!secure) Assert.That(failure, Is.TypeOf<EndOfStreamException>());
             Assert.That(Encoding.ASCII.GetString(body.ToArray()), Is.EqualTo("ab"));
-            // An application can observe EOF before Content-Length and close the response.
+            // Partial bytes remain observable, but cannot represent a completed body.
+            context.Response.StatusCode = 400;
+            context.Response.ContentLength64 = 0;
             context.Response.KeepAlive = false;
             context.Close();
             await fixture.AssertHealthy();
@@ -92,8 +125,10 @@ namespace EmbedIO.Tests
             using var fixture = new RawListener(secure);
             await fixture.Connect();
             await fixture.Write("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: -1\r\n\r\n", 7);
-            var bytes = new byte[1];
-            Assert.That(await fixture.Stream.ReadAsync(bytes.AsMemory(), fixture.Token), Is.Zero);
+            using var rejected = new MemoryStream();
+            await fixture.Stream.CopyToAsync(rejected, fixture.Token);
+            Assert.That(Encoding.ASCII.GetString(rejected.ToArray()),
+                Is.EqualTo("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
             await fixture.AssertHealthy();
         }
 
@@ -148,9 +183,10 @@ namespace EmbedIO.Tests
             const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
             var endpoint = RuntimeHelpers.GetUninitializedObject((endpointType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
             ((endpointType).GetField("<Listener>k__BackingField", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, fixture.Listener);
-            ((endpointType).GetField("_sock", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, socket);
+            var admissionField = endpointType.GetField("_admission", fields) ?? throw new AssertionException("Missing endpoint admission owner.");
+            admissionField.SetValue(endpoint, Activator.CreateInstance(admissionField.FieldType, fields, null, new object[] { socket }, null));
             ((endpointType).GetField("_endpoint", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, socket.LocalEndPoint);
-            foreach (var name in new[] { "_prefixes", "_unregistered" })
+            foreach (var name in new[] { "_routes" })
             {
                 var field = endpointType.GetField(name, fields);
                 (field ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, Activator.CreateInstance(field.FieldType));
@@ -159,16 +195,16 @@ namespace EmbedIO.Tests
             ((endpointType).GetMethod("AddPrefix") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(endpoint,
                 new[] { Activator.CreateInstance((prefixType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), $"http://127.0.0.1:{port}/"), fixture.Listener });
             var clients = new List<TcpClient>();
-            using var args = new SocketAsyncEventArgs { UserToken = endpoint };
-            var completion = endpointType.GetMethod("ProcessAccept", BindingFlags.Static | BindingFlags.NonPublic);
-            var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            args.Completed += (_, completed) =>
-            {
-                var terminal = completed.SocketError != SocketError.Success;
-                (completion ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(null, new object[] { completed });
-                if (terminal) closed.TrySetResult();
-            };
-            var armed = false;
+            var actorType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop")
+                ?? throw new AssertionException("Missing owned TCP accept loop.");
+            var admission = (Action<Socket>)(endpointType.GetMethod("ProcessAcceptedSocket", fields)
+                ?? throw new AssertionException("Missing endpoint admission.")).CreateDelegate(typeof(Action<Socket>), endpoint);
+            Func<bool> stopped = () => socket.SafeHandle.IsClosed;
+            var actor = Activator.CreateInstance(actorType, fields, null,
+                new object[] { socket, admission, stopped, (Action)socket.Dispose }, null)
+                ?? throw new AssertionException("Missing accept actor instance.");
+            var run = actorType.GetMethod("RunAsync", fields) ?? throw new AssertionException("Missing actor runner.");
+            Task? running = null;
             try
             {
                 // No accept is armed until every peer is in the socket backlog.
@@ -180,9 +216,8 @@ namespace EmbedIO.Tests
                     await peer.ConnectAsync(IPAddress.Loopback, port, fixture.Token);
                     await peer.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"GET /{i} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"), fixture.Token);
                 }
-                ((endpointType).GetMethod("Accept", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
-                    .Invoke(null, new object?[] { socket, args, null });
-                armed = true;
+                running = Task.Run(() => (Task)(run.Invoke(actor, null)
+                    ?? throw new AssertionException("Missing accept task.")));
                 var paths = new HashSet<string>();
                 for (var i = 0; i < count; i++)
                 {
@@ -201,7 +236,7 @@ namespace EmbedIO.Tests
             finally
             {
                 ((IDisposable)endpoint).Dispose();
-                if (armed) await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                if (running != null) await running.WaitAsync(TimeSpan.FromSeconds(5));
                 foreach (var peer in clients) peer.Dispose();
             }
         }
@@ -219,6 +254,44 @@ namespace EmbedIO.Tests
             })
                         yield return new TestCaseData(secure, fragment, headers, length)
                             .SetName($"FixedLengthBodiesAndSequentialRequestsPreserveBoundaries({secure},{fragment},{name})");
+        }
+
+        [TestCase(false, false, 8191)]
+        [TestCase(false, false, 8192)]
+        [TestCase(false, false, 16385)]
+        [TestCase(true, false, 8191)]
+        [TestCase(true, false, 8192)]
+        [TestCase(true, false, 16385)]
+        [TestCase(false, true, 8191)]
+        [TestCase(false, true, 8192)]
+        [TestCase(false, true, 16385)]
+        [TestCase(true, true, 8191)]
+        [TestCase(true, true, 8192)]
+        [TestCase(true, true, 16385)]
+        public async Task PipelineAfterPartiallyReadBodySurvivesTransportBufferReuse(bool secure, bool chunked, int length)
+        {
+            using var fixture = new RawListener(secure);
+            await fixture.Connect();
+            var payload = new string('b', length);
+            var framing = chunked ? "Transfer-Encoding: chunked" : $"Content-Length: {length}";
+            var body = chunked ? $"{length:x}\r\n{payload}\r\n0\r\nX-Trailer: end\r\n\r\n" : payload;
+            await fixture.Write($"POST /body HTTP/1.1\r\nHost: 127.0.0.1\r\n{framing}\r\n\r\n{body}GET /second HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Padding: {new string('p', 8200)}\r\n\r\nGET /third HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n", 8192);
+            var first = await fixture.Listener.GetContextAsync(fixture.Token);
+            Assert.That(first.Request.RawTarget, Is.EqualTo("/body"));
+            var prefix = new byte[13];
+            await first.Request.InputStream.ReadExactlyAsync(prefix, fixture.Token);
+            Assert.That(prefix, Is.All.EqualTo((byte)'b'));
+            Respond(first);
+            Assert.That(await fixture.ReadHeaders(), Does.StartWith("HTTP/1.1 204 "));
+            var second = await fixture.Listener.GetContextAsync(fixture.Token);
+            Assert.That(second.Request.RawTarget, Is.EqualTo("/second"));
+            Assert.That(second.Request.Headers["X-Padding"], Is.EqualTo(new string('p', 8200)));
+            Respond(second);
+            Assert.That(await fixture.ReadHeaders(), Does.StartWith("HTTP/1.1 204 "));
+            var third = await fixture.Listener.GetContextAsync(fixture.Token);
+            Assert.That(third.Request.RawTarget, Is.EqualTo("/third"));
+            Respond(third, false);
+            Assert.That(await fixture.ReadHeaders(), Does.StartWith("HTTP/1.1 204 "));
         }
 
         private static void Respond(IHttpContextImpl context, bool keepAlive = true)

@@ -292,7 +292,7 @@ shared CLR object identity by default. Distinct objects with equal values are
 also serialized as separate values.
 
 An actual cycle is different. For example, an object whose `Next` points back
-to itself, or an entity graph such as `Customer → Orders → Customer`, cannot be
+to itself, or an entity graph such as `Customer -> Orders -> Customer`, cannot be
 represented by endlessly expanding values. Upstream emitted a `$circref` marker
 in the audited self-cycle case. Neo defaults throw `JsonException`; the audited
 default HTTP response path returns 500. The server still serves subsequent valid
@@ -333,7 +333,7 @@ changes as follows:
 
 | Serializer | JSON timestamp |
 | --- | --- |
-| Upstream SWAN defaults | `"2026-10-07T12:34:56"` |
+| Upstream SWAN defaults | `"café <>&"` |
 | Neo defaults | `"2026-10-07T12:34:56.1234567Z"` |
 
 Neo preserves the tested fractional seconds and marks the UTC value with `Z`.
@@ -552,6 +552,103 @@ precise scope, tests and limitations. No release date/version is promised.
 
 The owner-requested correction in [#170](https://github.com/WilliamSmithEdward/embedio-neo/issues/170) changes `Range: bytes=-N` from an incorrect leading slice to the final N bytes, clamped to file size. `bytes=-0` now returns 416; a positive suffix on an empty file is ignored and returns 200. HEAD, If-Range validation, explicit/open-ended ranges and existing multipart handling retain their policies. Clients using explicit offsets may continue to do so; clients relying on wrong leading bytes must adopt correct suffix semantics. Published 1.0.3 retains the defect. No public API, dependency or target changes. See [suffix-range guidance](../user-reports/suffix-range-responses.md).
 
+## Managed HTTP framing (unreleased)
+
+The owner approved strict framing on 2026-10-08 as part of the modern engine
+replacement. The managed listener now decodes chunked request bodies. Such
+requests report `HasEntityBody = true` and `ContentLength64 = -1`; consume their
+stream to completion instead of treating an unknown length as an empty body.
+Trailer fields are validated and consumed without merging them into request
+headers. The current public request interface does not expose trailers separately.
+
+Send CRLF line endings, valid field names, decimal nonnegative lengths and one
+unambiguous framing scheme. Conflicting Content-Length fields, Content-Length
+together with Transfer-Encoding, repeated/unsupported transfer coding, duplicate
+Host, invalid field controls and malformed chunk boundaries now terminate the
+connection. Equal repeated decimal Content-Length is accepted. This intentionally
+changes the permissive behavior recorded by earlier listener-boundary audits.
+
+Fixed-length reads now use asynchronous transport I/O. Closing a response starts
+asynchronous draining of unread request data before admitting a successor; it no
+longer blocks the closing caller on that drain. The connection is closed if the
+body is incomplete or malformed. Applications must finish their own body reads
+before closing a response and must not concurrently read a request stream.
+
+Header parsing enforces a cumulative 32768-byte budget even across fragmented
+reads, and keeps the existing request-header deadline active until parsing is
+complete. Chunk metadata lines are limited to 8192 bytes and trailers to 32768
+bytes. The native Microsoft backend is unchanged. No package version or release
+is implied; see the [engine program](../project/http-engine.md) for validation
+status and the HTTP/2 and HTTP/3 milestones.
+
+## Managed WebSocket framing (unreleased)
+
+The managed WebSocket audit in [#190](https://github.com/WilliamSmithEdward/embedio-neo/issues/190)
+now rejects invalid masking, reserved bits and fragmentation state as soon as the
+base header is available. A continuation must follow an unfinished fragmented
+message. New data messages cannot interrupt one; ping/pong control frames may
+still occur between fragments. Clients that relied on silently discarded orphan
+continuations must correct their frame sequence.
+
+Use the shortest payload-length encoding required by RFC 6455 and leave the high
+bit of a 64-bit length clear. Nonminimal or invalid encodings now fail with close
+code 1002. Lengths greater than Int32.MaxValue cannot fit the engine's current
+byte-array representation and are rejected with 1009 before any narrowing cast
+or payload read. This is a representation check, not a newly configured message
+budget or a guarantee that all smaller allocations will succeed. Resource limits
+and memory/backpressure work remain tracked in #190.
+
+These checks apply to the existing managed HTTP/1.1 WebSocket engine and its
+HTTP/2 stream integration. Valid masked frames and interleaved control frames
+remain supported. Public APIs, callback scheduling and message-size defaults
+are unchanged. The native Microsoft WebSocket backend is unchanged. These
+changes are unreleased.
+
+Managed close frames now reject a one-byte status, forbidden/reserved codes and
+codes outside the supported 1000-4999 ranges with 1002. Incoming 1012-1014 codes
+and application/private-use 3000-4999 codes remain accepted. Close reasons must
+be valid UTF-8; invalid sequences fail with 1007. Empty close payloads remain
+valid. The registry snapshot is the [IANA WebSocket registry](https://www.iana.org/assignments/websocket)
+checked on 2026-10-08; no extension currently negotiates additional reserved
+codes. Rejection can occur before later bytes are consumed. Depending on TCP
+shutdown state, an invalid peer may observe transport closure/reset rather than
+a readable close frame. Applications must not rely on echoing malformed close
+payloads. This change does not alter application text-message callback policy.
+
+### Managed WebSocket limits, delivery and send framing (unreleased)
+
+These changes from [#190](https://github.com/WilliamSmithEdward/embedio-neo/issues/190)
+affect only the managed listener (`HttpListenerMode.EmbedIO`), over HTTP/1.1
+and RFC 8441 HTTP/2 tunnels. Public APIs, defaults and the Microsoft backend
+are unchanged.
+
+- `WebSocketModule.MaxMessageSize` is now enforced. It was documented but the
+  managed listener ignored it, so applications that set it received messages
+  of any size. A message whose frames add up to more than the limit now closes
+  the connection with 1009 before `OnMessageReceivedAsync` runs and before its
+  payload is buffered. The default of 0 still means no limit. Review the value
+  you set if you relied on larger messages arriving.
+- After rejecting a message (1009, or 1007 for invalid UTF-8 text), the server
+  skips the rejected payload, sends its close frame and keeps reading, without
+  delivering anything, until the peer's close arrives or the existing
+  one-second close timeout passes. Previously it closed the transport at once,
+  and a peer that was still sending often saw a connection reset instead of
+  the close status. Other protocol errors still close immediately.
+- A message completed on the wire before the peer's close frame is now always
+  delivered when the module has subscribed. The callback stopped as soon as the
+  close was processed, and such messages were often dropped. The disconnect is
+  reported after the last delivered message has been handed to
+  `OnMessageReceivedAsync`. A message still queued when a connection closes
+  before the module subscribes is discarded, as before.
+- Outgoing messages are split into frames of up to 64 KiB instead of 1016
+  bytes. RFC 6455 lets a sender fragment freely and every conforming client
+  reassembles messages, but a client that read individual frames, rather
+  than whole messages, now sees fewer, larger frames.
+- A WebSocket frame sent in the same TCP segment as the upgrade request is
+  still lost. RFC 6455 requires clients to wait for the 101 response, so
+  conforming clients are unaffected; the correction belongs to the HTTP/1
+  transport and is tracked in #190.
+
 ## Warning-free API cleanup (unreleased, owner-approved)
 
 William approved the necessary source and binary changes for the compiler/analyzer
@@ -611,3 +708,548 @@ Header comparisons remain explicitly case-insensitive. The supported library
 targets and runtime dependency groups are unchanged. CI enables analyzers for
 test/platform builds, treats warnings as errors, verifies formatting, and rejects
 compiler/analyzer suppression directives, null-forgiving operators, and build opt-outs.
+
+### Managed WebSocket text validation (unreleased)
+
+Incoming text messages now require valid UTF-8 before application callbacks run,
+as required by [RFC 6455 section 8.1](https://www.rfc-editor.org/rfc/rfc6455.html#section-8.1).
+Malformed text closes the managed WebSocket with code 1007; this includes overlong
+encodings, surrogate code points, values above U+10FFFF, stray continuation bytes
+and incomplete final sequences. Partial UTF-8 sequences may span fragments;
+interleaved ping/pong payloads do not affect the text decoder. Binary messages
+continue accepting arbitrary bytes. Applications previously sending non-UTF-8
+bytes as text must encode UTF-8 or use binary messages. These checks apply to the
+managed engine over HTTP/1.1, HTTP/2 and HTTP/3; native-backend behavior, public
+APIs, callback scheduling and message-size defaults are unchanged.
+
+### Managed HTTP/1 WebSocket opening handshake (unreleased)
+
+The managed HTTP/1 listener now requires GET over HTTP/1.1, the websocket Upgrade
+and Connection Upgrade tokens, one base64 nonce representing 16 bytes, and one
+WebSocket version 13 field before switching protocols. Invalid requests receive
+HTTP 400 instead of an upgrade or an internal-server error. An unsupported or
+missing version advertises `Sec-WebSocket-Version: 13`. Repeated nonce/version
+fields are retained and rejected rather than silently taking the last value.
+
+Repeated list-valued Upgrade and Sec-WebSocket-Protocol fields now retain all
+values in order. This allows a supported subprotocol from the first field to be
+selected when a later field lists another one. Ordinary case-insensitive protocol
+tokens and field OWS remain accepted. Native handshakes and HTTP/2/HTTP/3 extended
+CONNECT do not use this HTTP/1 nonce exchange. See
+[RFC 6455 section 4.2](https://www.rfc-editor.org/rfc/rfc6455.html#section-4.2).
+
+### Native Unix WebSocket response cleanup
+
+On the tested .NET 10 Unix HttpListener runtime, a completed WebSocket upgrade
+leaves HTTP response headers marked unsent internally. Stopping the listener can
+write a second HTTP response into the upgraded stream; concurrent cancellation
+can make that write throw from an already disposed NetworkStream and interrupt
+listener cleanup. The native adapter now marks the successful handshake as sent
+before delivering the WebSocket to application callbacks.
+
+This mitigation uses a guarded internal boolean runtime property. It does not
+change Windows behavior or IgnoreWriteExceptions. Unrecognized runtime shapes
+retain their native behavior; use the managed listener to avoid this runtime
+compatibility shim. It does not establish a general guarantee for cancellation
+while a native upgrade itself is still in progress.
+
+
+## HTTP/2 extensible priority settings (unreleased)
+
+The new engine advertises RFC 9218 priority support by sending
+SETTINGS_NO_RFC7540_PRIORITIES=1 in its initial SETTINGS frame. Peer values must
+be 0 or 1; later changes from the initial effective value cause a connection
+PROTOCOL_ERROR. Omission initially means 0. Repeated equal values are accepted;
+duplicates in the initial frame use their last value, in wire order. This setting
+was previously treated as unknown in the development engine.
+
+Deprecated PRIORITY dependency/weight values and equivalent HEADERS fields are
+ignored, including self-dependency values. Their frame shape, size and stream-ID
+requirements remain checked, and HEADERS compression state remains synchronized.
+Use the Priority header or PRIORITY_UPDATE for extensible urgency/incremental
+signals. These are scheduling hints, not guaranteed response completion order.
+
+## Default managed listener transition (planned, unreleased)
+
+The completed modern engine will become the default managed listener. The old
+Mono-derived implementation will be deprecated, with its migration and support
+policy documented before that transition. Immediate removal is not implied.
+Existing valid public entry points, including `HttpListenerMode.EmbedIO`, are to
+remain usable; changing the implementation does not itself require renaming this
+mode. The Microsoft listener remains an explicit compatibility option.
+
+This transition is still in development. In the current branch HTTP/3 uses the
+separate opt-in `EmbedIOHttp3` mode and its documented .NET 10, certificate and
+native QUIC prerequisites. Do not interpret the planned default switch as current
+combined HTTP/1, HTTP/2 and HTTP/3 hosting or identical capabilities across target
+assets. See the [default listener transition acceptance criteria](../project/http-engine.md#default-listener-transition)
+and [HTTP/3 guide](../guides/http3.md) for the implementation and validation scope.
+
+## QUERY routing (unreleased, development increment)
+
+`HttpVerbs.Query` adds explicit QUERY routes while preserving existing enum values.
+Existing wildcard handlers can still receive the method. Method names are case
+sensitive: lowercase `query` does not match a Query route. This increment provides
+routing and request-body access, not complete RFC 10008 semantics. A QUERY handler
+must perform a safe, idempotent operation and validate the request media type and
+content. QUERY requests with missing or syntactically invalid Content-Type now
+fail with 400 through the standard HTTP exception handler before application
+modules run. Applications must still reject unsupported media types or content
+inconsistent with their declared type. Complete QUERY support remains under
+development; do not advertise full support based on the enum alone.
+
+## HTTP/1 parser rejection responses (unreleased)
+
+The managed listener now attempts a fixed, empty HTTP 400 response for request
+line, header or framing initialization errors before closing the connection.
+Previously these paths closed silently. Invalid input is not reflected in the
+response, pipelined successor requests are not dispatched, and the existing
+request deadline remains active through the write. A disconnected peer or expired
+deadline can still prevent response delivery. Prefix-routing rejection remains
+unchanged. This does not add CONNECT tunneling or accept authority-form targets.
+
+## HTTP/1 request-target syntax (unreleased)
+
+Request targets without a leading slash or a valid absolute HTTP(S) URI are
+rejected with 400 before URI reconstruction. This includes query-only targets
+such as `?query=1` and targets beginning with `@`, which previously could reach
+URI normalization and either be dispatched or close without an HTTP error.
+Send `/?query=1` or a valid absolute HTTP(S) URL instead. `@` remains valid within
+an origin-form path or query, and OPTIONS retains asterisk-form support.
+This correction does not add CONNECT authority-form or tunnel support; that
+remains a separate engine implementation requirement.
+
+The managed listener accepts `OPTIONS *` for a root listener and retains `*` in
+`Request.RawTarget`; `Request.Url` uses the local root URI for dispatch. An OPTIONS
+handler can distinguish this server-wide request from `OPTIONS /` using RawTarget.
+This does not automatically aggregate capabilities or generate an Allow header.
+
+Literal fragments, backslashes, and incomplete/non-hex percent escapes in request
+targets now produce 400 before dispatch, rather than being silently normalized by
+URI parsing. Correctly escaped `%23` and `%25` remain accepted. Encode literal
+reserved characters in client paths or query values. Existing transport scheme,
+local port and valid path/query case behavior remain covered by regression tests.
+
+### HTTP/1 Host authority syntax (unreleased)
+
+The managed listener now rejects Host values containing userinfo, path/query/fragment
+delimiters, control/non-ASCII characters, or non-digit ports before constructing
+the application URL. Previously port stripping could hide malformed input, and
+URI normalization could reinterpret delimiters. Send a valid host with an optional
+decimal port; bracket IPv6 addresses. An empty port remains accepted as permitted
+by RFC 3986. Valid requests retain the existing transport scheme and local listener
+port in `Request.Url`. Rejections use the bounded empty 400 response and close the
+connection before application dispatch.
+
+HTTP/2 and HTTP/3 now also accept empty authority ports for ordinary requests and
+extended CONNECT, treating them as the scheme default when comparing Host and
+authority. Classic CONNECT still requires an explicit nonempty port. The original
+authority text remains available through the request headers.
+
+### HTTP/2 and HTTP/3 path/query syntax (unreleased)
+
+The shared request parser now rejects incomplete/non-hex percent escapes and
+characters outside the URI path/query grammar before application dispatch. Encode
+literal brackets, braces, quotes, backticks, carets and vertical bars using their
+percent-encoded forms. Valid escapes and URI delimiters remain unchanged, including
+leading `//` paths and slash/question-mark characters within queries. HTTP/2
+rejection resets the malformed stream with PROTOCOL_ERROR; other streams remain
+usable. This increment does not finish the HTTP/1 absolute-target grammar audit.
+
+HTTP/1 now applies the same path/query character grammar to origin-form and the
+raw path/query component of absolute-form requests before URI normalization.
+Literal brackets, braces, quotes, backticks, carets and vertical bars must be
+percent-encoded. Valid encoded equivalents remain accepted. Invalid input receives
+the bounded empty 400 response and closes before application dispatch. Existing
+transport scheme/local-port URL behavior is preserved; absolute-form authority
+precedence is a separate outstanding conformance item.
+
+### HTTP/1 absolute-form host precedence (unreleased)
+
+When an absolute request-target and Host header identify different hosts, the
+managed listener now uses the target URI host for `Request.Url` and prefix routing,
+as required by RFC 9112 section 3.2.2. The original Host header remains available
+through `Request.Headers`; applications should use `Request.Url.Host` for the
+effective routing host. Previously a conflicting Host could override the target.
+Host field presence and syntax validation still apply. The existing transport
+scheme/local-port URL behavior is unchanged in this increment; full absolute-URI
+scheme/port handling remains under audit. Unregistered target hosts retain the
+existing prefix-routing rejection behavior.
+
+### HTTP/1 absolute-target userinfo (unreleased)
+
+The managed listener rejects a userinfo component in an absolute request target,
+including an empty component marked by `@`, with an empty 400 response followed
+by connection closure. Put authentication information in the appropriate HTTP
+authentication mechanism, not the request URI. At-signs in valid path/query
+components and their percent-encoded equivalents remain accepted.
+
+HTTP/1 Host numeric ports must now fit the transport endpoint range 0 through
+65535 before the listener applies its existing local-port URL normalization.
+Out-of-range values previously disappeared during port stripping; they now
+receive the empty 400 response and connection closure. Empty ports and decimal
+leading zeros remain accepted.
+
+
+### Canceled response cleanup and combined drain (unreleased)
+
+Closing a canceled managed HTTP context now aborts its unfinished response rather
+than synthesizing an empty successful response during cleanup. Already written
+headers or body bytes cannot be recalled; clients may see an incomplete response.
+Completion callbacks still run. Normal response close/disposal remains unchanged,
+and closing an old canceled HTTP/1.1 context does not close a successor request
+on its reused connection. Do not rely on cancellation producing an HTTP status;
+finish an intended response before canceling its context.
+
+`WebServer.DrainAsync` supports combined TCP/QUIC hosting, including shared TCP
+endpoints. It lets accepted responses finish within the shared deadline;
+expiry or cancellation aborts unfinished and queued work. Immediate Stop and
+server disposal remain abort operations. Shared TCP endpoint drain refuses new
+requests for the draining owner while retaining sibling admission and traffic. See the
+[HTTP/3 and combined-host guide](../guides/http3.md) for lifecycle
+limits and cancellation behavior.
+
+HTTP/2 and HTTP/3 context cleanup also preserves cancellation already requested
+by the server or transport when cleanup runs before the linked cancellation
+callback. Captured application tokens and close callbacks observe cancellation;
+normal successful close does not cancel them. Recoverable exceptions from
+application cancellation callbacks are logged and do not interrupt cleanup.
+
+When TCP endpoint prefixes are shared, stopping or disposing one managed listener
+now cancels only its HTTP/2 exchanges. Active sibling streams and later sibling
+requests retain the same connection. Stopping the last endpoint owner still
+closes its connections. Shared endpoint graceful drain waits for the selected
+owner's accepted contexts without connection-wide HTTP/2 GOAWAY.
+
+A stale managed HTTP/1 shutdown snapshot no longer closes a keep-alive connection
+that has already transferred to a sibling listener. Connection ownership transfer
+and scoped shutdown decisions now share a synchronization boundary.
+
+A reset HTTP/2 context remains part of its owner's drain set until response
+cleanup and close callbacks finish. A concurrent drain no longer reports
+completion merely because request dispatch has started cleanup.
+
+The opt-in HTTP/3 transport logs recoverable application cancellation callback
+exceptions during its own shutdown and continues resource cleanup. Such callback
+failures no longer replace the connection shutdown outcome with an aggregate
+exception. This does not change exceptions raised when application code directly
+cancels a token source it owns.
+
+### Rejected HTTP/1.1 CONNECT persistence (unreleased)
+
+A managed HTTP/1.1 response with status 300 or greater to the exact `CONNECT`
+method now closes the connection even when application code requests keep-alive.
+Bytes already sent after that request are not dispatched as another request.
+This follows the rejection mitigation in [RFC 9931 section 8](https://www.rfc-editor.org/rfc/rfc9931.html#section-8).
+After a rejection, send any subsequent request on a new connection. Rejected
+WebSocket upgrades using GET retain their existing persistence behavior.
+
+Connection reuse also honors the response's committed keep-alive decision after
+headers have been sent. Mutating the public header collection afterward cannot
+reopen a response that committed connection closure. This does not add a CONNECT
+tunnel API or complete authority-form handling.
+
+### HTTP/1 interim continue responses (unreleased)
+
+The managed listener ignores `Expect: 100-continue` on HTTP/1.0 requests, as
+required by [RFC 9110 section 10.1.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.1).
+It also omits the interim response when request framing indicates no body.
+Previously, HTTP/1.0 requests with a body and bodyless HTTP/1.1 methods other
+than POST/PUT could receive an unsolicited `100 Continue` before the final
+response. Clients must not wait for this interim response on HTTP/1.0 or
+bodyless requests. HTTP/1.1 requests with a body retain the existing handshake.
+
+The interim transport write is now asynchronous and remains covered by the
+request-header deadline until it completes. This change does not yet implement
+all expectation-list syntax, extension expectations or an application-controlled
+early final-response policy. Public request/response APIs are unchanged.
+
+### Managed WebSocket disconnection notification (unreleased)
+
+Managed WebSocket processing now observes terminal transport cleanup directly
+instead of checking state every 500 ms. Disconnection notifications can therefore
+arrive sooner after a completed close. Public callback signatures and asynchronous
+message/disconnection dispatch are unchanged; notification does not promise that
+all asynchronous application message callbacks have finished. Close handshakes,
+close deadlines and the native Microsoft backend are unchanged.
+
+### Continue expectations across HTTP versions (unreleased)
+
+HTTP/1.1, HTTP/2 and HTTP/3 now recognize a bare `100-continue` member in an
+Expect list, including repeated members, case differences and optional whitespace.
+Quoted extension values do not create synthetic members when they contain commas
+or escaped quotes. Unknown expectations retain their existing ignored behavior;
+this is recognition of the supported expectation, not full extension validation.
+HTTP/1.0 still ignores the expectation and known-empty requests omit the interim
+response.
+
+HTTP/2 and HTTP/3 listener dispatch sends the informational headers before handing
+an applicable request to the application, without consuming the request body or
+ending the stream. A body-consuming handler can therefore receive a client that
+waits for `100 Continue` before uploading. Earlier implementations could leave
+both ends waiting until the client's fallback timer expired. Final response APIs
+are unchanged. Multiplexed CONNECT tunnels are excluded from automatic continue handling.
+The .NET Standard asset's existing cleartext HTTP/2 support and lack of TLS ALPN
+and QUIC are unchanged.
+
+## Unreleased modern engine: strict deflate request completion
+
+When compressed requests are enabled, the request helpers now reject truncated
+raw-DEFLATE data and bytes after its final block with HTTP 400. This applies to
+single `Content-Encoding: deflate` requests and deflate layers within supported
+coding chains, on both core target frameworks and listener modes. Valid existing
+raw-DEFLATE content retains its selected format. No automatic zlib-header sniffing
+or raw/zlib fallback is introduced.
+
+A request that decodes to an empty body must still carry a valid compressed
+stream. For raw DEFLATE, the empty fixed block `03 00` is valid; a zero-byte
+compressed payload is truncated. Update clients that previously relied on runtime
+acceptance of incomplete streams or trailing bytes to send one complete stream.
+Streaming handlers must read through EOF before accepting the entire body:
+application bytes can be returned before a later completion failure is detected.
+Decoded-byte limits remain applied to final application bytes, and direct reads
+of `Request.InputStream` bypass these helper policies.
+
+The internal zlib decoder is being validated for RFC 1950 headers, window limits,
+Adler-32 checksums and exact completion. It does not yet change public coding
+selection, response encoding or cached variants. The broader standards-format
+migration remains unfinished. These changes are development work and have not
+been released.
+
+### Buffered bytes at HTTP/1 WebSocket upgrade (unreleased)
+
+An accepted managed WebSocket now receives any unread bytes already buffered by
+its HTTP/1 connection. The handoff copies only that unread tail, replays it once,
+and leaves transport disposal with the connection. Ordinary clients that send
+frames after validating the handshake response retain their existing behavior.
+
+The regression deliberately sends early data with the upgrade request. RFC 6455
+section 4.1 requires clients to wait for the server response, so this is robustness
+coverage rather than valid-client conformance. Accepting an upgrade no longer
+silently discards those buffered bytes; it does not authorize clients to skip
+handshake validation.
+
+### Incomplete and malformed HTTP/1 request bodies (unreleased)
+
+A managed fixed-length request body that ends before its declared Content-Length
+now throws `EndOfStreamException` rather than returning normal EOF. Applications
+must not treat a partial body as a complete upload. Subsequent positive reads
+remain failed; empty reads, argument validation and cancellation retain their
+existing behavior. Valid fixed-length and unknown-length stream reads are unchanged.
+
+The server recognizes its own body-framing failures, including wrappers that
+retain the original exception as their inner cause. Before response headers are
+sent, the default request boundary sends 400 with a generic body-error message
+and closes the connection. Existing chunk parser exception types remain intact.
+Unrelated application `InvalidDataException` errors retain server-error handling.
+
+If a response has already started, its status cannot be replaced: the connection
+is aborted without a second error response or a clean chunk terminator. Completion
+callbacks still run, and a malformed request cannot dispose the listener shared
+by other clients. These changes apply to invalid/incomplete requests under the
+approved strict-framing policy; custom application error handlers remain available.
+
+### Managed HTTP/1 keep-alive request cap removed
+
+The modern managed engine no longer closes an otherwise reusable connection after
+100 requests. William approved this client-visible default change for the engine
+performance work. Long-lived clients may now reuse the same TCP/TLS connection
+beyond that limit. The managed Keep-Alive header retains timeout=15 and no longer
+advertises a max request count.
+
+The 15-second keep-alive idle timeout, explicit Connection: close, response policies
+that require closure, cancellation, stop and graceful drain remain in effect.
+Applications and tests that used the old request count as an implicit connection
+rotation mechanism should request closure explicitly. The Microsoft backend is
+unchanged. This change is unreleased and is part of the HTTP-engine candidate.
+### Bodyless managed responses and HTTP/2 graceful drain
+
+The managed HTTP/1 response stream now discards body writes for informational,
+204 and 304 responses, as it already did for HEAD. No payload or chunk terminator
+is emitted after these response heads. Informational and 204 responses omit
+Content-Length and Transfer-Encoding. A 304 retains an explicitly supplied
+selected-representation length rather than replacing it with zero. Callers remain
+responsible for supplying the corresponding unconditional response's length.
+See [HTTP semantics section 8.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6)
+and [HTTP/1.1 sections 6.1–6.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.1).
+Applications must not rely on writing content for a bodyless status. Ordinary
+responses and existing HEAD metadata behavior are preserved. The Microsoft
+backend is unchanged.
+
+During HTTP/2 graceful drain, an upload can already be in flight on a stream above
+the GOAWAY cutoff before its client receives GOAWAY. The engine refuses that
+request without invoking the application, processes its header compression state
+and counts/discards DATA against connection flow control, including padding.
+Accepted responses finish instead of being canceled by a spurious idle-stream
+protocol error. Invalid even client stream IDs still produce a connection error.
+See [HTTP/2 section 6.8](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.8).
+These corrections are unreleased HTTP-engine work.
+
+## HTTP/1.0 response delimitation (unreleased)
+
+The managed listener closes an HTTP/1.0 response with an unknown-length body,
+even when the client requests keep-alive or the handler sets KeepAlive. HTTP/1.0
+cannot use chunked transfer framing, so transport EOF is the body delimiter.
+Previously the listener could advertise persistence without providing a delimiter.
+Set ContentLength64 before writing to retain HTTP/1.0 persistence when the exact
+length is known. HEAD and bodyless status responses retain their existing
+persistence policy; HTTP/1.1 chunked responses are unchanged. See
+[RFC 9112 section 9.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-9.3).
+## HTTP/2 malformed WebSocket version negotiation (unreleased)
+
+An extended CONNECT request with `:protocol: websocket` and a missing, empty or
+unsupported Sec-WebSocket-Version receives 400 with Sec-WebSocket-Version: 13
+before application dispatch. Previously the failed socket acceptance could become
+500. This matches the existing HTTP/3 negotiation policy. The rejection affects
+its request stream; other HTTP/2 streams remain usable. Valid version-13
+WebSocket handshakes and the public acceptance API are unchanged.
+## HTTP/3 request field-section limit isolation (unreleased)
+
+An encoded or decoded request HEADERS section over the existing size limit now
+fails its request stream with H3_EXCESSIVE_LOAD (0x107). Previously these limits
+could close the entire connection, and Huffman expansion over the decoded budget
+could be reported as QPACK_DECOMPRESSION_FAILED. Healthy sibling requests and the
+shared decoder table remain usable, including when a blocked section becomes
+oversized after encoder inserts arrive. The limits themselves are unchanged.
+
+Malformed QPACK syntax/references and encoder instructions still fail the
+connection. Aggregate blocked-storage and decoder-feedback exhaustion also retain
+their connection-wide policy. Applications should handle the rejected request
+stream independently instead of assuming all requests on the connection failed.
+
+## Higher HTTP/1 minor versions (unreleased)
+
+The managed listener now processes syntactically valid higher HTTP/1 minor
+versions, such as HTTP/1.2 or HTTP/1.9, using its HTTP/1.1 semantics. These requests
+previously received 400. Request.ProtocolVersion preserves the received version;
+Response.ProtocolVersion and the response status line advertise the implemented
+HTTP/1.1 version. This does not claim implementation of hypothetical future features.
+
+Fixed-length and chunked bodies, Host validation, and 100-continue use the same
+rules as HTTP/1.1. Conflicting framing, duplicate/missing Host, malformed version
+syntax and unsupported major versions remain rejected. HTTP/1.0 and HTTP/1.1
+behavior is unchanged. This correction applies to the managed listener; native
+Microsoft-backend behavior is unchanged. Applications should use response metadata
+to identify the version the server actually sends, rather than echoing a higher
+received minor version into a response.
+
+References: [HTTP version semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
+and [single-digit HTTP/1 version syntax](https://www.rfc-editor.org/rfc/rfc9112.html#section-2.3).
+## HTTP/1 request-head limit statuses (unreleased)
+
+The managed engine retains its 32,768-byte request-head budget, including the
+request line and CRLF terminators. Requests that exceed it are still rejected
+before application dispatch and cannot reuse their connection or dispatch a
+pipelined request.
+
+Oversized request targets now receive 414 (URI Too Long), as required by
+[RFC 9112 section 3](https://www.rfc-editor.org/rfc/rfc9112.html#section-3).
+Oversized field sections after a parsed request line receive 431 (Request Header
+Fields Too Large), following [RFC 6585 section 5](https://www.rfc-editor.org/rfc/rfc6585.html#section-5).
+Previously both returned 400. These fixed responses have an empty body,
+`Cache-Control: no-store` and `Connection: close`; parser diagnostics and request
+content are not reflected. Malformed method/version/line syntax remains 400.
+
+Clients that categorize all limit failures as 400 should also handle 414 and 431.
+No new target, header or body limit is introduced; valid APIs, HTTP/1.0/1.1,
+higher-minor handling, framing and request deadlines remain. HTTP/2, HTTP/3 and
+the Microsoft listener backend are unchanged. This increment does not settle
+separate method-length policy or every HTTP limit requirement.
+
+## Multiplexed response stream disposal (unreleased)
+
+William explicitly approved this behavior change for the managed HTTP/2 and
+HTTP/3 engines. Disposing the response output stream synchronously now starts
+closure and prevents further writes, then returns without waiting for network
+output. Previously it blocked until closure completed, which could starve the
+worker pool when many streams waited for shared transport output. This also
+applies when a StreamWriter disposes its underlying response output stream.
+
+The server still awaits the same close operation before completing the HTTP
+context. Stream disposal returning does not prove END_STREAM reached the peer.
+A close-time transport failure is observed during context completion instead of
+being thrown from synchronous output-stream Dispose. If application code needs
+to wait for network closure and observe that error locally, await
+Response.OutputStream.DisposeAsync on the .NET 10 asset, or explicitly close the
+HTTP context or response. Synchronous explicit context/response Close still
+waits; the .NET Standard 2.0 asset has no Stream.DisposeAsync API. Flush still
+commits headers/output and is not a substitute for completing the response.
+
+The shared close operation remains idempotent; writes after stream disposal
+fail, and cancellation and graceful drain still join completion. HTTP/1 and the
+Microsoft listener backend are unchanged. No new public API or dependency is
+introduced.
+## Generic tunnel and capsule carriers (unreleased)
+
+William approved the optional `IHttpTunnelContext`, `HttpTunnel` and
+`HttpCapsuleChannel` APIs. Existing context interfaces are unchanged. The managed
+HTTP/1 listener accepts valid authority-form CONNECT for application-controlled
+handoff, or a selected offered Upgrade protocol. Invalid CONNECT authority forms,
+including an absent/empty/zero/out-of-range port, are rejected before dispatch.
+Use `Request.RawTarget` to inspect and authorize a CONNECT destination; accepting
+this carrier never opens a connection to that destination automatically.
+
+William separately approved dispatching valid non-WebSocket HTTP/3 extended
+CONNECT requests to application handlers. The earlier staging implementation
+returned 501 for every such protocol before dispatch. They now follow normal
+prefix matching and route authorization. A route without a matching handler can
+return its ordinary 404; applications wanting 501 should reject explicitly.
+Handlers must call `AcceptTunnelAsync` to negotiate a carrier. Nothing is accepted
+or forwarded automatically. The dedicated WebSocket version check and existing
+WebSocket acceptance API remain intact.
+
+Capsule mode validates the negotiated Boolean Item and excludes representation
+and HTTP framing headers. It streams declared payloads without allocating their
+length. Applications supply resource policy and cancellation. Unknown capsule
+types can be skipped incrementally by an endpoint. This does not advertise native
+unreliable QUIC datagrams or implement a UDP/TCP proxy or WebTransport session.
+
+`HttpCapsuleChannel` borrows its stream; `HttpTunnel` owns its accepted stream.
+Await `CompleteOutputAsync` to finish sending while still reading the peer.
+Await `CloseAsync` (or .NET 10 asynchronous disposal) to observe completion and
+cleanup errors. Synchronous disposal starts the same operation without blocking.
+The server joins completion when the handler ends, so retain handler lifetime
+while consuming peer input after send completion. See
+[capsule development and current validation](../project/http-capsule-transport.md)
+for platform and runtime limits. These APIs remain under validation and unreleased.
+
+## Optional response field sections (unreleased)
+
+The managed responses optionally implement `IHttpResponseSections` for awaited interim responses and declared response trailers. `IHttpResponse` is unchanged, so existing implementations and consumers remain compatible. The optional interface is identical on both target assets; unsupported backends do not advertise it. Existing automatic100 Continue, final-status property behavior and ordinary response framing remain unchanged. Opting into HTTP/1 trailers selects chunked framing and requires no configured Content-Length. Multiplexed trailers retain exact body-length validation and defer the final stream end until trailing HEADERS. The sender must choose fields whose definitions allow trailer use, and finish configuration before output disposal or handler completion. See [the guide](../guides/response-field-sections.md) for bounded snapshots, exclusions and validation limits.
+
+## HTTP/3 application read cancellation (unreleased)
+
+An application that cancels a pending HTTP/3 request-body or tunnel read can
+still send its response or tunnel output, provided the peer has not reset the
+stream and the request lifetime is still active. Previously the engine turned
+that local input cancellation into an abort of both transport directions.
+
+The canceled input remains unusable: a read may already have consumed part of
+a frame, and System.Net.Quic ends that read direction on cancellation. CanRead
+returns false and another read throws IOException. Catch the canceled read,
+write the intended response (for example, 408 for a timed-out upload), and
+complete output. A token canceled before a read begins does not abandon input.
+Peer resets, connection failure and canceled output still end the request.
+## Final response status validation (unreleased)
+
+William approved limiting the public Response.StatusCode setter to final
+statuses, 200 through 599. Assigning 100 through 199 or 600 through 999 now throws
+ArgumentOutOfRangeException before changing the status, description or headers.
+The managed HTTP/1, HTTP/2 and HTTP/3 responses and the Microsoft response adapter
+apply this validation. Unknown final status codes within that range remain
+accepted. RFC 9110 section 15 defines 600 through 999 as invalid HTTP status
+codes. Applications using them for internal error identifiers must map them to a
+valid HTTP status and carry their internal identifier in the response payload.
+
+Previously, assigning an informational status such as 103 could finish the
+response without a final status, leaving an HTTP/1.1 client waiting; HTTP/1.0
+must not receive informational responses at all. Use the optional
+IHttpResponseSections.SendInformationalAsync for supported interim responses,
+then send a final response. A backend that does not advertise the optional
+interface cannot send interim responses through it.
+
+For a 101 protocol switch, use AcceptWebSocketAsync or an application-authorized
+AcceptTunnelAsync handoff instead of assigning the property manually. Negotiated
+HTTP/1 handshakes keep their 101 response; HTTP/2 and HTTP/3 do not use 101.
+Automatic 100 Continue remains supported. No informational assignment is silently
+rewritten into a different final status.

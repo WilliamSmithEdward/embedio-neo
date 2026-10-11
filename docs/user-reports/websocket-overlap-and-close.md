@@ -68,14 +68,67 @@ not fire-and-forget close or rely on a successful earlier `State` check. For
 complete-message text/binary callbacks and UTF-8 handling, see
 [message callbacks](websocket-message-callbacks.md).
 
+## Broadcasting right after a client connects
+
+`WebSocketModule` writes the opening-handshake response before it adds the
+connection to `ActiveContexts`, the set that `BroadcastAsync` sends to, and
+then calls `OnClientConnectedAsync`. A client can therefore complete
+`ConnectAsync` before the server can broadcast to it. A broadcast issued in
+that interval does not reach the new connection. The interval is usually well
+under a millisecond, but nothing bounds it. Upstream EmbedIO 3.5.2 registers
+connections in the same order.
+
+If a client must not miss broadcasts that start right after it connects, send
+a readiness message from `OnClientConnectedAsync` and start those broadcasts
+once the client has received it. The regression below uses its `connected`
+message this way.
+
 ## Evidence and limits
+
+### Incoming messages followed by a close during initialization
+
+On the Neo v2 retirement branch, macOS CI run 38101113931 reported two missing
+messages in the 100-connection managed WebSocket close regression. Source review
+identified an initialization window: the receiver starts before
+`OnClientConnectedAsync` finishes, but the module subscribes to messages only
+after that callback. A peer can send a complete message and a close in that
+window. The old resource-release path discarded the queue when it saw no
+subscriber, even though successful initialization would shortly provide one.
+
+A deterministic regression holds connection initialization, sends a message and
+close together, and observes the completed wire handshake. It fails on the old
+implementation because application closure completes before initialization
+settles. This establishes the mechanism independently of runner timing; it is
+not an instrumented capture of the original macOS failure.
+
+The module now reserves its incoming-message consumer before acceptance. Control
+frames and the wire close handshake remain active during initialization. After
+successful initialization, messages received before peer close are delivered
+before application closure completes. Failed or canceled initialization releases
+the reservation and discards the undeliverable queue. Purging on another accept
+must leave a context whose initialization or message delivery is still pending.
+
+Four cases cover successful/failed initialization with and without a preceding
+message, including another connection that triggers the purge pass. Existing
+message callbacks retain their asynchronous completion behavior; this does not
+serialize or await every asynchronous application callback, impose an
+initialization deadline, or add receive backpressure.
+
+The affected lifecycle set passes all 83 cases on Windows. The full
+coverage-enabled Windows suite reports 4,487 cases: 4,485 passed, two expected
+skips and zero failures in 3 minutes 11 seconds. Both core targets build without
+warnings, and formatting, suppression and C# parser checks pass. Fresh hosted
+Linux/macOS and exact-head scanner checks remain required.
 
 The adapted regression uses the sample's JSON subprotocol, 20 ms inputs,
 deterministic delays spanning 50–150 ms, and 1,000 rows of ten 20-character
 columns. Sequence IDs and deterministic column contents make loss, duplication
 and corruption observable. It tests one/two clients on both listener modes,
 overlapping targeted replies with two large broadcasts, parses every complete
-JSON message and validates every row/column. All four source cases pass. The
+JSON message and validates every row/column. Broadcasts start after every
+client has received the module's `connected` message. Four further cases hold
+the server between the handshake response and registration, and confirm that
+the broadcasts still arrive. All eight source cases pass. The
 same workload against the exact published 1.0.3 assembly reproduced an aborted
 native single-client connection in one of four cases; the other three passed.
 This is an adapted .NET-client reproduction, not execution of the exact original

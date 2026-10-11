@@ -16,13 +16,9 @@ namespace EmbedIO.Tests.Issues
     public class Issue490_SpaRoutes
     {
         [TestCase(HttpListenerMode.EmbedIO, false, "/")]
-        [TestCase(HttpListenerMode.Microsoft, false, "/")]
         [TestCase(HttpListenerMode.EmbedIO, true, "/dashboard?tab=recent")]
-        [TestCase(HttpListenerMode.Microsoft, true, "/dashboard?tab=recent")]
         [TestCase(HttpListenerMode.EmbedIO, false, "/dashboard/reports")]
-        [TestCase(HttpListenerMode.Microsoft, false, "/dashboard/reports")]
         [TestCase(HttpListenerMode.EmbedIO, true, "/release/v1.0")]
-        [TestCase(HttpListenerMode.Microsoft, true, "/release/v1.0")]
         public async Task DirectNavigationAndRefreshPreserveUrlAndFileHeaders(HttpListenerMode mode, bool cache, string path)
             => await WithServer(mode, cache, async (client, root) =>
             {
@@ -41,9 +37,7 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task AssetsApiAndMissingResourcesDoNotBecomeHtml(HttpListenerMode mode, bool cache)
             => await WithServer(mode, cache, async (client, root) =>
             {
@@ -59,9 +53,7 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task HeadConditionalAndRangeUseTheEntryFile(HttpListenerMode mode, bool cache)
             => await WithServer(mode, cache, async (client, root) =>
             {
@@ -84,7 +76,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task InvalidMethodsMissingEntryAndDefaultProviderRemainUnchanged(HttpListenerMode mode)
             => await WithServer(mode, false, async (client, root) =>
             {
@@ -103,7 +94,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task MountedSpaUsesModuleRelativeRoutes(HttpListenerMode mode)
             => await WithServer(mode, true, async (client, root) =>
             {

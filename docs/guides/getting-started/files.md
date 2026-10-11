@@ -105,5 +105,25 @@ Registration order matters. Keep API handlers before the root static folder:
 the folder handles unmatched paths too, returning 404 when a file is missing.
 An API handler registered after it would not get that request.
 
+## Brotli responses in the modern-engine development branch
+
+The unreleased .NET 10 asset can negotiate `br` for `OpenResponseStream`,
+`OpenResponseText`, and compressible static files. Clients select it with
+`Accept-Encoding: br`; an absent header still produces an uncompressed response.
+Existing quality weights and client order determine negotiation. Gzip/deflate
+remain ahead of Brotli when a wildcard leaves all compressed choices tied.
+`preferCompression: false` continues to prefer an acceptable identity response.
+
+Both buffered and streaming responses use the runtime Brotli compressor. File
+caching retains distinct identity, gzip, deflate and Brotli variants, and their
+ETags differ. A cached HEAD response describes the selected representation;
+when its compressed size is unknown, HEAD omits Content-Length. Conditional
+requests use the ETag for the negotiated variant.
+
+The .NET Standard 2.0 asset continues to negotiate gzip/deflate/identity only.
+It rejects a request that accepts only Brotli with HTTP 406. Explicit Brotli
+cache/conversion operations on that asset throw NotSupportedException instead
+of returning bytes under an incorrect coding name. No production package or
+native runtime dependency is added. Shared-dictionary Brotli is separate work.
 Next: [Use a controller](controllers.md), or see
 [multiple static folders](../multiple-static-folders.md) for more than one directory.

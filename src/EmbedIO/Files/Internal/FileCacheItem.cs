@@ -41,7 +41,11 @@ namespace EmbedIO.Files.Internal
         //       (at the time of writing there are no fields here that need padding on 64-bit)
         //     - multiply count by 8 (size of a pointer)
         //     - if the result is not a multiple of 16, round it up to next multiple of 16
+#if NET10_0_OR_GREATER
+        private static readonly long SizeOfItem = Environment.Is64BitProcess ? 112 : 144;
+#else
         private static readonly long SizeOfItem = Environment.Is64BitProcess ? 96 : 128;
+#endif
 
         private readonly object _syncRoot = new object();
 
@@ -49,11 +53,14 @@ namespace EmbedIO.Files.Internal
         // Weak reference avoids circularity.
         private readonly WeakReference<FileCache.Section> _section;
 
-        // There are only 3 possible compression methods,
+        // There are few supported content-coding variants,
         // hence a dictionary (or two dictionaries) would be overkill.
         private byte[]? _uncompressedContent;
         private byte[]? _gzippedContent;
         private byte[]? _deflatedContent;
+#if NET10_0_OR_GREATER
+        private byte[]? _brotliContent;
+#endif
 
         internal FileCacheItem(FileCache.Section section, DateTime lastModifiedUtc, long length)
         {
@@ -87,6 +94,13 @@ namespace EmbedIO.Files.Internal
                 case CompressionMethod.Deflate:
                     if (_deflatedContent != null) return _deflatedContent;
                     break;
+                case CompressionMethod.Brotli:
+#if NET10_0_OR_GREATER
+                    if (_brotliContent != null) return _brotliContent;
+                    break;
+#else
+                    throw new NotSupportedException("Brotli caching requires the .NET 10 asset.");
+#endif
                 case CompressionMethod.Gzip:
                     if (_gzippedContent != null) return _gzippedContent;
                     break;
@@ -109,6 +123,12 @@ namespace EmbedIO.Files.Internal
             {
                 content = CompressionUtility.ConvertCompression(_deflatedContent, CompressionMethod.Deflate, compressionMethod);
             }
+#if NET10_0_OR_GREATER
+            else if (_brotliContent != null)
+            {
+                content = CompressionUtility.ConvertCompression(_brotliContent, CompressionMethod.Brotli, compressionMethod);
+            }
+#endif
             else
             {
                 // No content whatsoever.
@@ -138,6 +158,14 @@ namespace EmbedIO.Files.Internal
                         oldContent = _deflatedContent;
                         _deflatedContent = content;
                         break;
+                    case CompressionMethod.Brotli:
+#if NET10_0_OR_GREATER
+                        oldContent = _brotliContent;
+                        _brotliContent = content;
+                        break;
+#else
+                        throw new NotSupportedException("Brotli caching requires the .NET 10 asset.");
+#endif
                     case CompressionMethod.Gzip:
                         oldContent = _gzippedContent;
                         _gzippedContent = content;

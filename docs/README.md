@@ -1,4 +1,4 @@
-# Documentation
+﻿# Documentation
 
 EmbedIO-Neo keeps the existing `EmbedIO` namespaces and offers a small modular
 HTTP/WebSocket server, integrated CLI, JsonServer, and testing helpers.
@@ -14,6 +14,9 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Usage guides
 
+- [Capsule and tunnel carriers](guides/capsule-tunnels.md): unreleased optional APIs, authorization, streamed values and lifetime ownership.
+
+- [HTTP/3 listener](guides/http3.md): unreleased QUIC mode, certificates, usage and current limits.
 - [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
 - [Command-line server](guides/cli.md): options, static serving, plugins, and CLI provenance.
 - [Multiple static folders](guides/multiple-static-folders.md): mount order and explicit fallback.
@@ -131,9 +134,33 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Architecture
 
+- [Modern HTTP engine program](project/http-engine.md): protocol roadmap, compatibility changes and performance acceptance.
+- [QUIC lifetime and rebind](project/quic-lifetime.md): native disposal evidence, bounded retry, quarantine limits and retirement gates.
+- [Linux test-host terminations](project/linux-test-host-terminations.md): native listener stop race diagnosis, unattributed glibc abort evidence and next diagnostics.
+- [Native HTTP/3 provider ownership audit](project/http3-native-provider-audit.md): MsQuic acceptance, callback and ownership findings, reproductions and proposed fixes.
+- [Native QUIC lifetime campaigns](project/http3-native-lifetime-campaigns.md): Apple Silicon lifetime and resource campaigns for the native MsQuic provider, confirmed native disposal defects and proposed fixes.
+- [Managed TCP write latency](project/http-tcp-latency.md): controlled socket-delay comparison with unchanged keep-alive and HTTP/2 reset regressions.
+- [Managed engine load comparison](project/http-engine-load-comparison.md): separate-process HTTP/1.1, HTTP/2 and HTTP/3 measurements against main and Kestrel, profiled bottlenecks and prioritized improvements.
+- [HTTP teardown exception attribution](project/http-teardown-exceptions.md): phase accounting, profiler correction and bounded protocol comparisons for issue #282.
+- [Managed engine load baseline on a second host](project/http-engine-load-baseline-evo-x1.md): noise-controlled engine baseline against main and Kestrel on a Ryzen AI 9 HX 370 host, including request-inspection routes, failures and bottleneck evidence.
+- [Listener retirement test accounting](project/listener-retirement-test-accounting.md): owner-approved v2 backend removal, retained equivalent managed cases and remaining coverage migration.
+- [Apple Silicon load and interoperability evidence](project/macos-performance.md): macOS harness portability, A/A noise, candidate versus main and Kestrel on one M5 Pro, and macOS-specific defects.
+- [HTTP/2 graceful output lifetime](project/http2-drain-output-lifetime.md): response-loss evidence, committed control-write reproduction and shutdown cancellation boundaries.
+- [HTTP/2 output and dispatch performance](project/http2-performance.md): profiled small-response costs, output batching and response coalescing, before/after measurements and remaining bottlenecks.
+- [HTTP/3 request path performance](project/http3-performance.md): profiled HTTP/3 request costs, request scopes, write coalescing and QPACK feedback, before/after measurements and remaining bottlenecks.
+- [Multiplexed request-model allocation](project/http-request-model-allocations.md): profiled HTTP/2 and HTTP/3 request-model allocation, deferred query and referrer parsing, before/after load and in-process measurements and remaining contributors.
+- [HTTP/3 handshake and latency on a less loaded host](project/http3-quiet-host-validation.md): paced QUIC churn with separate handshake and stream latency against Kestrel, a CPU-saturation control and the open handshake-refusal finding.
+- [HTTP/3 transport abstraction cost](project/http3-abstraction-cost.md): cost of the provider-neutral transport boundary on the System.Net.Quic listener, guarded shared-machine procedure and how to repeat it for the native provider.
+
+- [HTTP conformance audit](project/http-conformance.md): October 2026 standards baseline, black-box conformance and stateful campaigns, and prioritized findings.
+- [HTTP standards applicability audit](project/http-standards-applicability.md): frozen October 2026 RFC, errata, registry and draft inventory, requirement-to-evidence matrix for extensions and application APIs, and reproduced gaps.
+- [Linux glibc heap aborts](project/linux-glibc-heap-aborts.md): inconclusive double-free investigation, checked runs, CI scan, limits of attribution and configured crash capture.
+
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
 
 ## Compatibility
+
+- [Neo v1 to v2](compatibility/neo-v1-to-v2.md): living migration guide for the v2 engine release scope, approved behavior changes and remaining integration.
 
 - [Migration](compatibility/migration.md): approved SWAN/JSON changes and consumer migration.
 
@@ -142,8 +169,19 @@ for a complete app you can run, then choose files or controllers as needed.
 - [MAUI HTTPS validation](platforms/maui-https-validation.md): native client, WebView and external-client fixtures.
 - [MAUI Android](platforms/maui-android.md): background work, listener ownership, and restart diagnostics.
 - [MAUI Mac Catalyst](platforms/maui-mac-catalyst.md): listener startup and sandbox entitlements.
+- [Native QUIC datagrams on macOS](platforms/quic-datagrams-macos-validation.md): local Apple Silicon evidence for the internal datagram owner, scoped to the exact tested commits.
+
+- [Informational responses and response trailers](guides/response-field-sections.md): optional managed response sections and ownership rules.
 
 ## Project and contribution
+
+- [HTTP/1 idle closure investigation](project/http1-idle-closure.md): TCP/TLS timeout observations, released/main controls and the pending orderly-closure policy decision.
+
+- [Cleanup after committed response completion](project/http-completed-response-cleanup.md): late cancellation, complete-wire state and preserved incomplete-response handling.
+
+- [Capsule transport development](project/http-capsule-transport.md): streamed framing, negotiation constraints and remaining integration work.
+- [Capsule and tunnel lifetime validation](project/http-capsule-lifetime.md): independent-peer cancellation, reset, drain and retention checks on HTTP/1, HTTP/2 and HTTP/3, with findings and limits.
+- [WebTransport session core development](project/http-webtransport-core.md): draft-ietf-webtrans-http3-16 framing, session association, capsules, flow control and bounded buffering as an isolated internal core, with the transport integration contract and remaining gaps.
 
 - [Neo baseline and direction](project/embed_io_neo.md): initial fork decisions and acknowledgments.
 - [Changelog](../CHANGELOG.md): released and unreleased changes.

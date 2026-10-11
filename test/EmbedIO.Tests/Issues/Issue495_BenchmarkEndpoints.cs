@@ -16,9 +16,7 @@ namespace EmbedIO.Tests.Issues
     public class Issue495_BenchmarkEndpoints
     {
         [TestCase(HttpListenerMode.EmbedIO, "/json")]
-        [TestCase(HttpListenerMode.Microsoft, "/json")]
         [TestCase(HttpListenerMode.EmbedIO, "/plaintext")]
-        [TestCase(HttpListenerMode.Microsoft, "/plaintext")]
         public async Task SequentialRequestsReuseTheSameTransport(HttpListenerMode mode, string path)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -32,9 +30,7 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task SixteenPipelinedResponsesRemainFramedAndOrdered(HttpListenerMode mode, bool mixed)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -47,12 +43,10 @@ namespace EmbedIO.Tests.Issues
                 foreach (var path in paths) Validate(await Read(stream, token), path, false);
                 await Write(stream, uri, "/json", false, token);
                 Validate(await Read(stream, token), "/json", false);
-            }, requiresPipelining: true);
+            });
 
         [TestCase(HttpListenerMode.EmbedIO, "/json")]
-        [TestCase(HttpListenerMode.Microsoft, "/json")]
         [TestCase(HttpListenerMode.EmbedIO, "/plaintext")]
-        [TestCase(HttpListenerMode.Microsoft, "/plaintext")]
         public async Task ExplicitCloseCompletesTheBodyAndAllowsFreshConnections(HttpListenerMode mode, string path)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -69,7 +63,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task UnknownChildPathsDoNotMasqueradeAsBenchmarkEndpoints(HttpListenerMode mode)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -80,7 +73,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ConcurrentClientsHaveIndependentReusableConnections(HttpListenerMode mode)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -97,11 +89,8 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO, 0)]
-        [TestCase(HttpListenerMode.Microsoft, 0)]
         [TestCase(HttpListenerMode.EmbedIO, 2)]
-        [TestCase(HttpListenerMode.Microsoft, 2)]
         [TestCase(HttpListenerMode.EmbedIO, 5)]
-        [TestCase(HttpListenerMode.Microsoft, 5)]
         public async Task PipelinedSuccessorSurvivesFullPartialAndUnreadBodies(HttpListenerMode mode, int readCount)
         {
             var observed = string.Empty;
@@ -129,11 +118,10 @@ namespace EmbedIO.Tests.Issues
                     context.Response.ContentType = "text/plain";
                     context.Response.ContentLength64 = response.Length;
                     await context.Response.OutputStream.WriteAsync(response, context.CancellationToken);
-                })), requiresPipelining: true);
+                })));
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task BufferedPartialSuccessorCombinesWithLaterSocketInput(HttpListenerMode mode)
             => await WithServer(mode, async (uri, token) =>
             {
@@ -143,7 +131,7 @@ namespace EmbedIO.Tests.Issues
                 Validate(await Read(stream, token), "/plaintext", false);
                 await stream.WriteAsync(Encoding.ASCII.GetBytes("on HTTP/1.1\r\nHost: " + uri.Authority + "\r\nConnection: keep-alive\r\n\r\n"), token);
                 Validate(await Read(stream, token), "/json", false);
-            }, requiresPipelining: true);
+            });
 
         [TestCase(false)]
         [TestCase(true)]
@@ -174,14 +162,8 @@ namespace EmbedIO.Tests.Issues
         }
 
         private static async Task WithServer(HttpListenerMode mode, Func<Uri, CancellationToken, Task> verify,
-            Func<string, HttpListenerMode, WebServer>? createServer = null, bool requiresPipelining = false)
+            Func<string, HttpListenerMode, WebServer>? createServer = null)
         {
-            // The owner-approved contract recommends EmbedIO mode for Unix pipelining.
-            // Preserve these native probes for explicit re-evaluation of a future runtime.
-            if (requiresPipelining && mode == HttpListenerMode.Microsoft && !OperatingSystem.IsWindows()
-                && Environment.GetEnvironmentVariable("EMBEDIO_TEST_NATIVE_UNIX_PIPELINING") != "1")
-                Assert.Ignore("Native Unix HttpListener discards pipelined bytes on .NET 10.0.12; use EmbedIO mode. Set EMBEDIO_TEST_NATIVE_UNIX_PIPELINING=1 to re-evaluate the runtime limitation documented in docs/user-reports/techempower-benchmarks.md.");
-
             var url = Resources.GetServerAddress();
             using var stop = new CancellationTokenSource();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));

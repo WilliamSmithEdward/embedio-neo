@@ -42,8 +42,16 @@ namespace EmbedIO
                 @this.Response.ContentEncoding = encoding;
             }
 
-            using var text = @this.OpenResponseText(encoding);
-            await text.WriteAsync(content).ConfigureAwait(false);
+            var text = @this.OpenResponseText(encoding);
+#if NET10_0_OR_GREATER
+            await using (text.ConfigureAwait(false))
+#else
+            using (text)
+#endif
+            {
+                await text.WriteAsync(content).ConfigureAwait(false);
+                await text.FlushAsync().ConfigureAwait(false);
+            }
         }
 
         /// <summary>

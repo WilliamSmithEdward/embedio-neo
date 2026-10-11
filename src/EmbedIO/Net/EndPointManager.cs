@@ -67,8 +67,44 @@ namespace EmbedIO.Net
             epl.Dispose();
         }
 
+        internal static void StopExclusiveEndpoints(HttpListener listener)
+        {
+            lock (RegistrationLock)
+            {
+                if (!Registrations.TryGetValue(listener, out var prefixes)) return;
+                var endpoints = new HashSet<EndPointListener>();
+                foreach (var registered in prefixes.Values)
+                    foreach (var endpoint in registered)
+                        if (endpoints.Add(endpoint)) endpoint.StopAcceptingIfExclusive(listener);
+            }
+        }
+
+        internal static HashSet<HttpConnection> BeginDrain(HttpListener listener, out HashSet<EndPointListener> exclusiveEndpoints)
+        {
+            lock (RegistrationLock)
+            {
+                var connections = new HashSet<HttpConnection>();
+                exclusiveEndpoints = new HashSet<EndPointListener>();
+                if (!Registrations.TryGetValue(listener, out var prefixes)) return connections;
+                var endpoints = new HashSet<EndPointListener>();
+                foreach (var registered in prefixes.Values)
+                    foreach (var endpoint in registered)
+                    {
+                        if (endpoint.IsExclusiveTo(listener)) endpoints.Add(endpoint);
+                    }
+                // Shared endpoints retain transport admission for their other owners.
+                // Freeze exclusivity for this drain; later route removals cannot
+                // enlarge the draining listener's accepted connection set.
+                exclusiveEndpoints.UnionWith(endpoints);
+                foreach (var endpoint in endpoints)
+                    connections.UnionWith(endpoint.StopAcceptingForDrain());
+                return connections;
+            }
+        }
+
         internal static void RemoveListener(HttpListener listener)
         {
+            StopExclusiveEndpoints(listener);
             foreach (var prefix in listener.Prefixes)
             {
                 RemovePrefix(prefix, listener);

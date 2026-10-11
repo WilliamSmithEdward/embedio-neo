@@ -4,11 +4,27 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, codex/managed-http-engine]
   workflow_dispatch:
     inputs:
       update-https-locks:
         description: Regenerate test-only MAUI HTTPS dependency locks for review
+        type: boolean
+        default: false
+      quic-cleanup-experiment:
+        description: Compare pinned MsQuic source with a test-only macOS socket cleanup patch
+        type: boolean
+        default: false
+      quic-self-contained-experiment:
+        description: Validate a review-only macOS MsQuic candidate with pinned bundled crypto and relocation
+        type: boolean
+        default: false
+      quic-openssl-experiment:
+        description: Validate the self-contained macOS candidate with pinned OpenSSL 3.5.9 LTS
+        type: boolean
+        default: false
+      quic-rebind-probe:
+        description: Trace native macOS UDP bind/close ordering in the independent QUIC rebind probe
         type: boolean
         default: false
       runtime-close-probe:
@@ -41,12 +57,131 @@ jobs:
           global-json-file: global.json
           cache: true
           cache-dependency-path: '**/packages.lock.json'
+      - name: Install pinned Linux QUIC prerequisite
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$RUNNER_TEMP/libmsquic_2.6.2_amd64.deb"
+          curl --fail --location --retry 3 --output "$package" https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/libm/libmsquic/libmsquic_2.6.2_amd64.deb
+          printf '%s  %s\n' 9ac90841ad45d99c1ff85b427d6dc7f0849291d596f0049d13db779a5a66ba4e "$package" | sha256sum --check
+          sudo apt-get update
+          sudo apt-get install --yes "$package"
+          dpkg-query --show libmsquic
+      - name: Install pinned macOS QUIC prerequisite
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_INSTALL_CLEANUP: '1'
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          bottle="$RUNNER_TEMP/libmsquic--2.6.2.arm64_sequoia.bottle.tar.gz"
+          curl --fail --location --retry 3 --header 'Authorization: Bearer QQ==' --output "$bottle" https://ghcr.io/v2/homebrew/core/libmsquic/blobs/sha256:c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55
+          printf '%s  %s\n' c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55 "$bottle" | shasum -a 256 --check
+          # Keep the pinned bottle isolated; current brew does not accept this
+          # local bottle path as an install target. Relocate only its dylib.
+          brew install openssl@3
+          quic_root="$RUNNER_TEMP/embedio-msquic"
+          mkdir -p "$quic_root" TestResults
+          tar -xzf "$bottle" -C "$quic_root"
+          quic_lib="$quic_root/libmsquic/2.6.2/lib"
+          install_name_tool -id "$quic_lib/libmsquic.2.dylib" -change '@@HOMEBREW_PREFIX@@/opt/openssl@3/lib/libcrypto.3.dylib' "$(brew --prefix openssl@3)/lib/libcrypto.3.dylib" "$quic_lib/libmsquic.2.6.2.dylib"
+          codesign --force --sign - "$quic_lib/libmsquic.2.6.2.dylib"
+          otool -L "$quic_lib/libmsquic.2.6.2.dylib" | tee TestResults/quic-native-macos.log
+          shasum -a 256 "$quic_lib/libmsquic.2.6.2.dylib" >> TestResults/quic-native-macos.log
+          printf 'DYLD_FALLBACK_LIBRARY_PATH=%s\n' "$quic_lib" >> "$GITHUB_ENV"
       - name: Restore from the lock files
         run: dotnet restore EmbedIO.sln --locked-mode
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=true
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+      - name: Provision the pinned independent QUIC datagram peer
+        shell: bash
+        run: python scripts/setup_datagram_peer.py
       - name: Run the regression suite with coverage
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 2118 --coverlet
+        shell: bash
+        env:
+          EMBEDIO_REQUIRE_QUIC: '1'
+          EMBEDIO_REGRESSION_TIMEOUT: ${{ runner.os == 'Windows' && '5m' || '8m' }}
+        run: |
+          set -euo pipefail
+          status=0
+          if test "$RUNNER_OS" != Windows; then
+            # Owner-approved ordinary CI diagnostics: JSON crash reports only,
+            # without heap dumps or changes to regression/failure policy.
+            mkdir -p "$RUNNER_TEMP/embedio-crash-reports"
+            export DOTNET_DbgEnableMiniDump=1
+            export DOTNET_EnableCrashReportOnly=1
+            export DOTNET_DbgMiniDumpName="$RUNNER_TEMP/embedio-crash-reports/crash.%p"
+          fi
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 4639 --coverlet || status=$?
+          if test "$status" = 0; then exit 0; fi
+          # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
+          # disposal returns (a deferred close on macOS; accepted connections on every
+          # OS), so the raw runtime rebind test, which tests MsQuic rather than EmbedIO,
+          # can fail. Pass a failed run only when every failure is that test stopping at
+          # bind with AddressAlreadyInUse; docs/project/http-engine.md has the evidence.
+          # EmbedIO's own HTTP/3 restart tests are not quarantined.
+          counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
+          read -r total passed failed defect <<< "$counts"
+          # The owner-approved exception cannot hide discovery loss.
+          test "$total" -ge 4639 || exit "$status"
+          if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
+            echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
+            exit 0
+          fi
+          exit "$status"
+      - name: Trace native macOS QUIC dispose and rebind ordering
+        if: always() && runner.os == 'macOS' && inputs.quic-rebind-probe == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p TestResults/quic-rebind-probe
+          dotnet restore test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj --locked-mode
+          dotnet build test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj -c Release --no-restore
+          trace_library="$RUNNER_TEMP/libembedio_quic_trace.dylib"
+          clang -std=c11 -O2 -Wall -Wextra -Werror -dynamiclib \
+            test/EmbedIO.RuntimeCloseProbe/quic_trace.c -o "$trace_library"
+          codesign --force --sign - "$trace_library"
+          clang --version > TestResults/quic-rebind-probe/compiler.txt
+          shasum -a 256 "$trace_library" > TestResults/quic-rebind-probe/tracer.sha256
+          nm -u "$RUNNER_TEMP/embedio-msquic/libmsquic/2.6.2/lib/libmsquic.2.6.2.dylib" > TestResults/quic-rebind-probe/native-imports.txt
+          DYLD_PRINT_LIBRARIES=1 \
+          DYLD_INSERT_LIBRARIES="$trace_library" \
+          EMBEDIO_QUIC_TRACE_LIBRARY="$trace_library" \
+          EMBEDIO_QUIC_TRACE_OUTPUT="$PWD/TestResults/quic-rebind-probe/native.jsonl" \
+            test/EmbedIO.RuntimeCloseProbe/bin/Release/net10.0/EmbedIO.RuntimeCloseProbe \
+              --quic-rebind 2048 TestResults/quic-rebind-probe \
+              2> TestResults/quic-rebind-probe/loader.log
+      - name: Verify independent HPACK interoperability
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 -m venv "$RUNNER_TEMP/hpack-venv"
+          "$RUNNER_TEMP/hpack-venv/bin/python" -m pip --isolated install --require-hashes --only-binary=:all: -r test/EmbedIO.Fuzz/hpack-requirements.txt
+          "$RUNNER_TEMP/hpack-venv/bin/python" test/EmbedIO.Fuzz/hpack_interop.py generate unused TestResults/hpack-independent.jsonl
+          dotnet restore test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj --locked-mode
+          dotnet run --project test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj -c Release --no-restore -- --hpack-corpus TestResults/hpack-independent.jsonl TestResults/hpack-ours.jsonl
+          "$RUNNER_TEMP/hpack-venv/bin/python" test/EmbedIO.Fuzz/hpack_interop.py verify TestResults/hpack-independent.jsonl TestResults/hpack-ours.jsonl
+      - name: Verify independent QPACK codecs and feedback
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/qpack-venv"
+          "$RUNNER_TEMP/qpack-venv/bin/python" -m pip --isolated install --require-hashes --only-binary=:all: -r test/EmbedIO.QpackInterop/requirements.txt
+          dotnet restore test/EmbedIO.QpackInterop/EmbedIO.QpackInterop.csproj --locked-mode
+          dotnet format whitespace test/EmbedIO.QpackInterop/EmbedIO.QpackInterop.csproj --no-restore --verify-no-changes
+          dotnet build test/EmbedIO.QpackInterop/EmbedIO.QpackInterop.csproj -c Release --no-restore
+          dotnet build src/EmbedIO/EmbedIO.csproj -c Release --no-restore
+          "$RUNNER_TEMP/qpack-venv/bin/python" test/EmbedIO.QpackInterop/verify.py src/EmbedIO/bin/Release/net10.0/EmbedIO.dll
+          "$RUNNER_TEMP/qpack-venv/bin/python" test/EmbedIO.QpackInterop/verify.py src/EmbedIO/bin/Release/netstandard2.0/EmbedIO.dll
       - name: Verify ZIP concurrency with a constrained worker pool
         env:
           DOTNET_PROCESSOR_COUNT: 2
@@ -67,6 +202,49 @@ jobs:
         with:
           name: test-results-${{ matrix.os }}
           path: TestResults/
+          if-no-files-found: error
+      - name: Retain Unix test-host crash reports
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure() && runner.os != 'Windows'
+        with:
+          name: test-host-crash-reports-${{ matrix.os }}
+          path: ${{ runner.temp }}/embedio-crash-reports/*.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  quic-cleanup-experiment:
+    name: Compare macOS native socket cleanup (${{ matrix.rid }})
+    if: inputs.quic-cleanup-experiment == true || inputs.quic-self-contained-experiment == true || inputs.quic-openssl-experiment == true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      EMBEDIO_EXPECT_NATIVE_RID: ${{ matrix.rid }}
+      EMBEDIO_QUIC_SELF_CONTAINED: ${{ (inputs.quic-self-contained-experiment || inputs.quic-openssl-experiment) && '1' || '0' }}
+      EMBEDIO_QUIC_TLS_BACKEND: ${{ inputs.quic-openssl-experiment && 'openssl' || 'quictls' }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Prepare native build tools
+        run: brew install cmake openssl@3 gnupg
+      - name: Compare pinned source with the test-only cleanup patch
+        run: bash test/EmbedIO.RuntimeCloseProbe/quic-cleanup-experiment.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: quic-cleanup-experiment-${{ matrix.rid }}
+          path: TestResults/quic-cleanup-experiment/
           if-no-files-found: error
 
   runtime-close-probe:
@@ -157,6 +335,15 @@ jobs:
           dotnet restore test/EmbedIO.LegacyCookieSmoke/EmbedIO.LegacyCookieSmoke.csproj --locked-mode
           dotnet build test/EmbedIO.LegacyCookieSmoke/EmbedIO.LegacyCookieSmoke.csproj -c Release --no-restore
           test/EmbedIO.LegacyCookieSmoke/bin/Release/net472/EmbedIO.LegacyCookieSmoke.exe
+      - name: Verify the managed HTTP engine on .NET Framework
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore test/EmbedIO.LegacyHttpEngineSmoke/EmbedIO.LegacyHttpEngineSmoke.csproj --locked-mode
+          dotnet build test/EmbedIO.LegacyHttpEngineSmoke/EmbedIO.LegacyHttpEngineSmoke.csproj -c Release --no-restore
+          dotnet format whitespace test/EmbedIO.LegacyHttpEngineSmoke/EmbedIO.LegacyHttpEngineSmoke.csproj --no-restore --verify-no-changes
+          test/EmbedIO.LegacyHttpEngineSmoke/bin/Release/net472/EmbedIO.LegacyHttpEngineSmoke.exe > TestResults/legacy-http-engine.log
       - name: Check hot-path and cold-start allocation budgets
         run: |
           dotnet restore test/EmbedIO.Performance/EmbedIO.Performance.csproj --locked-mode
@@ -208,6 +395,15 @@ jobs:
         run: dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes
       - name: Run the SDK and NUnit analyzers
         run: dotnet build EmbedIO.sln -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
+      - name: Validate standalone load benchmark tooling
+        run: |
+          python3 scripts/test_compare_load_benchmark.py
+          python3 scripts/test_guarded_load_benchmark.py
+          python3 scripts/test_summarize_teardown_exceptions.py
+          dotnet restore test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --locked-mode
+          dotnet format whitespace test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --no-restore --verify-no-changes
+          dotnet build test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
+          dotnet test/EmbedIO.LoadBenchmark/bin/Release/net10.0/EmbedIO.LoadBenchmark.dll exception-accounting-check
 
   build:
     name: Build and check the NuGet packages
@@ -236,14 +432,20 @@ jobs:
 
   mac-catalyst:
     name: Mac Catalyst
+    # Owner-requested temporary MAUI pause; re-enable only on William's instruction.
+    if: false
     uses: ./.github/workflows/mac-catalyst.yml
 
   android:
     name: Android
+    # Owner-requested temporary MAUI pause; re-enable only on William's instruction.
+    if: false
     uses: ./.github/workflows/android-smoke.yml
 
   maui-https:
     name: MAUI HTTPS
+    # Owner-requested temporary pause (2026-10-10); re-enable only on William's instruction.
+    if: false
     uses: ./.github/workflows/maui-https.yml
     with:
       update-locks: ${{ inputs.update-https-locks == true }}
@@ -269,7 +471,9 @@ jobs:
           results = json.loads(os.environ['RESULTS'])
           requested = os.environ['RUNTIME_PROBE_REQUESTED'] == 'true'
           for name, job in results.items():
-              expected = 'skipped' if name == 'runtime-close-probe' and not requested else 'success'
+              # All MAUI jobs are explicitly paused by the owner until re-enabled.
+              paused_maui = name in {'maui-https', 'mac-catalyst', 'android'}
+              expected = 'skipped' if paused_maui or (name == 'runtime-close-probe' and not requested) else 'success'
               assert job['result'] == expected, f"{name}: {job['result']}; required {expected}"
           print('All required CI jobs passed.')
           PY

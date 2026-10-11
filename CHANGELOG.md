@@ -1,6 +1,118 @@
 # Changelog
 
 ## [Unreleased]
+- Complete the server accept loop normally when explicit disposal wins between
+  the listening check and accept. Independent listener failures still propagate.
+- Preserve HTTP/3 response output after caller-cancelled input reads, while
+  abandoning input that may have been partly consumed. See the
+  [Neo v2 migration guide](docs/compatibility/neo-v1-to-v2.md#response-statuses-output-and-shutdown).
+- Restrict public response StatusCode assignments to final statuses (200-599),
+  as explicitly approved. Use informational-response and protocol-handoff APIs
+  for 1xx; automatic Continue and negotiated 101 remain supported. See the
+  [migration note](docs/compatibility/migration.md#final-response-status-validation-unreleased).
+- Enable TCP_NODELAY on accepted managed TCP sockets to avoid delayed small
+  writes while preserving protocol framing and writer batching. See the
+  [controlled latency comparison](docs/project/http-tcp-latency.md).
+- Add an isolated internal WebTransport over HTTP/3 session core (draft-ietf-webtrans-http3-16 framing, session association, capsules, flow control and bounded buffering) with unit coverage only. No listener advertises it, no public API or dependency changes; see [WebTransport session core development](docs/project/http-webtransport-core.md).
+- Preserve committed managed HTTP/2 control output when the last admitted response
+  completes during graceful drain. Stop input separately and wait for queued output;
+  forced cancellation and drain deadlines remain. See the
+  [lifetime evidence](docs/project/http2-drain-output-lifetime.md).
+- Add the optional managed `IHttpResponseSections` capability for awaited informational responses and declared response trailers, preserving the existing response interface and documenting opt-in framing and ownership. This increment remains under validation.
+- Reduce managed HTTP/3 per-request cost: connection-owned request cancellation
+  scopes, one continuation per transport direction, fewer thread-pool hops,
+  separate QPACK gates and one QUIC write per small frame, with final headers and
+  a small first body write coalesced. A request read to its FIN no longer emits a
+  QPACK Stream Cancellation, and an already received end of input is consumed
+  instead of aborting the read direction. See
+  [HTTP/3 request path performance](docs/project/http3-performance.md).
+- Batch managed HTTP/2 output in wire order, coalesce initial headers with body
+  data and retire streams when END_STREAM commits. Guard application cancellation
+  callbacks so cleanup and connection shutdown continue after callback failures.
+- Start managed HTTP/2 and HTTP/3 response-output stream closure without blocking
+  synchronous Dispose, as explicitly approved. Context completion still awaits
+  closure; see the [migration note](docs/compatibility/migration.md#multiplexed-response-stream-disposal-unreleased).
+- Reserve the bounded first-body prefix in managed HTTP/1 response-header buffers,
+  preserving framing and write boundaries while avoiding fitting-header growth.
+- Defer unused managed HTTP/1 query/item collections while preserving populated
+  query initialization, stable mutable collections and request-local state.
+- Commit bounded asynchronous managed HTTP/1 chunks with one transport write,
+  preserving byte framing, immediate application writes and cancellation.
+- Distinguish managed HTTP/1 request-head limit failures with 414 for oversized
+  targets and 431 for oversized field sections, retaining limits and connection
+  closure; see the [migration note](docs/compatibility/migration.md#http1-request-head-limit-statuses-unreleased).
+- Process valid higher HTTP/1 minor versions using HTTP/1.1 framing while retaining
+  received request metadata and advertising only the supported response version.
+  Preserve strict framing and HTTP/1.0/1.1 behavior; see the
+  [migration note](docs/compatibility/migration.md#higher-http1-minor-versions-unreleased).
+
+- Remove the approved managed HTTP/1 keep-alive cap of 100 requests. Connections
+  can remain reusable beyond that count; the 15-second idle timeout, explicit
+  close, cancellation and graceful drain remain. The Keep-Alive header no longer
+  advertises max. Clients relying on count-based rotation should request closure
+  explicitly; see the [migration notes](docs/compatibility/migration.md#managed-http1-keep-alive-request-cap-removed).
+
+- Prevent bodyless managed HTTP/1 responses from leaking payloads or chunk
+  terminators, while preserving header commitment and explicit 304 representation
+  lengths. Preserve accepted HTTP/2 responses during drain when a refused upload
+  was already in flight, retaining connection flow credit and invalid-ID checks.
+
+- Isolate oversized HTTP/3 request field sections to their streams, preserving
+  healthy requests and QPACK state while retaining fatal compression-error checks.
+
+- Return a stream-local 400 with the supported version for malformed HTTP/2
+  WebSocket version negotiation instead of an application 500.
+
+- Close unknown-length HTTP/1.0 response bodies to delimit them by transport EOF,
+  while retaining persistence for fixed-length and bodyless responses.
+
+- Reject malformed managed HTTP/1 request-target forms before URI reconstruction,
+  including query-only and leading-@ targets. Valid origin paths, absolute HTTP(S)
+  URLs and OPTIONS asterisk-form remain supported; see the migration notes.
+
+- Reject new HTTP/2 requests that reuse a completed stream identifier or try to
+  open a skipped lower identifier, while retaining minimal closed-stream
+  processing and the advertised modern priority policy.
+
+- Reject incomplete managed Content-Length bodies as errors rather than successful
+  short uploads. Map body-framing failures to generic 400 responses before headers
+  commit, and abort that connection after response commitment. Preserve ordinary
+  application error handling and keep other clients' listener available.
+
+- Preserve sibling HTTP/2 streams when a request is reset during response output.
+  Cancel queued writes without poisoning the shared connection, return unsent
+  DATA credit, and finish encoded HPACK blocks to keep peer tables synchronized.
+
+- Keep recoverable HTTP/2 and HTTP/3 request-stream failures from disposing the
+  listener shared by other clients. Response completion and context cleanup
+  still run after cancellation or output failure; nonrecoverable errors retain
+  their existing propagation behavior (engine program #181).
+
+- Begin the owner-approved modern HTTP engine replacement: managed chunked request
+  decoding, asynchronous body reads and draining, strict framing validation,
+  pipeline buffer adoption and reduced response-header allocations. Malformed or
+  ambiguous requests previously tolerated are rejected; see the
+  [migration notes](docs/compatibility/migration.md#managed-http-framing-unreleased)
+  and [protocol roadmap](docs/project/http-engine.md). The development branch now
+  includes HTTP/2, HPACK and RFC 8441 WebSockets, plus internal HTTP/3/QPACK/QUIC
+  connection dispatch; public HTTP/3 listener integration remains in development.
+  See the roadmap for target restrictions and outstanding conformance work.
+
+- Reject malformed managed WebSocket frame metadata before consuming payloads,
+  enforce minimal wire-length encoding, and reject lengths that cannot fit the
+  current payload representation before integer conversion. Validate incoming
+  close status codes and UTF-8 reasons before processing or echoing them (#190). See the
+  [compatibility notes](docs/compatibility/migration.md#managed-websocket-framing-unreleased).
+
+- Enforce `WebSocketModule.MaxMessageSize` on the managed listener before payloads
+  are buffered, complete the close handshake after rejecting oversized or invalid
+  text messages, deliver messages received just before the peer's close, and stop
+  failed close writes from escaping as unobserved task exceptions. Buffered frame
+  reads, 64 KiB send frames and fewer copies raise managed echo throughput by
+  about 8x for 64 KiB messages and 11x for 1 MiB messages in the documented
+  benchmark. A bounded stateful fuzzer now runs in the Fuzz workflow (#190). See the
+  [migration notes](docs/compatibility/migration.md#managed-websocket-limits-delivery-and-send-framing-unreleased)
+  and [benchmark](test/EmbedIO.Performance/README.md#managed-websocket-echo).
 
 - Keep the managed WebSocket receiver active during local closing so valid peer acknowledgements complete promptly. Use asynchronous receive-completion signaling while preserving close payloads, cancellation and shutdown limits (issue #184).
 

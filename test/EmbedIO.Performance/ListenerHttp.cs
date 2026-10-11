@@ -100,6 +100,7 @@ internal static class ListenerHttp
                     client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
                     client.Timeout = TimeSpan.FromSeconds(20);
                     var rows = new List<object>();
+                    var phase = "warmup";
                     try
                     {
                         async Task Request()
@@ -123,6 +124,7 @@ internal static class ListenerHttp
                         var retainedBefore = GC.GetTotalMemory(false);
                         for (var round = 0; round < rounds; round++)
                         {
+                            phase = $"measurement round {round}";
                             var samples = new double[workers * requests];
                             var gcBefore = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
                             var allocatedBefore = GC.GetTotalAllocatedBytes(true);
@@ -152,6 +154,7 @@ internal static class ListenerHttp
                                 collections = Enumerable.Range(0, 3).Select(index => GC.CollectionCount(index) - gcBefore[index]).ToArray()
                             });
                         }
+                        phase = "shutdown verification";
                         stop.Cancel();
                         await running.WaitAsync(TimeSpan.FromSeconds(10));
                         client.Dispose();
@@ -193,6 +196,14 @@ internal static class ListenerHttp
                         if (verify && (openStreams != 0 || activeTimers != 0))
                             throw new InvalidOperationException($"Shutdown retained {openStreams} transport wrappers and {activeTimers} timers.");
                     }
+                    catch (Exception error)
+                    {
+                        throw new InvalidOperationException(
+                            $"HTTP workload failed: url={url}, phase={phase}, closePerRequest={churn}, workers={workers}, "
+                            + $"requestBodyBytes={bodySize}, bodyConsumption={consumption}, responseBytes={payloadSize}, "
+                            + $"responseChunkBytes={chunkSize}, observedPeerPorts={ports.Count}, retainedConnections={connections.Count}, "
+                            + $"serverState={server.State}, serverTask={running.Status}, diagnostics={CaptureFailureState(connections)}.", error);
+                    }
                     finally
                     {
                         stop.Cancel();
@@ -209,6 +220,97 @@ internal static class ListenerHttp
             note = "Loopback client and server share this process. Allocations/memory include both. Timing is informational; optional retained connections intentionally keep diagnostic references alive.",
             results
         }, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static string CaptureFailureState(ConcurrentDictionary<object, byte> retained)
+    {
+        // Run only after failure. Never read payloads, alter timers or hold a registry
+        // lock indefinitely while diagnosing a possible stalled transport.
+        try
+        {
+            static object? Field(object value, string name)
+                => value.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(value);
+            var connections = new HashSet<object>(retained.Take(32).Select(pair => pair.Key));
+            var endpoints = new List<object>();
+            var registry = typeof(EmbedIO.Net.EndPointManager).GetField("IPToEndpoints", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
+                as System.Collections.IDictionary;
+            if (registry != null)
+                foreach (System.Collections.IDictionary ports in registry.Values)
+                    foreach (var endpoint in ports.Values)
+                    {
+                        if (endpoint == null || endpoints.Count == 32) continue;
+                        int? registeredCount = null, pendingCount = null;
+                        bool? listenerReadable = null;
+                        string? listenerSocketError = null;
+                        try
+                        {
+                            if (endpoint.GetType().GetProperty("ListeningSocket", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint)
+                                is System.Net.Sockets.Socket socket)
+                                listenerReadable = socket.Poll(0, System.Net.Sockets.SelectMode.SelectRead);
+                        }
+                        catch (Exception error) when (error is System.Net.Sockets.SocketException or ObjectDisposedException)
+                        { listenerSocketError = error.GetType().Name; }
+                        var owner = endpoint.GetType().GetProperty("Listener", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint);
+                        if (owner != null && Field(owner, "_connections") is System.Collections.IEnumerable registered)
+                        {
+                            registeredCount = (int?)registered.GetType().GetProperty("Count")?.GetValue(registered);
+                            var sampled = 0;
+                            foreach (var entry in registered)
+                            {
+                                var connection = entry?.GetType().GetProperty("Key")?.GetValue(entry);
+                                if (connection != null) connections.Add(connection);
+                                if (++sampled == 32) break;
+                            }
+                        }
+                        object?[] snapshotArguments = { null };
+                        var snapshot = endpoint.GetType().GetMethod("TryPendingConnections", BindingFlags.Instance | BindingFlags.NonPublic)
+                            ?? throw new InvalidOperationException("Missing endpoint pending-session diagnostics.");
+                        var busy = snapshot.Invoke(endpoint, snapshotArguments) is not true;
+                        if (!busy && snapshotArguments[0] is Array items)
+                        {
+                            pendingCount = items.Length;
+                            foreach (var connection in items.Cast<object>().Take(32)) connections.Add(connection);
+                        }
+                        endpoints.Add(new
+                        {
+                            worker = (Field(endpoint, "_acceptWorker") as Task)?.Status.ToString(),
+                            admissionStopped = endpoint.GetType().GetProperty("AdmissionStopped", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint),
+                            pendingRegistryBusy = busy,
+                            registeredConnections = registeredCount,
+                            pendingConnections = pendingCount,
+                            listenerReadable,
+                            listenerSocketError
+                        });
+                    }
+            var live = connections.Where(connection => Field(connection, "_resourcesDisposed") is not 1).Take(32)
+                .Select(connection =>
+                {
+                    var stream = connection.GetType().GetProperty("Stream")?.GetValue(connection) as Stream;
+                    var input = Field(connection, "_iStream");
+                    return new
+                    {
+                        resourcesDisposed = Field(connection, "_resourcesDisposed"),
+                        contextBound = Field(connection, "_contextBound"),
+                        readBufferAllocated = Field(connection, "_buffer") is byte[],
+                        reuses = connection.GetType().GetProperty("Reuses")?.GetValue(connection),
+                        tlsAuthenticated = (stream as System.Net.Security.SslStream)?.IsAuthenticated,
+                        remainingBody = input == null ? null : Field(input, "_bytesLeft"),
+                        responseFinishing = Field(connection, "_responseFinishing")
+                    };
+                }).ToArray();
+            return JsonSerializer.Serialize(new
+            {
+                threadPoolThreads = ThreadPool.ThreadCount,
+                pendingWorkItems = ThreadPool.PendingWorkItemCount,
+                completedWorkItems = ThreadPool.CompletedWorkItemCount,
+                retainedConnections = retained.Count,
+                sampledConnections = connections.Count,
+                liveConnectionSample = live,
+                endpoints
+            });
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or TargetInvocationException or InvalidCastException)
+        { return $"Snapshot unavailable: {error.GetType().FullName}"; }
     }
 
     private static double Percentile(double[] values, double percentile)

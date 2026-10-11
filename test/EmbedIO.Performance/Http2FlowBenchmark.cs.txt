@@ -1,0 +1,53 @@
+﻿using System.Diagnostics;
+using EmbedIO.Net.Internal.Http2;
+
+Func<Flow> baseline = () => { var f = new BaselineSendFlowControl(); return new(f.Open, f.Update, f.ReserveAsync); };
+Func<Flow> candidate = () => { var f = new Http2SendFlowControl(); return new(f.Open, f.Update, f.ReserveAsync); };
+await Fast(baseline, 10000); await Fast(candidate, 10000);
+await Blocked(baseline, 32, 30); await Blocked(candidate, 32, 30);
+Console.WriteLine(new System.Resources.ResourceManager("Scheduler.Labels", typeof(Flow).Assembly).GetString("Header", System.Globalization.CultureInfo.InvariantCulture));
+for (var sample = 0; sample < 5; sample++)
+{
+    var versions = sample % 2 == 0 ? new[] { ("baseline", baseline), ("candidate", candidate) } : new[] { ("candidate", candidate), ("baseline", baseline) };
+    foreach (var (name, factory) in versions)
+    {
+        await Measure(sample, name, "writable", 200000, () => Fast(factory, 200000));
+        await Measure(sample, name, "blocked-8", 1000, () => Blocked(factory, 8, 1000));
+        await Measure(sample, name, "blocked-128", 1000, () => Blocked(factory, 128, 1000));
+    }
+}
+static async Task Measure(int sample, string variant, string workload, int count, Func<Task> action)
+{
+    GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+    var allocated = GC.GetTotalAllocatedBytes(true); var start = Stopwatch.GetTimestamp();
+    await action();
+    var elapsed = Stopwatch.GetElapsedTime(start).TotalNanoseconds;
+    var bytes = GC.GetTotalAllocatedBytes(true) - allocated;
+    Console.WriteLine($"{sample},{variant},{workload},{count},{elapsed / count:F2},{(double)bytes / count:F2}");
+}
+static async Task Fast(Func<Flow> factory, int count)
+{
+    var f = factory(); f.Open(1);
+    for (var i = 0; i < count; i++)
+    {
+        if (await f.Reserve(1, 1024, default) != 1024) throw new InvalidOperationException("Wrong fast reservation.");
+        f.Update(0, 1024); f.Update(1, 1024);
+    }
+}
+static async Task Blocked(Func<Flow> factory, int streams, int count)
+{
+    using var cancel = new CancellationTokenSource();
+    for (var i = 0; i < count; i++)
+    {
+        var f = factory();
+        for (var id = 1; id <= streams; id++) f.Open(id);
+        if (await f.Reserve(1, 65535, default) != 65535) throw new InvalidOperationException("Wrong initial credit.");
+        f.Update(1, 65535);
+        var pending = new Task<int>[streams];
+        for (var id = 1; id <= streams; id++) pending[id - 1] = f.Reserve(id, 1, cancel.Token);
+        f.Update(0, streams);
+        var results = await Task.WhenAll(pending);
+        if (results.Any(value => value != 1)) throw new InvalidOperationException("Wrong pending credit.");
+    }
+}
+sealed record Flow(Action<int> Open, Action<int, int> Update, Func<int, int, CancellationToken, Task<int>> Reserve);

@@ -180,6 +180,8 @@ namespace EmbedIO.Tests.Issues
                 catch (OperationCanceledException) { }
                 // Linux HttpClient can expose the connect/dispose race directly instead of wrapping it.
                 catch (SocketException error) when (error.SocketErrorCode == SocketError.NotConnected) { }
+                // macOS reports the same race as EINVAL when HttpClient reads the reset socket's peer address.
+                catch (SocketException error) when (OperatingSystem.IsMacOS() && error.SocketErrorCode == SocketError.InvalidArgument) { }
             }).ToArray();
             try
             {

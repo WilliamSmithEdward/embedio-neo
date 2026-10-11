@@ -132,6 +132,9 @@ namespace EmbedIO.Testing.Internal
             if (method == System.Net.Http.HttpMethod.Put)
                 return HttpVerbs.Put;
 
+            if (string.Equals(method.Method, "QUERY", StringComparison.Ordinal))
+                return HttpVerbs.Query;
+
             return HttpVerbs.Any;
         }
     }

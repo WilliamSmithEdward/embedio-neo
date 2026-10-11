@@ -34,6 +34,9 @@ namespace EmbedIO
 
             return compressionMethod switch
             {
+#if NET10_0_OR_GREATER
+                CompressionMethod.Brotli => new BrotliStream(stream, CompressionMode.Compress),
+#endif
                 CompressionMethod.Gzip => new GZipStream(stream, CompressionMode.Compress),
                 CompressionMethod.Deflate => new DeflateStream(stream, CompressionMode.Compress),
                 _ => stream

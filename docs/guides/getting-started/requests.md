@@ -158,5 +158,205 @@ set `HttpContext.Response.StatusCode = 201` before returning its representation.
 For a missing item, throw `HttpException.NotFound()`. For a response with no body,
 set status 204 and use a method that returns `void` or `Task`.
 
+## Limit compressed request bodies
+
+The modern-engine development branch adds a decoded-byte limit to the existing
+opt-in request decompression setting. Configure it while creating the server:
+
+```csharp
+using var server = new WebServer(options => options
+    .WithUrlPrefix("http://localhost:9696/")
+    .WithMode(HttpListenerMode.EmbedIO)
+    .WithSupportCompressedRequests(true)
+    .WithMaximumDecompressedRequestBodyBytes(1_048_576));
+```
+
+The request-stream helpers, including JSON/form/body readers, raise HTTP 413
+when decoded content exceeds one MiB. The limit counts bytes, including all
+bytes of UTF-8 characters; an exactly sized body is accepted after checking EOF.
+Zero accepts only an empty decoded body. Null preserves the existing unlimited
+behavior, and negative values are rejected during configuration. Request
+compression remains disabled unless explicitly enabled.
+
+The .NET 10 asset handles gzip, deflate and Brotli. The .NET Standard 2.0 asset
+handles gzip/deflate and rejects Brotli explicitly. This setting applies when a
+helper decodes a recognized compressed coding. Uncompressed/identity bodies and
+direct reads of `Request.InputStream` need separate policies. For streaming
+processing, read through EOF before treating the whole request as accepted;
+data read before a later limit error may already have reached application code.
+The limit does not bound native codec memory or replace transport/slow-peer
+limits. These APIs are unreleased development work.
+
+## Decode content-coding chains
+
+The unreleased modern-engine branch accepts recognized Content-Encoding lists
+when `SupportCompressedRequests` is enabled. For `Content-Encoding: gzip, br`,
+the sender applies gzip first and Brotli second; the helpers undo Brotli and then
+gzip. Up to eight compression layers are supported. Excess depth, unsupported
+names and coding parameters are rejected with the existing HTTP 400 behavior.
+
+The .NET 10 asset supports gzip, deflate and Brotli layers; the .NET Standard
+asset supports gzip/deflate chains and explicitly rejects any Brotli layer.
+Case-insensitive coding names and optional whitespace are accepted. Empty list
+members are ignored; an empty field or identity-only list leaves the body raw.
+These untransformed bodies retain the existing decoded-limit exclusion.
+
+`MaximumDecompressedRequestBodyBytes` applies once to the final application
+bytes, so compression-envelope overhead does not reject an empty body at limit
+zero. It does not bound intermediate expansion CPU or native codec memory.
+Streaming applications must read through EOF before treating the complete body
+as accepted. The chain wrapper drives outer layers to EOF, preserves cancellation,
+closes its owned source once and makes malformed-data failures sticky.
+
+Deflate requests still select the legacy raw format. The helpers now validate
+the complete raw stream and reject truncation or trailing bytes with HTTP 400.
+An empty decoded body requires a valid empty DEFLATE stream, such as 03 00;
+an absent compressed stream is malformed. Standards zlib selection, gzip
+envelope validation and response coding-chain support remain development work.
 Next: [Serve HTML and files](files.md) alongside this API, or
 [await an outbound HTTP request](../async-outbound-requests.md).
+
+## Advertise and validate QUERY formats
+
+The unreleased engine branch adds `QueryFormatPolicy` for resources that support
+QUERY. Create the policy once and apply it before writing response headers:
+
+```csharp
+var formats = new QueryFormatPolicy("text/plain;charset=utf-8");
+
+server.WithAction("/search", HttpVerbs.Any, async context =>
+{
+    formats.Apply(context);
+    context.Response.Headers[HttpHeaderNames.Allow] = "GET, HEAD, OPTIONS, QUERY";
+    if (context.Request.HttpMethod == "QUERY")
+    {
+        var term = await context.GetRequestBodyAsStringAsync();
+        var names = new[] { "alpha", "beta", "gamma" };
+        var matches = names.Where(name => name.IndexOf(term,
+            StringComparison.OrdinalIgnoreCase) >= 0);
+        await context.SendStringAsync(string.Join("\n", matches), "text/plain",
+            WebServer.Utf8NoBomEncoding);
+    }
+    else if (context.Request.HttpVerb is HttpVerbs.Get or HttpVerbs.Head or HttpVerbs.Options)
+        await context.SendStringAsync("Send a UTF-8 text QUERY to search.",
+            "text/plain", WebServer.Utf8NoBomEncoding);
+    else
+        throw new HttpException(405);
+});
+```
+
+This fragment uses `System` and `System.Linq` and an existing configured `server`.
+It advertises `Accept-Query: "text/plain";charset="utf-8"` on that resource's
+responses, including discovery requests. The query component of the resource URI
+does not change the policy. An unsupported QUERY Content-Type raises HTTP 415
+with both `Accept-Query` and ordinary `Accept` format information. Missing,
+wildcard or ambiguous Content-Type information is rejected with HTTP 400.
+
+Media ranges support exact types, `type/*` and `*/*`. Configured parameters are
+required constraints; extra request parameters are allowed. Names and media types
+are case insensitive; charset values are case insensitive, while other configured
+parameter values match exactly after quoted-string decoding. Discovery uses
+Structured Fields strings, including numeric-looking parameter values. Parameter
+names must fit Structured Fields keys and advertised values must be printable
+ASCII; unrepresentable or duplicate configured parameters are rejected at setup.
+
+The policy does not alter other methods' request processing, route requests,
+read content, evaluate queries or implement conditional/range/cache semantics.
+Handlers must validate query content and remain safe and idempotent. This example
+performs a read-only text search; applying a policy does not make a mutating handler
+safe. See [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-3).
+
+## Evaluate selected-representation preconditions
+
+The unreleased `Request.EvaluatePreconditions(entityTag, lastModified,
+representationExists)` helper evaluates entity-tag and date conditions in HTTP
+order. It returns null to continue, 304 for unchanged GET/HEAD/QUERY results, or
+412 when a condition fails. Strong comparison is used for If-Match; weak comparison
+is used for If-None-Match. Invalid dates are ignored, malformed entity-tag lists
+raise HTTP 400, and server-supplied invalid tags raise an argument error.
+
+Call it after authorization and ordinary validation, for a request that would
+otherwise succeed. Supply validators for the selected representation. For QUERY,
+that means the query results including request content, relevant metadata and
+response content negotiation. A target-URI-only tag can incorrectly produce 304
+for different queries. The helper neither reads the request nor derives validators.
+
+Set the response's ETag/Last-Modified and other appropriate representation/cache
+headers yourself. If the helper returns a status, set `Response.StatusCode` and
+finish without writing content. Otherwise send the selected representation.
+CONNECT, OPTIONS and TRACE conditions are ignored. The helper does not implement
+range selection, caching, equivalent-resource URI assignment or automatic replay
+of a previously successful state-changing operation. Existing conditional and
+range helper behavior is preserved; adopting this evaluator is explicit.
+
+See [RFC 9110 precondition ordering](https://www.rfc-editor.org/rfc/rfc9110.html#section-13.2.2)
+and [QUERY conditional requests](https://www.rfc-editor.org/rfc/rfc10008.html#section-2.6).
+
+## Select a single GET or QUERY byte range
+
+The unreleased `Request.TryGetByteRange(contentLength, entityTag, lastModified,
+out start, out length, lastModifiedIsStrong: false)` helper selects one applicable
+range for exact GET or QUERY. Supply the selected encoded representation's byte
+length and validators after evaluating preconditions. QUERY metadata must describe
+its results after content negotiation. A range of compressed content selects
+compressed bytes, not the decoded text.
+
+A true result gives the start offset and byte count; send those bytes with 206,
+appropriate representation metadata and `Content-Range`. False means the range is
+ignored; the output values describe the full representation. Clamped ends and
+positive suffixes are supported, including decimal numerals larger than Int64.
+Unsatisfiable supported ranges raise `HttpRangeNotSatisfiableException` with the
+total length for a 416 response. Unknown units, invalid syntax, multiple ranges
+and empty representations are ignored. Multipart generation remains separate.
+
+If-Range entity tags must be strong and match exactly. Date If-Range requires the
+caller to explicitly assert that its Last-Modified is a strong validator; merely
+having a timestamp does not establish this. An unequal or unavailable validator
+causes the range to be ignored. Existing `IsRangeRequest` behavior is unchanged.
+Windows native HTTP.sys can reject oversized Range numerals with 400 before the
+application handler; the managed transports exercise the extended numeral path.
+
+## Stream a selected representation with multiple ranges
+
+The unreleased `Context.SendRepresentationAsync(content, contentType, entityTag,
+lastModified, leaveOpen: false, lastModifiedIsStrong: false, maximumRanges: 16)`
+helper streams an already selected readable, seekable representation. Call it
+before committing response headers, after authorization and content negotiation.
+The source represents the entire result from byte zero; its initial position is
+ignored when content is sent. QUERY validators must identify the selected query
+results, including relevant request content and negotiated representation metadata.
+
+The helper evaluates preconditions first, advertises byte-range support, and
+selects GET/QUERY ranges using strong If-Range validation. Multiple disjoint
+satisfiable ranges produce 206 `multipart/byteranges`, with per-part Content-Type
+and Content-Range and an exact total Content-Length. Overlapping/adjacent ranges
+are combined while retaining the first requested position. A single remaining
+range uses an ordinary 206 response. Unsatisfiable members are omitted when other
+members are satisfiable; all unsatisfiable members raise 416 with the total length.
+Invalid ranges, unknown units, empty representations or more than `maximumRanges`
+received specifications cause Range to be ignored and the full representation to
+be sent. The configurable budget is 1–128; unsatisfiable specifications count.
+
+HEAD sends full-representation metadata without reading the source. Matching
+preconditions return 304 or 412 without source reads or seeking. The optional 304
+Content-Length is omitted for native-listener compatibility; ETag/Last-Modified
+remain available. A 412 or 416 does not retain Content-Encoding from the selected
+source, since any error content represents a different response.
+
+The source closes on completion, cancellation or failure unless `leaveOpen` is
+true. Invalid basic arguments do not transfer ownership. Do not modify/share the
+source concurrently. Writes await transport backpressure, use the request's
+cancellation token and copy through a bounded pooled 64 KiB buffer. Premature
+source EOF fails the transfer instead of silently completing a truncated response.
+The helper does not close the response stream or buffer the whole representation.
+
+For an already encoded representation, set its Content-Encoding beforehand.
+Ranges address encoded bytes; this helper applies no compression. A range-aware
+consumer must reassemble those bytes before decoding the selected representation.
+The wire tests disable automatic decompression so it cannot try to decode isolated
+encoded fragments. Use validators and other metadata for those same encoded bytes;
+content digests must describe the actual transmitted content when used. Full cache
+integration, automatic compression and FileModule adoption are separate work.
+
+See [RFC 9110 multiple parts](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.7.2)
+and [encoded representation metadata](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4).

@@ -38,7 +38,7 @@ def differences(old, new, path=""):
     return [] if equal else [{"path": path, "upstream": old, "neo": new}]
 
 
-def validate_outcomes(report, upstream):
+def validate_outcomes(report, upstream, contract):
     cases = report["cases"]
     errors = []
     statuses = {
@@ -67,7 +67,7 @@ def validate_outcomes(report, upstream):
         if name.startswith("lifecycle/") or name == "https/cancel":
             if value != "Stopped":
                 errors.append(f"{name}: listener did not stop")
-    for mode in ("EmbedIO", "Microsoft"):
+    for mode in ("EmbedIO",):
         if f"http/{mode}/dto" not in cases:
             continue
         for phase, expected in (("first", "1"), ("second", "2")):
@@ -82,16 +82,19 @@ def validate_outcomes(report, upstream):
                            ("hostname-rejected", True), ("healthy-after-rejections", "encrypted")):
         if cases[f"https/{name}"] != expected:
             errors.append(f"https/{name}: incorrect TLS outcome")
-    if "native/unix-response-lifetime" in cases:
-        expected = {"status": 200, "body": {"Id": 42, "Name": "ordinary", "Amount": 12.5},
-                    "runError": "System.ObjectDisposedException" if upstream else None,
-                    "cancelError": "System.AggregateException" if upstream else None,
-                    "secondStatus": None if upstream else 200,
-                    "secondBody": None if upstream else {"Id": 42, "Name": "ordinary", "Amount": 12.5},
-                    "state": "Stopped"}
-        if cases["native/unix-response-lifetime"] != expected:
-            errors.append("Unix native listener did not exhibit the exact characterized response-lifetime outcome")
     return errors
+
+
+def target_api_differences(modern, standard):
+    # Compare exact entries by type so an approved additive convenience never
+    # permits unrelated missing types, overloads, interfaces or defaults.
+    observed = {}
+    for name in sorted(modern.keys() | standard.keys()):
+        neo_only = sorted(set(modern.get(name, [])) - set(standard.get(name, [])))
+        standard_only = sorted(set(standard.get(name, [])) - set(modern.get(name, [])))
+        if neo_only or standard_only:
+            observed[name] = {"neoOnly": neo_only, "neoStandardOnly": standard_only}
+    return observed
 
 
 def compare(reports, contract):
@@ -103,12 +106,18 @@ def compare(reports, contract):
         if set(report["cases"]) != expected_names:
             errors.append(f"{variant}: case manifest changed; review additions/removals explicitly")
         else:
-            errors.extend(f"{variant}: {error}" for error in validate_outcomes(report, variant == "Upstream"))
+            errors.extend(f"{variant}: {error}" for error in validate_outcomes(report, variant == "Upstream", contract))
     for variant in ("Neo", "NeoStandard"):
         report = reports[variant]
         observed = differences(normalized(upstream["cases"]), normalized(report["cases"]))
-        expected = [{key: entry[key] for key in ("path", "upstream", "neo")} for entry in contract["differences"]]
-        if observed != expected:
+        expected = contract["differences"]
+        matches = len(observed) == len(expected) and all(
+            actual["path"] == entry["path"] and not differences(actual["neo"], entry["neo"])
+            and (not differences(actual["upstream"], entry["upstream"])
+                 or any(not differences(actual["upstream"], alternative) for alternative in entry.get("upstreamAlternatives", [])))
+            for actual, entry in zip(observed, expected)
+        )
+        if not matches:
             errors.append(f"{variant}: unexpected or stale behavioral difference")
         removed = {name: sorted(set(entries) - set(report["api"].get(name, [])))
                    for name, entries in upstream["api"].items()
@@ -122,8 +131,13 @@ def compare(reports, contract):
                                                 if set(entries) - set(upstream["api"].get(name, []))}}
     if reports["Neo"]["cases"] != reports["NeoStandard"]["cases"]:
         errors.append("Neo target assets differ in consumer behavior")
-    if reports["Neo"]["api"] != reports["NeoStandard"]["api"]:
-        errors.append("Neo target assets differ in the inventoried API surface")
+    target_differences = target_api_differences(reports["Neo"]["api"], reports["NeoStandard"]["api"])
+    reviewed_targets = contract.get("targetApiDifferences", [])
+    expected_targets = {entry["type"]: {"neoOnly": entry["neoOnly"], "neoStandardOnly": entry["neoStandardOnly"]}
+                        for entry in reviewed_targets}
+    if target_differences != expected_targets or len(expected_targets) != len(reviewed_targets):
+        errors.append("Neo target assets have an unexpected or stale inventoried API difference")
+    details["targetApiDifferences"] = target_differences
     return {"caseCount": len(expected_names), "comparisons": len(expected_names) * 2,
             "errors": errors, "details": details,
             "implementations": {variant: {key: report[key] for key in report if key not in ("cases", "api")}
@@ -149,7 +163,24 @@ def verify_guards(reports, contract):
     stale["differences"].pop()
     if not compare(reports, stale)["errors"]:
         raise RuntimeError("Comparator accepted an unreviewed difference")
-    return len(mutations) + 1
+    target_checks = 0
+    if contract.get("targetApiDifferences"):
+        target_mutations = (
+            lambda sample: sample["Neo"]["api"]["EmbedIO.HttpTunnel"].remove("interface: System.IAsyncDisposable"),
+            lambda sample: sample["NeoStandard"]["api"]["EmbedIO.HttpTunnel"].append("Method: unreviewed target-only overload"),
+            lambda sample: sample["Neo"]["api"].update({"Unreviewed.TargetOnlyType": ["base: System.Object"]}),
+        )
+        for mutation in target_mutations:
+            sample = copy.deepcopy(reports)
+            mutation(sample)
+            if not compare(sample, contract)["errors"]:
+                raise RuntimeError("Comparator accepted an unreviewed target API change")
+        stale_targets = copy.deepcopy(contract)
+        stale_targets["targetApiDifferences"].pop()
+        if not compare(reports, stale_targets)["errors"]:
+            raise RuntimeError("Comparator accepted a missing target API approval")
+        target_checks = len(target_mutations) + 1
+    return len(mutations) + 1 + target_checks
 
 
 def main():

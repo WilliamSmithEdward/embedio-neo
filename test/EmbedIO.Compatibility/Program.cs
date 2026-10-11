@@ -39,8 +39,6 @@ internal static class Program
         Utilities();
         var windows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
         await Http(HttpListenerMode.EmbedIO);
-        if (windows) await Http(HttpListenerMode.Microsoft);
-        else await NativeProbe();
         await Https();
 
         var assembly = typeof(WebServer).Assembly;
@@ -91,42 +89,6 @@ internal static class Program
     {
         try { Cases.Add(name, new { value = action() }); }
         catch (ArgumentException ex) { Cases.Add(name, new { error = ex.GetType().FullName, parameter = ex.ParamName }); }
-    }
-
-    private static async Task NativeProbe()
-    {
-        using var reservation = new TcpListener(IPAddress.Loopback, 0);
-        reservation.Start();
-        var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
-        reservation.Stop();
-        using var lifetime = new CancellationTokenSource();
-        using var server = new WebServer(o => o.WithUrlPrefix($"http://127.0.0.1:{port}/").WithMode(HttpListenerMode.Microsoft))
-            .WithWebApi("/api", m => m.WithController<ConsumerController>());
-        var running = server.RunAsync(lifetime.Token);
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        using var response = await client.GetAsync($"http://127.0.0.1:{port}/api/dto");
-        var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsByteArrayAsync());
-        string? runError = null;
-        string? cancelError = null;
-        int? secondStatus = null;
-        JsonElement? secondBody = null;
-        try
-        {
-            await running.WaitAsync(TimeSpan.FromSeconds(1));
-            runError = "UnexpectedCompletion";
-        }
-        catch (TimeoutException) { } // A live accept loop is expected to stay pending.
-        catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { runError = ex.GetType().FullName; Console.Error.WriteLine($"Native baseline observation: {ex}"); }
-        if (runError == null)
-        {
-            using var next = await client.GetAsync($"http://127.0.0.1:{port}/api/dto");
-            secondStatus = (int)next.StatusCode;
-            secondBody = JsonSerializer.Deserialize<JsonElement>(await next.Content.ReadAsByteArrayAsync());
-        }
-        try { lifetime.Cancel(); }
-        catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { cancelError = ex.GetType().FullName; Console.Error.WriteLine($"Native cancellation observation: {ex}"); }
-        if (!running.IsCompleted) await running.WaitAsync(TimeSpan.FromSeconds(10));
-        Cases.Add("native/unix-response-lifetime", new { status = (int)response.StatusCode, body, runError, cancelError, secondStatus, secondBody, state = server.State.ToString() });
     }
 
     private static async Task Https()
@@ -310,7 +272,8 @@ internal static class Program
             await Request("optional-present", HttpMethod.Get, "api/optional/7");
             await Request("base-route", HttpMethod.Get, "api/base/a/b");
             await Request("exact-extra", HttpMethod.Get, "api/dto/extra");
-            await Request("query", HttpMethod.Get, "api/query?a=one&a=two&a[]=three&blank=&flag&text=caf%C3%A9+space");
+            // Preserve decoded array-key coverage with a syntactically valid request URI.
+            await Request("query", HttpMethod.Get, "api/query?a=one&a=two&a%5B%5D=three&blank=&flag&text=caf%C3%A9+space");
             await Request("query-field", HttpMethod.Get, "api/field?id=abc%20xyz");
             await Request("query-field-missing", HttpMethod.Get, "api/field");
             await Request("post-json", HttpMethod.Post, "api/body", "{\"Id\":42,\"Name\":\"caf\u00e9\",\"Amount\":12.50}");

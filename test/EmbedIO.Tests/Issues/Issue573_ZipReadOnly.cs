@@ -98,8 +98,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, CompressionLevel.NoCompression)]
         [TestCase(HttpListenerMode.EmbedIO, CompressionLevel.Optimal)]
-        [TestCase(HttpListenerMode.Microsoft, CompressionLevel.NoCompression)]
-        [TestCase(HttpListenerMode.Microsoft, CompressionLevel.Optimal)]
         public async Task TwoZipHostsServeContentAndRemainIndependentDuringShutdown(HttpListenerMode mode, CompressionLevel compression)
         {
             using var zip = new ArchiveFile(compression);

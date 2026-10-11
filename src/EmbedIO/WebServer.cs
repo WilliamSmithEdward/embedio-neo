@@ -15,6 +15,8 @@ namespace EmbedIO
     /// </summary>
     public partial class WebServer : WebServerBase<WebServerOptions>
     {
+        private int _disposeStarted;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer"/> class,
         /// that will respond on HTTP port 80 on all network interfaces.
@@ -121,11 +123,30 @@ namespace EmbedIO
         /// </summary>
         public IHttpListener Listener { get; }
 
+        /// <summary>Stops accepting new work and lets accepted responses finish within a deadline.</summary>
+        /// <param name="timeout">The maximum drain interval before remaining connections are aborted.</param>
+        /// <param name="cancellationToken">Cancellation aborts remaining connections immediately.</param>
+        /// <returns>A task completing when listener transport cleanup finishes.</returns>
+        /// <remarks>Supported by HTTP/3, exclusively owned managed TCP endpoints, and their combined listener. RunAsync cancellation and disposal remain immediate.
+        /// Concurrent calls share the first drain deadline. Await this operation outside request callbacks.</remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The timeout is nonpositive or exceeds the timer range.</exception>
+        /// <exception cref="NotSupportedException">The selected listener does not support graceful drain.</exception>
+        public Task DrainAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            if (timeout <= TimeSpan.Zero || timeout.TotalMilliseconds > uint.MaxValue - 1)
+                throw new ArgumentOutOfRangeException(nameof(timeout));
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Listener is not IGracefulHttpListener graceful)
+                throw new NotSupportedException("The selected listener does not support graceful drain.");
+            return graceful.DrainAsync(timeout, cancellationToken);
+        }
+
         /// <inheritdoc />
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
+                Interlocked.Exchange(ref _disposeStarted, 1);
                 try
                 {
                     Listener.Dispose();
@@ -156,7 +177,13 @@ namespace EmbedIO
         {
             while (!cancellationToken.IsCancellationRequested && (Listener?.IsListening ?? false))
             {
-                var context = await Listener.GetContextAsync(cancellationToken).ConfigureAwait(false);
+                IHttpContextImpl context;
+                try { context = await Listener.GetContextAsync(cancellationToken).ConfigureAwait(false); }
+                catch (ListenerDrainedException) { return; }
+                // Explicit disposal may win after the listening snapshot but
+                // before accept starts. Only expected stop failures end this loop.
+                catch (ObjectDisposedException) when (Volatile.Read(ref _disposeStarted) != 0) { return; }
+                catch (System.Net.HttpListenerException error) when (error.ErrorCode == 995 && Volatile.Read(ref _disposeStarted) != 0) { return; }
                 context.CancellationToken = cancellationToken;
                 context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
 
@@ -167,13 +194,24 @@ namespace EmbedIO
         /// <inheritdoc />
         protected override void OnFatalException() => Listener?.Dispose();
 
+        private static IHttpListener CreateHttp3Listener(X509Certificate2? certificate, bool combined = false)
+        {
+#if NET10_0_OR_GREATER
+            if ((OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+                && System.Net.Quic.QuicListener.IsSupported)
+                return combined ? new CombinedHttpListener(certificate) : new Net.Internal.Http3.Http3Listener(certificate);
+#endif
+            throw new PlatformNotSupportedException("HTTP/3 requires the .NET 10 asset and native QUIC support.");
+        }
+
         private IHttpListener CreateHttpListener()
         {
             IHttpListener DoCreate() => Options.Mode switch
             {
-                HttpListenerMode.Microsoft => System.Net.HttpListener.IsSupported
-                    ? new SystemHttpListener(new System.Net.HttpListener()) as IHttpListener
-                    : new Net.HttpListener(Options.Certificate),
+                HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(Options.Certificate),
+                HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(Options.Certificate, true),
+                _ when (int)Options.Mode == 1 => throw new NotSupportedException(
+                    "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."),
                 _ => new Net.HttpListener(Options.Certificate)
             };
 

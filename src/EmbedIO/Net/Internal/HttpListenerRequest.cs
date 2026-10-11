@@ -7,6 +7,8 @@ using System.Linq;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using EmbedIO.Internal;
 using EmbedIO.Utilities;
 
@@ -17,14 +19,19 @@ namespace EmbedIO.Net.Internal
     /// </summary>
     internal sealed partial class HttpListenerRequest : IHttpRequest
     {
-        private static readonly byte[] HttpStatus100 = WebServer.DefaultEncoding.GetBytes("HTTP/1.1 100 Continue\r\n\r\n");
-        private static readonly char[] Separators = { ' ' };
+
 
         private readonly HttpConnection _connection;
         private CookieList? _cookies;
+        private NameValueCollection? _queryString;
         private Stream? _inputStream;
+        internal bool HasBodyFramingFailure => _inputStream is RequestStream body && body.HasBodyFramingFailure;
+        internal bool IsBodyFramingError(Exception error) => _inputStream is RequestStream body && body.IsFramingError(error);
         private bool _kaSet;
         private bool _keepAlive;
+        private bool _chunked;
+        private bool _framingInitialized;
+        private long _contentLength;
 
         internal HttpListenerRequest(HttpListenerContext context)
         {
@@ -67,7 +74,7 @@ namespace EmbedIO.Net.Internal
         }
 
         /// <inheritdoc />
-        public long ContentLength64 => long.TryParse(Headers[HttpHeaderNames.ContentLength], out var val) ? val : 0;
+        public long ContentLength64 => _framingInitialized ? _contentLength : long.TryParse(Headers[HttpHeaderNames.ContentLength], out var val) ? val : 0;
 
         /// <inheritdoc />
         public string? ContentType => Headers[HttpHeaderNames.ContentType];
@@ -76,7 +83,7 @@ namespace EmbedIO.Net.Internal
         public ICookieCollection Cookies => _cookies ??= new CookieList();
 
         /// <inheritdoc />
-        public bool HasEntityBody => ContentLength64 > 0;
+        public bool HasEntityBody => _chunked || ContentLength64 > 0;
 
         /// <inheritdoc />
         public NameValueCollection Headers { get; } = new();
@@ -88,7 +95,7 @@ namespace EmbedIO.Net.Internal
         public HttpVerbs HttpVerb { get; private set; }
 
         /// <inheritdoc />
-        public Stream InputStream => _inputStream ??= ContentLength64 > 0 ? _connection.GetRequestStream(ContentLength64) : Stream.Null;
+        public Stream InputStream => _inputStream ??= HasEntityBody ? _connection.GetRequestStream(ContentLength64, _chunked) : Stream.Null;
 
         /// <inheritdoc />
         public bool IsAuthenticated => false;
@@ -106,10 +113,8 @@ namespace EmbedIO.Net.Internal
             {
                 if (!_kaSet)
                 {
-                    var cnc = Headers.GetValues(HttpHeaderNames.Connection);
-                    _keepAlive = ProtocolVersion < HttpVersion.Version11
-                        ? cnc != null && cnc.Length == 1 && string.Compare(cnc[0], "keep-alive", StringComparison.OrdinalIgnoreCase) == 0
-                        : cnc == null || cnc.All(s => string.Compare(s, "close", StringComparison.OrdinalIgnoreCase) != 0);
+                    _keepAlive = !Headers.Contains(HttpHeaderNames.Connection, "close", StringComparison.OrdinalIgnoreCase)
+                        && (ProtocolVersion >= HttpVersion.Version11 || Headers.Contains(HttpHeaderNames.Connection, "keep-alive", StringComparison.OrdinalIgnoreCase));
 
                     _kaSet = true;
                 }
@@ -125,7 +130,16 @@ namespace EmbedIO.Net.Internal
         public Version ProtocolVersion { get; private set; } = HttpVersion.Version11;
 
         /// <inheritdoc />
-        public NameValueCollection QueryString { get; } = new();
+        public NameValueCollection QueryString
+        {
+            get
+            {
+                var query = Volatile.Read(ref _queryString);
+                if (query != null) return query;
+                var created = new NameValueCollection();
+                return Interlocked.CompareExchange(ref _queryString, created, null) ?? created;
+            }
+        }
 
         /// <inheritdoc />
         public string RawTarget { get; private set; } = string.Empty;
@@ -155,64 +169,132 @@ namespace EmbedIO.Net.Internal
             && Headers.Contains(HttpHeaderNames.Upgrade, "websocket", StringComparison.OrdinalIgnoreCase)
             && Headers.Contains(HttpHeaderNames.Connection, "Upgrade", StringComparison.OrdinalIgnoreCase);
 
+        internal bool RequiresContinue => ProtocolVersion >= HttpVersion.Version11 && HasEntityBody
+            && HttpExpectations.ContainsContinue(Headers["Expect"]);
+
         internal void SetRequestLine(string req)
         {
-            const string forbiddenMethodChars = "\"(),/:;<=>?@[\\]{}";
-
-            var parts = req.Split(Separators, 3);
-            if (parts.Length != 3)
+            var first = EmbedIO.Internal.StringOperations.IndexOfOrdinal(req, ' ');
+            var second = first < 0 ? -1 : req.IndexOf(' ', first + 1);
+            if (first <= 0 || second <= first + 1 || second + 9 != req.Length)
             {
-                _connection.SetError("Invalid request line (parts).");
+                _connection.SetError("Invalid request line.");
                 return;
             }
-
-            HttpMethod = parts[0];
-            foreach (var c in HttpMethod)
-            {
-                // See https://tools.ietf.org/html/rfc7230#section-3.2.6
-                // for the list of allowed characters
-                if (c < 32 || c >= 127 || EmbedIO.Internal.StringOperations.IndexOfOrdinal(forbiddenMethodChars, c) >= 0)
+            for (var i = 0; i < first; i++)
+                if (!HttpRequestFraming.IsTokenCharacter(req[i]))
                 {
-                    _connection.SetError("(Invalid verb)");
+                    _connection.SetError("Invalid method.");
                     return;
                 }
-            }
-
-            HttpVerb = IsKnownHttpMethod(HttpMethod, out var verb) ? verb : HttpVerbs.Any;
-
-            RawTarget = parts[1];
-            if (parts[2].Length != 8 || !parts[2].StartsWith("HTTP/", StringComparison.Ordinal))
-            {
-                _connection.SetError("Invalid request line (missing HTTP version).");
-                return;
-            }
-
-            try
-            {
-                ProtocolVersion = new Version(parts[2].Substring(5));
-
-                if (ProtocolVersion.Major < 1)
+            for (var i = first + 1; i < second; i++)
+                if (req[i] <= 32 || req[i] == 127 || req[i] == '#' || req[i] == '\\'
+                    || (req[i] == '%' && (i + 2 >= second || !Uri.IsHexDigit(req[i + 1]) || !Uri.IsHexDigit(req[i + 2]))))
                 {
-                    throw new InvalidOperationException();
+                    _connection.SetError("Invalid request target.");
+                    return;
                 }
-            }
-            catch (Exception error) when (error is ArgumentException or FormatException or OverflowException or InvalidOperationException)
-            {
-                _connection.SetError("Invalid request line (could not parse HTTP version).");
-            }
+            HttpMethod = req.Substring(0, first);
+            HttpVerb = IsKnownHttpMethod(HttpMethod, out var verb) ? verb : HttpVerbs.Any;
+            RawTarget = req.Substring(first + 1, second - first - 1);
+            if (string.CompareOrdinal(req, second + 1, "HTTP/1.1", 0, 8) == 0)
+                ProtocolVersion = HttpVersion.Version11;
+            else if (string.CompareOrdinal(req, second + 1, "HTTP/1.0", 0, 8) == 0)
+                ProtocolVersion = HttpVersion.Version10;
+            else if (string.CompareOrdinal(req, second + 1, "HTTP/1.", 0, 7) == 0
+                && req[second + 8] is >= '2' and <= '9')
+                // RFC 9110: process higher minor versions using supported semantics,
+                // while preserving the version actually received for applications.
+                ProtocolVersion = new Version(1, req[second + 8] - '0');
+            else _connection.SetError("Unsupported HTTP version.");
         }
 
         internal void FinishInitialization()
         {
+            var transfer = Headers[HttpHeaderNames.TransferEncoding];
+            var length = Headers[HttpHeaderNames.ContentLength];
+            if (transfer != null)
+            {
+                if (length != null || ProtocolVersion < HttpVersion.Version11
+                    || !string.Equals(transfer, "chunked", StringComparison.OrdinalIgnoreCase))
+                {
+                    _connection.SetError("Unsupported or ambiguous request framing.");
+                    return;
+                }
+                _chunked = true;
+                _contentLength = -1;
+            }
+            else if (length != null && !HttpRequestFraming.TryContentLength(length, out _contentLength))
+            {
+                _connection.SetError("Invalid Content-Length.");
+                return;
+            }
+            _framingInitialized = true;
             var host = UserHostName;
-            if (ProtocolVersion > HttpVersion.Version10 && string.IsNullOrEmpty(host))
+            if ((ProtocolVersion > HttpVersion.Version10 && string.IsNullOrEmpty(host))
+                || (host != null && host.Length != 0 && !HttpRequestFraming.IsValidHost(host)))
             {
                 _connection.SetError("Invalid host name");
                 return;
             }
 
+            // CONNECT uses authority-form, including an explicit nonempty port.
+            // Preserve the exact destination in RawTarget; normal listener routing
+            // still uses the local endpoint and the reconstructed host URI.
+            var connect = HttpMethod == "CONNECT";
+            if (connect)
+            {
+                var separator = RawTarget.LastIndexOf(':');
+                if (separator <= RawTarget.LastIndexOf(']') || separator <= 0
+                    || separator == RawTarget.Length - 1 || !HttpRequestFraming.IsValidHost(RawTarget)
+                    || !Uri.TryCreate("http://" + RawTarget + "/", UriKind.Absolute, out var destination)
+                    || destination.Host.Length == 0 || destination.Port == 0)
+                {
+                    _connection.SetError("CONNECT requires a valid authority and explicit port.");
+                    return;
+                }
+                host = RawTarget;
+            }
+
+            var targetPathStart = 0;
+            if (RawTarget[0] != '/')
+            {
+                var schemeEnd = RawTarget.IndexOf("://", StringComparison.Ordinal);
+                if (schemeEnd >= 0)
+                {
+                    targetPathStart = schemeEnd + 3;
+                    while (targetPathStart < RawTarget.Length && RawTarget[targetPathStart] != '/' && RawTarget[targetPathStart] != '?')
+                    {
+                        if (RawTarget[targetPathStart] == '@')
+                        {
+                            _connection.SetError("Userinfo is not allowed in a request target.");
+                            return;
+                        }
+                        targetPathStart++;
+                    }
+                }
+            }
+            if (!connect && !HttpRequestFraming.IsValidPathAndQuery(RawTarget, targetPathStart))
+            {
+                _connection.SetError("Invalid request target syntax.");
+                return;
+            }
+
             var rawUri = UriUtility.StringToAbsoluteUri(RawTarget);
-            var path = rawUri?.PathAndQuery ?? RawTarget;
+            if (!connect && RawTarget[0] != '/' && RawTarget != "*"
+                && (rawUri == null || (rawUri.Scheme != Uri.UriSchemeHttp && rawUri.Scheme != Uri.UriSchemeHttps)
+                    || RawTarget.IndexOf("://", StringComparison.Ordinal) < 0))
+            {
+                _connection.SetError("Invalid request target form.");
+                return;
+            }
+            if (RawTarget == "*" && HttpVerb != HttpVerbs.Options)
+            {
+                _connection.SetError("Asterisk-form requires OPTIONS.");
+                return;
+            }
+            var path = connect || RawTarget == "*" ? "/" : rawUri?.PathAndQuery ?? RawTarget;
+            if (!connect && rawUri != null) host = rawUri.Host;
 
             if (string.IsNullOrEmpty(host))
             {
@@ -237,15 +319,7 @@ namespace EmbedIO.Net.Internal
             Url = url;
             InitializeQueryString(Url.Query);
 
-            if (ContentLength64 == 0 && (HttpVerb == HttpVerbs.Post || HttpVerb == HttpVerbs.Put))
-            {
-                return;
-            }
 
-            if (string.Compare(Headers["Expect"], "100-continue", StringComparison.OrdinalIgnoreCase) == 0)
-            {
-                _connection.GetResponseStream().InternalWrite(HttpStatus100, 0, HttpStatus100.Length);
-            }
         }
 
         internal void AddHeader(string header)
@@ -257,9 +331,48 @@ namespace EmbedIO.Net.Internal
                 return;
             }
 
-            var name = header.Substring(0, colon).Trim();
-            var val = header.Substring(colon + 1).Trim();
-
+            for (var i = 0; i < colon; i++)
+                if (!HttpRequestFraming.IsTokenCharacter(header[i]))
+                {
+                    _connection.SetError("Invalid header name.");
+                    return;
+                }
+            for (var i = colon + 1; i < header.Length; i++)
+                if ((header[i] < 32 && header[i] != '\t') || header[i] == 127)
+                {
+                    _connection.SetError("Invalid header value.");
+                    return;
+                }
+            var name = header.Substring(0, colon);
+            var val = header.Substring(colon + 1).Trim(' ', '\t');
+            var previous = Headers[name];
+            if (name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!HttpRequestFraming.TryContentLength(val, out var parsed)
+                    || (previous != null && (!HttpRequestFraming.TryContentLength(previous, out var existing) || existing != parsed)))
+                {
+                    _connection.SetError("Invalid or conflicting Content-Length.");
+                    return;
+                }
+            }
+            else if (previous != null && (name.Equals("Host", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Transfer-Encoding", StringComparison.OrdinalIgnoreCase)))
+            {
+                _connection.SetError("Duplicate framing header.");
+                return;
+            }
+            else if (previous != null && (name.Equals(HttpHeaderNames.SecWebSocketKey, StringComparison.OrdinalIgnoreCase)
+                || name.Equals(HttpHeaderNames.SecWebSocketVersion, StringComparison.OrdinalIgnoreCase)))
+            {
+                // Preserve repeated singleton fields so handshake validation rejects
+                // them instead of silently accepting the last supplied value.
+                Headers.Add(name, val);
+                return;
+            }
+            else if (previous != null && (name.Equals("Connection", StringComparison.OrdinalIgnoreCase)
+                || name.Equals(HttpHeaderNames.Upgrade, StringComparison.OrdinalIgnoreCase)
+                || name.Equals(HttpHeaderNames.SecWebSocketProtocol, StringComparison.OrdinalIgnoreCase)))
+                val = previous + ", " + val;
             Headers.Set(name, val);
 
             switch (name.ToUpperInvariant())
@@ -350,10 +463,25 @@ namespace EmbedIO.Net.Internal
             }
         }
 
+        internal async Task<bool> FlushInputAsync()
+        {
+            if (!HasEntityBody) return true;
+            var input = InputStream;
+            if (input is RequestStream body && body.IsBodyConsumed) return true;
+            var bytes = ArrayPool<byte>.Shared.Rent(2048);
+            try
+            {
+                while (await input.ReadAsync(bytes, 0, 2048, CancellationToken.None).ConfigureAwait(false) > 0) { }
+                return input is not RequestStream request || request.IsBodyConsumed;
+            }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { return false; }
+            finally { ArrayPool<byte>.Shared.Return(bytes, true); }
+        }
+
         // Optimized for the following list of methods:
-        // "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"
+        // "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "QUERY"
         // ***NOTE***: The verb parameter is NOT VALID upon exit if false is returned.
-        private static bool IsKnownHttpMethod(string method, out HttpVerbs verb)
+        internal static bool IsKnownHttpMethod(string method, out HttpVerbs verb)
         {
             switch (method.Length)
             {
@@ -390,6 +518,11 @@ namespace EmbedIO.Net.Internal
                     }
 
                 case 5:
+                    if (method[0] == 'Q')
+                    {
+                        verb = HttpVerbs.Query;
+                        return method[1] == 'U' && method[2] == 'E' && method[3] == 'R' && method[4] == 'Y';
+                    }
                     verb = HttpVerbs.Patch;
                     return method[0] == 'P'
                         && method[1] == 'A'
@@ -422,7 +555,7 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        private static CookieList ParseCookies(string val)
+        internal static CookieList ParseCookies(string val)
         {
             var cookies = new CookieList();
 

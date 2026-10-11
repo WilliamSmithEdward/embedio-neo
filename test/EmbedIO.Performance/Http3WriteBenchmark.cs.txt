@@ -1,0 +1,124 @@
+﻿using System.Diagnostics;
+using System.Net;
+using System.Net.Http;
+using System.Net.Quic;
+using System.Net.Security;
+using System.Reflection;
+using System.Runtime.Versioning;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
+using EmbedIO;
+
+if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+    throw new PlatformNotSupportedException("Native QUIC is required for this comparison.");
+await Http3WriteBenchmark.RunAsync();
+
+[SupportedOSPlatform("windows")]
+[SupportedOSPlatform("linux")]
+[SupportedOSPlatform("macos")]
+internal static class Http3WriteBenchmark
+{
+    private const BindingFlags Flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
+    private static byte[] _payload = Array.Empty<byte>();
+    private static readonly Type Exchange = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicExchange", true)
+        ?? throw new InvalidOperationException("Missing modern exchange.");
+    private static readonly MethodInfo Respond = Exchange.GetMethod("RespondAsync", Flags)
+        ?? throw new InvalidOperationException("Missing response method.");
+    internal static async Task RunAsync()
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var san = new SubjectAlternativeNameBuilder(); san.AddDnsName("localhost"); san.AddIpAddress(IPAddress.Loopback);
+        request.CertificateExtensions.Add(san.Build());
+        using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
+        using var certificate = X509CertificateLoader.LoadPkcs12(generated.Export(X509ContentType.Pkcs12), null, X509KeyStorageFlags.Exportable);
+        var fingerprint = certificate.GetCertHashString();
+        await using var listener = await QuicListener.ListenAsync(new QuicListenerOptions
+        {
+            ListenEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
+            ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
+            ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(new QuicServerConnectionOptions
+            {
+                DefaultCloseErrorCode = 0x100,
+                DefaultStreamErrorCode = 0x10c,
+                MaxInboundBidirectionalStreams = 32,
+                MaxInboundUnidirectionalStreams = 8,
+                ServerAuthenticationOptions = new SslServerAuthenticationOptions
+                { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = certificate }
+            })
+        }, deadline.Token);
+        var connection = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection", true)
+            ?? throw new InvalidOperationException("Missing connection.");
+        var handler = (typeof(Http3WriteBenchmark).GetMethod(nameof(Handle), Flags) ?? throw new InvalidOperationException("Missing callback."))
+            .MakeGenericMethod(Exchange).CreateDelegate(typeof(Func<,>).MakeGenericType(Exchange, typeof(Task)));
+        var server = Task.Run(async () =>
+        {
+            var accepted = await listener.AcceptConnectionAsync(deadline.Token);
+            await (Task)(connection.GetMethod("RunAsync", Flags)?.Invoke(null, new object[] { accepted, handler, deadline.Token })
+                ?? throw new InvalidOperationException("Missing runner."));
+        });
+        using var transport = new SocketsHttpHandler
+        { SslOptions = new SslClientAuthenticationOptions { RemoteCertificateValidationCallback = (_, peer, _, _) => peer?.GetCertHashString() == fingerprint } };
+        using var client = new HttpClient(transport);
+        var uri = new Uri($"https://127.0.0.1:{listener.LocalEndPoint.Port}/response");
+        var results = new List<Sample>();
+        try
+        {
+            foreach (var size in new[] { 128, 65536, 1048576, 8388608 })
+            {
+                _payload = new byte[size]; new Random(9218).NextBytes(_payload);
+                foreach (var concurrency in new[] { 1, 8 })
+                {
+                    var count = size < 1024 ? 2048 : size < 1048576 ? 256 : 32;
+                    await Batch(client, uri, concurrency, concurrency, deadline.Token);
+                    for (var sample = 0; sample < 3; ++sample)
+                    {
+                        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+                        using var process = Process.GetCurrentProcess();
+                        var cpu = process.TotalProcessorTime;
+                        var allocated = GC.GetTotalAllocatedBytes(true);
+                        var start = Stopwatch.GetTimestamp();
+                        var latencies = await Batch(client, uri, count, concurrency, deadline.Token);
+                        var elapsed = Stopwatch.GetElapsedTime(start).TotalSeconds;
+                        var bytes = GC.GetTotalAllocatedBytes(true) - allocated;
+                        var cpuMs = (process.TotalProcessorTime - cpu).TotalMilliseconds;
+                        Array.Sort(latencies);
+                        results.Add(new Sample(size, concurrency, sample, count, elapsed, cpuMs, bytes,
+                            latencies[(count - 1) / 2], latencies[(int)Math.Ceiling(count * .95) - 1], latencies[(int)Math.Ceiling(count * .99) - 1]));
+                    }
+                }
+            }
+        }
+        finally { deadline.Cancel(); try { await server; } catch (OperationCanceledException) { } }
+        Console.WriteLine(JsonSerializer.Serialize(results));
+    }
+    private static Task Handle<T>(T exchange) => (Task)(Respond.Invoke(exchange,
+        new object[] { _payload, CancellationToken.None }) ?? throw new InvalidOperationException("Missing write task."));
+    private static async Task<double[]> Batch(HttpClient client, Uri uri, int count, int concurrency, CancellationToken token)
+    {
+        var next = -1;
+        var times = new double[count];
+        await Task.WhenAll(Enumerable.Range(0, concurrency).Select(async _ =>
+        {
+            while (true)
+            {
+                var index = Interlocked.Increment(ref next);
+                if (index >= count) return;
+                var start = Stopwatch.GetTimestamp();
+                using var request = new HttpRequestMessage(HttpMethod.Get, uri)
+                { Version = HttpVersion.Version30, VersionPolicy = HttpVersionPolicy.RequestVersionExact };
+                request.Headers.Host = "localhost";
+                using var response = await client.SendAsync(request, token);
+                var body = await response.Content.ReadAsByteArrayAsync(token);
+                if (response.StatusCode != HttpStatusCode.OK || response.Version != HttpVersion.Version30 || !body.AsSpan().SequenceEqual(_payload))
+                    throw new InvalidDataException("HTTP/3 response bytes or metadata differ.");
+                times[index] = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+            }
+        }));
+        return times;
+    }
+    private sealed record Sample(int Size, int Concurrency, int Index, int Count, double Seconds,
+        double CpuMilliseconds, long AllocatedBytes, double P50Milliseconds, double P95Milliseconds, double P99Milliseconds);
+}

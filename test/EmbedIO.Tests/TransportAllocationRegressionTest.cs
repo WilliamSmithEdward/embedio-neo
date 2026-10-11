@@ -76,19 +76,17 @@ namespace EmbedIO.Tests
         {
             // Initialize parser state without opening a listener or a socket.
             var connection = NewConnection(Stream.Null);
-            var buffered = (MemoryStream)(Field("_ms").GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            (buffered).Capacity = 8192;
-            Array.Fill(buffered.GetBuffer(), (byte)'X');
             var bytes = Encoding.ASCII.GetBytes("POST /items?q=42 HTTP/1.1\r\nHost: localhost\r\nContent-Length: 6\r\n\r\nabcdef");
+            var storage = Enumerable.Repeat((byte)'X', 17).Concat(bytes).Concat(new byte[13]).ToArray();
             var process = ConnectionType.GetMethod("ProcessInput", BindingFlags.Instance | BindingFlags.NonPublic);
             var position = 0;
             var complete = false;
             while (position < bytes.Length && !complete)
             {
                 var count = Math.Min(chunkSize, bytes.Length - position);
-                buffered.Write(bytes, position, count);
+                var segment = new ArraySegment<byte>(storage, 17 + position, count);
                 position += count;
-                complete = (bool)((process ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, new object[] { buffered }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                complete = (bool)((process ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, new object[] { segment }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
             Assert.That(complete, Is.True);
             using var remainder = new MemoryStream(bytes, position, bytes.Length - position);
@@ -138,15 +136,26 @@ namespace EmbedIO.Tests
         {
             var data = new byte[length];
             new Random(42).NextBytes(data);
-            var opcode = Core.GetType("EmbedIO.WebSockets.Opcode", true);
-            var streamType = Core.GetType("EmbedIO.WebSockets.Internal.WebSocketStream", true);
-            using var stream = (IDisposable)(Activator.CreateInstance((streamType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), new[] { (object)data, Enum.Parse((opcode ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), "Binary") }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            var opcode = Core.GetType("EmbedIO.WebSockets.Opcode", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
+            var fin = Core.GetType("EmbedIO.WebSockets.Internal.Fin", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
+            // Fragment at 1016 bytes, the historical send size, so the boundary cases
+            // still produce one, two and three frame messages.
+            const int FragmentLength = 1016;
+            var frames = new System.Collections.Generic.List<object>();
+            for (var offset = 0; offset < length || frames.Count == 0; offset += FragmentLength)
+            {
+                var chunk = data.Skip(offset).Take(FragmentLength).ToArray();
+                var final = offset + FragmentLength >= length;
+                frames.Add(Activator.CreateInstance((Core.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
+                    BindingFlags.Instance | BindingFlags.NonPublic, null,
+                    new[] { Enum.Parse(fin, final ? "Final" : "More"), Enum.Parse(opcode, offset == 0 ? "Binary" : "Cont"), (object)chunk, false }, null)
+                    ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            }
             var socketType = Core.GetType("EmbedIO.WebSockets.Internal.WebSocket", true);
             var socket = RuntimeHelpers.GetUninitializedObject((socketType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
             var queueField = socketType.GetField("_messageEventQueue", BindingFlags.Instance | BindingFlags.NonPublic);
             var queue = Activator.CreateInstance((queueField ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).FieldType);
             queueField.SetValue(socket, queue);
-            var frames = (System.Collections.IEnumerable)((((streamType).GetMethod("GetFrames") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(stream, null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var count = 0;
             foreach (var frame in frames)
             {

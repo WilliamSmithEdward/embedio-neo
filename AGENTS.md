@@ -255,3 +255,167 @@ These rules are the same in every WilliamSmithEdward repository.
 - William requested aligning as closely as reasonable with upstream EmbedIO, explicitly "transparent" and "not opt in". PR #154 restores default raw string controls/trailing commas/lossless legacy number syntax, quoted booleans/named enums/culture-valid dates/public properties with nonpublic setters, empty-input defaults and named non-finite floating output. Existing APIs/targets and production dependency groups remain unchanged; fresh explicit JsonSerializerOptions remain strict, copied CreateOptions and deserializer snapshots retain compatibility, and application converters override built-in compatibility defaults.
 - Retain rejection of silently failed conversions, unknown escapes/trailing garbage/unrelated malformed input; accurate Unicode and ISO UTC/offset semantics remain. Keep Neo's existing case-insensitive matching, class-field and constructor support rather than reproducing ignored/lost values. The original macro bytes were not supplied; do not claim the original VBA application repaired. Maintain docs/user-reports/json-migration-compatibility.md plus migration/release notes.
 - The differential probe is test-only/outside the solution and packages, pinned to SWAN 3.1.0 and legacy reference assemblies with locks. It executes both the net10.0 core and netstandard2.0 asset on .NET Framework, records 272 observations and enforces 16 portable assertions plus default binding HTTP/value checks per run. Ordinary discovery rises from the reconciled main baseline of 1541 to 1630 (89 focused regressions); required CI/Security/Malware gates remain necessary. No release/tag or other backlog issue is authorized by this work.
+
+
+## Authorized modern HTTP engine program (2026-10-08)
+
+- William explicitly authorized an ambitious replacement managed transport with
+  extreme performance, no time/effort limit, and all modern HTTP support through
+  October 2026. Incremental delivery is approved. He separately approved strict
+  malformed/ambiguous framing with documented migration impact. Preserve valid
+  public application interfaces, targets and Microsoft backend. No release or
+  HTTP Arena submission, and no contributor reply yet.
+- Isolated managed worktree: C:/Users/William/.codex/worktrees/managed-http-engine/embedio-neo,
+  branch codex/managed-http-engine, base 2e8e98c. Preserve concurrent root memory and
+  other backlog work. docs/project/http-engine.md records HTTP/1.1, HTTP/2, HTTP/3,
+  HPACK/QPACK, TLS/QUIC and extension roadmap; only first HTTP/1 increment is being
+  implemented. Do not claim HTTP/2/3 support or all-modern completion.
+- Initial full Windows suite passed 2019 (2014 success, five existing skips).
+  Five additional body-boundary/cancellation tests bring intended discovery to
+  2024; expanded focused195 passed. Latest header stack-buffer optimization needs
+  final full/cross-platform validation. Initial fixture failures preserved under
+  ignored TestResults/http-engine; no PR or commit yet.
+- Same-runner allocation evidence: 64-request parser batch 10868.88 to3368 B/request;
+  headers1KB7904to1168B,16KB98584to16528B. These are isolated microbenchmarks, not
+  server throughput. Early direct-header CPU regression led to bounded stack path;
+  timing tradeoffs still need sustained separate-process validation. All normal
+  exact-head gates/green overall/clean merge credits remain required.
+
+- First-increment final source passed Windows full discovery2024 (2019 passed,
+  five platform skips) and pinned Linux SDK10.0.401/runtime10.0.12 discovery2024
+  (1995 passed,29 platform skips). Actual netstandard2.0 assembly focused195 passed
+  on Windows .NET10.0.11. Two async-only fixed-body tests fail against the original
+  core and pass against the candidate. Artifacts/source manifest are under ignored
+  TestResults/http-engine. Remote/macOS/platform/security gates remain outstanding.
+- Program tracking issue181 exists, assigned William/enhancement/.NET/Feature
+  planning. Keep it open across increments. Initial sustained-load attempts were
+  invalid due to client socket exhaustion; preserve their logs. The corrected
+  client verifies EOF after every explicit final close; no OS limits were changed.
+
+- Draft PR182 now tracks the first increment; issue181 remains open and no closing
+  references are intended. Commit561dfb4 corrected the load-discovered overlarge
+  receive buffer. Eight valid samples show ordinary allocations10841to9063B and
+  pipeline16 allocations10931to8495B approximately; throughput mixed, no broad
+  speedup claim. docs/project/http-engine.md records all samples and limitations.
+- Main9a20aa4 authentication helper was integrated as49df971, preserving both
+  changes and raising the combined discovery floor to2034. Exact combined-source
+  tests and PR checks remain pending; draft/unmerged, no public contributor reply.
+
+- William explicitly requested finishing all development as a goal on2026-10-08;
+  an active unbudgeted goal now tracks the full program. Do not mark it complete
+  after the first increment. docs/project/http-engine.md contains completion gates.
+- First increment head41ff73e had overallSUCCESS/28 successful checks/one intentional
+  skip. CI37756524880 attempt2 passed after unchanged macOS native-listener retry;
+  original failure retained. Final local combined2034 passed on Windows repeat and
+  Linux;38 new cases passed with final netstandard2.0 asset. PR182 remains draft.
+- Work has resumed beyond that tested head: PrefixInteger HPACK/QPACK primitive
+  adds17 focused passing cases and builds both targets. It is not yet connected to
+  the wire and does not constitute HTTP2 support. Next: bounded HPACK tables,
+  Huffman/string decoding and independent vectors, then stream/connection separation
+  and HTTP2 integration. New changes require fresh final checks; preserve old green
+  evidence without claiming it covers the new working tree.
+- Compression checkpoint: PrefixInteger, nibble-table HpackHuffman and HpackDecoder
+  implemented in isolation;49 focused cases pass on modern and netstandard2.0
+  assets (.NET10.0.11 runtime). Decoder bounds decoded headers/table sizes, preserves
+  never-indexed flags and poisons failed state. RFC7541 tables attributed in LICENSE.
+  Combined discovery floor2083. Encoder, independent differential tests and actual
+  HTTP2 negotiation/frame/stream integration remain pending. No HTTP2 support claim.
+
+- Encoder checkpoint adds dynamic indexing, sensitive-header protection, table
+  updates and Huffman selection;58 focused compression cases pass. Bidirectional
+  independent corpus1200 blocks passed against hash-pinned test-only hpack4.1.0.
+  CI Linux probe added; ordinary test floor2092. Initial probe import build error
+  retained then corrected. No HTTP2 transport yet. Next: frame reader/writer and
+  stream/connection ownership, followed by independent real HTTP2 clients.
+- Frame transport checkpoint:30 new cases (88 compression/framing total) pass.
+  Reader enforces maximum before payload allocation, handles partial async reads,
+  ignores the reserved stream bit and makes partial I/O failures terminal. Writer
+  serializes entire batches so HEADERS/CONTINUATION cannot interleave; rented output
+  buffers are cleared. Shape validation preserves connection versus stream errors.
+  Initial fixture compile/assertion errors retained and corrected; no weakened checks.
+  Discovery floor2122. Next: connection preface, SETTINGS/ACK, continuation assembly,
+  per-stream lifecycle/flow control and actual WebServer dispatch. No HTTP2 claim yet.
+- Connection-start checkpoint: prior framing commitdc1d138 full Windows suite2122
+  passed2117/five skips. Added14 settings/startup cases pass, including actual TCP
+  fragmented preface, initial SETTINGS/ACK, PING and GOAWAY. Both targets build.
+  Peer settings validate before mutation and apply duplicates/window deltas in wire
+  order. Server does not advertise extended CONNECT before implementation. Combined
+  discovery floor2136. Next header-block assembly plus stream state/flow control and
+  IHttpContext dispatch; startup alone is not HTTP2 application service.
+
+- Header/flow checkpoint:14 header assembly and11 outbound flow cases added;
+  127 focused HTTP2 cases pass with modern and actual netstandard2.0 assemblies
+  on local .NET10.0.11. Both targets build. SETTINGS updates send credit; no DATA
+  dispatch yet. Continuation guard bounds bytes/fragments and decodes rejected
+  stream blocks to preserve HPACK state. Atomic connection/stream reservations,
+  negative SETTINGS windows, scoped overflow, cancel/close wakeups validated.
+  Discovery floor2161. Full initial increment passed2156/five skips. Subsequent
+  connection IDisposable/failed-start cleanup and real-TCP settings-credit checks
+  passed127 focused cases on both assemblies; final full rerun still required.
+  Next stream lifecycle/inbound flow/request semantics, then bridge managed
+  listener's concrete HttpListenerContext queue to IHttpContextImpl dispatch.
+  Whole modern-engine goal remains active; no HTTP2 service advertised yet.
+
+- Receive-flow/lifecycle checkpoint: prior7e9182f final full Windows rerun passed
+  2156/five skips (2161). New9 inbound-flow and11 stream-state cases pass;147
+  focused HTTP2 tests pass modern+actualnetstandard on .NET10.0.11. Both targets
+  build. Initial fixture TestDelegate compile error corrected to NUnit5 Action.
+  Discovery floor2181. Incoming DATA credit is consumption-driven, batched, counts
+  padding and survives reset races; stream registry bounds active state, counts
+  half-closed streams, permits continued upload after early response, handles
+  trailers/idle-frame errors and minimally discards closed IDs without tombstones.
+  Connection owns/aborts both components, but body/stream dispatch not wired yet.
+  Next request semantics, bounded async request-body delivery and dispatch using
+  these components. Full/remote validation still required on final program head.
+
+- Request semantics/body checkpoint:46 header and8 body cases added;201 focused
+  HTTP2 tests pass modern+actualnetstandard on .NET10.0.11; both targets build.
+  Stream registry now parses request headers before admission and validates
+  trailers. CONNECT pseudoheaders/authority, CL lists/equality, host normalization,
+  cookies and connection-specific fields validated. ExtendedCONNECT remains off.
+  Body stream pools/coalesces 4KiB chunks, caps unread bytes65535, validates CL,
+  supports canceled/pending reads and returns discarded/consumed bytes once.
+  65535 tiny fragments of16KiB producer buffer retain16 chunks, source not retained.
+  Discovery floor2235. Next connect body stream, receive/send credit and registry
+  in frame dispatcher; then IHttpContext adapter/negotiation and independent client.
+  No HTTP2 endpoint yet. Goal remains active; remote final checks not current.
+
+- Internal HTTP2 service checkpoint: Http2Dispatcher/Http2Exchange connect request
+  state/body/flow with concurrent callbacks and response encoding/writes. Eight
+  independent .NETHttpClient VersionExact2 realTCP cases pass:0/1/65535/65536/262144
+  echo,24 multiplexed requests,blocked-stream cancellation+healthy follow-up,large
+  response header continuation. All209 focused cases modern+actualstd pass;both
+  targets build. First test had socket10053 fixture teardown race; cancel/joinserver
+  beforeclientdispose fixedfixture,originalevidenceretained. Priorfull e03511a passed
+  2230success/fiveskips2235total. Currentdiscoveryfloor2243. Header encoding/settings
+  serialize undergate; DATAreserve stream+conn; batched creditpump; body/resetcleanup.
+  No publiclistener HTTP2 yet. Next rawwire adversarialcases (malformedCL/reset,
+  zero-windowPINGprogress/invalidWINDOW),complete response semantics, IHttpContext
+  adapter+TLSALPN/prior-knowledge negotiation. Internalexchange is notcompletepublic
+  responseAPI; goalactive HTTP3/extensions/performance/fullremotevalidationpending.
+
+- Wire/response checkpoint: prior2458daa fullWindows2243 passed2238/fiveskips.
+  Added9rawwire cases (zero-windowPING/resume,CLmismatch,padding,invalidheaders,
+  scopedWINDOW/GOAWAY,resetcallbackordering). Reset ordering deterministically
+  failedbefore fix:Release nowRegistry.Reset beforeExchange.Cancel, prevents callback
+  observing live state/redundantRST race. Outboundresponse validation added20cases
+  plus4realclient HEAD/103/204/streamcomplete. Initial15unit failures were wrong
+  expectedIOException vsInvalidDataException; normalizedoutboundvalidation and
+  exactassertions corrected. All242focused modern+actualstd pass;bothtargetsbuild.
+  Discoveryfloor2276. Next PUBLIC IHttpContext/request/response adapter inclDate,
+  cookies,encoding,HEADwrites/closecallbacks; thenlistenernegotiation and platform
+  tests. Still noadvertisedHTTP2/WebServer support. Goalactive; HTTP3 etcpending.
+
+- Public-interface adapter checkpoint: Http2Request/Response/Context implement
+  existing IHttp contracts; actualTCP9 new cases cover SendStringAsync Unicode,
+  query/cookies/charset,independentSetCookie,HEAD/204,callbacks/concurrentclose,
+  unknownlengthupload,andKeepAlivefalse GOAWAY/drain+refusenew/completeexisting.
+  UnknownLengthUpload test failedHasEntityBodybeforefix: nowusesInitialEndStream
+  ratherthanmutableRemoteEnded. Builderrors diagnosticsimport/Version20 netstd
+  fixedusingcached Version(2,0). All251focused passmodern+actualstd;bothtargetsbuild.
+  Discoveryfloor2285. Responseclose sharesTask,countsqueuedoperationsbeforegate
+  disposal,andstreamdisposeavoidsrecursiveclose. Contextcancellationlinksserver
+  andexchangetokens;LIFOcallbacks once. Cookie/method helpers madeinternalwithout
+  behaviorchange. Next EndPointListener/HttpListener transport/context generalization,
+  HTTP2 TLSALPN/prior-knowledge detection and actual WebServer module tests.
+  ExtendedCONNECT/WebSockets stillunadvertised/unimplemented adapter;goalactive.

@@ -40,6 +40,9 @@
         /// </summary>
         public const string AcceptPatch = "Accept-Patch";
 
+        /// <summary>The RFC 10008 Structured Fields QUERY format discovery header.</summary>
+        public const string AcceptQuery = "Accept-Query";
+
         /// <summary>
         /// The <c>Accept-Ranges</c> HTTP header.
         /// </summary>

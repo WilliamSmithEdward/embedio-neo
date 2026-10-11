@@ -188,6 +188,9 @@ Extended Payload Length: {extPayloadLen}
                 throw new WebSocketException(CloseStatusCode.ProtocolError, "A frame from a client isn't masked.");
             }
 
+            if (!webSocket.InContinuation && Opcode == Opcode.Cont)
+                throw new WebSocketException(CloseStatusCode.ProtocolError, "A continuation frame has no preceding fragmented message.");
+
             if (webSocket.InContinuation && (Opcode == Opcode.Text || Opcode == Opcode.Binary))
             {
                 throw new WebSocketException(CloseStatusCode.ProtocolError,

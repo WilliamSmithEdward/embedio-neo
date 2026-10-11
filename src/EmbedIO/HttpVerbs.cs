@@ -44,5 +44,11 @@
         /// PUT method
         /// </summary>
         Put,
+
+        /// <summary>
+        /// QUERY method: a safe, idempotent query with request content (RFC 10008).
+        /// The handler must validate its query media type and preserve these semantics.
+        /// </summary>
+        Query,
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using EmbedIO.Configuration;
+using EmbedIO.Internal;
 
 namespace EmbedIO
 {
@@ -9,6 +10,7 @@ namespace EmbedIO
     public abstract class WebServerOptionsBase : ConfiguredObject
     {
         private bool _supportCompressedRequests;
+        internal RequestDecompressionPolicy? DecompressionPolicy { get; private set; }
 
         /// <summary>
         /// <para>Gets or sets a value indicating whether compressed request bodies are supported.</para>
@@ -24,6 +26,25 @@ namespace EmbedIO
             {
                 EnsureConfigurationNotLocked();
                 _supportCompressedRequests = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the maximum decoded bytes read from a compressed request body.
+        /// The default is null, preserving existing unlimited decompression behavior.
+        /// Zero permits only an empty decoded body. Excess content raises HTTP 413.
+        /// </summary>
+        /// <remarks>This applies to request-stream helpers when compressed requests are enabled.</remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public long? MaximumDecompressedRequestBodyBytes
+        {
+            get => DecompressionPolicy?.MaximumBytes;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
+                DecompressionPolicy = value.HasValue ? new RequestDecompressionPolicy(value.Value) : null;
             }
         }
 

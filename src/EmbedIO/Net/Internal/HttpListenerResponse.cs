@@ -1,12 +1,14 @@
-﻿using EmbedIO.Internal;
-using System;
+﻿using System;
 using System.Globalization;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+using EmbedIO.Internal;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
@@ -15,7 +17,7 @@ namespace EmbedIO.Net.Internal
     /// Represents an HTTP Listener's response.
     /// </summary>
     /// <seealso cref="IDisposable" />
-    internal sealed class HttpListenerResponse : IHttpResponse, IDisposable
+    internal sealed class HttpListenerResponse : IHttpResponseSections, IDisposable
     {
         private readonly HttpConnection _connection;
         private readonly HttpListenerRequest _request;
@@ -27,6 +29,12 @@ namespace EmbedIO.Net.Internal
         private ResponseStream? _outputStream;
         private int _statusCode = 200;
         private bool _chunked;
+        private bool _tunnel;
+        private bool _capsuleCarrier;
+        private bool _contentTypeConfigured;
+        private HashSet<string>? _trailerNames;
+        private byte[]? _endingChunk;
+        internal byte[]? EndingChunk => Volatile.Read(ref _endingChunk);
 
         internal HttpListenerResponse(HttpListenerContext context)
         {
@@ -53,6 +61,7 @@ namespace EmbedIO.Net.Internal
                     throw new ArgumentOutOfRangeException(nameof(value), "Must be >= 0");
                 }
 
+                if (_trailerNames != null) throw new InvalidOperationException("Reserved HTTP/1 trailers require chunked framing without Content-Length.");
                 Headers[HttpHeaderNames.ContentLength] = value.ToString(CultureInfo.InvariantCulture);
             }
         }
@@ -70,6 +79,7 @@ namespace EmbedIO.Net.Internal
             {
                 EnsureCanChangeHeaders();
                 _contentType = Validate.NotNullOrEmpty(nameof(value), value);
+                _contentTypeConfigured = true;
             }
         }
 
@@ -97,7 +107,7 @@ namespace EmbedIO.Net.Internal
         public Stream OutputStream => _outputStream ??= _connection.GetResponseStream();
 
         /// <inheritdoc />
-        public Version ProtocolVersion => _request.ProtocolVersion;
+        public Version ProtocolVersion => _request.ProtocolVersion.Minor == 0 ? HttpVersion.Version10 : HttpVersion.Version11;
 
         /// <inheritdoc />
         /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
@@ -109,6 +119,7 @@ namespace EmbedIO.Net.Internal
             set
             {
                 EnsureCanChangeHeaders();
+                if (_trailerNames != null && !value) throw new InvalidOperationException("Reserved HTTP/1 trailers require chunked framing.");
                 _chunked = value;
             }
         }
@@ -123,11 +134,10 @@ namespace EmbedIO.Net.Internal
             set
             {
                 EnsureCanChangeHeaders();
-                if (value < 100 || value > 999)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(StatusCode), "StatusCode must be between 100 and 999.");
-                }
+                HttpResponseFieldSections.ValidateFinalStatus(value);
 
+                if (_trailerNames != null && (value < 200 || value is 204 or 205 or 304))
+                    throw new InvalidOperationException("Reserved trailers require a body-capable final response.");
                 _statusCode = value;
                 StatusDescription = HttpListenerResponseHelper.GetStatusDescription(value);
             }
@@ -144,11 +154,15 @@ namespace EmbedIO.Net.Internal
 
         internal bool HeadersSent { get; set; }
 
+        internal bool SuppressesBody => IsHeadResponse || _statusCode < 200 || _statusCode is 204 or 304;
+
         internal bool IsHeadResponse => _request.HttpVerb == HttpVerbs.Head;
 
         void IDisposable.Dispose() => Close(true);
 
         public void Close() => Close(false);
+
+        internal void Abort() => Close(true, true);
 
         /// <inheritdoc />
         public void SetCookie(Cookie cookie)
@@ -173,9 +187,80 @@ namespace EmbedIO.Net.Internal
             _cookies.Add(cookie);
         }
 
-        internal MemoryStream SendHeaders(bool closing)
+        public Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken cancellationToken = default)
         {
-            if (_contentType != null)
+            var token = cancellationToken;
+            EnsureCanChangeHeaders();
+            if (ProtocolVersion < HttpVersion.Version11 || _tunnel)
+                throw new InvalidOperationException("This response cannot carry informational sections.");
+            var fields = HttpResponseFieldSections.Informational(statusCode, headers);
+            var bytes = HttpResponseFieldSections.Http1Informational(statusCode, fields);
+            return ((ResponseStream)OutputStream).WriteInformationalAsync(bytes, token);
+        }
+
+        public void DeclareTrailers(params string[] fieldNames) => PrepareTrailers(fieldNames);
+
+        internal void PrepareTrailers(string[] names)
+        {
+            EnsureCanChangeHeaders();
+            if (names == null) throw new ArgumentNullException(nameof(names));
+            if (ProtocolVersion < HttpVersion.Version11 || SuppressesBody || _statusCode == 205 || _tunnel
+                || (_request.HttpMethod == "CONNECT" && _statusCode >= 200 && _statusCode < 300))
+                throw new InvalidOperationException("This response cannot carry trailers.");
+            if (Headers[HttpHeaderNames.ContentLength] != null)
+                throw new InvalidOperationException("HTTP/1 trailers require chunked framing without Content-Length.");
+            var declared = HttpResponseTrailerFields.Declaration(names);
+            Headers["Trailer"] = string.Join(", ", declared);
+            _trailerNames = declared;
+            _chunked = true;
+        }
+
+        public void SetTrailers(WebHeaderCollection trailers)
+        {
+            if (trailers == null) throw new ArgumentNullException(nameof(trailers));
+            if (_disposed != 0 || _tunnel || _trailerNames == null || !_chunked || SuppressesBody || _statusCode == 205)
+                throw new InvalidOperationException("Trailers were not reserved for an open response.");
+            var fields = HttpResponseTrailerFields.Snapshot(trailers, _trailerNames);
+            var ending = HttpResponseTrailerFields.ChunkEnd(fields);
+            Volatile.Write(ref _endingChunk, ending);
+        }
+
+        internal void BeginTunnel(string? protocol, bool capsules)
+        {
+            EnsureCanChangeHeaders();
+            if (_trailerNames != null) throw new InvalidOperationException("A trailer response cannot become a tunnel.");
+            // Only an accepted protocol handoff can commit Switching Protocols.
+            _statusCode = protocol == null ? 200 : 101;
+            StatusDescription = HttpListenerResponseHelper.GetStatusDescription(_statusCode);
+            if (capsules)
+            {
+                HttpCapsuleProtocol.ValidateCarrierHeaders(_request.Headers);
+                HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _statusCode);
+                if (_contentTypeConfigured || _chunked) throw new InvalidOperationException("Capsule carriers cannot configure representation type or chunked framing.");
+                Headers[HttpCapsuleProtocol.HeaderName] = "?1";
+            }
+            Headers.Remove(HttpHeaderNames.ContentLength);
+            Headers.Remove(HttpHeaderNames.TransferEncoding);
+            Headers.Remove(HttpHeaderNames.KeepAlive);
+            Headers.Remove(HttpHeaderNames.Connection);
+            Headers.Remove(HttpHeaderNames.Upgrade);
+            if (protocol != null)
+            {
+                Headers[HttpHeaderNames.Connection] = "Upgrade";
+                Headers[HttpHeaderNames.Upgrade] = protocol;
+            }
+            _chunked = false;
+            _tunnel = true;
+            _capsuleCarrier = capsules;
+        }
+
+        internal MemoryStream SendHeaders(bool closing, int bodyCount)
+        {
+            if (_trailerNames != null && (!_chunked || SuppressesBody || _statusCode == 205
+                || _tunnel || Headers[HttpHeaderNames.ContentLength] != null))
+                throw new InvalidOperationException("Reserved trailers require a body-capable chunked response.");
+            if (_capsuleCarrier) HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _statusCode);
+            if (_contentType != null && (!_tunnel || (_contentTypeConfigured && !_capsuleCarrier)))
             {
                 var encoding = ContentEncoding;
                 var hasCharset = _contentType.IndexOf(";", System.StringComparison.Ordinal) >= 0
@@ -198,7 +283,20 @@ namespace EmbedIO.Net.Internal
                 Headers.Add(HttpHeaderNames.Date, HttpDate.Format(DateTime.UtcNow));
             }
 
-            if (closing)
+            if (_tunnel) return WriteHeaders(bodyCount);
+
+            if (_statusCode < 200 || _statusCode is 204 or 304)
+            {
+                // No message body or terminating chunk follows these response heads.
+                // A 304 may retain explicit selected-representation metadata.
+                if (_statusCode < 200 || _statusCode == 204)
+                {
+                    Headers.Remove(HttpHeaderNames.ContentLength);
+                    Headers.Remove(HttpHeaderNames.TransferEncoding);
+                }
+                _chunked = false;
+            }
+            else if (closing && _trailerNames == null)
             {
                 if (_request.HttpVerb != HttpVerbs.Head)
                     Headers[HttpHeaderNames.ContentLength] = "0";
@@ -239,7 +337,6 @@ namespace EmbedIO.Net.Internal
             //// HttpStatusCode.RequestUriTooLong     414
             //// HttpStatusCode.InternalServerError   500
             //// HttpStatusCode.ServiceUnavailable    503
-            var reuses = _connection.Reuses;
             var keepAlive = _statusCode switch
             {
                 400 => false,
@@ -249,8 +346,19 @@ namespace EmbedIO.Net.Internal
                 414 => false,
                 500 => false,
                 503 => false,
-                _ => KeepAlive && reuses < 100
+                _ => !_connection.IsDraining && KeepAlive
             };
+
+            // HTTP/1.0 has no chunked delimiter. An unknown-length body ends at
+            // transport EOF even when the client requests persistent service.
+            if (ProtocolVersion < HttpVersion.Version11 && !SuppressesBody
+                && (!long.TryParse(Headers[HttpHeaderNames.ContentLength], out var framedLength) || framedLength < 0))
+                keepAlive = false;
+
+            // RFC 9931 section 8: bytes after a rejected HTTP/1.1 CONNECT
+            // might already belong to the requested tunnel, never a successor.
+            if (ProtocolVersion == HttpVersion.Version11 && _request.HttpMethod == "CONNECT" && _statusCode >= 300)
+                keepAlive = false;
 
             _keepAlive = keepAlive;
             if (keepAlive)
@@ -258,7 +366,7 @@ namespace EmbedIO.Net.Internal
                 Headers.Add(HttpHeaderNames.Connection, "keep-alive");
                 if (ProtocolVersion >= HttpVersion.Version11)
                 {
-                    Headers.Add(HttpHeaderNames.KeepAlive, $"timeout=15,max={100 - reuses}");
+                    Headers.Add(HttpHeaderNames.KeepAlive, "timeout=15");
                 }
             }
             else
@@ -266,7 +374,7 @@ namespace EmbedIO.Net.Internal
                 Headers.Add(HttpHeaderNames.Connection, "close");
             }
 
-            return WriteHeaders();
+            return WriteHeaders(bodyCount);
         }
 
         private void AppendSetCookieHeader(StringBuilder sb, Cookie cookie)
@@ -332,74 +440,160 @@ namespace EmbedIO.Net.Internal
         private static string QuotedString(Cookie cookie, string value)
             => cookie.Version == 0 || value.IsToken() ? value : "\"" + EmbedIO.Internal.StringOperations.ReplaceOrdinal(value, "\"", "\\\"") + "\"";
 
-        private void Close(bool force)
+        private void Close(bool force, bool abort = false)
         {
             // A completed response may outlive its TCP connection's current request.
             // Its repeated close/dispose must never close that newer request.
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
 
-            _connection.Close(force);
+            if (abort) _connection.ForceClose();
+            else _connection.Close(force);
         }
 
-        private string GetHeaderData()
-        {
-            var sb = new StringBuilder()
-                .Append("HTTP/")
-                .Append(ProtocolVersion)
-                .Append(' ')
-                .Append(_statusCode)
-                .Append(' ')
-                .Append(StatusDescription)
-                .Append("\r\n");
-
-            foreach (var key in Headers.AllKeys)
-            {
-                if (string.Equals(key, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase)) continue;
-                _ = sb
-                    .Append(key)
-                    .Append(": ")
-                    .Append(Headers[key])
-                    .Append("\r\n");
-            }
-
-            if (_cookies != null)
-            {
-                foreach (var cookie in _cookies)
-                {
-                    AppendSetCookieHeader(sb, cookie);
-                }
-            }
-
-            if (Headers.GetValues(HttpHeaderNames.SetCookie) is { } rawCookieValues)
-            {
-                // Set-Cookie fields are independent; preserve attributes not represented by Cookie.
-                foreach (var value in rawCookieValues)
-                    sb.Append("Set-Cookie: ").Append(value).Append("\r\n");
-            }
-
-            return sb.Append("\r\n").ToString();
-        }
-
-        private MemoryStream WriteHeaders()
+        private MemoryStream WriteHeaders(int bodyCount)
         {
             var encoding = WebServer.DefaultEncoding;
-            var text = GetHeaderData();
             var preamble = encoding.GetPreamble();
-            var size = preamble.Length + encoding.GetByteCount(text);
-            var stream = new MemoryStream(size);
-            stream.SetLength(size);
-            var buffer = stream.GetBuffer();
-            Buffer.BlockCopy(preamble, 0, buffer, 0, preamble.Length);
-            encoding.GetBytes(text, 0, text.Length, buffer, preamble.Length);
-
+            var keys = Headers.AllKeys;
+            var rawCookies = Headers.GetValues(HttpHeaderNames.SetCookie);
+            string? cookies = null;
+            if (_cookies != null && _cookies.Count > 0)
+            {
+                var builder = new StringBuilder();
+                foreach (var cookie in _cookies) AppendSetCookieHeader(builder, cookie);
+                cookies = builder.ToString();
+            }
+            var version = ProtocolVersion == HttpVersion.Version11 ? "1.1"
+                : ProtocolVersion == HttpVersion.Version10 ? "1.0" : ProtocolVersion.ToString();
+            var status = _statusCode.ToString(CultureInfo.InvariantCulture);
+            MemoryStream stream;
+#if NET10_0_OR_GREATER
+            // Common headers fit on the stack: concatenate without a builder, then
+            // perform one encoding operation. Large fields use the exact-size path.
+            Span<char> text = stackalloc char[2048];
+            var characters = new HeaderWriter(text);
+            WriteHeaderFields(ref characters, version, status, keys, cookies, rawCookies);
+            if (!characters.Overflow)
+            {
+                var content = text.Slice(0, characters.Position);
+                var size = checked(preamble.Length + encoding.GetByteCount(content));
+                stream = new MemoryStream(GetHeaderBufferCapacity(size, preamble.Length, bodyCount));
+                stream.SetLength(size);
+                preamble.CopyTo(stream.GetBuffer(), 0);
+                encoding.GetBytes(content, stream.GetBuffer().AsSpan(preamble.Length));
+            }
+            else
+#endif
+            {
+                var writer = new HeaderWriter(encoding, null, preamble.Length);
+                WriteHeaderFields(ref writer, version, status, keys, cookies, rawCookies);
+                stream = new MemoryStream(GetHeaderBufferCapacity(writer.Position, preamble.Length, bodyCount));
+                stream.SetLength(writer.Position);
+                var buffer = stream.GetBuffer();
+                Buffer.BlockCopy(preamble, 0, buffer, 0, preamble.Length);
+                writer = new HeaderWriter(encoding, buffer, preamble.Length);
+                WriteHeaderFields(ref writer, version, status, keys, cookies, rawCookies);
+            }
             _outputStream ??= _connection.GetResponseStream();
-
-            // Assumes that the ms was at position 0
             stream.Position = preamble.Length;
             HeadersSent = true;
-
             return stream;
+        }
+
+        private int GetHeaderBufferCapacity(int headerSize, int preambleSize, int bodyCount)
+        {
+            if (bodyCount == 0 || SuppressesBody) return headerSize;
+            var chunkSize = 0;
+            if (_chunked)
+            {
+                chunkSize = 3; // At least one hexadecimal digit and CRLF.
+                for (var remaining = (uint)bodyCount >> 4; remaining != 0; remaining >>= 4) chunkSize++;
+            }
+            // Match ResponseStream's bounded first write exactly. Large headers and
+            // bodies retain their existing transport write boundaries.
+            var prefix = Math.Min(bodyCount, Math.Max(0, 16384 - (headerSize - preambleSize + chunkSize)));
+            return checked(headerSize + chunkSize + prefix);
+        }
+        private void WriteHeaderFields(ref HeaderWriter writer, string version, string status,
+            string[] keys, string? cookies, string[]? rawCookies)
+        {
+            writer.Append("HTTP/");
+            writer.Append(version);
+            writer.Append(" ");
+            writer.Append(status);
+            writer.Append(" ");
+            writer.Append(StatusDescription);
+            writer.Append("\r\n");
+            foreach (var key in keys)
+            {
+                if (string.Equals(key, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase)) continue;
+                writer.Append(key);
+                writer.Append(": ");
+                writer.Append(Headers[key]);
+                writer.Append("\r\n");
+            }
+            writer.Append(cookies);
+            if (rawCookies != null)
+                foreach (var value in rawCookies)
+                {
+                    writer.Append("Set-Cookie: ");
+                    writer.Append(value);
+                    writer.Append("\r\n");
+                }
+            writer.Append("\r\n");
+        }
+
+        // Count once, then encode directly into the one output allocation. Ordinary
+        // and large headers never need an intermediate UTF-16 builder or string.
+        private ref struct HeaderWriter
+        {
+            private readonly Encoding _encoding;
+            private readonly byte[]? _buffer;
+            internal int Position;
+#if NET10_0_OR_GREATER
+            private readonly Span<char> _characters;
+            private readonly bool _textMode;
+            internal bool Overflow;
+
+            internal HeaderWriter(Span<char> characters)
+            {
+                _encoding = WebServer.DefaultEncoding;
+                _buffer = null;
+                _characters = characters;
+                _textMode = true;
+                Position = 0;
+                Overflow = false;
+            }
+#endif
+
+            internal HeaderWriter(Encoding encoding, byte[]? buffer, int position)
+            {
+                _encoding = encoding;
+                _buffer = buffer;
+                Position = position;
+#if NET10_0_OR_GREATER
+                _characters = default;
+                _textMode = false;
+                Overflow = false;
+#endif
+            }
+
+            internal void Append(string? text)
+            {
+                if (text == null || text.Length == 0) return;
+#if NET10_0_OR_GREATER
+                if (_textMode)
+                {
+                    if (Overflow || text.Length > _characters.Length - Position) { Overflow = true; return; }
+                    text.AsSpan().CopyTo(_characters.Slice(Position));
+                    Position += text.Length;
+                    return;
+                }
+#endif
+                Position = checked(Position + (_buffer == null ? _encoding.GetByteCount(text)
+                    : _encoding.GetBytes(text, 0, text.Length, _buffer, Position)));
+            }
         }
 
         private void EnsureCanChangeHeaders()

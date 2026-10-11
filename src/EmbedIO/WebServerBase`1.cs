@@ -253,6 +253,7 @@ namespace EmbedIO
         {
             if (context is null) throw new System.NullReferenceException();
             context.SupportCompressedRequests = Options.SupportCompressedRequests;
+            RequestDecompressionPolicy.Associate(context, Options.DecompressionPolicy);
             context.MimeTypeProviders.Push(this);
 
             try
@@ -270,6 +271,11 @@ namespace EmbedIO
 
                     try
                     {
+                        // RFC 10008 requires QUERY media-type information before processing.
+                        if (context.Request.HttpMethod == "QUERY"
+                            && !System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(context.Request.ContentType, out _))
+                            throw HttpException.BadRequest("QUERY requires a valid Content-Type header.");
+
                         // Return a 404 (Not Found) response if no module handled the response.
                         await _modules.DispatchRequestAsync(context).ConfigureAwait(false);
                         if (!context.IsHandled)
@@ -285,6 +291,28 @@ namespace EmbedIO
                     catch (HttpListenerException)
                     {
                         throw; // Let outer catch block handle it
+                    }
+                    catch (Exception exception) when (context.Request is Net.Internal.HttpListenerRequest request && request.IsBodyFramingError(exception) && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
+                    {
+                        if (context is Net.Internal.HttpListenerContext owned && owned.HttpListenerResponse.HeadersSent)
+                            owned.HttpListenerResponse.Abort();
+                        else
+                        {
+                            context.Response.KeepAlive = false;
+                            context.Response.StatusCode = 400;
+                            await HttpExceptionHandler.Handle(LogSource, context,
+                                HttpException.BadRequest("Invalid or incomplete request body."), _onHttpException).ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception exception) when (context is Net.Internal.MultiplexedContext tunnel && tunnel.HasAcceptedTunnel && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
+                    {
+                        await tunnel.AbortTunnelAsync(exception).ConfigureAwait(false);
+                        exception.Log(LogSource, $"[{context.Id}] Tunnel application failed.");
+                    }
+                    catch (Exception exception) when (context is Net.Internal.HttpListenerContext tunnel && tunnel.HasAcceptedTunnel && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
+                    {
+                        tunnel.HttpListenerResponse.Abort();
+                        exception.Log(LogSource, $"[{context.Id}] Tunnel application failed.");
                     }
                     catch (Exception exception) when (exception is IHttpException && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                     {
@@ -314,7 +342,12 @@ namespace EmbedIO
                         finally
                         {
                             // Completion callbacks must run even if flushing or cleanup fails.
-                            context.Close();
+                            // Multiplexed FIN writes must not block a worker waiting for I/O.
+                            if (context is Net.Internal.MultiplexedContext multiplexed)
+                                await multiplexed.CloseAsync().ConfigureAwait(false);
+                            else if (context is Net.Internal.HttpListenerContext managed && managed.HasAcceptedTunnel)
+                                await managed.CloseTunnelAsync().ConfigureAwait(false);
+                            else context.Close();
                         }
                     }
 
@@ -333,6 +366,23 @@ namespace EmbedIO
             catch (HttpListenerException ex)
             {
                 ex.Log(LogSource, $"[{context.Id}] Listener exception.");
+            }
+            catch (Exception ex) when (context.Request is Net.Internal.HttpListenerRequest request && request.HasBodyFramingFailure && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                // Completing an invalid body can encounter the aborted connection.
+                // That request cannot take down the listener shared by other clients.
+                ex.Log(LogSource, $"[{context.Id}] Invalid request body connection closed.");
+            }
+            catch (Exception ex) when (context is Net.Internal.HttpListenerContext tunnel && tunnel.HasAcceptedTunnel && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                ex.Log(LogSource, $"[{context.Id}] HTTP/1 tunnel connection closed.");
+            }
+            catch (Exception ex) when (context is Net.Internal.MultiplexedContext && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                // A failed or reset request stream must not dispose the listener
+                // shared by unrelated HTTP/2 and HTTP/3 connections. Terminal
+                // context cleanup above still closes and completes that stream.
+                ex.Log(LogSource, $"[{context.Id}] Multiplexed request stream failed.");
             }
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
