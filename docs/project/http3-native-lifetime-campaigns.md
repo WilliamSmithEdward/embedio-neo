@@ -572,3 +572,19 @@ crash-dump capture and the configured independent peer enabled. No dump was
 produced. This verifies that combined source on both local platforms; it
 does not explain the earlier double-free, replace macOS validation, establish
 final hosted acceptance or wire the native provider into application startup.
+
+Reconciliation at `b09ebd0` includes verified engine `972ba33`, retaining the
+UTF8 JSON representation change. One ordinary Windows coverage suite reports
+5,072 total, 5,062 passed, ten expected skips and zero failures (3m44s).
+A fresh archived-source build in the pinned Linux container reports 5,072
+total, 5,038 passed, 34 expected skips and zero failures (2m59s), with both
+targets building warning-free and repository source guards passing. Changed
+source formatting passes on Windows. The independent datagram peer is
+configured on both platforms.
+
+These runs use standard repository commands with the existing five-minute
+Windows/eight-minute Unix budgets; no new dump capture, private runtime hook
+or explicit lifetime campaign is enabled. The six discovery gates are raised
+to the actually reported 5,072 count. macOS and every exact-head hosted gate
+remain required. These positive results do not explain the earlier double-free
+or integrate the native provider into application startup.
