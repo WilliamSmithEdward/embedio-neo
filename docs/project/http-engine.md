@@ -8130,8 +8130,9 @@ same-endpoint restarts, rejected-client-certificate-trust isolation followed by 
 healthy request, drain preserving an admitted response, multi-endpoint startup
 rollback and completion of a pending context accept on stop. The existing native
 lifetime/handshake and default-provider listener set passes 169/169 with QUIC
-required. Both targets build without warnings. Full 4,685-case, resource, platform
-and exact-head hosted validation remain pending. The first IPv6 smoke assertion
+required. Both targets build without warnings. The initial Windows full suite
+reported 4,687 cases with zero failures; all ten unchanged resource gates passed.
+Final platform and exact-head hosted validation remain required. The first IPv6 smoke assertion
 incorrectly required scope zero; Windows returned loopback ::1%1. The context
 retains that native scope; the fixture verifies address bytes and exact port.
 Initial log/TRX and the corrected passing run are retained.
@@ -8140,3 +8141,31 @@ This is an internal candidate, not default-provider or release acceptance. No
 public APIs, default provider or target/dependency group changes here. Datagrams
 and WebTransport still require application wiring. The separate Windows Native
 ABI result is not macOS/Linux or older-runtime proof. Program #181 remains open.
+
+#### Unix HTTP/3 client identity investigation
+
+The first hosted native binding revision, `f5f23f6`, failed five application
+cases on Linux and macOS while Windows passed. The fixture waited for an
+application context before observing the concurrent client request, so a failed
+client handshake appeared as a context-accept timeout. The revised fixture
+observes both tasks and surfaces the client exception immediately, with the
+original deadlines and application assertions retained.
+
+In the pinned Linux environment (.NET 10.0.12, MsQuic 2.6.2), the exact IP-literal
+HttpClient requests fail with `QUIC_STATUS_TLS_ERROR` against both the native
+candidate and the existing System.Net.Quic provider. Four controlled IPv4/IPv6
+cases reproduce this before any application context arrives. Native acceptance
+is therefore not the distinguishing cause of that failure. The upstream
+[hostname validation change](https://github.com/microsoft/msquic/pull/6274)
+affects the OpenSSL/QuicTLS client identity path; attributing the precise failing
+instruction requires further upstream evidence.
+
+IP transport and HTTP authority coverage remains in ordinary tests: a raw
+System.Net.Quic peer connects to the exact IPv4 or IPv6 endpoint, authenticates
+the pinned certificate under its `localhost` DNS identity, sends the literal
+HTTP authority and path, and verifies final status 200, exact body bytes,
+endpoints, restart, drain and rollback. Certificate hostname checks remain
+enabled; only the expected self-signed chain is accepted by the pin. Separate
+DNS HttpClient cases exercise both listener providers. All ten binding cases
+pass locally in the same pinned Linux image after this fixture correction.
+No production TLS policy, native dependency, quarantine or deadline changed.
