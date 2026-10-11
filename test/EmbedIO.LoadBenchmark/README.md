@@ -267,6 +267,10 @@ a cleartext `EmbedIO` listener (HTTP/1.1 and HTTP/2 prior knowledge) and an
 `EmbedIOCombined` TLS listener (HTTP/1.1 and HTTP/2 by ALPN, HTTP/3 over QUIC).
 Every step uses a fresh client process.
 
+Run `dotnet <runner>/EmbedIO.LoadBenchmark.dll endurance-verdict-check` to check
+the verdict boundary without network timing. It covers clean, failed and malformed
+drain reports, retained failures and validation errors during planned disruption.
+
 ```sh
 dotnet <runner>/EmbedIO.LoadBenchmark.dll endurance --output TestResults/endurance/<label>   --plan idle:60,load:steady:300,load:faults:240,load:ws:120,drain:mixed:60:3,restart:5,load:mixed:420,idle:60   --settle 20 --server-cpus 0-7 --client-cpus 8-19 --revision <sha>
 python scripts/analyze_endurance.py TestResults/endurance/<label>

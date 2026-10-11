@@ -1,4 +1,4 @@
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 using System.Text.Json.Nodes;
 
 // Checks the campaign's verdict boundary independently of live transport timing.

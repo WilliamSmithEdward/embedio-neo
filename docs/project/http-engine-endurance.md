@@ -56,7 +56,7 @@ control) passed, but no measurements were repeated on it.
 8-hour totals: 88,596,949 validated client exchanges (92.9 million server requests),
 708,888 deliberate client cancellations/resets, 193,131 WebSocket connections with
 1,161,801 echoed messages, 49 server instances (48 drain-and-replace cycles), zero
-requests served by a drained instance, zero validation failures (status, version,
+requests served by a drained instance, zero reported validation failures (status, version,
 framing, length, every body byte, every echoed message). Every phase reached zero
 in-flight requests and WebSockets within 23 ms of traffic stopping. Final graceful
 stop took 4.5 ms; the server exited with code 0.
@@ -188,8 +188,8 @@ those hours are kept and reported, not removed.
    the owning heap (a debugger with heap commands is needed for heap ownership).
 3. Reproduce the post-replacement connect timeout with repeated drain-and-replace
    under HTTP/1.1 connect churn only.
-4. Repeat a shorter mixed run on a quiet host to confirm the HTTP/3 handshake
-   timeouts are contention-only.
+4. Repeat a shorter mixed run on a quiet host to test whether the HTTP/3 handshake
+   timeouts depend on contention.
 
 ## Integration review
 
@@ -205,3 +205,13 @@ disrupted outcomes, so its historical zero reported validation failures do not
 prove that no validation exception occurred inside those windows. The reviewed
 classifier exempts only expected transport/cancellation failures; detected byte,
 status, version and framing mismatches remain errors during replacement too.
+
+Review validation on the engine base at `d8d445b`: locked restore and warning-free
+harness build, parser/suppression guards and formatting passed. The standalone
+`endurance-verdict-check` passes clean, failed and malformed drain reports and
+disruption classification. A synthetic analysis check excludes active, missing-counter
+and stuck snapshots from retention trends. Short HTTP and WebSocket load phases
+passed, as did small-request drain/replacement. The broader six-second steady
+drain phase failed with four late HTTP/1 streaming read errors at about ten seconds;
+its later health check passed. This failed attempt is retained and is not a new
+endurance measurement or proof of a product defect.
