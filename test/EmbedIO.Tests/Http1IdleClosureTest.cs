@@ -68,9 +68,7 @@ namespace EmbedIO.Tests
             }
             else
             {
-                var timer = type.GetField("_timer", Hidden)?.GetValue(connection) as Timer
-                    ?? throw new AssertionException("Missing timer.");
-                lock (sync) timer.Change(1, Timeout.Infinite);
+                lock (sync) TestObjects.TcpSessionProbe.Arm(connection, 1);
             }
             // No SslStream read is pending on this peer. TLS 1.2 exposes the
             // encrypted record's content type; TLS 1.3 hides alerts as type 23.
@@ -129,13 +127,10 @@ namespace EmbedIO.Tests
             var type = connection.GetType();
             var sync = type.GetField("_connectionSync", Hidden)?.GetValue(connection)
                 ?? throw new AssertionException("Missing connection gate.");
-            var timer = type.GetField("_timer", Hidden)?.GetValue(connection) as Timer
-                ?? throw new AssertionException("Missing request timer.");
+            var timer = TestObjects.TcpSessionProbe.Timer(connection);
             var force = type.GetMethod("ForceClose", Hidden)?.CreateDelegate<Action>(connection)
                 ?? throw new AssertionException("Missing abort operation.");
-            var finished = type.GetField("_closeFinished", Hidden)
-                ?? throw new AssertionException("Missing cleanup completion.");
-            bool Closed() { lock (sync) return (bool)(finished.GetValue(connection) ?? false); }
+            bool Closed() => TestObjects.TcpSessionProbe.Closed(connection);
 
             if (scenario == "unread-body-abort") force();
             else if (scenario == "partial-response-abort")
@@ -175,7 +170,7 @@ namespace EmbedIO.Tests
                 {
                     // Preserve the real 15-second default in the idle cases;
                     // accelerate only the partial-head and reuse race controls.
-                    lock (sync) timer.Change(1, Timeout.Infinite);
+                    lock (sync) TestObjects.TcpSessionProbe.Arm(connection, 1);
                     if (scenario == "reuse-race")
                     {
                         accepting = listener.GetContextAsync(deadline.Token);

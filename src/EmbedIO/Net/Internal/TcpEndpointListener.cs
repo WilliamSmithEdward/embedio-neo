@@ -18,17 +18,27 @@ namespace EmbedIO.Net.Internal
         private readonly EndpointRoutes _routes = new();
         private readonly TcpEndpointAdmission _admission;
         private readonly IPEndPoint _endpoint;
-        private readonly Task _acceptWorker;
+        private Task _acceptWorker = Task.CompletedTask;
+        private int _started;
 
         public EndPointListener(HttpListener listener, IPAddress address, int port, bool secure)
+            : this(listener, address, port, secure, true) { }
+
+        internal EndPointListener(HttpListener listener, IPAddress address, int port, bool secure, bool start)
         {
             Listener = listener;
             Secure = secure;
             _endpoint = new IPEndPoint(address, port);
             _admission = TcpEndpointAdmission.Bind(address, port);
+            if (start) StartAccepting();
+        }
+
+        internal void StartAccepting()
+        {
+            if (Interlocked.Exchange(ref _started, 1) != 0 || AdmissionStopped) return;
             try
             {
-                if (address.AddressFamily == AddressFamily.InterNetworkV6
+                if (_endpoint.AddressFamily == AddressFamily.InterNetworkV6
                     && RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                     _acceptWorker = Task.Factory.StartNew(AcceptBlocking, CancellationToken.None,
                         TaskCreationOptions.LongRunning, TaskScheduler.Default);
@@ -44,13 +54,15 @@ namespace EmbedIO.Net.Internal
                     _admission.Stop();
                     "TCP endpoint accept worker failed.".Warn();
                 }, CancellationToken.None,
-                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskContinuationOptions.OnlyOnFaulted,
                     TaskScheduler.Default);
             }
-            catch { Dispose(); throw; }
+            catch { _admission.Stop(); throw; }
         }
 
         internal HttpListener Listener { get; }
+        internal IPEndPoint LocalEndpoint => _endpoint;
+        internal bool RoutesEmpty => _routes.IsEmpty;
         internal bool Secure { get; }
         internal bool AdmissionStopped => _admission.IsStopped;
         internal Socket ListeningSocket => _admission.Socket;
@@ -97,11 +109,7 @@ namespace EmbedIO.Net.Internal
             return _routes.Add(prefix, listener);
         }
 
-        public void RemovePrefix(ListenerPrefix prefix, HttpListener listener)
-        {
-            _routes.Remove(prefix, listener);
-            if (_routes.IsEmpty) EndPointManager.RemoveEndPoint(this, _endpoint);
-        }
+        internal void DetachRoute(ListenerPrefix prefix, HttpListener listener) => _routes.Remove(prefix, listener);
 
         internal HttpListener? SearchListener(Uri uri, out ListenerPrefix? prefix) => _routes.Find(uri, out prefix);
 

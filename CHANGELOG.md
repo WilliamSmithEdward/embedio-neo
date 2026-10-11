@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+- Replace inherited per-connection transport cleanup with an independently authored
+  lifetime owner. Drain waits for transport and protocol detachment, recoverable
+  cleanup faults do not skip later resources, and stopped or renewed request
+  deadlines reject stale timer callbacks without changing configured timeouts.
+- Replace inherited TCP registration coordination with an independently authored
+  endpoint index and prefix-lease ledger. Release accepted sessions outside the
+  registration gate so one stalled cleanup does not block an unrelated listener
+  start, while preserving shared endpoints and registration rollback.
 - Replace inherited HTTP/1 response output with an independently authored owner
   for ordered writes and completion. Enforce the owner-approved declared-length
   contract and close incomplete or failed output without connection reuse,

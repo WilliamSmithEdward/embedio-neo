@@ -79,7 +79,7 @@ namespace EmbedIO.Net.Internal
             using var stop = new CancellationTokenSource();
             lock (_connectionSync)
             {
-                if (_sock == null || _resourcesDisposed != 0) return;
+                if (_protocolSocket == null || _protocolEnded != 0) return;
                 _http2 = true;
                 _http2Stop = new EmbedIO.Internal.BorrowedResource<CancellationTokenSource>(stop);
                 _http2Listeners = new Dictionary<HttpListener, Dictionary<Http2Exchange, MultiplexedContext>>();
@@ -91,7 +91,7 @@ namespace EmbedIO.Net.Internal
                 using var dispatcher = new Http2Dispatcher(connection);
                 lock (_connectionSync)
                 {
-                    if (_sock == null || _resourcesDisposed != 0) return;
+                    if (_protocolSocket == null || _protocolEnded != 0) return;
                     _http2Dispatcher = new EmbedIO.Internal.BorrowedResource<Http2Dispatcher>(dispatcher);
                 }
                 try { await dispatcher.RunAsync(DispatchHttp2Async, stop.Token).ConfigureAwait(false); }
@@ -129,7 +129,7 @@ namespace EmbedIO.Net.Internal
                 }
                 lock (_connectionSync)
                 {
-                    if (_sock == null || _resourcesDisposed != 0) throw new IOException("Connection closed before routing.");
+                    if (_protocolSocket == null || _protocolEnded != 0) throw new IOException("Connection closed before routing.");
                     var owners = _http2Listeners ?? throw new InvalidOperationException("HTTP/2 routing has not started.");
                     if (!owners.TryGetValue(listener, out var exchanges))
                         owners.Add(listener, exchanges = new Dictionary<Http2Exchange, MultiplexedContext>());
@@ -141,7 +141,7 @@ namespace EmbedIO.Net.Internal
                 listener.RegisterMultiplexedContext(context, this);
                 registered = true;
                 var closed = false;
-                lock (_connectionSync) closed = _sock == null || _resourcesDisposed != 0;
+                lock (_connectionSync) closed = _protocolSocket == null || _protocolEnded != 0;
                 if (closed)
                 {
                     listener.RemoveConnection(this);

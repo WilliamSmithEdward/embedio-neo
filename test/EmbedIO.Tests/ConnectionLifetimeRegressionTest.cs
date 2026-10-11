@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Actions;
 using EmbedIO.PlatformTests;
+using EmbedIO.Tests.TestObjects;
 using EmbedIO.WebSockets;
 using NUnit.Framework;
 
@@ -50,7 +51,7 @@ namespace EmbedIO.Tests
                 var context = await accept;
                 connection = ((context).GetType().GetProperty("Connection", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(context);
                 var stream = (Stream)((((connection ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetProperty("Stream") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-                var timer = (Timer)((((connection).GetType().GetField("_timer", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                var timer = TcpSessionProbe.Timer(connection);
                 context.Response.StatusCode = 204;
                 context.Response.ContentLength64 = 0;
                 context.Response.KeepAlive = operation != "response";
@@ -236,9 +237,7 @@ namespace EmbedIO.Tests
             listener.Start();
             using var client = new TcpClient();
             await client.ConnectAsync(IPAddress.Loopback, new Uri(url).Port);
-            var registrations = (IDictionary)((((typeof(Net.EndPointManager)).GetField("Registrations", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            var prefixes = (IDictionary)((registrations)[listener] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            var endpoint = ((IEnumerable)((prefixes)[url] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).Cast<object>().Single();
+            var endpoint = TcpRegistrationInventory.Owned(listener).Single();
             object? connection = null;
             var deadline = DateTime.UtcNow.AddSeconds(2);
             while (connection == null && DateTime.UtcNow < deadline)
@@ -271,11 +270,7 @@ namespace EmbedIO.Tests
             using var listener = new Net.HttpListener(certificate);
             listener.AddPrefix(url);
             listener.Start();
-            var registrations = typeof(Net.EndPointManager).GetField("Registrations", BindingFlags.Static | BindingFlags.NonPublic)
-                ?.GetValue(null) as IDictionary ?? throw new AssertionException("Missing endpoint registrations.");
-            var prefixes = registrations[listener] as IDictionary ?? throw new AssertionException("Missing owner registrations.");
-            var endpoint = (prefixes[url] as IEnumerable ?? throw new AssertionException("Missing endpoint."))
-                .Cast<object>().Single();
+            var endpoint = TcpRegistrationInventory.Owned(listener).Single();
             var peers = Enumerable.Range(0, 32).Select(_ => new TcpClient()).ToArray();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             try
@@ -323,14 +318,9 @@ namespace EmbedIO.Tests
         private static Stream Transport(object connection)
             => (Stream)((((connection).GetType().GetProperty("Stream") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         private static bool CloseFinished(object connection)
-        {
-            var type = connection.GetType();
-            var sync = ((type.GetField("_connectionSync", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
-            var finished = type.GetField("_closeFinished", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
-            lock (sync) return (bool)(finished.GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-        }
+            => TcpSessionProbe.Closed(connection);
         private static Timer RequestTimer(object connection)
-            => (Timer)((((connection).GetType().GetField("_timer", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(connection)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            => TcpSessionProbe.Timer(connection);
 
         private sealed class LifetimeSocket() : WebSocketModule("/echo", false)
         {
