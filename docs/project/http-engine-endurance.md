@@ -211,6 +211,7 @@ bytes matches small blocks plus heap overhead. Between the first and last load s
 | EmbedIO, HTTP/3 steady | 1,220,486 | 1,232,586 | 1,009.9 |
 | Kestrel, HTTP/3 steady | 1,232,365 | 1,238,414 | 1,004.9 |
 | EmbedIO, HTTP/3 1 MiB responses only | 430,225 | 430,257 | 1,000.1 |
+| EmbedIO, HTTP/3 small requests only | 1,258,351 | 1,258,383 | 1,000.0 |
 
 No other block size grew by more than a few per 1,000 requests.
 
@@ -273,8 +274,8 @@ The heap walk holds the heap lock, so it runs inside a GC no-GC region. In one r
 before that change, a walk deadlocked the server with a GC, stalling every managed
 thread at a quiesced snapshot. That run's orchestrator then failed every later step with
 "stream in use". A timed-out control read now marks the child unusable with an explicit
-error instead. The fixed walk passed the probe; a full 30-minute rerun of the
-configuration that stalled has not been completed yet.
+error instead. With the fix, a full 30-minute rerun of the configuration that
+stalled completed all 8 steps with a heap walk at every quiesced snapshot.
 
 ## Host contention
 
