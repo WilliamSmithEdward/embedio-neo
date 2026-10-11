@@ -37,6 +37,29 @@ after 100 requests, matching the managed listener's per-connection cap, so all
 engines pay the same reconnect cost. Churn scenarios are capped (5 s for HTTP/1.1,
 1.5 s for HTTP/2) to stay within the host's TIME_WAIT and ephemeral-port capacity.
 
+## Cancellation and recovery
+
+`recovery` keeps one server process alive through healthy load, an abort storm, idle drain,
+healthy load again, optional sustained load and a timed shutdown, and writes `recovery.json`
+with every phase's resource snapshot, open server sockets, the recovery throughput ratio,
+sustained growth slopes and shutdown time. It exits non-zero with its findings listed when
+descriptors, open sockets, working set or managed heap keep growing, recovery throughput drops
+below 80 %, or shutdown does not complete.
+
+```sh
+dotnet <runner>/EmbedIO.LoadBenchmark.dll recovery --output <fresh dir> --engine embedio|kestrel \
+  --protocol Http1|Http2|Http3 [--tls] [--connections 16] [--streams 8] [--healthy-seconds 10] \
+  [--storm-seconds 20] [--storm-workers 32] [--storm-mode both|upload|download] [--idle 5] \
+  [--sustain-minutes 0] [--snapshot-interval 60] [--server-dir <runner copy>]
+```
+
+## Comparing results against A/A noise
+
+`scripts/compare_load_benchmark.py <result dir> --reference baseline --aa <A/A dir>` prints each
+engine's median requests/s, CPU and bytes per request against a reference and calls a
+difference real only when it exceeds the identical-runner (A/A) ratio, both engines' own sample
+spread and a 3 % floor (`--floor`).
+
 ## Profiling
 
 Profile separately from comparisons. `--profile` aggregates runtime events in the
@@ -110,7 +133,9 @@ the candidate. HTTP/3 uses QUIC-only listeners on both engines (`EmbedIOHttp3`).
 - macOS: .NET's `GetActiveTcpConnections` omits TIME_WAIT there, so the TIME_WAIT gate and
   socket census parse `netstat -an -p tcp`. `HandleCount` and `PrivateMemorySize64` read 0, so
   `handles` is the open file-descriptor count (`/dev/fd`) and private bytes is reported as
-  unavailable (null). In one check the host held at most 8,192 server-side TIME_WAIT entries.
+  unavailable (null). macOS keeps TIME_WAIT for 30 s (`net.inet.tcp.msl` 15000) and has 16,384
+  ephemeral ports, so HTTP/1.1 churn at tens of thousands of connections per second can reuse a
+  4-tuple the server still holds in TIME_WAIT; compare every engine before reading churn failures.
 
 ## Comparing two modern engine revisions
 

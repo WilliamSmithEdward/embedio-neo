@@ -226,6 +226,8 @@
       href: project/http3-native-provider-audit.md
     - name: Managed engine load comparison
       href: project/http-engine-load-comparison.md
+    - name: Apple Silicon load evidence
+      href: project/macos-performance.md
     - name: HTTP/2 graceful output lifetime
       href: project/http2-drain-output-lifetime.md
     - name: HTTP/2 output and dispatch performance
