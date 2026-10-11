@@ -140,6 +140,12 @@ and exits successfully: 4,481 passed, two expected skips and zero failed, 4,483
 total in 3 minutes 10 seconds. Formatting, suppression checks and the C# parser
 guard pass. Linux/macOS and every final-head hosted check remain outstanding.
 
+The WebSocket initialization-close correction adds four ordinary regression
+cases after that retirement increment. Its complete coverage-enabled Windows
+report verifies **4,487 = 4,483 + 4** cases: 4,485 passed, two expected skips and
+zero failures. All six discovery-floor sites now enforce 4,487; the earlier
+4,483 reports remain the evidence for retirement accounting itself.
+
 ## Standalone consumer and tooling validation
 
 The shared compatibility consumer now exercises the retained listener against

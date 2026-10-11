@@ -20,6 +20,8 @@ permissions:
 jobs:
   smoke:
     name: MAUI HTTPS (${{ matrix.platform }})
+    # Owner-requested temporary pause (2026-10-10), including manual dispatch.
+    if: false
     strategy:
       fail-fast: false
       matrix:

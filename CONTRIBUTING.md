@@ -26,7 +26,14 @@ Python guard rejects compiler/analyzer directives and build configuration opt-ou
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
 The tests target .NET 10.
 
-The required `MAUI HTTPS` CI jobs also run a test-only native app on Windows,
+All MAUI CI jobs are temporarily disabled at William's explicit request
+on 2026-10-10, until he asks to re-enable them. The reusable workflow's manual
+dispatch is paused too, including standalone Android and Mac Catalyst workflows.
+The apps and validation tooling remain intact; this pause
+does not constitute HTTPS platform acceptance. See the re-enable instructions in
+[MAUI HTTPS validation](docs/platforms/maui-https-validation.md).
+
+When enabled, the HTTPS jobs run a test-only native app on Windows,
 iOS, Mac Catalyst and Android. They exercise platform client trust, HTTPS WebView
 rendering and a separate strict HTTPS client. The app and certificate generator
 remain outside the solution and shipped packages. See
@@ -39,7 +46,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4483
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4487
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -53,7 +60,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 4483 executed/reported test cases to catch accidental discovery loss; update
+least 4487 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
 suite budget is five minutes on Windows and eight minutes on Linux/macOS,
 approved by William on 2026-10-10 after incomplete Unix runs reported no failed

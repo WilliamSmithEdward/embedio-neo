@@ -104,7 +104,15 @@ jobs:
         run: |
           set -euo pipefail
           status=0
-          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 4483 --coverlet || status=$?
+          if test "$RUNNER_OS" != Windows; then
+            # Owner-approved ordinary CI diagnostics: JSON crash reports only,
+            # without heap dumps or changes to regression/failure policy.
+            mkdir -p "$RUNNER_TEMP/embedio-crash-reports"
+            export DOTNET_DbgEnableMiniDump=1
+            export DOTNET_EnableCrashReportOnly=1
+            export DOTNET_DbgMiniDumpName="$RUNNER_TEMP/embedio-crash-reports/crash.%p"
+          fi
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 4487 --coverlet || status=$?
           if test "$status" = 0; then exit 0; fi
           # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
           # disposal returns (a deferred close on macOS; accepted connections on every
@@ -115,7 +123,7 @@ jobs:
           counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
           read -r total passed failed defect <<< "$counts"
           # The owner-approved exception cannot hide discovery loss.
-          test "$total" -ge 4483 || exit "$status"
+          test "$total" -ge 4487 || exit "$status"
           if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
             echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
             exit 0
@@ -189,6 +197,14 @@ jobs:
           name: test-results-${{ matrix.os }}
           path: TestResults/
           if-no-files-found: error
+      - name: Retain Unix test-host crash reports
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure() && runner.os != 'Windows'
+        with:
+          name: test-host-crash-reports-${{ matrix.os }}
+          path: ${{ runner.temp }}/embedio-crash-reports/*.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   quic-cleanup-experiment:
     name: Compare macOS native socket cleanup (${{ matrix.rid }})
@@ -401,14 +417,20 @@ jobs:
 
   mac-catalyst:
     name: Mac Catalyst
+    # Owner-requested temporary MAUI pause; re-enable only on William's instruction.
+    if: false
     uses: ./.github/workflows/mac-catalyst.yml
 
   android:
     name: Android
+    # Owner-requested temporary MAUI pause; re-enable only on William's instruction.
+    if: false
     uses: ./.github/workflows/android-smoke.yml
 
   maui-https:
     name: MAUI HTTPS
+    # Owner-requested temporary pause (2026-10-10); re-enable only on William's instruction.
+    if: false
     uses: ./.github/workflows/maui-https.yml
     with:
       update-locks: ${{ inputs.update-https-locks == true }}
@@ -434,7 +456,9 @@ jobs:
           results = json.loads(os.environ['RESULTS'])
           requested = os.environ['RUNTIME_PROBE_REQUESTED'] == 'true'
           for name, job in results.items():
-              expected = 'skipped' if name == 'runtime-close-probe' and not requested else 'success'
+              # All MAUI jobs are explicitly paused by the owner until re-enabled.
+              paused_maui = name in {'maui-https', 'mac-catalyst', 'android'}
+              expected = 'skipped' if paused_maui or (name == 'runtime-close-probe' and not requested) else 'success'
               assert job['result'] == expected, f"{name}: {job['result']}; required {expected}"
           print('All required CI jobs passed.')
           PY

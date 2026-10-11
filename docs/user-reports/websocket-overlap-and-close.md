@@ -85,6 +85,41 @@ message this way.
 
 ## Evidence and limits
 
+### Incoming messages followed by a close during initialization
+
+On the Neo v2 retirement branch, macOS CI run 38101113931 reported two missing
+messages in the 100-connection managed WebSocket close regression. Source review
+identified an initialization window: the receiver starts before
+`OnClientConnectedAsync` finishes, but the module subscribes to messages only
+after that callback. A peer can send a complete message and a close in that
+window. The old resource-release path discarded the queue when it saw no
+subscriber, even though successful initialization would shortly provide one.
+
+A deterministic regression holds connection initialization, sends a message and
+close together, and observes the completed wire handshake. It fails on the old
+implementation because application closure completes before initialization
+settles. This establishes the mechanism independently of runner timing; it is
+not an instrumented capture of the original macOS failure.
+
+The module now reserves its incoming-message consumer before acceptance. Control
+frames and the wire close handshake remain active during initialization. After
+successful initialization, messages received before peer close are delivered
+before application closure completes. Failed or canceled initialization releases
+the reservation and discards the undeliverable queue. Purging on another accept
+must leave a context whose initialization or message delivery is still pending.
+
+Four cases cover successful/failed initialization with and without a preceding
+message, including another connection that triggers the purge pass. Existing
+message callbacks retain their asynchronous completion behavior; this does not
+serialize or await every asynchronous application callback, impose an
+initialization deadline, or add receive backpressure.
+
+The affected lifecycle set passes all 83 cases on Windows. The full
+coverage-enabled Windows suite reports 4,487 cases: 4,485 passed, two expected
+skips and zero failures in 3 minutes 11 seconds. Both core targets build without
+warnings, and formatting, suppression and C# parser checks pass. Fresh hosted
+Linux/macOS and exact-head scanner checks remain required.
+
 The adapted regression uses the sample's JSON subprotocol, 20 ms inputs,
 deterministic delays spanning 50–150 ms, and 1,000 rows of ten 20-character
 columns. Sequence IDs and deterministic column contents make loss, duplication

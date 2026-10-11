@@ -3,9 +3,26 @@
 Feature [#26](https://github.com/WilliamSmithEdward/embedio-neo/issues/26) tracks
 TLS hosting on desktop and in MAUI apps. The test-only
 `test/EmbedIO.MauiHttpsSmoke` app runs on Windows, iOS, Mac Catalyst and Android;
-it is outside the solution and all production packages. CI requires its four
-jobs through `CI passed`. A configured job is supported evidence only after its
+it is outside the solution and all production packages. When enabled, CI requires
+its four jobs through `CI passed`. A configured job is supported evidence only after its
 actual run and artifact have been verified.
+
+## Temporary owner-requested pause
+
+William requested a temporary pause on 2026-10-10, until he explicitly asks to
+turn MAUI CI back on. He expanded the pause to all MAUI jobs, including the
+standalone Android and Mac Catalyst smoke workflows. Each CI call and reusable
+smoke job has `if: false`; the aggregate gate expects only `maui-https`,
+`mac-catalyst` and `android` to be skipped. Manual dispatch is also paused. The
+apps, assertions, pinned dependencies and certificate validation tooling are
+preserved.
+
+To re-enable after William's instruction, remove the three pause conditions from
+`ci.yml` and the smoke-job conditions in `maui-https.yml`, `android-smoke.yml`
+and `mac-catalyst.yml`. Remove the three named MAUI skipped exceptions from
+`CI passed`, and update this guide and CONTRIBUTING.md. Validate the Android
+and Mac Catalyst smoke jobs and all four HTTPS platform jobs on the exact new
+head. A skipped job supplies no new platform validation evidence.
 
 ## What runs
 
