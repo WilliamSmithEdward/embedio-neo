@@ -277,12 +277,13 @@ namespace EmbedIO.Net.Internal
                 // an application never asks for OutputStream. Abort and upgrade
                 // cleanup do not manufacture another HTTP response.
                 if (_oStream == null && !forceClose && Volatile.Read(ref _forceClosing) == 0 && !_tunnel
-                    && _context.Response.StatusCode >= 200
-                    && (_context.HttpListenerResponse.SuppressesBody || HasEmptyResponseLength()))
+                    && _context.Response.StatusCode >= 200)
                     _oStream ??= GetResponseStream();
                 // Dispose may call Response.Close recursively. A forced close is
                 // recorded first so that callback cannot restart the request reader.
-                _oStream?.Dispose();
+                var output = _oStream;
+                output?.Dispose();
+                if (output != null && !output.OutputCompleted) Volatile.Write(ref _forceClosing, 1);
                 _oStream = null;
             }
             if (_sock == null) return;
@@ -294,15 +295,6 @@ namespace EmbedIO.Net.Internal
                 return;
             }
             CloseTransport(true);
-        }
-
-        private bool HasEmptyResponseLength()
-        {
-            var length = _context.Response.Headers[HttpHeaderNames.ContentLength];
-            if (length == null) return true;
-            if (length.Length == 0) return false;
-            foreach (var digit in length) if (digit != '0') return false;
-            return true;
         }
 
         [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_context))]
