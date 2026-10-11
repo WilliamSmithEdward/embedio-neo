@@ -1,0 +1,56 @@
+{
+  "testedCommit": "0e440fb1e6551cfef6701c75a23eea2884065010",
+  "engineBase": "b3e55b5a41e68fb252a95f2ba22dafc1a6637cbb",
+  "harnessCommit": "d6097ea7a28f40266171e77537e10f8160c1bda9",
+  "coreSha256": "4139452852AF87FCAF87FA534929E659633485976BAB07FBA13817D46629C43A",
+  "runnerSha256": "0A6BAD15D9C00629984C4B89A04CFF72238B4528D37CC632162E8077B5C6A3BF",
+  "environment": {
+    "os": "Microsoft Windows 10.0.26300",
+    "processor": "AMD Ryzen 7 9800X3D 8-Core Processor",
+    "logicalProcessors": 16,
+    "runtime": ".NET 10.0.12",
+    "plan": [
+      "idle:10",
+      "load:steady:120",
+      "drain:mixed:90:16",
+      "load:steady:120",
+      "idle:40",
+      "load:health:10"
+    ],
+    "rateScale": "0.25",
+    "drainTimeoutSeconds": 10,
+    "settleSeconds": 10
+  },
+  "results": {
+    "completedWithCleanServerExit": true,
+    "failedPlanStep": false,
+    "completedClientPhases": 37,
+    "completedMixedCycles": 16,
+    "validatedExchanges": 9862848,
+    "reportedClientErrors": 0,
+    "workersAlwaysFinished": true,
+    "recordedWorkloadErrorsIncludingDisruption": 6116,
+    "directHttp1TcpConnectCompletions": 17560,
+    "tcpConnectOutcomes": {
+      "connected": 14668,
+      "System.Net.Sockets.SocketException (10061): No connection could be made because the target machine actively refused it.": 2892
+    },
+    "longestConnectMilliseconds": 2589.0245,
+    "openEndpointAtExit": false,
+    "incompleteConnectEvidence": [],
+    "maximumStaleGenerationRequests": 0,
+    "finalGeneration": 17
+  },
+  "endpointSummary": {
+    "count": 68,
+    "allClosed": true,
+    "allWorkersCompleted": true,
+    "faultCount": 0
+  },
+  "limits": [
+    "Different host and OS build from the historical Hyper-V report.",
+    "Reduced paced rates: rate-scale 0.25.",
+    "Endpoint objects intentionally retained by diagnostics; not a memory/performance comparison.",
+    "No TCP packet capture or historical failure mechanism established."
+  ]
+}

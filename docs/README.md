@@ -175,6 +175,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
+- [TCP drain and replacement investigation](project/tcp-drain-replacement.md): bounded connect churn, listener generations and unresolved endurance timeouts.
 - [HTTP/1 idle closure investigation](project/http1-idle-closure.md): TCP/TLS timeout observations, released/main controls and the pending orderly-closure policy decision.
 
 - [Cleanup after committed response completion](project/http-completed-response-cleanup.md): late cancellation, complete-wire state and preserved incomplete-response handling.

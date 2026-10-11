@@ -273,3 +273,6 @@
 
 - name: Informational responses and response trailers
   href: guides/response-field-sections.md
+
+- name: TCP drain and replacement investigation
+  href: project/tcp-drain-replacement.md
