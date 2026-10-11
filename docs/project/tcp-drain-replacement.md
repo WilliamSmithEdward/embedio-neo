@@ -49,7 +49,7 @@ stays failed; cleanup releases owned objects without retrying the attempt.
 
 From a locked restore and Release build:
 
-```powershell
+```console
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --filter FullyQualifiedName~TcpDrainReplacementTest --report-trx --results-directory TestResults/issue-279 --timeout 2m --minimum-expected-tests 9
 ```
 
@@ -103,7 +103,7 @@ commit `d6097ea7a28f40266171e77537e10f8160c1bda9` and applies the committed
 checkout's core without changing production code or modifying the original harness
 branch. A new output label is required; previous evidence is never overwritten.
 
-```powershell
+```console
 git fetch origin d6097ea7a28f40266171e77537e10f8160c1bda9
 python scripts/prepare_tcp_endurance.py tcp-investigation
 dotnet restore TestResults/tcp-investigation/EnduranceHarness/EmbedIO.LoadBenchmark.csproj --locked-mode
@@ -180,7 +180,7 @@ and paced rates were reduced with `--rate-scale 0.25`.
 
 Use the independent summarizer after the server exits:
 
-```powershell
+```console
 python scripts/summarize_tcp_endurance.py TestResults/tcp-investigation/campaign --output TestResults/tcp-investigation/summary.json
 ```
 
