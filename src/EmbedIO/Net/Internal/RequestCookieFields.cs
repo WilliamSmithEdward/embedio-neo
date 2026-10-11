@@ -22,7 +22,7 @@ namespace EmbedIO.Net.Internal
                 var name = (equals < 0 ? part : part.Substring(0, equals)).Trim();
                 var value = equals < 0 ? string.Empty : part.Substring(equals + 1).Trim();
                 if (part.StartsWith("$Version", StringComparison.Ordinal))
-                    version = int.Parse((equals < 0 ? part : part.Substring(equals + 1)).Unquote(), CultureInfo.InvariantCulture);
+                    version = int.Parse(HeaderValueCursor.Unquote(equals < 0 ? part : part.Substring(equals + 1)), CultureInfo.InvariantCulture);
                 else if (cookie != null && part.StartsWith("$Path", StringComparison.Ordinal)) cookie.Path = value;
                 else if (cookie != null && part.StartsWith("$Domain", StringComparison.Ordinal)) cookie.Domain = value;
                 else if (cookie != null && part.StartsWith("$Port", StringComparison.Ordinal)) cookie.Port = "\"" + value + "\"";
