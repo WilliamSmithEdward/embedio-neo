@@ -7303,3 +7303,13 @@ still pending and about two MiB queued on the server TCP socket. This change
 reduces representation and small-write overhead; the prior timeout's exact
 mechanism remains unconfirmed, so these passing runs do not establish its
 repair. No timeout, assertion, retry or quarantine is changed.
+
+The reproducible component tool is `test/EmbedIO.JsonResponseBenchmark`;
+its README records commands, source/binary hashes and measurement limits.
+Eighteen fresh in-memory processes in three alternating rounds validate every
+response byte. Median allocation changes from 19,424.5 to 11,008.4 B/request
+for a one-KiB input, 535,886.4 to 269,064.3 for 64 KiB and 8,401,737.5 to
+4,203,032.0 for one MiB. These include simulated-stream growth and response
+copies. The legacy callback is reconstructed with public APIs on the same
+core; this is not a baseline-package comparison or production network
+throughput result. Short CPU windows and clock quantization limit CPU claims.
