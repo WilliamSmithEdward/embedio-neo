@@ -244,7 +244,8 @@ internal static class ListenerHttp
                         string? listenerSocketError = null;
                         try
                         {
-                            if (Field(endpoint, "_sock") is System.Net.Sockets.Socket socket)
+                            if (endpoint.GetType().GetProperty("ListeningSocket", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint)
+                                is System.Net.Sockets.Socket socket)
                                 listenerReadable = socket.Poll(0, System.Net.Sockets.SelectMode.SelectRead);
                         }
                         catch (Exception error) when (error is System.Net.Sockets.SocketException or ObjectDisposedException)
@@ -261,32 +262,19 @@ internal static class ListenerHttp
                                 if (++sampled == 32) break;
                             }
                         }
-                        var pending = Field(endpoint, "_unregistered");
-                        var busy = false;
-                        if (pending != null)
+                        object?[] snapshotArguments = { null };
+                        var snapshot = endpoint.GetType().GetMethod("TryPendingConnections", BindingFlags.Instance | BindingFlags.NonPublic)
+                            ?? throw new InvalidOperationException("Missing endpoint pending-session diagnostics.");
+                        var busy = snapshot.Invoke(endpoint, snapshotArguments) is not true;
+                        if (!busy && snapshotArguments[0] is Array items)
                         {
-                            var entered = false;
-                            try
-                            {
-                                entered = Monitor.TryEnter(pending, TimeSpan.FromMilliseconds(5));
-                                if (entered && pending is System.Collections.IEnumerable items)
-                                {
-                                    pendingCount = (int?)items.GetType().GetProperty("Count")?.GetValue(items);
-                                    var sampled = 0;
-                                    foreach (var connection in items)
-                                    {
-                                        if (connection != null) connections.Add(connection);
-                                        if (++sampled == 32) break;
-                                    }
-                                }
-                                busy = !entered;
-                            }
-                            finally { if (entered) Monitor.Exit(pending); }
+                            pendingCount = items.Length;
+                            foreach (var connection in items.Cast<object>().Take(32)) connections.Add(connection);
                         }
                         endpoints.Add(new
                         {
                             worker = (Field(endpoint, "_acceptWorker") as Task)?.Status.ToString(),
-                            admissionStopped = Field(endpoint, "_acceptingStopped"),
+                            admissionStopped = endpoint.GetType().GetProperty("AdmissionStopped", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint),
                             pendingRegistryBusy = busy,
                             registeredConnections = registeredCount,
                             pendingConnections = pendingCount,

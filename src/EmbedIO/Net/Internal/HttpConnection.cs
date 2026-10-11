@@ -121,7 +121,7 @@ namespace EmbedIO.Net.Internal
                     }
                     return;
                 }
-                await OnReadInternal(selection.Count, selection.Buffered).ConfigureAwait(false);
+                await RunHttp1Async(selection.Count, selection.Buffered).ConfigureAwait(false);
             }
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
@@ -273,6 +273,13 @@ namespace EmbedIO.Net.Internal
             if (!forceClose && Interlocked.Exchange(ref _responseFinishing, 1) != 0) return;
             if (_sock != null)
             {
+                // Normal empty/HEAD responses must emit their final head even when
+                // an application never asks for OutputStream. Abort and upgrade
+                // cleanup do not manufacture another HTTP response.
+                if (_oStream == null && !forceClose && Volatile.Read(ref _forceClosing) == 0 && !_tunnel
+                    && _context.Response.StatusCode >= 200
+                    && (_context.HttpListenerResponse.SuppressesBody || HasEmptyResponseLength()))
+                    _oStream ??= GetResponseStream();
                 // Dispose may call Response.Close recursively. A forced close is
                 // recorded first so that callback cannot restart the request reader.
                 _oStream?.Dispose();
@@ -283,51 +290,21 @@ namespace EmbedIO.Net.Internal
             if (!_tunnel && !_draining && Volatile.Read(ref _forceClosing) == 0 && _context.Request.KeepAlive
                 && _context.Response.KeepAlive && _context.Response.Headers["connection"] != "close")
             {
-                _ = CompleteResponseAsync();
+                EndResponse(true);
                 return;
             }
             CloseTransport(true);
         }
 
-        private async Task CompleteResponseAsync()
+        private bool HasEmptyResponseLength()
         {
-            try
-            {
-                if (!await _context.HttpListenerRequest.FlushInputAsync().ConfigureAwait(false))
-                {
-                    CloseTransport(true);
-                    return;
-                }
-                RestartRequest();
-            }
-            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { CloseTransport(true); }
+            var length = _context.Response.Headers[HttpHeaderNames.ContentLength];
+            if (length == null) return true;
+            if (length.Length == 0) return false;
+            foreach (var digit in length) if (digit != '0') return false;
+            return true;
         }
 
-        private void RestartRequest()
-        {
-            var restart = false;
-            lock (_connectionSync)
-            {
-                if (_sock != null && _resourcesDisposed == 0 && _forceClosing == 0 && !_draining)
-                {
-                    var pending = _iStream != null ? _iStream.BufferedRemainder : _pendingInput;
-                    // Keep the initial-request marker distinct even on long-lived connections.
-                    if (Reuses < int.MaxValue) Reuses++;
-                    Unbind();
-                    InitWithPendingInput(pending);
-                    restart = true;
-                }
-            }
-            // RegisterContext acquires the listener lock; do not enter the
-            // request reader while holding a connection lock.
-            if (restart)
-            {
-                _ = BeginReadRequest();
-                return;
-            }
-
-            CloseTransport(true);
-        }
         [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_context))]
         private void Init() => InitWithPendingInput(default);
 
@@ -343,6 +320,7 @@ namespace EmbedIO.Net.Internal
             _pendingInput = pending;
             _headReader.Reset();
             _responseFinishing = 0;
+            ResetResponseCompletion();
             _errorMessage = null;
             _context = new HttpListenerContext(this);
         }
@@ -350,81 +328,6 @@ namespace EmbedIO.Net.Internal
         private void OnTimeout(object? unused)
         {
             CloseSocket();
-        }
-
-        private async Task OnReadInternal(int offset, bool bufferedInput = false)
-        {
-            // Keep the header deadline active through every fragmented read.
-            // Continue reading until full header is received.
-            // Especially important for multipart requests when the second part of the header arrives after a tiny delay
-            // because the web browser has to measure the content length first.
-            while (true)
-            {
-                var buffer = _buffer;
-                if (buffer == null) { CloseSocket(); return; }
-                var input = bufferedInput ? _pendingInput : new ArraySegment<byte>(buffer, 0, offset);
-
-                if (offset == 0 && !bufferedInput)
-                {
-                    CloseSocket();
-                    return;
-                }
-
-                bufferedInput = false;
-                if (ProcessInput(input))
-                {
-                    if (_errorMessage is null)
-                    {
-                        _context.HttpListenerRequest.FinishInitialization();
-                    }
-
-                    if (_errorMessage != null)
-                    {
-                        // Keep the existing request deadline active through this bounded write.
-                        // Never reflect untrusted parser diagnostics or restart this connection.
-                        try
-                        {
-                            var response = _headReader.ErrorStatusCode switch
-                            {
-                                414 => UriTooLongResponse,
-                                431 => HeaderFieldsTooLargeResponse,
-                                _ => BadRequestResponse,
-                            };
-                            await Stream.WriteAsync(response, 0, response.Length).ConfigureAwait(false);
-                        }
-                        finally { Close(true); }
-                        return;
-                    }
-
-                    if (_context.HttpListenerRequest.RequiresContinue)
-                        await Stream.WriteAsync(ContinueResponse, 0, ContinueResponse.Length).ConfigureAwait(false);
-
-                    StopRequestTimer();
-                    if (!_epl.BindContext(_context))
-                    {
-                        Close(true);
-                        return;
-                    }
-
-                    var listener = _context.Listener ?? throw new InvalidOperationException("The request has not been bound to a listener.");
-                    lock (_connectionSync)
-                    {
-                        if (_sock == null || _resourcesDisposed != 0 || _draining || _forceClosing != 0)
-                            throw new IOException("Connection stopped before request admission.");
-                        if (_lastListener != listener)
-                        {
-                            RemoveConnection();
-                            listener.AddConnection(this);
-                            _lastListener = listener;
-                        }
-                        _contextBound = true;
-                    }
-                    listener.RegisterContext(_context);
-                    return;
-                }
-
-                offset = await Stream.ReadAsync(_buffer ?? throw new InvalidOperationException("The read buffer has been released."), 0, BufferSize).ConfigureAwait(false);
-            }
         }
 
         private void RemoveConnection()
@@ -498,6 +401,7 @@ namespace EmbedIO.Net.Internal
             {
                 socket = _sock;
                 _sock = null;
+                EndResponse(false);
                 protocolStop = _http2Stop?.Value;
                 protocolListeners = _http2Listeners == null ? Array.Empty<HttpListener>() : new List<HttpListener>(_http2Listeners.Keys).ToArray();
                 _http2Listeners?.Clear();
@@ -533,6 +437,7 @@ namespace EmbedIO.Net.Internal
             {
                 if (_resourcesDisposed != 0) return;
                 _resourcesDisposed = 1;
+                EndResponse(false);
                 input = _iStream;
                 _pendingInput = default;
                 _iStream = null;

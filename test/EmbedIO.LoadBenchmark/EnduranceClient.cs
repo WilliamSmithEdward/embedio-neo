@@ -167,7 +167,9 @@ internal sealed class WorkloadStats(Workload workload)
     {
         lock (_gate)
         {
-            if (disrupted)
+            if (disrupted && exception is not InvalidDataException
+                && exception is IOException or SocketException or HttpRequestException
+                    or WebSocketException or AuthenticationException or OperationCanceledException or TimeoutException)
             {
                 _disrupted++;
                 _intervalDisrupted++;
@@ -975,7 +977,11 @@ internal static class Workers
                 {
                     if (received == buffer.Length) throw new InvalidDataException("Echo longer than the message sent.");
                     result = await socket.ReceiveAsync(buffer.AsMemory(received), run.Token).ConfigureAwait(false);
-                    if (result.MessageType == WebSocketMessageType.Close) throw new InvalidDataException("Server closed during an echo: " + socket.CloseStatus + " " + socket.CloseStatusDescription);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        if (run.Disrupted) throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely, "Server closed during the planned disruption.");
+                        throw new InvalidDataException("Server closed during an echo: " + socket.CloseStatus + " " + socket.CloseStatusDescription);
+                    }
                     received += result.Count;
                 }
                 while (!result.EndOfMessage);
@@ -985,7 +991,11 @@ internal static class Workers
             }
 
             await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", run.Token).ConfigureAwait(false);
-            if (socket.CloseStatus != WebSocketCloseStatus.NormalClosure) throw new InvalidDataException("Unexpected close status " + socket.CloseStatus);
+            if (socket.CloseStatus != WebSocketCloseStatus.NormalClosure)
+            {
+                if (run.Disrupted) throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely, "Server closed during the planned disruption.");
+                throw new InvalidDataException("Unexpected close status " + socket.CloseStatus);
+            }
             if (!hold) stats.Completed(Stopwatch.GetTimestamp() - started, 0);
         }
     }

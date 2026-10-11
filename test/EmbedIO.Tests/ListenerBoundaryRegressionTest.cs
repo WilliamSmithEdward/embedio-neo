@@ -183,9 +183,10 @@ namespace EmbedIO.Tests
             const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
             var endpoint = RuntimeHelpers.GetUninitializedObject((endpointType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
             ((endpointType).GetField("<Listener>k__BackingField", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, fixture.Listener);
-            ((endpointType).GetField("_sock", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, socket);
+            var admissionField = endpointType.GetField("_admission", fields) ?? throw new AssertionException("Missing endpoint admission owner.");
+            admissionField.SetValue(endpoint, Activator.CreateInstance(admissionField.FieldType, fields, null, new object[] { socket }, null));
             ((endpointType).GetField("_endpoint", fields) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, socket.LocalEndPoint);
-            foreach (var name in new[] { "_routes", "_unregistered" })
+            foreach (var name in new[] { "_routes" })
             {
                 var field = endpointType.GetField(name, fields);
                 (field ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(endpoint, Activator.CreateInstance(field.FieldType));

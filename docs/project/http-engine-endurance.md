@@ -80,7 +80,8 @@ After two warm-up snapshots the least-squares slope is about +63 MiB/hour of pri
 bytes, steady across the whole run (before and after the host contention described
 below) and not released by 48 drain-and-replace cycles. The managed heap, GC
 committed memory, handles, threads, thread-pool threads and timers stay bounded,
-so this is neither managed retention nor leaked sockets or handles. Growth occurs
+so the measured growth is outside the observed managed heap. Flat handle counts
+do not identify the native allocation owner or exclude leaked native state. Growth occurs
 under the steady mix alone (quiesced private bytes rose from 570.9 to 589.0 MiB across
 the final 10-minute steady phase).
 
@@ -104,8 +105,9 @@ every small-request stall above 2 s (up to 15 s, on all five protocols at the sa
 moment), occurred in the first ~5 hours, while the host was CPU-saturated: in the
 worst windows the server used all 8 of its CPUs (140 CPU-seconds in a 17 s sampling
 gap) with the machine at 21 of 24 busy. See [host contention](#host-contention).
-None occurred in the remaining cycles. Treat these as overload effects of this host
-unless they recur on a quiet one.
+None occurred in the remaining cycles. This is an observed correlation with host
+load; a quiet-host control is still needed to distinguish contention from engine
+or runtime limits.
 
 ### 3. TCP connects unanswered for 21 s after drain-and-replace — open
 
@@ -142,7 +144,7 @@ connection. Over 8 hours: 15.2 million `IOException`, 5.5 million
 `OperationCanceledException`, 3.5 million `QuicException`, 3.3 million
 `TaskCanceledException`. This is CPU cost, not a correctness failure.
 
-### Not defects
+### Observed healthy outcomes
 
 - Health checks after every phase passed (34/34); quiesce never stalled.
 - Drain/replace under load completed with zero in flight and zero requests served by
@@ -156,7 +158,8 @@ connection. Over 8 hours: 15.2 million `IOException`, 5.5 million
 For the same workload, server CPU per request was about 4× higher and client CPU per
 request 3–5× higher in the first ~5 hours (cycles 1–10) than afterwards, with an
 abrupt change after cycle 10. The client never loads EmbedIO, so the change is
-host-wide (Hyper-V contention from other activity), not an engine effect. Throughput
+consistent with host-wide contention, but does not establish its cause or exclude
+engine/runtime limits. Throughput
 targets were paced, so achieved rates were lower during contention. Results from
 those hours are kept and reported, not removed.
 
@@ -187,3 +190,18 @@ those hours are kept and reported, not removed.
    under HTTP/1.1 connect churn only.
 4. Repeat a shorter mixed run on a quiet host to confirm the HTTP/3 handshake
    timeouts are contention-only.
+
+## Integration review
+
+The campaign figures above remain historical evidence for the named tested SHA.
+The current harness also fails a step when a retired listener reports a drain or
+server-run error, rejects missing drain reports, and fails the campaign when the
+server exits unsuccessfully. A healthy replacement cannot erase an earlier drain
+failure. No new measured endurance campaign is implied by these tooling changes.
+Remaining investigations are tracked separately in issues #278 through #283.
+
+The original classifier counted all exceptions in planned disruption windows as
+disrupted outcomes, so its historical zero reported validation failures do not
+prove that no validation exception occurred inside those windows. The reviewed
+classifier exempts only expected transport/cancellation failures; detected byte,
+status, version and framing mismatches remain errors during replacement too.

@@ -7636,3 +7636,83 @@ adapters still require independent replacements.
 The existing body/header allocation, wire-allocation and HTTP/HTTPS terminal
 cleanup verification modes also pass with the corrected compatibility fixtures.
 Their budgets and assertions are unchanged.
+
+### Independent TCP endpoint ownership coordinator
+
+`TcpEndpointListener` replaces the inherited endpoint coordinator while
+retaining its internal type contract. Routing stays in the independently
+written `EndpointRoutes`; socket admission and pending sessions belong to
+`TcpEndpointAdmission`. Its single gate makes session construction/publication
+and the stop snapshot one ownership boundary. TLS authentication and request
+handling begin after that gate is released. Shutdown seals admission, releases
+the listening socket, and closes the detached pending-session snapshot outside
+the gate. A recoverable cleanup failure cannot skip the remaining sessions;
+the first failure retains its exception type and original location.
+
+Shared endpoint routing and drain exclusivity remain unchanged. The existing
+macOS IPv6 blocking-accept workaround is retained, and both accept workers have
+an observed failure path. Timeout diagnostics use a nonblocking pending-session
+snapshot instead of enumerating the retired private collection. The retained
+lifecycle and queued-accept fixtures use the new owner without removing their
+resource, ordering, timer, restart or deadline assertions.
+
+Two new plain/TLS cases hold 32 idle or handshake peers, verify that every
+accepted session has an owner, stop and assert that all timers and transports
+are released, then verify a healthy response after restart. Their initial
+restart response omitted the explicit output write used by other low-level
+listener fixtures and timed out; the corrected fixture starts its response
+writer before close. Implicit finalization by low-level close remains a
+separate HTTP/1 session/output review item, not a repaired endpoint defect.
+
+The corrected focused ownership/routing/drain set passes 177/177. Complete
+Windows coverage reports 4,620 cases: 4,613 passed, seven expected skips and
+zero failures in 3m25s, with the required independent datagram peer enabled.
+Both targets build without warnings; formatting and source guards pass. The
+actual netstandard2.0 core asset passes 137 focused cases on the installed
+.NET 10 runtime. All ten existing allocation and HTTP/HTTPS cleanup modes pass
+with unchanged budgets. Discovery minimums are reconciled to 4,620.
+
+This is an ownership implementation replacement, not a measured speedup.
+Cross-platform final-head checks remain required. Registration/prefix handling,
+the HTTP/1 session and response output, and inherited application adapters
+remain under replacement; this component alone does not complete Mono removal.
+### Independent HTTP/1 request cycle
+
+The connection now runs one sequential HTTP/1 actor instead of recursively
+starting a new request reader from response completion. The actor owns head
+admission, response completion, unread-body drain and the next-request boundary.
+Initial TLS/HTTP/2 selection runs once; keep-alive requests read directly through
+the selected HTTP/1 transport. Existing first-head and idle-head deadlines,
+strict incoming framing, buffered body/pipeline/upgrade bytes, listener ownership
+and shared-protocol drain remain supported.
+
+The modern target uses a per-connection reusable response-completion signal;
+the retained asset uses a lazy task fallback. Continuations run outside the
+connection gate. The signal is consumed before the next request resets it,
+and a regression crosses the complete 16-bit token space while exercising real
+continuations and duplicate stop signals. The actor yields periodically instead
+of letting an already-buffered pipeline monopolize its worker.
+
+Four ordinary HTTP/HTTPS cases first failed because low-level Close did not
+send the final head of an empty or HEAD response when OutputStream was never
+accessed. Normal valid empty/HEAD completion now creates and closes the writer;
+abort and upgrade cleanup do not manufacture another response. The cases verify
+empty response bytes, HEAD representation length, same-connection successor
+alignment and rejection of stale output access after that successor is admitted.
+Malformed outgoing framing is a separately approved response-writer work item;
+this actor change does not claim to complete that correction.
+
+The final focused set passes 211/211. Complete Windows coverage reports 4,625
+cases: 4,618 passed, seven expected skips and zero failures in 3m24s, with the
+required independent native datagram peer enabled. Both targets build without
+warnings; formatting and both source guards pass. The actual netstandard2.0
+asset reports 186 focused cases: 185 passed and one modern-signal-specific skip,
+hosted on the installed .NET 10 runtime. All ten existing allocation and
+HTTP/HTTPS cleanup verification modes pass with unchanged budgets. The final
+stale-output assertions also pass in four targeted modern cases and in the
+retained-asset set. Discovery minimums are reconciled to 4,625.
+
+No whole-server speedup or allocation improvement is claimed without a comparative
+measurement. Hosted final-head checks remain required. This replaces the request
+cycle, not all transport cleanup, response output or inherited application models;
+full Mono retirement remains in progress.
