@@ -43,6 +43,11 @@ namespace EmbedIO.Serialization
         public static string Serialize(object? data, JsonSerializerOptions options)
             => JsonSerializer.Serialize(data, options ?? throw new ArgumentNullException(nameof(options)));
 
+        // HTTP JSON already promises UTF-8; avoid a complete UTF-16 intermediate
+        // and the text writer's many small output writes for a large value.
+        internal static byte[] SerializeUtf8(object? data, JsonSerializerOptions? options)
+            => JsonSerializer.SerializeToUtf8Bytes(data, options ?? DefaultOptions);
+
         /// <summary>Deserializes untyped JSON to dictionaries, lists, and primitive values.</summary>
         public static object? Deserialize(string json) => Deserialize<object>(json);
 
