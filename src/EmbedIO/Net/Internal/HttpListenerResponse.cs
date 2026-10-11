@@ -158,6 +158,8 @@ namespace EmbedIO.Net.Internal
 
         internal bool IsHeadResponse => _request.HttpVerb == HttpVerbs.Head;
 
+        internal bool IsTunnelResponse => _tunnel;
+
         void IDisposable.Dispose() => Close(true);
 
         public void Close() => Close(false);
@@ -298,7 +300,9 @@ namespace EmbedIO.Net.Internal
             }
             else if (closing && _trailerNames == null)
             {
-                if (_request.HttpVerb != HttpVerbs.Head)
+                if (_request.HttpVerb != HttpVerbs.Head
+                    && (!long.TryParse(Headers[HttpHeaderNames.ContentLength], NumberStyles.Integer, CultureInfo.InvariantCulture, out var closingLength)
+                        || closingLength < 0))
                     Headers[HttpHeaderNames.ContentLength] = "0";
                 _chunked = false;
             }

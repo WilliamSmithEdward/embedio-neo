@@ -1,4 +1,4 @@
-﻿# Modern HTTP engine program
+# Modern HTTP engine program
 
 Release scope: William designated this modern engine program for **EmbedIO-Neo v2**
 on 2026-10-10. Maintain the [Neo v1 to v2 migration guide](../compatibility/neo-v1-to-v2.md)
@@ -7716,3 +7716,50 @@ No whole-server speedup or allocation improvement is claimed without a comparati
 measurement. Hosted final-head checks remain required. This replaces the request
 cycle, not all transport cleanup, response output or inherited application models;
 full Mono retirement remains in progress.
+### Independent HTTP/1 response output owner
+
+The response stream is independently authored around a borrowed transport and
+one gate for synchronous writes, asynchronous writes and completion. Its body
+limit is fixed when the final head is committed, and its counter advances only
+after the complete submission succeeds. Existing independently authored bounded
+batching and pooled-buffer clearing helpers are retained. Concurrent completion
+joins an admitted write and commits framing once; connection reuse requires that
+completion to have finished successfully.
+
+William approved enforcing the declared response-body length and closing
+incomplete or failed output rather than reusing its transport. A rejected excess
+write submits none of that write's bytes. An output failure, including a possibly
+partial submission or cancellation during transport output, sends no later
+remainder or terminating chunk. IgnoreWriteExceptions retains transport-error
+suppression while the framing state stays failed. Pre-cancelled/queued operations,
+valid exact and automatic/chunked responses, HEAD/bodyless metadata and negotiated
+carriers retain their contracts. The [Neo v1-to-v2 guide](../compatibility/neo-v1-to-v2.md#response-statuses-output-and-shutdown)
+and unreleased changelog record the approved application migration.
+
+Six initial contract cases and two bounded real incomplete-output cases failed
+against the previous writer. The candidate retains valid empty normalization for invalid raw length fields and adds partial-submission and concurrent
+completion coverage, and splits empty-response coverage into valid automatic
+framing and an incomplete explicitly declared body. Initial full validation
+identified an obsolete normalization expectation and a transport-suppression
+regression; both are corrected without weakening the retained failure checks.
+
+The earlier component run reported 4,643 cases: 4,636 passed, seven expected skips and
+zero failures in 3m28s, with the independent native datagram peer required. The
+focused modern set passes 116/116. The actual netstandard2.0 core, hosted on the
+installed .NET 10 runtime, reports 115 passed and one modern-only skip. Both
+library targets build without warnings, formatting and both source guards pass,
+and all ten existing allocation and HTTP/HTTPS cleanup gates pass unchanged.
+The component discovery minimum was 4,643. No comparative throughput improvement
+is claimed; exact-head hosted checks still precede integration.
+
+This removes the inherited response-output implementation, not all remaining
+connection, listener registration or request/response application-model code.
+Full inherited-listener retirement remains in progress, and program #181 stays
+open. No release or native-provider activation is implied.
+
+The reconciled source includes the current engine's additional idle-close cases.
+Its complete Windows SDK run reports 4,657 cases: 4,650 passed, seven expected
+skips and zero failures in 3m58s, requiring native QUIC and the independent
+datagram peer. The stable runner stages and hashes the exact build and peer
+fixture, then uses the SDK's aggregate discovery policy; the combined minimum
+remains 4,657. Both source guards and changed-source formatting pass.

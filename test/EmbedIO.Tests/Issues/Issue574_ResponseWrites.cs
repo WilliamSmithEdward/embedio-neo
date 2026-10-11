@@ -32,6 +32,7 @@ namespace EmbedIO.Tests.Issues
         public async Task BackpressuredWriteRemainsAsyncAndHonorsMidWriteCancellation()
         {
             using var fixture = await Fixture.Create(false, ignoreErrors: true);
+            fixture.Response.ContentLength64 = 1024 * 1024;
             fixture.Transport.BlockWrites = true;
             using var cancel = new CancellationTokenSource();
             var pending = fixture.Stream.WriteAsync(new byte[1024 * 1024], 0, 1024 * 1024, cancel.Token);
@@ -77,6 +78,7 @@ namespace EmbedIO.Tests.Issues
         public async Task AsyncTransportErrorsRespectIgnoreWriteExceptions(bool ignoreErrors)
         {
             using var fixture = await Fixture.Create(false, ignoreErrors);
+            fixture.Response.ContentLength64 = 8;
             fixture.Transport.Error = new IOException("controlled transport failure");
             var writing = fixture.Stream.WriteAsync(new byte[8], 0, 8);
             if (ignoreErrors) await writing;
@@ -169,7 +171,7 @@ namespace EmbedIO.Tests.Issues
         }
         [TestCase(false)]
         [TestCase(true)]
-        public async Task BoundedChunkCancellationReleasesTheWriterForASubsequentWrite(bool ignoreErrors)
+        public async Task BoundedChunkTransportCancellationRejectsLaterWrites(bool ignoreErrors)
         {
             using var fixture = await Fixture.Create(true, ignoreErrors);
             await fixture.Stream.WriteAsync(Array.Empty<byte>(), 0, 0);
@@ -189,9 +191,13 @@ namespace EmbedIO.Tests.Issues
                 fixture.Transport.BlockWrites = false;
                 fixture.Transport.ReleaseWrites.TrySetResult();
             }
-            await fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("OK"));
+            var submissions = fixture.Transport.AsyncWrites + fixture.Transport.SynchronousWrites;
+            if (ignoreErrors) await fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("OK"));
+            else await Assert.ThrowsAsync<IOException>(async () => await fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("OK")));
             fixture.Stream.Dispose();
-            Assert.That(Encoding.ASCII.GetString(fixture.Transport.ToArray()), Does.EndWith("\r\n\r\n2\r\nOK\r\n0\r\n\r\n"));
+            Assert.That(fixture.Transport.AsyncWrites + fixture.Transport.SynchronousWrites, Is.EqualTo(submissions));
+            Assert.That(Encoding.ASCII.GetString(fixture.Transport.ToArray()), Does.EndWith("\r\n\r\n"),
+                "The committed head is retained, but a failed chunk must never be completed with later payload or a terminator.");
         }
         internal sealed class Fixture : IDisposable
         {
@@ -245,6 +251,7 @@ namespace EmbedIO.Tests.Issues
             public int AsyncWrites { get; private set; }
             public bool BlockWrites { get; set; }
             public Exception? Error { get; set; }
+            public int PartialBytesBeforeError { get; set; }
             public TaskCompletionSource AsyncEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public TaskCompletionSource ReleaseWrites { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public override void Write(byte[] buffer, int offset, int count)
@@ -252,7 +259,11 @@ namespace EmbedIO.Tests.Issues
                 SynchronousWrites++;
                 // Fail immediately rather than risking a hung worker in the old fallback.
                 if (BlockWrites) throw new IOException("Synchronous I/O attempted under backpressure");
-                if (Error != null) throw Error;
+                if (Error != null)
+                {
+                    if (PartialBytesBeforeError > 0) base.Write(buffer, offset, Math.Min(count, PartialBytesBeforeError));
+                    throw Error;
+                }
                 base.Write(buffer, offset, count);
             }
             public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -260,7 +271,11 @@ namespace EmbedIO.Tests.Issues
                 AsyncWrites++;
                 AsyncEntered.TrySetResult();
                 if (BlockWrites) await ReleaseWrites.Task.WaitAsync(cancellationToken);
-                if (Error != null) throw Error;
+                if (Error != null)
+                {
+                    if (PartialBytesBeforeError > 0) base.Write(buffer, offset, Math.Min(count, PartialBytesBeforeError));
+                    throw Error;
+                }
                 cancellationToken.ThrowIfCancellationRequested();
                 base.Write(buffer, offset, count);
             }
