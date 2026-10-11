@@ -600,7 +600,7 @@ was executed. Both independent-peer datagram cases ran with the installed
 hash-locked aioquic peer. The measured floor is 4,487 existing cases plus 78
 reported native cases.
 
-CI now provisions Python 3.12.14 and the existing hash-locked peer requirements
+CI now provisions Python 3.14.6 and the existing hash-locked peer requirements
 in an isolated temporary environment on each desktop runner. Missing peer
 configuration is a failure when `EMBEDIO_REQUIRE_DATAGRAM_PEER=1`, so hosted
 interoperability cannot silently skip. After that guard change, all 36 focused
@@ -624,3 +624,11 @@ gates use this measured 4,599 count (engine 4,521 plus 78 reported native cases)
 Locked restore, both-target analyzer build, formatting and source guards pass.
 No production or test files changed after this full run; only the count and this
 evidence paragraph are updated. Fresh exact-head hosted acceptance is pending.
+
+The first hosted attempt on `3770069` stopped before regression execution on
+Windows/macOS because setup-python did not provide Python 3.12.14 for those
+platforms. Its completed logs are retained; this is not an engine-test failure.
+Peer provisioning is corrected to 3.14.6, whose official python-versions manifest
+provides Windows x64, Linux x64 and macOS arm64 builds. This also matches the
+recorded Apple Silicon peer environment. The action SHA and hash-locked
+dependencies, required-peer gate, assertions and suite budgets are unchanged.
