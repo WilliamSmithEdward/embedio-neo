@@ -8243,6 +8243,24 @@ passes on Windows and pinned Linux. The first peer attempt omitted its HTTP
 datagram setting and correctly received no echoes; its failed result is retained.
 Only the peer's public capability flag changed to advertise support on both ends.
 
+The corrected production source passes the full Windows suite: 4,710 reported,
+4,703 passed, seven expected skips and zero failures (3m51.773s). Its combined
+codec/datagram/application set passes 98/98 on Windows and pinned Linux. The
+first full attempt reported 27 codec fixture failures because a newly added
+span overload made name-only reflection ambiguous. The new helper now has a
+distinct name, preserving the original entry point and every original assertion;
+both failed and corrected log/TRX evidence are retained.
+
+The actual .NET Standard 2.0 core on a .NET 10 host reports 435 selected cases:
+369 pass, 66 expected unsupported-feature skips, zero failures (42.740s). This
+does not establish an older-CLR or native-datagram capability. Three existing
+native argument cases initially caught their own missing-provider skip inside
+Assert.Throws; capability detection now happens before the unchanged assertion.
+All 98 native-enabled cases still pass after that fixture correction. Both
+targets build warning-free, source guards pass, and the ten unchanged resource
+gates pass on the initial production candidate. Final exact-head hosted gates
+remain required before integration.
+
 The additive application surface, capsule fallback/selection contract,
 WebTransport integration, broader native performance/memory acceptance and
 exact-head platform/security checks remain unfinished. Program #181 remains open.
