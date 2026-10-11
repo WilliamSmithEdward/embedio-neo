@@ -136,6 +136,20 @@ Bodyless statuses and HEAD cannot emit representation bytes. Configure metadata
 before committing output; a 304 representation length must describe the selected
 representation rather than a body sent with that response.
 
+For HTTP/1 responses, declare Content-Length only when it matches the encoded
+bytes actually sent, including any transformation, or use automatic/chunked
+framing. The owner-approved output correction rejects a write exceeding that
+length with ProtocolViolationException before submitting those bytes. Closing
+with an incomplete declared body closes the connection; it no longer rewrites an
+explicit positive length to zero or permits another response on that connection.
+HEAD and bodyless representation metadata retain their separate semantics.
+
+A failed transport submission, including cancellation during output, prevents
+later body/footer bytes and connection reuse. IgnoreWriteExceptions continues to
+suppress managed transport-write exceptions; it cannot restore failed framing.
+Cancellation before obtaining the writer gate leaves otherwise healthy output
+usable. These changes belong to the unreleased v2 output replacement.
+
 Synchronous Dispose of managed HTTP/2 and HTTP/3 response output now starts
 closure without blocking a worker on network completion. Await application writes
 and keep the handler alive until its work finishes; context completion awaits
