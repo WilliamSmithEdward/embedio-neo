@@ -16,14 +16,21 @@ def run(timeout, minimum):
     if destination.exists():
         raise FileExistsError(f"Do not reuse earlier run evidence: {destination}")
     shutil.copytree(source, destination)
+    # MTP's negative --filter can hide a result without preventing NUnit
+    # execution. Use NUnit's execution-stage Where filter for both processes.
+    main_settings = destination / "main.runsettings"
+    quiet_settings = destination / "quiet.runsettings"
+    for settings, operator in ((main_settings, "!="), (quiet_settings, "==")):
+        with settings.open("x", encoding="utf-8") as stream:
+            stream.write(f"<RunSettings><NUnit><Where>test {operator} {QUIET_TEST}</Where></NUnit></RunSettings>")
     quiet_results = ROOT / "TestResults/tcp-quiet"
     quiet_log = ROOT / "TestResults/tcp-quiet.log"
     main_command = ["dotnet", "test", "--project", "test/EmbedIO.Tests/EmbedIO.Tests.csproj",
                     "-c", "Release", "--no-build", "--report-trx", "--results-directory", "TestResults",
                     "--timeout", timeout, "--minimum-expected-tests", str(minimum - 1), "--coverlet",
-                    "--filter", f"FullyQualifiedName!~{QUIET_TEST}"]
+                    "--settings", str(main_settings)]
     quiet_command = ["dotnet", str(destination / "EmbedIO.Tests.dll"),
-                     "--filter", f"FullyQualifiedName~{QUIET_TEST}", "--report-trx",
+                     "--settings", str(quiet_settings), "--report-trx",
                      "--results-directory", str(quiet_results), "--timeout", "2m",
                      "--minimum-expected-tests", "1", "--coverlet"]
     with quiet_log.open("xb") as log:

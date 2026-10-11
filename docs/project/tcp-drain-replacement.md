@@ -224,3 +224,25 @@ controls prove that quiet failure cannot enter the main-only quarantine path.
 Source/parser/format guards, YAML parsing, pinned offline zizmor and diff checks
 pass. The earlier failed hosted run remains recorded; fresh exact-head hosted
 checks are required before acceptance.
+
+A later final-head run (`9bcdc21`, CI 38114362964 attempt 1) again stopped at
+4,322 reported cases with no assertion failures; all eight churn cases and the
+independent quiet case passed. Comparing TRX timelines exposed a forty-second
+unreported gap immediately after the churn cases in the earlier passing run.
+The negative MTP result filter excluded the quiet result but did not remove its
+execution. The first split's complete counts therefore did not establish that
+serialized quiet work had been removed.
+
+The runner now uses NUnit's documented `Where` execution filter in separate
+runsettings files: the main process excludes exactly the quiet test, and the
+copied process selects exactly that test. A focused eight-case native-filter
+proof completed in 1.6 seconds without the quiet delay. Counts, coverage, failure
+propagation and deadlines are unchanged. The original failed artifacts and the
+single unchanged diagnostic rerun remain preserved; final corrected-source
+validation is required. See [NUnit test selection documentation](https://docs.nunit.org/articles/nunit/running-tests/Test-Selection-Language.html).
+
+Corrected-filter local coverage validation passed 4,647 main cases (4,638 passed,
+nine explicit skips) in 4 minutes 42 seconds, plus one independently passed quiet
+case in 40 seconds. Neither process failed. Both coverage outputs exist; copied,
+main and source core DLL bytes match after restoration. Final hosted checks on
+the corrected source remain required.
