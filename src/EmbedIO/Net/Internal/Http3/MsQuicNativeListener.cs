@@ -26,20 +26,18 @@ namespace EmbedIO.Net.Internal.Http3
             private delegate uint StartListener(IntPtr listener, IntPtr alpn, uint count, IntPtr address);
             [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
             internal delegate void StopListener(IntPtr listener);
-            [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-            private delegate uint GetParameter(IntPtr handle, uint parameter, ref uint size, IntPtr buffer);
             internal readonly OpenListener Open;
             internal readonly CloseListener Close;
             internal readonly StopListener Stop;
             private readonly StartListener _start;
-            private readonly GetParameter _get;
+            private readonly MsQuicAddress.GetParameter _get;
             internal ListenerFunctions(IntPtr table)
             {
                 Open = Marshal.GetDelegateForFunctionPointer<OpenListener>(Marshal.ReadIntPtr(table, 11 * IntPtr.Size));
                 Close = Marshal.GetDelegateForFunctionPointer<CloseListener>(Marshal.ReadIntPtr(table, 12 * IntPtr.Size));
                 _start = Marshal.GetDelegateForFunctionPointer<StartListener>(Marshal.ReadIntPtr(table, 13 * IntPtr.Size));
                 Stop = Marshal.GetDelegateForFunctionPointer<StopListener>(Marshal.ReadIntPtr(table, 14 * IntPtr.Size));
-                _get = Marshal.GetDelegateForFunctionPointer<GetParameter>(Marshal.ReadIntPtr(table, 4 * IntPtr.Size));
+                _get = Marshal.GetDelegateForFunctionPointer<MsQuicAddress.GetParameter>(Marshal.ReadIntPtr(table, 4 * IntPtr.Size));
             }
             internal void Start(IntPtr listener, IPEndPoint endpoint, byte[] alpn)
             {
@@ -74,23 +72,7 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
             internal IPEndPoint LocalEndPoint(IntPtr listener)
-            {
-                var buffer = Marshal.AllocHGlobal(28);
-                try
-                {
-                    uint size = 28;
-                    var status = _get(listener, 0x04000000, ref size, buffer);
-                    if (MsQuicApi.Failed(status) || size > 28 || size < 16) throw new IOException("MsQuic listener address query failed.");
-                    var address = new byte[28]; Marshal.Copy(buffer, address, 0, (int)size);
-                    var family = OperatingSystem.IsMacOS() ? address[1] : BitConverter.ToUInt16(address, 0);
-                    var port = (address[2] << 8) | address[3];
-                    if (family == 2) return new IPEndPoint(new IPAddress(address.AsSpan(4, 4)), port);
-                    var expected = OperatingSystem.IsWindows() ? 23 : OperatingSystem.IsMacOS() ? 30 : 10;
-                    if (family != expected || size < 28) throw new IOException("MsQuic returned an invalid listener address family.");
-                    return new IPEndPoint(new IPAddress(address.AsSpan(8, 16), BitConverter.ToUInt32(address, 24)), port);
-                }
-                finally { Marshal.FreeHGlobal(buffer); }
-            }
+                => MsQuicAddress.Read(_get, listener, 0x04000000);
         }
         internal MsQuicNativeListener CreateListener(MsQuicRegistration registration)
         {

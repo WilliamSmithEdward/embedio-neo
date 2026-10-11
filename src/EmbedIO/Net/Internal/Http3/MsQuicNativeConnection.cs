@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,10 +38,12 @@ namespace EmbedIO.Net.Internal.Http3
             internal readonly ShutdownStream StreamShutdown;
             internal readonly StreamFunctions Streams;
             internal readonly DatagramFunctions Datagrams;
+            private readonly MsQuicAddress.GetParameter _get;
             internal ConnectionFunctions(IntPtr table, StreamFunctions streams)
             {
                 Streams = streams;
                 Datagrams = new DatagramFunctions(table);
+                _get = Marshal.GetDelegateForFunctionPointer<MsQuicAddress.GetParameter>(Marshal.ReadIntPtr(table, 4 * IntPtr.Size));
                 SetHandler = Marshal.GetDelegateForFunctionPointer<SetCallback>(Marshal.ReadIntPtr(table, 2 * IntPtr.Size));
                 Close = Marshal.GetDelegateForFunctionPointer<CloseConnection>(Marshal.ReadIntPtr(table, 16 * IntPtr.Size));
                 Shutdown = Marshal.GetDelegateForFunctionPointer<ShutdownConnection>(Marshal.ReadIntPtr(table, 17 * IntPtr.Size));
@@ -48,6 +51,7 @@ namespace EmbedIO.Net.Internal.Http3
                 StreamClose = Marshal.GetDelegateForFunctionPointer<CloseStream>(Marshal.ReadIntPtr(table, 22 * IntPtr.Size));
                 StreamShutdown = Marshal.GetDelegateForFunctionPointer<ShutdownStream>(Marshal.ReadIntPtr(table, 24 * IntPtr.Size));
             }
+            internal IPEndPoint EndPoint(IntPtr connection, uint parameter) => MsQuicAddress.Read(_get, connection, parameter);
         }
         internal MsQuicNativeConnection AcceptConnection(MsQuicRegistration registration, IntPtr connection)
             => MsQuicNativeConnection.Accept(registration, connection, _connectionFunctions);
@@ -239,6 +243,15 @@ namespace EmbedIO.Net.Internal.Http3
             finally { if (retained) registration.DangerousRelease(); }
         }
         internal Task Connected => _signals.Connected.Task;
+        internal IPEndPoint LocalEndPoint => QueryEndPoint(0x05000001);
+        internal IPEndPoint RemoteEndPoint => QueryEndPoint(0x05000002);
+        private IPEndPoint QueryEndPoint(uint parameter)
+        {
+            var retained = false;
+            DangerousAddRef(ref retained);
+            try { return _functions.EndPoint(handle, parameter); }
+            finally { if (retained) DangerousRelease(); }
+        }
         internal void Configure(MsQuicConfiguration configuration)
         {
             if (configuration == null) throw new ArgumentNullException(nameof(configuration));
