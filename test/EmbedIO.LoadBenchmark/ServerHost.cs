@@ -253,7 +253,9 @@ internal sealed class RuntimeEventProfile : EventListener
         return new
         {
             note = "AllocationTick events sample roughly every 100 KB per heap; amounts are sampled totals, not exact.",
-            sampledAllocationBytesByType = _allocations.OrderByDescending(pair => pair.Value).Take(30).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
+            // Keep every sampled type: a per-request object of a few dozen bytes sits far
+            // below the largest thirty types yet is exactly what a before/after diff needs.
+            sampledAllocationBytesByType = _allocations.OrderByDescending(pair => pair.Value).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
             exceptionsByType = _exceptions.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
             contentions = Interlocked.Read(ref _contentions),
             contentionMilliseconds = _contentionNanoseconds / 1_000_000,
