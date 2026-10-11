@@ -133,9 +133,18 @@ namespace EmbedIO
 
             exception.Log(logSource, $"[{context.Id}] HTTP exception {httpException.StatusCode}");
 
+            if (EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
+            {
+                // A committed status cannot become this exception's status; end the
+                // response visibly instead of terminating the partial body cleanly.
+                $"[{context.Id}] The response was already committed; aborting it instead of sending HTTP exception {httpException.StatusCode}.".Warn(logSource);
+                await EmbedIO.Internal.ResponseCommitment.AbortAsync(context, exception).ConfigureAwait(false);
+                return;
+            }
+
             try
             {
-                context.Response.SetEmptyResponse(httpException.StatusCode);
+                context.Response.PrepareReplacement(httpException.StatusCode);
                 context.Response.DisableCaching();
                 httpException.PrepareResponse(context);
                 await handler(context, httpException)

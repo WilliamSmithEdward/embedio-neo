@@ -129,6 +129,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Endpoint configuration](user-reports/endpoint-configuration.md): explicit binding, prefix paths, shared ports and certificate ownership.
 
 - [Streaming write errors](user-reports/streaming-write-errors.md): error policy, reverse proxies, compression and buffering.
+- [Deferred responses](user-reports/deferred-responses.md): the commitment contract, replaceable error responses and dispose-on-success buffering.
 - [Fluent Basic authentication](user-reports/fluent-basic-authentication.md): scoped registration, configuration and preserved authentication behavior.
 - [Context and persistent client banning](user-reports/context-client-banning.md): live controls, CIDR policies and optional restart persistence.
 

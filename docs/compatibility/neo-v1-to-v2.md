@@ -160,6 +160,18 @@ suppress managed transport-write exceptions; it cannot restore failed framing.
 Cancellation before obtaining the writer gate leaves otherwise healthy output
 usable. These changes belong to the unreleased v2 output replacement.
 
+Exception handlers now run only while the response is replaceable, that is,
+before its final headers reach the wire, and they start from a response whose
+Content-Length, Content-Encoding, Content-Range, ETag and chunked framing from
+the failed handler have been removed. An exception thrown after a committed
+write no longer invokes `OnUnhandledException` or `OnHttpException`; the engine
+closes an HTTP/1 body without its final chunk or short of its declared length,
+and resets an HTTP/2 or HTTP/3 stream, so the client sees an incomplete response
+instead of a truncated body framed as complete. Applications that need an error
+page for a failing body should produce the body before the first write; see
+[deferred responses](../user-reports/deferred-responses.md). This correction is
+on the engine development branch and is unreleased.
+
 Synchronous Dispose of managed HTTP/2 and HTTP/3 response output now starts
 closure without blocking a worker on network completion. Await application writes
 and keep the handler alive until its work finishes; context completion awaits
