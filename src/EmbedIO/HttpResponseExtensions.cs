@@ -26,7 +26,7 @@ namespace EmbedIO
             if (cookie == null) throw new ArgumentNullException(nameof(cookie));
             CookieSameSiteStore.ValidateMode(sameSite, nameof(sameSite));
             CookieSameSiteStore.ValidateCookie(cookie, sameSite);
-            if (@this is not EmbedIO.Net.Internal.HttpListenerResponse && @this is not SystemHttpResponse)
+            if (@this is not EmbedIO.Net.Internal.HttpListenerResponse)
                 throw new NotSupportedException("SameSite cookie metadata requires a built-in listener response.");
             @this.SetCookie(cookie);
             CookieSameSiteStore.Attach(@this, cookie, sameSite);
