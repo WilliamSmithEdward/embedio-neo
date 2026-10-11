@@ -543,8 +543,25 @@ internal sealed class ChildProcess
 
     internal bool HasExited => _process.HasExited;
 
+    // A read that timed out stays pending on the reader, so the control channel cannot be
+    // reused: later requests fail with this explicit error instead of the reader's
+    // "stream in use", and a late reply is never mistaken for the next response.
     internal async Task<string?> ReadLineAsync(TimeSpan timeout)
-        => await _process.StandardOutput.ReadLineAsync().WaitAsync(timeout).ConfigureAwait(false);
+    {
+        if (_timedOut is { } previous)
+            throw new TimeoutException("The child stopped answering its control channel (" + previous + ").");
+        try
+        {
+            return await _process.StandardOutput.ReadLineAsync().WaitAsync(timeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            _timedOut = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            throw;
+        }
+    }
+
+    private string? _timedOut;
 
     internal async Task<string?> RequestAsync(string command, TimeSpan timeout)
     {

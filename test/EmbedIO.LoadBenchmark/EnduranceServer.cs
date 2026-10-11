@@ -50,6 +50,9 @@ internal static class EnduranceServer
             runtime = RuntimeInformation.FrameworkDescription,
             quicSupported = System.Net.Quic.QuicListener.IsSupported,
             assemblies = AssemblyIdentity.Describe(typeof(WebServer).Assembly, typeof(System.Net.Quic.QuicListener).Assembly),
+            // The MsQuic module actually loaded, which differs from the runtime directory's
+            // copy when System.Net.Quic.AppLocalMsQuic selects an application-local build.
+            msquic = LoadedModule("msquic.dll"),
         }));
 
         while (true)
@@ -87,6 +90,24 @@ internal static class EnduranceServer
                     throw new InvalidOperationException("Unknown endurance server command: " + command);
             }
         }
+    }
+
+    private static object? LoadedModule(string name)
+    {
+        using var process = Process.GetCurrentProcess();
+        foreach (ProcessModule module in process.Modules)
+        {
+            if (!string.Equals(module.ModuleName, name, StringComparison.OrdinalIgnoreCase)) continue;
+            var path = module.FileName;
+            return new
+            {
+                path,
+                fileVersion = module.FileVersionInfo.FileVersion,
+                sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),
+            };
+        }
+
+        return null;
     }
 }
 
@@ -520,6 +541,8 @@ internal sealed class EnduranceSampler : IAsyncDisposable
             serverTcp = sockets,
             availablePhysicalBytes = GuestMemory.AvailablePhysicalBytes(),
             machineBusyCpuSeconds = SystemCpu.BusyTime().TotalSeconds,
+            // Only quiesced snapshots walk the process heaps; periodic samples stay cheap.
+            nativeHeaps = forced ? NativeHeaps.Summarize() : null,
         };
     }
 
@@ -588,5 +611,143 @@ internal static class GuestMemory
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool GlobalMemoryStatusEx(ref MemoryStatus status);
+    }
+}
+
+// Allocated versus committed bytes of every Win32 heap in the process (HeapSummary).
+// Committed memory the GC does not own but a heap holds as free space is allocator
+// retention; growth in allocated bytes is live native state. No contents are read.
+internal static class NativeHeaps
+{
+    internal static object? Summarize()
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        var count = NativeMethods.GetProcessHeaps(0, null);
+        var handles = new IntPtr[count + 16];
+        count = NativeMethods.GetProcessHeaps((uint)handles.Length, handles);
+        if (count == 0 || count > handles.Length) return null;
+        var defaultHeap = NativeMethods.GetProcessHeap();
+        var heaps = new List<HeapRow>();
+        for (var i = 0; i < count; i++)
+        {
+            var summary = new NativeMethods.HeapSummaryData { Size = (uint)Marshal.SizeOf<NativeMethods.HeapSummaryData>() };
+            if (!NativeMethods.HeapSummary(handles[i], 0, ref summary)) continue;
+            heaps.Add(new HeapRow(handles[i] == defaultHeap, (long)summary.Allocated, (long)summary.Committed, (long)summary.Reserved));
+        }
+
+        return new
+        {
+            count = heaps.Count,
+            allocatedBytes = heaps.Sum(heap => heap.AllocatedBytes),
+            committedBytes = heaps.Sum(heap => heap.CommittedBytes),
+            largest = heaps.OrderByDescending(heap => heap.CommittedBytes).Take(6).ToArray(),
+            defaultHeapBlocks = BusyBlockSizes(defaultHeap),
+        };
+    }
+
+    // Busy-block counts by size in one heap, largest totals first. A size whose count grows
+    // with traffic across quiesced snapshots fingerprints the retained allocation; block
+    // contents are never read. Only quiesced snapshots call this.
+    private static object[]? BusyBlockSizes(IntPtr heap)
+        => WalkBusyBlocks(heap) is { } sizes
+            ? [.. sizes.OrderByDescending(pair => pair.Key * pair.Value).Take(80)
+                .Select(pair => (object)new long[] { pair.Key, pair.Value })]
+            : null;
+
+    internal static long DefaultHeapBusyBlocks(uint size)
+        => WalkBusyBlocks(NativeMethods.GetProcessHeap()) is { } sizes ? sizes.GetValueOrDefault(size) : -1;
+
+    // The walk holds the heap lock. If a GC suspended this thread meanwhile and the runtime
+    // needed the same heap during that GC, the process would deadlock; one quiesced
+    // snapshot stalled every managed thread that way. No GC may start during the walk, so
+    // it runs inside a no-GC region with a pre-sized table, and is skipped (null) when the
+    // region cannot be entered. Another thread allocating past the budget would still end
+    // the region, which is why only quiesced snapshots walk.
+    private static Dictionary<uint, long>? WalkBusyBlocks(IntPtr heap)
+    {
+        var sizes = new Dictionary<uint, long>(8192);
+        if (!GC.TryStartNoGCRegion(16 * 1024 * 1024)) return null;
+        try
+        {
+            if (!NativeMethods.HeapLock(heap)) return null;
+            try
+            {
+                var entry = default(NativeMethods.HeapEntry);
+                while (NativeMethods.HeapWalk(heap, ref entry))
+                {
+                    if ((entry.Flags & NativeMethods.BusyFlag) == 0) continue;
+                    sizes[entry.DataSize] = sizes.GetValueOrDefault(entry.DataSize) + 1;
+                }
+            }
+            finally
+            {
+                _ = NativeMethods.HeapUnlock(heap);
+            }
+        }
+        finally
+        {
+            if (GCSettings.LatencyMode == GCLatencyMode.NoGCRegion) GC.EndNoGCRegion();
+        }
+
+        return sizes;
+    }
+
+    internal sealed record HeapRow(bool IsDefault, long AllocatedBytes, long CommittedBytes, long ReservedBytes);
+
+    private static class NativeMethods
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct HeapSummaryData
+        {
+            internal uint Size;
+            internal nuint Allocated;
+            internal nuint Committed;
+            internal nuint Reserved;
+            internal nuint MaxReserve;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern uint GetProcessHeaps(uint numberOfHeaps, IntPtr[]? processHeaps);
+
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern IntPtr GetProcessHeap();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool HeapSummary(IntPtr heap, uint flags, ref HeapSummaryData summary);
+
+        internal const ushort BusyFlag = 0x0004; // PROCESS_HEAP_ENTRY_BUSY
+
+        // PROCESS_HEAP_ENTRY; the trailing union (Block or Region) is not interpreted.
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct HeapEntry
+        {
+            internal IntPtr Data;
+            internal uint DataSize;
+            internal byte Overhead;
+            internal byte RegionIndex;
+            internal ushort Flags;
+            internal IntPtr Union0;
+            internal IntPtr Union1;
+            internal IntPtr Union2;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool HeapLock(IntPtr heap);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool HeapUnlock(IntPtr heap);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool HeapWalk(IntPtr heap, ref HeapEntry entry);
     }
 }

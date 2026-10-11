@@ -63,7 +63,11 @@ stop took 4.5 ms; the server exited with code 0.
 
 ## Findings
 
-### 1. Native (unmanaged) memory grows linearly — open, highest priority
+### 1. Native (unmanaged) memory grows linearly — attributed to System.Net.Quic
+
+Attributed in [Native memory attribution](#native-memory-attribution-issue-278): HTTP/3
+requests leak one 16-byte native allocation each inside .NET's `System.Net.Quic`, with
+Kestrel as much as with EmbedIO. The original observations follow.
 
 Quiesced snapshots (traffic stopped, zero in flight, 20 s settle, two forced
 compacting GCs):
@@ -92,8 +96,8 @@ contents are loopback socket addresses with client ephemeral ports, Schannel
 material (`Microsoft SSL Protocol Provider`, `CN=localhost`, `nistP256`,
 `ChainingModeGCM`) and request fragments for the TLS/QUIC port. This is consistent
 with a native heap (Schannel, MsQuic or socket-layer state) growing with connection
-or TLS churn, but the owner is **not yet identified**, and it is not yet known
-whether Kestrel on the same runtime grows the same way.
+or TLS churn. The attribution below found that the growth comes from HTTP/3 requests,
+not from TLS or connection churn as such.
 
 ### 2. HTTP/3 handshake timeouts and multi-second stalls under host CPU saturation
 
@@ -153,6 +157,126 @@ connection. Over 8 hours: 15.2 million `IOException`, 5.5 million
   the contention ended), median of per-minute p99: 2.2 ms (HTTP/1.1), 3.0 ms
   (HTTP/1.1+TLS), 3.6 ms (h2c), 4.1 ms (h2), 4.6 ms (HTTP/3).
 
+## Native memory attribution (issue #278)
+
+Tracking issue #278 asked whether finding 1 belongs to EmbedIO, Schannel, MsQuic or
+the socket layer. It belongs to none of them: it is a leak in .NET's `System.Net.Quic`.
+
+### Setup
+
+- Production source b3e55b5 (PR #182 head when the campaign started), with this
+  harness. .NET 10.0.12, bundled msquic.dll 2.5.10 unless stated otherwise.
+- Host: a different, physical machine from the original campaign. Windows 11 Pro
+  10.0.26300, AMD Ryzen 7 9800X3D (16 logical processors), 63 GiB. No benchmark lock,
+  CPU pinning or quiet window; several runs shared the host at once, and up to 67%
+  machine CPU was observed. Memory retention, unlike latency, does not depend on that.
+- One fresh server process per engine, transport and workload. Plan
+  `idle:30,load:steady:300` x6`,idle:30`, settle 20 s. The column below is private bytes
+  minus GC committed bytes at each quiesced snapshot, the part the managed heap cannot
+  explain. Slopes exclude the first two snapshots.
+
+### Per protocol (steady mix, 30 minutes each)
+
+| Engine | Transport | Requests | Native MiB, first load snapshot to last | Slope MiB/h |
+| --- | --- | --- | --- | --- |
+| EmbedIO | HTTP/1.1 | 2,409,399 | 26.0 to 26.9 | +1.5 |
+| EmbedIO | HTTP/1.1 TLS | 2,317,650 | 27.7 to 30.8 | +8.3 |
+| EmbedIO | h2c | 1,321,610 | 25.6 to 27.6 | +3.6 |
+| EmbedIO | h2 TLS | 1,271,116 | 29.1 to 31.0 | +1.8 |
+| EmbedIO | HTTP/3 | 1,217,572 | 44.3 to 81.2 | +80.7 |
+| Kestrel | HTTP/1.1 | 2,549,422 | 35.8 to 34.9 | -1.5 |
+| Kestrel | HTTP/1.1 TLS | 2,406,025 | 36.2 to 35.9 | -2.2 |
+| Kestrel | h2 TLS | 1,305,183 | 28.2 to 35.8 | -4.5 |
+| Kestrel | HTTP/3 | 1,203,001 | 49.4 to 89.4 | +76.9 |
+
+Only HTTP/3 grows, on both engines and at similar rates. TCP with TLS, including TLS
+connection churn, does not. Splitting HTTP/3 showed growth in both its request
+workloads (small, 1 MiB response, upload, stream; +99 and +111 MiB/h on the two
+engines) and its connection churn (+37 to +55 MiB/h, which also carries requests).
+Replacing the bundled MsQuic with app-local 2.5.11 or 2.6.2 (official
+`Microsoft.Native.Quic.MsQuic.Schannel` packages, Microsoft-signed, via the
+`System.Net.Quic.AppLocalMsQuic` switch) left the growth unchanged at +88 to +99 MiB/h.
+
+### Allocator
+
+Quiesced snapshots now record `HeapSummary` for every Win32 heap and, for the default
+process heap, live (busy) block counts by size from `HeapWalk`. No block contents are
+read and no dump is taken. Over a 30-minute HTTP/3 run the default heap's live bytes
+rose from about 10 to 40 MiB and its committed bytes from about 12 to 80 MiB; the other
+heaps stayed bounded after warm-up. Committed memory growing about twice as fast as live
+bytes matches small blocks plus heap overhead. Between the first and last load snapshot:
+
+| Run | Requests | Extra live 16-byte blocks | Per 1,000 requests |
+| --- | --- | --- | --- |
+| EmbedIO, HTTP/3 steady | 1,220,486 | 1,232,586 | 1,009.9 |
+| Kestrel, HTTP/3 steady | 1,232,365 | 1,238,414 | 1,004.9 |
+| EmbedIO, HTTP/3 1 MiB responses only | 430,225 | 430,257 | 1,000.1 |
+| EmbedIO, HTTP/3 small requests only | 1,258,351 | 1,258,383 | 1,000.0 |
+
+No other block size grew by more than a few per 1,000 requests.
+
+### Cause
+
+`QuicStream` keeps its send buffers in a `MsQuicBuffers` struct field and, in its
+constructors, hands the stream handle `Disposable = _sendBuffers`. That boxes a copy
+taken before any write, when the copy's `QUIC_BUFFER*` is still null. The first
+`WriteAsync` allocates the 16-byte `QUIC_BUFFER` array into the field
+(`NativeMemory.AllocZeroed`), and `SEND_COMPLETE` frees only the data it points to. When
+the handle closes it disposes the boxed copy, which frees nothing, so the array of
+every stream that ever sent data is orphaned. Every HTTP/3 response sends data on a
+request stream, hence one block per request. The handoff came from
+[dotnet/runtime#100228](https://github.com/dotnet/runtime/pull/100228) (March 2024):
+`release/9.0`, `release/10.0` and `main` contain it, `release/8.0` does not. Only .NET
+10.0.12 was measured.
+
+`quic-send-buffer-probe` (below) confirms this without HTTP, EmbedIO or Kestrel: one
+process, loopback QUIC, 2,000 server streams per round, everything disposed before
+counting.
+
+| Server streams | Extra live 16-byte blocks | Disposed streams still owning the array |
+| --- | --- | --- |
+| Write one byte | +2,002, then +2,002 | 2,000, then 2,000 |
+| Complete with an empty write | +1, then 0 | 0, then 0 |
+
+An empty write never allocates the array, which is the toggle that isolates it.
+
+### Consequences for EmbedIO
+
+- No EmbedIO lifetime defect was found, and nothing in EmbedIO frees or retains this
+  allocation. TCP protocols, WebSockets and connection churn without HTTP/3 are flat.
+- Long-running HTTP/3 servers on .NET 9 and 10 grow by about 16 live bytes, roughly 35
+  committed bytes, per request: around 35 MiB per million HTTP/3 requests, never
+  returned until the process exits. Server replacement does not help because the
+  memory belongs to disposed streams.
+- No configuration avoids it, since every response write allocates the array. A
+  reflection-based release of the private field after disposal could free it, but it
+  would be a private-runtime shim with a use-after-free risk if a late send-completion
+  ever reached the stream; none is added. The in-tree native MsQuic adapter does not go
+  through `QuicStream`. Until .NET ships a fix, hosts with heavy HTTP/3 traffic can
+  recycle processes periodically or leave HTTP/3 disabled where it is not needed.
+- The leak is reported as
+  [dotnet/runtime#135583](https://github.com/dotnet/runtime/issues/135583), with a
+  standalone repro.
+
+### Repeating the attribution
+
+```sh
+dotnet build test/EmbedIO.LoadBenchmark -c Release -o <runner>
+dotnet <runner>/EmbedIO.LoadBenchmark.dll quic-send-buffer-probe --streams 2000
+dotnet <runner>/EmbedIO.LoadBenchmark.dll endurance --output TestResults/endurance/h3 --engine embedio --transports h3 --plan idle:30,load:steady:300,load:steady:300,load:steady:300 --settle 20
+```
+
+Compare `quiesced.nativeHeaps.defaultHeapBlocks` (pairs of block size and count) across
+snapshots in `steps.jsonl`. When a fixed .NET runtime ships, the probe's "write" rows
+should report no growth and no streams still owning the array.
+
+The heap walk holds the heap lock, so it runs inside a GC no-GC region. In one run,
+before that change, a walk deadlocked the server with a GC, stalling every managed
+thread at a quiesced snapshot. That run's orchestrator then failed every later step with
+"stream in use". A timed-out control read now marks the child unusable with an explicit
+error instead. With the fix, a full 30-minute rerun of the configuration that
+stalled completed all 8 steps with a heap walk at every quiesced snapshot.
+
 ## Host contention
 
 For the same workload, server CPU per request was about 4× higher and client CPU per
@@ -165,8 +289,10 @@ those hours are kept and reported, not removed.
 
 ## Coverage gaps
 
-- Per-protocol attribution of the memory growth and the Kestrel control were started
-  and stopped after about 7 minutes (inconclusive); see [Next steps](#next-steps).
+- The memory attribution runs were 30 minutes per configuration on a different host;
+  the leak's per-request rate, not a multi-hour slope, carries the conclusion. Only
+  Windows was measured; the leaking code is platform-independent managed code, but
+  Linux and macOS were not run.
 - Additional multi-hour representative runs (steady-only, fault-only, WebSocket-only)
   were not run; the 8-hour run interleaves all of them.
 - WebSockets over HTTP/3 (RFC 9220) are not exercised: `ClientWebSocket` does not
@@ -177,18 +303,12 @@ those hours are kept and reported, not removed.
 
 ## Next steps
 
-1. Attribute the growth: one fresh server per engine and protocol, steady mix,
-   three 10-minute phases, for EmbedIO on `h1`, `h1tls`, `h2c`, `h2tls` and `h3` and for
-   Kestrel on `h1`, `h1tls`, `h2tls` and `h3`, then compare quiesced private-byte slopes:
-
-   ```sh
-   dotnet <runner>/EmbedIO.LoadBenchmark.dll endurance --output TestResults/endurance/attr-<engine>-<transport>      --engine <embedio|kestrel> --transports <transport> --plan idle:60,load:steady:600,load:steady:600,load:steady:600      --settle 20 --server-cpus 0-7 --client-cpus 8-19 --revision <sha>
-   ```
-2. If TLS or QUIC is implicated, compare two dumps from the same process to identify
-   the owning heap (a debugger with heap commands is needed for heap ownership).
-3. Reproduce the post-replacement connect timeout with repeated drain-and-replace
+1. Done: the native growth is attributed to `System.Net.Quic` (issue #278, above).
+   When a .NET runtime with a fix ships, rerun `quic-send-buffer-probe` and an HTTP/3
+   endurance run on it.
+2. Reproduce the post-replacement connect timeout with repeated drain-and-replace
    under HTTP/1.1 connect churn only.
-4. Repeat a shorter mixed run on a quiet host to test whether the HTTP/3 handshake
+3. Repeat a shorter mixed run on a quiet host to test whether the HTTP/3 handshake
    timeouts depend on contention.
 
 ## Integration review
