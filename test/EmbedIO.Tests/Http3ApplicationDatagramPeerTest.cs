@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
@@ -51,17 +50,17 @@ namespace EmbedIO.Tests
                 Assert.That(context.Request.ProtocolVersion, Is.EqualTo(System.Net.HttpVersion.Version30));
                 Assert.That(context.Request.Headers["capsule-protocol"], Is.EqualTo("?1"));
                 using var tunnel = await ((IHttpTunnelContext)context).AcceptTunnelAsync("neo-datagram-test", true, deadline.Token);
-                var exchange = context.GetType().GetField("_exchange", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(context)
-                    ?? throw new AssertionException("Missing application exchange.");
-                var channel = Get<object>(exchange, "Datagrams");
+                var channel = tunnel.Datagrams ?? throw new AssertionException("Missing public datagram channel.");
+                Assert.That(channel.CanSend, Is.True);
+                Assert.That(channel.MaximumPayloadLength, Is.GreaterThanOrEqualTo(1000));
                 var distinct = new HashSet<string>(StringComparer.Ordinal);
-                while (await ApplicationReceive(channel, deadline.Token) is { } packet)
+                while (await channel.ReceiveAsync(deadline.Token) is { } packet)
                 {
                     using (packet)
                     {
-                        var payload = Get<ReadOnlyMemory<byte>>(packet, "Payload");
+                        var payload = packet.Payload;
                         distinct.Add(Convert.ToHexString(payload.Span));
-                        Assert.That(Call(channel, "TrySend", payload).ToString(), Is.EqualTo("Queued"));
+                        Assert.That(channel.TrySend(payload), Is.EqualTo(HttpDatagramSendStatus.Queued));
                     }
                 }
                 await exited;

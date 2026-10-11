@@ -111,6 +111,64 @@ ordinary CONNECT destinations. .NET 10 uses public TLS send shutdown; the
 netstandard asset binds the same public runtime API when available. A runtime
 without it rejects TLS handoff before sending the success head. TLS 1.2 closure is defined by [RFC 5246 section 7.2.1](https://www.rfc-editor.org/rfc/rfc5246.html#section-7.2.1); TLS 1.3 supports independent closure under [RFC 8446 section 6.1](https://www.rfc-editor.org/rfc/rfc8446.html#section-6.1). macOS server-side SslStream currently negotiates TLS 1.2; the .NET 10 Network.framework TLS 1.3 option applies to clients only. See [the runtime explanation](https://devblogs.microsoft.com/dotnet/dotnet-10-networking-improvements/).
 
-Native unreliable QUIC DATAGRAM delivery, browser WebTransport sessions and
-extension-specific capsule value validation are separate capabilities. This API
-provides reliable framing and carrier lifetime, not those protocol implementations.
+## Native HTTP datagrams
+
+The unreleased native HTTP/3 candidate also exposes `HttpTunnel.Datagrams` after
+explicit tunnel acceptance. Public provider selection has not yet switched to
+that candidate; the normal current provider returns null. Native provider
+activation and final platform acceptance remain development work.
+
+On a supporting backend, `HttpDatagramChannel.ReceiveAsync` returns an owned
+`HttpDatagram`, or null when incoming delivery ends. An empty payload is a valid
+packet. Dispose each received packet after using its `Payload`; do not retain
+the memory after disposal. Canceling a receive does not discard unread packets.
+
+`TrySend` copies the borrowed payload before returning. `Queued` means submitted,
+not delivered or acknowledged: datagrams can be lost, reordered or duplicated.
+Other results distinguish absent negotiation, an excessive payload, a full local
+send queue and closed output. There is no automatic retry or reliable fallback.
+The selected extension must define whether and how reliable DATAGRAM capsules
+are used when native datagrams are unavailable.
+
+For an already accepted `HttpTunnel tunnel`, this echo loop uses the public
+channel and returns each packet owner promptly. Its unreliable policy drops
+packets that cannot currently be submitted; it does not retry or translate them
+into reliable capsules:
+
+```csharp
+HttpDatagramChannel? channel = tunnel.Datagrams;
+if (channel != null)
+{
+    while (await channel.ReceiveAsync(cancellationToken) is { } packet)
+    {
+        using (packet)
+        {
+            HttpDatagramSendStatus result = channel.TrySend(packet.Payload);
+            if (result == HttpDatagramSendStatus.Closed
+                || result == HttpDatagramSendStatus.Unavailable)
+                break;
+        }
+    }
+}
+```
+
+The caller still owns tunnel closure and protocol-specific authorization/control
+messages. A null channel requires the extension's explicit unsupported/fallback
+path; this loop alone does not implement that path.
+
+`CanSend` reports outgoing capability. Incoming delivery can remain open after
+`CompleteOutputAsync`, even when `CanSend` becomes false. `MaximumPayloadLength`
+accounts for the HTTP stream identifier and can shrink with transport limits;
+zero can permit an empty packet, so check `CanSend` separately. Full tunnel
+closure stops new submissions and incoming delivery promptly, releases queued
+packet owners and then awaits stream output completion. Already received packets
+remain the application's responsibility.
+
+Both HTTP peers and the QUIC transport must negotiate support. Per-request
+queues hold at most 16 packets, with a connection-wide router bound of 128 packets
+and 256 KiB in addition to the native transport receive budget. Excess packets
+are discarded without failing a healthy connection. These are bounds on this new
+unreliable channel; existing WebSocket buffering defaults are unchanged.
+
+Browser WebTransport sessions, native WebTransport streams and extension-specific
+capsule value validation remain separate integration work.

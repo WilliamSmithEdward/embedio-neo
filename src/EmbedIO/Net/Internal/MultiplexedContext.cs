@@ -208,6 +208,7 @@ namespace EmbedIO.Net.Internal
             await Response.OutputStream.FlushAsync(cancellationToken).ConfigureAwait(false);
             var stream = new Http2DuplexStream(Request.InputStream, Response.OutputStream);
             var tunnel = new HttpTunnel(stream, ((MultiplexedResponse)Response).CloseAsync, protocol, useCapsules, error => control.AbortTunnelAsync(error, true));
+            tunnel.AttachDatagrams((_exchange as IMultiplexedDatagramExchange)?.CreateDatagramChannel());
             lock (_sync)
             {
                 if (_closed) { tunnel.Dispose(); throw new ObjectDisposedException(nameof(MultiplexedContext)); }

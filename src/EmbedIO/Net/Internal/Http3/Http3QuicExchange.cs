@@ -15,7 +15,7 @@ namespace EmbedIO.Net.Internal.Http3
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("macos")]
-    internal sealed class Http3QuicExchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedResponseTrailers, IMultiplexedTunnelControl, IDisposable
+    internal sealed class Http3QuicExchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedResponseTrailers, IMultiplexedTunnelControl, IMultiplexedDatagramExchange, IDisposable
     {
         private const int MaximumDataPayload = 256 * 1024;
         // Frames up to this payload size are submitted with their header in one
@@ -49,6 +49,27 @@ namespace EmbedIO.Net.Internal.Http3
         }
         internal Http3PriorityState.Entry? PriorityState { get; set; }
         internal Http3DatagramChannel? Datagrams { get; set; }
+        public HttpDatagramChannel? CreateDatagramChannel()
+        {
+            var channel = Datagrams;
+            if (channel == null) return null;
+            return new HttpDatagramChannel(token => ReceiveDatagramAsync(channel, token),
+                payload => channel.TrySend(payload) switch
+                {
+                    Http3DatagramSendStatus.Queued => HttpDatagramSendStatus.Queued,
+                    Http3DatagramSendStatus.Unavailable => HttpDatagramSendStatus.Unavailable,
+                    Http3DatagramSendStatus.TooLarge => HttpDatagramSendStatus.TooLarge,
+                    Http3DatagramSendStatus.QueueFull => HttpDatagramSendStatus.QueueFull,
+                    _ => HttpDatagramSendStatus.Closed,
+                }, () => channel.IsSendAvailable, () => channel.MaximumPayloadLength, channel.Dispose);
+        }
+        private static async ValueTask<HttpDatagram?> ReceiveDatagramAsync(Http3DatagramChannel channel, CancellationToken token)
+        {
+            var packet = await channel.ReceiveAsync(token).ConfigureAwait(false);
+            if (packet == null) return null;
+            try { return new HttpDatagram(packet.Payload, packet); }
+            catch { packet.Dispose(); throw; }
+        }
         internal bool CanSendDatagrams => Volatile.Read(ref _headers) && Volatile.Read(ref _tunnel)
             && !Volatile.Read(ref _ended) && !Volatile.Read(ref _outputFailed) && Volatile.Read(ref _disposed) == 0;
         internal HttpPriority Priority => PriorityState?.Value ?? new HttpPriority(3, false);

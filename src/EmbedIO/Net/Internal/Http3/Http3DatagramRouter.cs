@@ -103,6 +103,17 @@ namespace EmbedIO.Net.Internal.Http3
                 finally { ArrayPool<byte>.Shared.Return(packet, true); }
             }
         }
+        internal bool IsSendAvailable(Http3DatagramChannel channel)
+        {
+            lock (_gate)
+                return !_disposed && _channels.TryGetValue(channel.Id, out var current) && ReferenceEquals(current, channel)
+                    && channel.CanSend() && _peerEnabled && _transport.MaximumSendLength >= QuicInteger.EncodedLength(channel.Id >> 2);
+        }
+        internal int MaximumPayloadLength(Http3DatagramChannel channel)
+        {
+            lock (_gate)
+                return IsSendAvailable(channel) ? Math.Max(0, _transport.MaximumSendLength - QuicInteger.EncodedLength(channel.Id >> 2)) : 0;
+        }
         internal void Close(Http3DatagramChannel channel)
         {
             lock (_gate)
@@ -146,6 +157,8 @@ namespace EmbedIO.Net.Internal.Http3
         }
         internal ValueTask<Http3DatagramPacket?> ReceiveAsync(CancellationToken token) => _owner.ReceiveAsync(this, token);
         internal Http3DatagramSendStatus TrySend(ReadOnlyMemory<byte> payload) => _owner.TrySend(this, payload);
+        internal bool IsSendAvailable => _owner.IsSendAvailable(this);
+        internal int MaximumPayloadLength => _owner.MaximumPayloadLength(this);
         internal void CompleteReceive() => _owner.CompleteReceive(this);
         public void Dispose() => _owner.Close(this);
     }
