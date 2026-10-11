@@ -134,8 +134,8 @@ Issue #202 keeps the following work visible:
 - Remove retry and quarantine only after required dependencies pass those gates.
   Recheck resource cleanup and ordinary conflicting-endpoint behavior afterward.
 
-No upstream issue has been posted, no patched native dependency is shipping, and
-no release is authorized by this investigation. Other protocol conformance,
+The upstream report is posted as microsoft/msquic#6374 (2026-10-11); no patched
+native dependency is shipping, and no release is authorized by this investigation. Other protocol conformance,
 performance and default-engine work remains in program #181. The sections from
 [Ownership of the disposal contract](#ownership-of-the-disposal-contract) onward
 record the work completed for #202 on that list: the reviewable draft report, the
@@ -213,8 +213,10 @@ unposted; posting it needs William's approval. In short:
 
 Both behaviors are therefore owned by MsQuic. dotnet/runtime can only document
 the limit or depend on a fixed native version; EmbedIO can only bridge the window
-with the bounded retry. The report asks the maintainers which contract they
-intend; until answered, the retry and the quarantine stay.
+with the bounded retry. With William's approval the report was posted on
+2026-10-11 as [microsoft/msquic#6374](https://github.com/microsoft/msquic/issues/6374);
+it asks the maintainers which contract they intend. Until answered, the retry and
+the quarantine stay, and the dotnet/runtime documentation note remains unposted.
 
 ## Native dependency policy
 

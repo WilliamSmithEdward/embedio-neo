@@ -1,10 +1,13 @@
 # Draft upstream report: QUIC listener endpoint release after disposal
 
-**Status: draft, not posted.** This is the reviewable upstream report requested by
-[issue #202](https://github.com/WilliamSmithEdward/embedio-neo/issues/202). Nothing
-in it has been sent to microsoft/msquic or dotnet/runtime. Posting externally
-requires William's explicit approval, and the draft must be re-read against the
-exact MsQuic and .NET versions current at that time. The maintained evidence is in
+**Status: the MsQuic report was posted on 2026-10-11 as
+[microsoft/msquic#6374](https://github.com/microsoft/msquic/issues/6374) after
+William's explicit approval; the dotnet/runtime note below remains unposted until
+the MsQuic maintainers answer the contract question.** This document is the
+reviewable source of that report, requested by
+[issue #202](https://github.com/WilliamSmithEdward/embedio-neo/issues/202). Any
+further external post needs the same approval and a re-read against the exact
+MsQuic and .NET versions current at that time. The maintained evidence is in
 [QUIC listener disposal, rebind and workaround retirement](quic-lifetime.md).
 
 Every source statement below was checked against the named revision of the
@@ -124,12 +127,13 @@ that is uninitializing as unavailable until closed, or have `QuicLibraryGetBindi
 wait for an in-progress uninitialize of a same-port binding instead of creating a
 colliding socket.
 
-## Suggested issue text for microsoft/msquic
+## Issue text for microsoft/msquic
 
-Title: Listener close does not release the UDP endpoint synchronously (deferred
-datapath close on kqueue/epoll; binding kept by connections until QuicConnFree)
-
-Body outline, to be finalized only after approval:
+Posted as [microsoft/msquic#6374](https://github.com/microsoft/msquic/issues/6374)
+on 2026-10-11 in the repository's bug-report structure, with the source
+references above and commit-pinned links to the raw test, the native probe, the
+kqueue fixture, the one-hunk patch and the evidence guide. The outline it
+followed:
 
 1. Environment: MsQuic 2.6.2 `819ab74f` (Homebrew bottle, QuicTLS) on macOS 15
    arm64 and macOS 27 Apple M5 Pro; MsQuic 2.5.10 bundled with .NET 10.0.12 on
@@ -163,9 +167,9 @@ recognizes.
 
 ## What this draft does not claim
 
-- No upstream issue exists for either behavior as far as searches on
-  2026-10-11 found; the closest upstream discussion (#2961) concerns a kqueue
-  wake-up deadlock on FreeBSD, not this ordering.
+- Before microsoft/msquic#6374 no upstream issue described either behavior as
+  far as searches on 2026-10-11 found; the closest upstream discussion (#2961)
+  concerns a kqueue wake-up deadlock on FreeBSD, not this ordering.
 - No MsQuic release after 2.6.2 existed on 2026-10-11, and `main` retained the
   deferred kqueue close. The release/10.0 move to MsQuic 2.5.11 is a security
   servicing update (CVE-2026-105794, OpenSSL and QuicTLS hostname validation)

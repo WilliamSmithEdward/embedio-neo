@@ -136,7 +136,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Modern HTTP engine program](project/http-engine.md): protocol roadmap, compatibility changes and performance acceptance.
 - [QUIC lifetime and rebind](project/quic-lifetime.md): native disposal evidence, bounded retry, quarantine limits and retirement gates.
-- [Draft upstream QUIC lifetime report](project/quic-upstream-report-draft.md): reviewable, unposted MsQuic and .NET report separating deferred datapath close from connection-held bindings; posting needs owner approval.
+- [Upstream QUIC lifetime report](project/quic-upstream-report-draft.md): the MsQuic report posted as microsoft/msquic#6374, separating deferred datapath close from connection-held bindings, plus the unposted dotnet/runtime note.
 - [Native QUIC abort disposal](project/native-quic-abort-disposal.md): preserve explicit read/write abort codes through cleanup, with real-peer regressions.
 - [Linux test-host terminations](project/linux-test-host-terminations.md): native listener stop race diagnosis, unattributed glibc abort evidence and next diagnostics.
 - [Native HTTP/3 provider ownership audit](project/http3-native-provider-audit.md): MsQuic acceptance, callback and ownership findings, reproductions and proposed fixes.
