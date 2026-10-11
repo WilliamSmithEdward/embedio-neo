@@ -401,14 +401,20 @@ jobs:
 
   mac-catalyst:
     name: Mac Catalyst
+    # Owner-requested temporary MAUI pause; re-enable only on William's instruction.
+    if: false
     uses: ./.github/workflows/mac-catalyst.yml
 
   android:
     name: Android
+    # Owner-requested temporary MAUI pause; re-enable only on William's instruction.
+    if: false
     uses: ./.github/workflows/android-smoke.yml
 
   maui-https:
     name: MAUI HTTPS
+    # Owner-requested temporary pause (2026-10-10); re-enable only on William's instruction.
+    if: false
     uses: ./.github/workflows/maui-https.yml
     with:
       update-locks: ${{ inputs.update-https-locks == true }}
@@ -434,7 +440,9 @@ jobs:
           results = json.loads(os.environ['RESULTS'])
           requested = os.environ['RUNTIME_PROBE_REQUESTED'] == 'true'
           for name, job in results.items():
-              expected = 'skipped' if name == 'runtime-close-probe' and not requested else 'success'
+              # All MAUI jobs are explicitly paused by the owner until re-enabled.
+              paused_maui = name in {'maui-https', 'mac-catalyst', 'android'}
+              expected = 'skipped' if paused_maui or (name == 'runtime-close-probe' and not requested) else 'success'
               assert job['result'] == expected, f"{name}: {job['result']}; required {expected}"
           print('All required CI jobs passed.')
           PY

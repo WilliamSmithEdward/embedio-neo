@@ -26,7 +26,14 @@ Python guard rejects compiler/analyzer directives and build configuration opt-ou
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
 The tests target .NET 10.
 
-The required `MAUI HTTPS` CI jobs also run a test-only native app on Windows,
+All MAUI CI jobs are temporarily disabled at William's explicit request
+on 2026-10-10, until he asks to re-enable them. The reusable workflow's manual
+dispatch is paused too, including standalone Android and Mac Catalyst workflows.
+The apps and validation tooling remain intact; this pause
+does not constitute HTTPS platform acceptance. See the re-enable instructions in
+[MAUI HTTPS validation](docs/platforms/maui-https-validation.md).
+
+When enabled, the HTTPS jobs run a test-only native app on Windows,
 iOS, Mac Catalyst and Android. They exercise platform client trust, HTTPS WebView
 rendering and a separate strict HTTPS client. The app and certificate generator
 remain outside the solution and shipped packages. See
