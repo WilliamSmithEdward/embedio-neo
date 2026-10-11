@@ -182,6 +182,11 @@ internal static class Recovery
                     ["handles"] = Slope(sustained.Select(s => (double?)Get(s, "handles")).ToArray()),
                     ["threads"] = Slope(sustained.Select(s => (double?)Get(s, "threads")).ToArray()),
                 };
+                // Continuing growth under steady load, after GC: native (working set) or managed.
+                if (Slope(sustained.Select(s => (double?)Get(s, "workingSetBytes")).ToArray()) is > 8.0 * (1 << 20) and var ws)
+                    verdict.Add(FormattableString.Invariant($"working set grows {ws / (1 << 20):F1} MiB per snapshot under sustained load"));
+                if (Slope(sustained.Select(s => (double?)Get(s, "managedHeapBytes")).ToArray()) is > 1.0 * (1 << 20) and var heap)
+                    verdict.Add(FormattableString.Invariant($"managed heap grows {heap / (1 << 20):F1} MiB per snapshot under sustained load"));
             }
 
             _ = initial;
@@ -273,8 +278,9 @@ internal static class Storm
                     Interlocked.Increment(ref connectFailures);
                     Unexpected(error);
                 }
-                catch (Exception error) when (error is IOException or SocketException or HttpRequestException or InvalidDataException or System.Security.Authentication.AuthenticationException)
+                catch (Exception error) when (error is not (OutOfMemoryException or InsufficientExecutionStackException or AccessViolationException))
                 {
+                    // Any client-side failure is counted by kind; the storm never aborts the run.
                     Unexpected(error);
                 }
             }
@@ -351,12 +357,14 @@ internal static class Storm
             SslOptions = new SslClientAuthenticationOptions { RemoteCertificateValidationCallback = LoadClient.Pinned(thumbprint) },
         };
         using var client = new HttpClient(handler, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan };
-        var uri = new Uri($"{(tls ? "https" : "http")}://localhost:{port}" + (upload ? "/upload" : $"/bytes/{Mebibyte}"));
+        var target = $"{(tls ? "https" : "http")}://localhost:{port}" + (upload ? "/upload" : $"/bytes/{Mebibyte}");
         // Several streams per connection, each abandoned midway.
         await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
         {
             using var cancel = new CancellationTokenSource();
-            using var request = new HttpRequestMessage(upload ? HttpMethod.Post : HttpMethod.Get, uri) { Version = version, VersionPolicy = HttpVersionPolicy.RequestVersionExact };
+            // One Uri per request: a shared instance raised NullReferenceException inside
+            // HttpClient (Uri.EnsureHostString) under concurrent HTTP/3 sends on .NET 10.0.12.
+            using var request = new HttpRequestMessage(upload ? HttpMethod.Post : HttpMethod.Get, new Uri(target)) { Version = version, VersionPolicy = HttpVersionPolicy.RequestVersionExact };
             if (upload)
             {
                 request.Content = new StallingContent(Payloads.Get(Mebibyte).AsMemory(0, Partial * 4), cancel);
