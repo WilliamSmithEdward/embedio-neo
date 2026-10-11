@@ -4,7 +4,7 @@ Owner-authorized Neo v2 removal of the Microsoft and inherited Mono implementati
 
 The SDK C# parser inspected each method attribute. The 291 Microsoft rows below each have an identical EmbedIO row in the same method. Only the obsolete attributes were removed; managed arguments, assertions, deadlines and iteration counts remain unchanged. The single unsupported-drain case is replaced by early rejection of retired numeric mode 1. Three additional cases guard the persisted identifiers 0, 2 and 3.
 
-Native-wrapper-only fixtures, Boolean backend matrices, samples, platform apps and the independent Mono replacement still require separate accounting. No discovery floor has been lowered; reconcile it from actual full reports after test migration compiles.
+Adapter-only fixtures and standalone consumers are accounted below. The independent Mono replacement and platform acceptance remain incomplete.
 
 | Fixture | Retired Microsoft rows with exact managed peers |
 | --- | ---: |
@@ -63,7 +63,12 @@ The runtime-specific graceful-drain case is recorded separately: GracefulDrainVa
 
 ## Paired iteration sources
 
-Removed only the Microsoft iteration from 14 explicit two-mode arrays. These are iterations inside existing tests, not removed NUnit cases. The retained EmbedIO iteration and its assertions are unchanged.
+Removed only the Microsoft iteration from 14 explicit two-mode arrays in
+`TestCaseSource` providers. They generate 180 retired NUnit cases, in addition
+to the 291 explicit attributes above. The retained EmbedIO arguments and
+assertions are unchanged. An earlier ledger incorrectly described these as
+iterations inside existing tests; comparison of the complete TRX reports
+establishes the generated-case count.
 
 | Fixture | Paired arrays changed |
 | --- | ---: |
@@ -76,6 +81,18 @@ Removed only the Microsoft iteration from 14 explicit two-mode arrays. These are
 | Issues/Issue567_ResponseCharset.cs | 1 |
 | Issues/Issue574_LargeResponses.cs | 1 |
 | Issues/Issue575_XmlResponses.cs | 1 |
+
+| Fixture | Generated Microsoft cases retired |
+| --- | ---: |
+| BrotliResponseTest | 4 |
+| Issue163_TypedRouteValidation | 18 |
+| Issue170_SuffixRanges | 44 |
+| Issue564_HeadResponses | 12 |
+| Issue566_IdentityContentEncoding | 18 |
+| Issue567_ResponseCharset | 8 |
+| Issue574_LargeResponses | 12 |
+| Issue575_XmlResponses | 12 |
+| RequestCodingChainTest | 52 |
 
 ## Adapter-specific retirement
 
@@ -109,7 +126,36 @@ removed; all surviving managed assertions and simultaneous-close iterations
 remain in place.
 
 The ordinary solution builds with zero warnings. The nine directly affected
-fixtures report 76 focused cases on Windows, all passed, none skipped. This is
-focused evidence; full-suite discovery, Linux/macOS, standalone tools and every
-final-head hosted check remain outstanding. The discovery floor is unchanged
-until the full supported suite is actually accounted and reported.
+fixtures report 76 focused cases on Windows, all passed, none skipped. The full
+Windows report contains 4,483 cases: 4,481 passed, two expected skips and zero
+failed in 3 minutes 5 seconds. Its first run deliberately retained the former
+4,994 minimum and exited with the discovery-policy violation (exit 9).
+
+The reconciled floor is **4,483 = 4,994 - 291 - 180 - 43 + 3**. The unsupported
+Microsoft-drain case is replaced one-for-one, and five ported shared contracts
+do not add cases. Comparing complete baseline and retirement TRX inventories
+confirms this net reduction; renamed ported cases are matched by their contracts.
+The subsequent coverage-enabled Windows run enforces the reconciled minimum
+and exits successfully: 4,481 passed, two expected skips and zero failed, 4,483
+total in 3 minutes 10 seconds. Formatting, suppression checks and the C# parser
+guard pass. Linux/macOS and every final-head hosted check remain outstanding.
+
+## Standalone consumer and tooling validation
+
+The shared compatibility consumer now exercises the retained listener against
+upstream EmbedIO 3.5.2 and both Neo assets. Its Windows profile reports 142 cases
+and 284 comparisons with no errors. The comparator's 11 negative checks still
+pass. Removed Microsoft-only behavior entries and the complete public runtime
+adapter surfaces are explicitly accounted in the reviewed-differences manifest;
+unrelated behavior and API differences remain enforced.
+
+The .NET Framework 4.8 runtime (Release 533509), consuming the .NET Standard 2.0
+core asset, passes 20 authentication requests, 21 cookie assertions and 17 route
+assertions. Locked restores and Release builds pass for all three smoke programs
+and the performance project. The performance host rejects its retired
+`--microsoft` selector instead of silently measuring another engine. Historical
+benchmark results continue to describe their recorded revisions.
+
+These results do not prove replacement of the inherited Mono implementation or
+full platform acceptance. Full-suite accounting and final-head hosted checks are
+still required.

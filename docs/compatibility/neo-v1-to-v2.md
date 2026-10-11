@@ -50,6 +50,9 @@ Remove `WithMicrosoftHttpListener()` and `HttpListenerMode.Microsoft` from sourc
 configuration. Applications that persisted its numeric value, 1, must migrate
 their configuration explicitly: v2 rejects that selection instead of silently
 choosing another implementation. The remaining mode values stay 0, 2 and 3.
+The public runtime adapters `EmbedIO.Net.Internal.SystemHttpRequest` and
+`SystemHttpResponse` are also removed. Use `IHttpRequest` and `IHttpResponse`
+instead of constructing adapters around a `System.Net.HttpListenerContext`.
 HTTP.sys URL reservations and kernel certificate bindings are specific to the
 removed backend; use the replacement engine's HTTPS certificate configuration and
 validate deployment guidance for your application model.
