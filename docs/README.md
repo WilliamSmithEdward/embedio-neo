@@ -173,6 +173,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
+- [TCP drain and replacement investigation](project/tcp-drain-replacement.md): bounded connect churn, listener generations and unresolved endurance timeouts.
+
 - [Cleanup after committed response completion](project/http-completed-response-cleanup.md): late cancellation, complete-wire state and preserved incomplete-response handling.
 
 - [Capsule transport development](project/http-capsule-transport.md): streamed framing, negotiation constraints and remaining integration work.
