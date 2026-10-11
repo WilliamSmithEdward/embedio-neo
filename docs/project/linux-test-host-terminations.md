@@ -168,9 +168,13 @@ ended with `free(): double free detected in tcache 2` after 356 reported cases,
 The freeing frame is unknown, so no cause is claimed. CoreCLR handles SIGABRT,
 which glibc raises for this error, and writes a crash dump before restoring the
 default action when `DOTNET_DbgEnableMiniDump=1` is set (`signal.cpp` lines 184
-and 427-438). A full dump (`DOTNET_DbgMiniDumpType=4`) from the Linux test step,
+and 429-436). A full dump (`DOTNET_DbgMiniDumpType=4`) from the Linux test step,
 retained on failure, would identify the native stack. Enabling it is a workflow
 change for the owner to approve.
+
+Follow-up: [Linux glibc heap aborts](linux-glibc-heap-aborts.md) adds a second
+occurrence from CI, a malloc-checked run of the pre-abort sequence, a CI log scan
+and further source review. The cause is still unattributed.
 
 ## Evidence locations
 

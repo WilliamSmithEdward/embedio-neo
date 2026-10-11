@@ -7,7 +7,7 @@ and [draft PR #182](https://github.com/WilliamSmithEdward/embedio-neo/pull/182).
 **Status: inconclusive.** No component or cause is established. There are no
 production, test, workflow or quarantine changes. The `FormatHeaders`
 NullReferenceException is a separate, diagnosed runtime race
-([draft PR #266](https://github.com/WilliamSmithEdward/embedio-neo/pull/266)). The
+([Linux test-host terminations](linux-test-host-terminations.md)). The
 intermittent large-JSON timeout is a separate failure and not a process crash.
 
 ## Occurrences
@@ -22,7 +22,7 @@ had a failed test or a dump. The pinned image is Ubuntu 24.04.5 with glibc
 2.39-0ubuntu8.9 and OpenSSL 3.0.13-0ubuntu3.16. `556022ec` is an ancestor of
 `b8f38ba`. The managed connection, endpoint listener, lifetime test and
 `HttpsSmoke` helper are byte-identical between `b8f38ba` and the integration head
-`0caaca3`.
+`5a0507f`.
 
 Both runs were sequential. In the local run the next case,
 `WebSocketUpgradeKeepsItsTransportUntilCloseOrShutdown(False,False)` (plain HTTP),
