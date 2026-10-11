@@ -239,12 +239,11 @@ namespace EmbedIO.Tests
             var registrations = (IDictionary)((((typeof(Net.EndPointManager)).GetField("Registrations", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var prefixes = (IDictionary)((registrations)[listener] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var endpoint = ((IEnumerable)((prefixes)[url] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).Cast<object>().Single();
-            var pending = (IEnumerable)((((endpoint).GetType().GetField("_unregistered", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(endpoint)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             object? connection = null;
             var deadline = DateTime.UtcNow.AddSeconds(2);
             while (connection == null && DateTime.UtcNow < deadline)
             {
-                lock (pending) { connection = pending.Cast<object>().SingleOrDefault(); }
+                connection = PendingConnections(endpoint).SingleOrDefault();
                 if (connection == null) await Task.Delay(10);
             }
             Assert.That(connection, Is.Not.Null);
@@ -260,6 +259,65 @@ namespace EmbedIO.Tests
             Assert.That(Transport(connection).CanRead, Is.False);
             Assert.That(listener.IsListening, Is.EqualTo(!shutdown));
         }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task PendingConnectionBurstReleasesEveryTransportBeforeRestart(bool secure)
+        {
+            using var certificate = secure ? HttpsSmoke.CreateCertificate() : null;
+            var address = new UriBuilder(HttpsSmoke.GetUrl())
+            { Host = "127.0.0.1", Scheme = secure ? "https" : "http" }.Uri;
+            var url = address.ToString();
+            using var listener = new Net.HttpListener(certificate);
+            listener.AddPrefix(url);
+            listener.Start();
+            var registrations = typeof(Net.EndPointManager).GetField("Registrations", BindingFlags.Static | BindingFlags.NonPublic)
+                ?.GetValue(null) as IDictionary ?? throw new AssertionException("Missing endpoint registrations.");
+            var prefixes = registrations[listener] as IDictionary ?? throw new AssertionException("Missing owner registrations.");
+            var endpoint = (prefixes[url] as IEnumerable ?? throw new AssertionException("Missing endpoint."))
+                .Cast<object>().Single();
+            var peers = Enumerable.Range(0, 32).Select(_ => new TcpClient()).ToArray();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                await Task.WhenAll(peers.Select(peer => peer.ConnectAsync(IPAddress.Loopback, address.Port, timeout.Token).AsTask()));
+                var deadline = DateTime.UtcNow.AddSeconds(2);
+                var pending = PendingConnections(endpoint);
+                while (pending.Length != peers.Length && DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(10, timeout.Token);
+                    pending = PendingConnections(endpoint);
+                }
+                Assert.That(pending, Has.Length.EqualTo(peers.Length), "Every accepted idle/TLS session must have an owner.");
+                listener.Stop();
+                deadline = DateTime.UtcNow.AddSeconds(2);
+                while (pending.Any(connection => !CloseFinished(connection)) && DateTime.UtcNow < deadline)
+                    await Task.Delay(10, timeout.Token);
+                foreach (var connection in pending)
+                {
+                    Assert.That(CloseFinished(connection), Is.True, "Terminal cleanup must finish for every pending session.");
+                    Assert.That(TimerDisposed(RequestTimer(connection)), Is.True);
+                    Assert.That(Transport(connection).CanRead, Is.False);
+                }
+                Assert.That(PendingConnections(endpoint), Is.Empty);
+                listener.Start();
+                using var client = secure ? HttpsSmoke.CreateClient(certificate ?? throw new AssertionException("Missing certificate.")) : new HttpClient();
+                var accepted = listener.GetContextAsync(timeout.Token);
+                var received = client.GetAsync(url, timeout.Token);
+                var context = await accepted;
+                context.Response.StatusCode = 204;
+                context.Response.ContentLength64 = 0;
+                context.Response.OutputStream.Write(Array.Empty<byte>(), 0, 0);
+                context.Close();
+                using var response = await received;
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+            }
+            finally { foreach (var peer in peers) peer.Dispose(); }
+        }
+
+        private static object[] PendingConnections(object endpoint)
+            => (endpoint.GetType().GetMethod("PendingConnections", PrivateInstance)?.Invoke(endpoint, null) as IEnumerable
+                ?? throw new AssertionException("Missing pending-session snapshot.")).Cast<object>().ToArray();
         private static object Connection(IHttpContext context)
             => ((((context).GetType().GetProperty("Connection", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(context)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
         private static Stream Transport(object connection)
