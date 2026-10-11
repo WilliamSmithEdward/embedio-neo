@@ -224,6 +224,8 @@
       href: project/http-webtransport-core.md
     - name: QUIC lifetime and rebind
       href: project/quic-lifetime.md
+    - name: Linux test-host terminations
+      href: project/linux-test-host-terminations.md
     - name: Native HTTP/3 provider ownership audit
       href: project/http3-native-provider-audit.md
     - name: Managed engine load comparison
