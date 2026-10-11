@@ -7825,3 +7825,12 @@ TLS partial-head timeout is retained, and the corrected focused set passes 96/96
 This replaces transport retirement, not the remaining request/response application
 models, and does not claim a whole-server performance improvement or complete
 legacy implementation retirement. Program #181 remains open.
+
+Final complete Windows validation reports 4,664 cases: 4,657 passed, seven
+expected skips and zero failures in 3m57s, requiring native QUIC and the independent
+datagram peer. The focused modern set passes 96/96. The actual netstandard2.0
+core passes 95 cases with the one modern reusable-signal case intentionally
+skipped, on the installed .NET 10 host; this is not a .NET Framework runtime claim.
+Both target builds, standalone performance build, formatting and both source
+guards pass. All ten existing allocation, body-consumption, wire and HTTP/HTTPS
+cleanup gates pass with unchanged budgets. Discovery minimums are 4,664.
