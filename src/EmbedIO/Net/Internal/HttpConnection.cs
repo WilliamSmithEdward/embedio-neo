@@ -4,8 +4,6 @@ using System.IO;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
-using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -110,52 +108,20 @@ namespace EmbedIO.Net.Internal
                     if (Reuses == 1) _sTimeout = 15000;
                     if (Reuses != 0) _ = _timer.Change(_sTimeout, Timeout.Infinite);
                 }
-                // Authenticate outside the socket accept callback. The request timer also
-                // bounds a client that connects without completing its TLS handshake.
-                if (Stream is SslStream sslStream && !sslStream.IsAuthenticated)
+                var selection = await TcpProtocolInput.ReadAsync(Stream, buffer, bufferedInput,
+                    Reuses == 0, IsSecure,
+                    Stream is SslStream { IsAuthenticated: false } ? _epl.Listener.Certificate : null).ConfigureAwait(false);
+                if (selection.IsHttp2)
                 {
-#if NET10_0_OR_GREATER
-                    await sslStream.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
+                    if (selection.Count == 0) await RunHttp2Async(Stream).ConfigureAwait(false);
+                    else
                     {
-                        ServerCertificate = _epl.Listener.Certificate ?? throw new InvalidOperationException("The HTTPS listener has no certificate."),
-                        EnabledSslProtocols = SslProtocols.None,
-                        ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http2, SslApplicationProtocol.Http11 },
-                    }).ConfigureAwait(false);
-                    if (sslStream.NegotiatedApplicationProtocol == SslApplicationProtocol.Http2)
-                    {
-                        if (sslStream.SslProtocol != SslProtocols.Tls12 && sslStream.SslProtocol != SslProtocols.Tls13)
-                            throw new AuthenticationException("HTTP/2 requires TLS 1.2 or later.");
-                        await RunHttp2Async(Stream).ConfigureAwait(false);
-                        return;
+                        using var replay = new PrefixReadStream(Stream, buffer, selection.Count);
+                        await RunHttp2Async(replay).ConfigureAwait(false);
                     }
-#else
-                    await sslStream.AuthenticateAsServerAsync(_epl.Listener.Certificate ?? throw new InvalidOperationException("The HTTPS listener has no certificate."),
-                        false, SslProtocols.None, false).ConfigureAwait(false);
-#endif
+                    return;
                 }
-
-                var data = bufferedInput ? 0 : await Stream.ReadAsync(buffer, 0, BufferSize).ConfigureAwait(false);
-                if (!IsSecure && Reuses == 0 && !bufferedInput && data > 0 && buffer[0] == (byte)'P')
-                {
-                    var preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
-                    while (true)
-                    {
-                        var matches = true;
-                        for (var i = 0; i < Math.Min(data, preface.Length); i++)
-                            if (buffer[i] != preface[i]) { matches = false; break; }
-                        if (!matches) break;
-                        if (data >= preface.Length)
-                        {
-                            using var replay = new PrefixReadStream(Stream, buffer, data);
-                            await RunHttp2Async(replay).ConfigureAwait(false);
-                            return;
-                        }
-                        var more = await Stream.ReadAsync(buffer, data, BufferSize - data).ConfigureAwait(false);
-                        if (more == 0) throw new EndOfStreamException("Incomplete protocol preface.");
-                        data += more;
-                    }
-                }
-                await OnReadInternal(data, bufferedInput).ConfigureAwait(false);
+                await OnReadInternal(selection.Count, selection.Buffered).ConfigureAwait(false);
             }
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
