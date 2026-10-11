@@ -167,7 +167,9 @@ internal sealed class WorkloadStats(Workload workload)
     {
         lock (_gate)
         {
-            if (disrupted)
+            if (disrupted && exception is not InvalidDataException
+                && exception is IOException or SocketException or HttpRequestException
+                    or WebSocketException or AuthenticationException or OperationCanceledException or TimeoutException)
             {
                 _disrupted++;
                 _intervalDisrupted++;
@@ -515,6 +517,9 @@ internal static class Workers
         while (run.Running)
         {
             await pacer.WaitAsync(run.Token).ConfigureAwait(false);
+            // A paced wait can outlast the phase. Finish an exchange already
+            // started, but never start a new one on a retired connection.
+            if (!run.Running) break;
             var started = Stopwatch.GetTimestamp();
             await stream.WriteAsync(request, run.Token).ConfigureAwait(false);
             var response = await reader.ReadAsync(expected, run.Token).ConfigureAwait(false);
@@ -975,7 +980,11 @@ internal static class Workers
                 {
                     if (received == buffer.Length) throw new InvalidDataException("Echo longer than the message sent.");
                     result = await socket.ReceiveAsync(buffer.AsMemory(received), run.Token).ConfigureAwait(false);
-                    if (result.MessageType == WebSocketMessageType.Close) throw new InvalidDataException("Server closed during an echo: " + socket.CloseStatus + " " + socket.CloseStatusDescription);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        if (run.Disrupted) throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely, "Server closed during the planned disruption.");
+                        throw new InvalidDataException("Server closed during an echo: " + socket.CloseStatus + " " + socket.CloseStatusDescription);
+                    }
                     received += result.Count;
                 }
                 while (!result.EndOfMessage);
@@ -985,7 +994,11 @@ internal static class Workers
             }
 
             await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", run.Token).ConfigureAwait(false);
-            if (socket.CloseStatus != WebSocketCloseStatus.NormalClosure) throw new InvalidDataException("Unexpected close status " + socket.CloseStatus);
+            if (socket.CloseStatus != WebSocketCloseStatus.NormalClosure)
+            {
+                if (run.Disrupted) throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely, "Server closed during the planned disruption.");
+                throw new InvalidDataException("Unexpected close status " + socket.CloseStatus);
+            }
             if (!hold) stats.Completed(Stopwatch.GetTimestamp() - started, 0);
         }
     }

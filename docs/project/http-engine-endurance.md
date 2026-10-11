@@ -56,7 +56,7 @@ control) passed, but no measurements were repeated on it.
 8-hour totals: 88,596,949 validated client exchanges (92.9 million server requests),
 708,888 deliberate client cancellations/resets, 193,131 WebSocket connections with
 1,161,801 echoed messages, 49 server instances (48 drain-and-replace cycles), zero
-requests served by a drained instance, zero validation failures (status, version,
+requests served by a drained instance, zero reported validation failures (status, version,
 framing, length, every body byte, every echoed message). Every phase reached zero
 in-flight requests and WebSockets within 23 ms of traffic stopping. Final graceful
 stop took 4.5 ms; the server exited with code 0.
@@ -84,7 +84,8 @@ After two warm-up snapshots the least-squares slope is about +63 MiB/hour of pri
 bytes, steady across the whole run (before and after the host contention described
 below) and not released by 48 drain-and-replace cycles. The managed heap, GC
 committed memory, handles, threads, thread-pool threads and timers stay bounded,
-so this is neither managed retention nor leaked sockets or handles. Growth occurs
+so the measured growth is outside the observed managed heap. Flat handle counts
+do not identify the native allocation owner or exclude leaked native state. Growth occurs
 under the steady mix alone (quiesced private bytes rose from 570.9 to 589.0 MiB across
 the final 10-minute steady phase).
 
@@ -108,8 +109,9 @@ every small-request stall above 2 s (up to 15 s, on all five protocols at the sa
 moment), occurred in the first ~5 hours, while the host was CPU-saturated: in the
 worst windows the server used all 8 of its CPUs (140 CPU-seconds in a 17 s sampling
 gap) with the machine at 21 of 24 busy. See [host contention](#host-contention).
-None occurred in the remaining cycles. Treat these as overload effects of this host
-unless they recur on a quiet one.
+None occurred in the remaining cycles. This is an observed correlation with host
+load; a quiet-host control is still needed to distinguish contention from engine
+or runtime limits.
 
 ### 3. TCP connects unanswered for 21 s after drain-and-replace — open
 
@@ -146,7 +148,7 @@ connection. Over 8 hours: 15.2 million `IOException`, 5.5 million
 `OperationCanceledException`, 3.5 million `QuicException`, 3.3 million
 `TaskCanceledException`. This is CPU cost, not a correctness failure.
 
-### Not defects
+### Observed healthy outcomes
 
 - Health checks after every phase passed (34/34); quiesce never stalled.
 - Drain/replace under load completed with zero in flight and zero requests served by
@@ -221,9 +223,10 @@ taken before any write, when the copy's `QUIC_BUFFER*` is still null. The first
 (`NativeMemory.AllocZeroed`), and `SEND_COMPLETE` frees only the data it points to. When
 the handle closes it disposes the boxed copy, which frees nothing, so the array of
 every stream that ever sent data is orphaned. Every HTTP/3 response sends data on a
-request stream, hence one block per request. The handoff came from dotnet/runtime
-#100228 (March 2024): `release/9.0`, `release/10.0` and `main` contain it, `release/8.0`
-does not. Only .NET 10.0.12 was measured.
+request stream, hence one block per request. The handoff came from
+[dotnet/runtime#100228](https://github.com/dotnet/runtime/pull/100228) (March 2024):
+`release/9.0`, `release/10.0` and `main` contain it, `release/8.0` does not. Only .NET
+10.0.12 was measured.
 
 `quic-send-buffer-probe` (below) confirms this without HTTP, EmbedIO or Kestrel: one
 process, loopback QUIC, 2,000 server streams per round, everything disposed before
@@ -278,7 +281,8 @@ configuration that stalled has not been completed yet.
 For the same workload, server CPU per request was about 4× higher and client CPU per
 request 3–5× higher in the first ~5 hours (cycles 1–10) than afterwards, with an
 abrupt change after cycle 10. The client never loads EmbedIO, so the change is
-host-wide (Hyper-V contention from other activity), not an engine effect. Throughput
+consistent with host-wide contention, but does not establish its cause or exclude
+engine/runtime limits. Throughput
 targets were paced, so achieved rates were lower during contention. Results from
 those hours are kept and reported, not removed.
 
@@ -303,5 +307,33 @@ those hours are kept and reported, not removed.
    endurance run on it.
 2. Reproduce the post-replacement connect timeout with repeated drain-and-replace
    under HTTP/1.1 connect churn only.
-3. Repeat a shorter mixed run on a quiet host to confirm the HTTP/3 handshake
-   timeouts are contention-only.
+3. Repeat a shorter mixed run on a quiet host to test whether the HTTP/3 handshake
+   timeouts depend on contention.
+
+## Integration review
+
+The campaign figures above remain historical evidence for the named tested SHA.
+The current harness also fails a step when a retired listener reports a drain or
+server-run error, rejects missing drain reports, and fails the campaign when the
+server exits unsuccessfully. A healthy replacement cannot erase an earlier drain
+failure. No new measured endurance campaign is implied by these tooling changes.
+Remaining investigations are tracked separately in issues #278 through #283.
+
+The original classifier counted all exceptions in planned disruption windows as
+disrupted outcomes, so its historical zero reported validation failures do not
+prove that no validation exception occurred inside those windows. The reviewed
+classifier exempts only expected transport/cancellation failures; detected byte,
+status, version and framing mismatches remain errors during replacement too.
+
+Review validation on the engine base at `d8d445b`: locked restore and warning-free
+harness build, parser/suppression guards and formatting passed. The standalone
+`endurance-verdict-check` passes clean, failed and malformed drain reports and
+disruption classification. A synthetic analysis check excludes active, missing-counter
+and stuck snapshots from retention trends. Short HTTP and WebSocket load phases
+passed, as did small-request drain/replacement. The broader six-second steady
+drain phase initially failed with four late HTTP/1 streaming read errors at about
+ten seconds in both EmbedIO and Kestrel. A paced HTTP/1 worker could wake after the
+phase ended and start another exchange on a connection retired during drain.
+The worker now checks the phase after its wait. Repeating the same bounded control
+passes on both engines with zero errors. Failed attempts remain retained; these
+short functional checks are not new endurance or comparative performance measurements.

@@ -137,7 +137,7 @@ internal static class Endurance
                             for (var cycle = 1; cycle <= int.Parse(parts[1], CultureInfo.InvariantCulture); cycle++)
                             {
                                 var nested = new JsonObject { ["cycle"] = cycle };
-                                nested["drain"] = await server.RequestJsonAsync("drain " + drainTimeout.ToString(CultureInfo.InvariantCulture), TimeSpan.FromSeconds(drainTimeout + 90)).ConfigureAwait(false);
+                                RecordDrain(nested, await server.RequestJsonAsync("drain " + drainTimeout.ToString(CultureInfo.InvariantCulture), TimeSpan.FromSeconds(drainTimeout + 90)).ConfigureAwait(false));
                                 nested["restart"] = await server.RequestJsonAsync("start", TimeSpan.FromSeconds(60)).ConfigureAwait(false);
                                 await QuiesceAsync(context, nested).ConfigureAwait(false);
                                 (record["cycles"] ??= new JsonArray()).AsArray().Add(nested);
@@ -163,7 +163,9 @@ internal static class Endurance
             }
 
             var stop = await server.RequestJsonAsync("exit", TimeSpan.FromSeconds(120)).ConfigureAwait(false);
-            await Write(new JsonObject { ["step"] = "server-exit", ["result"] = stop, ["exitCode"] = await server.WaitForExitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(false) }).ConfigureAwait(false);
+            var exitCode = await server.WaitForExitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(false);
+            await Write(new JsonObject { ["step"] = "server-exit", ["result"] = stop, ["exitCode"] = exitCode, ["failed"] = exitCode != 0 }).ConfigureAwait(false);
+            if (exitCode != 0) failures++;
         }
         finally
         {
@@ -254,7 +256,7 @@ internal static class Endurance
                 await Task.Delay(TimeSpan.FromSeconds(seconds / 2)).ConfigureAwait(false);
                 if (await client.RequestAsync("disrupt-begin", TimeSpan.FromSeconds(30)).ConfigureAwait(false) != "OK") throw new InvalidOperationException("Client did not acknowledge disruption.");
                 record["serverBeforeDrain"] = await context.Server.RequestJsonAsync("sample", TimeSpan.FromSeconds(30)).ConfigureAwait(false);
-                record["drain"] = await context.Server.RequestJsonAsync("drain " + context.DrainTimeout.ToString(CultureInfo.InvariantCulture), TimeSpan.FromSeconds(context.DrainTimeout + 90)).ConfigureAwait(false);
+                RecordDrain(record, await context.Server.RequestJsonAsync("drain " + context.DrainTimeout.ToString(CultureInfo.InvariantCulture), TimeSpan.FromSeconds(context.DrainTimeout + 90)).ConfigureAwait(false));
                 record["restart"] = await context.Server.RequestJsonAsync("start", TimeSpan.FromSeconds(60)).ConfigureAwait(false);
                 if (await client.RequestAsync("disrupt-end", TimeSpan.FromSeconds(30)).ConfigureAwait(false) != "OK") throw new InvalidOperationException("Client did not acknowledge disruption end.");
             }
@@ -271,6 +273,18 @@ internal static class Endurance
         {
             await client.DisposeAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         }
+    }
+
+    internal static void RecordDrain(JsonObject record, JsonNode? result)
+    {
+        record["drain"] = result;
+        // A later healthy replacement must not erase a failure of the instance
+        // being retired. Missing or malformed reports cannot prove a clean drain.
+        if (result is not JsonObject report || report["listeners"] is not JsonArray listeners || listeners.Count == 0
+            || listeners.Any(listener => listener is not JsonObject outcome
+                || !outcome.ContainsKey("error") || !outcome.ContainsKey("runError")
+                || outcome["error"] is not null || outcome["runError"] is not null))
+            record["failed"] = true;
     }
 
     // Health checks keep the transport filter (a control engine may not serve every

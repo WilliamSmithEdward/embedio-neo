@@ -47,7 +47,7 @@ def quiesced_points():
         holders = [step] + list(step.get("cycles", []))
         for holder in holders:
             snapshot = holder.get("quiesced")
-            if snapshot:
+            if snapshot and not holder.get("quiesceStuck") and snapshot.get("inFlightRequests") == 0 and snapshot.get("webSocketsActive") == 0:
                 label = step["step"] + (f" c{holder['cycle']}" if "cycle" in holder else "")
                 points.append((label, snapshot, holder))
     return points
@@ -125,6 +125,7 @@ metrics = [
     ("timers", "Timers", 1),
 ]
 out.append("## Quiesced snapshots (forced GC, zero in-flight)\n")
+out.append("Snapshots with incomplete quiescence or missing activity counters are excluded from retention trends.\n")
 out.append("| Hour | After | " + " | ".join(label for _, label, _ in metrics) + " | Server TCP | Available GiB |")
 out.append("| --- | --- | " + " | ".join("---" for _ in metrics) + " | --- | --- |")
 for label, snapshot, _ in points:
