@@ -588,3 +588,30 @@ or explicit lifetime campaign is enabled. The six discovery gates are raised
 to the actually reported 5,072 count. macOS and every exact-head hosted gate
 remain required. These positive results do not explain the earlier double-free
 or integrate the native provider into application startup.
+
+## Current integration review after backend retirement
+
+The owned consolidation is now reconciled with verified engine `5a7bf51`,
+including #269's Microsoft-backend retirement and #270's reviewed tooling.
+A fresh ordinary Windows coverage run reports 4,565 cases, 4,558 passed,
+seven expected skips and zero failures in 3m24s. The seven skips are the two
+existing platform cases and five explicit lifetime campaigns; no new campaign
+was executed. Both independent-peer datagram cases ran with the installed
+hash-locked aioquic peer. The measured floor is 4,487 existing cases plus 78
+reported native cases.
+
+CI now provisions Python 3.12.14 and the existing hash-locked peer requirements
+in an isolated temporary environment on each desktop runner. Missing peer
+configuration is a failure when `EMBEDIO_REQUIRE_DATAGRAM_PEER=1`, so hosted
+interoperability cannot silently skip. After that guard change, all 36 focused
+datagram cases passed on Windows with zero skips. Offline workflow auditing
+reports no findings (one existing suppression; none added). This is test
+infrastructure only; no Python is used by production assemblies or packages.
+
+The separately reviewed Apple Silicon datagram page from #248 is retained in
+[the platform guide](../platforms/quic-datagrams-macos-validation.md), preserving
+both recorded revisions from #242/#243. Those results and the earlier Linux
+full suite above do not validate this refreshed head. New exact-head Linux,
+macOS, compatibility and scanner gates remain required. Application HTTP/3
+still uses `System.Net.Quic`; this consolidation does not activate the native
+provider as the application listener or claim integrated WebTransport/datagrams.
