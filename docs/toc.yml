@@ -244,6 +244,8 @@
       href: project/http-conformance.md
     - name: HTTP standards applicability audit
       href: project/http-standards-applicability.md
+    - name: Linux glibc heap aborts
+      href: project/linux-glibc-heap-aborts.md
 
 - name: Suffix byte ranges
   href: user-reports/suffix-range-responses.md
