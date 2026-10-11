@@ -250,8 +250,9 @@ An empty write never allocates the array, which is the toggle that isolates it.
   ever reached the stream; none is added. The in-tree native MsQuic adapter does not go
   through `QuicStream`. Until .NET ships a fix, hosts with heavy HTTP/3 traffic can
   recycle processes periodically or leave HTTP/3 disabled where it is not needed.
-- The leak has been reported to dotnet/runtime with a standalone repro (link to be
-  added).
+- The leak is reported as
+  [dotnet/runtime#135583](https://github.com/dotnet/runtime/issues/135583), with a
+  standalone repro.
 
 ### Repeating the attribution
 
