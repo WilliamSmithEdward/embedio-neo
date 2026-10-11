@@ -1,4 +1,4 @@
-﻿# Modern HTTP engine program
+# Modern HTTP engine program
 
 Release scope: William designated this modern engine program for **EmbedIO-Neo v2**
 on 2026-10-10. Maintain the [Neo v1 to v2 migration guide](../compatibility/neo-v1-to-v2.md)
@@ -7743,16 +7743,23 @@ framing and an incomplete explicitly declared body. Initial full validation
 identified an obsolete normalization expectation and a transport-suppression
 regression; both are corrected without weakening the retained failure checks.
 
-Final Windows coverage reports 4,643 cases: 4,636 passed, seven expected skips and
+The earlier component run reported 4,643 cases: 4,636 passed, seven expected skips and
 zero failures in 3m28s, with the independent native datagram peer required. The
 focused modern set passes 116/116. The actual netstandard2.0 core, hosted on the
 installed .NET 10 runtime, reports 115 passed and one modern-only skip. Both
 library targets build without warnings, formatting and both source guards pass,
 and all ten existing allocation and HTTP/HTTPS cleanup gates pass unchanged.
-Discovery minimums are reconciled to 4,643. No comparative throughput improvement
+The component discovery minimum was 4,643. No comparative throughput improvement
 is claimed; exact-head hosted checks still precede integration.
 
 This removes the inherited response-output implementation, not all remaining
 connection, listener registration or request/response application-model code.
 Full inherited-listener retirement remains in progress, and program #181 stays
 open. No release or native-provider activation is implied.
+
+The reconciled source includes the current engine's additional idle-close cases.
+Its complete Windows SDK run reports 4,657 cases: 4,650 passed, seven expected
+skips and zero failures in 3m58s, requiring native QUIC and the independent
+datagram peer. The stable runner stages and hashes the exact build and peer
+fixture, then uses the SDK's aggregate discovery policy; the combined minimum
+remains 4,657. Both source guards and changed-source formatting pass.
