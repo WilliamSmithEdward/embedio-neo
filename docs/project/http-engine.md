@@ -7937,3 +7937,39 @@ seven expected skips and zero failures in 3m49s, again requiring QUIC and the
 independent datagram peer. Retained-asset results remain 234 passed and 17 expected
 HTTP/3 transport skips; both source guards, changed-source formatting, the
 rebuilt standalone performance harness and all ten unchanged resource gates pass.
+### Independent HTTP/1 response metadata
+
+An independently authored response model now owns application metadata, framing
+selection, trailer reservations, protocol handoff and the once-only close claim.
+The existing independently authored bounded header encoder is retained in a
+separate transport-independent helper; it still reserves the bounded first-body
+prefix and preserves small/large header encoding paths. A new cookie-field
+formatter retains attribute order, quoting, SameSite handling and distinct
+Set-Cookie lines for HTTP/1, multiplexed responses and WebSocket handshakes.
+
+The response interface, default media type/encoding, HEAD/304 representation
+metadata, informational sections, trailers, tunnel/capsule contracts and
+transport-error policy remain. Keep-alive evaluation retains the forced-status
+and drain short-circuits before accessing the request's cached policy. Header
+mutation guards and repeat close/disposal behavior remain request-local.
+
+Two controlled fixed-length/chunked output cases fail on the preceding HTTP/1
+model because it sends content for 205 Reset Content. The new model suppresses
+those bytes and commits zero length without chunk framing, matching the existing
+HTTP/2 and HTTP/3 policy and [RFC 9110 section 15.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.6).
+The affected malformed application response is documented in the Neo v1-to-v2
+guide; use a body-capable status when returning a payload.
+
+The focused framing, HTTP/1.0, trailer, informational, output, cookie, handoff and
+status set passes 171/171, including both controlled findings. Both core targets
+build without warnings. Full Windows validation reports 4,673 cases: 4,666 passed,
+seven expected skips and zero failures in 3m51s, with QUIC and the independent
+datagram peer required. The actual netstandard2.0 core passes the same 171 cases
+on the installed .NET 10 host; this is not .NET Framework runtime evidence. The
+standalone performance build, both source guards and changed-source formatting
+pass. All ten existing allocation, body-consumption, wire and HTTP/HTTPS cleanup
+gates pass with unchanged budgets. Exact-head hosted checks still precede
+integration. Discovery minimums are reconciled to 4,673.
+This replaces response metadata, not the remaining context/prefix/cookie-parser
+helpers or native HTTP/3 extension application integration. Program #181 remains
+open; no release or comparative whole-server speedup is claimed.
