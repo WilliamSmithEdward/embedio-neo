@@ -53,7 +53,10 @@ A small, modular, MIT-licensed web server targeting .NET 10 and .NET Standard 2.
 
 * Written entirely in C#, using built-in .NET APIs on .NET 10
 * Network operations use the async/await pattern: Responses are handled asynchronously
-* Multiple implementations support: EmbedIO can use Microsoft `HttpListener` or internal Http Listener based on [Mono](https://www.mono-project.com/)/[websocket-sharp](https://github.com/sta/websocket-sharp/) projects
+* Neo v2 development replaces the Microsoft and Mono-derived listener backends
+  with an independently authored TCP HTTP engine. See the
+  [Neo v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md).
+  Neo v2 is not released; the protocol badges above describe the released version.
 * The Neo regression suite passes on Windows, Linux and macOS with .NET 10.
   The .NET Standard 2.0 target is retained for legacy consumers;
   older runtimes, including .NET Framework and Mono, have not been validated for Neo.

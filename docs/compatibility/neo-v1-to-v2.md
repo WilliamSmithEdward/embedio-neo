@@ -236,6 +236,14 @@ the following Path attribute; that path and the actual expiry are retained.
 Check application assertions or workarounds that depended on either parsing bug.
 Cookie replacement identity, lookup ranking and mutation visibility are retained.
 This helper replacement adds no public API or runtime dependency.
+## Concurrent stream-property access
+
+The v2 TCP coordinator publishes one body stream and one response-output stream
+per request even when first property access races. This prevents duplicate transport
+owners; it does not authorize concurrent payload reads or writes without the
+stream's documented synchronization. Existing WebSocket cleanup can still acquire
+its harmless HTTP output flush view after the upgraded transport has closed.
+
 ## Validate an application upgrade
 
 1. Rebuild the application and custom adapters against the selected v2 candidate.
