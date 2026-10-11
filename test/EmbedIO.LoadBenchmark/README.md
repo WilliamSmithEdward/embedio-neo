@@ -15,10 +15,11 @@ dotnet TestResults/load-benchmark/runners/candidate/EmbedIO.LoadBenchmark.dll ru
 The prepare script builds this runner from the checkout, builds the baseline core
 from a pinned revision exported with `git archive` (default `1445c23`, the main
 commit PR #182 last merged), and copies the runner twice, swapping only
-`EmbedIO.dll` in the baseline copy. Builds use `ContinuousIntegrationBuild` so
-hashes do not depend on the build directory. The core's informational version
-embeds the current commit, so its hash changes with every commit even when the
-source does not. `runners.json` records revisions, uncommitted paths and SHA-256
+`EmbedIO.dll` in the baseline copy. Builds use `ContinuousIntegrationBuild`, but the core's hash still
+changed between two builds of the same commit in different output directories, and
+its informational version embeds the current commit, so its hash changes with every
+commit even when the source does not. Treat `runners.json` as the record of the
+binaries actually run, not as a reproducibility proof. `runners.json` records revisions, uncommitted paths and SHA-256
 hashes.
 
 `run` options: `--scenarios all|<prefix>,...`, `--engines candidate,baseline,kestrel`,
@@ -67,10 +68,55 @@ engine's median requests/s, CPU and bytes per request against a reference and ca
 difference real only when it exceeds the identical-runner (A/A) ratio, both engines' own sample
 spread and a 3 % floor (`--floor`).
 
+## Running on a shared machine
+
+Two scripts turn one orchestrator invocation into evidence that can be checked
+after the fact:
+
+```sh
+python -I scripts/guarded_load_benchmark.py --owner "<agent and branch>" \
+    --output TestResults/load-benchmark/results-<label> \
+    --own-marker <absolute path of this checkout> -- \
+    dotnet TestResults/load-benchmark/runners/candidate/EmbedIO.LoadBenchmark.dll run \
+    --output TestResults/load-benchmark/results-<label> --baseline-dir TestResults/load-benchmark/runners/baseline \
+    --modern-baseline --scenarios h3- --rounds 3 --server-cpus 0-7 --client-cpus 8-15
+python -I scripts/summarize_load_benchmark.py TestResults/load-benchmark/results-<label>-a1 --compare baseline candidate
+```
+
+`guarded_load_benchmark.py` waits until `TestResults/BENCHMARK-LOCK.txt` is absent
+and no foreign `EmbedIO.Tests`, load-benchmark, `dotnet test`, conformance or fuzz
+process has been seen for `--idle-seconds` (120), creates the lock with
+`O_CREAT | O_EXCL` (a lock written by another owner is never overwritten), then
+starts the command and checks every `--watch-interval` seconds that the lock is still
+its own and that no foreign process appeared. On either event it kills the command's
+process tree, writes `INVALID.txt` and `attempt.json` into that attempt's output and
+retries in a fresh `-a<n>` directory after the idle gate. Invalid attempts are kept.
+The command's own `--output` is rewritten to the attempt directory; a command that
+fails on its own (for example a failed sample) is not retried, because the failure is
+the result. The script's own shells and the command's descendants are excluded from the
+foreign check; pass `--own-marker` for any other process of this checkout whose command
+line would otherwise match, such as a build.
+
+`summarize_load_benchmark.py` prints every sample of the given result directories,
+failed and invalid ones included, with per-engine medians of accepted samples, and
+with `--compare baseline candidate` a table of candidate-to-baseline ratios per
+scenario (requests per second, server CPU and allocated bytes per request, client p50
+and p99). A result directory carrying `INVALID.txt` or `ABORTED.txt` is listed and
+contributes no accepted samples.
+
+The reviewed watchdog excludes its ancestor processes themselves and expands only
+owned descendants, so sibling jobs remain visible. Monitoring errors clean up the
+owned live child before releasing the lock; failed cleanup retains its lock.
+The summary uses the same complete, finite core-metric policy as the comparison
+helper and displays missing client CPU as unavailable. Historical runs made with
+the earlier ancestor-expansion bug need independent isolation evidence or a rerun.
+
 ## Profiling
 
 Profile separately from comparisons. `--profile` aggregates runtime events in the
-server (sampled allocation by type, exceptions, contention). `--trace-tool` runs
+server (sampled allocation by every type seen, exceptions, contention); a
+before/after diff of the per-type totals divided by completed requests attributes
+an allocation change to its type even when it is a few dozen bytes per request. `--trace-tool` runs
 dotnet-trace (`dotnet-sampled-thread-time`) against the server during the
 measurement window and writes the `.nettrace` plus top-60 exclusive and inclusive
 method reports next to each sample. The tool is not a project dependency; install a

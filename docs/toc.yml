@@ -250,6 +250,8 @@
       href: project/http3-performance.md
     - name: Multiplexed request-model allocation
       href: project/http-request-model-allocations.md
+    - name: HTTP/3 transport abstraction cost
+      href: project/http3-abstraction-cost.md
     - name: HTTP conformance audit
       href: project/http-conformance.md
     - name: HTTP standards applicability audit

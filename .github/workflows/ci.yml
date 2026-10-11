@@ -398,6 +398,7 @@ jobs:
       - name: Validate standalone load benchmark tooling
         run: |
           python3 scripts/test_compare_load_benchmark.py
+          python3 scripts/test_guarded_load_benchmark.py
           dotnet restore test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --locked-mode
           dotnet format whitespace test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --no-restore --verify-no-changes
           dotnet build test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
