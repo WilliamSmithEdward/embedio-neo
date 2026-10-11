@@ -24,15 +24,18 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly object _sync = new();
         private readonly X509Certificate2 _certificate;
+        private readonly bool _native;
         private readonly List<string> _prefixes = new();
         private Session? _session;
         private bool _disposed;
         private bool _stopping;
-        internal Http3Listener(X509Certificate2? certificate)
+        internal Http3Listener(X509Certificate2? certificate) : this(certificate, false) { }
+        internal Http3Listener(X509Certificate2? certificate, bool native)
         {
             if (certificate == null || !certificate.HasPrivateKey)
                 throw new ArgumentException("HTTP/3 requires a certificate with its private key.", nameof(certificate));
             _certificate = certificate;
+            _native = native;
         }
         public bool IgnoreWriteExceptions { get; set; } = true;
         public bool IsListening { get { lock (_sync) return _session?.IsRunning ?? false; } }
@@ -60,7 +63,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_session != null) return;
                 if (_stopping) throw new InvalidOperationException("The previous HTTP/3 listener is still stopping.");
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificate);
+                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificate, _native);
             }
         }
         public void Stop()
@@ -142,13 +145,15 @@ namespace EmbedIO.Net.Internal.Http3
             private int _disposed;
             internal bool IsDraining { get; private set; }
             internal bool IsRunning => !_stop.IsCancellationRequested;
-            private readonly Dictionary<QuicListener, (ListenerPrefix[] Prefixes, IPEndPoint EndPoint)> _listeners = new();
+            private readonly Dictionary<Http3ListenerBinding, (ListenerPrefix[] Prefixes, IPEndPoint EndPoint)> _listeners = new();
             private readonly List<Task> _accepts = new();
             private readonly object _gate = new();
             private readonly Dictionary<long, Task> _connections = new();
             private long _next;
+            private int _pendingHandshakes;
+            private int _activeConnections;
             private Session() { }
-            internal static Session Start(ListenerPrefix[] prefixes, X509Certificate2 certificate)
+            internal static Session Start(ListenerPrefix[] prefixes, X509Certificate2 certificate, bool native)
             {
                 var session = new Session();
                 try
@@ -166,29 +171,8 @@ namespace EmbedIO.Net.Internal.Http3
                     }
                     foreach (var binding in endpoints)
                     {
-                        var options = new QuicListenerOptions
-                        {
-                            ListenEndPoint = binding.Key,
-                            // Counts handshakes in progress as well as unaccepted connections;
-                            // beyond it System.Net.Quic answers CONNECTION_REFUSED. 512 matches
-                            // the runtime and Kestrel defaults; 128 refused churn once CPU
-                            // contention stretched handshakes past one second (#283).
-                            ListenBacklog = 512,
-                            ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
-                            ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(new QuicServerConnectionOptions
-                            {
-                                DefaultCloseErrorCode = 0x100,
-                                DefaultStreamErrorCode = 0x10c,
-                                MaxInboundBidirectionalStreams = 128,
-                                MaxInboundUnidirectionalStreams = 16,
-                                IdleTimeout = TimeSpan.FromSeconds(60),
-                                HandshakeTimeout = TimeSpan.FromSeconds(10),
-                                ServerAuthenticationOptions = new SslServerAuthenticationOptions
-                                { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = certificate }
-                            })
-                        };
                         var listener = QuicEndpointReleases.Shared.Bind(binding.Key,
-                            () => QuicListener.ListenAsync(options).AsTask().GetAwaiter().GetResult());
+                            () => Http3ListenerBinding.Bind(binding.Key, certificate, native));
                         session._listeners.Add(listener, (binding.Value.ToArray(), binding.Key));
                     }
                     // Publish accept loops only after all bindings succeeded.
@@ -215,14 +199,14 @@ namespace EmbedIO.Net.Internal.Http3
                     yield return addresses[0];
                 }
             }
-            private async Task AcceptAsync(QuicListener listener, ListenerPrefix[] prefixes)
+            private async Task AcceptAsync(Http3ListenerBinding listener, ListenerPrefix[] prefixes)
             {
                 try
                 {
                     while (true)
                     {
-                        QuicConnection connection;
-                        try { connection = await listener.AcceptConnectionAsync(_acceptStop.Token).ConfigureAwait(false); }
+                        Http3AcceptedConnection connection;
+                        try { connection = await listener.AcceptAsync(_acceptStop.Token).ConfigureAwait(false); }
                         catch (Exception error) when (!_acceptStop.IsCancellationRequested && (error is AuthenticationException
                             || error is QuicException quic && quic.QuicError is QuicError.ConnectionAborted or QuicError.ConnectionTimeout or QuicError.ConnectionIdle or QuicError.TransportError))
                         {
@@ -231,19 +215,21 @@ namespace EmbedIO.Net.Internal.Http3
                             continue;
                         }
                         var rejected = false;
+                        var pending = connection.HandshakePending;
                         lock (_gate)
                         {
-                            if (_connections.Count >= 256 || _acceptStop.IsCancellationRequested) rejected = true;
+                            if ((pending ? _pendingHandshakes >= 512 : _activeConnections >= 256) || _acceptStop.IsCancellationRequested) rejected = true;
                             else
                             {
                                 var id = ++_next;
-                                _connections.Add(id, Task.Run(() => RunConnectionAsync(id, connection, prefixes)));
+                                if (pending) _pendingHandshakes++; else _activeConnections++;
+                                _connections.Add(id, Task.Run(() => RunConnectionAsync(id, connection, prefixes, pending)));
                             }
                         }
                         if (rejected)
                         {
                             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                            try { await connection.CloseAsync(0x107, deadline.Token).ConfigureAwait(false); }
+                            try { await connection.RejectAsync(deadline.Token).ConfigureAwait(false); }
                             catch (Exception error) when (error is QuicException or OperationCanceledException) { }
                             finally { await connection.DisposeAsync().ConfigureAwait(false); }
                         }
@@ -251,6 +237,7 @@ namespace EmbedIO.Net.Internal.Http3
                 }
                 catch (OperationCanceledException) when (_acceptStop.IsCancellationRequested) { }
                 catch (ObjectDisposedException) when (_acceptStop.IsCancellationRequested) { }
+                catch (ChannelClosedException) when (_acceptStop.IsCancellationRequested) { }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
                 {
                     error.Log(NameForLog, "HTTP/3 accept loop failed.");
@@ -260,18 +247,46 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
             private const string NameForLog = "HTTP/3 listener";
-            private async Task RunConnectionAsync(long id, QuicConnection connection, ListenerPrefix[] prefixes)
+            private async Task RunConnectionAsync(long id, Http3AcceptedConnection connection, ListenerPrefix[] prefixes, bool pending)
             {
-                var local = connection.LocalEndPoint;
-                var remote = connection.RemoteEndPoint;
+                var active = !pending;
                 try
                 {
-                    await Http3QuicConnection.RunForListenerAsync(connection, exchange => DispatchAsync(exchange, local, remote, prefixes),
-                        _stop.Token, _drain.Token, TimeSpan.FromMilliseconds(uint.MaxValue - 1)).ConfigureAwait(false);
+                    await connection.WaitReadyAsync(_stop.Token).ConfigureAwait(false);
+                    if (pending)
+                    {
+                        lock (_gate)
+                        {
+                            _pendingHandshakes--;
+                            pending = false;
+                            if (_activeConnections < 256 && !_stop.IsCancellationRequested && !_drain.IsCancellationRequested)
+                            { _activeConnections++; active = true; }
+                        }
+                        if (!active)
+                        {
+                            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                            await connection.RejectAsync(deadline.Token).ConfigureAwait(false);
+                            return;
+                        }
+                    }
+                    await connection.RunAsync((exchange, local, remote) => DispatchAsync(exchange, local, remote, prefixes),
+                        _stop.Token, _drain.Token).ConfigureAwait(false);
                 }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
                 { if (!_stop.IsCancellationRequested) error.Log(NameForLog, "HTTP/3 connection ended with an error."); }
-                finally { lock (_gate) _connections.Remove(id); }
+                finally
+                {
+                    try { await connection.DisposeAsync().ConfigureAwait(false); }
+                    finally
+                    {
+                        lock (_gate)
+                        {
+                            if (pending) _pendingHandshakes--;
+                            if (active) _activeConnections--;
+                            _connections.Remove(id);
+                        }
+                    }
+                }
             }
             private static bool Matches(Uri uri, IPEndPoint local, ListenerPrefix[] prefixes)
             {

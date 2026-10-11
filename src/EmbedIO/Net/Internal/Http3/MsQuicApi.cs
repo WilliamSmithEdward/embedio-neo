@@ -38,6 +38,8 @@ namespace EmbedIO.Net.Internal.Http3
         private struct StreamSettings
         {
             [FieldOffset(0)] internal ulong IsSet;
+            [FieldOffset(16)] internal ulong HandshakeIdleTimeoutMs;
+            [FieldOffset(24)] internal ulong IdleTimeoutMs;
             [FieldOffset(94)] internal ushort PeerBidirectional;
             [FieldOffset(96)] internal ushort PeerUnidirectional;
             [FieldOffset(106)] internal byte BooleanFlags;
@@ -134,7 +136,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
 
-        internal MsQuicConfiguration CreateConfiguration(MsQuicRegistration registration, byte[] alpn, ushort bidirectional = 0, ushort unidirectional = 0, bool sendBuffering = true)
+        internal MsQuicConfiguration CreateConfiguration(MsQuicRegistration registration, byte[] alpn, ushort bidirectional = 0, ushort unidirectional = 0, bool sendBuffering = true, bool http3Listener = false)
         {
             if (alpn == null) throw new ArgumentNullException(nameof(alpn));
             if (alpn.Length == 0 || alpn.Length > 255) throw new ArgumentOutOfRangeException(nameof(alpn));
@@ -152,7 +154,9 @@ namespace EmbedIO.Net.Internal.Http3
                 settings = Marshal.AllocHGlobal(Marshal.SizeOf<StreamSettings>());
                 Marshal.StructureToPtr(new StreamSettings
                 {
-                    IsSet = (1UL << 18) | (1UL << 19) | (sendBuffering ? 0 : 1UL << 24),
+                    IsSet = (1UL << 18) | (1UL << 19) | (sendBuffering ? 0 : 1UL << 24) | (http3Listener ? 6UL : 0),
+                    HandshakeIdleTimeoutMs = http3Listener ? 10000UL : 0,
+                    IdleTimeoutMs = http3Listener ? 60000UL : 0,
                     PeerBidirectional = bidirectional,
                     PeerUnidirectional = unidirectional,
                     BooleanFlags = 0,
@@ -237,6 +241,8 @@ namespace EmbedIO.Net.Internal.Http3
         internal MsQuicNativeConnection AcceptConnection(IntPtr connection) => _api.AcceptConnection(this, connection);
         internal MsQuicNativeListener CreateListener() => _api.CreateListener(this);
         internal MsQuicConfiguration CreateConfiguration(byte[] alpn) => _api.CreateConfiguration(this, alpn);
+        internal MsQuicConfiguration CreateHttp3ListenerConfiguration(byte[] alpn)
+            => _api.CreateConfiguration(this, alpn, 128, 16, true, true);
         internal MsQuicConfiguration CreateStreamConfiguration(byte[] alpn, ushort bidirectional, ushort unidirectional)
             => _api.CreateConfiguration(this, alpn, bidirectional, unidirectional);
         internal MsQuicConfiguration CreateUnbufferedStreamConfiguration(byte[] alpn, ushort bidirectional, ushort unidirectional)

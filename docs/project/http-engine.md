@@ -8105,3 +8105,38 @@ fixtures, not the HTTP/3 tunnel/drain methods in the Http3ListenerTest partial
 fixture. Those are covered by the required-QUIC full suite; a separate correctly
 named selection reports 34/34 passes with QUIC required, including related
 tunnel cases in that fixture, and provides the focused QUIC handoff check.
+
+### Internal native HTTP/3 listener binding candidate
+
+An internal provider selector now lets the same HTTP/3 listener session own either
+System.Net.Quic or the native MsQuic listener/connection adapter. Public listener
+selection still uses System.Net.Quic. The native path configures peer stream
+acceptance before credentials, finishes handshakes concurrently on connection
+workers, and supplies queried local/remote endpoints to the ordinary application
+context queue. It uses the existing HTTP/3/QPACK protocol engine and routing,
+context completion, graceful-drain and recently-released endpoint retry policy.
+
+The native profile selects 128 bidirectional and 16 unidirectional peer streams,
+a 60-second idle timeout, a 10-second handshake timeout and 512 pending acceptance
+slots. A native slot stays reserved through handshake completion or peer disposal;
+acceptance cannot admit another full queue while configured handshakes still wait.
+Active connections retain the existing 256 limit. Failed peer configuration or TLS
+handshake releases that peer without stopping the listener. Native bind mapping
+recognizes only the platform's address-in-use status; other native errors retain
+their existing behavior. The older standalone native acceptance profile stays 256.
+
+Six real native application cases exercise IPv4/IPv6 response bytes and three
+same-endpoint restarts, rejected-client-certificate-trust isolation followed by a
+healthy request, drain preserving an admitted response, multi-endpoint startup
+rollback and completion of a pending context accept on stop. The existing native
+lifetime/handshake and default-provider listener set passes 169/169 with QUIC
+required. Both targets build without warnings. Full 4,685-case, resource, platform
+and exact-head hosted validation remain pending. The first IPv6 smoke assertion
+incorrectly required scope zero; Windows returned loopback ::1%1. The context
+retains that native scope; the fixture verifies address bytes and exact port.
+Initial log/TRX and the corrected passing run are retained.
+
+This is an internal candidate, not default-provider or release acceptance. No
+public APIs, default provider or target/dependency group changes here. Datagrams
+and WebTransport still require application wiring. The separate Windows Native
+ABI result is not macOS/Linux or older-runtime proof. Program #181 remains open.

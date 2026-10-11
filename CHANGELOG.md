@@ -1,6 +1,9 @@
 ﻿# Changelog
 
 ## [Unreleased]
+- Add an internally selectable native HTTP/3 listener binding for application
+  context validation, retaining the existing public provider selection. Preserve
+  stream/time limits, handshake backlog ownership, routing and graceful drain.
 - Replace remaining TCP request stream/completion coordination with original
   ownership transitions. Concurrent first property access shares one stream owner;
   completion disposes output outside the connection gate and retires failed output.
