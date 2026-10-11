@@ -228,6 +228,8 @@
       href: project/http-webtransport-core.md
     - name: QUIC lifetime and rebind
       href: project/quic-lifetime.md
+    - name: Native QUIC abort disposal
+      href: project/native-quic-abort-disposal.md
     - name: Linux test-host terminations
       href: project/linux-test-host-terminations.md
     - name: Native HTTP/3 provider ownership audit
