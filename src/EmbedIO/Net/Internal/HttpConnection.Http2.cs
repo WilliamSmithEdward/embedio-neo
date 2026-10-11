@@ -46,7 +46,11 @@ namespace EmbedIO.Net.Internal
                 // Decide ownership and block a later transfer under the same lock.
                 if (!_http2)
                 {
-                    if (!_epl.AdmissionStopped && _lastListener != owner) return;
+                    if (!_epl.AdmissionStopped)
+                    {
+                        if (_lastListener != owner) return;
+                        if (ReleaseIdleOwner(owner)) return;
+                    }
                     Volatile.Write(ref _forceClosing, 1);
                 }
                 // A shared endpoint remains open after this owner removes its routes.

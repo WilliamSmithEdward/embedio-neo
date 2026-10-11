@@ -65,5 +65,31 @@ namespace EmbedIO
             @this.ContentType = MimeType.Default;
             @this.ContentEncoding = null;
         }
+
+        // Representation fields describing the body a failed handler was about to send.
+        // They would otherwise frame or label the replacement body incorrectly.
+        private static readonly string[] ReplacedRepresentationHeaders =
+        {
+            HttpHeaderNames.ContentLength,
+            HttpHeaderNames.ContentEncoding,
+            HttpHeaderNames.ContentRange,
+            HttpHeaderNames.ContentLanguage,
+            HttpHeaderNames.ContentLocation,
+            HttpHeaderNames.ContentDisposition,
+            HttpHeaderNames.ETag,
+            HttpHeaderNames.TransferEncoding,
+        };
+
+        // Prepares an uncommitted response to be replaced by an exception handler:
+        // an empty response for the status plus removal of stale representation and
+        // framing fields. Headers unrelated to the body, such as CORS or custom
+        // diagnostics, are kept.
+        internal static void PrepareReplacement(this IHttpResponse @this, int statusCode)
+        {
+            @this.SetEmptyResponse(statusCode);
+            foreach (var name in ReplacedRepresentationHeaders)
+                @this.Headers.Remove(name);
+            @this.SendChunked = false;
+        }
     }
 }

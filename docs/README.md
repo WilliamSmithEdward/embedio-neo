@@ -129,6 +129,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Endpoint configuration](user-reports/endpoint-configuration.md): explicit binding, prefix paths, shared ports and certificate ownership.
 
 - [Streaming write errors](user-reports/streaming-write-errors.md): error policy, reverse proxies, compression and buffering.
+- [Deferred responses](user-reports/deferred-responses.md): the commitment contract, replaceable error responses and dispose-on-success buffering.
 - [Fluent Basic authentication](user-reports/fluent-basic-authentication.md): scoped registration, configuration and preserved authentication behavior.
 - [Context and persistent client banning](user-reports/context-client-banning.md): live controls, CIDR policies and optional restart persistence.
 
@@ -136,6 +137,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Modern HTTP engine program](project/http-engine.md): protocol roadmap, compatibility changes and performance acceptance.
 - [QUIC lifetime and rebind](project/quic-lifetime.md): native disposal evidence, bounded retry, quarantine limits and retirement gates.
+- [Upstream QUIC lifetime report](project/quic-upstream-report-draft.md): the MsQuic report posted as microsoft/msquic#6374, separating deferred datapath close from connection-held bindings, plus the unposted dotnet/runtime note.
 - [Native QUIC abort disposal](project/native-quic-abort-disposal.md): preserve explicit read/write abort codes through cleanup, with real-peer regressions.
 - [Linux test-host terminations](project/linux-test-host-terminations.md): native listener stop race diagnosis, unattributed glibc abort evidence and next diagnostics.
 - [Native HTTP/3 provider ownership audit](project/http3-native-provider-audit.md): MsQuic acceptance, callback and ownership findings, reproductions and proposed fixes.
@@ -178,6 +180,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Informational responses and response trailers](guides/response-field-sections.md): optional managed response sections and ownership rules.
 
 ## Project and contribution
+
+- [Shared HTTP/1 listener shutdown](project/shared-http1-owner-shutdown.md): logical-owner retirement, idle transport handoff and final-endpoint cleanup.
 
 - [HTTP/1 idle closure investigation](project/http1-idle-closure.md): TCP/TLS timeout observations, released/main controls and the pending orderly-closure policy decision.
 

@@ -186,6 +186,9 @@
     - name: Streaming write errors
       href: user-reports/streaming-write-errors.md
 
+    - name: Deferred responses
+      href: user-reports/deferred-responses.md
+
     - name: Fluent Basic authentication
       href: user-reports/fluent-basic-authentication.md
 
@@ -230,6 +233,8 @@
       href: project/http-webtransport-core.md
     - name: QUIC lifetime and rebind
       href: project/quic-lifetime.md
+    - name: Upstream QUIC lifetime report
+      href: project/quic-upstream-report-draft.md
     - name: Native QUIC abort disposal
       href: project/native-quic-abort-disposal.md
     - name: Linux test-host terminations
@@ -279,3 +284,6 @@
 
 - name: Informational responses and response trailers
   href: guides/response-field-sections.md
+
+- name: Shared HTTP/1 listener shutdown
+  href: project/shared-http1-owner-shutdown.md

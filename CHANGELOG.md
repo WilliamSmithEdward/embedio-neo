@@ -1,6 +1,17 @@
 ﻿# Changelog
 
 ## [Unreleased]
+- Preserve reusable HTTP/1 connections when one logical listener stops on a
+  shared endpoint. Active incomplete requests still abort, and retiring the final
+  listener still releases idle TCP/TLS transports.
+- Enforce the response commitment contract evaluated in Neo #42. Exception
+  handlers run only while the response is replaceable and start from a response
+  without the failed handler's representation fields, so a stale Content-Length
+  no longer truncates the error body. A failure after commitment closes an HTTP/1
+  body without its terminator and resets an HTTP/2 or HTTP/3 stream instead of
+  ending a partial body cleanly; see the
+  [Neo v2 migration guide](docs/compatibility/neo-v1-to-v2.md#response-statuses-output-and-shutdown)
+  and [deferred responses](docs/user-reports/deferred-responses.md).
 - Add an internally selectable native HTTP/3 listener binding for application
   context validation, retaining the existing public provider selection. Preserve
   stream/time limits, handshake backlog ownership, routing and graceful drain.

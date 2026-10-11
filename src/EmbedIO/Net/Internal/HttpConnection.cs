@@ -244,6 +244,22 @@ namespace EmbedIO.Net.Internal
             }
         }
 
+        // Called under the session gate. A completed body-free request can be
+        // between response completion and the actor's next-head transition.
+        // It is no longer work owned by the retiring logical listener.
+        private bool ReleaseIdleOwner(HttpListener owner)
+        {
+            if (_protocolEnded != 0 || _tunnel || _draining || _forceClosing != 0
+                || (_contextBound && !(_responseEnded && _responseCanReuse && !_context.Request.HasEntityBody)))
+                return false;
+            // Admission and final-endpoint disposal arbitrate the transfer. If
+            // disposal already sealed the endpoint, normal forced cleanup wins.
+            if (!_epl.RetainIdleConnection(this)) return false;
+            owner.RemoveConnection(this);
+            _lastListener = null;
+            return true;
+        }
+
         internal Task DrainAsync() => DrainCoreAsync(null);
 
         private Task DrainCoreAsync(HttpListener? owner)
@@ -253,8 +269,10 @@ namespace EmbedIO.Net.Internal
             bool close;
             lock (_connectionSync)
             {
-                if (owner != null && !_epl.AdmissionStopped && !_http2 && _lastListener != owner)
-                    return Task.CompletedTask;
+                if (owner != null && !_epl.AdmissionStopped && !_http2)
+                {
+                    if (_lastListener != owner || ReleaseIdleOwner(owner)) return Task.CompletedTask;
+                }
                 completion = _lifetime.Completion;
                 if (_lifetime.CloseFinished) return completion;
                 if (_draining) return completion;
