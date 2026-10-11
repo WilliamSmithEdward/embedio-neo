@@ -41,9 +41,10 @@ records the audited behavior and its limits.
 ## Listener selection and deployment
 
 William approved removal of both the Microsoft backend and the inherited Mono
-implementation on 2026-10-10. The retirement is being implemented incrementally;
-the replacement engine must pass the complete platform and protocol checks before
-shipping. This approval supersedes the earlier plan to retain Microsoft mode and
+implementation on 2026-10-10. The engine branch now contains the original TCP
+listener, protocol input, request actor, response output, endpoint/transport
+lifetime and request/response/context view replacements. Complete program
+acceptance is still required before shipping. This approval supersedes the earlier plan to retain Microsoft mode and
 only deprecate Mono.
 
 Remove `WithMicrosoftHttpListener()` and `HttpListenerMode.Microsoft` from source
@@ -57,19 +58,21 @@ HTTP.sys URL reservations and kernel certificate bindings are specific to the
 removed backend; use the replacement engine's HTTPS certificate configuration and
 validate deployment guidance for your application model.
 
-The intended v2 outcome is for the replacement engine to be the supported listener
-family, with both old implementations removed. On the retirement branch, the
-Microsoft factory and its adapters are removed; replacing the inherited Mono
-HTTP/1 implementation remains in progress. This intermediate state is not shipping
-acceptance. Keeping the EmbedIO mode name does not retain the old parser's
-permissive behavior.
+The replacement engine is the listener family on the engine branch; both old
+implementations are removed. HTTP/3 public selection still uses System.Net.Quic
+for its QUIC transport, with the independently authored HTTP/3 protocol engine.
+That transport API is distinct from the removed System.Net.HttpListener backend.
+The native MsQuic application provider is integrated as an internal candidate;
+its default activation and remaining extensions/performance acceptance are still
+unfinished. These source changes are not shipping acceptance. Keeping the
+EmbedIO mode name does not retain the old parser's permissive behavior.
 
 The current engine branch has these modes:
 
 | Mode | Current development behavior | Migration action |
 | --- | --- | --- |
-| EmbedIO | Managed HTTP/1 and HTTP/2 over TCP; replacement work remains in progress. | Exercise existing routes and clients against the new engine. |
-| Microsoft (v1 only) | Removed on the v2 retirement branch. | Remove the mode selection and migrate backend-specific deployment configuration. |
+| EmbedIO | Original HTTP/1 and HTTP/2 engine over TCP; full program acceptance remains pending. | Exercise existing routes and clients against the new engine. |
+| Microsoft (v1 only) | Removed on the v2 engine branch. | Remove the mode selection and migrate backend-specific deployment configuration. |
 | EmbedIOHttp3 | Opt-in HTTP/3 over UDP, without a TCP listener. | Use the .NET 10 asset, supported native QUIC, HTTPS and a certificate with its private key. |
 | EmbedIOCombined | HTTP/1 and HTTP/2 over TCP alongside HTTP/3 over UDP on the same HTTPS prefixes. | Permit both transports; startup requires both bindings and has no silent TCP-only fallback. |
 
@@ -261,11 +264,26 @@ its harmless HTTP output flush view after the upgraded transport has closed.
    datagrams/WebTransport and final platform acceptance are complete. Roll out only
    after the actual v2 package and its support policy are published.
 
+## Additive HTTP datagram API
+
+The native HTTP/3 candidate adds `HttpTunnel.Datagrams`, `HttpDatagramChannel`,
+`HttpDatagram` and `HttpDatagramSendStatus`. Existing context interfaces and tunnel
+constructors are unchanged. The surface exists on both current library targets;
+unsupported backends return null. Public provider selection and native activation
+are still under development, so this is not a released availability claim.
+
+Applications must explicitly accept and authorize the extension, dispose received
+packets after using their memory, and handle unreliable submission results. No
+automatic capsule fallback or retransmission is introduced. Output completion
+preserves remaining incoming delivery; full closure releases unread packet owners.
+See [the carrier guide](../guides/capsule-tunnels.md#native-http-datagrams) before
+adapting a protocol handler. This addition does not change WebSocket queue defaults.
+
 ## Release preparation still required
 
 Before v2 ships, reconcile every approved behavior change into this guide,
-verify code examples against the final package, finish default-listener and
-Mono-deprecation documentation, confirm extension/platform support and complete
+verify code examples against the final package, reconcile the listener-removal
+and native-provider deployment documentation, confirm extension/platform support and complete
 conformance, fuzzing, interoperability, sustained-load and exact-head CI gates.
 Update README HTTP badges when the corresponding engine support is integrated
 and verified. Program #181 remains open; this guide does not authorize a release.

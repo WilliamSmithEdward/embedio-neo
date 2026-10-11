@@ -16,6 +16,7 @@ namespace EmbedIO
         private readonly Func<Exception, Task>? _abort;
         private Task? _completion;
         private Task? _disposal;
+        private HttpDatagramChannel? _datagrams;
         /// <summary>Creates a tunnel over an already negotiated stream, taking ownership of that stream.</summary>
         /// <param name="stream">The duplex stream whose disposal ends the tunnel.</param>
         /// <param name="completeOutput">Backend action completing output according to transport closure semantics.</param>
@@ -37,6 +38,17 @@ namespace EmbedIO
         public string? Protocol { get; }
         /// <summary>Gets the capsule channel when explicitly negotiated, otherwise null.</summary>
         public HttpCapsuleChannel? Capsules { get; }
+        /// <summary>Gets the optional native HTTP datagram channel for this accepted tunnel.</summary>
+        /// <remarks>Null means the backend has no native datagram capability. No reliable fallback is implicit.</remarks>
+        public HttpDatagramChannel? Datagrams => Volatile.Read(ref _datagrams);
+        internal void AttachDatagrams(HttpDatagramChannel? channel)
+        {
+            lock (_sync)
+            {
+                if (_disposal == null) { _datagrams = channel; return; }
+            }
+            channel?.Close();
+        }
         /// <summary>Finishes output after pending writes according to transport closure semantics.</summary>
         /// <remarks>TLS 1.2 peers must finish sending before close_notify; independent half-close requires a supporting transport.</remarks>
         /// <param name="cancellationToken">The first caller's token controls shared completion.</param>
@@ -99,6 +111,9 @@ namespace EmbedIO
                 start = new TaskCompletionSource<bool>();
                 disposal = DisposeCoreAsync(start.Task, token);
                 _disposal = disposal;
+                // Publish closure before returning the shared task. Cleanup
+                // stays on the asynchronous worker and precedes output waits.
+                _datagrams?.BeginClose();
             }
             start.TrySetResult(true);
             return disposal;
@@ -107,13 +122,24 @@ namespace EmbedIO
         {
             await start.ConfigureAwait(false);
             Exception? failure = null;
-            try { await CompleteOutputAsync(token).ConfigureAwait(false); }
+            Exception? cleanupFailure = null;
+            try
+            {
+                try { Datagrams?.Close(); }
+                catch (Exception error) when (Internal.ExceptionPolicy.IsRecoverable(error)) { cleanupFailure = error; }
+                await CompleteOutputAsync(token).ConfigureAwait(false);
+            }
             catch (Exception error) { failure = error; throw; }
             finally
             {
                 try { Stream.Dispose(); }
-                catch (Exception error) when (failure != null && Internal.ExceptionPolicy.IsRecoverable(failure) && Internal.ExceptionPolicy.IsRecoverable(error))
-                { throw new AggregateException(failure, error); }
+                catch (Exception error) when (Internal.ExceptionPolicy.IsRecoverable(error))
+                { cleanupFailure = cleanupFailure == null ? error : new AggregateException(cleanupFailure, error); }
+                if (cleanupFailure != null)
+                {
+                    if (failure != null && Internal.ExceptionPolicy.IsRecoverable(failure)) throw new AggregateException(failure, cleanupFailure);
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(cleanupFailure).Throw();
+                }
             }
         }
     }

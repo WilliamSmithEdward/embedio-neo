@@ -8264,3 +8264,44 @@ remain required before integration.
 The additive application surface, capsule fallback/selection contract,
 WebTransport integration, broader native performance/memory acceptance and
 exact-head platform/security checks remain unfinished. Program #181 remains open.
+
+#### Additive public HTTP datagram access
+
+The application continuation adds `HttpTunnel.Datagrams`, `HttpDatagramChannel`,
+`HttpDatagram` and `HttpDatagramSendStatus` on both library targets, without an
+existing-interface/constructor change or a new runtime dependency group. The
+native exchange supplies the optional channel after explicit tunnel acceptance;
+unsupported backends return null. Public provider selection remains unchanged.
+The real pinned-certificate aioquic application test now uses only that public
+channel after acceptance, rather than reading the exchange's private field.
+
+Each receive transfers one packet owner. Disposal releases it once; payload
+access then throws. Empty payloads and end-of-input are distinct. `CanSend`
+describes output, while receive delivery can continue after output completion.
+The payload limit accounts for the identifier and can be zero for an available
+empty-only packet. Submission returns an explicit unreliable outcome; no capsule
+fallback or retransmission is implicit.
+
+Full tunnel closure publishes channel closure before returning the shared close
+task, then releases queued packet owners before waiting for output completion.
+Stream disposal still runs after datagram cleanup or output failures, and
+recoverable failures are preserved together. A new regression initially caught
+a publication gap: the async cleanup had not started when CloseAsync returned,
+so CanSend was still true. Publishing only the closed flag under the existing
+tunnel gate removes that gap; network cleanup remains asynchronous. The failed
+run and unchanged passing assertion are retained.
+
+Seven new ownership/cancellation/half-close/cleanup cases and the public-peer
+exchange pass with the existing tunnel cases: 52/52, zero skips, on Windows and
+pinned Linux. The full Windows suite reports 4,717 cases, 4,710 passed, seven
+expected skips, zero failures (3m52.043s). Actual .NET Standard core selection
+reports 442 cases, 376 passed, 66 unsupported-feature skips, zero failures
+(42.828s), with the modern core restored afterward. This is not older-CLR or
+native-standard-asset evidence. Both targets build warning-free; all ten
+unchanged resource gates pass. The exact carrier-guide echo fragment compiles
+without warnings in a private test wrapper.
+
+Native default activation, WebTransport integration and comparative native
+performance/memory acceptance remain unfinished. Exact-head hosted checks are
+required before integrating this increment. The updated carrier guide and Neo
+v1-to-v2 guide describe ownership and availability without claiming release.

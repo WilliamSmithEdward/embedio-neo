@@ -6,6 +6,10 @@ using EmbedIO.Net.Internal.Http2;
 
 namespace EmbedIO.Net.Internal
 {
+    internal interface IMultiplexedDatagramExchange
+    {
+        HttpDatagramChannel? CreateDatagramChannel();
+    }
     // Application-facing operations shared by the HTTP/2 and HTTP/3 transports.
     // Framing, compression, flow control, and stream ownership stay in each driver.
     internal interface IMultiplexedExchange
