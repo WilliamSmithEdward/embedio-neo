@@ -1,5 +1,14 @@
 # HTTP/3 transport abstraction cost (October 2026)
 
+Integration review retained these historical results but found that the original
+watchdog expanded descendants of its ancestor processes, potentially excluding
+other agents' sibling jobs. Therefore its lack of a competing-load report alone
+does not establish isolation of the recorded runs. The corrected watchdog expands
+only owned descendants and cleans up its child before unlocking on monitoring
+errors. Six synthetic ownership/lock/cleanup regressions pass, but these performance
+runs have not been repeated with the corrected tool. The figures below apply to
+their recorded revisions and are not performance acceptance for the current engine.
+
 Program #181 is moving the HTTP/3 engine from `System.Net.Quic` to a native
 QUIC provider (draft PR #231). The first step inserted a provider-neutral
 ownership boundary, `Http3TransportConnection` and `Http3TransportStream`,

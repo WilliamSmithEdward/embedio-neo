@@ -67,6 +67,7 @@ dotnet <runner>/EmbedIO.LoadBenchmark.dll recovery --output <fresh dir> --engine
 engine's median requests/s, CPU and bytes per request against a reference and calls a
 difference real only when it exceeds the identical-runner (A/A) ratio, both engines' own sample
 spread and a 3 % floor (`--floor`).
+
 ## Running on a shared machine
 
 Two scripts turn one orchestrator invocation into evidence that can be checked
@@ -102,6 +103,13 @@ with `--compare baseline candidate` a table of candidate-to-baseline ratios per
 scenario (requests per second, server CPU and allocated bytes per request, client p50
 and p99). A result directory carrying `INVALID.txt` or `ABORTED.txt` is listed and
 contributes no accepted samples.
+
+The reviewed watchdog excludes its ancestor processes themselves and expands only
+owned descendants, so sibling jobs remain visible. Monitoring errors clean up the
+owned live child before releasing the lock; failed cleanup retains its lock.
+The summary uses the same complete, finite core-metric policy as the comparison
+helper and displays missing client CPU as unavailable. Historical runs made with
+the earlier ancestor-expansion bug need independent isolation evidence or a rerun.
 
 ## Profiling
 
