@@ -95,8 +95,9 @@ namespace EmbedIO.Net.Internal.Http3
                     try
                     {
                         connection.EnableStreamAcceptance();
+                        var datagrams = connection.EnableDatagrams();
                         connection.Configure(_configuration);
-                        return new NativePeer(connection, _listener);
+                        return new NativePeer(connection, _listener, datagrams);
                     }
                     catch (Exception error) when (error is IOException or ObjectDisposedException)
                     {
@@ -150,10 +151,11 @@ namespace EmbedIO.Net.Internal.Http3
         {
             private readonly MsQuicNativeConnection _connection;
             private readonly MsQuicNativeListener _admission;
+            private readonly MsQuicNativeDatagrams _datagrams;
             private int _admissionReleased;
             private bool _transferred;
-            internal NativePeer(MsQuicNativeConnection connection, MsQuicNativeListener admission)
-            { _connection = connection; _admission = admission; }
+            internal NativePeer(MsQuicNativeConnection connection, MsQuicNativeListener admission, MsQuicNativeDatagrams datagrams)
+            { _connection = connection; _admission = admission; _datagrams = datagrams; }
             private void ReleaseAdmission()
             {
                 if (Interlocked.Exchange(ref _admissionReleased, 1) == 0) _admission.ReleaseHttp3Admission();
@@ -171,8 +173,8 @@ namespace EmbedIO.Net.Internal.Http3
                 var local = _connection.LocalEndPoint;
                 var remote = _connection.RemoteEndPoint;
                 _transferred = true;
-                await Http3QuicConnection.RunNativeForListenerAsync(_connection, exchange => dispatch(exchange, local, remote),
-                    abort, drain, TimeSpan.FromMilliseconds(uint.MaxValue - 1)).ConfigureAwait(false);
+                await Http3QuicConnection.RunNativeDatagramsForListenerAsync(_connection, exchange => dispatch(exchange, local, remote),
+                    abort, drain, TimeSpan.FromMilliseconds(uint.MaxValue - 1), _datagrams).ConfigureAwait(false);
             }
             internal override async ValueTask RejectAsync(CancellationToken token)
                 => await _connection.ShutdownAsync(0x107).WaitAsync(token).ConfigureAwait(false);

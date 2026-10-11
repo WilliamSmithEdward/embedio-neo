@@ -23,7 +23,7 @@ namespace EmbedIO.Tests
     // Native QUIC datagram ownership (RFC 9221) over the internal MsQuic provider.
     // Synthetic-event cases drive the documented v2.6.2 event layouts directly;
     // native cases use a real MsQuic server connection.
-    public sealed class MsQuicNativeDatagramTest
+    public sealed partial class MsQuicNativeDatagramTest
     {
         private static readonly Assembly Core = typeof(WebServer).Assembly;
         private static readonly uint Pending = OperatingSystem.IsWindows() ? 0x000703E5u : unchecked((uint)-2);

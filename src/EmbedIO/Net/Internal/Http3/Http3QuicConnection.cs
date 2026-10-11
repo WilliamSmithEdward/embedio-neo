@@ -43,6 +43,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly SemaphoreSlim _encoderReady = new(0, 1);
         private readonly SemaphoreSlim _feedbackReady = new(0, 1);
         private Http3PeerSettings _peer = Http3PeerSettings.Parse(Array.Empty<byte>());
+        private readonly Http3DatagramRouter? _datagrams;
         private Exception? _failure;
         private int _critical;
         private int _applicationCount;
@@ -60,6 +61,7 @@ namespace EmbedIO.Net.Internal.Http3
         private Http3QuicConnection(Http3TransportConnection connection, Func<Http3QuicExchange, Task> dispatch, CancellationToken token, bool dispatchInline)
         {
             _connection = new BorrowedResource<Http3TransportConnection>(connection);
+            if (connection.Datagrams != null) _datagrams = new Http3DatagramRouter(connection.Datagrams);
             _dispatch = dispatch;
             _dispatchInline = dispatchInline;
             _responseEncoder = new QpackResponseEncoder(_encoderFeedback, 4096, 65536);
@@ -79,14 +81,20 @@ namespace EmbedIO.Net.Internal.Http3
             using var session = new Http3QuicConnection(transport, dispatch, token, false);
             await session.RunCoreAsync().ConfigureAwait(false);
         }
-        internal static async Task RunNativeForListenerAsync(MsQuicNativeConnection connection, Func<Http3QuicExchange, Task> dispatch,
+        internal static Task RunNativeForListenerAsync(MsQuicNativeConnection connection, Func<Http3QuicExchange, Task> dispatch,
             CancellationToken abortToken, CancellationToken drainToken, TimeSpan drainTimeout)
+            => RunNativeListenerCoreAsync(connection, dispatch, abortToken, drainToken, drainTimeout, null);
+        internal static Task RunNativeDatagramsForListenerAsync(MsQuicNativeConnection connection, Func<Http3QuicExchange, Task> dispatch,
+            CancellationToken abortToken, CancellationToken drainToken, TimeSpan drainTimeout, MsQuicNativeDatagrams datagrams)
+            => RunNativeListenerCoreAsync(connection, dispatch, abortToken, drainToken, drainTimeout, datagrams);
+        private static async Task RunNativeListenerCoreAsync(MsQuicNativeConnection connection, Func<Http3QuicExchange, Task> dispatch,
+            CancellationToken abortToken, CancellationToken drainToken, TimeSpan drainTimeout, MsQuicNativeDatagrams? datagrams)
         {
             if (connection == null) throw new ArgumentNullException(nameof(connection));
             if (dispatch == null) throw new ArgumentNullException(nameof(dispatch));
             if (drainTimeout <= TimeSpan.Zero || drainTimeout.TotalMilliseconds > uint.MaxValue - 1)
                 throw new ArgumentOutOfRangeException(nameof(drainTimeout));
-            await using var transport = new MsQuicTransportConnection(connection);
+            await using var transport = datagrams == null ? new MsQuicTransportConnection(connection) : new MsQuicTransportConnection(connection, datagrams);
             using var session = new Http3QuicConnection(transport, dispatch, abortToken, true);
             session._drainToken = drainToken;
             session._drainTimeout = drainTimeout;
@@ -135,10 +143,14 @@ namespace EmbedIO.Net.Internal.Http3
                 startup.CancelAfter(TimeSpan.FromSeconds(10));
                 control = await _connection.Value.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, startup.Token).ConfigureAwait(false);
                 // Control type, SETTINGS: capacity 4096, field limit 65536, blocked streams 16, extended CONNECT enabled.
-                await control.WriteAsync(new byte[] { 0, 4, 12, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1 }, startup.Token).ConfigureAwait(false);
+                var settings = _datagrams == null
+                    ? new byte[] { 0, 4, 12, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1 }
+                    : new byte[] { 0, 4, 14, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1, 0x33, 1 };
+                await control.WriteAsync(settings, startup.Token).ConfigureAwait(false);
                 feedback = await _connection.Value.OpenOutboundStreamAsync(QuicStreamType.Unidirectional, startup.Token).ConfigureAwait(false);
                 await feedback.WriteAsync(new byte[] { 3 }, startup.Token).ConfigureAwait(false);
                 background = new[] { WriteEncoderAsync(), WriteFeedbackAsync(feedback), WatchCriticalOutputAsync(control), WatchCriticalOutputAsync(feedback), WatchDrainAsync(control) };
+                if (_datagrams != null) background = background.Append(ReadDatagramsAsync()).ToArray();
                 while (!_token.IsCancellationRequested)
                 {
                     var stream = await _connection.Value.AcceptInboundStreamAsync(_token).ConfigureAwait(false);
@@ -180,6 +192,7 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 try
                 {
+                    _datagrams?.Dispose();
                     CancelRequests(_stop);
                     lock (_decoderSync)
                     {
@@ -203,6 +216,16 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
             if (_failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(_failure).Throw();
+        }
+        private async Task ReadDatagramsAsync()
+        {
+            try
+            {
+                if (_datagrams != null) await _datagrams.RunAsync(_token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+            { if (!_token.IsCancellationRequested) Fail(error); }
         }
         private async Task WatchDrainAsync(Http3TransportStream control)
         {
@@ -335,6 +358,12 @@ namespace EmbedIO.Net.Internal.Http3
                 reader.ConfirmHeaders(request.ContentLength);
                 using var exchange = new Http3QuicExchange(stream, reader, request, scope, requestToken)
                 { PriorityState = _priorities.Headers(stream.Id, request.Headers["priority"]) };
+                using var datagrams = request.Method == "CONNECT" && request.Protocol != null
+                    ? _datagrams?.Open(stream.Id, () => !reads.IsCompleted, () => exchange.CanSendDatagrams && !writes.IsCompleted) : null;
+                exchange.Datagrams = datagrams;
+                if (datagrams != null)
+                    _ = reads.ContinueWith(static (_, state) => (state as Http3DatagramChannel)?.CompleteReceive(), datagrams,
+                        CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
                 lock (_sync)
                 {
                     if (_draining) throw new Http3StreamException(stream.Id, 0x10b, "Request arrived during connection drain.");
@@ -503,7 +532,12 @@ namespace EmbedIO.Net.Internal.Http3
                 var received = await control.ReadAsync(_token).ConfigureAwait(false);
                 if (received.Type == 0xf0700)
                     _priorities.Update(received.Identifier, received.Priority ?? throw new Http3ProtocolException(0x102, "Missing parsed priority."));
-                if (received.Type == 4) Volatile.Write(ref _peer, control.Settings ?? throw new Http3ProtocolException(0x102, "Missing peer settings."));
+                if (received.Type == 4)
+                {
+                    var settings = control.Settings ?? throw new Http3ProtocolException(0x102, "Missing peer settings.");
+                    Volatile.Write(ref _peer, settings);
+                    _datagrams?.SetPeerEnabled(settings.Datagrams);
+                }
                 // No push IDs have been promised by this server yet.
                 if (received.Type == 3 || received.Type == 0xf0701)
                     throw new Http3ProtocolException(0x108, "Control frame refers to an unpromised push.");
@@ -648,7 +682,7 @@ namespace EmbedIO.Net.Internal.Http3
             Interlocked.CompareExchange(ref _failure, error, null);
             CancelRequests(_stop);
         }
-        public void Dispose() { _stopRequests.Dispose(); lock (_encoderSync) { _responseEncoder.Clear(); _encoderFeedback.Abort(); } _encoderReady.Dispose(); _priorities.Clear(); _decoder.Dispose(); _feedbackReady.Dispose(); _applicationDrain.Dispose(); _stop.Dispose(); }
+        public void Dispose() { _stopRequests.Dispose(); _datagrams?.Dispose(); lock (_encoderSync) { _responseEncoder.Clear(); _encoderFeedback.Abort(); } _encoderReady.Dispose(); _priorities.Clear(); _decoder.Dispose(); _feedbackReady.Dispose(); _applicationDrain.Dispose(); _stop.Dispose(); }
     }
 }
 #endif

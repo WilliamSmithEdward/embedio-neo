@@ -12,6 +12,7 @@ namespace EmbedIO.Net.Internal.Http3
     // owned by the protocol worker. Writes borrow memory only until completion.
     internal abstract class Http3TransportConnection : IAsyncDisposable
     {
+        internal virtual Http3DatagramTransport? Datagrams => null;
         internal abstract ValueTask<Http3TransportStream> OpenOutboundStreamAsync(QuicStreamType type, CancellationToken token);
         internal abstract ValueTask<Http3TransportStream> AcceptInboundStreamAsync(CancellationToken token);
         internal abstract ValueTask CloseAsync(long code, CancellationToken token);

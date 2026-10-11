@@ -23,6 +23,8 @@ from aioquic.asyncio import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import DatagramFrameReceived
+from aioquic.h3.connection import H3Connection
+from aioquic.h3.events import DatagramReceived, HeadersReceived
 
 GREETING = b"embedio-native-datagram-hello"
 SIZES = (0, 1, 2, 63, 64, 255, 1000)
@@ -38,11 +40,22 @@ def payload(index, size):
 
 
 class Peer(QuicConnectionProtocol):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, http3=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.datagrams = asyncio.Queue()
+        # aioquic's public capability flag also emits SETTINGS_H3_DATAGRAM=1.
+        # The test uses generic CONNECT; no WebTransport session is negotiated.
+        self.http = H3Connection(self._quic, enable_webtransport=True) if http3 else None
+        self.headers = asyncio.Queue()
 
     def quic_event_received(self, event):
+        if self.http is not None:
+            for received in self.http.handle_event(event):
+                if isinstance(received, HeadersReceived):
+                    self.headers.put_nowait(received)
+                elif isinstance(received, DatagramReceived):
+                    self.datagrams.put_nowait((received.stream_id, received.data))
+            return
         if isinstance(event, DatagramFrameReceived):
             self.datagrams.put_nowait(event.data)
 
@@ -91,7 +104,7 @@ async def unsupported(peer):
 
 async def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("echo", "unsupported"))
+    parser.add_argument("mode", choices=("echo", "unsupported", "http-echo"))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--cafile", required=True)
@@ -102,12 +115,15 @@ async def main():
         is_client=True,
         alpn_protocols=["h3"],
         server_name="localhost",
-        max_datagram_frame_size=65536 if args.mode == "echo" else None,
+        max_datagram_frame_size=65536 if args.mode != "unsupported" else None,
     )
     # Real chain verification against the generated test certificate.
     configuration.load_verify_locations(args.cafile)
     report(event="peer", aioquic=importlib.metadata.version("aioquic"), python=sys.version.split()[0])
-    async with connect(args.host, args.port, configuration=configuration, create_protocol=Peer) as peer:
+    def protocol(*values, **options):
+        return Peer(*values, http3=args.mode == "http-echo", **options)
+
+    async with connect(args.host, args.port, configuration=configuration, create_protocol=protocol) as peer:
         await peer.wait_connected()
         leaf = hashlib.sha256(peer._quic.tls._peer_certificate.public_bytes(_der())).hexdigest()
         if leaf.lower() != args.sha256.lower():
@@ -117,6 +133,8 @@ async def main():
             if not peer._quic._remote_max_datagram_frame_size:
                 raise AssertionError("server did not advertise max_datagram_frame_size")
             await echo(peer)
+        elif args.mode == "http-echo":
+            await http_echo(peer, args.port)
         else:
             await unsupported(peer)
         peer.close(error_code=0x100)
@@ -127,6 +145,35 @@ async def main():
 def _der():
     from cryptography.hazmat.primitives.serialization import Encoding
     return Encoding.DER
+
+
+async def http_echo(peer, port):
+    stream = peer._quic.get_next_available_stream_id()
+    peer.http.send_headers(stream, [
+        (b":method", b"CONNECT"), (b":scheme", b"https"),
+        (b":authority", ("localhost:%s" % port).encode("ascii")),
+        (b":path", b"/"), (b":protocol", b"neo-datagram-test"),
+        (b"capsule-protocol", b"?1"),
+    ])
+    peer.transmit()
+    response = await asyncio.wait_for(peer.headers.get(), 10)
+    if response.stream_id != stream or dict(response.headers).get(b":status") != b"200":
+        raise AssertionError("extension CONNECT was not accepted")
+    if peer.http.received_settings.get(0x33) != 1:
+        raise AssertionError("server did not negotiate HTTP datagrams")
+    for index, size in enumerate(SIZES):
+        expected = payload(index, size)
+        for attempt in range(ATTEMPTS):
+            peer.http.send_datagram(stream, expected)
+            peer.transmit()
+            echoed = await receive(peer, 1)
+            if echoed == (stream, expected):
+                break
+            if echoed is not None:
+                raise AssertionError("HTTP datagram was misrouted or changed")
+        else:
+            raise AssertionError("HTTP datagram echo did not arrive")
+    report(event="http-echo-complete", count=len(SIZES), stream_id=stream)
 
 
 if __name__ == "__main__":
