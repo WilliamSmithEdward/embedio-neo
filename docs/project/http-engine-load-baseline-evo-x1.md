@@ -287,9 +287,12 @@ No stack sampler was installed on this host, so CPU is not attributed to methods
    `WebHeaderCollection` and `Uri`: the header and query collection model. The
    request-inspection route adds about 5.4 KB on HTTP/1.1 and 4.4 KB on HTTP/2; Kestrel
    allocates about 1.5 KB for the same handler work.
-4. **Admission contention.** Lock contention on every protocol's small-request path
-   remains two orders of magnitude above Kestrel, consistent with the listener-wide
-   admission lock identified in the earlier report.
+4. **Remaining contention.** Aggregate lock contention on every protocol's
+   small-request path remains two orders of magnitude above Kestrel. The measured
+   revision already skips the listener lifecycle lock during ordinary request
+   registration; accepting a context still takes that lock on entry and exit.
+   Without stack sampling, these counts do not identify which locks account for
+   the remaining cost. Attribute them before choosing another admission change.
 5. **Multiplexed and pipelined small requests.** These are the largest gaps to
    Kestrel (HTTP/2 32 streams 2.5-3.6x, pipelining 7.9x) and are where CPU per request
    differs most (2.5-7.5x).
@@ -317,6 +320,13 @@ Raw samples (per-sample JSON with full latency histograms), manifests, runner fi
 hashes, logs and the analysis scripts are retained on the measurement host under
 the ignored `TestResults/perf` directory of the benchmark worktree; they are not
 committed.
+
+The commands below outline the campaign; this documentation PR alone cannot
+reproduce all 29 scenarios. The four request-inspection scenarios require the
+exact `harness-request-route.patch` retained on that host. Obtain that patch and
+the full hash manifests before reproducing those scenarios or independently
+checking the paired comparisons. The abbreviated hashes above identify the
+reported artifacts but are not substitutes for their complete manifests.
 
 ```sh
 # Check out the engine revision with the request-inspection harness patch applied.
