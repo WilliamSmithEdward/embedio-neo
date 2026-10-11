@@ -169,7 +169,11 @@ namespace EmbedIO.Net.Internal.Http3
                         var options = new QuicListenerOptions
                         {
                             ListenEndPoint = binding.Key,
-                            ListenBacklog = 128,
+                            // Counts handshakes in progress as well as unaccepted connections;
+                            // beyond it System.Net.Quic answers CONNECTION_REFUSED. 512 matches
+                            // the runtime and Kestrel defaults; 128 refused churn once CPU
+                            // contention stretched handshakes past one second (#283).
+                            ListenBacklog = 512,
                             ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
                             ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(new QuicServerConnectionOptions
                             {
