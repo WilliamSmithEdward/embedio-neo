@@ -1,9 +1,9 @@
 # Informational responses and response trailers
 
-This unreleased managed-engine increment adds the optional `IHttpResponseSections`
-capability on .NET Standard 2.0 and .NET 10. Existing `IHttpResponse` implementations
-remain compatible. Detect the capability before opting in; the Microsoft backend
-continues to expose its existing response contract.
+Neo v2's HTTP engine implements the optional `IHttpResponseSections` capability
+on .NET Standard 2.0 and .NET 10. Existing custom `IHttpResponse` implementations
+need not implement it; detect the capability before opting in. The Microsoft
+listener backend is removed in v2. These APIs are not yet a published v2 feature.
 
 Use `SendInformationalAsync` for a non-final 1xx response such as 103 Early Hints.
 It copies the supplied fields and preserves final status, headers and body state.

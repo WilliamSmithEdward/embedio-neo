@@ -54,10 +54,11 @@ endpoints. Both accept pumps remain active while accepted responses
 finish; completion of one transport does not abort the other. Deadline expiry or
 cancellation stops queue admission and aborts the remaining responses, including
 requests waiting in the bounded queue. Shared TCP endpoints keep accepting for
-sibling listeners while refusing new requests for the draining listener. Alt-Svc discovery, shared-dispatch performance
-validation and the default-engine transition remain unfinished. This mode still
-uses the current TCP implementation and does not by itself complete replacement
-of the Mono-derived listener.
+sibling listeners while refusing new requests for the draining listener. V2 uses
+the original TCP HTTP engine; both inherited listener backends are removed.
+Public HTTP/3 selection still uses System.Net.Quic for its QUIC transport.
+Native-provider integration, Alt-Svc discovery and final resource/performance
+acceptance remain unfinished; TCP replacement does not establish their completion.
 
 ## Server
 
