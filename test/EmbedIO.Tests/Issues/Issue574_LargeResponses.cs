@@ -23,7 +23,7 @@ namespace EmbedIO.Tests.Issues
     {
         public static IEnumerable FileCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var cached in new[] { false, true })
                     foreach (var encoding in new[] { "identity", "gzip", "deflate" })
                         foreach (var megabytes in new[] { 1, 6 })
@@ -84,8 +84,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task LargeActionAndJsonResponsesCompleteWithoutDelayingOtherRequests(HttpListenerMode mode, bool buffered)
         {
             var url = Resources.GetServerAddress();

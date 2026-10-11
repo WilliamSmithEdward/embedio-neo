@@ -34,6 +34,7 @@ namespace EmbedIO.WebSockets.Internal
         // the limit applies before the receive loop reads its first frame. The
         // public IHttpContextImpl.AcceptWebSocketAsync contract has no parameter for it.
         private static readonly AsyncLocal<int> AcceptedMaxMessageSize = new();
+        private static readonly AsyncLocal<bool> AcceptedMessageConsumerPending = new();
 
         private readonly object _stateSyncRoot = new();
         private readonly object _messageSyncRoot = new();
@@ -53,6 +54,7 @@ namespace EmbedIO.WebSockets.Internal
         private FragmentBuffer? _fragmentsBuffer;
         private bool _inMessage;
         private bool _closeDeferred;
+        private bool _messageConsumerPending;
         private EventHandler<MessageEventArgs>? _onMessage;
         private AutoResetEvent? _receivePong;
         // The connection-close callback owns the underlying transport lifetime.
@@ -67,11 +69,35 @@ namespace EmbedIO.WebSockets.Internal
             _stream = new EmbedIO.Internal.BorrowedResource<Stream>(stream);
             _readyState = WebSocketState.Open;
             _maxMessageSize = AcceptedMaxMessageSize.Value;
+            _messageConsumerPending = AcceptedMessageConsumerPending.Value;
+            // The reservation belongs to this accepted socket, not callbacks or
+            // unrelated sockets created later in the receive loop's async flow.
+            AcceptedMessageConsumerPending.Value = false;
         }
 
         // Sets the incoming message size limit for sockets accepted later in the
         // current asynchronous flow. Zero disables the check.
         internal static void SetAcceptedMaxMessageSize(int value) => AcceptedMaxMessageSize.Value = value;
+        internal static void SetAcceptedMessageConsumerPending(bool value) => AcceptedMessageConsumerPending.Value = value;
+
+        // Failed/canceled module initialization has no consumer to receive queued
+        // messages. Release its reservation without retaining a deferred close.
+        internal void AbandonPendingMessageConsumer()
+        {
+            bool finish;
+            lock (_messageSyncRoot)
+            {
+                if (!_messageConsumerPending) return;
+                _messageConsumerPending = false;
+                finish = _closeDeferred && !_inMessage && _onMessage == null;
+                if (finish)
+                {
+                    _closeDeferred = false;
+                    while (_messageEventQueue.TryDequeue(out _)) { }
+                }
+            }
+            if (finish) CompleteClose();
+        }
 
         internal static WebSocket FromStream(Stream stream, Action close)
         {
@@ -92,7 +118,11 @@ namespace EmbedIO.WebSockets.Internal
         {
             add
             {
-                lock (_messageSyncRoot) _onMessage += value;
+                lock (_messageSyncRoot)
+                {
+                    _onMessage += value;
+                    _messageConsumerPending = false;
+                }
                 // Frames can arrive before the module finishes connection initialization.
                 // Registering the consumer must also wake a previously idle queue.
                 ScheduleMessages();
@@ -112,6 +142,11 @@ namespace EmbedIO.WebSockets.Internal
 
         /// <inheritdoc />
         public WebSocketState State => _readyState;
+
+        internal bool IsApplicationCloseCompleted
+        {
+            get { lock (_stateSyncRoot) return _closeCompleted; }
+        }
 
         internal Task WaitForCloseAsync(CancellationToken cancellationToken)
         {
@@ -468,7 +503,7 @@ namespace EmbedIO.WebSockets.Internal
         {
             lock (_messageSyncRoot)
             {
-                if (_inMessage || _onMessage == null || _messageEventQueue.IsEmpty)
+                if (_inMessage || _onMessage == null || (_messageEventQueue.IsEmpty && !_closeDeferred))
                     return;
             }
             _ = Task.Run(Message);
@@ -520,7 +555,7 @@ namespace EmbedIO.WebSockets.Internal
         // whatever an unsubscribed consumer left behind will never be delivered.
         private bool TakeDeferredClose()
         {
-            if (!_closeDeferred) return false;
+            if (!_closeDeferred || _messageConsumerPending) return false;
             _closeDeferred = false;
             while (_messageEventQueue.TryDequeue(out _)) { }
             return true;
@@ -662,14 +697,16 @@ namespace EmbedIO.WebSockets.Internal
                 // the close after the last message was handed to the application.
                 // Without a consumer the queued data is discarded.
                 bool drain;
+                bool pending;
                 lock (_messageSyncRoot)
                 {
+                    pending = _messageConsumerPending;
                     drain = _onMessage != null && (_inMessage || !_messageEventQueue.IsEmpty);
-                    _closeDeferred = drain;
-                    if (!drain) while (_messageEventQueue.TryDequeue(out _)) { }
+                    _closeDeferred = pending || drain;
+                    if (!pending && !drain) while (_messageEventQueue.TryDequeue(out _)) { }
                 }
                 if (drain) _ = Task.Run(Message);
-                else CompleteClose();
+                else if (!pending) CompleteClose();
             }
         }
 

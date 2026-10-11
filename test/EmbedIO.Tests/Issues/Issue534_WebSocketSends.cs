@@ -84,7 +84,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task RepeatedCloseReconnectAndServerShutdownNotifyEachDisconnectOnce(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -167,7 +166,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ConcurrentRealMessagesRemainCompleteAndConnectionStaysUsable(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();

@@ -224,10 +224,16 @@
       href: project/http-webtransport-core.md
     - name: QUIC lifetime and rebind
       href: project/quic-lifetime.md
+    - name: Linux test-host terminations
+      href: project/linux-test-host-terminations.md
     - name: Native HTTP/3 provider ownership audit
       href: project/http3-native-provider-audit.md
     - name: Managed engine load comparison
       href: project/http-engine-load-comparison.md
+    - name: Managed engine load baseline on a second host
+      href: project/http-engine-load-baseline-evo-x1.md
+    - name: Listener retirement test accounting
+      href: project/listener-retirement-test-accounting.md
     - name: Managed TCP write latency
       href: project/http-tcp-latency.md
     - name: HTTP/2 graceful output lifetime

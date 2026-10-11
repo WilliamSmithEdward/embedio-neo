@@ -19,7 +19,7 @@ namespace EmbedIO.Tests.Issues
     {
         public static IEnumerable SuffixCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var cached in new[] { false, true })
                     foreach (var zip in new[] { false, true })
                         foreach (var item in new (long Suffix, int Length, int Start, int Status)[]
@@ -34,7 +34,7 @@ namespace EmbedIO.Tests.Issues
 
         public static IEnumerable ProviderCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var cached in new[] { false, true })
                     foreach (var zip in new[] { false, true })
                         yield return new object[] { mode, cached, zip };
@@ -141,7 +141,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task NonSeekableLargeResourceSkipsUsingInt64Offsets(HttpListenerMode mode)
         {
             const long length = (long)int.MaxValue + 4;

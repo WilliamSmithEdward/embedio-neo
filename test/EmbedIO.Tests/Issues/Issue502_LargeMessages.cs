@@ -23,8 +23,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, 1)]
         [TestCase(HttpListenerMode.EmbedIO, 2)]
-        [TestCase(HttpListenerMode.Microsoft, 1)]
-        [TestCase(HttpListenerMode.Microsoft, 2)]
         public Task OriginalDelayedLargeReplyPatternSurvivesConcurrentBroadcasts(HttpListenerMode mode, int clientCount)
             => RunWorkloadAsync(mode, clientCount, null);
 
@@ -34,8 +32,6 @@ namespace EmbedIO.Tests.Issues
         // workload's broadcasts still reach them all.
         [TestCase(HttpListenerMode.EmbedIO, 1)]
         [TestCase(HttpListenerMode.EmbedIO, 2)]
-        [TestCase(HttpListenerMode.Microsoft, 1)]
-        [TestCase(HttpListenerMode.Microsoft, 2)]
         public async Task OriginalPatternSurvivesRegistrationAfterTheClientHandshake(HttpListenerMode mode, int clientCount)
         {
             var source = EmbedIO.Diagnostics.Log.Source;

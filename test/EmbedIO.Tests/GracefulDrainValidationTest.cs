@@ -15,12 +15,11 @@ namespace EmbedIO.Tests
             Assert.That(() => server.DrainAsync(TimeSpan.FromMilliseconds(milliseconds)), Throws.InstanceOf<ArgumentOutOfRangeException>());
             Assert.That(server.Listener.IsListening, Is.False);
         }
-        [TestCase(HttpListenerMode.Microsoft)]
-        public void UnsupportedListenersDoNotPretendToDrain(HttpListenerMode mode)
+        [Test]
+        public void RetiredMicrosoftModeIsRejectedBeforeListenerCreation()
         {
-            using var server = new WebServer(mode, "http://localhost:19999/");
-            Assert.That(() => server.DrainAsync(TimeSpan.FromSeconds(1)), Throws.InstanceOf<NotSupportedException>());
-            Assert.That(server.Listener.IsListening, Is.False);
+            Assert.That(() => { using var server = new WebServer((HttpListenerMode)1, "http://localhost:19999/"); },
+                Throws.InstanceOf<NotSupportedException>().With.Message.Contains("no longer supports the Microsoft HTTP listener"));
         }
         [Test]
         public void PreCanceledDrainHasNoListenerSideEffects()
