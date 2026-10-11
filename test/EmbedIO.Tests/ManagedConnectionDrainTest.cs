@@ -24,8 +24,11 @@ namespace EmbedIO.Tests
                 ?? throw new AssertionException("Missing connection drain operation."));
 
         private static void StopEndpoints(Net.HttpListener listener)
-            => (typeof(Net.EndPointManager).GetMethod("StopExclusiveEndpoints", BindingFlags.Static | BindingFlags.NonPublic)
-                ?? throw new AssertionException("Missing endpoint admission stop.")).Invoke(null, new object[] { listener });
+        {
+            foreach (var endpoint in TcpRegistrationInventory.Owned(listener))
+                (endpoint.GetType().GetMethod("StopAcceptingIfExclusive", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? throw new AssertionException("Missing endpoint admission stop.")).Invoke(endpoint, new object[] { listener });
+        }
 
         [TestCase(false, false)]
         [TestCase(false, true)]

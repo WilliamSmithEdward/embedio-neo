@@ -115,11 +115,7 @@ namespace EmbedIO.Tests
             using var listener = new Net.HttpListener();
             listener.AddPrefix(url);
             listener.Start();
-            var registrations = (IDictionary)(typeof(Net.EndPointManager).GetField("Registrations", BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null)
-                ?? throw new AssertionException("Missing endpoint registrations."));
-            var prefixes = (IDictionary)(registrations[listener] ?? throw new AssertionException("Missing listener registration."));
-            var endpoints = (IEnumerable)(prefixes[url] ?? throw new AssertionException("Missing endpoint."));
-            var endpoint = endpoints.Cast<object>().Single();
+            var endpoint = TestObjects.TcpRegistrationInventory.Owned(listener).Single();
             listener.Stop();
             var admission = endpoint.GetType().GetMethod("ProcessAcceptedSocket", BindingFlags.NonPublic | BindingFlags.Instance)
                 ?? throw new AssertionException("Missing endpoint admission.");

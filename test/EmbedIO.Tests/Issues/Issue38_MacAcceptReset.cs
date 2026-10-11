@@ -77,10 +77,7 @@ namespace EmbedIO.Tests.Issues
             listener.AddPrefix(url);
             listener.Start();
             // Observe the internal worker so shutdown cannot pass while leaking a thread.
-            var manager = typeof(Net.EndPointManager);
-            var endpoints = (IDictionary)((((manager).GetField("IPToEndpoints", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            var ports = (IDictionary)((endpoints)[ipv6 ? IPAddress.IPv6Loopback : IPAddress.Loopback] ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            var endpoint = (ports)[new Uri(url).Port];
+            var endpoint = TestObjects.TcpRegistrationInventory.Find(ipv6 ? IPAddress.IPv6Loopback : IPAddress.Loopback, new Uri(url).Port);
             var worker = (Task?)((endpoint ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetField("_acceptWorker", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(endpoint);
             var ownedLoop = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpAcceptLoop") != null;
             Assert.That(worker != null, Is.EqualTo(ownedLoop || ipv6 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)));

@@ -7763,3 +7763,41 @@ skips and zero failures in 3m58s, requiring native QUIC and the independent
 datagram peer. The stable runner stages and hashes the exact build and peer
 fixture, then uses the SDK's aggregate discovery policy; the combined minimum
 remains 4,657. Both source guards and changed-source formatting pass.
+
+### Independent TCP registration and prefix leases
+
+TCP registration now uses an independently authored flat endpoint index and a
+per-listener prefix-lease ledger. New listening sockets remain staged until the
+complete prefix batch has been installed; accept workers are scheduled afterward.
+A failed registration reverses only its recorded route mutations and releases new
+empty bindings, retaining prior canonical aliases and other listeners' routes.
+
+Removal seals physical admission and detaches the current binding by identity
+under the registration gate. Accepted-session disposal then runs outside that
+gate and attempts every retired endpoint even when one cleanup fails. Shared
+endpoints retain their other owners. Graceful drain fixes its exclusive endpoint
+set before closing admission and keeps admitted transports available until their
+existing drain or abort transition.
+
+Two controlled plain/TLS cases held one pending session's cleanup gate. Both
+failed with the previous coordinator because an unrelated listener could not
+start until that session was released; both pass with the new ownership boundary.
+The cases also require admission to have stopped, cleanup still to be pending,
+and a valid response from the independent listener. Existing rollback, localhost,
+shared endpoint and drain assertions are retained with diagnostics updated to the
+new inventory rather than recreating obsolete registry fields.
+
+EndPointManager.UseIpv6 remains public and true by default. Address selection,
+valid prefix behavior, targets, dependencies and configured deadlines are
+unchanged. DNS resolution, binding and worker scheduling remain cold startup
+operations under the registration gate. This does not claim a measured
+whole-server throughput improvement or complete inherited-listener retirement.
+Final complete Windows validation reports 4,659 cases: 4,652 passed, seven
+expected skips and zero failures in 3m54s, with native QUIC and the independent
+datagram peer required. The corrected focused ownership/lifecycle set passes
+189/189; the actual netstandard2.0 core passes the same 189 cases on the installed
+.NET 10 host. Both target builds, formatting and both source guards pass, and all
+ten existing allocation and HTTP/HTTPS cleanup gates pass with unchanged budgets.
+An initial full run found eight obsolete fixture method lookups; their retained
+routing and stale-generation assertions now use the new ownership boundary.
+Discovery minimums are reconciled to 4,659; program #181 remains open.

@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Replace inherited TCP registration coordination with an independently authored
+  endpoint index and prefix-lease ledger. Release accepted sessions outside the
+  registration gate so one stalled cleanup does not block an unrelated listener
+  start, while preserving shared endpoints and registration rollback.
 - Replace inherited HTTP/1 response output with an independently authored owner
   for ordered writes and completion. Enforce the owner-approved declared-length
   contract and close incomplete or failed output without connection reuse,

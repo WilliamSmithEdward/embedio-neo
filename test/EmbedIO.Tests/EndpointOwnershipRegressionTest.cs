@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Reflection;
@@ -23,13 +24,26 @@ namespace EmbedIO.Tests
             retiring.AddPrefix(url.Replace("localhost", "LOCALHOST", StringComparison.Ordinal));
             retiring.Start();
 
-            // Stop removes prefixes one at a time. Model a replacement starting after
-            // removal of the first alias, before the old listener removes its second alias.
-            var remove = typeof(Net.EndPointManager).GetMethod("RemovePrefix", BindingFlags.Static | BindingFlags.NonPublic);
-            (remove ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(null, new object[] { url, retiring });
+            // Removal now detaches all alias leases atomically. Retain the old
+            // physical endpoints to model a delayed retirement after replacement.
+            var endpoints = TcpRegistrationInventory.Owned(retiring);
+            Assert.That(endpoints, Is.Not.Empty);
+            retiring.Stop();
             using var replacement = new Net.HttpListener();
             replacement.AddPrefix(url);
             replacement.Start();
+            var registry = typeof(Net.HttpListener).Assembly.GetType("EmbedIO.Net.Internal.TcpEndpointRegistry")
+                ?? throw new AssertionException("Missing registration owner.");
+            var gate = registry.GetField("Gate", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
+                ?? throw new AssertionException("Missing registration publication gate.");
+            var detach = registry.GetMethod("DetachBinding", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new AssertionException("Missing binding retirement operation.");
+            foreach (var endpoint in endpoints)
+            {
+                var retired = Activator.CreateInstance(typeof(HashSet<>).MakeGenericType(endpoint.GetType()))
+                    ?? throw new AssertionException("Missing retirement set.");
+                lock (gate) detach.Invoke(null, new[] { endpoint, retired });
+            }
             retiring.Stop();
 
             using var additional = new Net.HttpListener();
@@ -177,7 +191,7 @@ namespace EmbedIO.Tests
                     new[] { Activator.CreateInstance(PrefixType, prefix), listener });
 
             public void Remove(string prefix, Net.HttpListener listener)
-                => ((EndpointType).GetMethod("RemovePrefix") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(_endpoint,
+                => ((EndpointType).GetMethod("DetachRoute", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(_endpoint,
                     new[] { Activator.CreateInstance(PrefixType, prefix), listener });
 
             public object? Find(string url) => Find(new Uri(url));
