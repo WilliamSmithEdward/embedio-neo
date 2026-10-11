@@ -1,6 +1,9 @@
 ﻿# Changelog
 
 ## [Unreleased]
+- Replace remaining TCP request stream/completion coordination with original
+  ownership transitions. Concurrent first property access shares one stream owner;
+  completion disposes output outside the connection gate and retires failed output.
 - Replace inherited prefix, cookie and header-string helpers with original code.
   Correct CommentURL and comma-free Expires attribute parsing while preserving
   cookie identity and lookup ordering; see the Neo v1-to-v2 migration guide.

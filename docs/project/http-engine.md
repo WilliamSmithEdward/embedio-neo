@@ -8061,3 +8061,47 @@ and failed four capability checks because that asset has no HTTP/3 provider.
 Its log/TRX are preserved. The subsequent retained run uses the existing target
 capability policy and passes; no filter, assertion or fixture was changed. Both
 modern full runs retain required QUIC and independent-peer coverage.
+
+### Original TCP request coordination
+
+The connection coordinator now publishes body and response-output owners under
+its connection gate. Concurrent first access returns the same owner and transfers
+read-ahead only after body construction succeeds. Completion publishes one claim,
+selects an output owner under the gate, and disposes it outside the gate. Reuse is
+chosen only after successful output completion; a final-head/output failure retires
+the transport. Abort retires transport before detaching output, and unbind detaches
+its request identity before calling the routing owner. These transitions compose
+with the existing independently authored protocol actors and transport lifetime.
+
+Two real-listener POST cases fail on the preceding coordinator: sixteen simultaneous
+property reads publish multiple body/output owners. Both pass with synchronized
+publication. The expanded HTTP/1 and transport lifetime set passes 263/263; the
+combined HTTP/1, WebSocket, tunnel and HTTP/2 upgrade set passes 337/337
+with QUIC required. Both targets build without warnings. Full 4,681-case, retained
+asset, resource and exact-head hosted validation remain in progress.
+
+The first broader handoff pass failed 23 WebSocket cases because a new post-retirement
+output-getter guard rejected WebServer's benign cleanup flush after an upgraded
+peer closed. That restriction is removed; publication remains synchronized and
+actual writes retain their output-owner checks. No test assertions or deadlines
+changed. The initial failure log/TRX are retained; the combined 337 cases pass.
+
+The retirement audit follows the live call graph rather than treating a class
+name or a missing copyright marker as proof. The managed listener frontend uses
+TcpListenerCoordinator/ListenerAcceptEpoch; endpoint registration uses
+TcpEndpointRegistry, EndpointRoutes and TcpEndpointAdmission; accepted TCP sessions
+use TcpProtocolInput and the sequential HttpConnection HTTP/1 actor. Head/body
+framing uses Http1HeadReader, Http1RequestHead, RequestStream and ChunkedRequestStream.
+The application views, response writer, context completion, transport lifetime and
+prefix/cookie helpers are the original replacements documented above. This increment
+replaces the remaining stream/completion coordination. Socket, TLS and maintained
+QUIC primitives remain runtime facilities; they are not System.Net.HttpListener.
+Retained mode values and internal class names preserve configuration/test contracts.
+Native HTTP/3 datagram/WebTransport application integration and final platform,
+performance, interoperability and endurance acceptance remain open under #181.
+
+The result-file audit confirms that the 337-case selection covers the named TCP
+fixtures, not the HTTP/3 tunnel/drain methods in the Http3ListenerTest partial
+fixture. Those are covered by the required-QUIC full suite; a separate correctly
+named selection reports 34/34 passes with QUIC required, including related
+tunnel cases in that fixture, and provides the focused QUIC handoff check.
