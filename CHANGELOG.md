@@ -1,6 +1,18 @@
 # Changelog
 
 ## [Unreleased]
+- Complete the server accept loop normally when explicit disposal wins between
+  the listening check and accept. Independent listener failures still propagate.
+- Preserve HTTP/3 response output after caller-cancelled input reads, while
+  abandoning input that may have been partly consumed. See the
+  [Neo v2 migration guide](docs/compatibility/neo-v1-to-v2.md#response-statuses-output-and-shutdown).
+- Restrict public response StatusCode assignments to final statuses (200-599),
+  as explicitly approved. Use informational-response and protocol-handoff APIs
+  for 1xx; automatic Continue and negotiated 101 remain supported. See the
+  [migration note](docs/compatibility/migration.md#final-response-status-validation-unreleased).
+- Enable TCP_NODELAY on accepted managed TCP sockets to avoid delayed small
+  writes while preserving protocol framing and writer batching. See the
+  [controlled latency comparison](docs/project/http-tcp-latency.md).
 - Add an isolated internal WebTransport over HTTP/3 session core (draft-ietf-webtrans-http3-16 framing, session association, capsules, flow control and bounded buffering) with unit coverage only. No listener advertises it, no public API or dependency changes; see [WebTransport session core development](docs/project/http-webtransport-core.md).
 - Preserve committed managed HTTP/2 control output when the last admitted response
   completes during graceful drain. Stop input separately and wait for queued output;

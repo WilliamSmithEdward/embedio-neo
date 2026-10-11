@@ -43,7 +43,7 @@ namespace EmbedIO.Net.Internal
             set
             {
                 EnsureHeaders();
-                if (value < 100 || value > 999) throw new ArgumentOutOfRangeException(nameof(value));
+                HttpResponseFieldSections.ValidateFinalStatus(value);
                 if (_trailerNames != null && (value < 200 || value is 204 or 205 or 304))
                     throw new InvalidOperationException("Reserved trailers require a body-capable final response.");
                 _status = value;

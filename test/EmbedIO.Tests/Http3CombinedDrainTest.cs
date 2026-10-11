@@ -41,15 +41,19 @@ namespace EmbedIO.Tests
             }).ToArray();
             var running = server.RunAsync(stop.Token);
             var requests = clients.Select(client => client.GetStringAsync(prefix)).ToArray();
+            var phase = "await all three protocol handlers";
+            Exception? primaryFailure = null;
             try
             {
                 await Task.WhenAll(entered.Select(signal => signal.Task)).WaitAsync(stop.Token);
+                phase = "begin drain";
                 var drain = server.DrainAsync(TimeSpan.FromSeconds(15));
                 var other = concurrent ? server.DrainAsync(TimeSpan.FromMilliseconds(1)) : Task.CompletedTask;
                 Assert.That(() => server.Listener.Start(), Throws.InstanceOf<InvalidOperationException>());
                 for (var index = 0; index < 3; index++)
                     if ((index == 2) == quicFirst)
                     {
+                        phase = "release HTTP/" + (index + 1);
                         release[index].TrySetResult();
                         Assert.That(await requests[index].WaitAsync(stop.Token), Is.EqualTo(clients[index].DefaultRequestVersion.ToString()));
                         clients[index].Dispose();
@@ -59,22 +63,39 @@ namespace EmbedIO.Tests
                 for (var index = 0; index < 3; index++)
                     if ((index == 2) != quicFirst)
                     {
+                        phase = "release HTTP/" + (index + 1);
                         release[index].TrySetResult();
                         Assert.That(await requests[index].WaitAsync(stop.Token), Is.EqualTo(clients[index].DefaultRequestVersion.ToString()));
                         clients[index].Dispose();
                     }
+                phase = "await both drain calls";
                 await Task.WhenAll(drain, other).WaitAsync(TimeSpan.FromSeconds(5));
+                phase = "await stopped server";
                 await running.WaitAsync(TimeSpan.FromSeconds(5));
                 Assert.That(server.State, Is.EqualTo(WebServerState.Stopped));
                 server.Listener.Start();
                 Assert.That(server.Listener.IsListening, Is.True);
+            }
+            catch (Exception error)
+            {
+                primaryFailure = error;
+                TestContext.Error.WriteLine($"Combined drain primary failure: phase={phase}, quicFirst={quicFirst}, concurrent={concurrent}, state={server.State}, entered={string.Join(",", entered.Select(signal => signal.Task.IsCompleted))}\n{error}");
+                for (var index = 0; index < requests.Length; index++)
+                    TestContext.Error.WriteLine($"HTTP/{index + 1} request: {requests[index].Status}\n{requests[index].Exception}");
+                throw;
             }
             finally
             {
                 foreach (var signal in release) signal.TrySetResult();
                 foreach (var client in clients) client.Dispose();
                 stop.Cancel();
-                await running.WaitAsync(TimeSpan.FromSeconds(5));
+                try { await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+                catch (Exception error) when (primaryFailure != null && (error is OperationCanceledException or HttpListenerException or TimeoutException))
+                {
+                    // The test is already failing. Retain its primary failure;
+                    // report the cleanup error without replacing that evidence.
+                    TestContext.Error.WriteLine($"Combined drain cleanup failure after primary failure:\n{error}");
+                }
             }
         }
 

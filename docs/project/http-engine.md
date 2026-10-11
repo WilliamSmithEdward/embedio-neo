@@ -1,4 +1,9 @@
-# Modern HTTP engine program
+﻿# Modern HTTP engine program
+
+Release scope: William designated this modern engine program for **EmbedIO-Neo v2**
+on 2026-10-10. Maintain the [Neo v1 to v2 migration guide](../compatibility/neo-v1-to-v2.md)
+as the implementation and approved behavior changes settle. V2 is not released;
+this designation does not authorize publication.
 
 The owner authorized a replacement managed transport on 2026-10-08, with extreme
 performance as a core requirement, incremental delivery, and HTTP support through
@@ -7159,3 +7164,152 @@ application WebTransport capability nor independent interoperability is claimed.
 The native direction branch is reconciled onto verified WebTransport merge 90e84f1. Combined discovery is 4903 (4897 base plus six real-peer direction cases). Fresh combined-source and exact-head hosted validation remain required.
 
 Combined native direction acceptance on WebTransport development base 90e84f1 passes 4903 Windows cases: 4898 passed, five existing skips, zero failures (3m 23s), with complete warning-free builds for both targets. Fresh hosted checks on this reconciled head remain required.
+
+### HTTP/2 cancellation while the final drain barrier is queued
+
+PR #241's Windows regression run 38073076144 failed
+`InFlightRefusedUploadPreservesDrainedResponseAndConnectionCredit(False)` during
+cleanup: `TaskCanceledException` escaped `Http2Dispatcher.RunAsync`'s final empty
+output barrier. The helper cancels its server token after wire verification;
+that cancellation can occur after the dispatcher's cancellation check and while
+the barrier is still queued. This is distinct from the combined-listener
+admission/drain failure and the HTTP/1.1 upload-churn timeout.
+
+A controlled fixture holds the credit pump and output flusher, observes the real
+empty barrier in the output queue, and then cancels the connection. That case
+fails on unchanged production source at a4f7105. A companion case injects an
+IOException into the same queued barrier before cancellation and verifies that
+the original output error still propagates. These are controlled internal-state
+fixtures, not independent wire-conformance cases.
+
+The correction handles only OperationCanceledException when the connection's
+stop token is canceled, matching the existing read-loop and drain-task cleanup
+paths. It changes no successful drain ordering or application response writes.
+Other failures still propagate. Both target builds have zero warnings; all 126
+focused HTTP/2 interoperability/drain/cancellation cases pass on Windows. The
+discovery floor becomes 4905 (4903 base plus two cases). The full Windows suite reports 4905 cases, 4900 passed, five expected skips
+and zero failures in 3m 21s. All 126 focused cases also pass on pinned Linux,
+using the same Windows-built IL. Formatting and both source guards pass.
+Fresh hosted checks remain required. The tested core SHA-256 is
+`5B155800B43D8BBF090966B2067C3E36790C29260BC0D67753FBC9FDCDFE2BE2`.
+
+Reconciliation on engine `0fc0caa` preserves the narrow cancellation correction
+and both regression cases. The Windows coverage run on `080013e` reports 4937
+total, 4932 passed, five expected skips and zero failures in 3m40s. The current
+discovery minimum is reconciled to 4937; the approved five-minute Windows and
+eight-minute Unix suite budgets remain unchanged. PR #255's Windows run
+38085897387 independently captured the same final-barrier cancellation at
+`Http2Dispatcher.RunAsync` line 162 in
+`GracefulDrainCompletesExistingUploadAndRefusesNewStream` on the uncorrected
+engine. PR #245 still requires fresh checks on its reconciled head; the earlier
+HTTP/3 TLS handshake cancellation on its previous head is retained as an
+unconfirmed separate failure, not claimed repaired by this HTTP/2 correction.
+
+Combined drain investigation: Windows PR 239 head ba4991b failed
+CombinedDrainPreservesEveryProtocolUntilItsResponseFinishes(True,True) in run
+38071451499, job 114269517877. The published listener error 995 points to the
+fixture's cleanup await at line 77 after about 30 seconds. That cleanup can
+replace an earlier failure; the original phase and protocol admission statuses
+were not recorded. The underlying cause is unconfirmed, and neither this test
+nor its application transports use the new native provider. The log is retained
+under ignored TestResults/native-abort-integration/windows-ba4991b.log.
+
+The diagnostic fixture now records the current phase, each protocol's handler
+entry, request-task status and exceptions before cleanup. If a primary failure
+already exists, known cancellation/listener/timeout cleanup failures are logged
+without replacing it. The test still fails with its primary exception; success
+assertions, deadlines and transport behavior are unchanged. No retry, quarantine
+or production correction is added. Locked restore, both-target warning-free builds, source guards and changed-file formatting pass. All four existing combined-drain cases pass locally. No natural failure was captured during that focused run, so the root cause remains unconfirmed; hosted phase evidence is still required.
+
+### HTTP/1 response-write first-segment batching
+
+The managed HTTP/1 response stream now commits the first write of a response as
+one pooled transport segment: head, chunk-size line, up to 64 KiB of body and
+the chunk CRLF. Bodies beyond 64 KiB merge a 16 KiB prefix with the head and send
+the remainder directly, as before. The head buffer no longer reserves a fresh
+copy of the first body bytes, bounded subsequent chunks format their size line
+in place and clear only the bytes they wrote, and the synchronous write path
+batches bounded chunks like the asynchronous one. The change is confined to
+`ResponseStream.cs`; wire bytes, flush behavior, cancellation,
+`IgnoreWriteExceptions`, HEAD and bodyless suppression, trailers, disposal and
+graceful drain are unchanged, and no public API, default, target or dependency
+moved.
+
+A dotnet-trace profile of the base engine on flushed 1 MiB streaming attributes
+42 of the response stream's 46 points of sampled thread time to the socket send
+itself; pool clearing, copying and the write gate add about 3 points together.
+The socket-free `--response-write` component benchmark on the base showed the
+remaining waste directly: a 16 KiB fixed-length response needed two transport
+writes and a 16 KiB first chunk three, a complete small chunked response three,
+each batched chunk allocated 104 B and every response of 16 KiB or more
+allocated a fresh 16 KiB head buffer. The candidate removes those writes and
+allocations with exact wire bytes.
+
+Paired separate-process comparison against the exact base (66 samples, zero
+failures, three alternating rounds, fresh processes, every byte validated):
+small chunked responses use about 25% less server CPU per response and complete
+about 30% more responses per second on plain and TLS; flushed 1 MiB streaming
+uses 3-5% less CPU and 60% less allocation per response in every round; 1 MiB
+fixed-length and single-chunk responses keep their CPU within noise with two
+thirds less allocation; small fixed-length, pipelined and TLS small responses
+are unchanged within noise. Every sample carried 8-30 CPU-seconds of unrelated
+host activity per 15 s window, the client ran near saturation on the small
+chunked scenarios, and TLS streaming tails were noisy in both directions.
+Method, tables, per-round values and limits are recorded in the
+[load comparison](http-engine-load-comparison.md#http1-response-write-first-segment-batching-2026-10-10).
+
+Thirty-two regression cases cover first-write merging, bounded and oversized
+bodies and heads, synchronous batching, mid-write cancellation of the merged
+segment, transport failure under both write policies, 204 suppression, reserved
+trailers and exact 20,000-byte responses over HTTP and HTTPS. Both targets
+build; formatting, both source guards, the allocation and cleanup gates, the
+full Windows suite (4,935 cases, 4,930 passed, five existing skips) and the
+net472 engine smoke against the netstandard2.0 asset pass. The discovery floor
+rises by 32 once the shared floors are reconciled. Not addressed here: the
+synchronous terminator written when the pipeline closes a chunked response
+(`HttpConnection` closes synchronously), the write gate's task per write,
+batching across pipelined responses, and `NoDelay` on accepted sockets.
+
+The correction was subsequently reconciled with engine commit `1b70377` at
+`00d2640`. The coverage-enabled Windows run reports 4,986 cases: 4,981 passed,
+five expected skips and zero failures in 3m35s. The six discovery minimums are
+now 4,986. The prior Linux CI failure at `0abf879` was the explicit server
+disposal/accept race corrected by the engine's PR #261; fresh checks on the
+reconciled head remain required. This does not establish a correction for
+the separate HTTP/2 response/trailer loss or HTTP/3 TLS failures.
+
+### HTTP JSON UTF-8 response representation
+
+HTTP JSON now serializes directly to a UTF-8 byte array and uses the existing
+binary response output path. It avoids a complete intermediate UTF-16 string
+and the text writer's repeated small body writes. The same default options
+and copied custom options are used; public string serialization and the
+general text-response API are unchanged. JSON bytes, UTF-8 metadata, optional
+compression, buffering and synchronous serialization errors are preserved.
+HTTP transfer chunk boundaries may differ and are not JSON record boundaries.
+
+Eight real HTTP cases cover both backends, buffering and custom options, with
+exact Unicode/null/large-value bytes and options snapshot behavior. On source
+`1409cc2`, 115 focused Linux cases pass with zero skips. The complete pinned
+Linux coverage suite reports 4,994 cases, 4,965 passed, 29 existing skips and
+zero failures in 2m43s. Both targets build without warnings; formatting and
+both source guards pass. All six discovery minimums now require that measured
+4,994 count. Final-head hosted checks and comparative measurements remain
+required.
+
+The engine's Ubuntu run 38093558390 at `ba253fa` timed out in the unbuffered
+six-MiB JSON case. Its existing nine-second diagnostic recorded serialization
+still pending and about two MiB queued on the server TCP socket. This change
+reduces representation and small-write overhead; the prior timeout's exact
+mechanism remains unconfirmed, so these passing runs do not establish its
+repair. No timeout, assertion, retry or quarantine is changed.
+
+The reproducible component tool is `test/EmbedIO.JsonResponseBenchmark`;
+its README records commands, source/binary hashes and measurement limits.
+Eighteen fresh in-memory processes in three alternating rounds validate every
+response byte. Median allocation changes from 19,424.5 to 11,008.4 B/request
+for a one-KiB input, 535,886.4 to 269,064.3 for 64 KiB and 8,401,737.5 to
+4,203,032.0 for one MiB. These include simulated-stream growth and response
+copies. The legacy callback is reconstructed with public APIs on the same
+core; this is not a baseline-package comparison or production network
+throughput result. Short CPU windows and clock quantization limit CPU claims.

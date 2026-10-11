@@ -63,6 +63,8 @@ namespace EmbedIO.Net.Internal
             LocalEndPoint = (IPEndPoint)(sock.LocalEndPoint ?? throw new ArgumentException("The socket has no local endpoint.", nameof(sock)));
             RemoteEndPoint = (IPEndPoint)(sock.RemoteEndPoint ?? throw new ArgumentException("The socket has no remote endpoint.", nameof(sock)));
 
+            // Commit protocol writes promptly; batching belongs to the HTTP writer.
+            sock.NoDelay = true;
             Stream = new NetworkStream(sock, false);
             if (IsSecure)
             {

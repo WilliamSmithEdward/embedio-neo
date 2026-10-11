@@ -10,6 +10,12 @@ namespace EmbedIO.Net.Internal
 {
     internal static class HttpResponseFieldSections
     {
+        internal static void ValidateFinalStatus(int statusCode)
+        {
+            if (statusCode < 200 || statusCode > 599)
+                throw new ArgumentOutOfRangeException(nameof(statusCode), "A final response status must be between 200 and 599. Use informational response or protocol handoff APIs for 1xx.");
+        }
+
         internal static HpackField[] Informational(int statusCode, WebHeaderCollection headers)
         {
             if (statusCode < 100 || statusCode >= 200 || statusCode == 101)

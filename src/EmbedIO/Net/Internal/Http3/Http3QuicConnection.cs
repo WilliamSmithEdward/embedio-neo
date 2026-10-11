@@ -299,7 +299,7 @@ namespace EmbedIO.Net.Internal.Http3
             // cancels the request; this observes resets even while QPACK is blocked.
             var reads = stream.ReadsClosed;
             var writes = stream.WritesClosed;
-            WatchRequestDirection(reads, requestStop);
+            WatchRequestReadDirection(reads, requestStop);
             WatchRequestDirection(writes, requestStop);
             try
             {
@@ -381,9 +381,18 @@ namespace EmbedIO.Net.Internal.Http3
             if (direction.IsCompleted) { ObserveDirection(direction, requestStop); return; }
             direction.ConfigureAwait(false).GetAwaiter().UnsafeOnCompleted(() => ObserveDirection(direction, requestStop));
         }
-        private static void ObserveDirection(Task direction, CancellationTokenSource requestStop)
+        // OperationAborted on the receive side is a local read abort, including
+        // application cancellation. Peer RESET_STREAM and connection failures
+        // still cancel the request and its output.
+        internal static void WatchRequestReadDirection(Task direction, CancellationTokenSource requestStop)
         {
-            if (direction.IsFaulted && direction.Exception?.InnerException is QuicException) CancelRequests(requestStop);
+            if (direction.IsCompleted) { ObserveDirection(direction, requestStop, true); return; }
+            direction.ConfigureAwait(false).GetAwaiter().UnsafeOnCompleted(() => ObserveDirection(direction, requestStop, true));
+        }
+        private static void ObserveDirection(Task direction, CancellationTokenSource requestStop, bool reading = false)
+        {
+            if (direction.IsFaulted && direction.Exception?.InnerException is QuicException error
+                && (!reading || error.QuicError != QuicError.OperationAborted)) CancelRequests(requestStop);
         }
         // A completed direction that failed in some other way is reported to the
         // stream owner when the request ends, as an awaited watcher would have.
