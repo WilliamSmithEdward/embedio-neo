@@ -306,7 +306,7 @@ internal static class ListenerHttp
                         readBufferAllocated = Field(connection, "_buffer") is byte[],
                         reuses = connection.GetType().GetProperty("Reuses")?.GetValue(connection),
                         tlsAuthenticated = (stream as System.Net.Security.SslStream)?.IsAuthenticated,
-                        remainingBody = input == null ? null : Field(input, "_remainingBody"),
+                        remainingBody = input == null ? null : Field(input, "_bytesLeft"),
                         responseFinishing = Field(connection, "_responseFinishing")
                     };
                 }).ToArray();

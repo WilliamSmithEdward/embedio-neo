@@ -22,13 +22,14 @@ internal static class ListenerAllocations
             var context = Context(source);
             context.Request.Headers["Content-Length"] = "4096";
             var input = context.Request.InputStream;
-            var remaining = input.GetType().GetField("_remainingBody", PrivateInstance);
+            var remaining = input.GetType().GetField("_bytesLeft", PrivateInstance)
+                ?? throw new InvalidOperationException("Missing fixed-length body accounting field.");
             object length = 4096L;
             input.CopyTo(Stream.Null);
             var flush = ((context.Request.GetType().GetMethod("FlushInput", PrivateInstance)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).CreateDelegate<Func<bool>>(context.Request);
             Measure(consumed ? "drain-consumed-4k" : "drain-unread-4k", () =>
             {
-                if (!consumed) { source.Position = 0; ((remaining) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).SetValue(input, length); }
+                if (!consumed) { source.Position = 0; remaining.SetValue(input, length); }
                 if (!flush() || source.Position != 4096) throw new InvalidOperationException("Body drain boundary changed.");
             }, consumed ? 0 : 160);
         }
