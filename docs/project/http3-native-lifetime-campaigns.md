@@ -615,3 +615,12 @@ full suite above do not validate this refreshed head. New exact-head Linux,
 macOS, compatibility and scanner gates remain required. Application HTTP/3
 still uses `System.Net.Quic`; this consolidation does not activate the native
 provider as the application listener or claim integrated WebTransport/datagrams.
+
+Final reconciliation at `3b58611` includes the now-merged request-model PR #262
+(engine `6cc7b04`). The full ordinary Windows coverage suite reports 4,599
+cases, 4,592 passed, the same seven expected skips and zero failures in 3m25s.
+Both independent peer cases are required and executed. The final six discovery
+gates use this measured 4,599 count (engine 4,521 plus 78 reported native cases).
+Locked restore, both-target analyzer build, formatting and source guards pass.
+No production or test files changed after this full run; only the count and this
+evidence paragraph are updated. Fresh exact-head hosted acceptance is pending.
