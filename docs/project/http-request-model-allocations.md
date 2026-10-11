@@ -241,7 +241,18 @@ skips on Windows and pinned Linux. The original fixture fails the two Unix
 rooted-referrer cases; its macOS TLS failures require hosted verification of
 the corrected key provision. The original PR #260 Linux run also terminated
 with an unhandled Microsoft-listener `FormatHeaders` null-reference callback.
-That cause remains unconfirmed. Reconciliation and new positive runs alone
-do not establish its repair; integration remains held pending investigation
-and every exact-head check. Earlier performance results are for their named
-revisions and do not measure the reconciled review head.
+The separate investigation in [draft PR #266](https://github.com/WilliamSmithEdward/embedio-neo/pull/266)
+identifies a corrupted header collection on an unbound 404 response in the
+runtime's Unix managed `HttpListener`, with retained exceptions from listener
+shutdown and `SendError`. Its upgraded responses are intact. These paths do
+not involve the changed multiplexed request-model files. No runtime correction,
+new quarantine or removal of the upgrade-cancellation test is made here;
+passing follow-ups do not establish repair of that runtime defect. The separate
+glibc double-free remains unattributed. Earlier performance results are for their
+named revisions and do not measure the reconciled review head.
+
+The review is now reconciled with verified engine `972ba33`, retaining its
+HTTP/2 shutdown correction and UTF8 JSON path. The prior measured 5,018-case
+minimum remains until the new combined discovery is actually reported. Fresh
+combined-source validation and every exact-head check are still required before
+integration.
