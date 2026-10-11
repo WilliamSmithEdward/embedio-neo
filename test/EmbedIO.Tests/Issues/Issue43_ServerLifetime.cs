@@ -161,20 +161,27 @@ namespace EmbedIO.Tests.Issues
                 });
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
-            using var client = CreateClient(protocol);
-            var pending = client.GetAsync(url);
+            // HTTP/1.1 uses a raw socket: HttpClient would retry the closed connection
+            // against the now-closed port, which Windows refuses only after SYN retries.
+            using var client = protocol == 2 ? CreateClient(2) : null;
+            using var raw = protocol == 1 ? await OpenRawRequestAsync(url) : null;
+            var pending = client?.GetAsync(url);
             try
             {
                 await entered.Task.WaitAsync(Deadline);
                 server.Dispose();
                 await running.WaitAsync(Deadline);
                 Assert.That(await exited.Task.WaitAsync(Deadline), Is.True, "The handler observes disposal through its context token.");
-                Assert.That(async () => await pending, Throws.InstanceOf<HttpRequestException>().Or.InstanceOf<OperationCanceledException>());
+                if (pending != null)
+                    Assert.That(async () => await pending, Throws.InstanceOf<HttpRequestException>().Or.InstanceOf<OperationCanceledException>());
+                else
+                    Assert.That(await ConnectionClosedAsync(raw!), Is.True, "The aborted connection closes without a response.");
             }
             finally
             {
                 stop.Cancel();
-                try { await pending; } catch (Exception error) when (error is HttpRequestException or OperationCanceledException) { }
+                if (pending != null)
+                    try { await pending; } catch (Exception error) when (error is HttpRequestException or OperationCanceledException) { }
             }
         }
 
@@ -193,19 +200,12 @@ namespace EmbedIO.Tests.Issues
                 });
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
-            using var client = CreateClient(1);
-            var pending = client.GetAsync(url);
-            try
-            {
-                await entered.Task.WaitAsync(Deadline);
-                stop.Cancel();
-                Assert.That(await exited.Task.WaitAsync(Deadline), Is.True);
-                await running.WaitAsync(Deadline);
-            }
-            finally
-            {
-                try { await pending; } catch (Exception error) when (error is HttpRequestException or OperationCanceledException) { }
-            }
+            using var raw = await OpenRawRequestAsync(url);
+            await entered.Task.WaitAsync(Deadline);
+            stop.Cancel();
+            Assert.That(await exited.Task.WaitAsync(Deadline), Is.True);
+            await running.WaitAsync(Deadline);
+            Assert.That(await ConnectionClosedAsync(raw), Is.True);
         }
 
         [Test]
@@ -223,8 +223,7 @@ namespace EmbedIO.Tests.Issues
                 });
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
-            using var client = CreateClient(1);
-            var pending = client.GetAsync(url);
+            using var raw = await OpenRawRequestAsync(url);
             try
             {
                 await entered.Task.WaitAsync(Deadline);
@@ -232,11 +231,11 @@ namespace EmbedIO.Tests.Issues
                 await running.WaitAsync(Deadline);
                 Assert.That(server.State, Is.EqualTo(WebServerState.Stopped));
                 Assert.That(await exited.Task.WaitAsync(Deadline), Is.True, "Work the server left behind is canceled once RunAsync completes.");
+                Assert.That(await ConnectionClosedAsync(raw), Is.True);
             }
             finally
             {
                 stop.Cancel();
-                try { await pending; } catch (Exception error) when (error is HttpRequestException or OperationCanceledException) { }
             }
         }
 
@@ -265,16 +264,19 @@ namespace EmbedIO.Tests.Issues
                 var address = new Uri(url);
                 using (var late = new TcpClient())
                 {
+                    // Windows refuses a connect to a just-closed port only after SYN
+                    // retries, so a bounded wait counts as refusal too; only an accepted
+                    // connection that reads response bytes would mean the server served it.
                     var refused = false;
                     try
                     {
-                        await late.ConnectAsync(address.Host, address.Port).WaitAsync(Deadline);
+                        await late.ConnectAsync(IPAddress.Loopback, address.Port).WaitAsync(TimeSpan.FromSeconds(1.5));
                         await late.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"GET / HTTP/1.1\r\nHost: {address.Authority}\r\n\r\n"));
                         var buffer = new byte[1];
-                        using var timeout = new CancellationTokenSource(Deadline);
+                        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1.5));
                         refused = await late.GetStream().ReadAsync(buffer, 0, 1, timeout.Token) == 0;
                     }
-                    catch (Exception error) when (error is SocketException or System.IO.IOException) { refused = true; }
+                    catch (Exception error) when (error is SocketException or System.IO.IOException or TimeoutException or OperationCanceledException) { refused = true; }
                     Assert.That(refused, Is.True, "A draining server does not serve new connections.");
                 }
                 release.TrySetResult();
@@ -305,6 +307,30 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(server.State, Is.EqualTo(WebServerState.Listening), "iteration " + iteration);
                 Assert.That(server.Dispose, Throws.Nothing, "iteration " + iteration);
             }
+        }
+
+        // A raw HTTP/1.1 request whose connection the test observes directly. HttpClient
+        // would retry a connection the server closed before responding, and on Windows
+        // that retry waits through SYN retransmissions before the closed port refuses it.
+        private static async Task<TcpClient> OpenRawRequestAsync(string url)
+        {
+            var address = new Uri(url);
+            var socket = new TcpClient();
+            await socket.ConnectAsync(IPAddress.Loopback, address.Port);
+            var request = Encoding.ASCII.GetBytes($"GET / HTTP/1.1\r\nHost: {address.Authority}\r\n\r\n");
+            await socket.GetStream().WriteAsync(request, 0, request.Length);
+            return socket;
+        }
+
+        private static async Task<bool> ConnectionClosedAsync(TcpClient socket)
+        {
+            var buffer = new byte[1];
+            try
+            {
+                using var timeout = new CancellationTokenSource(Deadline);
+                return await socket.GetStream().ReadAsync(buffer, 0, 1, timeout.Token) == 0;
+            }
+            catch (Exception error) when (error is System.IO.IOException or SocketException) { return true; }
         }
 
         private static HttpClient CreateClient(int protocol) => new(new SocketsHttpHandler { UseProxy = false })
