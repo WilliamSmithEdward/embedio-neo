@@ -173,6 +173,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
+- [HTTP/1 idle closure investigation](project/http1-idle-closure.md): TCP/TLS timeout observations, released/main controls and the pending orderly-closure policy decision.
+
 - [Cleanup after committed response completion](project/http-completed-response-cleanup.md): late cancellation, complete-wire state and preserved incomplete-response handling.
 
 - [Capsule transport development](project/http-capsule-transport.md): streamed framing, negotiation constraints and remaining integration work.
