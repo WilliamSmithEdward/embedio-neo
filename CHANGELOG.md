@@ -1,6 +1,9 @@
 ﻿# Changelog
 
 ## [Unreleased]
+- Replace the inherited HTTP/1 request model with independently authored parsed
+  head ownership and an application view, preserving request-local collections,
+  strict framing, target/version semantics and borrowed body transport behavior.
 - Replace the inherited listener frontend and prefix adapter with independently
   authored lifecycle coordination and accept generations. Preserve valid public
   behavior while preventing a stopped accept from claiming a restarted listener's
