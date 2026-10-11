@@ -134,9 +134,18 @@ namespace EmbedIO
 
             exception.Log(logSource, $"[{context.Id}] Unhandled exception.");
 
+            if (EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
+            {
+                // The status and body already reached the client. Ending the response
+                // visibly is the only honest outcome; no handler can replace it.
+                $"[{context.Id}] The response was already committed; aborting it instead of running the exception handler.".Warn(logSource);
+                await EmbedIO.Internal.ResponseCommitment.AbortAsync(context, exception).ConfigureAwait(false);
+                return;
+            }
+
             try
             {
-                context.Response.SetEmptyResponse((int)HttpStatusCode.InternalServerError);
+                context.Response.PrepareReplacement((int)HttpStatusCode.InternalServerError);
                 context.Response.DisableCaching();
                 await handler(context, exception)
                     .ConfigureAwait(false);

@@ -184,6 +184,9 @@
     - name: Streaming write errors
       href: user-reports/streaming-write-errors.md
 
+    - name: Deferred responses
+      href: user-reports/deferred-responses.md
+
     - name: Fluent Basic authentication
       href: user-reports/fluent-basic-authentication.md
 

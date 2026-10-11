@@ -292,7 +292,7 @@ The gate is executable and lives in the repository:
   production retry had to bridge an `AddressAlreadyInUse` failure. The counter is
   the only production change; it is internal and read through reflection.
 - Selection: the owned cases skip unless `EMBEDIO_QUIC_RETIREMENT_GATE=1`, so
-  the ordinary suite counts them in the 4,725 floor without running them.
+  the ordinary suite counts them in the 4,743 floor without running them.
   `--filter "TestCategory=QuicLifetimeRetirementGate|FullyQualifiedName~QuicRuntimeRebindTest"`
   with `--minimum-expected-tests 6` selects the six gate cases.
 - Platforms and repetitions: the `quic-retirement-gate` CI dispatch input runs
@@ -362,7 +362,7 @@ Reviewed at engine head 15d8a19 plus this change:
   and prohibits DTDs. Owned restart methods, other stages, other socket errors,
   WebSocket timeouts, crashes and discovery loss remain failures, as checked
   earlier against 41 retained TRX files and four counterexamples. The ordinary
-  regression step now checks a 4,725 floor before it may tolerate the raw
+  regression step now checks a 4,743 floor before it may tolerate the raw
   failure.
 
 ## Retirement gate control on the stock dependency (local, 2026-10-11)

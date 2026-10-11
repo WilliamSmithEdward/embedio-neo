@@ -61,6 +61,7 @@ namespace EmbedIO.Net.Internal
             set { EnsureHeaders(); if (string.IsNullOrEmpty(value)) throw new ArgumentException("Content type is required.", nameof(value)); _contentType = value; _contentTypeConfigured = true; }
         }
         public Stream OutputStream => _output;
+        internal bool HeadersSent => _headersSent;
         public Encoding? ContentEncoding { get; set; } = WebServer.DefaultEncoding;
         public bool KeepAlive { get => _keepAlive; set { EnsureHeaders(); _keepAlive = value; } }
         public bool SendChunked { get => _chunked; set { EnsureHeaders(); _chunked = value; } }

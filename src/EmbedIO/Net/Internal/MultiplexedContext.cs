@@ -175,7 +175,11 @@ namespace EmbedIO.Net.Internal
             }
         }
         internal bool HasAcceptedTunnel => _acceptedTunnel != null;
-        internal Task AbortTunnelAsync(Exception cause)
+        internal bool ResponseHeadersSent => ((MultiplexedResponse)Response).HeadersSent;
+        internal Task AbortTunnelAsync(Exception cause) => AbortExchangeAsync(cause);
+        // Resets the request stream so a committed, incomplete response cannot be
+        // mistaken for a complete one. A stream that already ended is left alone.
+        internal Task AbortExchangeAsync(Exception cause)
             => _exchange.CancellationToken.IsCancellationRequested || _exchange.Ended
                 ? Task.CompletedTask
                 : (_exchange as IMultiplexedTunnelControl ?? throw new NotSupportedException("Tunnel control is unavailable.")).AbortTunnelAsync(cause, false);
