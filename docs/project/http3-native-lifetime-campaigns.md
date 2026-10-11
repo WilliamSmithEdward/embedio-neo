@@ -632,3 +632,10 @@ Peer provisioning is corrected to 3.14.6, whose official python-versions manifes
 provides Windows x64, Linux x64 and macOS arm64 builds. This also matches the
 recorded Apple Silicon peer environment. The action SHA and hash-locked
 dependencies, required-peer gate, assertions and suite budgets are unchanged.
+
+On the next head (`9cb1cc5`), Security report rejected two Semgrep parser warnings:
+the pinned GitHub Actions rules parsed the inline PowerShell setup as Bash. The
+same peer setup is now a standalone Python script with explicit subprocess
+arguments, hash-locked binary-only requirements and the same environment exports.
+Scanner rules, error handling and acceptance policy are unchanged; no warning is
+suppressed. Fresh full checks remain required.
