@@ -134,9 +134,13 @@ Issue #202 keeps the following work visible:
 - Remove retry and quarantine only after required dependencies pass those gates.
   Recheck resource cleanup and ordinary conflicting-endpoint behavior afterward.
 
-No upstream issue has been posted, no patched native dependency is shipping, and
-no release is authorized by this investigation. Other protocol conformance,
-performance and default-engine work remains in program #181.
+The upstream report is posted as microsoft/msquic#6374 (2026-10-11); no patched
+native dependency is shipping, and no release is authorized by this investigation. Other protocol conformance,
+performance and default-engine work remains in program #181. The sections from
+[Ownership of the disposal contract](#ownership-of-the-disposal-contract) onward
+record the work completed for #202 on that list: the reviewable draft report, the
+recorded dependency policy, version tracking, the executable retirement gate, the
+owner review of the retry and classifier, and exact-head outcomes.
 ## Subsequent owner checkpoint
 
 The owner reconciled the candidate with engine c25fd05 and the explicitly approved
@@ -174,3 +178,262 @@ still requires the runtime evidence and gates listed above.
 Artifacts and classification receipts are retained under ignored
 TestResults/a337-quic-experiment. The control failures and failed overall workflow
 remain part of the evidence.
+
+## Ownership of the disposal contract
+
+The verified mechanics are written up in the
+[draft upstream report](quic-upstream-report-draft.md), which is reviewable but
+unposted; posting it needs William's approval. In short:
+
+- .NET's `QuicListener.DisposeAsync` (release/10.0) calls `ListenerStop`, waits
+  for `STOP_COMPLETE`, disposes the handle (`ListenerClose`), cancels pending
+  handshakes and drains its accept queue. Its documentation promises that the
+  listener "releases all resources"; neither it nor MsQuic's `ListenerClose.md`
+  or `ListenerStop.md` says anything about the bound UDP port.
+- MsQuic's `QuicListenerStopAsync` unregisters the listener and releases the
+  listener's binding reference before the stop-complete indication, and
+  `MsQuicListenerClose` blocks on the stop event. When `DisposeAsync` returns,
+  the listener's own reference is gone; whether the port is free depends on the
+  two behaviors below, neither of which the managed runtime can observe.
+- Behavior A, deferred datapath close: `CxPlatSocketDelete` returns after
+  `CxPlatSocketContextUninitialize` queues `ShutdownSqe`; the `close()` runs
+  later on the event-queue worker in both `datapath_kqueue.c` and
+  `datapath_epoll.c`, at `v2.6.2` and on `main` as inspected on 2026-10-11. The
+  kqueue datapath sets neither `SO_REUSEADDR` nor `SO_REUSEPORT`; the epoll
+  datapath sets `SO_REUSEPORT` on UDP server sockets when `PartitionCount > 1`,
+  which is why multi-core Linux runners never reproduced the failure. Windows
+  calls `closesocket` synchronously after its rundown wait.
+- Behavior B, connection-held binding: connections reference the binding from
+  `QuicBindingCreateConnection` until `QuicConnFree`, which usually runs on a
+  worker after `ConnectionClose` returned. A new listener shares a still-listed
+  binding without error; the failure window is the interval in
+  `QuicLibraryReleaseBinding` between unlinking the binding under the lock and
+  the completed socket close in `QuicBindingUninitialize`, during which a new
+  listener creates a colliding socket.
+
+Both behaviors are therefore owned by MsQuic. dotnet/runtime can only document
+the limit or depend on a fixed native version; EmbedIO can only bridge the window
+with the bounded retry. With William's approval the report was posted on
+2026-10-11 as [microsoft/msquic#6374](https://github.com/microsoft/msquic/issues/6374);
+it asks the maintainers which contract they intend. Until answered, the retry and
+the quarantine stay, and the dotnet/runtime documentation note remains unposted.
+
+## Native dependency policy
+
+This is the explicit policy requested by #202; it restates what the candidate
+already does and what remains a separate decision.
+
+- Shipped packages use stock native dependencies only. On Windows that is the
+  `msquic.dll` bundled with the installed .NET runtime; on Linux and macOS it is
+  the `libmsquic` the host installs. Desktop CI pins libmsquic 2.6.2 by package
+  hash (Ubuntu 24.04 `.deb`, Homebrew arm64 bottle) so results name an exact
+  library; raising those pins is a deliberate change recorded here.
+- Patched MsQuic builds are test-only experiments: the patches live under
+  `test/EmbedIO.RuntimeCloseProbe`, are compiled only by
+  `quic-cleanup-experiment.sh` on a dispatch input, are never installed
+  system-wide, never packaged, and never referenced by production projects or
+  lock files. Their results show what a native fix would achieve; they are not
+  evidence about the shipped runtime.
+- Shipping a patched or privately built MsQuic is a separate owner decision. It
+  would need William's explicit approval and a provenance, signing, loader and
+  security-servicing plan per OS before any work starts. CVE-2026-105794, fixed
+  in MsQuic 2.5.11 and 2.6.1, shows why: a private build must track upstream
+  security fixes for as long as it ships. The investigation recommends against
+  it; the bounded retry stays until the stock dependencies pass the retirement
+  gate.
+- No production project, package dependency group, target or public API changes
+  for this policy.
+
+## Runtime and MsQuic version tracking
+
+Checked on 2026-10-11. "A" and "B" refer to the two behaviors above.
+
+| Platform (CI runner) | Runtime | MsQuic | Source | A | B |
+| --- | --- | --- | --- | --- | --- |
+| Windows (windows-2025) | .NET 10.0.12 | 2.5.10, bundled, Schannel | runtime | not applicable: synchronous `closesocket` | present: 4 of 7,040 contended restarts |
+| Linux (ubuntu-24.04) | .NET 10.0.12 | 2.6.2 `.deb` `9ac90841…` | packages.microsoft.com | present in code, masked by `SO_REUSEPORT` with more than one partition | not reproduced; immunity not claimed |
+| macOS (macos-15, arm64) | .NET 10.0.12 | 2.6.2 bottle `c7d7fbda…` | ghcr.io/homebrew | present: twelve traced failures; PR #200 recorded the raw case failing in about one ordinary run in four | present in code |
+
+Upstream status on the same date:
+
+- MsQuic `v2.6.2` (2026-09-30) is the latest release; no later release or
+  prerelease exists. `main` retains the deferred kqueue close. No upstream issue
+  describes either behavior; discussion #2961 concerns a kqueue wake-up deadlock
+  on FreeBSD.
+- dotnet/runtime `release/10.0` moved `MicrosoftNativeQuicMsQuicSchannelVersion`
+  to 2.5.11 for 10.0.13 (PR #135579, merged 2026-10-11, servicing-approved) only
+  because 2.5.10 carries CVE-2026-105794, an OpenSSL/QuicTLS hostname-validation
+  defect; the 2.5.11 and 2.6.x changes do not touch socket close ordering or
+  binding lifetime. `main` (12.0 alpha) also references 2.5.11. The CI-pinned
+  2.6.2 already contains that security fix. .NET 10.0.13 had not shipped on
+  2026-10-11.
+
+A new runtime or library version counts toward retirement only after it is
+checked, in this order: `datapath_kqueue.c` and `datapath_epoll.c` close the
+descriptor inside `CxPlatSocketContextUninitialize` or `CxPlatSocketDelete`
+waits for it; `library.c` and `binding.c` no longer leave the unlink-before-close
+window; dotnet/runtime's `eng/Versions.props` and release notes name the bundled
+Windows version; the pins in `ci.yml` and `quic-cleanup-experiment.sh` are
+raised with new hashes; and the retirement gate below passes on every platform.
+A major version number or a prerelease label is not evidence.
+
+## Retirement gates
+
+The gate is executable and lives in the repository:
+
+- Cases: the raw `QuicRuntimeRebindTest.DisposedRuntimeListenerRebindsSameEndpoint`
+  pair, which has no retry, and the four owned cases in
+  `QuicLifetimeRetirementGateTest`: an idle listener restarted 64 times
+  (behavior A), a served listener restarted 32 times with the client connection
+  alternately closed before and after the stop (behavior B), a drained listener
+  restarted 16 times after `DrainAsync`, and four servers restarting concurrently
+  for 16 served cycles each (contention). Each owned case fails if the restart
+  fails or if `QuicEndpointReleases.Shared.Retries` grew, that is, if the
+  production retry had to bridge an `AddressAlreadyInUse` failure. The counter is
+  the only production change; it is internal and read through reflection.
+- Selection: the owned cases skip unless `EMBEDIO_QUIC_RETIREMENT_GATE=1`, so
+  the ordinary suite counts them in the 4,743 floor without running them.
+  `--filter "TestCategory=QuicLifetimeRetirementGate|FullyQualifiedName~QuicRuntimeRebindTest"`
+  with `--minimum-expected-tests 6` selects the six gate cases.
+- Platforms and repetitions: the `quic-retirement-gate` CI dispatch input runs
+  the selection on ubuntu-24.04, windows-2025 and macos-15 in separate test
+  processes (`quic-retirement-gate-repetitions`, default 10), with
+  `EMBEDIO_REQUIRE_QUIC=1`, no quarantine and no tolerated exit code. Its
+  artifact retains `environment.txt` (runtime and the exact native library:
+  `dpkg` version, dylib hash or `msquic.dll` product version),
+  `repetitions.tsv`, every TRX and log, and `gate-ledger.jsonl` with one record
+  per case (cycles, retries before and after, bridged count, outcome, timing,
+  runtime, OS). `ci-passed` requires the job only when it was requested.
+- Pass criterion: every repetition exits zero on every platform, twice, on
+  identical source: once as the control with the current pins and once with the
+  candidate dependency. A control that fails on the stock runtime is the
+  expected outcome today and is retained as proof that the gate detects the
+  defect; it is not a CI regression. The default ten processes detect the macOS
+  ordering reliably, but the recorded Windows rate is about four failures in
+  7,040 restarts, so the Windows candidate run needs at least 100 processes
+  (about 17,600 owned restarts) with zero bridged binds before behavior B may be
+  called absent there.
+- Retirement: only after the candidate passes, remove the retry
+  (`QuicEndpointReleases` and its two `Http3Listener` call sites), remove the
+  quarantine branch from `ci.yml` and the classifier use, keep the raw and owned
+  cases as ordinary strict tests, rerun the gate and the full suite on the final
+  source, and recheck `FailedMultiEndpointStartupRollsBackEarlierBindings`,
+  foreign-process endpoint conflicts and resource cleanup. The idle case covers
+  behavior A and the served and contended cases cover behavior B; fixing one
+  does not retire the other.
+
+Run it on a branch with
+`gh workflow run ci.yml --ref <branch> -f quic-retirement-gate=true -f quic-retirement-gate-repetitions=10`,
+or locally with the same filter and environment variables after installing the
+pinned native library.
+
+## Owner review of retry boundaries, retention and classification
+
+Reviewed at engine head 15d8a19 plus this change:
+
+- Bounds. The retry applies only to `SocketError.AddressAlreadyInUse` for an
+  endpoint this process recorded within one second; recency is re-evaluated after
+  every one-millisecond sleep, so a genuine conflict surfaces with the last
+  socket error at most about one second after the recorded release. Other
+  errors and unrecorded endpoints propagate on the first attempt. Both the
+  System.Net.Quic binding and the native provider binding are covered; the native
+  path maps MsQuic's address-in-use status (`0x80072740`, 48 or 98) to the same
+  socket error before the policy sees it.
+- Recording. `ShutdownAsync` records each endpoint immediately after that
+  listener's `DisposeAsync` returns. The synchronous `Dispose` path and the
+  failed multi-endpoint startup rollback both run through `ShutdownAsync`, so a
+  rolled-back endpoint is recorded as well.
+- Retention. One timestamp per distinct endpoint; `Record` prunes entries older
+  than the window, so retention is bounded by the number of distinct endpoints
+  released within one second, and the entries from a process's final release
+  persist only until the next record. `Bind` allocates nothing beyond the
+  exception the runtime already throws.
+- Concurrency. The dictionary is guarded by a lock and the new counter is
+  interlocked. Two sessions in one process racing for the same endpoint both
+  retry until the window ends and the loser then receives the conflict; that
+  one-second delay of a legitimate in-process conflict is the documented cost.
+- Outcome. No correction to the policy was needed; the only production change is
+  the `Retries` counter that makes the gate observable. Its unit coverage
+  (`CountsOnlyTheBindsItRetried`) checks that rejected errors, foreign endpoints
+  and expired windows are never counted.
+- Classification. The quarantine classifier matches the exact raw test class and
+  method, requires `stage=bind,` in the captured output and
+  `SocketErrorCode: AddressAlreadyInUse` in the message, accepts exactly one TRX
+  and prohibits DTDs. Owned restart methods, other stages, other socket errors,
+  WebSocket timeouts, crashes and discovery loss remain failures, as checked
+  earlier against 41 retained TRX files and four counterexamples. The ordinary
+  regression step now checks a 4,743 floor before it may tolerate the raw
+  failure.
+
+## Retirement gate control on the stock dependency (local, 2026-10-11)
+
+The gate was run on this change's working tree over engine head `15d8a19` on a
+MacBook Pro with an Apple M5 Pro, macOS 27.0.1 (26A434) arm64, .NET SDK 10.0.401
+and runtime 10.0.12, with the CI-pinned Homebrew libmsquic 2.6.2 bottle
+(`c7d7fbda…`) relocated beside OpenSSL 3.6.5 and loaded through
+`DYLD_FALLBACK_LIBRARY_PATH` (relocated `libmsquic.2.6.2.dylib` SHA-256
+`662c2a12…43bcd`). Five gate processes used the CI filter and the floor of six:
+
+| Process | Exit | Raw pair | Idle 64 | Served 32 | Drained 16 | Contended 64 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 2 | passed | 0 bridged | 0 bridged | 0 bridged | 1 bridged, failed |
+| 2 | 2 | passed | 0 bridged | 0 bridged | 0 bridged | 2 bridged, failed |
+| 3 | 2 | passed | 0 bridged | 0 bridged | 0 bridged | 1 bridged, failed |
+| 4 | 0 | passed | 0 bridged | 0 bridged | 0 bridged | 0 bridged |
+| 5 | 2 | passed | 0 bridged | 0 bridged | 0 bridged | 1 bridged, failed |
+
+Every failure is `ContendedRestartsCompleteWithoutRetry` reporting that the
+production retry bridged one or two `AddressAlreadyInUse` binds during 64
+contended cycles, each case finishing in under 200 ms. The single-lane cases and
+both raw runtime cases passed in all five processes on this fast host, which
+shows why the ordinary suite cannot be the retirement evidence: with the retry in
+place it passes, and without contention this host rarely loses the race. The
+stock dependency still needs the workaround. The ordinary-mode check reported the
+four gate cases skipped and counted alongside the six retry unit cases (10 total,
+zero failures). Artifacts are retained under ignored
+`TestResults/upstream-202/gate-local`: `environment.txt`, `repetitions.tsv`,
+`gate-ledger.jsonl`, and each process's TRX and log.
+
+## Exact head outcomes recorded
+
+- PR #203 final head `580aa2b` (merged into the engine branch on 2026-10-09):
+  [CI 38005558956](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38005558956)
+  passed with 4,448 cases and zero failures in each Test job (macOS 4,417
+  succeeded, Windows 4,445, Ubuntu 4,419; the remainder are platform skips),
+  Security 38005558799, Malware 38005558829 and the fuzz run 38005558806 passed,
+  and no quarantine warning was emitted; the quarantine was not exercised.
+- Engine head `15d8a19`, the base of this change (PR #182 on 2026-10-11):
+  [CI 38158991953](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38158991953)
+  succeeded with 4,720 cases and zero failures in each Test job (macOS 4,708
+  succeeded and 12 skipped, Windows 4,713 and 7, Ubuntu 4,710 and 10); no
+  quarantine warning was emitted. Every check on that head was terminal success
+  or an intentional skip.
+
+## Retirement gate control in CI (dispatch 38169343155 on `6caee02`, 2026-10-11)
+
+The first CI dispatch of the gate ran ten gate processes per platform on this
+change's first head `6caee02` with the pinned native dependencies of the
+regression job, no quarantine and no tolerated exit code
+([run 38169343155](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38169343155)).
+All three used .NET SDK 10.0.401 and runtime 10.0.12.
+
+| Platform | Native library | Processes failed | Raw failures | Bridged binds: idle 64, served 32, drained 16, contended 64 |
+| --- | --- | --- | --- | --- |
+| macos-15 (macOS 15.7.9, arm64) | libmsquic 2.6.2 bottle, relocated dylib `6f045def…` | 9 of 10 | 2 (`connected=False`, `stage=bind`, cycles 1 and 11) | 1, 1, 3, 18 |
+| ubuntu-24.04 (24.04.5) | libmsquic 2.6.2 `.deb` | 0 of 10 | 0 | 0, 0, 0, 0 |
+| windows-2025 (10.0.26100) | runtime-bundled `msquic.dll` 2.5.10.154561281 | 0 of 10 | 0 | 0, 0, 0, 0 |
+
+The macOS job failed as expected for the stock dependency, and that dispatch's
+`ci-passed` fails with it; the Windows and Linux jobs passed. On macOS every
+owned case and the raw case detected the defect: the retry bridged 23 binds
+across the 40 owned cases of ten processes, and two raw processes failed before
+completing their 32 cycles. The Linux and Windows passes match the version
+table (`SO_REUSEPORT` on multi-partition Linux, synchronous `closesocket` on
+Windows), but ten processes are 640 contended and 320 served restarts per
+platform, far below the 7,040-restart campaign that recorded four Windows
+failures, so they do not establish that behavior B is absent; the Windows
+retirement requirement above stands. The job's `environment.txt` names every
+installed runtime and the loaded library on each platform, which is the
+evidence a candidate run must be compared against. Copies of the three
+`quic-retirement-gate-<os>` artifacts are retained under ignored
+`TestResults/upstream-202/gate-ci-6caee02`.

@@ -46,7 +46,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4766
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4771
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -60,7 +60,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 4766 executed/reported test cases to catch accidental discovery loss; update
+least 4771 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
 suite budget is five minutes on Windows and eight minutes on Linux/macOS,
 approved by William on 2026-10-10 after incomplete Unix runs reported no failed
@@ -227,3 +227,12 @@ coverage. After preparing the native library, use that environment variable with
 `dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --filter FullyQualifiedName~Http3QuicTest`.
 See [the engine validation record](docs/project/http-engine.md#required-native-quic-coverage-in-desktop-ci)
 for package sources, platform limitations and actual test evidence.
+
+The QUIC lifetime retirement gate is opt-in. Its four owned restart cases are
+skipped unless `EMBEDIO_QUIC_RETIREMENT_GATE=1`; select them with the raw
+runtime rebind cases using
+`--filter "TestCategory=QuicLifetimeRetirementGate|FullyQualifiedName~QuicRuntimeRebindTest"`,
+or dispatch CI with the `quic-retirement-gate` input. The gate tolerates no
+retry and applies no quarantine, so a runtime whose MsQuic still keeps a
+disposed listener's port bound fails it by design. See
+[QUIC lifetime and rebind](docs/project/quic-lifetime.md#retirement-gates).

@@ -15,8 +15,8 @@ namespace EmbedIO.Net.Internal.Http3
     // the connection. Binding the same endpoint at once can then fail with
     // AddressAlreadyInUse even though the server has stopped. Bridge only that window:
     // retry a rebind of an endpoint this process released moments ago. Remove this once
-    // the required MsQuic releases the port before disposal completes; see
-    // docs/project/http-engine.md.
+    // the required MsQuic releases the port before disposal completes and the
+    // retirement gates pass without it; see docs/project/quic-lifetime.md.
     internal sealed class QuicEndpointReleases
     {
         // Every traced deferred close completed within 230 microseconds of disposal.
@@ -26,6 +26,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Dictionary<IPEndPoint, long> _released = new();
         private readonly long _window;
         private readonly Func<long> _clock;
+        private long _retries;
 
         internal QuicEndpointReleases(TimeSpan window, Func<long> clock)
         {
@@ -34,6 +35,11 @@ namespace EmbedIO.Net.Internal.Http3
         }
 
         internal static QuicEndpointReleases Shared { get; } = new(Window, Stopwatch.GetTimestamp);
+
+        // How many binds this policy retried: one per AddressAlreadyInUse failure of an
+        // endpoint this process had just released. The retirement gate reads it; a count
+        // that grows during EmbedIO's own restarts shows the runtime still needs this.
+        internal long Retries => Interlocked.Read(ref _retries);
 
         // Call after the listener bound to the endpoint has been disposed.
         internal void Record(IPEndPoint endpoint)
@@ -56,6 +62,7 @@ namespace EmbedIO.Net.Internal.Http3
                 try { return bind(); }
                 catch (SocketException error) when (error.SocketErrorCode == SocketError.AddressAlreadyInUse && IsRecent(endpoint))
                 {
+                    Interlocked.Increment(ref _retries);
                     Thread.Sleep(1);
                 }
             }
