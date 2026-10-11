@@ -7918,7 +7918,8 @@ fixed-length and chunked bodies still yield exactly their parsed content, and th
 following request is dispatched separately. These preserve an existing invariant;
 they do not claim a newly reproduced old-engine defect. The focused request,
 cookie, query, framing, body and tunnel set passes 251/251. The replacement builds
-both core targets without warnings, and both source guards pass. Complete Windows validation reports 4,671 cases: 4,664 passed, seven expected
+both core targets without warnings, and both source guards pass.
+Complete Windows validation reports 4,671 cases: 4,664 passed, seven expected
 skips and zero failures in 3m50s, requiring QUIC and the independent datagram
 peer. The actual netstandard2.0 core reports 234 passed and 17 expected HTTP/3
 transport skips in the 251-case focused set, on the installed .NET 10 host;
@@ -7930,3 +7931,9 @@ exact-head hosted checks still precede integration.
 This increment replaces the inherited request model, not the response metadata
 or application-context lifecycle. Program #181 remains open. No release,
 whole-server speedup or native HTTP/3 provider activation is implied.
+After incorporating the frontend's synchronous drain-cutoff correction, final
+combined-source Windows validation reports the same 4,671 cases with 4,664 passed,
+seven expected skips and zero failures in 3m49s, again requiring QUIC and the
+independent datagram peer. Retained-asset results remain 234 passed and 17 expected
+HTTP/3 transport skips; both source guards, changed-source formatting, the
+rebuilt standalone performance harness and all ten unchanged resource gates pass.
