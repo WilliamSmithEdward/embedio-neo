@@ -306,7 +306,11 @@ The gate is executable and lives in the repository:
   identical source: once as the control with the current pins and once with the
   candidate dependency. A control that fails on the stock runtime is the
   expected outcome today and is retained as proof that the gate detects the
-  defect; it is not a CI regression.
+  defect; it is not a CI regression. The default ten processes detect the macOS
+  ordering reliably, but the recorded Windows rate is about four failures in
+  7,040 restarts, so the Windows candidate run needs at least 100 processes
+  (about 17,600 owned restarts) with zero bridged binds before behavior B may be
+  called absent there.
 - Retirement: only after the candidate passes, remove the retry
   (`QuicEndpointReleases` and its two `Http3Listener` call sites), remove the
   quarantine branch from `ci.yml` and the classifier use, keep the raw and owned
@@ -402,3 +406,32 @@ zero failures). Artifacts are retained under ignored
   succeeded and 12 skipped, Windows 4,713 and 7, Ubuntu 4,710 and 10); no
   quarantine warning was emitted. Every check on that head was terminal success
   or an intentional skip.
+
+## Retirement gate control in CI (dispatch 38169343155 on `6caee02`, 2026-10-11)
+
+The first CI dispatch of the gate ran ten gate processes per platform on this
+change's first head `6caee02` with the pinned native dependencies of the
+regression job, no quarantine and no tolerated exit code
+([run 38169343155](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38169343155)).
+All three used .NET SDK 10.0.401 and runtime 10.0.12.
+
+| Platform | Native library | Processes failed | Raw failures | Bridged binds: idle 64, served 32, drained 16, contended 64 |
+| --- | --- | --- | --- | --- |
+| macos-15 (macOS 15.7.9, arm64) | libmsquic 2.6.2 bottle, relocated dylib `6f045def…` | 9 of 10 | 2 (`connected=False`, `stage=bind`, cycles 1 and 11) | 1, 1, 3, 18 |
+| ubuntu-24.04 (24.04.5) | libmsquic 2.6.2 `.deb` | 0 of 10 | 0 | 0, 0, 0, 0 |
+| windows-2025 (10.0.26100) | runtime-bundled `msquic.dll` 2.5.10.154561281 | 0 of 10 | 0 | 0, 0, 0, 0 |
+
+The macOS job failed as expected for the stock dependency, and that dispatch's
+`ci-passed` fails with it; the Windows and Linux jobs passed. On macOS every
+owned case and the raw case detected the defect: the retry bridged 23 binds
+across the 40 owned cases of ten processes, and two raw processes failed before
+completing their 32 cycles. The Linux and Windows passes match the version
+table (`SO_REUSEPORT` on multi-partition Linux, synchronous `closesocket` on
+Windows), but ten processes are 640 contended and 320 served restarts per
+platform, far below the 7,040-restart campaign that recorded four Windows
+failures, so they do not establish that behavior B is absent; the Windows
+retirement requirement above stands. The job's `environment.txt` names every
+installed runtime and the loaded library on each platform, which is the
+evidence a candidate run must be compared against. Copies of the three
+`quic-retirement-gate-<os>` artifacts are retained under ignored
+`TestResults/upstream-202/gate-ci-6caee02`.
