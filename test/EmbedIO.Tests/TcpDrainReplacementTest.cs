@@ -94,7 +94,11 @@ namespace EmbedIO.Tests
         [Test]
         public async Task ReplacementAcceptsFreshRequestAfterFortySecondsWithoutTraffic()
         {
-            var prefix = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
+            using var reservation = new TcpListener(IPAddress.Loopback, 0);
+            reservation.Start();
+            var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
+            reservation.Stop();
+            var prefix = $"http://127.0.0.1:{port}/";
             var target = new IPEndPoint(IPAddress.Loopback, new Uri(prefix).Port);
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(55));
             using var retired = Server(prefix, "old");

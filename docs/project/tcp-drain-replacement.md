@@ -139,8 +139,8 @@ available during the run. This is runtime/ownership evidence, not a TCP packet c
 The local smoke campaign passed one twenty-second mixed-load drain cycle plus
 post-phase health checks. It recorded 316 direct TCP connection completions, including
 173 refusals during deliberate disruption and no timeout; its maximum recorded
-connect duration was 2.06 seconds. The longer campaign is still in progress; final
-results will be recorded here without claiming the historical cause was identified.
+connect duration was 2.06 seconds. The completed longer-campaign results are recorded below; the historical cause
+remains unconfirmed.
 
 ### Integration reconciliation
 
@@ -151,3 +151,76 @@ Both documentation entries are preserved and both discovery guards combine the n
 base's 4,639 cases with these nine cases, for a 4,648 minimum. The running campaign
 keeps its originally recorded binary, hashes and source identity. Reconciliation
 does not replace its evidence with results from an untested binary.
+
+### Completed longer-campaign results
+
+[Committed evidence](evidence/tcp-drain-replacement-279.json) records the exact
+binaries, plan, runtime and limitations. All six plan steps passed over approximately
+38 minutes on Windows 10.0.26300 / .NET 10.0.12, Ryzen 7 9800X3D with sixteen logical
+processors. This is a different host/OS build from the historical Hyper-V report,
+and paced rates were reduced with `--rate-scale 0.25`.
+
+- Sixteen mixed-load drain/replacement cycles and subsequent health checks passed;
+  the process used seventeen listener generations.
+- 9,862,848 validated exchanges completed across 37 client phases, with zero
+  reported unexpected client errors and all workers finishing within the original
+  shutdown bound. No stale-generation requests occurred.
+- All 17,560 direct HTTP/1 TCP connects have paired start/end evidence: 14,668
+  succeeded; 2,892 were refused during deliberate disruption. There were zero TCP
+  connect timeouts, including inside those disruption windows.
+- The longest connect took 2,589 ms and ended in refusal during deliberate
+  disruption. No refusal occurred outside that window. All 6,116 captured workload
+  interruption exceptions remain available; they are not described as absent.
+- All 68 recorded endpoint objects ended with closed listening handles and
+  successfully completed accept workers. There were no captured endpoint faults,
+  no incomplete connect traces, and the server exited cleanly without forced killing.
+- The final steady-load phase, forty-second traffic-free endpoint interval and
+  subsequent health traffic also passed. Binary hashes were verified unchanged
+  after completion.
+
+Use the independent summarizer after the server exits:
+
+```powershell
+python scripts/summarize_tcp_endurance.py TestResults/tcp-investigation/campaign --output TestResults/tcp-investigation/summary.json
+```
+
+It fails for TCP timeouts even when the original harness labels them as intentional
+shutdown disruption, incomplete connect evidence, endpoint faults/open handles,
+worker-bound violations, failed plan steps, an incomplete server exit, or reported
+client errors. Summary outputs use exclusive creation so earlier evidence is not
+overwritten. Controlled hidden-timeout, incomplete-trace, worker-bound and unfinished
+campaign inputs are retained separately from actual runtime results.
+
+This materially extends coverage beyond the bounded regressions, but does not
+reproduce or explain the old two approximately 21-second timeouts. No production
+fix is inferred. The original environment, eight-hour duration, full-rate load and
+TCP packet evidence remain unvalidated; issue #279 remains open for that concrete
+reproduction/attribution gap.
+
+### Owner-approved CI scheduling correction
+
+CI run 38112614865 on reconciliation head `8a6274b` hit its unchanged five-minute
+Windows limit with 4,322 results and zero reported assertion failures. Its original
+log is preserved. The new forty-second quiet case contributed serialized elapsed
+work; the discovery gate correctly rejected the incomplete suite.
+
+William explicitly approved running that case concurrently on copied binaries.
+`scripts/run_tcp_regression_ci.py` keeps the main suite's platform deadline and
+coverage, requires 4,647 main cases plus the separately required quiet case, runs
+coverage against separate assembly copies, and retains separate TRX/coverage/log
+artifacts. The quiet case uses an ephemeral port so it cannot reuse the other
+process's sequential test-port allocation. Its assertions and per-operation
+limits remain unchanged. A quiet-case failure returns a non-quarantinable error;
+the existing MsQuic classifier still examines only the main TRX and cannot hide
+that failure. No test, coverage run or platform is dropped and no deadline is
+increased. Final local and hosted results are recorded in the PR.
+
+The approved split passed locally with coverage on both processes: main TRX reports
+4,647 cases (4,638 passed, nine explicit skips, zero failures); quiet TRX reports
+one passed case, zero skips/failures. Both coverage artifacts exist, and main,
+copied and source core DLL bytes match after collector restoration. Eight synthetic
+summary faults are rejected, and the successful control passes. Five driver exit
+controls prove that quiet failure cannot enter the main-only quarantine path.
+Source/parser/format guards, YAML parsing, pinned offline zizmor and diff checks
+pass. The earlier failed hosted run remains recorded; fresh exact-head hosted
+checks are required before acceptance.
