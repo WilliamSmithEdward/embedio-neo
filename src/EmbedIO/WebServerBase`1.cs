@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -21,6 +22,8 @@ namespace EmbedIO
     public abstract class WebServerBase<TOptions> : ConfiguredObject, IWebServer, IHttpContextHandler
         where TOptions : WebServerOptionsBase, new()
     {
+        private static readonly double MillisecondsPerTimestamp = 1000.0 / Stopwatch.Frequency;
+
         private readonly WebModuleCollection _modules;
 
         private readonly MimeTypeCustomizer _mimeTypeCustomizer = new MimeTypeCustomizer();
@@ -252,6 +255,9 @@ namespace EmbedIO
         protected async Task DoHandleContextAsync(IHttpContextImpl context)
         {
             if (context is null) throw new System.NullReferenceException();
+            // Context creation can precede admission by a keep-alive idle interval.
+            // Measure this handling operation without changing the public Age clock.
+            var requestStarted = Stopwatch.GetTimestamp();
             context.SupportCompressedRequests = Options.SupportCompressedRequests;
             RequestDecompressionPolicy.Associate(context, Options.DecompressionPolicy);
             context.MimeTypeProviders.Push(this);
@@ -351,11 +357,12 @@ namespace EmbedIO
                         }
                     }
 
+                    var handlingMilliseconds = (long)((Stopwatch.GetTimestamp() - requestStarted) * MillisecondsPerTimestamp);
                     var statusCode = context.Response.StatusCode;
                     var statusDescription = context.Response.StatusDescription;
                     var sendChunked = context.Response.SendChunked;
                     var contentLength = context.Response.ContentLength64;
-                    $"[{context.Id}] {context.Request.HttpMethod} {context.Request.Url.AbsolutePath}: \"{statusCode} {statusDescription}\" sent in {context.Age}ms ({(sendChunked ? "chunked" : contentLength.ToString(CultureInfo.InvariantCulture) + " bytes")})"
+                    $"[{context.Id}] {context.Request.HttpMethod} {context.Request.Url.AbsolutePath}: \"{statusCode} {statusDescription}\" sent in {handlingMilliseconds}ms ({(sendChunked ? "chunked" : contentLength.ToString(CultureInfo.InvariantCulture) + " bytes")})"
                         .Info(LogSource);
                 }
             }
