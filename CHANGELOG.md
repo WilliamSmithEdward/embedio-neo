@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+- Replace inherited HTTP/1 response output with an independently authored owner
+  for ordered writes and completion. Enforce the owner-approved declared-length
+  contract and close incomplete or failed output without connection reuse,
+  preserving transport-error suppression and valid HEAD/bodyless metadata. See
+  the [Neo v2 migration guide](docs/compatibility/neo-v1-to-v2.md#response-statuses-output-and-shutdown).
 - Complete the server accept loop normally when explicit disposal wins between
   the listening check and accept. Independent listener failures still propagate.
 - Preserve HTTP/3 response output after caller-cancelled input reads, while

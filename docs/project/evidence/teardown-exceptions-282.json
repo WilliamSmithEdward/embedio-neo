@@ -1,0 +1,1838 @@
+{
+  "engineRevision": "b3e55b5a41e68fb252a95f2ba22dafc1a6637cbb",
+  "scope": "Diagnostic-only on shared Windows host; no quiet-host cost or production improvement claim",
+  "environment": {
+    "capturedUtc": "2026-10-11T04:18:46.9179374Z",
+    "os": "Microsoft Windows 10.0.26300",
+    "architecture": "X64",
+    "processor": "AMD Ryzen 7 9800X3D 8-Core Processor",
+    "logicalProcessors": 16,
+    "totalMemoryBytes": 68053987328,
+    "runtime": ".NET 10.0.12",
+    "runtimeDirectory": "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\10.0.12\\",
+    "processorTopology": null,
+    "quicSupported": true,
+    "libraryPath": {},
+    "powerScheme": "Power Scheme GUID: 3743a327-2199-4b5f-9ab3-0c04b7060223  (Ultimate Performance)",
+    "powerSettings": null,
+    "cpuAffinity": "inherited CPU set (Windows)",
+    "dotnetEnvironment": {},
+    "candidateRevision": "b3e55b5a41e68fb252a95f2ba22dafc1a6637cbb",
+    "baselineRevision": null,
+    "baselineAllProtocols": false,
+    "targets": [
+      {
+        "name": "candidate",
+        "engine": "embedio",
+        "directory": "F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\TestResults\\final-runner\\",
+        "runnerSha256": "1DD4E665C58E13DB618A8C8A7CD0CCCA3712A9FDDDF8661D6F0D4A0A4BDC9BE5",
+        "embedioSha256": "90014EF9DEA19E4841C6598FBC636C8C0A2F1176C854483786956BD89EC6A183"
+      },
+      {
+        "name": "kestrel",
+        "engine": "kestrel",
+        "directory": "F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\TestResults\\final-runner\\",
+        "runnerSha256": "1DD4E665C58E13DB618A8C8A7CD0CCCA3712A9FDDDF8661D6F0D4A0A4BDC9BE5",
+        "embedioSha256": "90014EF9DEA19E4841C6598FBC636C8C0A2F1176C854483786956BD89EC6A183"
+      }
+    ],
+    "kestrelCoreSha256": "62B5AB79F5F896235E4068039450A15A7BCDB5BB4EB73F2F6BDF5A787D4CC239",
+    "kestrelQuicSha256": "6A6919A866B014E392B18BB0F1BF26AE9ED51A063C77ED584A06CF4A2AB591DE",
+    "systemNetQuicSha256": "AF5B52CDEE62D014AF677C411530A3FDE5C1C368ADECB8F83DCFE9246E8BBE73",
+    "msquicSha256": "B7158D427B01C70483BB3D80C5211E387DD98E9471C8A70E4484D449DE9157E8",
+    "serverCpus": "0-1",
+    "clientCpus": "2-3",
+    "warmupSeconds": 0.2,
+    "durationSeconds": 0.5,
+    "idleSeconds": 0.5,
+    "rounds": 2,
+    "profile": false,
+    "gc": "Server GC, concurrent (runtimeconfig), identical for every engine",
+    "method": "Fresh server and client processes per sample; engine order alternates by round; closed-loop client; every response validated; first error aborts the sample without retry.",
+    "modernBaseline": false
+  },
+  "samples": [
+    {
+      "rawFile": "samples/h1-plain-small-c64-close100/candidate-r1.json",
+      "rawSha256": "0299e002a13da3fd3aa8b903334be42fe47539f6854cee8dec5122dc4bad07bc",
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "candidate",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 2304,
+        "connectionsOpened": 24,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 5958,
+      "connectionsOpened": 60,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2,
+          "System.OperationCanceledException: Accept canceled.": 3,
+          "System.OperationCanceledException: The operation was canceled.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 11883.041196936178,
+        "serverCpuMicrosecondsPerRequest": 52.45048674051695,
+        "serverAllocatedBytesPerRequest": 8080.396106075865,
+        "serverCpuUtilization": 0.3071495168464384,
+        "clientCpuUtilization": 0.21500466179250688,
+        "backgroundCpuSeconds": 7.015625,
+        "retainedManagedHeapBytes": 69360,
+        "retainedWorkingSetBytes": 6303744,
+        "retainedPrivateBytes": 2146304,
+        "retainedHandles": 0,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.5247,
+      "serverStopMilliseconds": 16.2018,
+      "clientTimeWaitAtStart": 10711,
+      "machineTimeWaitAtStart": 14905,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "3d63488da85da2cbfbf9b38c74b5d4d3ced718e717ad30a151e79b74d0a5c7f6",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h1-plain-small-c64-close100/candidate-r2.json",
+      "rawSha256": "58976abf4c998cf959bdc4634be1063a7b0c047aea9b50bcbe4d26489c824491",
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "candidate",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 2333,
+        "connectionsOpened": 24,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 6707,
+      "connectionsOpened": 68,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2,
+          "System.OperationCanceledException: Accept canceled.": 3,
+          "System.OperationCanceledException: The operation was canceled.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 13401.394648193907,
+        "serverCpuMicrosecondsPerRequest": 102.50484568361414,
+        "serverAllocatedBytesPerRequest": 8081.252422841807,
+        "serverCpuUtilization": 0.6750309630566109,
+        "clientCpuUtilization": 0.35285709432504664,
+        "backgroundCpuSeconds": 3.515625,
+        "retainedManagedHeapBytes": 93936,
+        "retainedWorkingSetBytes": 6328320,
+        "retainedPrivateBytes": 2015232,
+        "retainedHandles": 1,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.4223,
+      "serverStopMilliseconds": 13.6074,
+      "clientTimeWaitAtStart": 5300,
+      "machineTimeWaitAtStart": 9830,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "2fc6da4b048b01fd4b95588e31b6c1756761e74cd00d364ef236120c5c5e1d44",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h1-plain-small-c64-close100/kestrel-r1.json",
+      "rawSha256": "a8bd57fd67fdb01ce36f910bb0cd8785a9e9714c4137dd9376d34678c31f2892",
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "kestrel",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 3952,
+        "connectionsOpened": 40,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 9611,
+      "connectionsOpened": 97,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 19207.467629991148,
+        "serverCpuMicrosecondsPerRequest": 82.9128082405577,
+        "serverAllocatedBytesPerRequest": 128.122359796067,
+        "serverCpuUtilization": 0.7783320180030943,
+        "clientCpuUtilization": 0.6867635452968478,
+        "backgroundCpuSeconds": 1.15625,
+        "retainedManagedHeapBytes": 94752,
+        "retainedWorkingSetBytes": 5484544,
+        "retainedPrivateBytes": 1363968,
+        "retainedHandles": 4,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 1,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.2719,
+      "serverStopMilliseconds": 14.7768,
+      "clientTimeWaitAtStart": 5811,
+      "machineTimeWaitAtStart": 10031,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "322af3a103402b55c9b26b44f32898432e7884b0c5f9d900cada75011849c6a3",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h1-plain-small-c64-close100/kestrel-r2.json",
+      "rawSha256": "d598372125c78c7487b4ea9920dfb4e0deffe76d60c9d127de61c0981b6925b3",
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "kestrel",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 4484,
+        "connectionsOpened": 45,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 11783,
+      "connectionsOpened": 118,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 23265.204175218598,
+        "serverCpuMicrosecondsPerRequest": 67.62921157599932,
+        "serverAllocatedBytesPerRequest": 127.38148179580752,
+        "serverCpuUtilization": 0.7733448987720034,
+        "clientCpuUtilization": 0.5762177677124731,
+        "backgroundCpuSeconds": 3.546875,
+        "retainedManagedHeapBytes": 96592,
+        "retainedWorkingSetBytes": 5120000,
+        "retainedPrivateBytes": 1019904,
+        "retainedHandles": 14,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 3,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.1983,
+      "serverStopMilliseconds": 12.2349,
+      "clientTimeWaitAtStart": 5282,
+      "machineTimeWaitAtStart": 9647,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "322af3a103402b55c9b26b44f32898432e7884b0c5f9d900cada75011849c6a3",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h1-tls-small-c64/candidate-r1.json",
+      "rawSha256": "22e728af24485a11ae110a3f651bdb75d47bbf0c1eadab89ae5fa39259260b34",
+      "scenario": "h1-tls-small-c64",
+      "engine": "candidate",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 1455,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 5710,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2,
+          "System.OperationCanceledException: Accept canceled.": 3,
+          "System.OperationCanceledException: The operation was canceled.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 11406.729411003238,
+        "serverCpuMicrosecondsPerRequest": 150.50350262697023,
+        "serverAllocatedBytesPerRequest": 8031.483012259195,
+        "serverCpuUtilization": 0.8442617024127685,
+        "clientCpuUtilization": 0.4298059575919549,
+        "backgroundCpuSeconds": 2.1875,
+        "retainedManagedHeapBytes": 188072,
+        "retainedWorkingSetBytes": 6381568,
+        "retainedPrivateBytes": 2437120,
+        "retainedHandles": 17,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 3,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.5951,
+      "serverStopMilliseconds": 12.7905,
+      "clientTimeWaitAtStart": 5631,
+      "machineTimeWaitAtStart": 9995,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "f92548e1b01c8a6c66dadbdbb437947fdf39ef4cf4138ffed2b743878d5533dd",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h1-tls-small-c64/candidate-r2.json",
+      "rawSha256": "25f06aa9d0156763cac4e69342e67809078307ada7d895d7a635fde5fad77b89",
+      "scenario": "h1-tls-small-c64",
+      "engine": "candidate",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 1537,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 6032,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2,
+          "System.OperationCanceledException: Accept canceled.": 3,
+          "System.OperationCanceledException: The operation was canceled.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 12050.002716844112,
+        "serverCpuMicrosecondsPerRequest": 49.21667771883289,
+        "serverAllocatedBytesPerRequest": 8008.835543766579,
+        "serverCpuUtilization": 0.2920823952261709,
+        "clientCpuUtilization": 0.3074551528696536,
+        "backgroundCpuSeconds": 6.84375,
+        "retainedManagedHeapBytes": 90368,
+        "retainedWorkingSetBytes": 6209536,
+        "retainedPrivateBytes": 2301952,
+        "retainedHandles": 0,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.5119,
+      "serverStopMilliseconds": 13.0096,
+      "clientTimeWaitAtStart": 5298,
+      "machineTimeWaitAtStart": 9923,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "ae6d3a0317b7a747bbf18875dafdaf860a0633cf2969df8b5d814a675b95752a",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h1-tls-small-c64/kestrel-r1.json",
+      "rawSha256": "b4e2c8792248065bc7e17ab6c17bfddcfeea425b93adf22b1c26858b2380c3ff",
+      "scenario": "h1-tls-small-c64",
+      "engine": "kestrel",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 2859,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 9623,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 19222.17987469927,
+        "serverCpuMicrosecondsPerRequest": 87.6805569988569,
+        "serverAllocatedBytesPerRequest": 36.9132287228515,
+        "serverCpuUtilization": 0.8286750745144628,
+        "clientCpuUtilization": 0.7212542315218472,
+        "backgroundCpuSeconds": 1.640625,
+        "retainedManagedHeapBytes": 87672,
+        "retainedWorkingSetBytes": 4259840,
+        "retainedPrivateBytes": 942080,
+        "retainedHandles": 0,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.2815,
+      "serverStopMilliseconds": 11.5862,
+      "clientTimeWaitAtStart": 5624,
+      "machineTimeWaitAtStart": 9943,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "387f9d0ee52c6e48c94e44ba15ec370f8b6c397c20375c66e5622ad0a90f18c1",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h1-tls-small-c64/kestrel-r2.json",
+      "rawSha256": "704864b910f5a509f9b8432fed1f0743f909e509a1e2233f9619b5fadc9932c3",
+      "scenario": "h1-tls-small-c64",
+      "engine": "kestrel",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 2450,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 6741,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 13465.988939151348,
+        "serverCpuMicrosecondsPerRequest": 118.21317311971518,
+        "serverAllocatedBytesPerRequest": 44.16674083963804,
+        "serverCpuUtilization": 0.7828756181954294,
+        "clientCpuUtilization": 0.5526180834320678,
+        "backgroundCpuSeconds": 2.484375,
+        "retainedManagedHeapBytes": 147392,
+        "retainedWorkingSetBytes": 4333568,
+        "retainedPrivateBytes": 1003520,
+        "retainedHandles": 9,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 1,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.6207,
+      "serverStopMilliseconds": 14.2315,
+      "clientTimeWaitAtStart": 5297,
+      "machineTimeWaitAtStart": 9927,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "387f9d0ee52c6e48c94e44ba15ec370f8b6c397c20375c66e5622ad0a90f18c1",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-plain-small-c64x1/candidate-r1.json",
+      "rawSha256": "750b28e3be210570479bcf1b90de35f8e8cfcd03a2a2e87bdd1d2b2727641257",
+      "scenario": "h2-plain-small-c64x1",
+      "engine": "candidate",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 893,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 3559,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2,
+          "System.OperationCanceledException: Accept canceled.": 3,
+          "System.OperationCanceledException: The operation was canceled.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 7110.549566164573,
+        "serverCpuMicrosecondsPerRequest": 210.73335206518686,
+        "serverAllocatedBytesPerRequest": 9349.289126159034,
+        "serverCpuUtilization": 0.7362204562093128,
+        "clientCpuUtilization": 0.46013778513082043,
+        "backgroundCpuSeconds": 1.515625,
+        "retainedManagedHeapBytes": 70560,
+        "retainedWorkingSetBytes": 7540736,
+        "retainedPrivateBytes": 3694592,
+        "retainedHandles": 1,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.9471,
+      "serverStopMilliseconds": 15.4831,
+      "clientTimeWaitAtStart": 5337,
+      "machineTimeWaitAtStart": 9689,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "efd5bdaae736e29aa603e708490b124f18aa0f4d9af4262159a3fc4ff5a2ab68",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-plain-small-c64x1/candidate-r2.json",
+      "rawSha256": "da964ab48dd89cc74dad7df74d68c0632eeffe7e039cff73e47134978391dcbd",
+      "scenario": "h2-plain-small-c64x1",
+      "engine": "candidate",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 1055,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 4068,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2,
+          "System.OperationCanceledException: Accept canceled.": 3,
+          "System.OperationCanceledException: The operation was canceled.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 8120.885408078484,
+        "serverCpuMicrosecondsPerRequest": 145.95624385447394,
+        "serverAllocatedBytesPerRequest": 9346.570304818093,
+        "serverCpuUtilization": 0.5852184513291432,
+        "clientCpuUtilization": 0.41581311015491756,
+        "backgroundCpuSeconds": 3.984375,
+        "retainedManagedHeapBytes": 70112,
+        "retainedWorkingSetBytes": 5926912,
+        "retainedPrivateBytes": 2093056,
+        "retainedHandles": 0,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.6079,
+      "serverStopMilliseconds": 12.7058,
+      "clientTimeWaitAtStart": 5819,
+      "machineTimeWaitAtStart": 10489,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "5d5185ecdb412abbb51cff43313a044e9eec8db2fab23a356f7189b14cd31034",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-plain-small-c64x1/kestrel-r1.json",
+      "rawSha256": "93d514d6218b633309fab3737775c07bf4f997a9b5141ef5ed54652ab232466f",
+      "scenario": "h2-plain-small-c64x1",
+      "engine": "kestrel",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 2197,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 5995,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 11971.59487004679,
+        "serverCpuMicrosecondsPerRequest": 49.52043369474562,
+        "serverAllocatedBytesPerRequest": 43.08790658882402,
+        "serverCpuUtilization": 0.28871538357254933,
+        "clientCpuUtilization": 0.2431287440610942,
+        "backgroundCpuSeconds": 7.328125,
+        "retainedManagedHeapBytes": 108192,
+        "retainedWorkingSetBytes": 8507392,
+        "retainedPrivateBytes": 4775936,
+        "retainedHandles": 4,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 1,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.5503,
+      "serverStopMilliseconds": 12.3741,
+      "clientTimeWaitAtStart": 5333,
+      "machineTimeWaitAtStart": 9689,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "387f9d0ee52c6e48c94e44ba15ec370f8b6c397c20375c66e5622ad0a90f18c1",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-plain-small-c64x1/kestrel-r2.json",
+      "rawSha256": "b531511b755dd0ff203366d4bbb3e4aa6c0593d9c17b2050e8fd97b4b3346600",
+      "scenario": "h2-plain-small-c64x1",
+      "engine": "kestrel",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 2290,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 6258,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 12491.678701568047,
+        "serverCpuMicrosecondsPerRequest": 129.83381271971876,
+        "serverAllocatedBytesPerRequest": 41.90348354106743,
+        "serverCpuUtilization": 0.8003377474545812,
+        "clientCpuUtilization": 0.5540799790070178,
+        "backgroundCpuSeconds": 1.515625,
+        "retainedManagedHeapBytes": 83576,
+        "retainedWorkingSetBytes": 8355840,
+        "retainedPrivateBytes": 4788224,
+        "retainedHandles": 4,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 1,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.4415,
+      "serverStopMilliseconds": 12.3238,
+      "clientTimeWaitAtStart": 5761,
+      "machineTimeWaitAtStart": 10420,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "387f9d0ee52c6e48c94e44ba15ec370f8b6c397c20375c66e5622ad0a90f18c1",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-tls-churn-c32/candidate-r1.json",
+      "rawSha256": "085dd60396ac49181da61c946578fb8a7f6e6a710dee9064e29a83fc302a4952",
+      "scenario": "h2-tls-churn-c32",
+      "engine": "candidate",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 11,
+        "connectionsOpened": 11,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 122,
+      "connectionsOpened": 122,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {
+          "System.IO.IOException: Unable to read data from the transport connection: An established connection was aborted by the software in your host machine..": 44,
+          "System.IO.IOException: Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host..": 66
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2,
+          "System.OperationCanceledException: Accept canceled.": 3,
+          "System.OperationCanceledException: The operation was canceled.": 2
+        }
+      },
+      "serverWindowExceptions": {
+        "System.IO.IOException: Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host..": 66,
+        "System.IO.IOException: Unable to read data from the transport connection: An established connection was aborted by the software in your host machine..": 44
+      },
+      "derived": {
+        "requestsPerSecond": 243.14839705415753,
+        "serverCpuMicrosecondsPerRequest": 1921.1065573770493,
+        "serverAllocatedBytesPerRequest": 38646.16393442623,
+        "serverCpuUtilization": 0.22942241249694595,
+        "clientCpuUtilization": 0.3670758599951135,
+        "backgroundCpuSeconds": 1.9375,
+        "retainedManagedHeapBytes": 82072,
+        "retainedWorkingSetBytes": 12337152,
+        "retainedPrivateBytes": 6164480,
+        "retainedHandles": 5,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 7.1679,
+      "serverStopMilliseconds": 5.2928,
+      "clientTimeWaitAtStart": 5328,
+      "machineTimeWaitAtStart": 9696,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "0a01de97e2ea0b840f3135197388ee491bdd1cceb8fe4a3291a78d2f55a40bb5",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-tls-churn-c32/candidate-r2.json",
+      "rawSha256": "8a533e450c7777ce96c212890783c44d5a269ebc78bb7f0fe9bd87395def539a",
+      "scenario": "h2-tls-churn-c32",
+      "engine": "candidate",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 13,
+        "connectionsOpened": 13,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 129,
+      "connectionsOpened": 129,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "System.IO.IOException: Unable to read data from the transport connection: An established connection was aborted by the software in your host machine..": 11,
+          "System.IO.IOException: Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host..": 11
+        },
+        "load-and-client-close": {
+          "System.IO.IOException: Unable to read data from the transport connection: An established connection was aborted by the software in your host machine..": 44,
+          "System.IO.IOException: Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host..": 198,
+          "System.OperationCanceledException: The operation was canceled.": 3
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2,
+          "System.OperationCanceledException: Accept canceled.": 3,
+          "System.OperationCanceledException: The operation was canceled.": 2
+        }
+      },
+      "serverWindowExceptions": {
+        "System.IO.IOException: Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host..": 198,
+        "System.IO.IOException: Unable to read data from the transport connection: An established connection was aborted by the software in your host machine..": 44,
+        "System.OperationCanceledException: The operation was canceled.": 3
+      },
+      "derived": {
+        "requestsPerSecond": 257.3327875484444,
+        "serverCpuMicrosecondsPerRequest": 1816.860465116279,
+        "serverAllocatedBytesPerRequest": 40527.441860465115,
+        "serverCpuUtilization": 0.22966863042532426,
+        "clientCpuUtilization": 0.24497987245367922,
+        "backgroundCpuSeconds": 2.890625,
+        "retainedManagedHeapBytes": 71328,
+        "retainedWorkingSetBytes": 10121216,
+        "retainedPrivateBytes": 5615616,
+        "retainedHandles": 0,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 6.7583,
+      "serverStopMilliseconds": 6.6705,
+      "clientTimeWaitAtStart": 5966,
+      "machineTimeWaitAtStart": 10641,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "95d93ce7f1a52ef1bffdc2d2cfd228c9153fec5925ad09a9fc9ccebd31c28d92",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-tls-churn-c32/kestrel-r1.json",
+      "rawSha256": "7e19739c745f22b6aa35bb4e0e62dc46c1fe95826eb8610c806e4c6193a4b1f7",
+      "scenario": "h2-tls-churn-c32",
+      "engine": "kestrel",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 22,
+        "connectionsOpened": 22,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 133,
+      "connectionsOpened": 133,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: An existing connection was forcibly closed by the remote host.": 21
+        },
+        "load-and-client-close": {
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: An established connection was aborted by the software in your host machine.": 7,
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: An existing connection was forcibly closed by the remote host.": 252
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2
+        }
+      },
+      "serverWindowExceptions": {
+        "Microsoft.AspNetCore.Connections.ConnectionResetException: An existing connection was forcibly closed by the remote host.": 252,
+        "Microsoft.AspNetCore.Connections.ConnectionResetException: An established connection was aborted by the software in your host machine.": 7
+      },
+      "derived": {
+        "requestsPerSecond": 264.7080658139883,
+        "serverCpuMicrosecondsPerRequest": 1409.7744360902257,
+        "serverAllocatedBytesPerRequest": 39907.308270676695,
+        "serverCpuUtilization": 0.18354500885812686,
+        "clientCpuUtilization": 0.19884042626297077,
+        "backgroundCpuSeconds": 7,
+        "retainedManagedHeapBytes": 95312,
+        "retainedWorkingSetBytes": 13180928,
+        "retainedPrivateBytes": 8577024,
+        "retainedHandles": 0,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 6.5535,
+      "serverStopMilliseconds": 7.8526,
+      "clientTimeWaitAtStart": 5449,
+      "machineTimeWaitAtStart": 9824,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "479801859cb786cfaa5e8d9da6684fbaa30f435a7f804eaf66725bcbbb9b1e20",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-tls-churn-c32/kestrel-r2.json",
+      "rawSha256": "e52317e170fab393023903615888234b7c2ebd31be5c8bf36e8d00ccd5d481b6",
+      "scenario": "h2-tls-churn-c32",
+      "engine": "kestrel",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 24,
+        "connectionsOpened": 24,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 132,
+      "connectionsOpened": 132,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: An established connection was aborted by the software in your host machine.": 7,
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: An existing connection was forcibly closed by the remote host.": 14
+        },
+        "load-and-client-close": {
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: An established connection was aborted by the software in your host machine.": 14,
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: An existing connection was forcibly closed by the remote host.": 224
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2
+        }
+      },
+      "serverWindowExceptions": {
+        "Microsoft.AspNetCore.Connections.ConnectionResetException: An existing connection was forcibly closed by the remote host.": 224,
+        "Microsoft.AspNetCore.Connections.ConnectionResetException: An established connection was aborted by the software in your host machine.": 14
+      },
+      "derived": {
+        "requestsPerSecond": 263.54922540486757,
+        "serverCpuMicrosecondsPerRequest": 1538.8257575757575,
+        "serverAllocatedBytesPerRequest": 39517.878787878784,
+        "serverCpuUtilization": 0.19993582367653556,
+        "clientCpuUtilization": 0.27683421739828,
+        "backgroundCpuSeconds": 1.5625,
+        "retainedManagedHeapBytes": 94952,
+        "retainedWorkingSetBytes": 12894208,
+        "retainedPrivateBytes": 8491008,
+        "retainedHandles": 0,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 6.9631,
+      "serverStopMilliseconds": 5.5642,
+      "clientTimeWaitAtStart": 5833,
+      "machineTimeWaitAtStart": 10508,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "45831464c23f9d65c1e71a1b2f9ff2c3e0bfd6d5eb117c465ad15387f47d9a89",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-tls-small-c64x1/candidate-r1.json",
+      "rawSha256": "f80c44309b972978e1e06d004e166cee2b7e7751a81ada4a2f40be068a3af3e7",
+      "scenario": "h2-tls-small-c64x1",
+      "engine": "candidate",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 472,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 2965,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2,
+          "System.OperationCanceledException: Accept canceled.": 3,
+          "System.OperationCanceledException: The operation was canceled.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 5921.0036270890005,
+        "serverCpuMicrosecondsPerRequest": 131.74536256323776,
+        "serverAllocatedBytesPerRequest": 9351.792242833053,
+        "serverCpuUtilization": 0.3856627544707754,
+        "clientCpuUtilization": 0.3856627544707754,
+        "backgroundCpuSeconds": 5.8125,
+        "retainedManagedHeapBytes": 70944,
+        "retainedWorkingSetBytes": 10956800,
+        "retainedPrivateBytes": 6926336,
+        "retainedHandles": 2,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.9855,
+      "serverStopMilliseconds": 11.7942,
+      "clientTimeWaitAtStart": 5490,
+      "machineTimeWaitAtStart": 9832,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "5d5185ecdb412abbb51cff43313a044e9eec8db2fab23a356f7189b14cd31034",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-tls-small-c64x1/candidate-r2.json",
+      "rawSha256": "0e40eb04a6afd7c8803d7daeb63ed20e4f43f1f85fbe72b20406b3abc59db163",
+      "scenario": "h2-tls-small-c64x1",
+      "engine": "candidate",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 289,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 2885,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2,
+          "System.OperationCanceledException: Accept canceled.": 3,
+          "System.OperationCanceledException: The operation was canceled.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 5761.83662986281,
+        "serverCpuMicrosecondsPerRequest": 227.46967071057193,
+        "serverAllocatedBytesPerRequest": 9355.96533795494,
+        "serverCpuUtilization": 0.6469574907769741,
+        "clientCpuUtilization": 0.5853424916553575,
+        "backgroundCpuSeconds": 2.15625,
+        "retainedManagedHeapBytes": 91296,
+        "retainedWorkingSetBytes": 6582272,
+        "retainedPrivateBytes": 2539520,
+        "retainedHandles": 3,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.9343,
+      "serverStopMilliseconds": 13.0171,
+      "clientTimeWaitAtStart": 5554,
+      "machineTimeWaitAtStart": 10197,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "efd5bdaae736e29aa603e708490b124f18aa0f4d9af4262159a3fc4ff5a2ab68",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-tls-small-c64x1/kestrel-r1.json",
+      "rawSha256": "756d3d6dcec61be5c61108dc864d23e0d41409936c07289959f02a310e32dae8",
+      "scenario": "h2-tls-small-c64x1",
+      "engine": "kestrel",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 946,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 2496,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 4985.838500780736,
+        "serverCpuMicrosecondsPerRequest": 106.42027243589743,
+        "serverAllocatedBytesPerRequest": 132.6153846153846,
+        "serverCpuUtilization": 0.25954211153202394,
+        "clientCpuUtilization": 0.3816795757823882,
+        "backgroundCpuSeconds": 4.65625,
+        "retainedManagedHeapBytes": 112016,
+        "retainedWorkingSetBytes": 8548352,
+        "retainedPrivateBytes": 4800512,
+        "retainedHandles": 0,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 2.7391,
+      "serverStopMilliseconds": 12.4102,
+      "clientTimeWaitAtStart": 5341,
+      "machineTimeWaitAtStart": 9688,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "387f9d0ee52c6e48c94e44ba15ec370f8b6c397c20375c66e5622ad0a90f18c1",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h2-tls-small-c64x1/kestrel-r2.json",
+      "rawSha256": "011a967682b3d7d5fb658a130a10ecb574c2342a5aa25d5f86607ce53ba2e325",
+      "scenario": "h2-tls-small-c64x1",
+      "engine": "kestrel",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 747,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 4140,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {},
+        "load-and-client-close": {},
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.": 2
+        }
+      },
+      "serverWindowExceptions": {},
+      "derived": {
+        "requestsPerSecond": 8268.706600525002,
+        "serverCpuMicrosecondsPerRequest": 203.80434782608697,
+        "serverAllocatedBytesPerRequest": 162.2840579710145,
+        "serverCpuUtilization": 0.8274020253036455,
+        "clientCpuUtilization": 0.6128903891138114,
+        "backgroundCpuSeconds": 1.125,
+        "retainedManagedHeapBytes": 124432,
+        "retainedWorkingSetBytes": 8269824,
+        "retainedPrivateBytes": 4595712,
+        "retainedHandles": 2,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.8319,
+      "serverStopMilliseconds": 13.614,
+      "clientTimeWaitAtStart": 5350,
+      "machineTimeWaitAtStart": 9984,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "387f9d0ee52c6e48c94e44ba15ec370f8b6c397c20375c66e5622ad0a90f18c1",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h3-churn-c16/candidate-r1.json",
+      "rawSha256": "9f4b1618996db6577c3486c646c721cc18da4b4f9f3e25fd72bb89e90a37d7b3",
+      "scenario": "h3-churn-c16",
+      "engine": "candidate",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 12,
+        "connectionsOpened": 12,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 108,
+      "connectionsOpened": 109,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 126,
+          "System.OperationCanceledException: The operation was canceled.": 48,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 12,
+          "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 30
+        },
+        "load-and-client-close": {
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 1133,
+          "System.OperationCanceledException: The operation was canceled.": 435,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 108,
+          "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 264
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.OperationCanceledException: The operation was canceled.": 7
+        }
+      },
+      "serverWindowExceptions": {
+        "System.Net.Quic.QuicException: Connection aborted by peer (256).": 1133,
+        "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 108,
+        "System.OperationCanceledException: The operation was canceled.": 435,
+        "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 264
+      },
+      "derived": {
+        "requestsPerSecond": 215.84592917575435,
+        "serverCpuMicrosecondsPerRequest": 1446.7592592592594,
+        "serverAllocatedBytesPerRequest": 140820.14814814815,
+        "serverCpuUtilization": 0.15385554613549332,
+        "clientCpuUtilization": 0.3846388653387333,
+        "backgroundCpuSeconds": 2.78125,
+        "retainedManagedHeapBytes": 96376,
+        "retainedWorkingSetBytes": 19808256,
+        "retainedPrivateBytes": 15716352,
+        "retainedHandles": 24,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 7.6799,
+      "serverStopMilliseconds": 8.4619,
+      "clientTimeWaitAtStart": 5247,
+      "machineTimeWaitAtStart": 9607,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "894a0ab9fe75c2a960c740188c80530aa95c6b18c55abbfbfcb9f40214654feb",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h3-churn-c16/candidate-r2.json",
+      "rawSha256": "0f5193263e367eefb762441c3cbdd4d8569a86a474f2d95b8c7e6244821eceb2",
+      "scenario": "h3-churn-c16",
+      "engine": "candidate",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 4,
+        "connectionsOpened": 4,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 116,
+      "connectionsOpened": 116,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 41,
+          "System.OperationCanceledException: The operation was canceled.": 16,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 4,
+          "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 11
+        },
+        "load-and-client-close": {
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 1197,
+          "System.OperationCanceledException: The operation was canceled.": 464,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 116,
+          "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 311
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.OperationCanceledException: The operation was canceled.": 7
+        }
+      },
+      "serverWindowExceptions": {
+        "System.Net.Quic.QuicException: Connection aborted by peer (256).": 1197,
+        "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 116,
+        "System.OperationCanceledException: The operation was canceled.": 464,
+        "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 311
+      },
+      "derived": {
+        "requestsPerSecond": 230.87535994662798,
+        "serverCpuMicrosecondsPerRequest": 1346.9827586206898,
+        "serverAllocatedBytesPerRequest": 139137.5172413793,
+        "serverCpuUtilization": 0.1531430041041345,
+        "clientCpuUtilization": 0.13782870369372105,
+        "backgroundCpuSeconds": 7.953125,
+        "retainedManagedHeapBytes": 76384,
+        "retainedWorkingSetBytes": 20508672,
+        "retainedPrivateBytes": 17522688,
+        "retainedHandles": 72,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 6.1439,
+      "serverStopMilliseconds": 6.7933,
+      "clientTimeWaitAtStart": 8861,
+      "machineTimeWaitAtStart": 13569,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "5dcf3a42b538beddc9eaa1c9cc77ae0049bebf8beb253f3290400dc934bac9aa",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h3-churn-c16/kestrel-r1.json",
+      "rawSha256": "051ac62f4d1f6764c20d53ae3cbef3bdf06ab9f85fa6b1bf8e34780ef4cfe734",
+      "scenario": "h3-churn-c16",
+      "engine": "kestrel",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 18,
+        "connectionsOpened": 18,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 121,
+      "connectionsOpened": 121,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "Microsoft.AspNetCore.Connections.ConnectionAbortedException: The client closed the connection.": 3,
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 87,
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 108,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 18
+        },
+        "load-and-client-close": {
+          "Microsoft.AspNetCore.Connections.ConnectionAbortedException: The client closed the connection.": 51,
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 554,
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 726,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 121
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.ObjectDisposedException: Cannot access a disposed object.\r\nObject name: 'System.Net.Quic.QuicListener'.": 4,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 2
+        }
+      },
+      "serverWindowExceptions": {
+        "System.Net.Quic.QuicException: Connection aborted by peer (256).": 726,
+        "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 121,
+        "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 554,
+        "Microsoft.AspNetCore.Connections.ConnectionAbortedException: The client closed the connection.": 51
+      },
+      "derived": {
+        "requestsPerSecond": 241.76123660273115,
+        "serverCpuMicrosecondsPerRequest": 774.7933884297521,
+        "serverAllocatedBytesPerRequest": 145325.48760330578,
+        "serverCpuUtilization": 0.09200550207623295,
+        "clientCpuUtilization": 0.19934525449850474,
+        "backgroundCpuSeconds": 1.65625,
+        "retainedManagedHeapBytes": 62848,
+        "retainedWorkingSetBytes": 21118976,
+        "retainedPrivateBytes": 17657856,
+        "retainedHandles": 0,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 6.5023,
+      "serverStopMilliseconds": 7.1811,
+      "clientTimeWaitAtStart": 5274,
+      "machineTimeWaitAtStart": 9638,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "ea6ab2a3e90f809406bc3fde777b1b37f664f88f8cca46aa780a93b30b9c9426",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h3-churn-c16/kestrel-r2.json",
+      "rawSha256": "4c6282ba5504cca0646c470e2ddc39fde1f7b901877f07d0d199aa4e660d8f44",
+      "scenario": "h3-churn-c16",
+      "engine": "kestrel",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 17,
+        "connectionsOpened": 17,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 105,
+      "connectionsOpened": 105,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "Microsoft.AspNetCore.Connections.ConnectionAbortedException: The client closed the connection.": 18,
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 67,
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 102,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 17
+        },
+        "load-and-client-close": {
+          "Microsoft.AspNetCore.Connections.ConnectionAbortedException: The client closed the connection.": 87,
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 438,
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 630,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 105
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.ObjectDisposedException: Cannot access a disposed object.\r\nObject name: 'System.Net.Quic.QuicListener'.": 4,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 2
+        }
+      },
+      "serverWindowExceptions": {
+        "System.Net.Quic.QuicException: Connection aborted by peer (256).": 630,
+        "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 105,
+        "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 438,
+        "Microsoft.AspNetCore.Connections.ConnectionAbortedException: The client closed the connection.": 87
+      },
+      "derived": {
+        "requestsPerSecond": 209.21573389990283,
+        "serverCpuMicrosecondsPerRequest": 1041.6666666666667,
+        "serverAllocatedBytesPerRequest": 147324.57142857142,
+        "serverCpuUtilization": 0.10694758917888891,
+        "clientCpuUtilization": 0.2291734053833334,
+        "backgroundCpuSeconds": 4.421875,
+        "retainedManagedHeapBytes": 68840,
+        "retainedWorkingSetBytes": 23064576,
+        "retainedPrivateBytes": 19468288,
+        "retainedHandles": 37,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 9.3183,
+      "serverStopMilliseconds": 6.2882,
+      "clientTimeWaitAtStart": 6106,
+      "machineTimeWaitAtStart": 10763,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "ffad6983e8a102d98106afbb9c5ffb241b222ce9769211758614c06d25023ac5",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h3-small-c64x1/candidate-r1.json",
+      "rawSha256": "2de50c2bc196b8f8e4587db7ffe62ca4847eb85cfbb7c6cd0482ae97bfe520c4",
+      "scenario": "h3-small-c64x1",
+      "engine": "candidate",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 256,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 1974,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 11,
+          "System.OperationCanceledException: The operation was canceled.": 4,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1,
+          "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 2
+        },
+        "load-and-client-close": {
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 10,
+          "System.OperationCanceledException: The operation was canceled.": 4,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1,
+          "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 3
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.OperationCanceledException: The operation was canceled.": 7
+        }
+      },
+      "serverWindowExceptions": {
+        "System.Net.Quic.QuicException: Connection aborted by peer (256).": 10,
+        "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1,
+        "System.OperationCanceledException: The operation was canceled.": 4,
+        "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 3
+      },
+      "derived": {
+        "requestsPerSecond": 3937.241880286306,
+        "serverCpuMicrosecondsPerRequest": 435.3470111448835,
+        "serverAllocatedBytesPerRequest": 13151.396149949342,
+        "serverCpuUtilization": 0.8453333370056663,
+        "clientCpuUtilization": 0.38424242591166646,
+        "backgroundCpuSeconds": 1.421875,
+        "retainedManagedHeapBytes": 86904,
+        "retainedWorkingSetBytes": 15544320,
+        "retainedPrivateBytes": 11649024,
+        "retainedHandles": 6,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.9983,
+      "serverStopMilliseconds": 8.4741,
+      "clientTimeWaitAtStart": 5452,
+      "machineTimeWaitAtStart": 9818,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "3284512ba9fde1b38aaedc8b6dd86ed81d16b8872b3fbcfe3925184600c8e20c",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h3-small-c64x1/candidate-r2.json",
+      "rawSha256": "30f778c7c7640ac1063abd42ac0045de68a92ba2473df960fe3d3d8f3ad477e1",
+      "scenario": "h3-small-c64x1",
+      "engine": "candidate",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 286,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 2266,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 10,
+          "System.OperationCanceledException: The operation was canceled.": 4,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1,
+          "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 3
+        },
+        "load-and-client-close": {
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 10,
+          "System.OperationCanceledException: The operation was canceled.": 4,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1,
+          "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 3
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.OperationCanceledException: The operation was canceled.": 7
+        }
+      },
+      "serverWindowExceptions": {
+        "System.Net.Quic.QuicException: Connection aborted by peer (256).": 10,
+        "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1,
+        "System.OperationCanceledException: The operation was canceled.": 4,
+        "System.Threading.Tasks.TaskCanceledException: A task was canceled.": 3
+      },
+      "derived": {
+        "requestsPerSecond": 4526.229057951113,
+        "serverCpuMicrosecondsPerRequest": 310.29346866725507,
+        "serverAllocatedBytesPerRequest": 13145.030891438659,
+        "serverCpuUtilization": 0.6916384076533743,
+        "clientCpuUtilization": 0.32276459023824133,
+        "backgroundCpuSeconds": 3.3125,
+        "retainedManagedHeapBytes": 111480,
+        "retainedWorkingSetBytes": 12132352,
+        "retainedPrivateBytes": 7872512,
+        "retainedHandles": 7,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.7423,
+      "serverStopMilliseconds": 8.7125,
+      "clientTimeWaitAtStart": 6058,
+      "machineTimeWaitAtStart": 10700,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "69c763859c9a25bcf965ef07b42af239268c8da18d80cb8159c345021f92e730",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h3-small-c64x1/kestrel-r1.json",
+      "rawSha256": "f53d8953e32b109a3b8dda3be599db6b8166ae932b3c0dfd1fe27182815f05d2",
+      "scenario": "h3-small-c64x1",
+      "engine": "kestrel",
+      "round": 1,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 232,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 1840,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 5,
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 6,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1
+        },
+        "load-and-client-close": {
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 5,
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 6,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.ObjectDisposedException: Cannot access a disposed object.\r\nObject name: 'System.Net.Quic.QuicListener'.": 4,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 2
+        }
+      },
+      "serverWindowExceptions": {
+        "System.Net.Quic.QuicException: Connection aborted by peer (256).": 6,
+        "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1,
+        "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 5
+      },
+      "derived": {
+        "requestsPerSecond": 3675.722194510029,
+        "serverCpuMicrosecondsPerRequest": 365.1494565217391,
+        "serverAllocatedBytesPerRequest": 2473.0782608695654,
+        "serverCpuUtilization": 0.6617473537985259,
+        "clientCpuUtilization": 0.5078526203570082,
+        "backgroundCpuSeconds": 2.875,
+        "retainedManagedHeapBytes": 111984,
+        "retainedWorkingSetBytes": 12222464,
+        "retainedPrivateBytes": 8589312,
+        "retainedHandles": 6,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 1.6383,
+      "serverStopMilliseconds": 10.4613,
+      "clientTimeWaitAtStart": 5325,
+      "machineTimeWaitAtStart": 9683,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "2aae5f09834cbb018affe923ceb183a35f3c4a7a22522c730f46e853e62b19c3",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    },
+    {
+      "rawFile": "samples/h3-small-c64x1/kestrel-r2.json",
+      "rawSha256": "59f45f0c01c3c44d59f7977a8884fab99c1348c332ca06947a125d741750f7b6",
+      "scenario": "h3-small-c64x1",
+      "engine": "kestrel",
+      "round": 2,
+      "connections": 1,
+      "streams": 1,
+      "warmup": {
+        "requests": 362,
+        "connectionsOpened": 1,
+        "serverInitiatedCloses": 0,
+        "error": null
+      },
+      "requests": 2144,
+      "connectionsOpened": 1,
+      "serverInitiatedCloses": 0,
+      "exceptionPhases": {
+        "warmup-and-settle": {
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 5,
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 6,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1
+        },
+        "load-and-client-close": {
+          "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 5,
+          "System.Net.Quic.QuicException: Connection aborted by peer (256).": 6,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1
+        },
+        "post-load-idle": {},
+        "listener-stop": {
+          "System.ObjectDisposedException: Cannot access a disposed object.\r\nObject name: 'System.Net.Quic.QuicListener'.": 4,
+          "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 2
+        }
+      },
+      "serverWindowExceptions": {
+        "System.Net.Quic.QuicException: Connection aborted by peer (256).": 6,
+        "System.Threading.Channels.ChannelClosedException: The channel has been closed.": 1,
+        "Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).": 5
+      },
+      "derived": {
+        "requestsPerSecond": 4284.649404165942,
+        "serverCpuMicrosecondsPerRequest": 327.9500932835821,
+        "serverAllocatedBytesPerRequest": 2445.4216417910447,
+        "serverCpuUtilization": 0.6916520147103871,
+        "clientCpuUtilization": 0.6301718356250193,
+        "backgroundCpuSeconds": 2.578125,
+        "retainedManagedHeapBytes": 86952,
+        "retainedWorkingSetBytes": 12742656,
+        "retainedPrivateBytes": 8761344,
+        "retainedHandles": 6,
+        "openServerSocketsAfter": 0,
+        "retainedThreads": 0,
+        "serverCpus": "0-1",
+        "clientCpus": "2-3"
+      },
+      "p99Milliseconds": 0.9983,
+      "serverStopMilliseconds": 6.9808,
+      "clientTimeWaitAtStart": 6175,
+      "machineTimeWaitAtStart": 10841,
+      "clientExitCode": 0,
+      "serverExitCode": 0,
+      "clientKilled": false,
+      "serverKilled": false,
+      "stderrSha256": {
+        "server": "6535705b7eabcbcfc8c238ae5710a60716ec680b32e2321f0f086e17b22f1baa",
+        "client": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "exceptionsAtReady": {}
+    }
+  ],
+  "diagnosticLogs": {
+    "3d63488da85da2cbfbf9b38c74b5d4d3ced718e717ad30a151e79b74d0a5c7f6": "FIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource<System.Net.Sockets.Socket>.GetResult(Int16 token)\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.OperationCanceledException: Accept canceled.\r\n   at EmbedIO.Net.HttpListener.GetContextAsync(CancellationToken cancellationToken) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\src\\EmbedIO\\Net\\HttpListener.cs:line 259\r\n",
+    "2fc6da4b048b01fd4b95588e31b6c1756761e74cd00d364ef236120c5c5e1d44": "FIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource<System.Net.Sockets.Socket>.GetResult(Int16 token)\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource<System.Net.Sockets.Socket>.GetResult(Int16 token)\r\nFIRST System.OperationCanceledException: Accept canceled.\r\n   at EmbedIO.Net.HttpListener.GetContextAsync(CancellationToken cancellationToken) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\src\\EmbedIO\\Net\\HttpListener.cs:line 259\r\n",
+    "322af3a103402b55c9b26b44f32898432e7884b0c5f9d900cada75011849c6a3": "FIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource<System.Net.Sockets.Socket>.GetResult(Int16 token)\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource<System.Net.Sockets.Socket>.GetResult(Int16 token)\r\n",
+    "f92548e1b01c8a6c66dadbdbb437947fdf39ef4cf4138ffed2b743878d5533dd": "FIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\r\nFIRST System.OperationCanceledException: Accept canceled.\r\n   at EmbedIO.Net.HttpListener.GetContextAsync(CancellationToken cancellationToken) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\src\\EmbedIO\\Net\\HttpListener.cs:line 259\r\n",
+    "ae6d3a0317b7a747bbf18875dafdaf860a0633cf2969df8b5d814a675b95752a": "FIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.OperationCanceledException: Accept canceled.\r\n   at EmbedIO.Net.HttpListener.GetContextAsync(CancellationToken cancellationToken) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\src\\EmbedIO\\Net\\HttpListener.cs:line 259\r\n",
+    "387f9d0ee52c6e48c94e44ba15ec370f8b6c397c20375c66e5622ad0a90f18c1": "FIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\r\n",
+    "efd5bdaae736e29aa603e708490b124f18aa0f4d9af4262159a3fc4ff5a2ab68": "FIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.OperationCanceledException: Accept canceled.\r\n   at EmbedIO.Net.HttpListener.GetContextAsync(CancellationToken cancellationToken) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\src\\EmbedIO\\Net\\HttpListener.cs:line 259\r\n",
+    "5d5185ecdb412abbb51cff43313a044e9eec8db2fab23a356f7189b14cd31034": "FIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\r\nFIRST System.OperationCanceledException: Accept canceled.\r\n   at EmbedIO.Net.HttpListener.GetContextAsync(CancellationToken cancellationToken) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\src\\EmbedIO\\Net\\HttpListener.cs:line 259\r\n",
+    "0a01de97e2ea0b840f3135197388ee491bdd1cceb8fe4a3291a78d2f55a40bb5": "FIRST System.IO.IOException: Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host..\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\r\nFIRST System.IO.IOException: Unable to read data from the transport connection: An established connection was aborted by the software in your host machine..\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.OperationCanceledException: Accept canceled.\r\n   at EmbedIO.Net.HttpListener.GetContextAsync(CancellationToken cancellationToken) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\src\\EmbedIO\\Net\\HttpListener.cs:line 259\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource<System.Net.Sockets.Socket>.GetResult(Int16 token)\r\n",
+    "95d93ce7f1a52ef1bffdc2d2cfd228c9153fec5925ad09a9fc9ccebd31c28d92": "FIRST System.IO.IOException: Unable to read data from the transport connection: An established connection was aborted by the software in your host machine..\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.IO.IOException: Unable to read data from the transport connection: An existing connection was forcibly closed by the remote host..\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.OperationCanceledException: Accept canceled.\r\n   at EmbedIO.Net.HttpListener.GetContextAsync(CancellationToken cancellationToken) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\src\\EmbedIO\\Net\\HttpListener.cs:line 259\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource<System.Net.Sockets.Socket>.GetResult(Int16 token)\r\n",
+    "479801859cb786cfaa5e8d9da6684fbaa30f435a7f804eaf66725bcbbb9b1e20": "FIRST Microsoft.AspNetCore.Connections.ConnectionResetException: An existing connection was forcibly closed by the remote host.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: An existing connection was forcibly closed by the remote host.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: An established connection was aborted by the software in your host machine.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource<System.Net.Sockets.Socket>.GetResult(Int16 token)\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource<System.Net.Sockets.Socket>.GetResult(Int16 token)\r\n",
+    "45831464c23f9d65c1e71a1b2f9ff2c3e0bfd6d5eb117c465ad15387f47d9a89": "FIRST Microsoft.AspNetCore.Connections.ConnectionResetException: An existing connection was forcibly closed by the remote host.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: An established connection was aborted by the software in your host machine.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Sockets.SocketException: The I/O operation has been aborted because of either a thread exit or an application request.\r\n   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource<System.Net.Sockets.Socket>.GetResult(Int16 token)\r\n",
+    "894a0ab9fe75c2a960c740188c80530aa95c6b18c55abbfbfcb9f40214654feb": "FIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.ResettableValueTaskSource.TryComplete(Exception exception, Boolean final)\r\n   at System.Net.Quic.QuicStream.HandleEventShutdownComplete(_SHUTDOWN_COMPLETE_e__Struct& data)\r\n   at System.Net.Quic.QuicStream.HandleStreamEvent(QUIC_STREAM_EVENT& streamEvent)\r\n   at System.Net.Quic.QuicStream.NativeCallback(QUIC_HANDLE* stream, Void* context, QUIC_STREAM_EVENT* streamEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.QuicConnection.HandleEventShutdownInitiatedByPeer(_SHUTDOWN_INITIATED_BY_PEER_e__Struct& data)\r\n   at System.Net.Quic.QuicConnection.HandleConnectionEvent(QUIC_CONNECTION_EVENT& connectionEvent)\r\n   at System.Net.Quic.QuicConnection.NativeCallback(QUIC_HANDLE* connection, Void* context, QUIC_CONNECTION_EVENT* connectionEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Tasks.TaskCanceledException: A task was canceled.\r\n   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\nFIRST System.Threading.Tasks.TaskCanceledException: A task was canceled.\r\n   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\n",
+    "5dcf3a42b538beddc9eaa1c9cc77ae0049bebf8beb253f3290400dc934bac9aa": "FIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.QuicConnection.HandleEventShutdownInitiatedByPeer(_SHUTDOWN_INITIATED_BY_PEER_e__Struct& data)\r\n   at System.Net.Quic.QuicConnection.HandleConnectionEvent(QUIC_CONNECTION_EVENT& connectionEvent)\r\n   at System.Net.Quic.QuicConnection.NativeCallback(QUIC_HANDLE* connection, Void* context, QUIC_CONNECTION_EVENT* connectionEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Tasks.TaskCanceledException: A task was canceled.\r\n   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\nFIRST System.Threading.Tasks.TaskCanceledException: A task was canceled.\r\n   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\nFIRST System.Threading.Tasks.TaskCanceledException: A task was canceled.\r\n   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\n",
+    "ea6ab2a3e90f809406bc3fde777b1b37f664f88f8cca46aa780a93b30b9c9426": "FIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.ResettableValueTaskSource.TryComplete(Exception exception, Boolean final)\r\n   at System.Net.Quic.QuicStream.HandleEventShutdownComplete(_SHUTDOWN_COMPLETE_e__Struct& data)\r\n   at System.Net.Quic.QuicStream.HandleStreamEvent(QUIC_STREAM_EVENT& streamEvent)\r\n   at System.Net.Quic.QuicStream.NativeCallback(QUIC_HANDLE* stream, Void* context, QUIC_STREAM_EVENT* streamEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionContext.AcceptAsync(CancellationToken cancellationToken)\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionContext.AcceptAsync(CancellationToken cancellationToken)\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionAbortedException: The client closed the connection.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.ObjectDisposedException: Cannot access a disposed object.\r\nObject name: 'System.Net.Quic.QuicListener'.\r\n   at System.Net.Quic.QuicListener.DisposeAsync()\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at System.Net.Quic.QuicListener.DisposeAsync()\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionListener.DisposeAsync()\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionListener.DisposeAsync()\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.ActiveTransport.UnbindAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.ActiveTransport.UnbindAsync(CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.StopTransportsAsync(List`1 transportsToStop, CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.StopTransportsAsync(List`1 transportsToStop, CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StopAsync(CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Hosting.GenericWebHostService.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Hosting.GenericWebHostService.StopAsync(CancellationToken cancellationToken)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.StopAsync(CancellationToken cancellationToken)\r\n   at KestrelServer.StopAsync() in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\ServerEngines.cs:line 198\r\n   at ServerHost.RunAsync(CommandLine options) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\ServerHost.cs:line 89\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at ServerHost.RunAsync(CommandLine options)\r\n   at Program.<Main>$(String[] args) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Program.cs:line 6\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Program.<Main>$(String[] args)\r\n   at Program.<Main>(String[] args)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n",
+    "ffad6983e8a102d98106afbb9c5ffb241b222ce9769211758614c06d25023ac5": "FIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.QuicConnection.HandleEventShutdownInitiatedByPeer(_SHUTDOWN_INITIATED_BY_PEER_e__Struct& data)\r\n   at System.Net.Quic.QuicConnection.HandleConnectionEvent(QUIC_CONNECTION_EVENT& connectionEvent)\r\n   at System.Net.Quic.QuicConnection.NativeCallback(QUIC_HANDLE* connection, Void* context, QUIC_CONNECTION_EVENT* connectionEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionContext.AcceptAsync(CancellationToken cancellationToken)\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionContext.AcceptAsync(CancellationToken cancellationToken)\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionContext.AcceptAsync(CancellationToken cancellationToken)\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionAbortedException: The client closed the connection.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionAbortedException: The client closed the connection.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionAbortedException: The client closed the connection.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.ObjectDisposedException: Cannot access a disposed object.\r\nObject name: 'System.Net.Quic.QuicListener'.\r\n   at System.Net.Quic.QuicListener.DisposeAsync()\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at System.Net.Quic.QuicListener.DisposeAsync()\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionListener.DisposeAsync()\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionListener.DisposeAsync()\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.ActiveTransport.UnbindAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.ActiveTransport.UnbindAsync(CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.StopTransportsAsync(List`1 transportsToStop, CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.StopTransportsAsync(List`1 transportsToStop, CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StopAsync(CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Hosting.GenericWebHostService.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Hosting.GenericWebHostService.StopAsync(CancellationToken cancellationToken)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.StopAsync(CancellationToken cancellationToken)\r\n   at KestrelServer.StopAsync() in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\ServerEngines.cs:line 198\r\n   at ServerHost.RunAsync(CommandLine options) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\ServerHost.cs:line 89\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at ServerHost.RunAsync(CommandLine options)\r\n   at Program.<Main>$(String[] args) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Program.cs:line 6\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Program.<Main>$(String[] args)\r\n   at Program.<Main>(String[] args)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n",
+    "3284512ba9fde1b38aaedc8b6dd86ed81d16b8872b3fbcfe3925184600c8e20c": "FIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.ResettableValueTaskSource.TryComplete(Exception exception, Boolean final)\r\n   at System.Net.Quic.QuicStream.HandleEventShutdownComplete(_SHUTDOWN_COMPLETE_e__Struct& data)\r\n   at System.Net.Quic.QuicStream.HandleStreamEvent(QUIC_STREAM_EVENT& streamEvent)\r\n   at System.Net.Quic.QuicStream.NativeCallback(QUIC_HANDLE* stream, Void* context, QUIC_STREAM_EVENT* streamEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.ResettableValueTaskSource.TryComplete(Exception exception, Boolean final)\r\n   at System.Net.Quic.QuicStream.HandleEventShutdownComplete(_SHUTDOWN_COMPLETE_e__Struct& data)\r\n   at System.Net.Quic.QuicStream.HandleStreamEvent(QUIC_STREAM_EVENT& streamEvent)\r\n   at System.Net.Quic.QuicStream.NativeCallback(QUIC_HANDLE* stream, Void* context, QUIC_STREAM_EVENT* streamEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Tasks.TaskCanceledException: A task was canceled.\r\n   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\n",
+    "69c763859c9a25bcf965ef07b42af239268c8da18d80cb8159c345021f92e730": "FIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.ResettableValueTaskSource.TryComplete(Exception exception, Boolean final)\r\n   at System.Net.Quic.QuicStream.HandleEventShutdownComplete(_SHUTDOWN_COMPLETE_e__Struct& data)\r\n   at System.Net.Quic.QuicStream.HandleStreamEvent(QUIC_STREAM_EVENT& streamEvent)\r\n   at System.Net.Quic.QuicStream.NativeCallback(QUIC_HANDLE* stream, Void* context, QUIC_STREAM_EVENT* streamEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Tasks.TaskCanceledException: A task was canceled.\r\n   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\nFIRST System.OperationCanceledException: The operation was canceled.\r\n   at System.Threading.CancellationToken.ThrowOperationCanceledException()\r\n",
+    "2aae5f09834cbb018affe923ceb183a35f3c4a7a22522c730f46e853e62b19c3": "FIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.ResettableValueTaskSource.TryComplete(Exception exception, Boolean final)\r\n   at System.Net.Quic.QuicStream.HandleEventShutdownComplete(_SHUTDOWN_COMPLETE_e__Struct& data)\r\n   at System.Net.Quic.QuicStream.HandleStreamEvent(QUIC_STREAM_EVENT& streamEvent)\r\n   at System.Net.Quic.QuicStream.NativeCallback(QUIC_HANDLE* stream, Void* context, QUIC_STREAM_EVENT* streamEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.ResettableValueTaskSource.TryComplete(Exception exception, Boolean final)\r\n   at System.Net.Quic.QuicStream.HandleEventShutdownComplete(_SHUTDOWN_COMPLETE_e__Struct& data)\r\n   at System.Net.Quic.QuicStream.HandleStreamEvent(QUIC_STREAM_EVENT& streamEvent)\r\n   at System.Net.Quic.QuicStream.NativeCallback(QUIC_HANDLE* stream, Void* context, QUIC_STREAM_EVENT* streamEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionContext.AcceptAsync(CancellationToken cancellationToken)\r\nFIRST System.ObjectDisposedException: Cannot access a disposed object.\r\nObject name: 'System.Net.Quic.QuicListener'.\r\n   at System.Net.Quic.QuicListener.DisposeAsync()\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at System.Net.Quic.QuicListener.DisposeAsync()\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionListener.DisposeAsync()\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionListener.DisposeAsync()\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.ActiveTransport.UnbindAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.ActiveTransport.UnbindAsync(CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.StopTransportsAsync(List`1 transportsToStop, CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.StopTransportsAsync(List`1 transportsToStop, CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StopAsync(CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Hosting.GenericWebHostService.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Hosting.GenericWebHostService.StopAsync(CancellationToken cancellationToken)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.StopAsync(CancellationToken cancellationToken)\r\n   at KestrelServer.StopAsync() in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\ServerEngines.cs:line 198\r\n   at ServerHost.RunAsync(CommandLine options) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\ServerHost.cs:line 89\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at ServerHost.RunAsync(CommandLine options)\r\n   at Program.<Main>$(String[] args) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Program.cs:line 6\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Program.<Main>$(String[] args)\r\n   at Program.<Main>(String[] args)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n",
+    "6535705b7eabcbcfc8c238ae5710a60716ec680b32e2321f0f086e17b22f1baa": "FIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.ResettableValueTaskSource.TryComplete(Exception exception, Boolean final)\r\n   at System.Net.Quic.QuicStream.HandleEventShutdownComplete(_SHUTDOWN_COMPLETE_e__Struct& data)\r\n   at System.Net.Quic.QuicStream.HandleStreamEvent(QUIC_STREAM_EVENT& streamEvent)\r\n   at System.Net.Quic.QuicStream.NativeCallback(QUIC_HANDLE* stream, Void* context, QUIC_STREAM_EVENT* streamEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Net.Quic.QuicException: Connection aborted by peer (256).\r\n   at System.Net.Quic.ResettableValueTaskSource.TryComplete(Exception exception, Boolean final)\r\n   at System.Net.Quic.QuicStream.HandleEventShutdownComplete(_SHUTDOWN_COMPLETE_e__Struct& data)\r\n   at System.Net.Quic.QuicStream.HandleStreamEvent(QUIC_STREAM_EVENT& streamEvent)\r\n   at System.Net.Quic.QuicStream.NativeCallback(QUIC_HANDLE* stream, Void* context, QUIC_STREAM_EVENT* streamEvent)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST System.Threading.Channels.ChannelClosedException: The channel has been closed.\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\nFIRST Microsoft.AspNetCore.Connections.ConnectionResetException: Connection aborted by peer (256).\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionContext.AcceptAsync(CancellationToken cancellationToken)\r\nFIRST System.ObjectDisposedException: Cannot access a disposed object.\r\nObject name: 'System.Net.Quic.QuicListener'.\r\n   at System.Net.Quic.QuicListener.DisposeAsync()\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at System.Net.Quic.QuicListener.DisposeAsync()\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionListener.DisposeAsync()\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.Internal.QuicConnectionListener.DisposeAsync()\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.ActiveTransport.UnbindAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.ActiveTransport.UnbindAsync(CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.StopTransportsAsync(List`1 transportsToStop, CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.StopTransportsAsync(List`1 transportsToStop, CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StopAsync(CancellationToken cancellationToken)\r\n   at Microsoft.AspNetCore.Hosting.GenericWebHostService.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.AspNetCore.Hosting.GenericWebHostService.StopAsync(CancellationToken cancellationToken)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.StopAsync(CancellationToken cancellationToken)\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Microsoft.Extensions.Hosting.Internal.Host.StopAsync(CancellationToken cancellationToken)\r\n   at KestrelServer.StopAsync() in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\ServerEngines.cs:line 198\r\n   at ServerHost.RunAsync(CommandLine options) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\ServerHost.cs:line 89\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at ServerHost.RunAsync(CommandLine options)\r\n   at Program.<Main>$(String[] args) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Program.cs:line 6\r\n   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)\r\n   at Program.<Main>$(String[] args)\r\n   at Program.<Main>(String[] args)\r\n--- End of stack trace from previous location ---\r\n   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n"
+  },
+  "unsuccessfulAttempts": [
+    {
+      "file": "profile-initial.log",
+      "status": "sandbox TCP census denied; no sample",
+      "sha256": "0381fdac4f51ae9551ce0d6c1f03e0d7b28c64335cea5448d4762cb30cea8ed8",
+      "log": "Unhandled exception. System.Net.NetworkInformation.NetworkInformationException (5): Access is denied.\r\n   at System.Net.NetworkInformation.SystemIPGlobalProperties.GetAllTcpConnections()\r\n   at System.Net.NetworkInformation.SystemIPGlobalProperties.GetActiveTcpConnections()\r\n   at Orchestrator.TcpConnections() in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Orchestrator.cs:line 326\r\n   at Orchestrator.TimeWaitCount(Boolean clientSide) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Orchestrator.cs:line 317\r\n   at Orchestrator.RunSampleAsync(SampleContext context) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Orchestrator.cs:line 136\r\n   at Orchestrator.RunAsync(CommandLine options) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Orchestrator.cs:line 79\r\n   at Program.<Main>$(String[] args) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Program.cs:line 4\r\n   at Program.<Main>(String[] args)\r\n"
+    },
+    {
+      "file": "profile-access.log",
+      "status": "blocked by TIME_WAIT admission; own orchestrator stopped before any child started",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": ""
+    },
+    {
+      "file": "profile-phases.log",
+      "status": "invalid CPU affinity before server creation",
+      "sha256": "311bd526264b1a0c1d2a792ee3d85c9b21c7d32d433cdb4d4c508e5e829a1caa",
+      "log": "Unhandled exception. System.ComponentModel.Win32Exception (87): The parameter is incorrect.\r\n   at System.Diagnostics.Process.set_ProcessorAffinityCore(IntPtr value)\r\n   at System.Diagnostics.Process.set_ProcessorAffinity(IntPtr value)\r\n   at ChildProcess.Start(String directory, IReadOnlyList`1 arguments, String cpus, String stderrPath) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Orchestrator.cs:line 510\r\n   at Orchestrator.RunSampleAsync(SampleContext context) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Orchestrator.cs:line 175\r\n   at Orchestrator.RunSampleAsync(SampleContext context)\r\n   at Orchestrator.RunAsync(CommandLine options) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Orchestrator.cs:line 79\r\n   at Program.<Main>$(String[] args) in F:\\GitHub\\embedio-neo\\TestResults\\issue-282\\worktree\\test\\EmbedIO.LoadBenchmark\\Program.cs:line 4\r\n   at Program.<Main>(String[] args)\r\n"
+    }
+  ]
+}

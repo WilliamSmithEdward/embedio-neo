@@ -53,7 +53,13 @@ internal static class LoadClient
         var duration = TimeSpan.FromSeconds(options.Number("--duration", 15));
         using var abort = new CancellationTokenSource(warmup + duration + TimeSpan.FromMinutes(2));
         var warm = await ExerciseAsync(settings, warmup, abort.Token).ConfigureAwait(false);
-        Control.Write("WARM " + JsonSerializer.Serialize(new { requests = warm.Requests, error = warm.Error }));
+        Control.Write("WARM " + JsonSerializer.Serialize(new
+        {
+            requests = warm.Requests,
+            connectionsOpened = warm.ConnectionsOpened,
+            serverInitiatedCloses = warm.ServerCloses,
+            error = warm.Error,
+        }));
         if (warm.Error is not null) return 2;
         await Control.ExpectAsync("start", abort.Token).ConfigureAwait(false);
 

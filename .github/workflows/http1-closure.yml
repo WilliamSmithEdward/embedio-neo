@@ -1,0 +1,73 @@
+name: HTTP/1 closure observations
+
+on:
+  pull_request:
+    branches: [main, codex/managed-http-engine]
+    paths:
+      - '.github/workflows/http1-closure.yml'
+      - 'test/EmbedIO.Http1ClosureProbe/**'
+      - 'test/EmbedIO.Tests/Http1IdleClosureTest.cs'
+      - 'docs/project/http1-idle-closure.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+      - name: Observe current source and compare released and main baselines
+        shell: bash
+        run: |
+          set -euo pipefail
+          results=TestResults/http1-closure
+          root="$PWD"
+          if test "$RUNNER_OS" = Windows; then root="$(cygpath -m "$PWD")"; fi
+          mkdir -p "$results/main"
+          git rev-parse HEAD > "$results/current-commit.txt"
+          dotnet --info > "$results/runtime.txt"
+          dotnet restore EmbedIO.sln --locked-mode
+          dotnet build src/EmbedIO/EmbedIO.csproj -c Release --no-restore
+          dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
+            --filter FullyQualifiedName~Http1IdleClosureTest --minimum-expected-tests 14 \
+            --report-trx --results-directory "$results/current" --timeout 2m
+          probe=test/EmbedIO.Http1ClosureProbe/EmbedIO.Http1ClosureProbe.csproj
+          dotnet restore "$probe" --locked-mode
+          dotnet run --project "$probe" -c Release --no-restore \
+            -p:CorePath="$root/src/EmbedIO/bin/Release/net10.0/EmbedIO.dll" | tee "$results/current-public.log"
+          dotnet run --project "$probe" -c Release --no-restore \
+            -p:CorePath="$root/src/EmbedIO/bin/Release/netstandard2.0/EmbedIO.dll" | tee "$results/legacy-public.log"
+          package="$results/embedio-neo.1.0.3.nupkg"
+          curl --fail --location --retry 3 --output "$package" https://api.nuget.org/v3-flatcontainer/embedio-neo/1.0.3/embedio-neo.1.0.3.nupkg
+          python -c 'import hashlib,sys,zipfile; p=sys.argv[1]; assert hashlib.sha256(open(p,"rb").read()).hexdigest()=="2121f6dd0600557a8bff6a594f4b5d550d0cff643e1f9ad46a49543e3901a315"; zipfile.ZipFile(p).extractall(sys.argv[2])' "$package" "$results/released"
+          dotnet run --project "$probe" -c Release --no-restore \
+            -p:CorePath="$root/$results/released/lib/net10.0/EmbedIO.dll" | tee "$results/released-public.log"
+          git fetch --no-tags https://github.com/WilliamSmithEdward/embedio-neo.git main
+          git rev-parse FETCH_HEAD > "$results/main-commit.txt"
+          git archive FETCH_HEAD --output "$results/main.tar"
+          tar -xf "$results/main.tar" -C "$results/main"
+          dotnet restore "$results/main/src/EmbedIO/EmbedIO.csproj" --locked-mode
+          dotnet build "$results/main/src/EmbedIO/EmbedIO.csproj" -c Release --no-restore
+          dotnet run --project "$probe" -c Release --no-restore \
+            -p:CorePath="$root/$results/main/src/EmbedIO/bin/Release/net10.0/EmbedIO.dll" | tee "$results/main-public.log"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: http1-closure-${{ matrix.os }}
+          path: TestResults/http1-closure

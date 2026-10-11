@@ -52,6 +52,7 @@
         "files": [
           "LICENSE",
           "licenses/**",
+          "docs/project/evidence/*.json",
           "images/**"
         ]
       }

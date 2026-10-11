@@ -35,57 +35,74 @@ internal static class ServerHost
             exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
         };
         using var profile = options.Has("--profile") ? new RuntimeEventProfile() : null;
-        await using IBenchmarkServer server = settings.Engine switch
+        IBenchmarkServer server = settings.Engine switch
         {
             "kestrel" => new KestrelServer(settings),
             "embedio" => new EmbedIOServer(settings),
             _ => throw new ArgumentException("Unknown engine " + settings.Engine),
         };
-        var started = Stopwatch.StartNew();
-        await server.StartAsync().ConfigureAwait(false);
-        Control.Write("READY " + JsonSerializer.Serialize(new
+        var disposed = false;
+        try
         {
-            engine = settings.Engine,
-            protocol = settings.Protocol.ToString(),
-            tls,
-            startMilliseconds = started.Elapsed.TotalMilliseconds,
-            processId = Environment.ProcessId,
-            processorCount = Environment.ProcessorCount,
-            serverGc = GCSettings.IsServerGC,
-            gcLatencyMode = GCSettings.LatencyMode.ToString(),
-            runtime = RuntimeInformation.FrameworkDescription,
-            assemblies = AssemblyIdentity.Describe(typeof(EmbedIO.WebServer).Assembly, typeof(Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions).Assembly, typeof(System.Net.Quic.QuicListener).Assembly),
-        }));
-
-        Measurement? measurement = null;
-        while (true)
-        {
-            var command = await Console.In.ReadLineAsync().ConfigureAwait(false);
-            switch (command)
+            var started = Stopwatch.StartNew();
+            await server.StartAsync().ConfigureAwait(false);
+            Control.Write("READY " + JsonSerializer.Serialize(new
             {
-                case "snapshot":
-                    Control.Write(JsonSerializer.Serialize(ResourceSnapshot.Capture()));
-                    break;
-                case "start":
-                    profile?.Begin();
-                    measurement?.Dispose();
-                    measurement = new Measurement(exceptions);
-                    Control.Write("MEASURING");
-                    break;
-                case "stop":
-                    var result = await (measurement ?? throw new InvalidOperationException("stop without start")).FinishAsync().ConfigureAwait(false);
-                    Control.Write(JsonSerializer.Serialize(new { window = result, profile = profile?.End() }));
-                    break;
-                case "exit":
-                case null:
-                    measurement?.Dispose();
-                    var stopping = Stopwatch.StartNew();
-                    await server.StopAsync().ConfigureAwait(false);
-                    Control.Write(JsonSerializer.Serialize(new { stopMilliseconds = stopping.Elapsed.TotalMilliseconds }));
-                    return 0;
-                default:
-                    throw new InvalidOperationException("Unknown server command: " + command);
+                engine = settings.Engine,
+                protocol = settings.Protocol.ToString(),
+                tls,
+                startMilliseconds = started.Elapsed.TotalMilliseconds,
+                processId = Environment.ProcessId,
+                processorCount = Environment.ProcessorCount,
+                serverGc = GCSettings.IsServerGC,
+                gcLatencyMode = GCSettings.LatencyMode.ToString(),
+                runtime = RuntimeInformation.FrameworkDescription,
+                assemblies = AssemblyIdentity.Describe(typeof(EmbedIO.WebServer).Assembly, typeof(Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions).Assembly, typeof(System.Net.Quic.QuicListener).Assembly),
+            }));
+
+            Measurement? measurement = null;
+            while (true)
+            {
+                var command = await Console.In.ReadLineAsync().ConfigureAwait(false);
+                switch (command)
+                {
+                    case "snapshot":
+                        Control.Write(JsonSerializer.Serialize(ResourceSnapshot.Capture()));
+                        break;
+                    case "exceptions":
+                        Control.Write(JsonSerializer.Serialize(new Dictionary<string, long>(exceptions, StringComparer.Ordinal)));
+                        break;
+                    case "start":
+                        profile?.Begin();
+                        measurement?.Dispose();
+                        measurement = new Measurement(exceptions);
+                        Control.Write("MEASURING");
+                        break;
+                    case "stop":
+                        var result = await (measurement ?? throw new InvalidOperationException("stop without start")).FinishAsync().ConfigureAwait(false);
+                        Control.Write(JsonSerializer.Serialize(new { window = result, profile = profile?.End() }));
+                        break;
+                    case "exit":
+                    case null:
+                        measurement?.Dispose();
+                        var stopping = Stopwatch.StartNew();
+                        await server.StopAsync().ConfigureAwait(false);
+                        await server.DisposeAsync().ConfigureAwait(false);
+                        disposed = true;
+                        Control.Write(JsonSerializer.Serialize(new
+                        {
+                            stopMilliseconds = stopping.Elapsed.TotalMilliseconds,
+                            firstChanceExceptions = new Dictionary<string, long>(exceptions, StringComparer.Ordinal),
+                        }));
+                        return 0;
+                    default:
+                        throw new InvalidOperationException("Unknown server command: " + command);
+                }
             }
+        }
+        finally
+        {
+            if (!disposed) await server.DisposeAsync().ConfigureAwait(false);
         }
     }
 }
@@ -142,7 +159,7 @@ internal sealed class Measurement : IDisposable
     private readonly long _workItems;
     private readonly ConcurrentDictionary<string, long> _exceptions;
     private readonly Dictionary<string, long> _exceptionsBefore;
-    private readonly CancellationTokenSource _stop = new();
+    private readonly PeriodicTimer _timer = new(TimeSpan.FromMilliseconds(200));
     private readonly Task _sampler;
     private long _peakWorkingSet;
     private long _peakPrivate;
@@ -160,7 +177,7 @@ internal sealed class Measurement : IDisposable
         _pause = GC.GetTotalPauseDuration();
         _contention = Monitor.LockContentionCount;
         _workItems = ThreadPool.CompletedWorkItemCount;
-        _sampler = SampleAsync(_stop.Token);
+        _sampler = SampleAsync();
     }
 
     internal async Task<object> FinishAsync()
@@ -170,7 +187,9 @@ internal sealed class Measurement : IDisposable
         var cpu = _process.TotalProcessorTime - _cpu;
         var user = _process.UserProcessorTime - _userCpu;
         var allocated = GC.GetTotalAllocatedBytes(true) - _allocated;
-        await _stop.CancelAsync().ConfigureAwait(false);
+        // Dispose completes the outstanding tick with false, without injecting a
+        // benchmark-owned cancellation exception into the first-chance census.
+        _timer.Dispose();
         await _sampler.ConfigureAwait(false);
 
         var thrown = _exceptions
@@ -198,29 +217,21 @@ internal sealed class Measurement : IDisposable
 
     public void Dispose()
     {
-        _stop.Dispose();
+        _timer.Dispose();
         _process.Dispose();
     }
 
-    private async Task SampleAsync(CancellationToken cancellation)
+    private async Task SampleAsync()
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(200));
-        try
+        do
         {
-            do
-            {
-                _process.Refresh();
-                _peakWorkingSet = Math.Max(_peakWorkingSet, _process.WorkingSet64);
-                _peakPrivate = Math.Max(_peakPrivate, _process.PrivateMemorySize64);
-                _peakThreads = Math.Max(_peakThreads, _process.Threads.Count);
-                _peakPoolThreads = Math.Max(_peakPoolThreads, ThreadPool.ThreadCount);
-            }
-            while (await timer.WaitForNextTickAsync(cancellation).ConfigureAwait(false));
+            _process.Refresh();
+            _peakWorkingSet = Math.Max(_peakWorkingSet, _process.WorkingSet64);
+            _peakPrivate = Math.Max(_peakPrivate, _process.PrivateMemorySize64);
+            _peakThreads = Math.Max(_peakThreads, _process.Threads.Count);
+            _peakPoolThreads = Math.Max(_peakPoolThreads, ThreadPool.ThreadCount);
         }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        {
-            // The measurement window ended.
-        }
+        while (await _timer.WaitForNextTickAsync().ConfigureAwait(false));
     }
 }
 

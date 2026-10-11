@@ -154,7 +154,7 @@ namespace EmbedIO.Tests
 
         [TestCase(false)]
         [TestCase(true)]
-        public async Task CanceledMergedFirstWriteSendsNothingAndReleasesTheWriter(bool chunked)
+        public async Task CanceledMergedTransportSubmissionRejectsLaterOutput(bool chunked)
         {
             using var fixture = await Issue574_ResponseWrites.Fixture.Create(chunked, ignoreErrors: true);
             if (!chunked) fixture.Response.ContentLength64 = 16384 + 2;
@@ -176,10 +176,12 @@ namespace EmbedIO.Tests
                 fixture.Transport.BlockWrites = false;
                 fixture.Transport.ReleaseWrites.TrySetResult();
             }
+            var submissions = fixture.Transport.AsyncWrites + fixture.Transport.SynchronousWrites;
             await fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("OK"));
             fixture.Stream.Dispose();
             var wire = Encoding.ASCII.GetString(fixture.Transport.ToArray());
-            Assert.That(wire, Is.EqualTo(chunked ? "2\r\nOK\r\n0\r\n\r\n" : "OK"), "Headers were committed by the canceled write; later bytes follow its framing.");
+            Assert.That(wire, Is.Empty, "The failed submission must not be retried or followed by body/footer bytes.");
+            Assert.That(fixture.Transport.AsyncWrites + fixture.Transport.SynchronousWrites, Is.EqualTo(submissions));
         }
 
         [TestCase(false)]

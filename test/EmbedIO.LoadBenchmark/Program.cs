@@ -11,6 +11,9 @@ return args.FirstOrDefault() switch
     "endurance-server" => await EnduranceServer.RunAsync(options).ConfigureAwait(false),
     "endurance-client" => await EnduranceClient.RunAsync(options).ConfigureAwait(false),
     "quic-send-buffer-probe" => await QuicSendBufferProbe.RunAsync(options).ConfigureAwait(false),
+    "quic-churn" => await QuicChurn.RunAsync(options).ConfigureAwait(false),
+    "burn" => await QuicChurn.BurnAsync(options).ConfigureAwait(false),
+    "exception-accounting-check" => await ExceptionAccountingCheck.RunAsync().ConfigureAwait(false),
     _ => Usage(),
 };
 
