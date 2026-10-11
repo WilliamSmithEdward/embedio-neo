@@ -517,6 +517,9 @@ internal static class Workers
         while (run.Running)
         {
             await pacer.WaitAsync(run.Token).ConfigureAwait(false);
+            // A paced wait can outlast the phase. Finish an exchange already
+            // started, but never start a new one on a retired connection.
+            if (!run.Running) break;
             var started = Stopwatch.GetTimestamp();
             await stream.WriteAsync(request, run.Token).ConfigureAwait(false);
             var response = await reader.ReadAsync(expected, run.Token).ConfigureAwait(false);

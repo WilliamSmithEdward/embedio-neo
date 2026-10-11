@@ -212,6 +212,9 @@ harness build, parser/suppression guards and formatting passed. The standalone
 disruption classification. A synthetic analysis check excludes active, missing-counter
 and stuck snapshots from retention trends. Short HTTP and WebSocket load phases
 passed, as did small-request drain/replacement. The broader six-second steady
-drain phase failed with four late HTTP/1 streaming read errors at about ten seconds;
-its later health check passed. This failed attempt is retained and is not a new
-endurance measurement or proof of a product defect.
+drain phase initially failed with four late HTTP/1 streaming read errors at about
+ten seconds in both EmbedIO and Kestrel. A paced HTTP/1 worker could wake after the
+phase ended and start another exchange on a connection retired during drain.
+The worker now checks the phase after its wait. Repeating the same bounded control
+passes on both engines with zero errors. Failed attempts remain retained; these
+short functional checks are not new endurance or comparative performance measurements.
