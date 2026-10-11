@@ -7894,3 +7894,46 @@ rebuilt standalone performance harness have zero warnings/errors. All ten
 unchanged resource, allocation, body and wire gates pass again; formatting and
 both source guards pass. Fresh hosted checks are required for this correction;
 the earlier failed macOS head is not accepted as final validation.
+
+### Independent HTTP/1 request head and application view
+
+The HTTP/1 request now has an independently authored wire-head owner and an
+application adapter. The head owns method, raw target, received version, resolved
+URI and validated framing. The adapter retains the request-local mutable header,
+query and cookie views and borrows the existing body transport only on demand.
+The shared cookie reader scans fields in order without split-array or LINQ
+intermediates, preserving the supported version/path/domain/port attributes and
+quoted values. Query parsing retains repeated keys, null-key components and URL
+decoding without splitting the entire query into an array.
+
+Strict method, target, Host, duplicate framing-field and Content-Length/Transfer-
+Encoding validation remain. CONNECT authority, OPTIONS asterisk targets and
+supported HTTP/1 higher-minor semantics retain their application views. The
+existing request framing, synchronous and asynchronous unread-body cleanup,
+Continue, WebSocket and borrowed transport contracts remain. No input timeout,
+finite request-body default or public API is added by this replacement.
+
+Two real pipelined cases change the mutable header view before first body access:
+fixed-length and chunked bodies still yield exactly their parsed content, and the
+following request is dispatched separately. These preserve an existing invariant;
+they do not claim a newly reproduced old-engine defect. The focused request,
+cookie, query, framing, body and tunnel set passes 251/251. The replacement builds
+both core targets without warnings, and both source guards pass.
+Complete Windows validation reports 4,671 cases: 4,664 passed, seven expected
+skips and zero failures in 3m50s, requiring QUIC and the independent datagram
+peer. The actual netstandard2.0 core reports 234 passed and 17 expected HTTP/3
+transport skips in the 251-case focused set, on the installed .NET 10 host;
+this is not .NET Framework runtime coverage. The standalone performance build,
+changed-source formatting and all ten unchanged allocation, body-consumption,
+wire and HTTP/HTTPS cleanup gates pass. Discovery minimums are 4,671;
+exact-head hosted checks still precede integration.
+
+This increment replaces the inherited request model, not the response metadata
+or application-context lifecycle. Program #181 remains open. No release,
+whole-server speedup or native HTTP/3 provider activation is implied.
+After incorporating the frontend's synchronous drain-cutoff correction, final
+combined-source Windows validation reports the same 4,671 cases with 4,664 passed,
+seven expected skips and zero failures in 3m49s, again requiring QUIC and the
+independent datagram peer. Retained-asset results remain 234 passed and 17 expected
+HTTP/3 transport skips; both source guards, changed-source formatting, the
+rebuilt standalone performance harness and all ten unchanged resource gates pass.
