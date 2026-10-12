@@ -11,7 +11,7 @@ writes at build time. The .NET Standard 2.0 asset is not analyzed for trimming.
 ## What works
 
 A Native AOT executable built from the
-[smoke host](../../test/EmbedIO.AotSmoke/Program.cs) serves real HTTP/1.1 with:
+[smoke host](../../test/EmbedIO.AotSmoke/Program.cs) serves real HTTP with:
 
 - routing modules and action modules with explicit routes and delegates;
 - Web API controllers registered through generated bindings (below), with route, query,
@@ -20,11 +20,38 @@ A Native AOT executable built from the
 - static files from `WithStaticFolder`;
 - streamed responses;
 - telemetry (`WithTelemetry`);
+- HTTPS with HTTP/1.1, HTTP/2 and HTTP/3 from one `HttpListenerMode.EmbedIOCombined`
+  listener, each checked by the negotiated version;
+- WebSockets over TLS, with a `WebSocketMessageModule` echo;
+- local sessions (`WithLocalSessionManager`), across requests;
+- `EmbedIO.DependencyInjection`: request scopes, and a controller activated from request
+  services through its generated binding, with a `[FromServices]` parameter;
 - clean shutdown through the cancellation token.
 
 Its publish runs with warnings as errors, so no trim or AOT warning is reachable from
 these features. CI publishes and runs it on Windows (`windows-2025`, `win-x64`) and Linux
-(`ubuntu-24.04`, `linux-x64`).
+(`ubuntu-24.04`, `linux-x64`, with the pinned `libmsquic` 2.6.2 package for HTTP/3).
+
+## HTTP/3 in a Native AOT application
+
+HTTP/3 uses MsQuic. On Linux it is the system's `libmsquic`, installed as for any .NET
+HTTP/3 application. On Windows, .NET ships `msquic.dll` in its runtime, but a Native AOT
+publish leaves it out, so `QuicListener.IsSupported` is false and an HTTP/3 or combined
+listener cannot start. Publish it beside the executable from the runtime pack:
+
+```xml
+<Target Name="PublishWindowsMsQuic" AfterTargets="ComputeLinkedFilesToPublish" Condition="$(RuntimeIdentifier.StartsWith('win-'))">
+  <ItemGroup>
+    <_MsQuic Include="@(RuntimePackAsset)" Condition="'%(Filename)%(Extension)' == 'msquic.dll'" />
+    <ResolvedFileToPublish Include="@(_MsQuic)" RelativePath="msquic.dll" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Target>
+```
+
+Trimmed and Native AOT applications also turn off `HttpClient`'s own HTTP/3 support by
+default (`Http3Support`). That affects only an application that is also an HTTP/3
+client, as the smoke host is; set `<Http3Support>true</Http3Support>` there. The server
+does not need it.
 
 ## JSON
 
@@ -169,8 +196,10 @@ These features are annotated and not supported in trimmed or AOT applications:
 - **Reflection-based controller registration**: `WithController<T>()`,
   `RegisterController(Type)` and the other overloads without a binding. Use generated
   bindings, above.
-- **`WithControllerServices` in `EmbedIO.DependencyInjection`**, which activates
-  controllers through `ActivatorUtilities`.
+- **`WithControllerServices<T>()` and `WithControllerServices(Type)` in
+  `EmbedIO.DependencyInjection`**, which bind the controller through reflection. Use
+  `WithControllerServices(binding)` with a generated binding: it activates the controller
+  from request services the same way, and `[FromServices]` parameters work.
 - **Attribute-scanned routing handlers**: `RoutingModule.AddFrom` and
   `WithHandlersFrom`. Register routes with `OnGet`, `OnPost` and the other explicit methods.
 - **EmbedIO's default JSON options**, as above.
@@ -191,9 +220,10 @@ platform in the `aot-smoke-*` artifacts.
 
 ## Not yet validated
 
-The smoke host covers HTTP/1.1 over plain TCP. HTTPS, HTTP/2, HTTP/3, WebSockets,
-sessions, the `EmbedIO.DependencyInjection` package and platforms other than Windows and
-Linux x64 have not been exercised as Native AOT.
+Native AOT is exercised on Windows and Linux x64 only; macOS, ARM64 and mobile Native
+AOT have not been run. The smoke host checks one representative of each feature, not
+every option: for example, WebSockets over HTTP/2, the CLI and
+`EmbedIO.JsonServer` have not been exercised as Native AOT.
 
 The generated binding's handling of the plain `Exception` that .NET Framework's numeric
 converters throw for invalid route values mirrors the reflection binder, but tests run on

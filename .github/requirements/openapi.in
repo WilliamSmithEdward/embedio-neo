@@ -1,0 +1,7 @@
+# openapi-spec-validator, which CI runs on the OpenAPI document the tests write,
+# so the document is checked by an implementation independent of EmbedIO.
+# openapi.txt is compiled from this file with hashes for every package in the
+# tree:
+#   uv pip compile openapi.in --universal --generate-hashes --python-version 3.12 --exclude-newer <a week ago> -o openapi.txt
+# Dependabot proposes each new release.
+openapi-spec-validator==0.9.0
