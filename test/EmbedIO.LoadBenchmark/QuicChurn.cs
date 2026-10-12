@@ -324,11 +324,13 @@ internal static class QuicChurn
         var samples = new JsonArray();
         using var self = Process.GetCurrentProcess();
         var busy = SystemCpu.BusyTime();
+        var hostLast = clock.Elapsed;
         server.Refresh();
         var serverCpu = server.TotalProcessorTime;
+        var serverLast = clock.Elapsed;
         var clientCpu = self.TotalProcessorTime;
+        var clientLast = clock.Elapsed;
         var processCpu = processDiagnostics ? ReadProcessCpu() : null;
-        var last = clock.Elapsed;
         long started = 0, completed = 0, failed = 0, mixedDone = 0;
         while (true)
         {
@@ -343,21 +345,25 @@ internal static class QuicChurn
 
             var now = clock.Elapsed;
             var busyNow = SystemCpu.BusyTime();
+            var hostNow = clock.Elapsed;
             server.Refresh();
             self.Refresh();
             var serverNow = server.HasExited ? serverCpu : server.TotalProcessorTime;
+            var serverAt = clock.Elapsed;
             var clientNow = self.TotalProcessorTime;
-            var seconds = (now - last).TotalSeconds;
-            var host = (busyNow - busy).TotalSeconds;
-            var serverUsed = (serverNow - serverCpu).TotalSeconds;
-            var clientUsed = (clientNow - clientCpu).TotalSeconds;
+            var clientAt = clock.Elapsed;
+            // Counter reads can block during a host stall. Match each CPU delta
+            // to its own acquisition interval rather than the earlier loop timestamp.
+            var host = (busyNow - busy).TotalSeconds / (hostNow - hostLast).TotalSeconds;
+            var serverUsed = (serverNow - serverCpu).TotalSeconds / (serverAt - serverLast).TotalSeconds;
+            var clientUsed = (clientNow - clientCpu).TotalSeconds / (clientAt - clientLast).TotalSeconds;
             var sample = new JsonObject
             {
                 ["t"] = Math.Round(now.TotalSeconds, 3),
-                ["hostBusyCpus"] = Math.Round(host / seconds, 3),
-                ["serverCpus"] = Math.Round(serverUsed / seconds, 3),
-                ["clientCpus"] = Math.Round(clientUsed / seconds, 3),
-                ["backgroundCpus"] = Math.Round((host - serverUsed - clientUsed) / seconds, 3),
+                ["hostBusyCpus"] = Math.Round(host, 3),
+                ["serverCpus"] = Math.Round(serverUsed, 3),
+                ["clientCpus"] = Math.Round(clientUsed, 3),
+                ["backgroundCpus"] = Math.Round(host - serverUsed - clientUsed, 3),
                 ["started"] = counters.Started - started,
                 ["completed"] = counters.Completed - completed,
                 ["failed"] = counters.Failed - failed,
@@ -372,6 +378,7 @@ internal static class QuicChurn
                 foreach (var (pid, entry) in current.Values)
                 {
                     if (!processCpu.Values.TryGetValue(pid, out var previous) || previous.StartTicks != entry.StartTicks) continue;
+                    var seconds = (entry.SampleTicks - previous.SampleTicks) / (double)Stopwatch.Frequency;
                     var used = (entry.CpuSeconds - previous.CpuSeconds) / seconds;
                     if (used > 0.001) rows.Add(new JsonObject
                     {
@@ -393,15 +400,17 @@ internal static class QuicChurn
             failed = counters.Failed;
             mixedDone = mixed?.Completed ?? 0;
             busy = busyNow;
+            hostLast = hostNow;
             serverCpu = serverNow;
+            serverLast = serverAt;
             clientCpu = clientNow;
-            last = now;
+            clientLast = clientAt;
         }
 
         return samples;
     }
 
-    private sealed record ProcessCpuEntry(string Name, long StartTicks, double CpuSeconds);
+    private sealed record ProcessCpuEntry(string Name, long StartTicks, double CpuSeconds, long SampleTicks);
     private sealed record ProcessCpuSnapshot(Dictionary<int, ProcessCpuEntry> Values, JsonArray Errors);
 
     // CPU accounting only: no process memory, command lines or credentials are read.
@@ -418,7 +427,7 @@ internal static class QuicChurn
                 try
                 {
                     values[pid] = new ProcessCpuEntry(process.ProcessName, process.StartTime.ToUniversalTime().Ticks,
-                        process.TotalProcessorTime.TotalSeconds);
+                        process.TotalProcessorTime.TotalSeconds, Stopwatch.GetTimestamp());
                 }
                 catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
                 {

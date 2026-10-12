@@ -131,7 +131,8 @@ Both retain 32 small requests/second and two 1 MiB requests/second over four war
 HTTP/3 clients. Connection establishment, first-stream service and warm requests
 are measured separately. No handshake deadline is increased.
 
-A 15-second baseline must average at most 0.5 busy CPUs before either arm starts.
+On Linux, a 15-second baseline must average at most 0.5 busy CPUs before either arm starts.
+Windows records its ambient baseline without a quiet assertion.
 Each quiet phase must also average at most 0.5 background CPUs; the contention arm
 must measure at least 80% host CPU. These thresholds are declared before the run.
 Missing samples, cap omissions, any request failure, unsuccessful server exit or
@@ -216,3 +217,19 @@ measurement and applies quiet prerequisites only to the Linux reference. Invalid
 measurements still fail on both platforms, and Windows must execute and pass every
 request and measured contention case on fresh source. The rejected setup is retained;
 it is not counted as a completed contention run.
+
+### Retained Windows handshake failure and timing correction
+
+Run [38269242512](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38269242512)
+passed Linux and the Windows contention arm, but Windows ambient EmbedIO round two
+at 16 connections/second recorded 22 handshake refusals out of 240 attempts. Warm
+requests completed, with multi-second latency. The host's compatibility process was
+active and the scheduler accumulated substantial lag, but this does not establish
+the refusals' root cause. The run remains failed; no request failure is accepted.
+
+The stall also exposed mismatched CPU sampling intervals: the initial counter read
+preceded the process census while its timestamp followed it, and subsequent loop
+timestamps preceded potentially blocking reads. CPU deltas now use each counter's
+own acquisition interval, including a timestamp for each process CPU read. This
+corrects telemetry only, without changing request scheduling, deadlines or gates.
+Fresh source validation remains required and the original failure is preserved.
