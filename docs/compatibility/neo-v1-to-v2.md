@@ -38,6 +38,27 @@ tests for custom converters, unsupported payloads, numeric precision and exact
 response bytes against the final v2 package. The
 [JSON compatibility guide](../user-reports/json-migration-compatibility.md)
 records the audited behavior and its limits.
+## Direct HTTP/1 response flushing
+
+Calling `Response.OutputStream.Flush()` or `FlushAsync()` on an open HTTP/1
+response now sends its final headers before the first body write. Flushes run in
+the same order as body writes and do not finish the response. Set status, cookies,
+content length and other response metadata before the first successful flush;
+the guarded response properties cannot be changed after headers are sent.
+
+A flush canceled while waiting for writer ownership never overtakes that writer;
+a pre-canceled first flush leaves headers mutable. Transport failure makes further
+output unusable, following `IgnoreWriteExceptions`.
+Flushing disposed output reports `ObjectDisposedException`. HEAD responses keep
+their metadata until completion, so serializers can determine representation
+headers without emitting body bytes. Empty writes keep their existing behavior.
+
+Automatic server cleanup completes direct HTTP/1 output without calling the
+application flush path. Buffered serializers and other output wrappers retain
+their flushing behavior, including empty responses and final framing. This
+approved change is unreleased; test custom streaming code against the final v2
+package before upgrading.
+
 ## Listener selection and deployment
 
 William approved removal of both the Microsoft backend and the inherited Mono

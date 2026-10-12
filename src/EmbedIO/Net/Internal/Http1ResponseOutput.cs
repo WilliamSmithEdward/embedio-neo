@@ -43,16 +43,55 @@ namespace EmbedIO.Net.Internal
             && (_bodyLimit == null || _committedBody == _bodyLimit.Value);
 
         public override bool CanRead => false;
-        public override bool CanWrite => true;
+        public override bool CanWrite => Volatile.Read(ref _closed) == 0;
         public override bool CanSeek => false;
         public override long Length => throw new NotSupportedException();
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long length) => throw new NotSupportedException();
-        public override void Flush() { }
+        public override void Flush()
+        {
+            CheckWrite(Array.Empty<byte>(), 0, 0);
+            using var writer = _writers.Enter();
+            CheckWrite(Array.Empty<byte>(), 0, 0);
+            if (!CanSubmit()) return;
+            FlushCoreAsync(true, default).GetAwaiter().GetResult();
+        }
+
         public override Task FlushAsync(CancellationToken token)
-            => token.IsCancellationRequested ? Task.FromCanceled(token) : Task.CompletedTask;
+        {
+            CheckWrite(Array.Empty<byte>(), 0, 0);
+            return token.IsCancellationRequested ? Task.FromCanceled(token) : FlushOrderedAsync(token);
+        }
+
+        private async Task FlushOrderedAsync(CancellationToken token)
+        {
+            using var writer = await _writers.EnterAsync(token).ConfigureAwait(false);
+            CheckWrite(Array.Empty<byte>(), 0, 0);
+            token.ThrowIfCancellationRequested();
+            if (!CanSubmit()) return;
+            await FlushCoreAsync(false, token).ConfigureAwait(false);
+        }
+
+        private async Task FlushCoreAsync(bool synchronous, CancellationToken token)
+        {
+            // HEAD writers retain metadata until completion; no body bytes are buffered.
+            using var head = _response.IsHeadResponse ? null : PrepareHead(false);
+            if (head != null)
+                await SubmitAsync(head.GetBuffer(), checked((int)head.Position), checked((int)(head.Length - head.Position)), synchronous, token).ConfigureAwait(false);
+            if (Volatile.Read(ref _failed) != 0) return;
+            try
+            {
+                if (synchronous) _transport.Value.Flush();
+                else await _transport.Value.FlushAsync(token).ConfigureAwait(false);
+            }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+            {
+                Volatile.Write(ref _failed, 1);
+                if (!_ignoreErrors || error is OperationCanceledException && token.IsCancellationRequested) throw;
+            }
+        }
 
         public override void Write(byte[] buffer, int offset, int count)
         {
