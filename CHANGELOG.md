@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+- Add per-route request limit policies from Neo #136:
+  `WithRouteRequestLimits(baseRoute, configure)` and `RequestLimitPolicy` replace the
+  server-wide `MaximumRequestBodyBytes`, `RequestBodyReadTimeout` and `RequestTimeout`
+  under a base route, matched like a module's base route; the first matching policy
+  applies. `long.MaxValue` or `Timeout.InfiniteTimeSpan` lifts a server-wide limit for
+  the route. `WebServerOptionsBase.RouteRequestLimits` lists them.
 - Add opt-in connection limits from Neo #136 on `WebServerOptions`:
   `MaximumConnections` (connections beyond it closed at once),
   `RequestHeadersTimeout` (replaces the fixed 90-second first-request deadline) and

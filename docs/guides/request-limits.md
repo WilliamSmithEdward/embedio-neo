@@ -1,10 +1,11 @@
 # Request limits, admission and deadlines
 
 [Neo #136](https://github.com/WilliamSmithEdward/embedio-neo/issues/136) asks for
-opt-in resource policies for HTTP requests. This guide covers the server-wide options
-delivered so far: limits on request headers and bodies, the number of requests handled
-at once, and how long a request may be handled. All of them default to off, so a
-server that sets none of them behaves exactly as before.
+opt-in resource policies for HTTP requests. This guide covers them: limits on request
+headers and bodies, the number of connections and of requests handled at once, how long
+a connection, a body read and a request may take, and per-route policies that replace
+the server-wide values under a base route. All of them default to off, so a server that
+sets none of them behaves exactly as before.
 
 | Option | Default | Rejection |
 | --- | --- | --- |
@@ -172,6 +173,42 @@ connection it accepts. Two servers may share a port only when neither sets conne
 limits; otherwise the second server fails to start with `HttpListenerException`, and
 the first keeps serving.
 
+## Per-route policies
+
+A route policy replaces the server-wide body limit, body read deadline and request
+deadline for requests under one base route. Typical uses are a larger body limit for an
+upload endpoint, a tighter one for a JSON API, or no deadline for a long report.
+
+```csharp
+using var server = new WebServer(o => o
+        .WithUrlPrefix("http://localhost:9696/")
+        .WithMode(HttpListenerMode.EmbedIO)
+        .WithMaximumRequestBodyBytes(64 * 1024)
+        .WithRequestTimeout(TimeSpan.FromSeconds(10))
+        .WithRouteRequestLimits("/api/uploads", p =>
+        {
+            p.MaximumRequestBodyBytes = 512L * 1024 * 1024;     // 512 MiB here
+            p.RequestTimeout = Timeout.InfiniteTimeSpan;         // no request deadline
+            p.RequestBodyReadTimeout = TimeSpan.FromSeconds(30); // but each read must progress
+        })
+        .WithRouteRequestLimits("/api", p => p.MaximumRequestBodyBytes = 16 * 1024))
+    .WithWebApi("/api", m => m.WithController<ImportController>());
+```
+
+- A policy property left null inherits the server-wide value. `long.MaxValue` lifts the
+  body limit and `Timeout.InfiniteTimeSpan` lifts a deadline for the route.
+- The base route is matched like a module's base route, against the request path before
+  any module runs. It can contain parameters such as `/tenants/{id}`, and it also matches
+  every path below it.
+- Policies are checked in the order they were added and the first match applies, so add
+  more specific routes first. A base route can have only one policy.
+- `RouteRequestLimits` lists the policies; they lock with the options.
+- The declared-length check, the `100 Continue` deferral, the byte count, the read
+  deadline and the request deadline all use the route's values. `100 Continue` is
+  deferred when the server or any route sets a body limit.
+- Header limits, admission and connection limits stay server-wide: they apply before
+  routing or to whole connections.
+
 ## Concurrent requests and the queue
 
 `MaximumConcurrentRequests` bounds how many requests are being handled at once,
@@ -211,8 +248,9 @@ in the queue.
 
 ## Measured scenarios
 
-`test/EmbedIO.Tests/Issues/Issue136_RequestLimits.cs`, `Issue136_RequestLimits.Headers.cs`
-and `Issue136_RequestLimits.Connections.cs` drive the managed engine over real connections.
+`test/EmbedIO.Tests/Issues/Issue136_RequestLimits.cs`, `Issue136_RequestLimits.Headers.cs`,
+`Issue136_RequestLimits.Connections.cs` and `Issue136_RequestLimits.Routes.cs` drive the
+managed engine over real connections.
 HTTP/2 uses cleartext prior knowledge; HTTP/3 uses QUIC with a generated certificate
 and is skipped on hosts without QUIC support.
 
@@ -248,13 +286,21 @@ and is skipped on hosts without QUIC support.
 | Idle connection after a response | closed at `KeepAliveTimeout`, header rounded up | GOAWAY then close | n/a |
 | Stream open longer than the idle deadline | n/a | completes normally | n/a |
 | No connection options | `Keep-Alive: timeout=15`, unchanged | n/a | n/a |
+| Route lifts the server body limit | route accepts 5000 bytes, other routes 413 | same | n/a |
+| Route sets a body limit the server lacks | 413 on the route, others unlimited | same | n/a |
+| Overlapping routes | first added applies | n/a | n/a |
+| Parameterized base route | matches paths below it | n/a | n/a |
+| Route request deadline lifted or shortened | long request completes; 503 elsewhere | n/a | n/a |
+| Route body read deadline lifted | slow upload completes; 408 elsewhere | same | n/a |
+| Route body limit with `Expect: 100-continue` | n/a | refused body never sent | n/a |
 
 The .NET HTTP/1.1 client aborts its own connection after a refusal that arrives
 without `100 Continue`, so the HTTP/1.1 refusal case is checked on the wire with a raw
 socket. `TestWebServer` locks its options in its constructor and has no way to set
 these limits.
 
-## Not in this increment
+## Not covered
 
-The rest of #136 remains open: per-route policies. HTTP/3-specific limits, including
-QUIC connection counts and idle deadlines, are tracked in #135.
+HTTP/3-specific limits, including QUIC connection counts and idle deadlines, are tracked
+in #135. Route policies do not set per-route concurrency; `MaximumConcurrentRequests`
+stays server-wide.
