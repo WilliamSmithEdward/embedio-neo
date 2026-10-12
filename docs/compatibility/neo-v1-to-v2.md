@@ -1,4 +1,4 @@
-﻿# Migrating from EmbedIO-Neo v1 to v2
+# Migrating from EmbedIO-Neo v1 to v2
 
 This guide tracks the owner-designated **Neo v2** release scope for the modern
 HTTP engine program [#181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181)
@@ -328,6 +328,17 @@ ignores cancellation, that storage remains owned until its actual read settles;
 request retirement does not return still-active storage to the pool. Enabling
 this optional deadline therefore adds a copy to body reads. Transport retirement
 remains responsible for ending the underlying I/O.
+
+## Additive request trailer snapshots
+
+The built-in request adapters implement the optional `IHttpRequestTrailers`
+interface. Existing implementations of `IHttpRequest` need no new members.
+`TryGetTrailers` never reads or drains input; after complete valid consumption it
+returns an immutable ordered list kept separate from initial headers. Empty success
+means no trailers, while false means unavailable, incomplete, abandoned or failed
+input. Declaration does not authorize a field, and trailer metadata never changes
+routing or authentication. See [Request trailers](../guides/request-trailers.md)
+for the completion and ownership contract. This addition is unreleased.
 
 ## Release preparation still required
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
 using System.Net;
@@ -9,7 +10,7 @@ using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
 {
-    internal sealed class MultiplexedRequest : IHttpRequest, EmbedIO.Internal.IRequestPolicyTarget
+    internal sealed class MultiplexedRequest : IHttpRequestTrailers, EmbedIO.Internal.IRequestPolicyTarget
     {
         private readonly IMultiplexedExchange _exchange;
         private CookieList? _cookies;
@@ -82,6 +83,12 @@ namespace EmbedIO.Net.Internal
             if (_applicationInput != null) throw new InvalidOperationException("The request body was already opened.");
             _bodyLimit = maximumBytes;
             _onBodyLimitExceeded = onExceeded;
+        }
+        public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
+        {
+            if (_exchange.InputStream is IRequestTrailerSource source) return source.TryGetTrailers(out trailers);
+            trailers = RequestTrailerSnapshot.Empty;
+            return false;
         }
         public Encoding ContentEncoding
         {

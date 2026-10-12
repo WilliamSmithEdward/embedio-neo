@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Add the optional `IHttpRequestTrailers` capability on built-in request adapters.
+  Complete valid input exposes an immutable trailer snapshot, separate from
+  initial headers, without reading or draining input. Existing `IHttpRequest`
+  implementations remain compatible. See [request trailers](docs/guides/request-trailers.md).
 - Add opt-in HTTP server telemetry from Neo #137: `WithTelemetry(serverName)` publishes
   the `EmbedIO.Server` meter (`http.server.request.duration`,
   `http.server.active_requests`) and activity source (server spans with W3C trace

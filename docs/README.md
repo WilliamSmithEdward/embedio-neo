@@ -17,6 +17,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [WebSocket handshake status](guides/websocket-handshake-status.md): exact endpoints, module order, and HTTP/1 versus extended CONNECT.
 
 - [Response-time diagnostics](guides/response-timing.md): server handling duration, preserved context age and the difference from client latency.
+- [Request trailers](guides/request-trailers.md): optional completion-aware immutable snapshots separate from initial headers.
 
 - [Capsule and tunnel carriers](guides/capsule-tunnels.md): unreleased optional APIs, authorization, streamed values, native datagram packet ownership and carrier lifetime.
 

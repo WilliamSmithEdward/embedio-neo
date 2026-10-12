@@ -42,6 +42,8 @@
       href: guides/websocket-handshake-status.md
     - name: Controller base routes and fallback
       href: guides/controller-base-routes.md
+    - name: Request trailers (Neo v2, unreleased)
+      href: guides/request-trailers.md
     - name: HTTPS
       href: guides/https.md
     - name: Request limits, admission and deadlines
