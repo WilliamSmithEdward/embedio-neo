@@ -314,6 +314,21 @@ preserves remaining incoming delivery; full closure releases unread packet owner
 See [the carrier guide](../guides/capsule-tunnels.md#native-http-datagrams) before
 adapting a protocol handler. This addition does not change WebSocket queue defaults.
 
+## Optional request body read deadlines
+
+`RequestBodyReadTimeout` is disabled by default. When enabled, a stalled body
+read reports HTTP 408; caller cancellation retains the caller's cancellation
+token. A timed-out request cannot resume reading, and a canceled read cannot be
+replaced until its underlying source has finished. Applications should finish
+handling that request rather than retrying its input operation.
+
+The deadline reader uses private pooled storage, in chunks of at most 64 KiB,
+and copies data into application memory only after a successful read. If a source
+ignores cancellation, that storage remains owned until its actual read settles;
+request retirement does not return still-active storage to the pool. Enabling
+this optional deadline therefore adds a copy to body reads. Transport retirement
+remains responsible for ending the underlying I/O.
+
 ## Release preparation still required
 
 Before v2 ships, reconcile every approved behavior change into this guide,
