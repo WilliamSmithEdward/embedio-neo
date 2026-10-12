@@ -175,10 +175,16 @@ its processing.
 | h2spec case | RFC 9113 text | Assessment |
 | --- | --- | --- |
 | 3.5/2 invalid preface, cleartext only | Section 3.4: an invalid preface is a connection error, and "A GOAWAY frame ... MAY be omitted" | Permitted. The shared HTTP/1.1 and h2c port answers HTTP/1.1 400 and closes (captured earlier); h2spec fails parsing those bytes as frames. TLS passes. |
-| 5.1/8 DATA after the peer's RST_STREAM; 5.1/11 DATA on a closed stream | Section 6.1: DATA on a stream not "open" or "half-closed (local)" "MUST respond with a stream error ... STREAM_CLOSED". Section 5.1, closed: an endpoint "can perform this minimal processing for all streams that are in the closed state" | Contested inside RFC 9113, not permitted outright. The engine discards the DATA and credits the connection window, which follows section 5.1; section 6.1 read literally requires RST_STREAM(STREAM_CLOSED). h2spec v2.6.0 accepts RST_STREAM or GOAWAY with STREAM_CLOSED, or closure (`VerifyStreamError`). Answering such DATA with RST_STREAM(STREAM_CLOSED) satisfies both readings. Owner decision. |
+| 5.1/8 DATA after the peer's RST_STREAM | Sections [5.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1) and [6.4](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.4) distinguish reset closure from normal completion. Section 6.4 prohibits sending further stream frames after receiving a reset, except PRIORITY. | A blanket RST_STREAM reply would conflict with the reset rule. The engine discards the DATA and returns connection credit. The older h2spec expectation and section 6.1's general DATA rule must be assessed with this specific reset restriction, rather than treating a reset reply as satisfying every section. No production change or new passing campaign is claimed. |
+| 5.1/11 DATA after normal stream completion | Section [6.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.1) requires a STREAM_CLOSED stream error for DATA outside the receiving states; section 5.1 also permits minimal processing for closed streams. | The assessment remains unresolved. The current registry discards retired-stream DATA and returns connection credit, retaining only its stream-ID high-water mark. Any proposed change must preserve close cause, bounded retained state, HPACK processing and connection credit, and distinguish normal completion from received or sent resets. The peer-reset case cannot justify a blanket reset policy. |
 | 5.3.1/1 and 5.3.1/2 self-dependency | Section 5.3.2 deprecates RFC 7540 priority signaling; the captured RFC 9113 text has no self-dependency rule. The server advertises SETTINGS_NO_RFC7540_PRIORITIES=1 (RFC 9218 section 2.1) | Obsolete RFC 7540 section 5.3.1 expectation. The server answered the request normally. |
 
-The previous "permitted" label on 5.1/8 and 5.1/11 rested on section 5.1 alone.
+The previous joint assessment of 5.1/8 and 5.1/11 omitted section 6.4's
+received-reset restriction. Those cases need separate treatment. In particular,
+the earlier claim that RST_STREAM satisfies both readings for every closed
+stream was incorrect. `Http2ClosedStreamWireTest` currently checks both closure
+paths, connection credit and healthy subsequent requests; it records the
+existing behavior rather than proving that a different policy is conformant.
 The aggregate h2spec result remains a failure, and its logs and JUnit reports are
 retained.
 
