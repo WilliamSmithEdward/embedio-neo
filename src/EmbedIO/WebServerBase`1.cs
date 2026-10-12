@@ -346,7 +346,7 @@ namespace EmbedIO
 
                             CheckHeaderLimits(context);
                             admitted = await AdmitAsync(context).ConfigureAwait(false);
-                            ApplyBodyLimit(context);
+                            ApplyBodyPolicies(context);
 
                             // RFC 10008 requires QUERY media-type information before processing.
                             if (context.Request.HttpMethod == "QUERY"
@@ -551,14 +551,17 @@ namespace EmbedIO
                 context.Response.KeepAlive = false;
         }
 
-        // Applies MaximumRequestBodyBytes: a declared length over the limit is rejected
-        // before dispatch, and the body stream counts what is actually read. HTTP/1 stops
-        // connection reuse on either rejection, because keep-alive would otherwise drain
-        // the unread remainder, which is unbounded for chunked bodies. HTTP/2 and HTTP/3
-        // reset the stream when the response completes before its body.
-        private void ApplyBodyLimit(IHttpContext context)
+        // Applies MaximumRequestBodyBytes and RequestBodyReadTimeout. A declared length over
+        // the limit is rejected before dispatch, and the body stream counts what is actually
+        // read and bounds how long each read waits. HTTP/1 stops connection reuse on any
+        // rejection, because keep-alive would otherwise drain the unread remainder, which is
+        // unbounded for chunked bodies. HTTP/2 and HTTP/3 reset the stream when the response
+        // completes before its body.
+        private void ApplyBodyPolicies(IHttpContext context)
         {
-            if (!(Options.MaximumRequestBodyBytes is long limit)) return;
+            var limit = Options.MaximumRequestBodyBytes;
+            var readTimeout = Options.RequestBodyReadTimeout;
+            if (limit == null && readTimeout == null) return;
             var request = context.Request;
             // CONNECT carries tunnel data, not a request body.
             if (request.HttpMethod == "CONNECT") return;
@@ -569,14 +572,15 @@ namespace EmbedIO
                     context.Response.KeepAlive = false;
             }
 
-            if (request.HasEntityBody && request.ContentLength64 > limit)
+            if (limit is long maximum && request.HasEntityBody && request.ContentLength64 > maximum)
             {
                 StopReuse();
                 throw new HttpException(413, EmbedIO.Internal.LimitedRequestStream.TransferredLimitMessage);
             }
 
-            if (request is EmbedIO.Internal.IRequestPolicyTarget limited)
-                limited.LimitBody(limit, StopReuse);
+            if (!(request is EmbedIO.Internal.IRequestPolicyTarget target)) return;
+            if (limit is long bytes) target.LimitBody(bytes, StopReuse);
+            if (readTimeout is TimeSpan timeout) target.TimeBodyReads(timeout, StopReuse);
         }
 
         /// <inheritdoc />

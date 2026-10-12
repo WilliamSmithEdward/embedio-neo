@@ -30,6 +30,7 @@ namespace EmbedIO.Net.Internal.Http2
         private bool _drainSent;
         private Task? _drainTask;
         private int _drainLastStream;
+        private long _idleSince = System.Diagnostics.Stopwatch.GetTimestamp();
 
         internal Http2Dispatcher(Http2Connection connection)
         {
@@ -250,9 +251,16 @@ namespace EmbedIO.Net.Internal.Http2
             await _connection.SendAsync(new[] { new Http2Frame(3, 0, id, payload) }, _stop.Token).ConfigureAwait(false);
         }
 
+        // Stopwatch timestamp since which no stream has been open, or null while streams are.
+        internal long? IdleSince
+        {
+            get { lock (_sync) return _exchanges.Count == 0 ? _idleSince : null; }
+        }
+
         private void Release(Http2Exchange exchange, Exception? error)
         {
             if (!_exchanges.Remove(exchange.Id)) return;
+            if (_exchanges.Count == 0) _idleSince = System.Diagnostics.Stopwatch.GetTimestamp();
             _connection.Streams.Reset(exchange.Id);
             if (error != null) exchange.Cancel(error);
             _connection.SendFlow.Close(exchange.Id);
