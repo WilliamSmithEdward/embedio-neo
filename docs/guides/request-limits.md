@@ -282,6 +282,7 @@ and is skipped on hosts without QUIC support.
 | Slow steady upload, each read within the deadline | completes | completes | n/a |
 | Connections beyond `MaximumConnections` | closed unanswered; slot returns when one closes | n/a | n/a |
 | Second server on a port with connection limits | fails to start, first keeps serving | n/a | n/a |
+| Client disconnects mid-upload | handler sees the failure; request and connection slots return | n/a | n/a |
 | Incomplete first request head | closed at `RequestHeadersTimeout` | n/a | n/a |
 | Idle connection after a response | closed at `KeepAliveTimeout`, header rounded up | GOAWAY then close | n/a |
 | Stream open longer than the idle deadline | n/a | completes normally | n/a |
