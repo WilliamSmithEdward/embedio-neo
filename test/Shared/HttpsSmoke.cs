@@ -39,19 +39,18 @@ namespace EmbedIO.PlatformTests
             return $"https://127.0.0.1:{((IPEndPoint)port.LocalEndpoint).Port}/";
         }
 
-        internal static HttpClient CreateClient(X509Certificate2 certificate)
+        internal static HttpClient CreateClient(X509Certificate2 certificate, SocketsHttpHandler? handler = null)
         {
             var expected = certificate.GetCertHashString(HashAlgorithmName.SHA256);
-            return new HttpClient(new SocketsHttpHandler
+            handler ??= new SocketsHttpHandler();
+            handler.SslOptions = new SslClientAuthenticationOptions
             {
-                SslOptions = new SslClientAuthenticationOptions
-                {
-                    // Trust exactly the generated leaf, retaining hostname validation.
-                    RemoteCertificateValidationCallback = (_, peer, _, errors) => peer != null
-                        && (errors & ~SslPolicyErrors.RemoteCertificateChainErrors) == SslPolicyErrors.None
-                        && peer.GetCertHashString(HashAlgorithmName.SHA256) == expected,
-                },
-            })
+                // Trust exactly the generated leaf, retaining hostname validation.
+                RemoteCertificateValidationCallback = (_, peer, _, errors) => peer != null
+                    && (errors & ~SslPolicyErrors.RemoteCertificateChainErrors) == SslPolicyErrors.None
+                    && peer.GetCertHashString(HashAlgorithmName.SHA256) == expected,
+            };
+            return new HttpClient(handler)
             { Timeout = TimeSpan.FromSeconds(10) };
         }
 

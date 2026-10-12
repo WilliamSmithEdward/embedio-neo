@@ -83,6 +83,27 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Adds request limits that replace the server-wide values under a base route.
+        /// </summary>
+        /// <typeparam name="TOptions">The options type.</typeparam>
+        /// <param name="this">The options instance.</param>
+        /// <param name="baseRoute">The base route, matched like a module's base route.</param>
+        /// <param name="configure">Sets the policy's limits.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="baseRoute"/> or
+        /// <paramref name="configure"/> is null.</exception>
+        /// <exception cref="ArgumentException">The base route is invalid or already has a policy.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static TOptions WithRouteRequestLimits<TOptions>(this TOptions @this, string baseRoute, Action<RequestLimitPolicy> configure)
+            where TOptions : WebServerOptionsBase
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            _ = @this.AddRouteRequestLimits(baseRoute, configure);
+            return @this;
+        }
+
+        /// <summary>
         /// Sets how long one read of a request body may wait for data.
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>
