@@ -8,13 +8,29 @@
     <PublishAot>true</PublishAot>
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <IsPackable>false</IsPackable>
+    <!-- Trimmed and AOT apps default HttpClient's HTTP/3 support off; the host's client needs it
+         to check the server's HTTP/3. -->
+    <Http3Support>true</Http3Support>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
+    <ProjectReference Include="../../src/EmbedIO.DependencyInjection/EmbedIO.DependencyInjection.csproj" />
+    <Compile Include="../Shared/HttpsSmoke.cs" Link="Shared/HttpsSmoke.cs" />
     <!-- A package consumer gets the generator from the package's analyzers folder. -->
     <ProjectReference Include="../../src/EmbedIO.Generators/EmbedIO.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <!-- A package consumer gets this from the package's buildTransitive folder. -->
   <Import Project="../../src/EmbedIO/Packaging/EmbedIO-Neo.targets" />
+
+  <!-- On Windows, QUIC needs msquic.dll, which .NET ships in its runtime pack but a Native AOT
+       publish leaves out. Copy it from the resolved runtime pack, as an application serving
+       HTTP/3 must. On Linux, libmsquic is a system library. -->
+  <Target Name="PublishWindowsMsQuic" AfterTargets="ComputeLinkedFilesToPublish" Condition="$(RuntimeIdentifier.StartsWith('win-'))">
+    <ItemGroup>
+      <_EmbedIOMsQuic Include="@(RuntimePackAsset)" Condition="'%(Filename)%(Extension)' == 'msquic.dll'" />
+      <ResolvedFileToPublish Include="@(_EmbedIOMsQuic)" RelativePath="msquic.dll" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+    <Error Condition="'@(_EmbedIOMsQuic)' == ''" Text="The runtime pack provides no msquic.dll to publish." />
+  </Target>
 </Project>

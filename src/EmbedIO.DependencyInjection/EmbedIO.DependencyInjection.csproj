@@ -9,6 +9,10 @@
     <RepositoryUrl>https://github.com/WilliamSmithEdward/embedio-neo</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+  <!-- The .NET 10 asset is analyzed for trimming and Native AOT, as the core library is. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../EmbedIO/EmbedIO.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />

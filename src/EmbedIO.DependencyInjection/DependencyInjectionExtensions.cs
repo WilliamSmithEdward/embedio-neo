@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using EmbedIO.WebApi;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +13,9 @@ namespace EmbedIO.DependencyInjection
     public static class DependencyInjectionExtensions
     {
         internal static readonly object ServicesKey = new object();
+
+        private const string ReflectionMessage = "Registering a controller by type binds it through reflection and runtime code generation, "
+            + "which trimming and Native AOT do not support. Use the overload that takes a generated WebApiControllerBinding.";
 
         /// <summary>
         /// Adds one scope per HTTP request. Add this before modules that use request services.
@@ -54,6 +58,8 @@ namespace EmbedIO.DependencyInjection
         /// <typeparam name="TController">The controller type.</typeparam>
         /// <param name="module">The Web API module.</param>
         /// <returns>The module.</returns>
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
         public static WebApiModule WithControllerServices<TController>(this WebApiModule module)
             where TController : WebApiController
             => WithControllerServices(module, typeof(TController));
@@ -62,6 +68,8 @@ namespace EmbedIO.DependencyInjection
         /// <param name="module">The Web API module.</param>
         /// <param name="controllerType">A concrete controller type.</param>
         /// <returns>The module.</returns>
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
         public static WebApiModule WithControllerServices(this WebApiModule module, Type controllerType)
         {
             if (module == null) throw new ArgumentNullException(nameof(module));
@@ -73,6 +81,38 @@ namespace EmbedIO.DependencyInjection
             module.RegisterControllerWithContext(controllerType, context =>
             {
                 var controller = (WebApiController)activate(context.GetRequestServices(), null);
+                context.OnRequestCompleted(() => DisposeAsync(controller));
+                return controller;
+            }, (_, _) => Task.CompletedTask);
+            return module;
+        }
+
+        /// <summary>
+        /// Registers a controller through its binding from the EmbedIO-Neo source generator, activating
+        /// a fresh controller from request services as <see cref="WithControllerServices{TController}(WebApiModule)"/>
+        /// does. Neither binding nor activation uses reflection-based registration, so this works in trimmed
+        /// and Native AOT applications.
+        /// </summary>
+        /// <typeparam name="TController">The controller type. Its public constructors are kept for activation.</typeparam>
+        /// <param name="module">The Web API module.</param>
+        /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
+        /// <returns>The module.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="module"/> or <paramref name="binding"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><typeparamref name="TController"/> is abstract.</exception>
+        public static WebApiModule WithControllerServices<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TController>(
+            this WebApiModule module,
+            WebApiControllerBinding<TController> binding)
+            where TController : WebApiController
+        {
+            if (module == null) throw new ArgumentNullException(nameof(module));
+            if (binding == null) throw new ArgumentNullException(nameof(binding));
+            if (typeof(TController).IsAbstract)
+                throw new ArgumentException("A concrete WebApiController type is required.", nameof(binding));
+
+            var activate = ActivatorUtilities.CreateFactory<TController>(Type.EmptyTypes);
+            module.RegisterControllerWithContext(binding, context =>
+            {
+                var controller = activate(context.GetRequestServices(), null);
                 context.OnRequestCompleted(() => DisposeAsync(controller));
                 return controller;
             }, (_, _) => Task.CompletedTask);
