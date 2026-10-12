@@ -162,6 +162,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [HTTP conformance audit](project/http-conformance.md): October 2026 standards baseline, black-box conformance and stateful campaigns, and prioritized findings.
 - [HTTP standards applicability audit](project/http-standards-applicability.md): frozen October 2026 RFC, errata, registry and draft inventory, requirement-to-evidence matrix for extensions and application APIs, and reproduced gaps.
 - [Linux glibc heap aborts](project/linux-glibc-heap-aborts.md): inconclusive double-free investigation, checked runs, CI scan, limits of attribution and configured crash capture.
+- [Analyzer warning inventory](project/analyzer-warning-inventory.md): the gates in force, the zero-warning baseline across every repository project, classification and the reproducible script.
 
 - [Dependency injection](architecture/dependency-injection.md): request scopes, controller ownership, and hosting.
 

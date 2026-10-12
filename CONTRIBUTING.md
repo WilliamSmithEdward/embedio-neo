@@ -112,7 +112,11 @@ Builds treat compiler and analyzer warnings as errors. CI also verifies formatti
 and runs `python scripts/check_analyzer_suppressions.py`, which rejects diagnostic
 pragmas, suppression attributes, disabled rule severities, nullable-disable directives,
 warning exemptions and analyzer-off build settings. Fix the diagnostic rather than
-adding an exemption. SDK analyzers and NUnit.Analyzers provide the lint checks;
+adding an exemption. `python scripts/analyzer_inventory.py` builds the solution and
+every project outside it with analyzers forced on and records per-project warning
+counts under the ignored `TestResults/analyzer-inventory` folder; the recorded
+baseline is in [the analyzer warning inventory](docs/project/analyzer-warning-inventory.md).
+SDK analyzers and NUnit.Analyzers provide the lint checks;
 no additional runtime dependency is needed. Owner-approved API changes for this
 cleanup are documented in [the migration guide](docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved).
 
