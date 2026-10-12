@@ -7,7 +7,7 @@ validation, and records gaps with minimal reproductions. It complements the
 [conformance audit](http-conformance.md), which covers framing and stateful
 campaigns. It is not a claim of complete conformance, and #181 stays open.
 
-- Engine audited: `codex/managed-http-engine` at `01e785d`.
+- Historical engine audited: `codex/managed-http-engine` at `01e785d`.
 - Draft #224 (`codex/http-capsule-streaming` at `a2dc18c`, based on `01e785d`) was
   reviewed separately. Nothing below assumes it is integrated; rows that it changes
   say so.
@@ -19,6 +19,35 @@ Legend for the matrix: **V** implemented and checked by an independent peer;
 **I** implemented, checked only by the engine's own tests or internal calls;
 **P** partial; **M** missing; **N/A** not an origin-server requirement. "API" means
 a public member an application can call; an internal method is not an API.
+
+## Current accepted source and pending work (2026-10-12)
+
+The dated matrices and findings below describe `01e785d` and the separately
+reviewed `a2dc18c` candidate. They remain reproduction history, not a list of
+defects still present in today's source. This source-only reconciliation uses
+accepted engine `7b77cd6247e52a65d7de4f4ae5b42a4331730484`; it does not recapture
+the 48-RFC inventory, retest the engine or certify complete conformance.
+
+| Historical topic | Current accepted disposition | Evidence and remaining scope |
+| --- | --- | --- |
+| F1: 1xx accepted as final status | [Shared final-status validation](../../src/EmbedIO/Net/Internal/HttpResponseFieldSections.cs) restricts assignments to 200–599. Both TCP and multiplexed response adapters invoke it. The former 1xx-final defect is historical. | The approved correction and consumer migration are in [Neo v1 to v2](../compatibility/neo-v1-to-v2.md). Current response-section state and wire tests are present; this refresh is not another test run. |
+| F3: no public informational API | [IHttpResponseSections](../../src/EmbedIO/IHttpResponseSections.cs) provides awaited informational sections, excluding 101 and invalid final/protocol/commitment states. Third-party `IHttpResponse` implementations need no new members. | `Http1InformationalSectionsTest`, `Http2InformationalSectionsTest`, `ResponseSectionStateTest` and `ResponseSectionLifetimeTest` cover the accepted surface. The old reflection-only probe does not define its current scope. See [response field sections](../guides/response-field-sections.md). |
+| F4: response trailers unavailable | The same public capability supplies `DeclareTrailers` and `SetTrailers`; built-in H1/H2/H3 output paths validate and copy separate trailer metadata. | `Http1ResponseTrailersTest`, `Http2ResponseTrailersTest` and `Http3ResponseTrailersTest` are accepted tests. The historical “no caller/no test/no API” finding is superseded. Independent peer, resource and final platform/package acceptance remain separate gates. |
+| F4: request trailer access | Parsing and validation are accepted; a public request accessor is still pending. | [PR345](https://github.com/WilliamSmithEdward/embedio-neo/pull/345) proposes optional `IHttpRequestTrailers` and a complete-valid-input immutable snapshot, without accessor I/O. Its retained pending-read/disposal/late-FIN proof and 12 new cases are candidate evidence, not accepted-source support. |
+| Configured body/header/deadline policies | Nullable raw-body, decoded-body, header, admission, request, body-read and connection policies, including per-route body/deadline policies, exist. Raw and decoded byte limits are separate. | See [request limits](../guides/request-limits.md) and accepted `Issue136_RequestLimits` fixtures. Enforcement is in the shared pipeline and owned adapters; do not infer listener-selected-owner/pre-100 refusal, disposal-safe cleanup or third-party direct-read coverage from the existence of an option. Stronger original-framing accounting and cleanup integration remain separately validated pending work. |
+| F6: direct initial H1 flush | Accepted `Http1ResponseOutput.Flush` / `FlushAsync` still do not publish an initial final head. | [PR350](https://github.com/WilliamSmithEdward/embedio-neo/pull/350) proposes write-ordered direct flush commitment with 21 new cases. Its HEAD commitment review and exact-head checks remain pending; the actual Standard-asset NET10-host test is not older-CLR evidence. |
+| AOT and retained consumer APIs | Accepted [PR349](https://github.com/WilliamSmithEdward/embedio-neo/pull/349) gives the new metadata helpers distinct names while preserving legacy null-options and serializer-callback selection. | [Trimming and Native AOT](../guides/trimming-and-native-aot.md) describes supported metadata paths and reflection restrictions. AOT acceptance does not establish browser, QUIC or WebTransport compatibility. |
+| F10: native WebTransport | Public H3 remains on System.Net.Quic. The modified native candidate and session experiments are test-only. | [Provider readiness](webtransport-upstream-readiness.md) keeps #303 open for upstream current-wire reset and full integration. Its scoped reset, receive and application-peer experiments do not prove complete session flow, shipping approval or final platform/browser/resource acceptance. |
+
+CONNECT authorization and each selected extension's semantics remain explicit
+application/engine work; a generic successful response is not proof of that
+protocol's support. Priority parsing and H2 flow-credit admission are not a full
+H3 output scheduler. Alt-Svc/DNS discovery, browser interoperability and bounded
+WebSocket queued/in-flight callback work remain open. Per-message limits do not
+bound aggregate delivery, and legacy asynchronous callback overlap is retained.
+Keep those topics, the remaining normative ledger, supported assets/platforms,
+independent conformance, performance, soak, security and package evidence in the
+full program scope. No status above completes #181 or authorizes a release.
 
 ## Frozen inventory
 
