@@ -71,6 +71,19 @@ class CampaignTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate(self.directory, "revision", 0)
 
+    def test_approved_ambient_repeat_retains_no_quiet_claim(self):
+        self.run["phases"][0]["timeline"][0]["backgroundCpus"] = 0.6
+        self.write()
+        self.assertEqual(len(validate(self.directory, "revision", 0, require_quiet_phase=False)), 4)
+        with self.assertRaises(ValueError):
+            validate(self.directory, "revision", 0)
+
+    def test_ambient_scope_does_not_allow_request_failure(self):
+        self.run["phases"][0]["failureCount"] = 1
+        self.write()
+        with self.assertRaises(ValueError):
+            validate(self.directory, "revision", 0, require_quiet_phase=False)
+
     def test_insufficient_contention_is_not_accepted(self):
         self.environment["burnThreads"] = 4
         self.write()

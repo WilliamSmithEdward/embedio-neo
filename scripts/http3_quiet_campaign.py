@@ -10,7 +10,7 @@ import subprocess
 import time
 
 
-def validate(directory, revision, burn_threads):
+def validate(directory, revision, burn_threads, require_quiet_phase=True):
     environment = json.loads((directory / "environment.json").read_text())
     if environment["sourceRevision"] != revision:
         raise ValueError("Source revision mismatch")
@@ -58,7 +58,7 @@ def validate(directory, revision, burn_threads):
                 background = sum(s["backgroundCpus"] for s in samples) / len(samples)
                 if not math.isfinite(host) or not math.isfinite(background):
                     raise ValueError("Invalid CPU measurement")
-                if burn_threads == 0 and background > 0.5:
+                if require_quiet_phase and burn_threads == 0 and background > 0.5:
                     raise ValueError("Quiet phase was contaminated by background load")
                 if burn_threads and host < environment["logicalProcessors"] * 0.8:
                     raise ValueError("Contention arm did not reach 80% measured host CPU")
@@ -90,7 +90,10 @@ def main():
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     time.sleep(30)
     failures = []
-    for arm, rates, burn in (("quiet", "4,16,64,128", 0), ("contention", "64,128", os.cpu_count())):
+    reference = os.name != "nt"
+    manifest["quietReference"] = reference
+    first_arm = "quiet" if reference else "ambient"
+    for arm, rates, burn in ((first_arm, "4,16,64,128", 0), ("contention", "64,128", os.cpu_count())):
         directory = args.output / arm
         command = ["dotnet", str(args.runner), "quic-churn", "--output", str(directory),
                    "--source-revision", revision, "--engines", "embedio,kestrel",
@@ -120,12 +123,14 @@ def main():
                     raise
                 if code:
                     failures.append(f"{arm}: harness exited {code}")
-                rows = validate(directory, revision, burn)
+                rows = validate(directory, revision, burn, require_quiet_phase=reference)
                 (args.output / (arm + "-validated.json")).write_text(json.dumps(rows, indent=2) + "\n")
             except (ValueError, KeyError, OSError, subprocess.TimeoutExpired) as error:
                 failures.append(f"{arm}: {error}")
         # No repeated load or quieter retry to erase a failed campaign.
-    (args.output / "verdict.json").write_text(json.dumps({"passed": not failures, "failures": failures}, indent=2) + "\n")
+    (args.output / "verdict.json").write_text(json.dumps({"passed": not failures, "failures": failures,
+                                                      "quietReference": reference,
+                                                      "windowsQuietStatus": "not established" if not reference else "not applicable"}, indent=2) + "\n")
     for failure in failures:
         print(failure)
     return 1 if failures else 0

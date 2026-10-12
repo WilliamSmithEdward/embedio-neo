@@ -396,3 +396,10 @@ than being retried or discarded. Loaded Linux MsQuic and runtime/core hashes are
 recorded. Original artifacts remain available even if acceptance fails.
 
 These are bounded controls, not an exhaustive endurance or public performance claim.
+
+William approved Linux as the qualified quiet reference and Windows as an explicitly
+ambient repeat, retaining every request and contention case. Windows verdicts state
+that quiet acceptance is not established; its rejected quiet attempts remain preserved.
+The Windows per-process census reads CPU counters only and reports inaccessible
+processes. The initial passive baseline ceiling remains on both platforms. See the
+[control report](../../docs/project/http3-quiet-host-validation.md) for scope and evidence.

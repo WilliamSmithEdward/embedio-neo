@@ -172,3 +172,33 @@ Windows, with inaccessible or exited processes explicitly recorded. It reads no
 process memory, command lines or credentials. This adds attribution evidence without
 excluding processes or changing the quiet-host gate. Artifact names include the run
 attempt so an explicit rerun cannot replace earlier failure evidence.
+
+### Approved reference scope
+
+William approved using Linux as the qualified quiet-host reference, with every Windows
+case retained as an explicitly ambient platform repeat and a measured contention arm.
+Windows quiet acceptance is **not established**. This does not retroactively pass the
+rejected Windows quiet runs or exclude OS processes from their CPU records.
+
+New artifact manifests and verdicts identify `quietReference` explicitly; Windows' first
+arm is named `ambient`, and its verdict retains `windowsQuietStatus: not established`.
+All request counts, complete latency/CPU data, native/core/runtime hashes, runtime
+handshake deadlines, zero-error/cap-omission checks and clean server exits remain
+mandatory. Linux's quiet ceilings and both platforms' measured contention requirement
+are unchanged. The initial passive baseline ceiling is also retained on both platforms.
+The Windows process census remains diagnostic; protected read failures are recorded.
+
+The Windows CPU census in run 38264278426 showed substantial `lsass` activity increasing
+with handshake rate for both engines (up to about 0.43 busy CPUs in phase means), plus
+update and compatibility tasks. Microsoft's [CNG key-storage documentation](https://learn.microsoft.com/en-us/windows/win32/seccng/key-storage-and-retrieval)
+explains that private-key operations can run in the LSA process. Workload-related crypto
+is therefore a plausible contributor to the residual; the census does not establish
+exact attribution of all service activity. No process is excluded to obtain a quiet result.
+
+Linux passed quiet and contention controls in both runs 38261965704 and 38264278426.
+Each complete per-platform campaign measured 24,240 connection handshakes/first-stream
+GETs and 12,240 mixed warm requests, excluding setup and health requests. Windows
+completed those same requests without failures or cap omissions in both runs, while its
+quiet assessment remained inconclusive. A fresh run under the approved scope is required
+before PR acceptance. These are bounded hosted-VM controls, not exhaustive endurance,
+original-host reproduction, a public ranking or proof of the sole historical cause.
