@@ -96,55 +96,75 @@ samples and unsuccessful cleanup, while checking phase differences and unavailab
 denominators. Both profiler checks are part of the existing CI static-analysis job.
 The test-only harness remains outside shipped packages and the ordinary solution.
 
-## Remaining work
+## Current-source controlled measurements
 
-Issue #282 remains open for a quiet-host campaign with longer alternating samples,
-A/A noise controls, protocol-isolated paced traffic, explicit deliberate-fault
-phases, and direct server closed-connection accounting. The current client-opened
-denominator and TCP-only socket census do not prove QUIC native cleanup.
-The historical combined-listener endurance workload was not repeated here; this
-harness's HTTP/3 scenario uses the explicit HTTP/3 listener.
+PR #351's campaign [38289079183](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38289079183)
+measured head `333aa45d1d0226107ecee0c12887bf58d3d01f3c`, based on engine
+`6810599e7f5723664d02266283a80fa4909cf7a6`, on a disposable Linux runner.
+All 112 normal samples validated: 28 diagnostic profiles, 42 identical-binary A/A
+samples and 42 Kestrel cost comparisons. The whole campaign **failed** its original
+fault-control qualification. Artifact `11767068625` and the earlier counter-enabled
+preparation run `38287772112`/artifact `11767096653` remain retained. They are not
+relabeled as passing or as measurements of subsequent engine changes.
 
-Before a production change, attribute owned versus runtime-origin throws at
-specific sites and measure material CPU/allocation/tail-latency cost, including
-shutdown races, reset/cancellation and healthy subsequent connections. No
-catch-and-ignore filter, exception suppression or runtime/OS setting change is
-justified by these counts alone. No release is authorized or published.
+Cost and A/A children explicitly disable the inherited first-chance observer;
+exception counts are unavailable, not observed zero. Profiles record actual loaded
+runtime, core and MsQuic identities. CI loaded the official MsQuic 2.6.2 LTTng
+library (SHA-256 `8a67643a29cde90b05fc58c6e84d45143006f793a2529f8bb4f49421f7c634d5`)
+on runtime 10.0.12. A/A copies have identical core and runner assembly hashes.
+Every arm uses 32 requests/second, alternating engine order, a quiet baseline and
+phase background ceilings of 0.5 busy CPUs. Failed or contaminated samples are
+preserved rather than retried or omitted.
 
-## Current-source follow-up in progress
+The first profiled round observed zero load/idle throws for both engines' normal
+HTTP/1 and HTTP/2 variants. HTTP/3 persistent connections observed 18 for EmbedIO
+and 12 for Kestrel; 160 churned connections observed 2,890 and 1,920 respectively.
+These include runtime notifications and rethrows, not distinct failed responses.
+Roughly 18 versus 12 per closed HTTP/3 connection is lifetime-specific; a
+per-request rate changes with reuse. Closed-channel dispatch stacks alone do not
+establish original ownership.
 
-The follow-up for #282 adds opt-in paced requests, actual server lifetime counters,
-bounded stack-site counts and isolated profile/A/A/cost controls. Diagnostic
-connection observation enables the existing telemetry API only in test servers;
-unprofiled cost controls retain defaults. Kestrel's connection meter is documented
-in [Microsoft's HTTP metrics reference](https://learn.microsoft.com/en-us/aspnet/core/metrics/http?view=aspnetcore-10.0).
+Median observer-free cost samples are whole-process comparisons, not incremental
+exception costs. HTTP/3 persistent CPU was within the 3% comparison noise floor;
+allocation differences remain descriptive. HTTP/1 and HTTP/2 differences occurred
+without routine throw notifications. No causal exception-cost estimate, performance
+improvement, exception suppression, or production optimization is justified by
+these measurements. The test-only harness remains outside shipped packages.
 
-The proposed campaign compares seven protocol/lifetime variants at identical paced
-load, retaining all errors, request counts, hashes, host measurements and original
-samples. A/A copies use identical binaries, with alternating order and three rounds.
-Intentional abandonment and recovery are separate from normal traffic. Linux is the
-proposed quiet-host measurement environment; ordinary cross-platform regressions
-remain required. A configured workflow is not a passing result or proof of material
-production cost. No production optimization is justified until the new evidence has
-been collected and examined. Historical results and remaining limits above are
-preserved.
+## Diagnostic qualification and remaining control gap
 
-Local follow-up preparation now passes 17 evidence-acceptance tests, the existing
-ten phase-accounting tests, executable connection/pacing checks, SDK analysis and
-changed-file formatting. Fourteen corrected, tiny isolated Docker samples cover
-HTTP/1, HTTP/2 and stock-MsQuic HTTP/3 response validation and balanced server
-lifetimes. They are functional checks, not quiet-host cost measurements. The
-original exhausted-slot pacing defect and missing-libnuma startup failure are
-retained as unsuccessful tooling attempts; neither is a production finding.
-Recovery acceptance additionally requires clean child exits, healthy traffic,
-complete atomic stack/type counters and balanced server lifetimes.
+The original bounded full-stack keys overflowed under intentional faults. Revised
+`throw-site-v2` groups count type/message, the synchronous notification's first
+throw frame and nearest owned frame, preserving a representative exception and
+notification stack. A group without an owned frame remains unattributed. Atomic
+per-type totals must agree with every group's count. The 512-group/16 KiB key
+bounds remain enforced; representative truncation is explicit, with full-content
+SHA-256 and original length. Genuine group overflow still fails qualification.
+This is a declared observable-site census, not every asynchronous stack variant.
 
-Detailed profiles retain both the exception stack and the synchronous first-chance
-notification stack: an exception-dispatch-only rethrow frame cannot identify the
-owned await site by itself. These diagnostic stacks are excluded from cost arms
-and still do not establish original fault ownership across asynchronous boundaries.
+EmbedIO lifetime accounting uses its server meter. Diagnostic Kestrel profiles
+observe the original connection-delegate task and independently retain its meter
+witness. A bounded settle wait does not force pending counts to zero. Meter coverage
+ending before final delegate completion is explicitly distinguished from a live,
+unexplained residual. Neither delegate completion nor a logical meter proves native
+QUIC heap release.
 
-Observer-free cost controls explicitly disable even the inherited lightweight
-first-chance counter. Profiles retain it; cost/A/A arms report counts as unavailable.
-The first current-source campaign used that counter and is retained as instrumented
-preparation, not accepted observer-free cost evidence.
+Kestrel's deliberate HTTP/3 abort control retained unfinished delegate entries
+through host stop/disposal. Weak task-target collection did not count as completion;
+strong-reference experiments altered shutdown observability. A separately labelled
+public Abort experiment made two actual calls and still left two unfinished entries
+(50 entered, 48 completed), with roughly 33 seconds of shutdown/observer waiting.
+It did not qualify as a fix. These functional container probes are not quiet cost
+measurements, and do not establish a production Kestrel defect or native leak.
+
+William approved requiring normal profiles and observer-free A/A/cost comparisons
+for both engines, plus every EmbedIO intentional-abort/recovery case. Kestrel fault
+experiments remain visible diagnostic controls: unsuccessful cases are recorded as
+`failed-control`, never passing. The unresolved control gap is tracked separately
+in [#361](https://github.com/WilliamSmithEdward/embedio-neo/issues/361). All genuine
+EmbedIO recovery failures, missing requests, incomplete identities, contaminated
+normal samples, unbalanced lifetimes and census overflow remain blocking.
+
+PR #351 is unmerged pending a fresh current-source campaign and every exact-head
+check. Historical source-specific evidence remains unchanged. No production API,
+default, target or runtime dependency changes or release are included.

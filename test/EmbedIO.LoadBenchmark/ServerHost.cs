@@ -19,57 +19,34 @@ internal static class ServerHost
         using var certificate = tls
             ? X509CertificateLoader.LoadPkcs12FromFile(options.Required("--certificate"), options.Required("--certificate-password"), X509KeyStorageFlags.Exportable)
             : null;
-        var settings = new ServerSettings(options.Required("--engine"), protocol, tls, options.Integer("--port", 0), certificate, options.Has("--connection-census"));
+        var settings = new ServerSettings(options.Required("--engine"), protocol, tls, options.Integer("--port", 0), certificate, options.Has("--connection-census"), options.Has("--control-hard-cleanup"));
         Payloads.Prepare(options.Integer("--reference-bytes", 1 << 20));
         var exceptions = new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
         // Diagnostic opt-in: key by message too and log the first stack per key (bounded).
         var exceptionCensus = !options.Has("--disable-exception-census");
         var detail = exceptionCensus && Environment.GetEnvironmentVariable("EMBEDIO_BENCH_EXCEPTION_DETAIL") == "1";
-        var sites = new Dictionary<string, long>(StringComparer.Ordinal);
-        var siteGate = new object();
-        long siteOverflow = 0;
-        object? SiteSnapshot()
-        {
-            if (!detail) return null;
-            lock (siteGate) return new
-            {
-                counts = new Dictionary<string, long>(sites, StringComparer.Ordinal),
-                types = new Dictionary<string, long>(exceptions, StringComparer.Ordinal),
-                overflow = siteOverflow,
-            };
-        }
+        var sites = new ExceptionSiteLedger(exceptions);
+        object? SiteSnapshot() => detail ? sites.Snapshot() : null;
         if (exceptionCensus) AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
         {
             var key = e.Exception.GetType().FullName ?? "?";
             if (detail)
             {
                 key += ": " + e.Exception.Message;
-                // Exception.StackTrace can contain only an EDI rethrow frame here.
-                // Capture the synchronous throw notification stack as well; neither
-                // proves original fault ownership across asynchronous boundaries.
-                var site = key + "\nexception stack:\n" + (e.Exception.StackTrace ?? "<stack unavailable>")
-                    + "\nthrow notification stack:\n" + Environment.StackTrace;
-                bool first;
-                lock (siteGate)
-                {
-                    first = !exceptions.ContainsKey(key) && exceptions.Count < 64;
-                    if (sites.TryGetValue(site, out var count)) sites[site] = count + 1;
-                    else if (sites.Count < 512 && site.Length <= 16384) sites.Add(site, 1);
-                    else siteOverflow++;
-                    exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
-                }
+                var first = sites.Record(key, e.Exception.StackTrace ?? "<stack unavailable>", Environment.StackTrace);
                 if (first) Console.Error.WriteLine("FIRST " + key + Environment.NewLine + e.Exception.StackTrace);
             }
             else exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
         };
         using var profile = options.Has("--profile") ? new RuntimeEventProfile() : null;
+        using var connections = settings.ConnectionCensus ? new ConnectionLedger(settings.Engine == "kestrel") : null;
+        connections?.Start();
         IBenchmarkServer server = settings.Engine switch
         {
-            "kestrel" => new KestrelServer(settings),
+            "kestrel" => new KestrelServer(settings, connections),
             "embedio" => new EmbedIOServer(settings),
             _ => throw new ArgumentException("Unknown engine " + settings.Engine),
         };
-        using var connections = settings.ConnectionCensus ? new ConnectionLedger() : null;
         var disposed = false;
         try
         {
@@ -79,6 +56,7 @@ internal static class ServerHost
             {
                 engine = settings.Engine,
                 exceptionCensus,
+                controlHardCleanup = settings.ControlHardCleanup,
                 protocol = settings.Protocol.ToString(),
                 tls,
                 startMilliseconds = started.Elapsed.TotalMilliseconds,
@@ -122,13 +100,20 @@ internal static class ServerHost
                     case "exit":
                     case null:
                         measurement?.Dispose();
+                        var connectionsBeforeHostStop = connections?.Snapshot();
                         var stopping = Stopwatch.StartNew();
                         await server.StopAsync().ConfigureAwait(false);
+                        var connectionsAfterHostStop = connections?.Snapshot();
                         await server.DisposeAsync().ConfigureAwait(false);
+                        var observerComplete = connections is null || await connections.WaitForCompletionAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
                         disposed = true;
                         Control.Write(JsonSerializer.Serialize(new
                         {
                             exceptionSites = SiteSnapshot(),
+                            connectionsBeforeHostStop,
+                            controlCleanup = server is KestrelServer control ? control.CleanupSnapshot() : null,
+                            connectionsAfterHostStop,
+                            observerComplete,
                             connections = connections?.Snapshot(),
                             stopMilliseconds = stopping.Elapsed.TotalMilliseconds,
                             firstChanceExceptions = new Dictionary<string, long>(exceptions, StringComparer.Ordinal),

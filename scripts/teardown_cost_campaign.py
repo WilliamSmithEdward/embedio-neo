@@ -1,5 +1,6 @@
 """Issue #282: preserve bounded isolated profiles and unprofiled A/A cost controls."""
 import argparse
+from collections import Counter
 import hashlib
 import json
 import math
@@ -15,6 +16,57 @@ from summarize_teardown_exceptions import complete_sample, difference, phases
 
 SCENARIOS = ("h1-plain-small-c64-close100", "h1-tls-small-c64", "h2-plain-small-c64x1",
              "h2-tls-small-c64x1", "h2-tls-churn-c32", "h3-small-c64x1", "h3-churn-c16")
+
+
+def validate_sites(site):
+    if site is None or site.get("schema") != "throw-site-v2" or site["overflow"]:
+        raise ValueError("Throw-site capture unavailable or overflowed")
+    counts = difference(site["counts"], {})
+    types = difference(site["types"], {})
+    if set(site["counts"]) != set(site["siteTypes"]) or set(site["counts"]) != set(site["examples"]):
+        raise ValueError("Throw-site metadata incomplete")
+    observed = Counter()
+    for key, count in counts.items():
+        observed[site["siteTypes"][key]] += count
+        example = site["examples"][key]
+        value = example["sha256"]
+        if len(example["text"]) > 16384 or example["originalCharacters"] < len(example["text"]):
+            raise ValueError("Invalid representative stack bound")
+        if not isinstance(example["truncated"], bool) or not isinstance(value, str) or len(value) != 64 or any(c not in "0123456789abcdefABCDEF" for c in value):
+            raise ValueError("Invalid representative stack identity")
+        if not example["truncated"] and hashlib.sha256(example["text"].encode()).hexdigest() != value.lower():
+            raise ValueError("Representative stack content hash mismatch")
+    if dict(observed) != types:
+        raise ValueError("Atomic per-type throw-site census disagrees")
+
+
+def validate_lifetime(final, expected_source):
+    for counts in (final, final.get("reportedMeter")):
+        if counts is None: continue
+        for key in ("opened", "closed", "active", "invalidMeasurements"):
+            n = counts[key]
+            if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+                raise ValueError("Invalid lifetime count")
+        if counts["closed"] > counts["opened"] or counts["active"] != counts["opened"] - counts["closed"]:
+            raise ValueError("Contradictory lifetime count tuple")
+    if not final["available"] or final["source"] != expected_source or final["invalidMeasurements"] or final["active"] != 0:
+        raise ValueError("Server lifetime accounting unavailable or incomplete")
+    if final["opened"] <= 0 or final["closed"] != final["opened"]:
+        raise ValueError("Server lifetime entries/completions do not balance")
+    if expected_source == "kestrel-connection-delegate":
+        witness = final["reportedMeter"]
+        if not final["instrumentSeen"] or witness["invalidMeasurements"] or witness["opened"] != final["opened"]:
+            raise ValueError("Published meter witness coverage disagrees")
+        if witness["completed"] and witness["activeAtCompletion"] != witness["active"]:
+            raise ValueError("Contradictory completed meter witness")
+        if witness["active"]:
+            if (not witness["completed"] or witness["delegateActiveAtCompletion"] <= 0
+                    or witness["activeAtCompletion"] != witness["active"]
+                    or witness["active"] > witness["delegateActiveAtCompletion"]
+                    or witness["delegateActiveAtCompletion"] > final["opened"]):
+                raise ValueError("Unexplained published meter residual")
+            return "meter coverage ended before final delegate completion; native release unmeasured"
+    return "balanced"
 
 
 def validate(root, census, duration, rounds):
@@ -58,10 +110,10 @@ def validate(root, census, duration, rounds):
         site_phases = None
         if census:
             final = sample["serverStop"]["connections"]
-            if not final["instrumentSeen"] or final["invalidMeasurements"] or final["active"] != 0:
-                raise ValueError("Server connection accounting unavailable or incomplete")
-            if final["opened"] <= 0 or final["closed"] != final["opened"]:
-                raise ValueError("Server accepted/closed connections do not balance")
+            if sample["serverStop"]["observerComplete"] is not True:
+                raise ValueError("Lifetime observer did not settle within its bounded wait")
+            expected_source = "kestrel-connection-delegate" if sample["engine"] == "kestrel" else "server-meter"
+            witness_status = validate_lifetime(final, expected_source)
             # One worker can create at most one final empty connection per phase.
             # An excess catches exhausted pacing loops even when all bodies validate.
             if final["opened"] > client["requests"] + sample["warmup"]["requests"] + 2:
@@ -71,22 +123,21 @@ def validate(root, census, duration, rounds):
             points = []
             for point in ("AtReady", "BeforeLoad", "AfterLoad", "BeforeStop"):
                 site = sample["exceptionSites" + point]
-                if site is None or site["overflow"]:
-                    raise ValueError("Exception site capture unavailable or overflowed")
-                if sum(site["counts"].values()) != sum(site["types"].values()):
-                    raise ValueError("Atomic exception site/type census disagrees")
+                validate_sites(site)
                 points.append(site)
             stop_site = sample["serverStop"]["exceptionSites"]
-            if stop_site["overflow"] or sum(stop_site["counts"].values()) != sum(stop_site["types"].values()):
-                raise ValueError("Incomplete stop site census")
+            validate_sites(stop_site)
             points.append(stop_site)
             names = ("warmup-and-settle", "load-and-client-close", "post-load-idle", "listener-stop")
             site_phases = {name: difference(after["counts"], before["counts"]) for name, before, after in zip(names, points, points[1:])}
             counts = {name: difference(after["types"], before["types"]) for name, before, after in zip(names, points, points[1:])}
         else:
             closed = None
+            witness_status = None
         rows.append({"sample": str(path.relative_to(root)), "requests": client["requests"],
-                     "clientConnectionsOpened": client["connectionsOpened"], "serverClosedDuringLoadAndIdle": closed,
+                     "clientConnectionsOpened": client["connectionsOpened"], "serverLifetimeCompletionsDuringLoadAndIdle": closed,
+                     "connectionCensusSource": sample["serverStop"]["connections"]["source"] if census else None,
+                     "publishedMeterWitness": witness_status,
                      "exceptions": counts, "stackSites": site_phases, "metrics": sample["derived"], "p99Milliseconds": client["p99Milliseconds"],
                      "backgroundBusyCpus": background})
     expected_engines = {"candidate", "kestrel"} if census else None
@@ -108,20 +159,38 @@ def validate_recovery(path):
         raise ValueError("Recovery reports a genuine failure")
     if report["serverExitCode"] != 0 or report["serverKilled"] is not False:
         raise ValueError("Recovery server did not exit cleanly")
+    if report["server"]["exceptionCensus"] is not True:
+        raise ValueError("Recovery exception observer is disabled")
     for name in ("healthy-before", "healthy-after"):
-        if report[name + "ClientKilled"] is not False:
+        if report[name + "ClientExitCode"] != 0 or report[name + "ClientKilled"] is not False:
             raise ValueError("Recovery client required forced cleanup")
         phase = next(p for p in report["phases"] if p["phase"] == name)
-        if phase["client"].get("error") or phase["client"]["requests"] <= 0:
+        if phase["client"].get("error") or phase["client"]["requests"] <= 0 or phase["client"]["latencyCount"] != phase["client"]["requests"]:
             raise ValueError("Missing validated healthy recovery traffic")
     snapshots = [p["exceptionSites"] for p in report["phases"] if "exceptionSites" in p]
     snapshots.append(report["stop"]["exceptionSites"])
     for site in snapshots:
-        if site is None or site["overflow"] or sum(site["counts"].values()) != sum(site["types"].values()):
-            raise ValueError("Recovery site census incomplete")
+        validate_sites(site)
     final = report["stop"]["connections"]
-    if not final["instrumentSeen"] or final["invalidMeasurements"] or final["active"] != 0 or final["opened"] <= 0 or final["opened"] != final["closed"]:
-        raise ValueError("Recovery server connection accounting incomplete")
+    if report["stop"]["observerComplete"] is not True:
+        raise ValueError("Recovery lifetime observer did not settle")
+    expected_source = "kestrel-connection-delegate" if report["engine"] == "kestrel" else "server-meter"
+    return validate_lifetime(final, expected_source)
+
+
+def record_fault_failure(engine, name, error, failures, control_limitations):
+    """Keep deliberate comparison failures visible without accepting them as passes.
+
+    William approved Kestrel fault experiments as diagnostic controls; all EmbedIO
+    fault cases and both engines' normal profile/cost arms remain required.
+    """
+    message = name + ": " + str(error)
+    if engine == "kestrel":
+        control_limitations.append({"sample": name, "status": "failed-control", "error": str(error)})
+    elif engine == "embedio":
+        failures.append(message)
+    else:
+        raise ValueError("Unknown recovery engine")
 
 
 def main():
@@ -142,6 +211,7 @@ def main():
     if manifest["aaCoreHash"] != manifest["coreHash"]:
         raise ValueError("A/A core identity differs")
     failures = []
+    control_limitations = []
     time.sleep(30)
     for arm, engines, duration, rounds, census in (("profile", "candidate,kestrel", 5, 2, True),
                                                    ("aa", "candidate,baseline", 15, 3, False),
@@ -195,8 +265,10 @@ def main():
                     if code: raise subprocess.CalledProcessError(code, command)
                     validate_recovery(args.output / name / "recovery.json")
                 except (ValueError, KeyError, StopIteration, OSError, subprocess.SubprocessError) as error:
-                    failures.append(name + ": " + str(error))
-    (args.output / "verdict.json").write_text(json.dumps({"passed": not failures, "failures": failures}, indent=2))
+                    record_fault_failure(engine, name, error, failures, control_limitations)
+    (args.output / "verdict.json").write_text(json.dumps({"passed": not failures, "acceptanceScope": "normal-profile-aa-cost-and-EmbedIO-recovery",
+        "failures": failures, "kestrelFaultControls": {"required": False, "limitations": control_limitations}}, indent=2))
+    for limitation in control_limitations: print("FAILED COMPARISON CONTROL: " + json.dumps(limitation))
     for failure in failures: print(failure)
     return 1 if failures else 0
 

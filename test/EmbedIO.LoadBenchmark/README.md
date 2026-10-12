@@ -444,3 +444,27 @@ observer mode is recorded and checked. Those arms report exception counts as
 unavailable, not zero. Detailed profiles and deliberate-fault arms retain counters;
 ordinary harness defaults are unchanged. The earlier counter-enabled campaign is
 preparation evidence and cannot establish observer-free production cost.
+
+
+### Revised diagnostic qualification
+
+Detailed `throw-site-v2` groups use type/message, the notification throw frame and
+nearest owned frame, with atomic typed totals and bounded representative stacks.
+Representatives retain full-content hashes, original lengths and explicit truncation;
+missing owned frames remain unattributed. Group overflow remains a failure.
+Kestrel profiles return the original connection-delegate task, retain its meter as
+an independent witness, and never count weak-target collection as completion.
+Logical lifetime accounting does not prove native heap release.
+
+Normal profile/A/A/cost arms for both engines and every EmbedIO recovery case are
+required. William approved Kestrel deliberate-fault cases as diagnostic comparison
+controls: their actual failures remain `failed-control` limitations in `verdict.json`
+and logs, not passing results. See issue #361 for unfinished HTTP/3 control tasks.
+This scope does not exempt normal Kestrel traffic, alter ordinary cost workloads,
+change EmbedIO recovery gates, or retroactively accept earlier failed campaigns.
+
+`recovery --control-hard-cleanup` is a separate diagnostic Kestrel experiment that
+strongly retains active contexts and records actual public Abort calls. It is off
+by default, is not enabled in ordinary campaign comparisons, and did not qualify
+as a shutdown fix in the captured HTTP/3 probe. Strong references can themselves
+alter lifetime observability. Retain the actual pending-task and exit evidence.
