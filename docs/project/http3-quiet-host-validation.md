@@ -120,8 +120,8 @@ Raw evidence is under ignored `TestResults/issue-283` in the issue worktree.
 
 ## Current-source disposable CI control
 
-Issue #283 now has a dedicated `HTTP3 quiet-host control` workflow for Windows 2025
-and Ubuntu 24.04. It builds the checked-out core and identical comparison harness,
+Issue #283 has a dedicated `HTTP3 host controls` workflow: Ubuntu 24.04 is the
+qualified quiet reference; Windows 2025 retains ambient and contention repeats. It builds the checked-out core and identical comparison harness,
 uses SDK 10.0.401 and the existing pinned Linux MsQuic 2.6.2 prerequisite, and records
 the actual source revision and loaded core/runtime/native binary hashes.
 
@@ -140,8 +140,10 @@ control, not evidence of an engine defect or a quiet run. The script preserves a
 raw JSON and logs, including failed campaigns, and does not retry them automatically.
 
 The contention arm runs only on disposable GitHub runners. It does not authorize
-an all-core burn on a shared development workstation. CI outcomes will be recorded
-here after the campaigns execute; configuring this workflow alone is not validation.
+an all-core burn on a shared development workstation. Actual outcomes and exact-source acceptance are recorded in
+[issue #283](https://github.com/WilliamSmithEdward/embedio-neo/issues/283) and the
+[PR #346 checks](https://github.com/WilliamSmithEdward/embedio-neo/pull/346/checks).
+Configuring this workflow alone is not validation.
 
 ### Retained initial control attempt
 
@@ -199,6 +201,6 @@ Linux passed quiet and contention controls in both runs 38261965704 and 38264278
 Each complete per-platform campaign measured 24,240 connection handshakes/first-stream
 GETs and 12,240 mixed warm requests, excluding setup and health requests. Windows
 completed those same requests without failures or cap omissions in both runs, while its
-quiet assessment remained inconclusive. A fresh run under the approved scope is required
-before PR acceptance. These are bounded hosted-VM controls, not exhaustive endurance,
+quiet assessment remained inconclusive. PR acceptance requires a fresh run under the approved scope
+and all normal checks passing on the exact current head. These are bounded hosted-VM controls, not exhaustive endurance,
 original-host reproduction, a public ranking or proof of the sole historical cause.

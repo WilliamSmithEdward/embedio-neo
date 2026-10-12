@@ -388,8 +388,9 @@ not be used for an all-core burn on a development workstation.
 Both engines receive identical paced churn and warm small/1 MiB requests, with
 alternating engine order and two rounds. The runtime handshake deadline is unchanged.
 `--max-baseline-busy-cpus 0.5` rejects a busy 15-second baseline before starting any
-load. The quiet arm additionally requires mean background activity at most 0.5 busy
-CPUs in every phase; the contention arm must actually measure at least 80% host CPU.
+load. The Linux quiet arm additionally requires mean background activity at most 0.5
+busy CPUs in every phase. Windows retains the same first-arm requests as an ambient
+repeat, with no quiet claim. Both contention arms must measure at least 80% host CPU.
 Every attempted request, cap omission, latency histogram, CPU timeline, error and
 server exit is checked. Missing data or a failed request fails the campaign rather
 than being retried or discarded. Loaded Linux MsQuic and runtime/core hashes are
