@@ -40,8 +40,6 @@ namespace EmbedIO.Net.Internal
 
         internal bool IsDefault => ReferenceEquals(this, Default);
 
-        internal int OpenConnections => Volatile.Read(ref _open);
-
         // Claims a connection slot. Every successful claim is released exactly once.
         internal bool TryAcquire()
         {
