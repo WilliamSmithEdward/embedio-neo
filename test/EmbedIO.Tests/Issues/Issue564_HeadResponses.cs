@@ -182,8 +182,8 @@ namespace EmbedIO.Tests.Issues
                         Assert.That(result.AsyncState, Is.SameAs(state));
                         stream.WriteByte(42);
                         await stream.WriteAsync(new byte[] { 42 }.AsMemory(), context.CancellationToken);
-                        stream.Flush(); await stream.FlushAsync(context.CancellationToken);
                         context.Response.ContentLength64 = 123;
+                        stream.Flush(); await stream.FlushAsync(context.CancellationToken);
                         stream.Dispose();
                         Assert.Throws<ObjectDisposedException>(() => stream.Write(new byte[1], 0, 1));
                         validated.TrySetResult(true);

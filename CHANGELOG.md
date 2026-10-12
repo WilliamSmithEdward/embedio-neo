@@ -9,6 +9,10 @@
   serves HTTPS with HTTP/1.1, HTTP/2 and HTTP/3, WebSockets over TLS, local sessions and a
   DI-activated controller, on Windows and Linux. A Windows Native AOT publish omits
   `msquic.dll`; the guide shows how to publish it for HTTP/3.
+- Direct HTTP/1 response `Flush` and `FlushAsync` now commit the final response
+  headers in write order without ending the response. HEAD and bodyless responses
+  retain their payload suppression. Disposed output rejects flushes; automatic
+  request cleanup preserves empty-response framing and higher-level buffering behavior.
 - Add a controller-binding source generator from Neo #138, shipped in the EmbedIO-Neo
   package. `[GeneratedControllerBinding(typeof(TController))]` on a partial class makes it
   generate a `WebApiControllerBinding<TController>`, registered with new
