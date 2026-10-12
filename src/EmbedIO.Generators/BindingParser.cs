@@ -608,7 +608,7 @@ namespace EmbedIO.Generators
         private static bool TryReadField(AttributeData attribute, IParameterSymbol parameter, out string fieldName, out string badRequestIfMissing, ref string? problem)
         {
             string? field = parameter.Name;
-            var required = false;
+            var missingIsBadRequest = false;
             var constructorParameters = attribute.AttributeConstructor?.Parameters ?? ImmutableArray<IParameterSymbol>.Empty;
             for (var i = 0; i < attribute.ConstructorArguments.Length && i < constructorParameters.Length; i++)
             {
@@ -625,12 +625,12 @@ namespace EmbedIO.Generators
                 }
                 else if (string.Equals(constructorParameters[i].Name, "badRequestIfMissing", StringComparison.Ordinal))
                 {
-                    required = value is true;
+                    missingIsBadRequest = value is true;
                 }
             }
 
             fieldName = Literals.String(field ?? parameter.Name);
-            badRequestIfMissing = required ? "true" : "false";
+            badRequestIfMissing = missingIsBadRequest ? "true" : "false";
             return true;
         }
 
