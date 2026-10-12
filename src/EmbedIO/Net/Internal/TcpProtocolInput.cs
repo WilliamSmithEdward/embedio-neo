@@ -14,6 +14,21 @@ namespace EmbedIO.Net.Internal
     internal static class TcpProtocolInput
     {
         private static readonly byte[] Http2Preface = Encoding.ASCII.GetBytes("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
+        private static readonly SslProtocols ServerTlsProtocols = SelectServerTlsProtocols();
+
+        private static SslProtocols SelectServerTlsProtocols()
+        {
+#if NET10_0_OR_GREATER
+            return SslProtocols.Tls12 | SslProtocols.Tls13;
+#else
+            // The Standard reference assembly predates this flag. Resolve the
+            // executing runtime's public enum once, retaining TLS 1.3 on modern
+            // hosts without asking older runtimes to accept an unknown value.
+            return Enum.TryParse<SslProtocols>("Tls13", out var tls13)
+                && Enum.IsDefined(typeof(SslProtocols), tls13)
+                ? SslProtocols.Tls12 | tls13 : SslProtocols.Tls12;
+#endif
+        }
 
         internal readonly struct Selection
         {
@@ -34,7 +49,7 @@ namespace EmbedIO.Net.Internal
                 await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
                 {
                     ServerCertificate = serverCertificate,
-                    EnabledSslProtocols = SslProtocols.None,
+                    EnabledSslProtocols = ServerTlsProtocols,
                     ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http2, SslApplicationProtocol.Http11 },
                 }).ConfigureAwait(false);
                 if (tls.NegotiatedApplicationProtocol == SslApplicationProtocol.Http2)
@@ -44,7 +59,7 @@ namespace EmbedIO.Net.Internal
                     return new Selection(true, 0, false);
                 }
 #else
-                await tls.AuthenticateAsServerAsync(serverCertificate, false, SslProtocols.None, false).ConfigureAwait(false);
+                await tls.AuthenticateAsServerAsync(serverCertificate, false, ServerTlsProtocols, false).ConfigureAwait(false);
 #endif
             }
 

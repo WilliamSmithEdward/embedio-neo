@@ -9,6 +9,11 @@
   rejections; `ClientKey` keys by connection address, IPv6 by /64, without trusting forwarded
   headers. EmbedIO-Neo now depends on the `System.Threading.RateLimiting` package (10.0.12) on
   both targets. See [Rate limiting](docs/guides/rate-limiting.md).
+- Require TLS 1.2 or later for Neo v2 HTTPS, retaining TLS 1.3 where supported.
+  TLS 1.0 and TLS 1.1 clients must update their TLS stack or intermediary backend
+  settings. This owner-approved compatibility change preserves application APIs
+  and OS certificate/cipher policy. See the
+  [v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md#minimum-https-tls-version).
 - Complete OpenAPI support from Neo #139. `AddSecurityScheme` adds Basic, Bearer and API key
   schemes, and `RequireSecurity` requires one on every operation an authentication module
   handles, decided by the module's own route matching. `AddBasicAuthentication(name, module)`

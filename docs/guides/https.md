@@ -27,9 +27,14 @@ needs explicit client trust. Do not use an accept-all validation callback in a
 production client. HTTPS encrypts traffic; configure application authentication
 and authorization separately before exposing privileged routes.
 
-TLS protocol selection is delegated to the runtime/OS using `SslProtocols.None`.
-It does not mean plaintext or enable every protocol. Actual availability depends
-on the OS security provider and its policy. The listener performs authentication
+Neo v2 requires TLS 1.2 or later for HTTPS. The modern asset allows TLS 1.2 and
+TLS 1.3; the retained Standard asset includes TLS 1.3 when the executing runtime
+defines its public protocol flag. Runtime/OS policy still determines availability,
+cipher suites and certificate support. Clients limited to TLS 1.0 or TLS 1.1
+cannot connect; update their TLS stack or the HTTPS backend configuration of any
+intermediary. See the [v1-to-v2 migration guide](../compatibility/neo-v1-to-v2.md#minimum-https-tls-version).
+This change does not establish support on an otherwise unvalidated platform.
+The listener performs authentication
 asynchronously, within the existing 90-second first-request timeout; clients that
 stall the TLS handshake do not hold the socket accept callback. Stopping the
 listener closes pending connections.

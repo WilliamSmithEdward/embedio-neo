@@ -14,6 +14,27 @@ and earlier v1 changes that are not new in v2. Compare against the released tag,
 not the unreleased main branch: source compatibility changes already present on
 main can still be new to a v1 package consumer.
 
+## Minimum HTTPS TLS version
+
+Neo v2 requires TLS 1.2 or later for HTTPS. TLS 1.0 and TLS 1.1 clients can no
+longer connect, even when local OS policy would otherwise allow those versions.
+TLS 1.3 remains enabled where the runtime and security provider support it; this
+is a minimum-version change, not a restriction to TLS 1.2 alone. The Standard
+asset resolves the executing runtime's public TLS 1.3 flag rather than imposing
+an unknown protocol value on an older runtime.
+
+Update old client runtimes and embedded-device TLS stacks. Check reverse proxies,
+gateways and inspection appliances too: their connection to this server must use
+TLS 1.2 or later, regardless of what version the end user's browser negotiates
+with the intermediary. Plain HTTP and application API signatures are unchanged.
+OS certificate, cipher and trust policy still apply; the minimum does not make a
+weak cipher or untrusted certificate acceptable.
+
+The IETF deprecated TLS 1.0 and TLS 1.1 in [RFC 8996](https://www.rfc-editor.org/rfc/rfc8996.html).
+William approved this compatibility change for v2. Provider and retained-runtime
+validation remain required before release; source configuration is not evidence
+that every deployment can negotiate either allowed version.
+
 ## Rebuild and update source references
 
 V2 includes the approved compiler/API cleanup as well as the engine replacement.
