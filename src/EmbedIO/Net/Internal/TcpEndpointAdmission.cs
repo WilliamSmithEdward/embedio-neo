@@ -35,14 +35,15 @@ namespace EmbedIO.Net.Internal
             catch { socket.Dispose(); throw; }
         }
 
-        internal HttpConnection? CreatePending(Socket peer, EndPointListener endpoint)
+        // The connection takes ownership of a slot claimed from slotOwner and releases it on retirement.
+        internal HttpConnection? CreatePending(Socket peer, EndPointListener endpoint, TcpConnectionPolicy? slotOwner = null)
         {
             lock (_sync)
             {
                 if (_phase != 0) return null;
                 // Construction only creates owned transport wrappers and the head
                 // timer. TLS, reads and application admission start after this gate.
-                var connection = new HttpConnection(peer, endpoint);
+                var connection = new HttpConnection(peer, endpoint, slotOwner);
                 _pending.Add(connection);
                 return connection;
             }

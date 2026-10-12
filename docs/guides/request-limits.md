@@ -11,6 +11,7 @@ server that sets none of them behaves exactly as before.
 | `MaximumRequestHeaderBytes` | null (no limit) | HTTP 431 |
 | `MaximumRequestHeaderCount` | null (no limit) | HTTP 431 |
 | `MaximumRequestBodyBytes` | null (unlimited) | HTTP 413 |
+| `RequestBodyReadTimeout` | null (no read deadline) | HTTP 408 |
 | `MaximumConcurrentRequests` with `RequestQueueLimit` | null, queue 0 | HTTP 503 |
 | `RequestTimeout` | null (no deadline) | HTTP 503 |
 
@@ -19,14 +20,28 @@ They live on `WebServerOptionsBase`, next to the existing
 dispatch path. That path serves the managed HTTP/1.1 listener, HTTP/2 and HTTP/3
 alike; each HTTP/2 or HTTP/3 stream counts as one request.
 
+Three more options bound TCP connections rather than requests. They live on
+`WebServerOptions` and are enforced by the managed TCP listener, so they cover
+HTTP/1.1 and HTTP/2 but not HTTP/3; see [connection limits](#connection-limits).
+
+| Option | Default | When exceeded |
+| --- | --- | --- |
+| `MaximumConnections` | null (unlimited) | new connection closed |
+| `RequestHeadersTimeout` | null (90 seconds) | connection closed |
+| `KeepAliveTimeout` | null (15 s on HTTP/1.1, none on HTTP/2) | connection closed, GOAWAY on HTTP/2 |
+
 ## Example
 
 ```csharp
 using var server = new WebServer(o => o
         .WithUrlPrefix("http://localhost:9696/")
         .WithMode(HttpListenerMode.EmbedIO)
+        .WithConnectionLimits(1000,                           // open TCP connections
+            requestHeadersTimeout: TimeSpan.FromSeconds(10),
+            keepAliveTimeout: TimeSpan.FromSeconds(30))
         .WithRequestHeaderLimits(8 * 1024, maximumCount: 64)  // 8 KiB, 64 fields
         .WithMaximumRequestBodyBytes(1024 * 1024)            // 1 MiB transferred
+        .WithRequestBodyReadTimeout(TimeSpan.FromSeconds(15)) // per read
         .WithMaximumConcurrentRequests(64, queueLimit: 128)   // 64 at once, 128 waiting
         .WithRequestTimeout(TimeSpan.FromSeconds(30)))
     .WithWebApi("/api", m => m.WithController<ImportController>());
@@ -114,6 +129,49 @@ once. An HTTP/1.1 client that is still sending when the server answers 413 and
 closes often sees a connection reset instead of the response. That is TCP behavior
 when the server closes with unread data; HTTP/2 and HTTP/3 clients receive the 413.
 
+### Body read deadline
+
+`RequestBodyReadTimeout` bounds how long one read of the request body may wait for
+data. It applies to each read separately, so a slow but steady upload is not cut off;
+a client that stops sending is.
+
+- A read that misses the deadline throws a 408 `HttpException`, and so does every
+  later read of the same body. A handler that lets it propagate answers 408.
+- On HTTP/1.1 the response carries `Connection: close` and the connection is not
+  reused. On HTTP/2 and HTTP/3 the stream is reset after the response, and the
+  connection carries on.
+- It applies to every protocol and listener mode. `CONNECT` tunnels are not timed.
+- It complements `RequestTimeout`: the read deadline catches a stalled upload even when
+  the handler does not observe the context token, and the request deadline bounds the
+  whole request.
+
+## Connection limits
+
+These options on `WebServerOptions` apply to the managed TCP listener in the `EmbedIO`
+and `EmbedIOCombined` modes. Setting any of them on an `EmbedIOHttp3` server throws
+`NotSupportedException`, because QUIC connections are not governed by them.
+
+- **`MaximumConnections`** bounds the TCP connections the server keeps open across all
+  of its endpoints, counting HTTP/1.1 and HTTP/2 connections alike. A connection
+  accepted at the limit is closed at once, before any TLS handshake, without a
+  response. A slot frees when an open connection closes, including idle keep-alive
+  connections when their deadline passes.
+- **`RequestHeadersTimeout`** bounds how long a new connection may take to deliver its
+  first complete request head, including the TLS handshake and, on HTTP/2, the
+  connection preface. A connection that misses it is closed without a response. The
+  default stays at 90 seconds.
+- **`KeepAliveTimeout`** bounds idle time between requests. On HTTP/1.1 it runs from
+  the end of a response until the next request head is complete, replacing the fixed
+  15 seconds, and the `Keep-Alive` response header advertises it in whole seconds,
+  rounded up. On HTTP/2 it runs while the connection has no open stream; when it
+  passes, the server sends GOAWAY and closes the connection gracefully. Without the
+  option HTTP/2 connections have no idle deadline, as before.
+
+An endpoint applies the connection limits of the server that opened it to every
+connection it accepts. Two servers may share a port only when neither sets connection
+limits; otherwise the second server fails to start with `HttpListenerException`, and
+the first keeps serving.
+
 ## Concurrent requests and the queue
 
 `MaximumConcurrentRequests` bounds how many requests are being handled at once,
@@ -153,8 +211,8 @@ in the queue.
 
 ## Measured scenarios
 
-`test/EmbedIO.Tests/Issues/Issue136_RequestLimits.cs` and
-`Issue136_RequestLimits.Headers.cs` drive the managed engine over real connections.
+`test/EmbedIO.Tests/Issues/Issue136_RequestLimits.cs`, `Issue136_RequestLimits.Headers.cs`
+and `Issue136_RequestLimits.Connections.cs` drive the managed engine over real connections.
 HTTP/2 uses cleartext prior knowledge; HTTP/3 uses QUIC with a generated certificate
 and is skipped on hosts without QUIC support.
 
@@ -182,6 +240,14 @@ and is skipped on hosts without QUIC support.
 | Deadline after commitment | body left unterminated | n/a | n/a |
 | Deadline while queued | 503, module never entered | n/a | n/a |
 | False Content-Length, stalled upload | deadline interrupts the read, 503 | n/a | n/a |
+| Stalled body read | 408 and `Connection: close` | 408 | 408 |
+| Slow steady upload, each read within the deadline | completes | completes | n/a |
+| Connections beyond `MaximumConnections` | closed unanswered; slot returns when one closes | n/a | n/a |
+| Second server on a port with connection limits | fails to start, first keeps serving | n/a | n/a |
+| Incomplete first request head | closed at `RequestHeadersTimeout` | n/a | n/a |
+| Idle connection after a response | closed at `KeepAliveTimeout`, header rounded up | GOAWAY then close | n/a |
+| Stream open longer than the idle deadline | n/a | completes normally | n/a |
+| No connection options | `Keep-Alive: timeout=15`, unchanged | n/a | n/a |
 
 The .NET HTTP/1.1 client aborts its own connection after a refusal that arrives
 without `100 Continue`, so the HTTP/1.1 refusal case is checked on the wire with a raw
@@ -190,6 +256,5 @@ these limits.
 
 ## Not in this increment
 
-The rest of #136 remains open: active connection limits, connection-level header,
-body and idle deadlines, and per-route policies. HTTP/3-specific limits are tracked
-in #135.
+The rest of #136 remains open: per-route policies. HTTP/3-specific limits, including
+QUIC connection counts and idle deadlines, are tracked in #135.
