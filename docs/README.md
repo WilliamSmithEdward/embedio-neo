@@ -219,3 +219,5 @@ points for existing links.
 - [Controller compression and response length](guides/controller-compression.md): streamed framing, buffered encoded lengths and the Xamarin report's validation limits.
 
 - [Standalone native QUIC module lifetime](project/native-quic-module-lifetime.md): Linux unload crash reproduction, retained mapping, collectible contexts and fresh-process acceptance.
+
+- [WebTransport upstream readiness](project/webtransport-upstream-readiness.md): decision to await a current-wire provider, test-only evidence and resumption gates.
