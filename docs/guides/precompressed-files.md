@@ -93,6 +93,12 @@ offsets apply to the identity representation only, never to a differently encode
 Within the module's caching limits, a variant is cached separately from the original and from
 dynamically compressed copies. Larger variants are streamed from the provider.
 
+A replaced `.br` or `.gz` file is picked up on the next request, since the variant is looked up on
+every request. Noticing that the original changed, and that its variant is therefore stale, needs a
+provider that reports changes. On macOS `FileSystemProvider` is always immutable, because it has no
+file watcher there, so regenerate variants before the server starts or restart it after changing
+originals.
+
 ## Refused encodings no longer get 406
 
 This change also corrects content negotiation for every module that compresses responses. When a

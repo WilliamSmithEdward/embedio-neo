@@ -216,11 +216,15 @@ namespace EmbedIO.Tests.Issues
             Assert.That(Decode(reply.Body, reply.Coding), Is.EqualTo(Script));
         }
 
-        // Replacing either file is seen on the next request, past the module's content cache.
-        [Test]
-        public async Task ChangedFilesAreServedFresh()
+        // A replaced .br file is seen on the next request, past the module's content cache. The variant is mapped
+        // on every request, so this holds even for an immutable provider (FileSystemProvider is always one on macOS):
+        // the body and its length must come from the same file.
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task ChangedVariantsAreServedFresh(bool immutable)
         {
-            await using var server = Issue138_GeneratedBinding.RunningServer.Start(Module(PrecompressedVariants.Brotli));
+            var module = new FileModule("/", new FileSystemProvider(_root, immutable)) { PrecompressedVariants = PrecompressedVariants.Brotli };
+            await using var server = Issue138_GeneratedBinding.RunningServer.Start(module);
             using var client = Client();
             var first = await Get(client, server.Url + "app.js", "br");
             Assert.That(first.ETag, Does.EndWith("-br-file\""));
@@ -228,10 +232,27 @@ namespace EmbedIO.Tests.Issues
             var updated = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("let updated = true;\n", 300)));
             Write("app.js.br", Brotli(updated), Original.AddMinutes(5));
             var second = await Get(client, server.Url + "app.js", "br");
+            Assert.That(second.Status, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(second.ETag, Is.Not.EqualTo(first.ETag));
+            Assert.That(second.Length, Is.EqualTo(second.Body.Length));
             Assert.That(Decode(second.Body, "br"), Is.EqualTo(updated));
+        }
 
-            // The original changes after the .br file: the .br file is stale until it is regenerated.
+        // The original changes after the .br file: the .br file is stale until it is regenerated. Seeing the original
+        // change needs a provider that reports changes.
+        [Test]
+        public async Task ChangedOriginalsMakeVariantsStale()
+        {
+            var provider = new FileSystemProvider(_root, false);
+            if (provider.IsImmutable)
+                Assert.Ignore("This platform's FileSystemProvider is always immutable.");
+
+            await using var server = Issue138_GeneratedBinding.RunningServer.Start(new FileModule("/", provider) { PrecompressedVariants = PrecompressedVariants.Brotli });
+            using var client = Client();
+            var first = await Get(client, server.Url + "app.js", "br");
+            Assert.That(first.ETag, Does.EndWith("-br-file\""));
+
+            var updated = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("let updated = true;\n", 300)));
             Write("app.js", updated, Original.AddMinutes(10));
             var third = await Get(client, server.Url + "app.js", "br");
             Assert.That(third.ETag, Does.Not.Contain("-file"));

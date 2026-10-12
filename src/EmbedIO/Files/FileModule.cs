@@ -823,9 +823,11 @@ namespace EmbedIO.Files
                 return;
 
             // The file's bytes, cached like any file. A direct request for the file caches the same bytes.
+            // The variant was just mapped, so the cached bytes are checked against it even for an immutable provider:
+            // the headers above already describe this file, and the body must match them.
             var section = _cacheSection ?? throw new InvalidOperationException("The file cache section has not been initialized.");
             if (!section.TryGet(variant.Path, out var cacheItem)
-             || (!Provider.IsImmutable && (cacheItem.LastModifiedUtc != variant.LastModifiedUtc || cacheItem.Length != variant.Length)))
+             || cacheItem.LastModifiedUtc != variant.LastModifiedUtc || cacheItem.Length != variant.Length)
             {
                 section.Remove(variant.Path);
                 cacheItem = new FileCacheItem(section, variant.LastModifiedUtc, variant.Length);
