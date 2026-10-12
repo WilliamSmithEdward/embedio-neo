@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+- Verify the historical WebSocket accept-to-subscription race against the
+  existing startup fix, including application handshake bursts over HTTP/1 and
+  HTTP/2 TCP/TLS. Extend the startup guide without changing production behavior.
 - Document and verify endpoint retirement and fresh listener replacement for the
   upstream iOS shutdown report, preserving current production behavior. Actual
   iOS background/suspension recovery remains a separate validation gap.
