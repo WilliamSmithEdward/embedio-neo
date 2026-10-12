@@ -14,8 +14,10 @@ namespace EmbedIO.Internal
         internal const string TimeoutMessage = "The request body was not received within the configured time.";
         private readonly Stream _source;
         private readonly TimeSpan _timeout;
+        private readonly TaskCompletionSource<bool> _retirement = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private Action? _onTimeout;
-        private int _timedOut;
+        private HttpException? _timeoutFailure;
+        private int _readPending;
 
         internal ReadTimeoutStream(Stream source, TimeSpan timeout, Action? onTimeout)
         {
@@ -24,7 +26,7 @@ namespace EmbedIO.Internal
             _onTimeout = onTimeout;
         }
 
-        public override bool CanRead => _source.CanRead;
+        public override bool CanRead => !_retirement.Task.IsCompleted && _source.CanRead;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
         public override long Length => throw new NotSupportedException();
@@ -32,36 +34,120 @@ namespace EmbedIO.Internal
 
         private HttpException Expired()
         {
-            if (Interlocked.Exchange(ref _timedOut, 1) == 0) Interlocked.Exchange(ref _onTimeout, null)?.Invoke();
-            return new HttpException(408, TimeoutMessage);
+            var failure = new HttpException(408, TimeoutMessage);
+            var previous = Interlocked.CompareExchange(ref _timeoutFailure, failure, null);
+            if (previous != null) return previous;
+            Interlocked.Exchange(ref _onTimeout, null)?.Invoke();
+            return failure;
         }
 
-        private void ThrowIfExpired()
+        internal bool IsTimeoutFailure(Exception failure) => ReferenceEquals(Volatile.Read(ref _timeoutFailure), failure);
+
+        // The request owner retires this borrowed view; it still owns disposal of the transport.
+        internal void Retire()
         {
-            if (Volatile.Read(ref _timedOut) != 0) throw new HttpException(408, TimeoutMessage);
+            Interlocked.Exchange(ref _onTimeout, null);
+            _retirement.TrySetResult(true);
         }
 
-        // The abandoned read is left to the transport; observe its outcome so a later
-        // fault is not reported as unobserved.
-        private static void Abandon(Task read)
-            => _ = read.ContinueWith(static task => _ = task.Exception, CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        private void ThrowIfUnavailable()
+        {
+            if (_retirement.Task.IsCompleted) throw new ObjectDisposedException(nameof(ReadTimeoutStream));
+            var failure = Volatile.Read(ref _timeoutFailure);
+            if (failure != null) throw failure;
+        }
+
+        private void ReleaseStorage(byte[]? buffer)
+        {
+            if (buffer == null) return;
+            ArrayPool<byte>.Shared.Return(buffer, true);
+            Volatile.Write(ref _readPending, 0);
+        }
+
+        private async Task<ReadResult> ReadOwnedAsync(int count, CancellationToken cancellationToken)
+        {
+            ThrowIfUnavailable();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (count == 0) return default;
+            if (Interlocked.CompareExchange(ref _readPending, 1, 0) != 0)
+                throw new InvalidOperationException("The previous request body read has not settled.");
+            byte[]? buffer = null;
+            Task<int>? read = null;
+            var transferred = false;
+            try
+            {
+                var length = Math.Min(count, 64 * 1024);
+                buffer = ArrayPool<byte>.Shared.Rent(length);
+#if NET10_0_OR_GREATER
+                read = _source.ReadAsync(buffer.AsMemory(0, length), cancellationToken).AsTask();
+#else
+                read = _source.ReadAsync(buffer, 0, length, cancellationToken);
+#endif
+                var received = await WithDeadlineAsync(read, cancellationToken).ConfigureAwait(false);
+                if (received < 0 || received > length) throw new IOException("The request body source returned an invalid read count.");
+                transferred = true;
+                return new ReadResult(buffer, received);
+            }
+            finally
+            {
+                if (!transferred)
+                {
+                    if (buffer == null) Volatile.Write(ref _readPending, 0);
+                    else if (read == null || read.IsCompleted) ReleaseStorage(buffer);
+                    else
+                    {
+                        // A source may ignore cancellation. Keep its private storage until its
+                        // actual task settles, rather than returning a still-owned pooled buffer.
+                        _ = read.ContinueWith(static (task, state) =>
+                        {
+                            var lease = ((ReadTimeoutStream Owner, byte[] Buffer))(state
+                                ?? throw new InvalidOperationException("Missing pending read storage ownership."));
+                            _ = task.Exception;
+                            lease.Owner.ReleaseStorage(lease.Buffer);
+                        }, (this, buffer), CancellationToken.None,
+                            TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                    }
+                }
+            }
+        }
+
+        private readonly struct ReadResult
+        {
+            internal ReadResult(byte[] buffer, int count) { Buffer = buffer; Count = count; }
+            internal byte[]? Buffer { get; }
+            internal int Count { get; }
+        }
+
+        private static void ValidateBuffer(byte[] buffer, int offset, int count)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+            if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+            if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+            if (offset > buffer.Length - count) throw new ArgumentException("The read exceeds the supplied buffer.");
+        }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            ThrowIfExpired();
-            var read = _source.ReadAsync(buffer, offset, count, CancellationToken.None);
-            bool completed;
-            try { completed = read.Wait(_timeout); }
-            catch (AggregateException) { completed = true; }
-            if (!completed) { Abandon(read); throw Expired(); }
-            return read.GetAwaiter().GetResult();
+            ValidateBuffer(buffer, offset, count);
+            var result = ReadOwnedAsync(count, CancellationToken.None).GetAwaiter().GetResult();
+            try
+            {
+                if (result.Buffer != null) Array.Copy(result.Buffer, 0, buffer, offset, result.Count);
+                return result.Count;
+            }
+            finally { ReleaseStorage(result.Buffer); }
         }
 
         public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
-            ThrowIfExpired();
-            return await WithDeadlineAsync(_source.ReadAsync(buffer, offset, count, cancellationToken), cancellationToken).ConfigureAwait(false);
+            ValidateBuffer(buffer, offset, count);
+            var result = await ReadOwnedAsync(count, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (result.Buffer != null) Array.Copy(result.Buffer, 0, buffer, offset, result.Count);
+                return result.Count;
+            }
+            finally { ReleaseStorage(result.Buffer); }
         }
 
         private async Task<int> WithDeadlineAsync(Task<int> read, CancellationToken cancellationToken)
@@ -70,29 +156,32 @@ namespace EmbedIO.Internal
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(_timeout);
             var expiry = Task.Delay(Timeout.Infinite, deadline.Token);
-            if (await Task.WhenAny(read, expiry).ConfigureAwait(false) == read) return await read.ConfigureAwait(false);
-            Abandon(read);
+            if (await Task.WhenAny(read, expiry, _retirement.Task).ConfigureAwait(false) == read) return await read.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
+            ThrowIfUnavailable();
             throw Expired();
         }
 #if NET10_0_OR_GREATER
         public override int Read(Span<byte> buffer)
         {
-            var array = ArrayPool<byte>.Shared.Rent(buffer.Length);
+            var result = ReadOwnedAsync(buffer.Length, CancellationToken.None).GetAwaiter().GetResult();
             try
             {
-                var count = Read(array, 0, buffer.Length);
-                array.AsSpan(0, count).CopyTo(buffer);
-                return count;
+                if (result.Buffer != null) result.Buffer.AsSpan(0, result.Count).CopyTo(buffer);
+                return result.Count;
             }
-            finally { ArrayPool<byte>.Shared.Return(array, true); }
+            finally { ReleaseStorage(result.Buffer); }
         }
 
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            ThrowIfExpired();
-            var read = _source.ReadAsync(buffer, cancellationToken);
-            return read.IsCompletedSuccessfully ? read : new ValueTask<int>(WithDeadlineAsync(read.AsTask(), cancellationToken));
+            var result = await ReadOwnedAsync(buffer.Length, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (result.Buffer != null) result.Buffer.AsMemory(0, result.Count).CopyTo(buffer);
+                return result.Count;
+            }
+            finally { ReleaseStorage(result.Buffer); }
         }
 #endif
         public override void Flush() { }
@@ -102,7 +191,7 @@ namespace EmbedIO.Internal
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) _source.Dispose();
+            if (disposing) { Retire(); _source.Dispose(); }
             base.Dispose(disposing);
         }
     }
