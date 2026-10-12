@@ -42,13 +42,10 @@ jobs:
           sudo apt-get install --yes "$package"
       - name: Verify acceptance checks
         run: python -m unittest discover -s scripts -p test_http3_quiet_campaign.py
+      - name: Restore the separate-process comparison runner
+        run: dotnet restore test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --locked-mode
       - name: Build the separate-process comparison runner
-        shell: pwsh
-        run: |
-          dotnet restore test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --locked-mode
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet build test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj -c Release --no-restore -p:ContinuousIntegrationBuild=true
-          exit $LASTEXITCODE
+        run: dotnet build test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj -c Release --no-restore -p:ContinuousIntegrationBuild=true
       - name: Compare quiet baseline and bounded CPU contention
         run: python scripts/http3_quiet_campaign.py --runner test/EmbedIO.LoadBenchmark/bin/Release/net10.0/EmbedIO.LoadBenchmark.dll --output TestResults/http3-quiet-host
       - name: Preserve all successful and failed samples

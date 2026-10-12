@@ -142,3 +142,17 @@ raw JSON and logs, including failed campaigns, and does not retry them automatic
 The contention arm runs only on disposable GitHub runners. It does not authorize
 an all-core burn on a shared development workstation. CI outcomes will be recorded
 here after the campaigns execute; configuring this workflow alone is not validation.
+
+### Retained initial control attempt
+
+Run [38260741994](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38260741994)
+rejected both quiet baselines before generating load: Linux measured 0.682 busy CPUs
+and Windows 0.943, exceeding the declared 0.5 ceiling. These are inconclusive quiet
+controls. The subsequent contention arms completed without request failures or cap
+omissions on both platforms; every original sample is retained in their run artifacts.
+
+The setup now waits a fixed 30 seconds after compilation before starting measurement.
+This is preparation, not a discarded baseline or automatic retry, and no acceptance
+threshold or deadline changed. A fresh campaign is still required. The initial security
+report also exposed PowerShell syntax that a Bash-specific Semgrep rule could not
+parse; separate plain restore/build steps replace that block without a scanner waiver.

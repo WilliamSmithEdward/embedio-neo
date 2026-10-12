@@ -7,6 +7,7 @@ import os
 import signal
 from pathlib import Path
 import subprocess
+import time
 
 
 def validate(directory, revision, burn_threads):
@@ -82,6 +83,11 @@ def main():
                 "runner": str(args.runner.resolve()),
                 "runnerSha256": hashlib.sha256(args.runner.read_bytes()).hexdigest(),
                 "cpus": os.cpu_count(), "commands": []}
+    # Fixed preparation interval after restore/build; it precedes measurement,
+    # never discards a failed baseline, and leaves every acceptance ceiling intact.
+    manifest["settlingSeconds"] = 30
+    (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    time.sleep(30)
     failures = []
     for arm, rates, burn in (("quiet", "4,16,64,128", 0), ("contention", "64,128", os.cpu_count())):
         directory = args.output / arm
