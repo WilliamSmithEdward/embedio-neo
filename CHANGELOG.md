@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+- Document and verify endpoint retirement and fresh listener replacement for the
+  upstream iOS shutdown report, preserving current production behavior. Actual
+  iOS background/suspension recovery remains a separate validation gap.
 - Let unmatched descendants of WebSocket endpoints reach later modules or the
   ordinary 404 fallback, rather than returning an empty HTTP 200. Successful
   managed HTTP/1 upgrades now expose their committed 101 status in response
