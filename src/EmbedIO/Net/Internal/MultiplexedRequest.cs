@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
-using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -192,12 +191,6 @@ namespace EmbedIO.Net.Internal
                 return false;
             }
             return available;
-        }
-        public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
-        {
-            if (_exchange.InputStream is IRequestTrailerSource source) return source.TryGetTrailers(out trailers);
-            trailers = RequestTrailerSnapshot.Empty;
-            return false;
         }
         public Encoding ContentEncoding
         {

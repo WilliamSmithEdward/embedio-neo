@@ -251,12 +251,6 @@ namespace EmbedIO.Net.Internal
             }
             return available;
         }
-        public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
-        {
-            if (_inputStream is IRequestTrailerSource source) return source.TryGetTrailers(out trailers);
-            trailers = RequestTrailerSnapshot.Empty;
-            return !HasEntityBody;
-        }
         internal bool HasBodyFramingFailure => _inputStream is RequestStream body && body.HasBodyFramingFailure;
         internal bool IsBodyFramingError(Exception error) => _inputStream is RequestStream body && body.IsFramingError(error);
         internal bool RequiresContinue => ProtocolVersion >= HttpVersion.Version11 && HasEntityBody
