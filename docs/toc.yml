@@ -44,6 +44,8 @@
       href: guides/controller-base-routes.md
     - name: HTTPS
       href: guides/https.md
+    - name: Request limits, admission and deadlines
+      href: guides/request-limits.md
     - name: HTTP/3 listener (unreleased)
       href: guides/http3.md
     - name: Command-line server

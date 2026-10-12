@@ -172,7 +172,7 @@ namespace EmbedIO.Net.Internal
             if (string.Equals(protocol, "websocket", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Use AcceptWebSocketAsync for WebSocket negotiation.");
             if (useCapsules && protocol == null) throw new InvalidOperationException("Capsules require a negotiated extension protocol.");
-            if (Request.HasEntityBody && Request.InputStream is RequestStream body && !body.IsBodyConsumed)
+            if (Request.HasEntityBody && HttpListenerRequest.RawInputStream is RequestStream body && !body.IsBodyConsumed)
                 throw new InvalidOperationException("Consume the HTTP request body before handing off its connection.");
             TaskCompletionSource<bool> handshake;
             lock (_lifetime)

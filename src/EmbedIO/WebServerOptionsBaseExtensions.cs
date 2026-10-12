@@ -26,6 +26,63 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Sets the maximum number of request body bytes a handler may read.
+        /// </summary>
+        /// <typeparam name="TOptions">The options type.</typeparam>
+        /// <param name="this">The options instance.</param>
+        /// <param name="value">The maximum transferred body bytes, or null for existing unlimited behavior.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The limit is negative.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static TOptions WithMaximumRequestBodyBytes<TOptions>(this TOptions @this, long? value)
+            where TOptions : WebServerOptionsBase
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.MaximumRequestBodyBytes = value;
+            return @this;
+        }
+
+        /// <summary>
+        /// Limits how many requests the server handles at the same time and how many may wait.
+        /// </summary>
+        /// <typeparam name="TOptions">The options type.</typeparam>
+        /// <param name="this">The options instance.</param>
+        /// <param name="maximum">The maximum concurrent requests, or null for existing unlimited dispatch.</param>
+        /// <param name="queueLimit">How many requests may wait for a slot before HTTP 503 is returned.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="maximum"/> is less than one,
+        /// or <paramref name="queueLimit"/> is negative.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static TOptions WithMaximumConcurrentRequests<TOptions>(this TOptions @this, int? maximum, int queueLimit = 0)
+            where TOptions : WebServerOptionsBase
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.MaximumConcurrentRequests = maximum;
+            @this.RequestQueueLimit = queueLimit;
+            return @this;
+        }
+
+        /// <summary>
+        /// Sets how long a request may be handled before its context token is canceled.
+        /// </summary>
+        /// <typeparam name="TOptions">The options type.</typeparam>
+        /// <param name="this">The options instance.</param>
+        /// <param name="value">The deadline, or null for existing behavior without a deadline.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The deadline is not positive or is too large.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static TOptions WithRequestTimeout<TOptions>(this TOptions @this, TimeSpan? value)
+            where TOptions : WebServerOptionsBase
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.RequestTimeout = value;
+            return @this;
+        }
+
+        /// <summary>
         /// Adds a URL prefix.
         /// </summary>
         /// <typeparam name="TOptions">The type of the object on which this method is called.</typeparam>
