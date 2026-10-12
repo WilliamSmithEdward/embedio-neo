@@ -83,6 +83,8 @@ internal static class Recovery
         report["phases"] = phases;
         var timeout = TimeSpan.FromMinutes(2);
         var serverArguments = new List<string> { "server", "--engine", engine, "--protocol", protocol.ToString(), "--port", port.ToString(CultureInfo.InvariantCulture) };
+        if (options.Has("--exception-phases")) serverArguments.Add("--connection-census");
+        if (options.Has("--control-hard-cleanup")) serverArguments.Add("--control-hard-cleanup");
         if (tls) serverArguments.AddRange(["--tls", "--certificate", certificatePath, "--certificate-password", password]);
         var server = ChildProcess.Start(serverDirectory, serverArguments, null, Path.Combine(output, "server.stderr.log"));
         var verdict = new JsonArray();
@@ -109,6 +111,9 @@ internal static class Recovery
                     ["phase"] = name,
                     ["utc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                     ["snapshot"] = snapshot?.DeepClone(),
+                    ["exceptions"] = options.Has("--exception-phases") ? await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false) : null,
+                    ["exceptionSites"] = options.Has("--exception-phases") ? await server.RequestJsonAsync("exception-sites", timeout).ConfigureAwait(false) : null,
+                    ["connections"] = options.Has("--exception-phases") ? await server.RequestJsonAsync("connections", timeout).ConfigureAwait(false) : null,
                     ["serverSockets"] = Orchestrator.ServerSockets(port),
                 });
                 return snapshot;
@@ -136,7 +141,9 @@ internal static class Recovery
                     }
                     result ??= new JsonObject { ["error"] = "client did not complete: " + warm };
                     result.AsObject().Remove("histogram");
-                    await client.WaitForExitAsync(wait).ConfigureAwait(false);
+                    var clientExit = await client.WaitForExitAsync(wait).ConfigureAwait(false);
+                    report[name + "ClientExitCode"] = clientExit;
+                    if (clientExit != 0) verdict.Add(name + ": healthy client exited unsuccessfully");
                     phases.Add(new JsonObject { ["phase"] = name, ["utc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture), ["client"] = result.DeepClone() });
                     if (result["error"] is { } error) verdict.Add($"{name}: healthy client failed: {error}");
                     return result;
@@ -258,7 +265,8 @@ internal static class Recovery
 // Clients that abandon work midway. HTTP/1.1 resets the TCP connection (linger 0)
 // after part of a 1 MiB response or part of a 1 MiB upload. HTTP/2 and HTTP/3 cancel
 // individual streams the same way (RST_STREAM / STOP_SENDING + RESET_STREAM) and,
-// every 16th iteration, drop the whole connection without a graceful close.
+// dispose each iteration's client handler, including its pooled connections.
+// The explicit every-16th disposal is redundant with that per-iteration ownership.
 internal static class Storm
 {
     private const int Mebibyte = 1 << 20;
