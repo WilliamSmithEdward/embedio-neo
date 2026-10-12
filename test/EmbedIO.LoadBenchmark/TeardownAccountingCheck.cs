@@ -41,6 +41,14 @@ internal static class TeardownAccountingCheck
         if (await expired.WaitForSlotAsync().ConfigureAwait(false)) return 7;
         var unlimited = new RunState(TimeSpan.FromSeconds(5), CancellationToken.None);
         if (!await unlimited.WaitForSlotAsync(16).ConfigureAwait(false)) return 8;
+        var bounded = new RunState(TimeSpan.FromMilliseconds(100), CancellationToken.None, 1);
+        if (!await bounded.WaitForSlotAsync().ConfigureAwait(false)) return 9;
+        if (await bounded.WaitForSlotAsync().ConfigureAwait(false) || bounded.Running) return 10;
+        var concurrent = new RunState(TimeSpan.FromSeconds(2), CancellationToken.None, 1);
+        if (!await concurrent.WaitForSlotAsync().ConfigureAwait(false)) return 11;
+        var waiting = concurrent.WaitForSlotAsync().AsTask();
+        if (await concurrent.WaitForSlotAsync().ConfigureAwait(false)) return 12;
+        if (!await waiting.ConfigureAwait(false)) return 13;
         Control.Write("CONNECTION CENSUS AND PACING OK");
         return 0;
     }

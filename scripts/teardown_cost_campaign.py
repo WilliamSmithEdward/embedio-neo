@@ -47,6 +47,8 @@ def validate(root, census, duration, rounds):
         if sample["requestRate"] != 32 or sample["connectionCensus"] != census:
             raise ValueError("Configuration changed")
         measured = sample["machineMeasurementSeconds"]
+        if not math.isfinite(measured) or measured <= 0:
+            raise ValueError("Invalid machine CPU acquisition interval")
         background = sample["derived"]["backgroundCpuSeconds"] / measured
         if not math.isfinite(background) or background > 0.5:
             raise ValueError("Quiet sample contaminated: " + str(path))

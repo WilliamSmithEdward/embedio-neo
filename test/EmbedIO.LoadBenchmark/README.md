@@ -433,3 +433,7 @@ quiet baseline and phase background ceilings of 0.5 busy CPUs. It preserves all
 failed runs and does not retry them. Separate intentional-abandonment/recovery
 cases keep the existing recovery and cleanup gates. Profiles are not timing claims.
 No production API, defaults, error propagation or dependency changes are involved.
+
+The long cost campaign is deferred while its PR is a draft. Marking the PR ready
+for review schedules it on that source. A skipped draft campaign is not acceptance;
+its successful current-source run and all ordinary checks are required before merge.

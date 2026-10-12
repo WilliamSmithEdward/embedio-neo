@@ -62,6 +62,12 @@ class CostCampaignTests(unittest.TestCase):
         next((self.root / "samples").glob("*/*.json")).unlink()
         with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
 
+    def test_invalid_cpu_interval_rejected(self):
+        for value in (0, -1, float("nan"), float("inf")):
+            self.sample["machineMeasurementSeconds"] = value
+            self.write()
+            with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
+
     def test_stack_capture_overflow_rejected(self):
         self.sample["exceptionSitesAfterLoad"]["overflow"] = 1
         self.write()

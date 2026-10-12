@@ -128,6 +128,7 @@ internal sealed class RunState(TimeSpan duration, CancellationToken cancellation
 {
     private readonly CancellationTokenSource _failed = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
     private readonly List<LatencyHistogram> _histograms = [];
+    private int _slotsExhausted;
     private long _slots;
     private long _requests;
     private long _responseBytes;
@@ -141,7 +142,7 @@ internal sealed class RunState(TimeSpan duration, CancellationToken cancellation
 
     internal CancellationToken Token => _failed.Token;
 
-    internal bool Running => Clock.Elapsed < duration && !_failed.IsCancellationRequested;
+    internal bool Running => Volatile.Read(ref _slotsExhausted) == 0 && Clock.Elapsed < duration && !_failed.IsCancellationRequested;
 
     internal long Requests => Interlocked.Read(ref _requests);
 
@@ -176,10 +177,15 @@ internal sealed class RunState(TimeSpan duration, CancellationToken cancellation
         if (requestRate == 0) return Running;
         var number = Interlocked.Add(ref _slots, batch) - batch;
         var due = TimeSpan.FromSeconds(number / requestRate);
-        if (due >= duration) return false;
+        if (due >= duration)
+        {
+            Volatile.Write(ref _slotsExhausted, 1);
+            return false;
+        }
         var wait = due - Clock.Elapsed;
         if (wait > TimeSpan.Zero) await Task.Delay(wait, Token).ConfigureAwait(false);
-        return Running;
+        // Another worker may exhaust future slots while this valid slot is waiting.
+        return Clock.Elapsed < duration && !_failed.IsCancellationRequested;
     }
 
     internal void Opened() => Interlocked.Increment(ref _connectionsOpened);
