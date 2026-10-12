@@ -338,6 +338,9 @@ namespace EmbedIO
         private async Task HandleContextCoreAsync(IHttpContextImpl context, long requestStarted, EmbedIO.Internal.RequestTelemetry? telemetry)
         {
             var admitted = false;
+            var rawBodyFailureHandled = false;
+            var bodyReadFailureHandled = false;
+            var headerPolicyRejected = false;
             try
             {
                 $"[{context.Id}] {context.Request.SafeGetRemoteEndpointStr()}: {context.Request.HttpMethod} {context.Request.Url.PathAndQuery} - {context.Request.UserAgent}"
@@ -353,7 +356,12 @@ namespace EmbedIO
 
                     var serverToken = context.CancellationToken;
                     // A matching route policy replaces the server-wide body and deadline values.
-                    var routeLimits = Options.FindRouteRequestLimits(context.RequestedPath);
+                    var capturedPolicy = RequestPolicySnapshot.CapturedBy(context.Request);
+                    var routeLimits = capturedPolicy == null ? Options.FindRouteRequestLimits(context.RequestedPath) : null;
+                    var effectiveTimeout = capturedPolicy != null ? capturedPolicy.RequestTimeout
+                        : RequestLimitPolicy.Resolve(routeLimits?.RequestTimeout, Options.RequestTimeout);
+                    var effectiveBodyReadTimeout = capturedPolicy != null ? capturedPolicy.BodyReadTimeout
+                        : RequestLimitPolicy.Resolve(routeLimits?.RequestBodyReadTimeout, Options.RequestBodyReadTimeout);
                     CancellationTokenSource? deadline = null;
                     try
                     {
@@ -361,16 +369,19 @@ namespace EmbedIO
                         {
                             // The deadline covers queueing and handling. The context token is
                             // restored before completion so a late deadline cannot abort it.
-                            if (RequestLimitPolicy.Resolve(routeLimits?.RequestTimeout, Options.RequestTimeout) is TimeSpan timeout)
+                            if (effectiveTimeout is TimeSpan timeout)
                             {
                                 deadline = CancellationTokenSource.CreateLinkedTokenSource(serverToken);
                                 deadline.CancelAfter(timeout);
                                 context.CancellationToken = deadline.Token;
                             }
 
-                            CheckHeaderLimits(context);
+                            CheckHeaderLimits(context, ref headerPolicyRejected);
+                            if (RequestBodyPolicy.KnownRefusal(context.Request) is { } knownBodyRefusal)
+                                throw knownBodyRefusal;
                             admitted = await AdmitAsync(context).ConfigureAwait(false);
-                            ApplyBodyPolicies(context, routeLimits);
+                            if (capturedPolicy == null) ApplyBodyPolicies(context, routeLimits);
+                            else ApplyBodyReadTimeout(context, effectiveBodyReadTimeout);
 
                             // RFC 10008 requires QUERY media-type information before processing.
                             if (context.Request.HttpMethod == "QUERY"
@@ -413,6 +424,16 @@ namespace EmbedIO
                     {
                         throw; // Let outer catch block handle it
                     }
+                    catch (RawRequestBodyLimitException exception)
+                    {
+                        rawBodyFailureHandled = true;
+                        await HandleRawBodyLimitAsync(context, exception).ConfigureAwait(false);
+                    }
+                    catch (HttpException exception) when (IsOwnedBodyReadTimeout(context.Request, exception))
+                    {
+                        bodyReadFailureHandled = true;
+                        await HandleBodyReadTimeoutAsync(context, exception).ConfigureAwait(false);
+                    }
                     catch (Exception exception) when (context.Request is Net.Internal.HttpListenerRequest request && request.IsBodyFramingError(exception) && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                     {
                         if (context is Net.Internal.HttpListenerContext owned && owned.HttpListenerResponse.HeadersSent)
@@ -451,6 +472,21 @@ namespace EmbedIO
                     // Request cleanup and context closure must run even when flushing fails.
                     try
                     {
+                        try
+                        {
+                            if (!rawBodyFailureHandled && !bodyReadFailureHandled && !headerPolicyRejected && context.Request is Net.Internal.HttpListenerRequest http1)
+                                await http1.CompleteBodyInputAsync(context.CancellationToken).ConfigureAwait(false);
+                            else if (!rawBodyFailureHandled && !bodyReadFailureHandled && !headerPolicyRejected && context.Request is Net.Internal.MultiplexedRequest multiplexedRequest)
+                                await multiplexedRequest.CompleteBodyInputAsync(context.CancellationToken).ConfigureAwait(false);
+                        }
+                        catch (RawRequestBodyLimitException exception)
+                        {
+                            await HandleRawBodyLimitAsync(context, exception).ConfigureAwait(false);
+                        }
+                        catch (HttpException exception) when (IsOwnedBodyReadTimeout(context.Request, exception))
+                        {
+                            await HandleBodyReadTimeoutAsync(context, exception).ConfigureAwait(false);
+                        }
                         // Direct HTTP/1 writes are unbuffered; completion supplies final
                         // framing and handles already-disposed serializer output. Do not
                         // turn automatic teardown into an application header flush.
@@ -501,6 +537,11 @@ namespace EmbedIO
             {
                 $"[{context.Id}] Operation canceled.".Debug(LogSource);
             }
+            catch (OperationCanceledException error) when (context.Request is Net.Internal.HttpListenerRequest request
+                && request.IsBodyCleanupCancellation(error))
+            {
+                $"[{context.Id}] Owned request body cleanup canceled.".Debug(LogSource);
+            }
             catch (HttpListenerException ex)
             {
                 ex.Log(LogSource, $"[{context.Id}] Listener exception.");
@@ -510,6 +551,10 @@ namespace EmbedIO
                 // Completing an invalid body can encounter the aborted connection.
                 // That request cannot take down the listener shared by other clients.
                 ex.Log(LogSource, $"[{context.Id}] Invalid request body connection closed.");
+            }
+            catch (Exception ex) when (context.Request is Net.Internal.HttpListenerRequest request && request.HasBodyLimitFailure && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                ex.Log(LogSource, $"[{context.Id}] Over-limit request body connection closed.");
             }
             catch (Exception ex) when (context is Net.Internal.HttpListenerContext tunnel && tunnel.HasAcceptedTunnel && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
@@ -527,6 +572,40 @@ namespace EmbedIO
                 ex.Log(LogSource, $"[{context.Id}] Fatal exception.");
                 OnFatalException();
             }
+        }
+
+        private async Task HandleRawBodyLimitAsync(IHttpContextImpl context, RawRequestBodyLimitException error)
+        {
+            // A module may already have rendered this same sticky failure.
+            // Preserve its completed 413 rather than aborting it a second time.
+            if (context.Response.StatusCode == 413 && ResponseCommitment.IsCommitted(context))
+                return;
+            if (context is Net.Internal.MultiplexedContext multiplexed && multiplexed.ResponseHeadersSent)
+            {
+                await multiplexed.AbortExchangeAsync(error).ConfigureAwait(false);
+                return;
+            }
+            if (context is Net.Internal.HttpListenerContext http1)
+            {
+                if (http1.HttpListenerResponse.HeadersSent) { http1.HttpListenerResponse.Abort(); return; }
+                context.Response.KeepAlive = false;
+            }
+            await HttpExceptionHandler.Handle(LogSource, context, error, _onHttpException).ConfigureAwait(false);
+        }
+
+        private static bool IsOwnedBodyReadTimeout(IHttpRequest request, Exception error)
+            => request switch
+            {
+                Net.Internal.HttpListenerRequest http1 => http1.IsBodyReadTimeoutFailure(error),
+                Net.Internal.MultiplexedRequest multiplexed => multiplexed.IsBodyReadTimeoutFailure(error),
+                _ => false,
+            };
+        private Task HandleBodyReadTimeoutAsync(IHttpContextImpl context, HttpException error)
+        {
+            // A module may have rendered this exact cached failure already. A
+            // status value on an uncommitted response does not establish that.
+            if (context.Response.StatusCode == 408 && ResponseCommitment.IsCommitted(context)) return Task.CompletedTask;
+            return HttpExceptionHandler.Handle(LogSource, context, error, _onHttpException);
         }
 
         // Returns true when a slot was taken and must be released after the request
@@ -564,7 +643,7 @@ namespace EmbedIO
 
         // Applies MaximumRequestHeaderBytes and MaximumRequestHeaderCount before admission,
         // so an oversized request never takes a slot. The parsers count received field lines.
-        private void CheckHeaderLimits(IHttpContext context)
+        private void CheckHeaderLimits(IHttpContext context, ref bool rejected)
         {
             var maximumBytes = Options.MaximumRequestHeaderBytes;
             var maximumCount = Options.MaximumRequestHeaderCount;
@@ -573,6 +652,7 @@ namespace EmbedIO
                 return;
             if (request.HeaderFieldBytes > maximumBytes || request.HeaderFieldCount > maximumCount)
             {
+                rejected = true;
                 StopReuseForUnreadBody(context);
                 throw new HttpException(431, "Request header fields exceed the configured limit.");
             }
@@ -585,6 +665,19 @@ namespace EmbedIO
             if (context is Net.Internal.HttpListenerContext && context.Request.HasEntityBody
                 && !EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
                 context.Response.KeepAlive = false;
+        }
+
+        // Raw accounting was bound by the owned listener before Continue.
+        // Only the independent body-read deadline is applied at this stage.
+        private static void ApplyBodyReadTimeout(IHttpContext context, TimeSpan? readTimeout)
+        {
+            if (readTimeout is not TimeSpan timeout || context.Request.HttpMethod == "CONNECT") return;
+            void StopReuse()
+            {
+                if (context is Net.Internal.HttpListenerContext && !ResponseCommitment.IsCommitted(context))
+                    context.Response.KeepAlive = false;
+            }
+            if (context.Request is IRequestPolicyTarget target) target.TimeBodyReads(timeout, StopReuse);
         }
 
         // Applies MaximumRequestBodyBytes and RequestBodyReadTimeout. A declared length over

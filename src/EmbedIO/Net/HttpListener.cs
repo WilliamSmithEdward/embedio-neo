@@ -13,8 +13,10 @@ namespace EmbedIO.Net
         private readonly TcpListenerCoordinator _coordinator;
         /// <summary>Initializes a listener, optionally using the supplied server certificate.</summary>
         /// <param name="certificate">The borrowed server certificate.</param>
-        public HttpListener(X509Certificate? certificate = null)
+        public HttpListener(X509Certificate? certificate = null) : this(certificate, null) { }
+        internal HttpListener(X509Certificate? certificate, EmbedIO.Internal.RequestPolicyResolver? bodyPolicy)
         {
+            BodyPolicy = bodyPolicy;
             Certificate = certificate;
             _coordinator = new TcpListenerCoordinator(this);
         }
@@ -33,6 +35,7 @@ namespace EmbedIO.Net
         /// <inheritdoc />
         public List<string> Prefixes => _coordinator.PrefixSnapshot();
         internal X509Certificate? Certificate { get; }
+        internal EmbedIO.Internal.RequestPolicyResolver? BodyPolicy { get; }
         /// <inheritdoc />
         public void Start() => _coordinator.Start();
         /// <inheritdoc />

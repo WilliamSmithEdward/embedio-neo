@@ -20,6 +20,7 @@ namespace EmbedIO.Net.Internal
         private readonly object _sync = new();
         private readonly X509Certificate2 _certificate;
         private readonly bool _native;
+        private readonly RequestPolicyResolver? _bodyPolicy;
         private readonly List<string> _prefixes = new();
         private Session? _session;
         private bool _disposed;
@@ -28,12 +29,14 @@ namespace EmbedIO.Net.Internal
         private bool _ignoreWriteExceptions = true;
 
         internal CombinedHttpListener(X509Certificate2? certificate) : this(certificate, false) { }
-        internal CombinedHttpListener(X509Certificate2? certificate, bool native)
+        internal CombinedHttpListener(X509Certificate2? certificate, bool native) : this(certificate, native, null) { }
+        internal CombinedHttpListener(X509Certificate2? certificate, bool native, RequestPolicyResolver? bodyPolicy)
         {
             if (certificate == null || !certificate.HasPrivateKey)
                 throw new ArgumentException("Combined hosting requires a certificate with its private key.", nameof(certificate));
             _certificate = certificate;
             _native = native;
+            _bodyPolicy = bodyPolicy;
         }
         // Set by a server with body policies before Start; applied to both transports.
         internal bool DeferContinue { get; set; }
@@ -82,7 +85,7 @@ namespace EmbedIO.Net.Internal
                     throw new InvalidOperationException("Stop the failed listener session before restarting.");
                 }
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_certificate, _prefixes, _ignoreWriteExceptions, _native, DeferContinue, ConnectionPolicy, Telemetry);
+                _session = Session.Start(_certificate, _prefixes, _ignoreWriteExceptions, _native, DeferContinue, ConnectionPolicy, Telemetry, _bodyPolicy);
                 _drained = false;
             }
         }
@@ -165,10 +168,10 @@ namespace EmbedIO.Net.Internal
             internal bool IsRunning => Volatile.Read(ref _stopping) == 0;
             internal void SetIgnoreWriteExceptions(bool value)
             { _tcp.IgnoreWriteExceptions = value; _quic.IgnoreWriteExceptions = value; }
-            internal static Session Start(X509Certificate2 certificate, List<string> prefixes, bool ignoreWriteExceptions, bool native, bool deferContinue, TcpConnectionPolicy connections, EmbedIO.Internal.ServerTelemetry? telemetry)
+            internal static Session Start(X509Certificate2 certificate, List<string> prefixes, bool ignoreWriteExceptions, bool native, bool deferContinue, TcpConnectionPolicy connections, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
             {
-                var tcp = new HttpListener(certificate);
-                var quic = new Http3.Http3Listener(certificate, native);
+                var tcp = new HttpListener(certificate, bodyPolicy);
+                var quic = new Http3.Http3Listener(certificate, native, bodyPolicy);
                 tcp.DeferContinue = deferContinue;
                 tcp.ConnectionPolicy = connections;
                 tcp.Telemetry = telemetry;

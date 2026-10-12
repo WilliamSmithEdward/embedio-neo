@@ -167,6 +167,7 @@ namespace EmbedIO.Net.Internal
                     }
                 }
                 _acceptedTunnel?.Dispose();
+                ((MultiplexedRequest)Request).RetireBodyLimit();
                 PropagateCancellation();
                 // BeginClose set _closed under _sync after the last registration.
                 if (_callbacks != null)
