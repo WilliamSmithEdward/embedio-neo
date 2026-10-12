@@ -27,7 +27,7 @@ namespace EmbedIO.Tests
     // them. Each case checks that one failing or finished exchange leaves the listener,
     // and for HTTP/2 and HTTP/3 the shared connection, usable.
     [TestFixture]
-    public sealed class HttpApplicationLifecycleAuditTest
+    public sealed partial class HttpApplicationLifecycleAuditTest
     {
         private static readonly TimeSpan Settle = TimeSpan.FromSeconds(10);
         private const int Http2Headers = 1, Http2Data = 0, Http2Reset = 3, Http2Settings = 4, Http2Ping = 6, Http2GoAway = 7, Http2Continuation = 9, Http2WindowUpdate = 8;
@@ -978,7 +978,8 @@ namespace EmbedIO.Tests
             internal int Port { get; }
             internal CancellationToken Token => _stop.Token;
 
-            internal static async Task<Host> StartAsync(HttpListenerMode mode, X509Certificate2? certificate, RequestHandlerCallback handler)
+            internal static async Task<Host> StartAsync(HttpListenerMode mode, X509Certificate2? certificate, RequestHandlerCallback handler,
+                Action<WebServerOptions>? configure = null, Action<WebServer>? configureServer = null)
             {
                 var quic = mode == HttpListenerMode.EmbedIOHttp3;
                 var port = FreePort(quic);
@@ -988,7 +989,9 @@ namespace EmbedIO.Tests
                 {
                     o.WithUrlPrefix(prefix).WithMode(mode);
                     if (certificate != null) o.WithCertificate(certificate);
+                    configure?.Invoke(o);
                 }).WithAction("/", HttpVerbs.Any, handler);
+                configureServer?.Invoke(server);
                 var running = server.RunAsync(stop.Token);
                 var deadline = DateTime.UtcNow + Settle;
                 while (server.State != WebServerState.Listening && !running.IsCompleted && DateTime.UtcNow < deadline) await Task.Delay(10);
@@ -1267,7 +1270,7 @@ namespace EmbedIO.Tests
                 Assert.That(Encoding.ASCII.GetString(body.ToArray()), Is.EqualTo("healthy"));
             }
 
-            private static async Task SendFieldsAsync(QuicStream stream, (string Name, string Value)[] fields, bool fin, CancellationToken token)
+            internal static async Task SendFieldsAsync(QuicStream stream, (string Name, string Value)[] fields, bool fin, CancellationToken token)
             {
                 using var section = new MemoryStream();
                 section.WriteByte(0);

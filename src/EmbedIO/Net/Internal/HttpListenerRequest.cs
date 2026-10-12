@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
 using System.Net;
@@ -13,9 +14,10 @@ namespace EmbedIO.Net.Internal
 {
     // Application view of one parsed HTTP/1 head. Framing facts belong to the
     // head owner; body access borrows the existing session's request transport.
-    internal sealed class HttpListenerRequest : IHttpRequest, IRequestPolicyTarget
+    internal sealed class HttpListenerRequest : IHttpRequestTrailers, IRequestPolicyTarget
     {
         private readonly HttpConnection _connection;
+        private readonly HttpListenerContext _context;
         private readonly Http1RequestHead _head = new();
         private CookieList? _cookies;
         private NameValueCollection? _queryString;
@@ -23,13 +25,19 @@ namespace EmbedIO.Net.Internal
         private Stream? _applicationInput;
         private int _continueStarted;
         private Func<CancellationToken, Task>? _sendContinue;
-        private long _bodyLimit = -1;
-        private Action? _onBodyLimitExceeded;
         private int _headerFieldCount;
         private long _headerFieldBytes;
+        private RequestBodyPolicy? _bodyPolicy;
+        private RawRequestBodyLimitException? _knownBodyRefusal;
+        private RawRequestBodyStream? _limitedInput;
+        private int _bodyLimitRetired;
+        private object? _bodyCleanupSync;
+        private Task? _bodyCleanup;
+        private CancellationToken _bodyCleanupToken;
         private bool? _keepAlive;
 
-        internal HttpListenerRequest(HttpListenerContext context) => _connection = context.Connection;
+        internal HttpListenerRequest(HttpListenerContext context)
+        { _context = context; _connection = context.Connection; }
         public NameValueCollection Headers => _head.Fields;
         public string HttpMethod => _head.Method;
         public HttpVerbs HttpVerb { get; private set; }
@@ -52,51 +60,179 @@ namespace EmbedIO.Net.Internal
         public long ContentLength64 => _head.Framed ? _head.Length
             : long.TryParse(Headers[HttpHeaderNames.ContentLength], out var length) ? length : 0;
         public bool HasEntityBody => _head.Chunked || ContentLength64 > 0;
-        public Stream InputStream => !HasEntityBody || (_bodyLimit < 0 && _sendContinue == null && _readTimeout == null && _countBody == null) ? RawInputStream
-            : _applicationInput ??= CreateApplicationInput();
-        private Stream CreateApplicationInput()
-        {
-            var input = RawInputStream;
-            if (_countBody != null) input = new EmbedIO.Internal.CountingReadStream(input, _countBody);
-            if (_readTimeout is TimeSpan timeout) input = new EmbedIO.Internal.ReadTimeoutStream(input, timeout, _onReadTimeout);
-            if (_sendContinue != null) input = new DeferredContinueStream(input, StartContinue);
-            return _bodyLimit < 0 ? input
-                : new LimitedRequestStream(input, _bodyLimit, LimitedRequestStream.TransferredLimitMessage, _onBodyLimitExceeded);
-        }
-        // Set by the connection instead of writing 100 Continue before dispatch.
-        internal void DeferContinue(Func<CancellationToken, Task> send) => _sendContinue = send;
-        // A deferred 100 Continue was never sent: the client may still be waiting to upload.
-        internal bool IsContinueOwed => _sendContinue != null && Volatile.Read(ref _continueStarted) == 0;
-        private Task StartContinue(CancellationToken cancellationToken)
-        {
-            Volatile.Write(ref _continueStarted, 1);
-            return (_sendContinue ?? throw new InvalidOperationException("No 100 Continue is owed."))(cancellationToken);
-        }
-        int IRequestPolicyTarget.HeaderFieldCount => _headerFieldCount;
-        long IRequestPolicyTarget.HeaderFieldBytes => _headerFieldBytes;
-        // The transport body without the server's byte limit. Framing and handoff checks
-        // inspect this stream; applications read InputStream.
-        internal Stream RawInputStream => _inputStream ??= HasEntityBody
+        internal Stream RawInputStream => FramingInput;
+        private Stream FramingInput => _inputStream ??= HasEntityBody
             ? _connection.GetRequestStream(ContentLength64, _head.Chunked) : Stream.Null;
         private TimeSpan? _readTimeout;
         private Action? _onReadTimeout;
-        private EmbedIO.Internal.RequestTelemetry? _countBody;
-        void IRequestPolicyTarget.CountBody(EmbedIO.Internal.RequestTelemetry scope)
+        private ReadTimeoutStream? _timedInput;
+        private object? _applicationInputSync;
+        private long _legacyBodyLimit = -1;
+        private Action? _onLegacyLimitExceeded;
+        private Stream ApplicationInput
         {
-            if (_applicationInput != null) throw new InvalidOperationException("The request body was already opened.");
+            get
+            {
+                if (!HasEntityBody || (_sendContinue == null && _readTimeout == null && _countBody == null && _legacyBodyLimit < 0)) return FramingInput;
+                var current = Volatile.Read(ref _applicationInput);
+                if (current != null)
+                {
+                    if (Volatile.Read(ref _bodyLimitRetired) != 0) Volatile.Read(ref _timedInput)?.Retire();
+                    return current;
+                }
+                // Resolve the physical framing owner before taking the publication
+                // gate, so request publication cannot invert the connection lock.
+                var framing = FramingInput;
+                ReadTimeoutStream? timed;
+                lock (LazyInitializer.EnsureInitialized(ref _applicationInputSync)
+                    ?? throw new InvalidOperationException("Missing application input publication."))
+                {
+                    if (_applicationInput == null)
+                    {
+                        var input = framing;
+                        if (_countBody != null) input = new CountingReadStream(input, _countBody);
+                        timed = _readTimeout is TimeSpan timeout ? new ReadTimeoutStream(input, timeout, _onReadTimeout) : null;
+                        if (timed != null) input = timed;
+                        if (_sendContinue != null) input = new DeferredContinueStream(input, StartContinue);
+                        if (_legacyBodyLimit >= 0) input = new LimitedRequestStream(input, _legacyBodyLimit,
+                            LimitedRequestStream.TransferredLimitMessage, _onLegacyLimitExceeded);
+                        Volatile.Write(ref _timedInput, timed);
+                        Volatile.Write(ref _applicationInput, input);
+                    }
+                    timed = _timedInput;
+                    current = _applicationInput ?? throw new InvalidOperationException("Missing published application input.");
+                }
+                // Retirement never takes the publication gate or disposes a
+                // borrowed source. This recheck covers publication after retire.
+                if (Volatile.Read(ref _bodyLimitRetired) != 0) timed?.Retire();
+                return current;
+            }
+        }
+        private RequestTelemetry? _countBody;
+        void IRequestPolicyTarget.LimitBody(long maximumBytes, Action onExceeded)
+        {
+            if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
+                throw new InvalidOperationException("The request body was already opened.");
+            _legacyBodyLimit = maximumBytes;
+            _onLegacyLimitExceeded = onExceeded;
+        }
+        void IRequestPolicyTarget.CountBody(RequestTelemetry scope)
+        {
+            if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
+                throw new InvalidOperationException("The request body was already opened.");
             _countBody = scope;
         }
         void IRequestPolicyTarget.TimeBodyReads(TimeSpan timeout, Action onTimeout)
         {
-            if (_applicationInput != null) throw new InvalidOperationException("The request body was already opened.");
+            if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
+                throw new InvalidOperationException("The request body was already opened.");
             _readTimeout = timeout;
             _onReadTimeout = onTimeout;
         }
-        void IRequestPolicyTarget.LimitBody(long maximumBytes, Action onExceeded)
+        internal void DeferContinue(Func<CancellationToken, Task> send) => _sendContinue = send;
+        internal bool IsContinueOwed => _sendContinue != null && Volatile.Read(ref _continueStarted) == 0;
+        private Task StartContinue(CancellationToken token)
         {
-            if (_applicationInput != null) throw new InvalidOperationException("The request body was already opened.");
-            _bodyLimit = maximumBytes;
-            _onBodyLimitExceeded = onExceeded;
+            Volatile.Write(ref _continueStarted, 1);
+            return (_sendContinue ?? throw new InvalidOperationException("No 100 Continue is owed."))(token);
+        }
+        int IRequestPolicyTarget.HeaderFieldCount => _headerFieldCount;
+        long IRequestPolicyTarget.HeaderFieldBytes => _headerFieldBytes;
+        public Stream InputStream
+        {
+            get
+            {
+                if (_bodyPolicy == null) return ApplicationInput;
+                var view = Volatile.Read(ref _limitedInput);
+                if (view != null) return view;
+                var created = new RawRequestBodyStream(ApplicationInput, _bodyPolicy.MaximumBytes, KnownBodyRefusal);
+                view = Interlocked.CompareExchange(ref _limitedInput, created, null) ?? created;
+                if (!ReferenceEquals(created, view)) created.Retire();
+                if (Volatile.Read(ref _bodyLimitRetired) != 0) view.Retire();
+                return view;
+            }
+        }
+        internal bool IsBodyReadTimeoutFailure(Exception error) => Volatile.Read(ref _timedInput)?.IsTimeoutFailure(error) == true;
+        internal RequestPolicySnapshot? CapturedRequestPolicy { get; private set; }
+        internal void CaptureRequestPolicy(RequestPolicySnapshot policy) => CapturedRequestPolicy = policy;
+        internal void SetBodyPolicy(RequestBodyPolicy policy) => _bodyPolicy = policy;
+        internal RawRequestBodyLimitException? KnownBodyRefusal => Volatile.Read(ref _knownBodyRefusal);
+        internal void MarkKnownBodyRefusal(RawRequestBodyLimitException failure)
+            => Interlocked.CompareExchange(ref _knownBodyRefusal, failure, null);
+        internal bool IsBodyConsumed => !HasEntityBody || FramingInput is RequestStream body && body.IsBodyConsumed;
+        internal bool HasBodyLimitFailure => Volatile.Read(ref _limitedInput)?.HasLimitFailure == true;
+        internal void RetireBodyLimit()
+        {
+            if (_bodyPolicy == null && _readTimeout == null) return;
+            Interlocked.Exchange(ref _bodyLimitRetired, 1);
+            Volatile.Read(ref _limitedInput)?.Retire();
+            Volatile.Read(ref _timedInput)?.Retire();
+        }
+        internal Task CompleteBodyInputAsync(CancellationToken token)
+        {
+            if (_bodyPolicy == null || KnownBodyRefusal != null || IsContinueOwed) return Task.CompletedTask;
+            TaskCompletionSource<bool> completion;
+            CancellationToken readToken;
+            lock (LazyInitializer.EnsureInitialized(ref _bodyCleanupSync)
+                ?? throw new InvalidOperationException("Missing raw body cleanup gate."))
+            {
+                if (_bodyCleanup != null) return _bodyCleanup;
+                completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                readToken = token.CanBeCanceled ? token : _context.CancellationToken;
+                _bodyCleanupToken = readToken;
+                _bodyCleanup = completion.Task;
+            }
+            // Publication precedes the first read, and the borrowed reader is
+            // never invoked under the publication gate. The actor and pipeline
+            // retain this request's exact outcome even after transport retirement.
+            var cleanup = CompleteBodyInputCoreAsync(readToken);
+            _ = cleanup.ContinueWith(static (finished, state) =>
+            {
+                var result = state is ValueTuple<TaskCompletionSource<bool>, CancellationToken> captured
+                    ? captured : throw new InvalidOperationException("Missing cleanup publication.");
+                if (finished.IsCanceled) result.Item1.TrySetCanceled(result.Item2);
+                else if (finished.IsFaulted)
+                    result.Item1.TrySetException((finished.Exception
+                        ?? throw new InvalidOperationException("Missing cleanup failure.")).InnerExceptions);
+                else result.Item1.TrySetResult(finished.Result);
+            }, (completion, readToken), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            return completion.Task;
+        }
+        internal bool IsBodyCleanupCancellation(OperationCanceledException error)
+        {
+            var gate = Volatile.Read(ref _bodyCleanupSync);
+            if (gate == null) return false;
+            lock (gate)
+                return _bodyCleanup?.IsCanceled == true && _bodyCleanupToken.IsCancellationRequested
+                    && error.CancellationToken == _bodyCleanupToken;
+        }
+        private async Task<bool> CompleteBodyInputCoreAsync(CancellationToken token)
+        {
+            // Nonpersistent response completion may have already retired this
+            // exact request. Its discarded input is not a validated EOF, and a
+            // sticky limit failure remains the original failure after retirement.
+            if (Volatile.Read(ref _bodyLimitRetired) != 0) return DiscardRetiredInput();
+            try
+            {
+                _ = InputStream;
+                await (_limitedInput ?? throw new InvalidOperationException("Missing raw body view."))
+                    .CompleteInputAsync(token).ConfigureAwait(false);
+                return true;
+            }
+            catch (ObjectDisposedException) when (Volatile.Read(ref _bodyLimitRetired) != 0)
+            { return DiscardRetiredInput(); }
+        }
+        private bool DiscardRetiredInput()
+        {
+            var failure = Volatile.Read(ref _limitedInput)?.LimitFailure;
+            if (failure != null) throw failure;
+            return false;
+        }
+        public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
+        {
+            if (_inputStream is IRequestTrailerSource source) return source.TryGetTrailers(out trailers);
+            trailers = RequestTrailerSnapshot.Empty;
+            return !HasEntityBody;
         }
         internal bool HasBodyFramingFailure => _inputStream is RequestStream body && body.HasBodyFramingFailure;
         internal bool IsBodyFramingError(Exception error) => _inputStream is RequestStream body && body.IsFramingError(error);
@@ -171,8 +307,8 @@ namespace EmbedIO.Net.Internal
         internal bool FlushInput()
         {
             if (!HasEntityBody) return true;
-            // The client was never invited to upload: close instead of waiting for its body.
-            if (IsContinueOwed) return false;
+            if (KnownBodyRefusal != null || IsContinueOwed) return false;
+            if (_bodyPolicy != null) return FlushInputAsync().GetAwaiter().GetResult();
             Stream input;
             try { input = InputStream; }
             catch (ObjectDisposedException) { _inputStream = null; return true; }
@@ -192,8 +328,16 @@ namespace EmbedIO.Net.Internal
         internal async Task<bool> FlushInputAsync()
         {
             if (!HasEntityBody) return true;
-            // The client was never invited to upload: close instead of waiting for its body.
             if (IsContinueOwed) return false;
+            if (_bodyPolicy != null)
+            {
+                try
+                {
+                    await CompleteBodyInputAsync(CancellationToken.None).ConfigureAwait(false);
+                    return Volatile.Read(ref _bodyLimitRetired) == 0 && IsBodyConsumed;
+                }
+                catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { return false; }
+            }
             var input = InputStream;
             if (input is RequestStream body && body.IsBodyConsumed) return true;
             var buffer = ArrayPool<byte>.Shared.Rent(2048);

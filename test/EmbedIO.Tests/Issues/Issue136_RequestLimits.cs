@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -49,15 +50,27 @@ namespace EmbedIO.Tests.Issues
         [Test]
         public async Task UnknownLengthBodyFailsWhenAReadCrossesTheLimit()
         {
-            await using var host = Host.Start(o => o.WithMaximumRequestBodyBytes(1000), Host.EchoLength, HttpVerbs.Any);
+            var peers = new ConcurrentQueue<int>();
+            await using var host = Host.Start(o => o.WithMaximumRequestBodyBytes(1000), context =>
+            {
+                peers.Enqueue(context.Request.RemoteEndPoint.Port);
+                return Host.EchoLength(context);
+            }, HttpVerbs.Any);
             using var client = Host.CreateClient(2);
-            using (var over = await client.SendAsync(Post(client, host.Url, new StreamContent(new MemoryStream(new byte[5000])))))
+            using var unknown = new StreamContent(new NonSeekingBody(new byte[5000]));
+            Assert.That(unknown.Headers.ContentLength, Is.Null, "The streaming case must not advertise a computed length.");
+            using (var over = await client.SendAsync(Post(client, host.Url, unknown)))
             {
                 Assert.That(over.StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
                 Assert.That(await over.Content.ReadAsStringAsync(), Does.Contain("configured byte limit"));
             }
-            using var exact = await client.SendAsync(Post(client, host.Url, new StreamContent(new MemoryStream(new byte[1000]))));
+            using var boundary = new StreamContent(new NonSeekingBody(new byte[1000]));
+            Assert.That(boundary.Headers.ContentLength, Is.Null);
+            using var exact = await client.SendAsync(Post(client, host.Url, boundary));
             Assert.That(await exact.Content.ReadAsStringAsync(), Is.EqualTo("1000"), "Exactly the limit is accepted, also on a reused HTTP/2 connection.");
+            var ports = peers.ToArray();
+            Assert.That(ports, Has.Length.EqualTo(2));
+            Assert.That(ports[1], Is.EqualTo(ports[0]), "The healthy boundary request uses the same HTTP/2 transport.");
         }
 
         [Test]
@@ -89,6 +102,8 @@ namespace EmbedIO.Tests.Issues
         [Test]
         public async Task TransferredAndDecodedLimitsAreIndependent()
         {
+            var handlerEntries = 0;
+            var decoderEntries = 0;
             var payload = new byte[100_000];
             byte[] compressed;
             using (var buffer = new MemoryStream())
@@ -101,7 +116,9 @@ namespace EmbedIO.Tests.Issues
             await using var host = Host.Start(o => o.WithSupportCompressedRequests(true).WithMaximumRequestBodyBytes(1000).WithMaximumDecompressedRequestBodyBytes(200_000),
                 async context =>
                 {
+                    Interlocked.Increment(ref handlerEntries);
                     using var body = context.OpenRequestStream();
+                    Interlocked.Increment(ref decoderEntries);
                     var total = 0L;
                     var chunk = new byte[8192];
                     int read;
@@ -113,17 +130,35 @@ namespace EmbedIO.Tests.Issues
             small.Headers.ContentEncoding.Add("gzip");
             using (var response = await client.SendAsync(Post(client, host.Url, small)))
                 Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("100000"), "A small transfer may decode to more than the transferred limit.");
+            Assert.That(Volatile.Read(ref handlerEntries), Is.EqualTo(1));
+            Assert.That(Volatile.Read(ref decoderEntries), Is.EqualTo(1));
 
-            // A declared over-limit HTTP/1 body is rejected before it is read. Do
-            // not race HttpClient's upload against that intentional connection
-            // close: unread uploaded bytes can turn the response into a TCP reset.
-            using var socket = await host.ConnectAsync();
-            await socket.SendAsync($"POST / HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 2000\r\n\r\n");
-            var rejected = await socket.ReadToEndAsync();
-            Assert.That(rejected, Does.StartWith("HTTP/1.1 413"));
-            Assert.That(rejected, Does.Contain("Connection: close"));
-            Assert.That(rejected, Does.Contain("Request body exceeds").And.Not.Contain("Decompressed"));
-            Assert.That(await host.ProbeAsync(), Is.EqualTo("healthy"));
+            // Preserve the accepted head-only observation: do not race an
+            // unnecessary upload against intentional early HTTP/1 retirement.
+            using (var socket = await host.ConnectAsync())
+            {
+                await socket.SendAsync($"POST / HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 2000\r\n\r\n");
+                var rejected = await socket.ReadToEndAsync();
+                Assert.That(rejected, Does.StartWith("HTTP/1.1 413"));
+                Assert.That(rejected, Does.Contain("Connection: close"));
+                Assert.That(rejected, Does.Contain("Request body exceeds").And.Not.Contain("Decompressed"),
+                    "Known excess retains the configured pipeline error formatter.");
+                Assert.That(Volatile.Read(ref handlerEntries), Is.EqualTo(1));
+                Assert.That(Volatile.Read(ref decoderEntries), Is.EqualTo(1));
+            }
+            var successor = new ByteArrayContent(compressed);
+            successor.Headers.ContentEncoding.Add("gzip");
+            using var healthy = await client.SendAsync(Post(client, host.Url, successor));
+            Assert.That(healthy.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(await healthy.Content.ReadAsStringAsync(), Is.EqualTo("100000"));
+            Assert.That(Volatile.Read(ref handlerEntries), Is.EqualTo(2));
+            Assert.That(Volatile.Read(ref decoderEntries), Is.EqualTo(2));
+        }
+
+        private sealed class NonSeekingBody : MemoryStream
+        {
+            internal NonSeekingBody(byte[] bytes) : base(bytes) { }
+            public override bool CanSeek => false;
         }
 
         // ------------------------------------------------------------ admission

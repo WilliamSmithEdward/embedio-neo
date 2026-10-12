@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,10 +18,19 @@ namespace EmbedIO.Net.Internal
         private int _available;
         private bool _ownsInput;
         private long _remaining;
-        private Phase _phase;
+        private volatile Phase _phase;
         private readonly StringBuilder _line = new();
         private bool _lineCr;
         private int _trailerBytes;
+        private List<KeyValuePair<string, string>>? _trailerLines;
+        private IReadOnlyList<KeyValuePair<string, string>> _trailers = RequestTrailerSnapshot.Empty;
+
+        public override bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
+        {
+            var available = IsBodyConsumed && !TrailerInputAbandoned;
+            trailers = available ? _trailers : RequestTrailerSnapshot.Empty;
+            return available;
+        }
 
         internal ChunkedRequestStream(Stream source, byte[] buffer, int offset, int length)
             : base(source, Array.Empty<byte>(), 0, 0, 0)
@@ -135,10 +145,18 @@ namespace EmbedIO.Net.Internal
                             }
                             else if (line.Length == 0)
                             {
+                                if (_trailerLines != null) _trailers = Array.AsReadOnly(_trailerLines.ToArray());
+                                _trailerLines = null;
                                 _phase = Phase.Complete;
                                 return 0;
                             }
-                            else ValidateTrailer(line);
+                            else
+                            {
+                                ValidateTrailer(line);
+                                var colon = EmbedIO.Internal.StringOperations.IndexOfOrdinal(line, ':');
+                                (_trailerLines ??= new List<KeyValuePair<string, string>>()).Add(
+                                    new KeyValuePair<string, string>(line.Substring(0, colon), line.Substring(colon + 1).Trim(' ', '\t')));
+                            }
                         }
                         else if (next == 13) _lineCr = true;
                         else

@@ -370,6 +370,7 @@ namespace EmbedIO.Net.Internal
         private void InitWithPendingInput(ArraySegment<byte> pending)
         {
             _contextBound = false;
+            _context?.HttpListenerRequest.RetireBodyLimit();
             _iStream = null;
             _oStream = null;
             Prefix = null;
@@ -451,6 +452,7 @@ namespace EmbedIO.Net.Internal
             CancellationTokenSource? protocolStop;
             HttpListener[] protocolListeners;
             RequestStream? input;
+            HttpListenerRequest request;
             TcpConnectionPolicy? slotOwner;
             EmbedIO.Internal.ServerTelemetry.LifetimeTelemetry? connectionTelemetry;
             string protocolVersion;
@@ -469,12 +471,17 @@ namespace EmbedIO.Net.Internal
                 protocolListeners = _http2Listeners == null ? Array.Empty<HttpListener>() : new List<HttpListener>(_http2Listeners.Keys).ToArray();
                 _http2Listeners?.Clear();
                 input = _iStream;
+                request = _context.HttpListenerRequest;
                 _pendingInput = default;
                 _iStream = null;
                 _buffer = null;
                 _headReader.Reset();
             }
-            try { FinishRetirement(); }
+            try
+            {
+                request.RetireBodyLimit();
+                FinishRetirement();
+            }
             finally
             {
                 slotOwner?.Release();

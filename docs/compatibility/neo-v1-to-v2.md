@@ -314,6 +314,34 @@ preserves remaining incoming delivery; full closure releases unread packet owner
 See [the carrier guide](../guides/capsule-tunnels.md#native-http-datagrams) before
 adapting a protocol handler. This addition does not change WebSocket queue defaults.
 
+## Actual request-body byte limits
+
+`MaximumRequestBodyBytes` remains optional and unlimited by default. When
+configured, the owned listener now enforces it on actual entity bytes, including
+direct input-stream reads and unknown-length uploads. The raw budget counts
+encoded bytes after HTTP framing and before content decoding; the separate
+decompressed budget applies to compressed-request helpers. Chunk syntax, padding,
+frame headers and request trailers do not count against the raw budget.
+
+The routed server and its first matching route supply an immutable policy before
+automatic `100 Continue` or request admission. An excessive declared length uses
+the normal 413 error callback before module dispatch. A simultaneous header-limit
+failure retains 431 precedence. Automatic refusal does not drain or invite the
+upload; a custom error callback that explicitly reads input still observes the
+captured limit and can send deferred `100 Continue`.
+
+For unknown-length input, an in-limit prefix can reach application code before
+an excess byte is detected. Complete input validation before committing changes
+that cannot be rolled back. Reaching the numeric boundary does not prove EOF or
+make trailers available. Unread input is validated during completion when a raw
+limit is enabled. If output has already committed, an over-limit body terminates
+the affected connection or stream rather than replacing the response status.
+
+Negotiated CONNECT transport is excluded. Custom context adapters retain their
+existing policy path; actual-byte enforcement depends on their own stream
+integration. See [request-body byte limits](../guides/request-body-limits.md)
+for configuration, route inheritance and stream ownership.
+
 ## Optional request body read deadlines
 
 `RequestBodyReadTimeout` is disabled by default. When enabled, a stalled body
