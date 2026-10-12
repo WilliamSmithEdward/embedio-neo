@@ -56,30 +56,6 @@ namespace EmbedIO.WebSockets.Internal
         }
 
         /// <summary>
-        /// Gets a value indicating whether the message type is binary.
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if the message type is binary; otherwise, <c>false</c>.
-        /// </value>
-        public bool IsBinary => Opcode == Opcode.Binary;
-
-        /// <summary>
-        /// Gets a value indicating whether the message type is ping.
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if the message type is ping; otherwise, <c>false</c>.
-        /// </value>
-        public bool IsPing => Opcode == Opcode.Ping;
-
-        /// <summary>
-        /// Gets a value indicating whether the message type is text.
-        /// </summary>
-        /// <value>
-        /// <c>true</c> if the message type is text; otherwise, <c>false</c>.
-        /// </value>
-        public bool IsText => Opcode == Opcode.Text;
-
-        /// <summary>
         /// Gets the message data as an array of <see cref="byte"/>.
         /// </summary>
         /// <value>
