@@ -159,6 +159,10 @@ WebTransport sessions.
 
 ### WebTransport (drafts)
 
+Current provider decision: [await upstream current-wire support](webtransport-upstream-readiness.md).
+The native candidate remains test-only; the preserved experiments are not shipped
+WebTransport support. Issue #303 remains open for provider and integration work.
+
 | Item | Engine `01e785d` | Draft #224 `a2dc18c` | Status |
 | --- | --- | --- | --- |
 | Settings, stream type 0x54, signal 0x41, `:protocol=webtransport` sessions | None. Unknown unidirectional stream types are aborted with H3_STREAM_CREATION_ERROR (`Http3QuicConnection.cs:245-246`) and unknown frames skipped, as RFC 9114 6.2.3 and 9 require. HTTP/3 `:protocol=webtransport` gets 501; HTTP/2 dispatches it (F2) | `:protocol=webtransport` dispatched on both versions; an application could accept it only as a generic capsule tunnel | Experimental draft, not supported. Concrete experimental work remains in program181: freeze the October2026 draft/registry version and validate session/datagram interoperability before advertising support; F2 applies to the generic probe route meanwhile |
