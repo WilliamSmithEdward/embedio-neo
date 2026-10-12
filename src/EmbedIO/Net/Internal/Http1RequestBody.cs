@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,7 +11,7 @@ namespace EmbedIO.Net.Internal
     // declared length bounds every transport read; following request bytes are
     // handed back only after this body completes. Chunked framing specializes
     // this internal stream contract rather than using the fixed-length reader.
-    internal class RequestStream : Stream
+    internal class RequestStream : Stream, IRequestTrailerSource
     {
         private readonly EmbedIO.Internal.BorrowedResource<Stream> _connectionInput;
         private readonly byte[] _readAheadBytes;
@@ -18,6 +19,7 @@ namespace EmbedIO.Net.Internal
         private int _readCursor;
         private long _bytesLeft;
         private ExceptionDispatchInfo? _bodyFailure;
+        private volatile bool _trailerInputAbandoned;
 
         internal RequestStream(Stream stream, byte[] buffer, int offset, int length, long contentLength = -1)
         {
@@ -32,11 +34,23 @@ namespace EmbedIO.Net.Internal
         }
 
         internal virtual bool IsBodyConsumed => _bytesLeft == 0;
+        public virtual bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
+        {
+            trailers = RequestTrailerSnapshot.Empty;
+            return IsBodyConsumed && !HasBodyFramingFailure && !_trailerInputAbandoned;
+        }
 
         internal virtual ArraySegment<byte> BufferedRemainder => IsBodyConsumed
             ? new ArraySegment<byte>(_readAheadBytes, _readCursor, _readEnd - _readCursor) : default;
         internal bool HasBodyFramingFailure => _bodyFailure != null;
         protected bool HasFramingFailure => HasBodyFramingFailure;
+        protected bool TrailerInputAbandoned => _trailerInputAbandoned;
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && !IsBodyConsumed) _trailerInputAbandoned = true;
+            base.Dispose(disposing);
+        }
 
         protected void RememberFramingError(Exception error) => _bodyFailure = ExceptionDispatchInfo.Capture(error);
 
