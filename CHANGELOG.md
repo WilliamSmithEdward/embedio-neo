@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+- Add opt-in trusted-proxy request metadata from Neo #142. `ForwardedHeadersModule` reads
+  `Forwarded` or the selected `X-Forwarded-*` headers only from connections in its trusted proxy
+  networks, walks at most `ForwardLimit` hops while each named sender is itself trusted, and uses a
+  forwarded host only if it is allowed. The result, `context.GetForwardedRequest()`, gives the
+  effective client address, scheme and host beside the connection's own values, which are not
+  changed. Malformed, oversized or conflicting chains apply nothing. See
+  [Behind a reverse proxy](docs/guides/forwarded-headers.md).
 - Add opt-in rate limiting from Neo #141. `RateLimitingModule` admits the requests under its
   base route through a `PartitionedRateLimiter<IHttpContext>` from Microsoft's
   `System.Threading.RateLimiting` (fixed window, sliding window, token bucket, concurrency or a
