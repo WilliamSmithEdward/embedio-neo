@@ -83,6 +83,26 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Limits the total size and the number of a request's header fields.
+        /// </summary>
+        /// <typeparam name="TOptions">The options type.</typeparam>
+        /// <param name="this">The options instance.</param>
+        /// <param name="maximumBytes">The maximum summed name and value lengths, or null for no limit.</param>
+        /// <param name="maximumCount">The maximum number of field lines, or null for no limit.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">A limit is less than one.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static TOptions WithRequestHeaderLimits<TOptions>(this TOptions @this, int? maximumBytes, int? maximumCount = null)
+            where TOptions : WebServerOptionsBase
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.MaximumRequestHeaderBytes = maximumBytes;
+            @this.MaximumRequestHeaderCount = maximumCount;
+            return @this;
+        }
+
+        /// <summary>
         /// Adds a URL prefix.
         /// </summary>
         /// <typeparam name="TOptions">The type of the object on which this method is called.</typeparam>

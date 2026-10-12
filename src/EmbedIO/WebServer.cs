@@ -227,6 +227,18 @@ namespace EmbedIO
             var listener = DoCreate();
             $"Running HTTPListener: {listener.Name}".Info(LogSource);
 
+            // With a body limit, 100 Continue waits until a handler reads the body, so a
+            // request refused before dispatch never invites its upload.
+            var deferContinue = Options.MaximumRequestBodyBytes.HasValue;
+            if (listener is Net.HttpListener tcp) tcp.DeferContinue = deferContinue;
+#if NET10_0_OR_GREATER
+            else if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            {
+                if (listener is CombinedHttpListener combined) combined.DeferContinue = deferContinue;
+                else if (listener is Net.Internal.Http3.Http3Listener quic) quic.DeferContinue = deferContinue;
+            }
+#endif
+
             foreach (var prefix in Options.UrlPrefixes)
             {
                 var urlPrefix = new string(prefix?.ToCharArray());

@@ -96,11 +96,24 @@ namespace EmbedIO.Net.Internal
 #endif
             return UniqueIdGenerator.GetNext();
         }
-        internal Task SendContinueAsync()
-            => Request.HttpMethod != "CONNECT" && Request.HasEntityBody && Request.ContentLength64 != 0
-                && HttpExpectations.ContainsContinue(Request.Headers["Expect"])
-                ? _exchange.SendHeadersAsync(ContinueFields, false, _exchange.CancellationToken)
-                : Task.CompletedTask;
+        internal Task SendContinueAsync(bool defer = false)
+        {
+            if (Request.HttpMethod == "CONNECT" || !Request.HasEntityBody || Request.ContentLength64 == 0
+                || !HttpExpectations.ContainsContinue(Request.Headers["Expect"]))
+                return Task.CompletedTask;
+            // A server with body policies invites the upload only when a handler reads it.
+            if (!defer) return _exchange.SendHeadersAsync(ContinueFields, false, _exchange.CancellationToken);
+            ((MultiplexedRequest)Request).DeferContinue(SendDeferredContinueAsync);
+            return Task.CompletedTask;
+        }
+
+        // Sends a deferred 100 Continue unless a final response has already started.
+        private async Task SendDeferredContinueAsync(CancellationToken cancellationToken)
+        {
+            if (ResponseHeadersSent) return;
+            try { await ((MultiplexedResponse)Response).SendInformationalAsync(100, new WebHeaderCollection(), cancellationToken).ConfigureAwait(false); }
+            catch (InvalidOperationException) when (ResponseHeadersSent) { }
+        }
 
         public void SetHandled() => IsHandled = true;
         public string? GetMimeType(string extension) => MimeTypeProviders.GetMimeType(extension);
