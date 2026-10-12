@@ -23,6 +23,22 @@ namespace EmbedIO.Tests.Issues
     {
         private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(10);
 
+        [Test]
+        public void HostReportsFailedStartupBeforeSendingRequests()
+        {
+            var occupied = new TcpListener(IPAddress.Loopback, 0);
+            occupied.Start();
+            try
+            {
+                var port = ((IPEndPoint)occupied.LocalEndpoint).Port;
+                var url = $"http://127.0.0.1:{port}/";
+                var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO));
+                Assert.Throws<SocketException>(() => new Host(server, url),
+                    "A failed fixture must not send requests to a different listener on its address.");
+            }
+            finally { occupied.Stop(); }
+        }
+
         // ---------------------------------------------------------------- body limits
 
         [TestCase(1)]
@@ -472,7 +488,24 @@ namespace EmbedIO.Tests.Issues
             private readonly WebServer _server;
             private readonly CancellationTokenSource _stop = new();
             private readonly Task _running;
-            private Host(WebServer server, string url) { _server = server; Url = url; _running = server.RunAsync(_stop.Token); }
+            internal Host(WebServer server, string url)
+            {
+                _server = server;
+                Url = url;
+                _running = server.RunAsync(_stop.Token);
+                // Preparation completes synchronously before RunAsync's first await.
+                // Observe startup faults before any client can reach another listener.
+                try
+                {
+                    if (_running.IsCompleted) _running.GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    _server.Dispose();
+                    _stop.Dispose();
+                    throw;
+                }
+            }
             public string Url { get; }
             public string Authority => new Uri(Url).Authority;
 
