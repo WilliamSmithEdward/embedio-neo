@@ -212,12 +212,18 @@ namespace EmbedIO.Tests
                 var received = client.GetAsync(url, timeout.Token);
                 var context = await accepted;
                 var connection = Connection(context);
+                var cleanup = TcpSessionProbe.Completion(connection);
                 context.Response.StatusCode = 204;
                 context.Response.ContentLength64 = 0;
                 context.Response.OutputStream.Write(Array.Empty<byte>(), 0, 0);
                 await Task.WhenAll(Task.Run(context.Close), Task.Run(listener.Stop), Task.Run(listener.Dispose)).WaitAsync(timeout.Token);
                 using var response = await received;
                 Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+                // A protocol actor may win retirement while all three close
+                // callers return as non-claimants. Await the owner, not merely
+                // those callers, within the existing five-second case deadline.
+                await cleanup.WaitAsync(timeout.Token);
+                Assert.That(CloseFinished(connection), Is.True);
                 Assert.That(Transport(connection).CanRead, Is.False);
                 Assert.That(TimerDisposed(RequestTimer(connection)), Is.True);
             }
