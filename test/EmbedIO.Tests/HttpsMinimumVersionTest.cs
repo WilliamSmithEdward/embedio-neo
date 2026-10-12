@@ -156,7 +156,13 @@ namespace EmbedIO.Tests
                 using var peer = new TcpClient();
                 await peer.ConnectAsync(IPAddress.Loopback, port, token);
                 using var tls = CreatePeer(peer, certificate);
-                await tls.AuthenticateAsClientAsync(ClientOptions(protocol), token);
+                // Offer a provider-compatible range during the capability probe.
+                // The control server still allows only the requested version and
+                // both endpoints assert it; TLS 1.2 cannot make a TLS 1.3 probe pass.
+                // This lets a TLS 1.2-only client reach the server's actual
+                // unsupported-version result instead of failing locally first.
+                var offer = protocol == SslProtocols.Tls13 ? SslProtocols.Tls12 | SslProtocols.Tls13 : protocol;
+                await tls.AuthenticateAsClientAsync(ClientOptions(offer), token);
                 Assert.That(tls.SslProtocol, Is.EqualTo(protocol));
             }
             finally { release.TrySetResult(true); }
