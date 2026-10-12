@@ -1,9 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System;
-using System.Linq;
+﻿using System;
 using System.Threading.Tasks;
 using EmbedIO.Utilities;
-using EmbedIO.Internal;
 
 namespace EmbedIO.WebApi
 {
@@ -29,8 +26,6 @@ namespace EmbedIO.WebApi
     /// <seealso cref="IRequestDataAttribute{TController,TData}" />
     /// <seealso cref="IRequestDataAttribute{TController}" />
     [AttributeUsage(AttributeTargets.Parameter)]
-    [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
-    [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
     public sealed class FormFieldAttribute :
         Attribute,
         IRequestDataAttribute<WebApiController, string>,
@@ -118,11 +113,7 @@ namespace EmbedIO.WebApi
             var data = await controller.HttpContext.GetRequestFormDataAsync()
                 .ConfigureAwait(false);
 
-            var fieldName = FieldName ?? parameterName;
-            if (!data.ContainsKey(fieldName) && BadRequestIfMissing)
-                throw HttpException.BadRequest($"Missing form field {fieldName}.");
-
-            return data.GetValues(fieldName)?.LastOrDefault();
+            return RequestFieldBinding.GetString(data, FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Form);
         }
 
         async Task<string[]?> IRequestDataAttribute<WebApiController, string[]>.GetRequestDataAsync(
@@ -132,11 +123,7 @@ namespace EmbedIO.WebApi
             var data = await controller.HttpContext.GetRequestFormDataAsync()
                 .ConfigureAwait(false);
 
-            var fieldName = FieldName ?? parameterName;
-            if (!data.ContainsKey(fieldName) && BadRequestIfMissing)
-                throw HttpException.BadRequest($"Missing form field {fieldName}.");
-
-            return data.GetValues(fieldName) ?? Array.Empty<string>();
+            return RequestFieldBinding.GetStrings(data, FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Form);
         }
 
         async Task<object?> IRequestDataAttribute<WebApiController>.GetRequestDataAsync(
@@ -144,32 +131,14 @@ namespace EmbedIO.WebApi
             Type type,
             string parameterName)
         {
+            // Only the reflection-based binder converts to a runtime type; generated bindings do not call this.
+            if (!ReflectionBinding.IsSupported)
+                throw ReflectionBinding.Disabled();
+
             var data = await controller.HttpContext.GetRequestFormDataAsync()
                 .ConfigureAwait(false);
 
-            var fieldName = FieldName ?? parameterName;
-            if (!data.ContainsKey(fieldName) && BadRequestIfMissing)
-                throw HttpException.BadRequest($"Missing form field {fieldName}.");
-
-            if (type.IsArray)
-            {
-                var fieldValues = data.GetValues(fieldName) ?? Array.Empty<string>();
-                if (!FromString.TryConvertTo(type, fieldValues, out var result))
-                    throw HttpException.BadRequest($"Cannot convert field {fieldName} to an array of {type.GetElementType()?.Name}.");
-
-                return result;
-            }
-            else
-            {
-                var fieldValue = data.GetValues(fieldName)?.LastOrDefault();
-                if (fieldValue == null)
-                    return type.IsValueType ? Activator.CreateInstance(type) : null;
-
-                if (!FromString.TryConvertTo(type, fieldValue, out var result))
-                    throw HttpException.BadRequest($"Cannot convert field {fieldName} to {type.Name}.");
-
-                return result;
-            }
+            return RequestFieldBinding.GetUntyped(data, FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Form, type);
         }
     }
 }

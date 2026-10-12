@@ -1,6 +1,47 @@
 # Changelog
 
 ## [Unreleased]
+- Complete OpenAPI support from Neo #139. `AddSecurityScheme` adds Basic, Bearer and API key
+  schemes, and `RequireSecurity` requires one on every operation an authentication module
+  handles, decided by the module's own route matching. `AddBasicAuthentication(name, module)`
+  describes a `BasicAuthenticationModule`, including the 401 response and `WWW-Authenticate`
+  header it sends. `AddOperation` declares routes outside generated bindings, such as
+  `RoutingModule` handlers, with typed path, query, header and cookie parameters, bodies and
+  responses; declarations the document cannot hold are reported. `[OpenApiResponse]` media
+  types other than JSON now describe text and binary bodies. See
+  [OpenAPI documents](docs/guides/openapi.md).
+- Write OpenAPI 3.1 documents from generated controller bindings, from Neo #139.
+  `OpenApiDocumentBuilder` describes each route's path, query and form parameters, JSON
+  body and response types from what the binding binds and returns, with schemas from the
+  JSON serializer options, and `WithOpenApiDocument` serves the result. `[OpenApiOperation]`,
+  `[OpenApiResponse]` and `[OpenApiIgnore]` add summaries, tags and declared responses or
+  leave routes out. Routes OpenAPI cannot express, such as base routes and `HttpVerbs.Any`,
+  are reported rather than approximated. Works in trimmed and Native AOT applications. See
+  [OpenAPI documents](docs/guides/openapi.md).
+- Complete Native AOT support from Neo #138. `EmbedIO.DependencyInjection` adds
+  `WithControllerServices(binding)`, which activates a controller from request services
+  through its generated binding without reflection, and its .NET 10 asset is now trim- and
+  AOT-analyzed: `WithControllerServices<T>()` and `WithControllerServices(Type)` carry
+  `RequiresUnreferencedCode` and `RequiresDynamicCode`. The Native AOT smoke host now also
+  serves HTTPS with HTTP/1.1, HTTP/2 and HTTP/3, WebSockets over TLS, local sessions and a
+  DI-activated controller, on Windows and Linux. A Windows Native AOT publish omits
+  `msquic.dll`; the guide shows how to publish it for HTTP/3.
+- Direct HTTP/1 response `Flush` and `FlushAsync` now commit the final response
+  headers in write order without ending the response. HEAD and bodyless responses
+  retain their payload suppression. Disposed output rejects flushes; automatic
+  request cleanup preserves empty-response framing and higher-level buffering behavior.
+- Add a controller-binding source generator from Neo #138, shipped in the EmbedIO-Neo
+  package. `[GeneratedControllerBinding(typeof(TController))]` on a partial class makes it
+  generate a `WebApiControllerBinding<TController>`, registered with new
+  `WithController(binding)`, `RegisterController(binding)` and
+  `RegisterControllerWithContext(binding, ...)` overloads that use no reflection, so Web
+  API controllers work in trimmed and Native AOT applications. Bindings keep the
+  reflection-based registration's routes, parameter rules, converters, serialization and
+  controller lifetime; `[JsonData]` can use a `JsonSerializerContext`. Signatures the
+  binding cannot reproduce are reported at build time (EMBEDIO001 to EMBEDIO012).
+  `[QueryField]`, `[FormField]` and `[JsonData]` no longer carry trimming annotations;
+  their runtime-type paths, used only by reflection-based registration, are behind
+  feature switches.
 - Add the optional `IHttpRequestTrailers` capability on built-in request adapters.
   Complete valid input exposes an immutable trailer snapshot, separate from
   initial headers, without reading or draining input. Existing `IHttpRequest`

@@ -172,11 +172,37 @@ namespace EmbedIO.Tests.Issues
         public void ReflectionBasedApisAreAnnotated(Type type, string name)
         {
             ArgumentNullException.ThrowIfNull(type);
-            var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance).Where(m => m.Name == name).ToList();
+            var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
+                .Where(m => m.Name == name && !TakesGeneratedBinding(m)).ToList();
             Assert.That(methods, Is.Not.Empty);
             foreach (var method in methods)
                 Assert.That(method.GetCustomAttribute<RequiresUnreferencedCodeAttribute>(), Is.Not.Null, method.ToString());
         }
+
+        // Registration through a generated binding, and applying the request-data attributes,
+        // need no reflection; only the attributes' runtime-type paths are behind feature switches.
+        [Test]
+        public void GeneratedBindingApisAndRequestDataAttributesAreNotAnnotated()
+        {
+            var bindingApis = typeof(WebApiModule).GetMethods().Concat(typeof(WebApiModuleExtensions).GetMethods())
+                .Where(TakesGeneratedBinding).ToList();
+            Assert.That(bindingApis, Has.Count.EqualTo(5));
+            foreach (var method in bindingApis)
+            {
+                Assert.That(method.GetCustomAttribute<RequiresUnreferencedCodeAttribute>(), Is.Null, method.ToString());
+                Assert.That(method.GetCustomAttribute<RequiresDynamicCodeAttribute>(), Is.Null, method.ToString());
+            }
+
+            foreach (var attribute in new[] { typeof(QueryFieldAttribute), typeof(FormFieldAttribute), typeof(JsonDataAttribute) })
+            {
+                Assert.That(attribute.GetCustomAttribute<RequiresUnreferencedCodeAttribute>(), Is.Null, attribute.Name);
+                Assert.That(attribute.GetCustomAttribute<RequiresDynamicCodeAttribute>(), Is.Null, attribute.Name);
+                Assert.That(attribute.GetConstructors().Select(c => c.GetCustomAttribute<RequiresUnreferencedCodeAttribute>()), Is.All.Null, attribute.Name);
+            }
+        }
+
+        private static bool TakesGeneratedBinding(MethodInfo method)
+            => method.GetParameters().Any(p => p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition() == typeof(WebApiControllerBinding<>));
 
         [Test]
         public void TypedAndOptionsBasedApisAreNotAnnotated()
