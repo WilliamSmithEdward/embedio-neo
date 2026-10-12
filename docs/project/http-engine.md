@@ -8305,3 +8305,23 @@ Native default activation, WebTransport integration and comparative native
 performance/memory acceptance remain unfinished. Exact-head hosted checks are
 required before integrating this increment. The updated carrier guide and Neo
 v1-to-v2 guide describe ownership and availability without claiming release.
+
+## macOS QUIC connection failure on the header-policy integration
+
+[CI 38208254275](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38208254275)
+tested engine `10662706`. macOS reported all 4,996 cases in 5m20s: 4,978 passed,
+16 skipped and two failed. This was within the eight-minute whole-suite budget.
+The raw runtime rebind case failed with `AddressAlreadyInUse` (48). Separately,
+`Http3WebSocketEchoAndClosurePreserveSiblingRequests(262144,False,False,False)`
+failed in `QuicConnection.ConnectAsync` with `HostUnreachable` (65), before the
+WebSocket handshake. The rebind exception policy correctly kept this mixed-failure
+run red. The connection failure's cause is not established by that log.
+
+The WebSocket wire fixture now verifies that server startup reached Listening,
+preserves an immediately faulted server task's original exception, and records
+the endpoint, socket error, server state, task status and cancellation state if
+the peer connect fails. It rethrows the original socket exception. It adds no
+retry, skip, quarantine, timeout increase or production change. Both targets
+build without warnings; the 12 existing HTTP/3 WebSocket wire cases pass on
+Windows with this diagnostic increment. Those passes do not reproduce or repair
+the macOS failure. Fresh macOS evidence and exact-head checks remain required.
