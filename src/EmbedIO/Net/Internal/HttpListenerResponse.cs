@@ -232,6 +232,9 @@ namespace EmbedIO.Net.Internal
                 && !_transport.IsDraining && KeepAlive;
             if (ProtocolVersion < HttpVersion.Version11 && !SuppressesBody && !HasDeclaredLength) persistent = false;
             if (ProtocolVersion == HttpVersion.Version11 && _request.HttpMethod == "CONNECT" && _status >= 300) persistent = false;
+            // A body the server never invited with 100 Continue may still be on its way; the
+            // connection closes after this response instead of waiting to drain it.
+            if (_request.IsContinueOwed) persistent = false;
             _persistent = persistent;
             Headers.Add(HttpHeaderNames.Connection, persistent ? "keep-alive" : "close");
             if (persistent && ProtocolVersion >= HttpVersion.Version11) Headers.Add(HttpHeaderNames.KeepAlive, "timeout=15");

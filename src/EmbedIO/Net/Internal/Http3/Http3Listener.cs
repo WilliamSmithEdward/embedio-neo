@@ -38,6 +38,8 @@ namespace EmbedIO.Net.Internal.Http3
             _native = native;
         }
         public bool IgnoreWriteExceptions { get; set; } = true;
+        // Set by a server with body policies: 100 Continue waits for the first body read.
+        internal bool DeferContinue { get; set; }
         public bool IsListening { get { lock (_sync) return _session?.IsRunning ?? false; } }
         public string Name => "EmbedIO HTTP/3 listener";
         public List<string> Prefixes { get { lock (_sync) return new List<string>(_prefixes); } }
@@ -63,7 +65,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_session != null) return;
                 if (_stopping) throw new InvalidOperationException("The previous HTTP/3 listener is still stopping.");
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificate, _native);
+                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificate, _native, DeferContinue);
             }
         }
         public void Stop()
@@ -152,10 +154,11 @@ namespace EmbedIO.Net.Internal.Http3
             private long _next;
             private int _pendingHandshakes;
             private int _activeConnections;
+            private bool _deferContinue;
             private Session() { }
-            internal static Session Start(ListenerPrefix[] prefixes, X509Certificate2 certificate, bool native)
+            internal static Session Start(ListenerPrefix[] prefixes, X509Certificate2 certificate, bool native, bool deferContinue)
             {
-                var session = new Session();
+                var session = new Session { _deferContinue = deferContinue };
                 try
                 {
                     var endpoints = new Dictionary<IPEndPoint, List<ListenerPrefix>>();
@@ -314,7 +317,7 @@ namespace EmbedIO.Net.Internal.Http3
                             return;
                         }
                     }
-                    await context.SendContinueAsync().ConfigureAwait(false);
+                    await context.SendContinueAsync(_deferContinue).ConfigureAwait(false);
                     await Contexts.Writer.WriteAsync(context, exchange.CancellationToken).ConfigureAwait(false);
                     await context.Completion.WaitAsync(exchange.CancellationToken).ConfigureAwait(false);
                 }

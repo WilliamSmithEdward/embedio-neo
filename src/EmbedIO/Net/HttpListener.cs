@@ -20,6 +20,8 @@ namespace EmbedIO.Net
         }
         /// <inheritdoc />
         public bool IgnoreWriteExceptions { get; set; } = true;
+        // Set by a server with body policies: 100 Continue waits for the first body read.
+        internal bool DeferContinue { get; set; }
         /// <inheritdoc />
         public bool IsListening => _coordinator.IsListening;
         /// <inheritdoc />

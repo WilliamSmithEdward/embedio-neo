@@ -221,8 +221,9 @@ namespace EmbedIO.Tests
                 Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
                 // A protocol actor may win retirement while all three close
                 // callers return as non-claimants. Await the owner, not merely
-                // those callers, within the existing five-second case deadline.
-                await cleanup.WaitAsync(timeout.Token);
+                // those callers, within both the two-second retirement allowance
+                // and the existing five-second case deadline.
+                await cleanup.WaitAsync(TimeSpan.FromSeconds(2), timeout.Token);
                 Assert.That(CloseFinished(connection), Is.True);
                 Assert.That(Transport(connection).CanRead, Is.False);
                 Assert.That(TimerDisposed(RequestTimer(connection)), Is.True);

@@ -35,6 +35,8 @@ namespace EmbedIO.Net.Internal
             _certificate = certificate;
             _native = native;
         }
+        // Set by a server with body policies before Start; applied to both transports.
+        internal bool DeferContinue { get; set; }
         public string Name => "EmbedIO TCP and QUIC listener";
         public bool IsListening { get { lock (_sync) return _session?.IsRunning ?? false; } }
         public List<string> Prefixes { get { lock (_sync) return new List<string>(_prefixes); } }
@@ -76,7 +78,7 @@ namespace EmbedIO.Net.Internal
                     throw new InvalidOperationException("Stop the failed listener session before restarting.");
                 }
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_certificate, _prefixes, _ignoreWriteExceptions, _native);
+                _session = Session.Start(_certificate, _prefixes, _ignoreWriteExceptions, _native, DeferContinue);
                 _drained = false;
             }
         }
@@ -159,10 +161,12 @@ namespace EmbedIO.Net.Internal
             internal bool IsRunning => Volatile.Read(ref _stopping) == 0;
             internal void SetIgnoreWriteExceptions(bool value)
             { _tcp.IgnoreWriteExceptions = value; _quic.IgnoreWriteExceptions = value; }
-            internal static Session Start(X509Certificate2 certificate, List<string> prefixes, bool ignoreWriteExceptions, bool native)
+            internal static Session Start(X509Certificate2 certificate, List<string> prefixes, bool ignoreWriteExceptions, bool native, bool deferContinue)
             {
                 var tcp = new HttpListener(certificate);
                 var quic = new Http3.Http3Listener(certificate, native);
+                tcp.DeferContinue = deferContinue;
+                quic.DeferContinue = deferContinue;
                 var session = new Session(tcp, quic);
                 try
                 {
