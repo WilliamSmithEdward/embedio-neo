@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -95,7 +96,11 @@ internal static class ListenerHttp
                         }));
                     using var stop = new CancellationTokenSource();
                     var running = server.RunAsync(stop.Token);
-                    using var client = secure ? HttpsSmoke.CreateClient(((certificate) ?? throw new System.InvalidOperationException("Expected a non-null test value."))) : new HttpClient();
+                    var handler = new SocketsHttpHandler();
+                    var exclusiveBinding = churn && OperatingSystem.IsWindows();
+                    if (exclusiveBinding)
+                        handler.ConnectCallback = ConnectExclusiveLoopbackAsync;
+                    using var client = secure ? HttpsSmoke.CreateClient(((certificate) ?? throw new System.InvalidOperationException("Expected a non-null test value.")), handler) : new HttpClient(handler);
                     client.DefaultRequestVersion = HttpVersion.Version11;
                     client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
                     client.Timeout = TimeSpan.FromSeconds(20);
@@ -154,6 +159,8 @@ internal static class ListenerHttp
                                 collections = Enumerable.Range(0, 3).Select(index => GC.CollectionCount(index) - gcBefore[index]).ToArray()
                             });
                         }
+                        if (verify && exclusiveBinding && ports.Count != workers * requests * rounds)
+                            throw new InvalidOperationException("Exclusive churn connections reused a measured client port.");
                         phase = "shutdown verification";
                         stop.Cancel();
                         await running.WaitAsync(TimeSpan.FromSeconds(10));
@@ -180,6 +187,7 @@ internal static class ListenerHttp
                         {
                             protocol = secure ? "https" : "http",
                             connectionPolicy = churn ? "close-per-request" : "keep-alive",
+                            clientSocketBinding = exclusiveBinding ? "exclusive-loopback" : "runtime-default",
                             workers,
                             payloadBytes = payload.Length,
                             responseChunkBytes = chunkSize,
@@ -320,6 +328,26 @@ internal static class ListenerHttp
 
     private static double Percentile(double[] values, double percentile)
         => values[Math.Clamp((int)Math.Ceiling(values.Length * percentile) - 1, 0, values.Length - 1)];
+
+    private static async ValueTask<Stream> ConnectExclusiveLoopbackAsync(SocketsHttpConnectionContext context, CancellationToken token)
+    {
+        var address = IPAddress.Parse(context.DnsEndPoint.Host);
+        if (!IPAddress.IsLoopback(address)) throw new InvalidOperationException("The workload requires a loopback endpoint.");
+        var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+        try
+        {
+            // Windows implicit async binding enables SO_REUSE_UNICASTPORT. A churn
+            // client can reuse a tuple still in the server's TIME_WAIT and stall
+            // before admission. Explicit exclusive binding keeps this test's fresh
+            // connections distinct without changing server close semantics.
+            socket.ExclusiveAddressUse = true;
+            socket.Bind(new IPEndPoint(address, 0));
+            socket.NoDelay = true;
+            await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), token).ConfigureAwait(false);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch { socket.Dispose(); throw; }
+    }
 
     private static int Integer(string[] args, string option, int fallback)
     {

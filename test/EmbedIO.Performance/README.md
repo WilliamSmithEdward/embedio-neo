@@ -52,6 +52,14 @@ percentiles, process allocations, GC counts and memory. Add --retain-connections
 for retained-reference cleanup diagnostics; --requests, --rounds, --concurrency
 and --payload-bytes select workloads. Timing is informational. Heavy repeated
 churn can exhaust Windows socket/TIME_WAIT capacity; failures abort without retries.
+On Windows, close-per-request workloads explicitly bind each client socket to an
+exclusive loopback source port before connecting. The runtime's implicit async
+bind enables `SO_REUSE_UNICASTPORT`; a reused tuple was observed in `SYN_SENT`
+while the server's previous connection was still in `TIME_WAIT`, before server
+admission or TLS. Keep-alive workloads retain the runtime's default connection
+path. JSON records `clientSocketBinding`; verification also requires distinct
+measured source ports for exclusive churn. Certificate pinning, request timeout,
+body/response checks and server cleanup assertions remain in force.
 See [the lifetime report](../../docs/user-reports/listener-connection-lifetimes.md)
 for methodology, baseline measurements and compatibility coverage.
 
