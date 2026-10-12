@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+- Return read-only wrappers from `WebServerOptions.UrlPrefixes`,
+  `IComponentCollection.WithSafeNames` and `IComponentCollection.Named`, evaluated
+  in Neo #49. The views previously were the backing collections, so a cast could
+  add URL prefixes after the options locked or insert a module into a running
+  server. Declared types are unchanged; see
+  [configuration locking](docs/user-reports/configuration-locking.md).
 - Document and verify endpoint retirement and fresh listener replacement for the
   upstream iOS shutdown report, preserving current production behavior. Actual
   iOS background/suspension recovery remains a separate validation gap.

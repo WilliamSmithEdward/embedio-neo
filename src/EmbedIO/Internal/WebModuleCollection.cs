@@ -16,7 +16,7 @@ namespace EmbedIO.Internal
 
         internal void StartAll(CancellationToken cancellationToken)
         {
-            foreach (var (name, module) in WithSafeNames)
+            foreach (var (name, module) in SafeNamedComponents)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 $"Starting module {name}...".Debug(_logSource);
@@ -30,7 +30,7 @@ namespace EmbedIO.Internal
                 return;
 
             var requestedPath = context.RequestedPath;
-            foreach (var (name, module) in WithSafeNames)
+            foreach (var (name, module) in SafeNamedComponents)
             {
                 var routeMatch = module.MatchUrlPath(requestedPath);
                 if (routeMatch == null)

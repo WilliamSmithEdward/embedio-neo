@@ -38,7 +38,11 @@ namespace EmbedIO
         /// <summary>
         /// Gets the URL prefixes.
         /// </summary>
-        public IReadOnlyList<string> UrlPrefixes => _urlPrefixes;
+        // A wrapper, not the list itself: a caller could otherwise cast the view back to
+        // List<string> and add prefixes after the options are locked.
+        public IReadOnlyList<string> UrlPrefixes => _urlPrefixesView ??= _urlPrefixes.AsReadOnly();
+
+        private System.Collections.ObjectModel.ReadOnlyCollection<string>? _urlPrefixesView;
 
         /// <summary>
         /// Gets or sets the type of HTTP listener.
