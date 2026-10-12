@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+- Complete Native AOT support from Neo #138. `EmbedIO.DependencyInjection` adds
+  `WithControllerServices(binding)`, which activates a controller from request services
+  through its generated binding without reflection, and its .NET 10 asset is now trim- and
+  AOT-analyzed: `WithControllerServices<T>()` and `WithControllerServices(Type)` carry
+  `RequiresUnreferencedCode` and `RequiresDynamicCode`. The Native AOT smoke host now also
+  serves HTTPS with HTTP/1.1, HTTP/2 and HTTP/3, WebSockets over TLS, local sessions and a
+  DI-activated controller, on Windows and Linux. A Windows Native AOT publish omits
+  `msquic.dll`; the guide shows how to publish it for HTTP/3.
 - Direct HTTP/1 response `Flush` and `FlushAsync` now commit the final response
   headers in write order without ending the response. HEAD and bodyless responses
   retain their payload suppression. Disposed output rejects flushes; automatic
