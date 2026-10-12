@@ -137,6 +137,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Server lifetime](user-reports/server-lifetime.md): cancel, drain, dispose and stop compared, the server-owned lifetime token, repeat calls and ownership.
 - [Byte ranges from any module](user-reports/range-responses.md): the opt-in representation helper, every range criterion end to end, compression and what is not provided.
 - [Configuration locking](user-reports/configuration-locking.md): when each surface locks, object initialization, startup validation, nested objects and read-only collection views.
+- [Object initialization and fluent setup](user-reports/object-initialization.md): the same server both ways, collection initializers for modules and accounts, and which helpers stay methods.
 - [Fluent Basic authentication](user-reports/fluent-basic-authentication.md): scoped registration, configuration and preserved authentication behavior.
 - [Context and persistent client banning](user-reports/context-client-banning.md): live controls, CIDR policies and optional restart persistence.
 
