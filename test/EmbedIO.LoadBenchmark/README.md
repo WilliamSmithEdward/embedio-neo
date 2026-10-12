@@ -413,25 +413,28 @@ rate is limited to 64 requests/second; paced churn can therefore use longer samp
 without the unpaced TIME_WAIT safety cap. A missing paced request fails the campaign.
 Rate zero retains the existing closed-loop behavior and churn caps.
 
-`--connection-census` enables only the test server's connection metrics and observes
-actual accepted/closed lifetime measurements from EmbedIO.Server and Kestrel. The
-census is used only in diagnostic profiles; timing/allocation comparisons leave it
-off. It counts logical server lifetimes, not native QUIC allocations or heap release.
+`--connection-census` observes EmbedIO.Server's logical connection meter and
+Kestrel's original connection-delegate tasks with an independent meter witness.
+The census is used only in diagnostic profiles; timing/allocation comparisons
+leave it off. It counts logical server lifetimes, not native QUIC allocations or heap release.
 The `teardown-accounting-check` command verifies both meters, isolation from other
 meters, unsupported deltas, paced cancellation and expired slots.
 
-When detailed exception profiling is explicitly enabled, cumulative stack-site
-counts accompany type/message counts. Capture is bounded at 512 sites and 16 KiB
-per key, with overflow recorded and rejected by the diagnostic campaign. Stack
-presence alone does not identify the original owner of every asynchronous rethrow.
+When detailed exception profiling is explicitly enabled, typed observable-site
+counts accompany type/message counts. Capture is bounded at 512 groups and 16 KiB
+per key, with overflow recorded and rejected by required diagnostic profiles.
+Representative trace truncation is explicit and retains full-content hashes.
+Stack presence alone does not identify every asynchronous rethrow's original owner.
 
 `scripts/teardown_cost_campaign.py` runs only on disposable Linux GitHub runners:
 seven protocol/lifetime scenarios, two alternating profiled rounds, then three
 unprofiled A/A and Kestrel comparison rounds. A/A copies have byte-identical runner
 and core assemblies. Every arm uses 32 requests/second, one connection/stream,
 quiet baseline and phase background ceilings of 0.5 busy CPUs. It preserves all
-failed runs and does not retry them. Separate intentional-abandonment/recovery
-cases keep the existing recovery and cleanup gates. Profiles are not timing claims.
+failed runs and does not retry them. Separate EmbedIO intentional-abandonment/recovery
+cases keep the existing recovery and cleanup gates. Kestrel fault controls remain
+explicitly diagnostic, with unsuccessful results retained separately under #361.
+Profiles are not timing claims.
 No production API, defaults, error propagation or dependency changes are involved.
 
 The long cost campaign is deferred while its PR is a draft. Marking the PR ready
