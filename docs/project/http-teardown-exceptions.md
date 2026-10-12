@@ -96,6 +96,9 @@ samples and unsuccessful cleanup, while checking phase differences and unavailab
 denominators. Both profiler checks are part of the existing CI static-analysis job.
 The test-only harness remains outside shipped packages and the ordinary solution.
 
+<a id="remaining-work"></a>
+<a id="current-source-follow-up-in-progress"></a>
+
 ## Current-source controlled measurements
 
 PR #351's campaign [38289079183](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38289079183)
