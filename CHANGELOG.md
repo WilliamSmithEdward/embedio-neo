@@ -26,6 +26,9 @@
   taken). While `MaximumRequestBodyBytes` is set, `100 Continue` is sent when a
   handler first reads the body instead of before dispatch, so a refused body is
   never invited. HTTP/3 is now covered by the request-limit tests.
+- Keep the internal native QUIC module mapped on Linux through process teardown,
+  while closing API tables and child handles. Add fresh-process native-peer and
+  collectible-context checks; see [lifetime guidance](docs/project/native-quic-module-lifetime.md).
 - Add opt-in, server-wide request limits from Neo #136:
   `MaximumRequestBodyBytes` (HTTP 413 on a declared or counted over-limit body,
   with HTTP/1 connection reuse stopped), `MaximumConcurrentRequests` with a bounded

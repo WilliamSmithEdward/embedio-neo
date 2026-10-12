@@ -70,6 +70,40 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public async Task RetirementClaimDoesNotCompleteBeforeTransportDisposalFinishes()
+        {
+            var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var release = new ManualResetEventSlim();
+            var stream = new ObservedStream(null, () =>
+            {
+                entered.TrySetResult(true);
+                if (!release.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("Missing transport disposal release.");
+            });
+            var owner = Create(stream);
+            var completion = Completion(owner);
+            Assert.That(Retire(owner, false), Is.True);
+            var closing = Task.Run(() => Finish(owner, null, () => { }));
+            try
+            {
+                await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Multiple(() =>
+                {
+                    Assert.That(Retire(owner, false), Is.False, "A competing close returns without owning cleanup.");
+                    Assert.That(completion.IsCompleted, Is.False);
+                    Assert.That(Closed(owner), Is.False);
+                    Assert.That(stream.CanRead, Is.True, "The retirement claim alone does not prove transport disposal.");
+                });
+            }
+            finally { release.Set(); }
+            await closing.WaitAsync(TimeSpan.FromSeconds(5));
+            await completion.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.That(stream.CanRead, Is.False);
+            Assert.That(Closed(owner), Is.True);
+            Assert.That(stream.Disposals, Is.EqualTo(1));
+            Assert.That(TimerDisposed(Timer(owner)), Is.True);
+        }
+
+        [Test]
         public void StaleDeadlineCannotRetireStoppedOrRenewedRequest()
         {
             var owner = Create(new ObservedStream(null));
@@ -153,12 +187,16 @@ namespace EmbedIO.Tests
             catch (ObjectDisposedException) { return true; }
         }
 
-        private sealed class ObservedStream(Exception? failure) : MemoryStream
+        private sealed class ObservedStream(Exception? failure, Action? beforeDispose = null) : MemoryStream
         {
             internal int Disposals { get; private set; }
             protected override void Dispose(bool disposing)
             {
-                if (disposing) Disposals++;
+                if (disposing)
+                {
+                    Disposals++;
+                    beforeDispose?.Invoke();
+                }
                 base.Dispose(disposing);
                 if (disposing && failure != null) throw failure;
             }

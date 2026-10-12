@@ -212,17 +212,19 @@ namespace EmbedIO.Tests
                 var received = client.GetAsync(url, timeout.Token);
                 var context = await accepted;
                 var connection = Connection(context);
+                var cleanup = TcpSessionProbe.Completion(connection);
                 context.Response.StatusCode = 204;
                 context.Response.ContentLength64 = 0;
                 context.Response.OutputStream.Write(Array.Empty<byte>(), 0, 0);
                 await Task.WhenAll(Task.Run(context.Close), Task.Run(listener.Stop), Task.Run(listener.Dispose)).WaitAsync(timeout.Token);
                 using var response = await received;
                 Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
-                // The client can read the response before the server finishes retiring the
-                // transport; wait a bounded time for retirement rather than racing it.
-                var deadline = DateTime.UtcNow.AddSeconds(2);
-                while ((Transport(connection).CanRead || !TimerDisposed(RequestTimer(connection))) && DateTime.UtcNow < deadline)
-                    await Task.Delay(10);
+                // A protocol actor may win retirement while all three close
+                // callers return as non-claimants. Await the owner, not merely
+                // those callers, within both the two-second retirement allowance
+                // and the existing five-second case deadline.
+                await cleanup.WaitAsync(TimeSpan.FromSeconds(2), timeout.Token);
+                Assert.That(CloseFinished(connection), Is.True);
                 Assert.That(Transport(connection).CanRead, Is.False);
                 Assert.That(TimerDisposed(RequestTimer(connection)), Is.True);
             }

@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests.TestObjects
@@ -21,6 +22,12 @@ namespace EmbedIO.Tests.TestObjects
             var owner = Lifetime(session);
             return (bool)(owner.GetType().GetProperty("CloseFinished", Hidden)?.GetValue(owner)
                 ?? throw new AssertionException("Missing cleanup completion state."));
+        }
+        internal static Task Completion(object session)
+        {
+            var owner = Lifetime(session);
+            return owner.GetType().GetProperty("Completion", Hidden)?.GetValue(owner) as Task
+                ?? throw new AssertionException("Missing terminal cleanup task.");
         }
         internal static void Arm(object session, int milliseconds)
         {
