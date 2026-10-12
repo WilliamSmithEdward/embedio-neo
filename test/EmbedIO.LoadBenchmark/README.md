@@ -405,3 +405,91 @@ The Windows per-process census reads CPU counters only and reports inaccessible
 processes. Linux retains its passive baseline ceiling; Windows records ambient baseline
 activity without a quiet precondition. See the
 [control report](../../docs/project/http3-quiet-host-validation.md) for scope and evidence.
+
+## Current teardown cost controls (#282)
+
+`run --request-rate 32` reserves paced request slots across client workers. The opt-in
+rate is limited to 64 requests/second; paced churn can therefore use longer samples
+without the unpaced TIME_WAIT safety cap. A missing paced request fails the campaign.
+Rate zero retains the existing closed-loop behavior and churn caps.
+
+`--connection-census` observes EmbedIO.Server's logical connection meter and
+Kestrel's original connection-delegate tasks with an independent meter witness.
+The census is used only in diagnostic profiles; timing/allocation comparisons
+leave it off. It counts logical server lifetimes, not native QUIC allocations or heap release.
+The `teardown-accounting-check` command verifies both meters, isolation from other
+meters, unsupported deltas, paced cancellation and expired slots.
+
+When detailed exception profiling is explicitly enabled, typed observable-site
+counts accompany type/message counts. Capture is bounded at 512 groups and 16 KiB
+per key, with overflow recorded and rejected by required diagnostic profiles.
+Representative trace truncation is explicit and retains full-content hashes.
+Stack presence alone does not identify every asynchronous rethrow's original owner.
+
+`scripts/teardown_cost_campaign.py` runs only on disposable Linux GitHub runners:
+seven protocol/lifetime scenarios, two alternating profiled rounds, then three
+unprofiled A/A and Kestrel comparison rounds. A/A copies have byte-identical runner
+and core assemblies. Every arm uses 32 requests/second, one connection/stream,
+quiet baseline and phase background ceilings of 0.5 busy CPUs. It preserves all
+failed runs and does not retry them. Separate EmbedIO intentional-abandonment/recovery
+cases keep the existing recovery and cleanup gates. Kestrel fault controls remain
+explicitly diagnostic, with unsuccessful results retained separately under #361.
+Profiles are not timing claims.
+No production API, defaults, error propagation or dependency changes are involved.
+
+The long cost campaign is deferred while its PR is a draft. Marking the PR ready
+for review schedules it on that source. A skipped draft campaign is not acceptance;
+its successful current-source run and all ordinary checks are required before merge.
+
+The cost and identical-binary A/A arms use `--disable-exception-census`, which does
+not register the inherited lightweight first-chance counter. The actual child
+observer mode is recorded and checked. Those arms report exception counts as
+unavailable, not zero. Detailed profiles and deliberate-fault arms retain counters;
+ordinary harness defaults are unchanged. The earlier counter-enabled campaign is
+preparation evidence and cannot establish observer-free production cost.
+
+
+### Revised diagnostic qualification
+
+Detailed `throw-site-v2` groups use type/message, the notification throw frame and
+nearest owned frame, with atomic typed totals and bounded representative stacks.
+Representatives retain full-content hashes, original lengths and explicit truncation;
+missing owned frames remain unattributed. Group overflow remains a failure.
+Kestrel profiles return the original connection-delegate task, retain its meter as
+an independent witness, and never count weak-target collection as completion.
+Logical lifetime accounting does not prove native heap release.
+
+Normal profile/A/A/cost arms for both engines and every EmbedIO recovery case are
+required. William approved Kestrel deliberate-fault cases as diagnostic comparison
+controls: their actual failures remain `failed-control` limitations in `verdict.json`
+and logs, not passing results. See issue #361 for unfinished HTTP/3 control tasks.
+This scope does not exempt normal Kestrel traffic, alter ordinary cost workloads,
+change EmbedIO recovery gates, or retroactively accept earlier failed campaigns.
+
+`recovery --control-hard-cleanup` is a separate diagnostic Kestrel experiment that
+strongly retains active contexts and records actual public Abort calls. It is off
+by default, is not enabled in ordinary campaign comparisons, and did not qualify
+as a shutdown fix in the captured HTTP/3 probe. Strong references can themselves
+alter lifetime observability. Retain the actual pending-task and exit evidence.
+
+
+Campaign progress output reports the active phase, elapsed time, sample-file count
+and newest file every 30 seconds. File presence is explicitly not validation or
+acceptance. This reporting runs in the campaign parent; cost server children still
+have their exception observers disabled.
+
+A 52-minute whole-campaign ceiling reserves time for artifact retention within the
+existing 60-minute job. Individual arm/fault ceilings remain 1,500/180 seconds and
+are capped by the remaining overall budget. Timeout cleanup kills only the owned
+process group and waits at most ten seconds for exit. Unattempted phases/controls,
+overall expiry and incomplete required results are recorded as failures, never
+partial success. All original requests, rounds, quiet ceilings and acceptance
+checks remain required; the campaign does not retry unsuccessful measurements.
+
+
+Only the verified unfinished Kestrel lifetime observation qualifies for the
+separate control limitation after clean driver/healthy traffic, complete site
+capture and valid counter/witness evidence. Unknown failures, crashes, timeouts,
+invalid identities or malformed evidence remain blocking for either engine.
+The campaign enforces the actual child engine, disabled experimental hard cleanup,
+loaded core hash and byte-identical copied A/A runner, rather than trusting labels.

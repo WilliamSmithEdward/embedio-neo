@@ -15,6 +15,7 @@ return args.FirstOrDefault() switch
     "native-heap-census-check" => NativeHeaps.CheckCounter(),
     "quic-churn" => await QuicChurn.RunAsync(options).ConfigureAwait(false),
     "burn" => await QuicChurn.BurnAsync(options).ConfigureAwait(false),
+    "teardown-accounting-check" => await TeardownAccountingCheck.RunAsync().ConfigureAwait(false),
     "exception-accounting-check" => await ExceptionAccountingCheck.RunAsync().ConfigureAwait(false),
     _ => Usage(),
 };

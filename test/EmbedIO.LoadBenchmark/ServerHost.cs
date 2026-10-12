@@ -19,25 +19,31 @@ internal static class ServerHost
         using var certificate = tls
             ? X509CertificateLoader.LoadPkcs12FromFile(options.Required("--certificate"), options.Required("--certificate-password"), X509KeyStorageFlags.Exportable)
             : null;
-        var settings = new ServerSettings(options.Required("--engine"), protocol, tls, options.Integer("--port", 0), certificate);
+        var settings = new ServerSettings(options.Required("--engine"), protocol, tls, options.Integer("--port", 0), certificate, options.Has("--connection-census"), options.Has("--control-hard-cleanup"));
         Payloads.Prepare(options.Integer("--reference-bytes", 1 << 20));
         var exceptions = new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
         // Diagnostic opt-in: key by message too and log the first stack per key (bounded).
-        var detail = Environment.GetEnvironmentVariable("EMBEDIO_BENCH_EXCEPTION_DETAIL") == "1";
-        AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
+        var exceptionCensus = !options.Has("--disable-exception-census");
+        var detail = exceptionCensus && Environment.GetEnvironmentVariable("EMBEDIO_BENCH_EXCEPTION_DETAIL") == "1";
+        var sites = new ExceptionSiteLedger(exceptions);
+        object? SiteSnapshot() => detail ? sites.Snapshot() : null;
+        if (exceptionCensus) AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
         {
             var key = e.Exception.GetType().FullName ?? "?";
             if (detail)
             {
                 key += ": " + e.Exception.Message;
-                if (!exceptions.ContainsKey(key) && exceptions.Count < 64) Console.Error.WriteLine("FIRST " + key + Environment.NewLine + e.Exception.StackTrace);
+                var first = sites.Record(key, e.Exception.StackTrace ?? "<stack unavailable>", Environment.StackTrace);
+                if (first) Console.Error.WriteLine("FIRST " + key + Environment.NewLine + e.Exception.StackTrace);
             }
-            exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
+            else exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
         };
         using var profile = options.Has("--profile") ? new RuntimeEventProfile() : null;
+        using var connections = settings.ConnectionCensus ? new ConnectionLedger(settings.Engine == "kestrel") : null;
+        connections?.Start();
         IBenchmarkServer server = settings.Engine switch
         {
-            "kestrel" => new KestrelServer(settings),
+            "kestrel" => new KestrelServer(settings, connections),
             "embedio" => new EmbedIOServer(settings),
             _ => throw new ArgumentException("Unknown engine " + settings.Engine),
         };
@@ -49,6 +55,8 @@ internal static class ServerHost
             Control.Write("READY " + JsonSerializer.Serialize(new
             {
                 engine = settings.Engine,
+                exceptionCensus,
+                controlHardCleanup = settings.ControlHardCleanup,
                 protocol = settings.Protocol.ToString(),
                 tls,
                 startMilliseconds = started.Elapsed.TotalMilliseconds,
@@ -57,6 +65,7 @@ internal static class ServerHost
                 serverGc = GCSettings.IsServerGC,
                 gcLatencyMode = GCSettings.LatencyMode.ToString(),
                 runtime = RuntimeInformation.FrameworkDescription,
+                msquic = AssemblyIdentity.NativeQuic(),
                 assemblies = AssemblyIdentity.Describe(typeof(EmbedIO.WebServer).Assembly, typeof(Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions).Assembly, typeof(System.Net.Quic.QuicListener).Assembly),
             }));
 
@@ -68,6 +77,12 @@ internal static class ServerHost
                 {
                     case "snapshot":
                         Control.Write(JsonSerializer.Serialize(ResourceSnapshot.Capture()));
+                        break;
+                    case "exception-sites":
+                        Control.Write(JsonSerializer.Serialize(SiteSnapshot()));
+                        break;
+                    case "connections":
+                        Control.Write(JsonSerializer.Serialize(connections?.Snapshot()));
                         break;
                     case "exceptions":
                         Control.Write(JsonSerializer.Serialize(new Dictionary<string, long>(exceptions, StringComparer.Ordinal)));
@@ -85,12 +100,21 @@ internal static class ServerHost
                     case "exit":
                     case null:
                         measurement?.Dispose();
+                        var connectionsBeforeHostStop = connections?.Snapshot();
                         var stopping = Stopwatch.StartNew();
                         await server.StopAsync().ConfigureAwait(false);
+                        var connectionsAfterHostStop = connections?.Snapshot();
                         await server.DisposeAsync().ConfigureAwait(false);
+                        var observerComplete = connections is null || await connections.WaitForCompletionAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
                         disposed = true;
                         Control.Write(JsonSerializer.Serialize(new
                         {
+                            exceptionSites = SiteSnapshot(),
+                            connectionsBeforeHostStop,
+                            controlCleanup = server is KestrelServer control ? control.CleanupSnapshot() : null,
+                            connectionsAfterHostStop,
+                            observerComplete,
+                            connections = connections?.Snapshot(),
                             stopMilliseconds = stopping.Elapsed.TotalMilliseconds,
                             firstChanceExceptions = new Dictionary<string, long>(exceptions, StringComparer.Ordinal),
                         }));
@@ -109,6 +133,23 @@ internal static class ServerHost
 
 internal static class AssemblyIdentity
 {
+    internal static object? NativeQuic()
+    {
+        if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            || !System.Net.Quic.QuicConnection.IsSupported) return null;
+        string? path = null;
+        if (OperatingSystem.IsLinux())
+            path = File.ReadLines("/proc/self/maps").Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Last())
+                .FirstOrDefault(value => value.StartsWith("/", StringComparison.Ordinal) && Path.GetFileName(value).StartsWith("libmsquic", StringComparison.Ordinal));
+        else if (OperatingSystem.IsWindows())
+        {
+            using var process = Process.GetCurrentProcess();
+            foreach (ProcessModule module in process.Modules)
+                if (module.ModuleName.Equals("msquic.dll", StringComparison.OrdinalIgnoreCase)) { path = module.FileName; break; }
+        }
+        return path is null ? null : new { path, sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) };
+    }
+
     internal static object[] Describe(params Assembly[] assemblies) => assemblies.Select(assembly => (object)new
     {
         name = assembly.GetName().Name,
