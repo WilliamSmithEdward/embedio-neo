@@ -615,8 +615,7 @@ namespace EmbedIO.WebSockets
                                 e.RawData,
                                 new Internal.WebSocketReceiveResult(e.RawData.Length, e.Opcode))
                             .ConfigureAwait(false);
-                        else await e.DeliveryLease.DeliverAsync(() => OnMessageReceivedAsync(context, e.RawData,
-                            new Internal.WebSocketReceiveResult(e.RawData.Length, e.Opcode))).ConfigureAwait(false);
+                        else await DeliverLimitedMessageAsync(context, e).ConfigureAwait(false);
                     }
                 }
                 catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested) { }
@@ -624,6 +623,13 @@ namespace EmbedIO.WebSockets
             };
 
             await ((Internal.WebSocket)context.WebSocket).WaitForCloseAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        private Task DeliverLimitedMessageAsync(IWebSocketContext context, Internal.MessageEventArgs message)
+        {
+            var lease = message.DeliveryLease ?? throw new InvalidOperationException("Missing message delivery reservation.");
+            return lease.DeliverAsync(() => OnMessageReceivedAsync(context, message.RawData,
+                new Internal.WebSocketReceiveResult(message.RawData.Length, message.Opcode)));
         }
     }
 }
