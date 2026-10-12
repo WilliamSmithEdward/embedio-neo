@@ -138,3 +138,8 @@ original exhausted-slot pacing defect and missing-libnuma startup failure are
 retained as unsuccessful tooling attempts; neither is a production finding.
 Recovery acceptance additionally requires clean child exits, healthy traffic,
 complete atomic stack/type counters and balanced server lifetimes.
+
+Detailed profiles retain both the exception stack and the synchronous first-chance
+notification stack: an exception-dispatch-only rethrow frame cannot identify the
+owned await site by itself. These diagnostic stacks are excluded from cost arms
+and still do not establish original fault ownership across asynchronous boundaries.

@@ -43,7 +43,11 @@ internal static class ServerHost
             if (detail)
             {
                 key += ": " + e.Exception.Message;
-                var site = key + "\n" + (e.Exception.StackTrace ?? "<stack unavailable>");
+                // Exception.StackTrace can contain only an EDI rethrow frame here.
+                // Capture the synchronous throw notification stack as well; neither
+                // proves original fault ownership across asynchronous boundaries.
+                var site = key + "\nexception stack:\n" + (e.Exception.StackTrace ?? "<stack unavailable>")
+                    + "\nthrow notification stack:\n" + Environment.StackTrace;
                 bool first;
                 lock (siteGate)
                 {
