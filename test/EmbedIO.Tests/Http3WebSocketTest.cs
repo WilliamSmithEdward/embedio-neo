@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Quic;
 using System.Net.Security;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Reflection;
 using System.Runtime.Versioning;
@@ -72,7 +73,12 @@ namespace EmbedIO.Tests
                 .WithModule(new ActionModule("/", HttpVerbs.Get, context => context.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding)));
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             var running = server.RunAsync(stop.Token);
-            await using var connection = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
+            // A failed startup must retain its original error instead of being
+            // diagnosed only as a later client-side UDP connection failure.
+            if (running.IsFaulted) await running;
+            Assert.That(server.State, Is.EqualTo(WebServerState.Listening),
+                $"QUIC startup state for {prefix}; task={running.Status}, canceled={stop.IsCancellationRequested}.");
+            await using var connection = await ConnectWebSocketPeerAsync(server, running, new QuicClientConnectionOptions
             {
                 RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, uri.Port),
                 DefaultCloseErrorCode = 0x100,
@@ -148,6 +154,23 @@ namespace EmbedIO.Tests
                 stop.Cancel();
                 foreach (var peer in peerStreams) await peer.DisposeAsync();
                 await running.WaitAsync(TimeSpan.FromSeconds(10));
+            }
+        }
+
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task<QuicConnection> ConnectWebSocketPeerAsync(WebServer server, Task running,
+            QuicClientConnectionOptions options, CancellationToken token)
+        {
+            try { return await QuicConnection.ConnectAsync(options, token); }
+            catch (SocketException error)
+            {
+                TestContext.Out.WriteLine($"QUIC peer connect failed: endpoint={options.RemoteEndPoint}, "
+                    + $"socketError={error.SocketErrorCode}, nativeError={error.NativeErrorCode}, "
+                    + $"serverState={server.State}, serverTask={running.Status}, canceled={token.IsCancellationRequested}.");
+                if (running.IsFaulted) TestContext.Out.WriteLine("Original server task failure: " + running.Exception);
+                throw;
             }
         }
         [SupportedOSPlatform("windows")]
