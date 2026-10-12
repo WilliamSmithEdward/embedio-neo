@@ -320,3 +320,6 @@
 
 - name: Standalone native QUIC module lifetime
   href: project/native-quic-module-lifetime.md
+
+- name: WebTransport upstream readiness
+  href: project/webtransport-upstream-readiness.md
