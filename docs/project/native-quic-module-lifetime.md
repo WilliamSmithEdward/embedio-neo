@@ -70,7 +70,7 @@ still runs against the normal test output.
 CI runs the seven-case native-only subset in three fresh processes on each desktop
 platform before the complete coverage suite. The independent peer and MsQuic are
 pinned by existing setup. A test summary alone is insufficient: each process must
-exit successfully. The full discovery floor adds six new NUnit cases and a required standalone context check; existing coverage,
+exit successfully. The full discovery floor adds seven new NUnit cases and a required standalone context check; existing coverage,
 deadlines and the separate raw-runtime rebind quarantine are preserved.
 Final-head repository gates must pass before integration. The issue records actual hosted outcomes; configuring jobs alone does not establish platform acceptance.
 

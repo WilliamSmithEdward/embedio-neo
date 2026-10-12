@@ -58,6 +58,25 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public void IncreasedPathLimitAcceptsAFormerlyOversizedDatagram()
+        {
+            var native = new FakeNative();
+            using var datagrams = Negotiated(native, 1200);
+            var observed = Get<int>(datagrams, "MaxSendLength");
+            Assert.That(TrySend(datagrams, new byte[observed + 1], out var rejected), Is.EqualTo("TooLarge"));
+            Assert.That(rejected, Is.Null);
+            using (var state = NativeEvent.StateChanged(true, 1452)) Deliver(datagrams, state);
+            Assert.That(Get<int>(datagrams, "MaxSendLength"), Is.EqualTo(1452));
+            Assert.That(TrySend(datagrams, new byte[observed + 1], out var accepted), Is.EqualTo("Queued"));
+            Assert.That(native.Calls.Single().Length, Is.EqualTo(1201));
+            Assert.That(TrySend(datagrams, new byte[1453], out rejected), Is.EqualTo("TooLarge"));
+            Assert.That(rejected, Is.Null);
+            Complete(datagrams, native.Calls[0].Context, 4);
+            Assert.That(Outcome(Required(accepted)), Is.EqualTo("Acknowledged"));
+            Assert.That(Get<int>(datagrams, "PendingSendCount"), Is.Zero);
+        }
+
+        [Test]
         public void PeerWithoutDatagramSupportReportsUnavailable()
         {
             var native = new FakeNative();
@@ -557,9 +576,18 @@ namespace EmbedIO.Tests
                 if (mode == "echo")
                 {
                     Assert.That(negotiated, Is.True);
-                    var limit = Get<int>(datagrams, "MaxSendLength");
-                    Assert.That(limit, Is.InRange(1000, 65535));
-                    Assert.That(TrySend(datagrams, new byte[limit + 1], out _), Is.EqualTo("TooLarge"));
+                    // MsQuic can raise another path-MTU indication immediately.
+                    // This locally rejected send must use the same state as the
+                    // observed limit; otherwise a legitimate increase can admit it.
+                    var stateGate = datagrams.GetType().GetField("_sync", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(datagrams)
+                        ?? throw new AssertionException("Missing native datagram state gate.");
+                    lock (stateGate)
+                    {
+                        var limit = Get<int>(datagrams, "MaxSendLength");
+                        Assert.That(limit, Is.InRange(1000, 65535));
+                        Assert.That(TrySend(datagrams, new byte[limit + 1], out var rejected), Is.EqualTo("TooLarge"));
+                        Assert.That(rejected, Is.Null);
+                    }
                     Assert.That(TrySend(datagrams, System.Text.Encoding.ASCII.GetBytes("embedio-native-datagram-hello"), out var greeting), Is.EqualTo("Queued"));
                     completions.Add(Required(greeting));
                     while (await Receive(datagrams, deadline.Token) is { } datagram)
