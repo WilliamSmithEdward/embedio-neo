@@ -33,7 +33,7 @@ using var server = new WebServer(o => o
     .WithUrlPrefix("http://127.0.0.1:8877/")
     .WithMode(HttpListenerMode.EmbedIO))
     .WithModule(new EchoModule());
-Console.WriteLine("WebSocket endpoint: ws://127.0.0.1:8877/socket; press Ctrl+C to stop.");
+Console.WriteLine(new Uri("ws://127.0.0.1:8877/socket"));
 await server.RunAsync(stop.Token);
 
 public sealed class EchoModule : WebSocketModule
