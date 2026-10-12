@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+- Add opt-in RFC 9457 problem details from Neo #143. `WithProblemDetails()`, or
+  `ProblemDetailsHandler.ForHttpExceptions()` and `ForUnhandledExceptions()` on a server or module,
+  answer errors with `application/problem+json`: HTTP exceptions and Web API binding failures keep
+  their status and message, a thrown `ProblemDetailsException` is sent as is, and unhandled
+  exceptions reveal nothing beyond a 500 unless enabled for development. Every problem carries the
+  `requestId` EmbedIO logs for the request. Clients that prefer HTML still get the HTML pages, and
+  defaults are unchanged. See [Problem details for API errors](docs/guides/problem-details.md).
 - Add opt-in trusted-proxy request metadata from Neo #142. `ForwardedHeadersModule` reads
   `Forwarded` or the selected `X-Forwarded-*` headers only from connections in its trusted proxy
   networks, walks at most `ForwardLimit` hops while each named sender is itself trusted, and uses a
