@@ -150,7 +150,7 @@ jobs:
             export DOTNET_EnableCrashReportOnly=1
             export DOTNET_DbgMiniDumpName="$RUNNER_TEMP/embedio-crash-reports/crash.%p"
           fi
-          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 5062 --coverlet || status=$?
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 5071 --coverlet || status=$?
           if test "$status" = 0; then exit 0; fi
           # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
           # disposal returns (a deferred close on macOS; accepted connections on every
@@ -161,7 +161,7 @@ jobs:
           counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
           read -r total passed failed defect <<< "$counts"
           # The owner-approved exception cannot hide discovery loss.
-          test "$total" -ge 5062 || exit "$status"
+          test "$total" -ge 5071 || exit "$status"
           if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
             echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
             exit 0
@@ -612,10 +612,14 @@ jobs:
     name: Windows AppContainer
     uses: ./.github/workflows/appcontainer.yml
 
+  aot-smoke:
+    name: Native AOT
+    uses: ./.github/workflows/aot-smoke.yml
+
   ci-passed:
     name: CI passed
     if: always()
-    needs: [test, runtime-close-probe, quic-retirement-gate, compatibility, static-analysis, build, mac-catalyst, android, maui-https, appcontainer]
+    needs: [test, runtime-close-probe, quic-retirement-gate, compatibility, static-analysis, build, mac-catalyst, android, maui-https, appcontainer, aot-smoke]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

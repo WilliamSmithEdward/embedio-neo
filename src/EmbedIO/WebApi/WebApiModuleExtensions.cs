@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 
 namespace EmbedIO.WebApi
 {
@@ -18,6 +19,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WithController{TController}(WebApiModule,Func{TController})"/>
         /// <seealso cref="WithController(WebApiModule,Type)"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType{TController}()"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public static WebApiModule WithController<TController>(this WebApiModule @this)
             where TController : WebApiController, new()
         {
@@ -38,6 +41,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WithController{TController}(WebApiModule)"/>
         /// <seealso cref="WithController(WebApiModule,Type,Func{WebApiController})"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType{TController}(Func{TController})"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public static WebApiModule WithController<TController>(this WebApiModule @this, Func<TController> factory)
             where TController : WebApiController
         {
@@ -57,6 +62,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WithController(WebApiModule,Type,Func{WebApiController})"/>
         /// <seealso cref="WithController{TController}(WebApiModule)"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type)"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public static WebApiModule WithController(this WebApiModule @this, Type controllerType)
         {
             if (@this is null) throw new System.NullReferenceException();
@@ -76,6 +83,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WithController(WebApiModule,Type)"/>
         /// <seealso cref="WithController{TController}(WebApiModule,Func{TController})"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type,Func{WebApiController})"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public static WebApiModule WithController(this WebApiModule @this, Type controllerType, Func<WebApiController> factory)
         {
             if (@this is null) throw new System.NullReferenceException();

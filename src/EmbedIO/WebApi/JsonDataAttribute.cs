@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 using System.Threading.Tasks;
 
 namespace EmbedIO.WebApi
@@ -16,6 +17,8 @@ namespace EmbedIO.WebApi
     /// <seealso cref="Attribute" />
     /// <seealso cref="IRequestDataAttribute{TController}" />
     [AttributeUsage(AttributeTargets.Parameter)]
+    [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+    [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
     public class JsonDataAttribute : Attribute, IRequestDataAttribute<WebApiController>
     {
         /// <inheritdoc />

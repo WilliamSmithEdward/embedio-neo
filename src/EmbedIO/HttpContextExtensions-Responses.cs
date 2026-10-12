@@ -130,5 +130,25 @@ namespace EmbedIO
         /// <seealso cref="ResponseSerializer.Default"/>
         public static Task SendDataAsync(this IHttpContext @this, ResponseSerializerCallback serializer, object? data)
             => Validate.NotNull(nameof(serializer), serializer)(@this, data);
+
+        /// <summary>
+        /// Asynchronously sends data as a JSON response, using source-generated or otherwise explicit metadata.
+        /// </summary>
+        /// <typeparam name="TData">The type of the data.</typeparam>
+        /// <param name="this">The <see cref="IHttpContext"/> interface on which this method is called.</param>
+        /// <param name="data">The data to serialize.</param>
+        /// <param name="typeInfo">Metadata for <typeparamref name="TData"/>, for example from a
+        /// <see cref="System.Text.Json.Serialization.JsonSerializerContext"/>.</param>
+        /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="typeInfo"/> is <see langword="null"/>.</exception>
+        /// <remarks>The response is UTF-8 <c>application/json</c>, as with the default serializer. This overload
+        /// uses no reflection, so it works in trimmed and Native AOT applications.</remarks>
+        public static Task SendDataAsync<TData>(this IHttpContext @this, TData data, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TData> typeInfo)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            Validate.NotNull(nameof(typeInfo), typeInfo);
+            return ResponseSerializer.WriteJsonBytesAsync(@this, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, typeInfo), false);
+        }
     }
 }

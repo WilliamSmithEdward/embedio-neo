@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -16,6 +17,9 @@ namespace EmbedIO.WebApi
     /// </summary>
     public abstract class WebApiModuleBase : RoutingModuleBase
     {
+        internal const string ReflectionMessage = "Controllers are discovered, bound and invoked through reflection and runtime code generation, "
+            + "which trimming and Native AOT do not support. Register routes with RoutingModule or ActionModule delegates instead.";
+
         private const string GetRequestDataAsyncMethodName = nameof(IRequestDataAttribute<WebApiController>.GetRequestDataAsync);
 
         private static readonly MethodInfo PreProcessRequestMethod = typeof(WebApiController).GetMethod(nameof(WebApiController.PreProcessRequest)) ?? throw new MissingMemberException("PreProcessRequestMethod");
@@ -124,6 +128,8 @@ namespace EmbedIO.WebApi
         /// </remarks>
         /// <seealso cref="RegisterControllerType{TController}(Func{TController})"/>
         /// <seealso cref="RegisterControllerType(Type)"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerType<TController>()
             where TController : WebApiController, new()
             => RegisterControllerType(typeof(TController));
@@ -170,6 +176,8 @@ namespace EmbedIO.WebApi
         /// </remarks>
         /// <seealso cref="RegisterControllerType{TController}()"/>
         /// <seealso cref="RegisterControllerType(Type,Func{WebApiController})"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerType<TController>(Func<TController> factory)
             where TController : WebApiController
             => RegisterControllerType(typeof(TController), factory);
@@ -208,6 +216,8 @@ namespace EmbedIO.WebApi
         /// </remarks>
         /// <seealso cref="RegisterControllerType(Type,Func{WebApiController})"/>
         /// <seealso cref="RegisterControllerType{TController}()"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerType(Type controllerType)
         {
             EnsureConfigurationNotLocked();
@@ -272,6 +282,8 @@ namespace EmbedIO.WebApi
         /// </remarks>
         /// <seealso cref="RegisterControllerType(Type)"/>
         /// <seealso cref="RegisterControllerType{TController}(Func{TController})"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerType(Type controllerType, Func<WebApiController> factory)
         {
             EnsureConfigurationNotLocked();
@@ -296,6 +308,8 @@ namespace EmbedIO.WebApi
         /// <param name="controllerType">The concrete controller type.</param>
         /// <param name="factory">Creates a fresh controller for the request.</param>
         /// <param name="release">Releases the controller, or does nothing for container-owned instances.</param>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerTypeWithContext(
             Type controllerType,
             Func<IHttpContext, WebApiController?> factory,
@@ -364,6 +378,8 @@ namespace EmbedIO.WebApi
         // - serializes the returned object (or the result of the returned task),
         //   unless the return type of the controller method is void or Task;
         // - if the controller implements IDisposable, disposes it.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
         private RouteHandlerCallback CompileHandler(
             Expression factoryExpression, MethodInfo method, RouteMatcher matcher,
             Func<IHttpContext, WebApiController?>? contextFactory,
@@ -653,6 +669,8 @@ namespace EmbedIO.WebApi
             return value;
         }
 
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         private bool TryRegisterControllerTypeCore(
             Type controllerType, Expression factoryExpression,
             Func<IHttpContext, WebApiController?>? contextFactory = null,
