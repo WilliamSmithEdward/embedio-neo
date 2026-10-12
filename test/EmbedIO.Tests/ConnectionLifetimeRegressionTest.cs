@@ -218,6 +218,11 @@ namespace EmbedIO.Tests
                 await Task.WhenAll(Task.Run(context.Close), Task.Run(listener.Stop), Task.Run(listener.Dispose)).WaitAsync(timeout.Token);
                 using var response = await received;
                 Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+                // The client can read the response before the server finishes retiring the
+                // transport; wait a bounded time for retirement rather than racing it.
+                var deadline = DateTime.UtcNow.AddSeconds(2);
+                while ((Transport(connection).CanRead || !TimerDisposed(RequestTimer(connection))) && DateTime.UtcNow < deadline)
+                    await Task.Delay(10);
                 Assert.That(Transport(connection).CanRead, Is.False);
                 Assert.That(TimerDisposed(RequestTimer(connection)), Is.True);
             }
