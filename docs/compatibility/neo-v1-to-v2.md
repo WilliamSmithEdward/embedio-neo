@@ -1,4 +1,4 @@
-﻿# Migrating from EmbedIO-Neo v1 to v2
+# Migrating from EmbedIO-Neo v1 to v2
 
 This guide tracks the owner-designated **Neo v2** release scope for the modern
 HTTP engine program [#181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181)
@@ -58,6 +58,20 @@ application flush path. Buffered serializers and other output wrappers retain
 their flushing behavior, including empty responses and final framing. This
 approved change is unreleased; test custom streaming code against the final v2
 package before upgrading.
+
+## Explicit JSON metadata method names
+
+The unreleased Native AOT APIs use distinct names: `Json.SerializeWithMetadata`,
+`Json.DeserializeWithMetadata`, `GetRequestDataWithMetadataAsync` and
+`SendDataWithMetadataAsync`. William approved renaming only these new APIs after
+their original overload names made existing null-options calls ambiguous and
+changed serializer callback selection for null data. Update code using the earlier
+v2 branch metadata overloads to these names. No published v1 metadata API is renamed.
+
+Existing `Json.Deserialize<T>(json, null)`, options-based serialization and
+`SendDataAsync(serializer, null)` retain their signatures and behavior. Explicit
+metadata still uses its own options and supports source-generated JSON in trimmed
+and Native AOT applications. See [the Native AOT guide](../guides/trimming-and-native-aot.md).
 
 ## Listener selection and deployment
 

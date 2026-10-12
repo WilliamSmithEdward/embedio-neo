@@ -3,15 +3,18 @@
 ## [Unreleased]
 - Direct HTTP/1 response `Flush` and `FlushAsync` now commit the final response
   headers in write order without ending the response. HEAD and bodyless responses
-  retain their payload suppression. Disposed output rejects flushes; automatic request cleanup
-  preserves empty-response framing and higher-level buffering behavior.
+  retain their payload suppression. Disposed output rejects flushes; automatic
+  request cleanup preserves empty-response framing and higher-level buffering behavior.
+- Give the new unreleased explicit JSON metadata APIs distinct `WithMetadata` names.
+  This restores legacy null-options calls and serializer callbacks with null data;
+  reflection defaults and the Native AOT implementation are preserved.
 - Make the .NET 10 asset trim- and Native-AOT-analyzable from Neo #138. Reflection-based
   APIs (Web API controller registration and its request-data attributes,
   `RoutingModule.AddFrom`/`WithHandlersFrom`, EmbedIO's default JSON options) carry
-  `RequiresUnreferencedCode` and `RequiresDynamicCode`. New AOT-safe overloads take
-  source-generated metadata: `SendDataAsync(data, JsonTypeInfo<T>)`,
-  `GetRequestDataAsync(JsonTypeInfo<T>)`, `Json.Serialize(data, JsonTypeInfo<T>)` and
-  `Json.Deserialize(json, JsonTypeInfo<T>)`. Options-based JSON helpers now resolve
+  `RequiresUnreferencedCode` and `RequiresDynamicCode`. New AOT-safe methods take
+  source-generated metadata: `SendDataWithMetadataAsync(data, JsonTypeInfo<T>)`,
+  `GetRequestDataWithMetadataAsync(JsonTypeInfo<T>)`, `Json.SerializeWithMetadata(data, JsonTypeInfo<T>)` and
+  `Json.DeserializeWithMetadata(json, JsonTypeInfo<T>)`. Options-based JSON helpers now resolve
   metadata through the options, so a `JsonSerializerContext` works without reflection.
   The package adds a build file that disables EmbedIO's reflection JSON with the
   application's `JsonSerializerIsReflectionEnabledByDefault`; those paths then throw
