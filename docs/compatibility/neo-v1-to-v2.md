@@ -49,9 +49,9 @@ the guarded response properties cannot be changed after headers are sent.
 A flush canceled while waiting for writer ownership never overtakes that writer;
 a pre-canceled first flush leaves headers mutable. Transport failure makes further
 output unusable, following `IgnoreWriteExceptions`.
-Flushing disposed output reports `ObjectDisposedException`. HEAD responses keep
-their metadata until completion, so serializers can determine representation
-headers without emitting body bytes. Empty writes keep their existing behavior.
+Flushing disposed output reports `ObjectDisposedException`. Explicit HEAD flushes
+also commit representation headers, while HEAD writes and completion still emit
+no body bytes. Empty writes keep their existing behavior.
 
 Automatic server cleanup completes direct HTTP/1 output without calling the
 application flush path. Buffered serializers and other output wrappers retain

@@ -2,8 +2,8 @@
 
 ## [Unreleased]
 - Direct HTTP/1 response `Flush` and `FlushAsync` now commit the final response
-  headers in write order without ending the response. HEAD retains metadata
-  until completion. Disposed output rejects flushes; automatic request cleanup
+  headers in write order without ending the response. HEAD and bodyless responses
+  retain their payload suppression. Disposed output rejects flushes; automatic request cleanup
   preserves empty-response framing and higher-level buffering behavior.
 - Make the .NET 10 asset trim- and Native-AOT-analyzable from Neo #138. Reflection-based
   APIs (Web API controller registration and its request-data attributes,

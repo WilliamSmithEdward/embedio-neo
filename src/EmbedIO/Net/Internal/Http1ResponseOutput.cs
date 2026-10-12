@@ -76,8 +76,7 @@ namespace EmbedIO.Net.Internal
 
         private async Task FlushCoreAsync(bool synchronous, CancellationToken token)
         {
-            // HEAD writers retain metadata until completion; no body bytes are buffered.
-            using var head = _response.IsHeadResponse ? null : PrepareHead(false);
+            using var head = PrepareHead(false);
             if (head != null)
                 await SubmitAsync(head.GetBuffer(), checked((int)head.Position), checked((int)(head.Length - head.Position)), synchronous, token).ConfigureAwait(false);
             if (Volatile.Read(ref _failed) != 0) return;

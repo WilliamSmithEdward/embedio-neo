@@ -190,7 +190,7 @@ namespace EmbedIO.Tests
 
         [TestCase(false)]
         [TestCase(true)]
-        public async Task HeadFlushPreservesMetadataUntilCompletion(bool asynchronous)
+        public async Task HeadFlushCommitsHeadersAndPreservesTheNextResponse(bool asynchronous)
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var url = new UriBuilder(HttpsSmoke.GetUrl()) { Host = "127.0.0.1", Scheme = "http" }.Uri;
@@ -200,20 +200,35 @@ namespace EmbedIO.Tests
             using var peer = new TcpClient();
             await peer.ConnectAsync(IPAddress.Loopback, url.Port, timeout.Token);
             var transport = peer.GetStream();
-            await transport.WriteAsync(Encoding.ASCII.GetBytes($"HEAD / HTTP/1.1\r\nHost: {url.Authority}\r\nConnection: close\r\n\r\n"), timeout.Token);
+            await transport.WriteAsync(Encoding.ASCII.GetBytes($"HEAD / HTTP/1.1\r\nHost: {url.Authority}\r\n\r\n"), timeout.Token);
             var context = await listener.GetContextAsync(timeout.Token);
             try
             {
                 context.Response.ContentLength64 = 3;
+                context.Response.SetCookie(new Cookie("flush", "head"));
                 if (asynchronous) await context.Response.OutputStream.FlushAsync(timeout.Token);
                 else context.Response.OutputStream.Flush();
-                context.Response.ContentLength64 = 5;
-                context.Response.SetCookie(new Cookie("flush", "head"));
+                // The peer receives headers while the application still owns this
+                // context; response completion cannot manufacture the observation.
+                var head = await ReadThroughAsync(transport, "\r\n\r\n", timeout.Token);
+                Assert.That(head, Does.Contain("Content-Length: 3\r\n"));
+                Assert.That(head, Does.Contain("Set-Cookie: flush=head"));
+                Assert.Throws<InvalidOperationException>(() => context.Response.ContentLength64 = 5);
+                Assert.Throws<InvalidOperationException>(() => context.Response.StatusCode = 201);
+                await context.Response.OutputStream.WriteAsync(Encoding.ASCII.GetBytes("HEAD_BODY_MUST_NOT_BE_SENT"), timeout.Token);
             }
             finally { context.Close(); }
-            var wire = await ReadThroughAsync(transport, "\r\n\r\n", timeout.Token);
-            Assert.That(wire, Does.Contain("Content-Length: 5\r\n"));
-            Assert.That(wire, Does.Contain("Set-Cookie: flush=head"));
+            await transport.WriteAsync(Encoding.ASCII.GetBytes($"GET /next HTTP/1.1\r\nHost: {url.Authority}\r\nConnection: close\r\n\r\n"), timeout.Token);
+            var next = await listener.GetContextAsync(timeout.Token);
+            try
+            {
+                next.Response.ContentLength64 = 7;
+                await next.Response.OutputStream.WriteAsync(Encoding.ASCII.GetBytes("healthy"), timeout.Token);
+            }
+            finally { next.Close(); }
+            var nextHead = await ReadThroughAsync(transport, "\r\n\r\n", timeout.Token);
+            Assert.That(nextHead, Does.StartWith("HTTP/1.1 200"), "HEAD payload or chunk bytes cannot precede the next response.");
+            Assert.That(await ReadThroughAsync(transport, "healthy", timeout.Token), Is.EqualTo("healthy"));
             Assert.That(await transport.ReadAsync(new byte[1], timeout.Token), Is.Zero);
         }
 
