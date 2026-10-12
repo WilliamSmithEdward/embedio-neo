@@ -235,11 +235,16 @@ namespace EmbedIO.Tests.Issues
 
         private System.Collections.Concurrent.ConcurrentQueue<string> Log { get; }
 
+        private TaskCompletionSource Disposed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Waits for disposal, at most delay milliseconds. Disposal that happens when the method
+        // returns its task lets the handler finish after it; disposal after completion would
+        // only follow the full delay, so the logged order shows which one happened.
         [Route(HttpVerbs.Get, "/dispose/{delay}")]
         public async Task<string> Work(int delay)
         {
             Log.Enqueue("handler-start");
-            await Task.Delay(delay).ConfigureAwait(false);
+            await Task.WhenAny(Disposed.Task, Task.Delay(delay)).ConfigureAwait(false);
             Log.Enqueue("handler-end");
             return "worked";
         }
@@ -251,7 +256,11 @@ namespace EmbedIO.Tests.Issues
             throw new InvalidOperationException("thrown");
         }
 
-        public void Dispose() => Log.Enqueue("dispose");
+        public void Dispose()
+        {
+            Log.Enqueue("dispose");
+            Disposed.TrySetResult();
+        }
     }
 
     // Reflection registration rejects these defaults: it passes an untyped null constant.

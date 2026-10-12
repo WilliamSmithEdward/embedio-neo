@@ -30,7 +30,7 @@ namespace EmbedIO.Tests.Issues
 
             await using var server = Issue138_GeneratedBinding.RunningServer.Start(module);
             using var client = new HttpClient();
-            Assert.That(await client.GetStringAsync(server.Url + "dispose/50"), Is.EqualTo("\"worked\""));
+            Assert.That(await client.GetStringAsync(server.Url + "dispose/5000"), Is.EqualTo("\"worked\""));
             Assert.That(log, Is.EqualTo(new[] { "handler-start", "dispose", "handler-end" }));
 
             log.Clear();
