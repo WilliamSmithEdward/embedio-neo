@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Collections.Generic;
 using System.IO;
@@ -169,6 +170,12 @@ namespace EmbedIO.Net.Internal
             Interlocked.Exchange(ref _bodyLimitRetired, 1);
             Volatile.Read(ref _limitedInput)?.Retire();
             Volatile.Read(ref _timedInput)?.Retire();
+        }
+        public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
+        {
+            if (_exchange.InputStream is IRequestTrailerSource source) return source.TryGetTrailers(out trailers);
+            trailers = RequestTrailerSnapshot.Empty;
+            return false;
         }
         public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
         {
