@@ -2,6 +2,7 @@
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Net.Internal;
 
 namespace EmbedIO.Internal
 {
@@ -20,20 +21,29 @@ namespace EmbedIO.Internal
         private bool _complete;
         private RawRequestBodyLimitException? _failure;
         private readonly RawRequestBodyLimitException? _knownRefusal;
+        private readonly IRequestTrailerSource? _physicalInput;
+        private int _trailerInputAbandoned;
 
         internal RawRequestBodyStream(Stream source, long maximum)
             : this(source, maximum, null) { }
 
         internal RawRequestBodyStream(Stream source, long maximum, RawRequestBodyLimitException? knownRefusal)
+            : this(source, maximum, knownRefusal, null) { }
+
+        internal RawRequestBodyStream(Stream source, long maximum, RawRequestBodyLimitException? knownRefusal,
+            IRequestTrailerSource? physicalInput)
         {
             if (maximum < 0) throw new ArgumentOutOfRangeException(nameof(maximum));
             _source = new BorrowedResource<Stream>(source ?? throw new ArgumentNullException(nameof(source)));
             _maximum = maximum;
             _knownRefusal = knownRefusal;
+            _physicalInput = physicalInput;
         }
 
         internal RawRequestBodyLimitException? LimitFailure => Volatile.Read(ref _failure);
         internal bool HasLimitFailure => LimitFailure != null;
+        internal bool ReadInProgress => Volatile.Read(ref _reading) != 0;
+        internal bool TrailerInputAbandoned => Volatile.Read(ref _trailerInputAbandoned) != 0;
         public override bool CanRead => Volatile.Read(ref _disposed) == 0 && Volatile.Read(ref _retired) == 0;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
@@ -176,7 +186,14 @@ namespace EmbedIO.Internal
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         protected override void Dispose(bool disposing)
         {
-            if (disposing) Interlocked.Exchange(ref _disposed, 1);
+            // Physical framing can finish on a positive read. Preserve that
+            // snapshot, but do not let cleanup or late FIN undo abandonment.
+            if (disposing)
+            {
+                if (_physicalInput != null && !_physicalInput.TryGetTrailers(out _))
+                    Interlocked.Exchange(ref _trailerInputAbandoned, 1);
+                Interlocked.Exchange(ref _disposed, 1);
+            }
             base.Dispose(disposing);
         }
     }

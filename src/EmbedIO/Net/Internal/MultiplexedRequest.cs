@@ -23,6 +23,7 @@ namespace EmbedIO.Net.Internal
         private RequestBodyPolicy? _bodyPolicy;
         private RawRequestBodyLimitException? _knownBodyRefusal;
         private RawRequestBodyStream? _limitedInput;
+        private Stream? _rawApplicationInput;
         private int _bodyLimitRetired;
         internal MultiplexedRequest(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
         {
@@ -88,7 +89,7 @@ namespace EmbedIO.Net.Internal
                     if (_applicationInput == null)
                     {
                         var input = framing;
-                        if (_countBody != null) input = new CountingReadStream(input, _countBody);
+                        if (_countBody != null && _bodyPolicy == null) input = new CountingReadStream(input, _countBody);
                         timed = _readTimeout is TimeSpan timeout ? new ReadTimeoutStream(input, timeout, _onReadTimeout) : null;
                         if (timed != null) input = timed;
                         if (_sendContinue != null) input = new DeferredContinueStream(input, StartContinue);
@@ -141,13 +142,21 @@ namespace EmbedIO.Net.Internal
             get
             {
                 if (_bodyPolicy == null) return ApplicationInput;
+                var application = Volatile.Read(ref _rawApplicationInput);
+                if (application != null) return application;
                 var view = Volatile.Read(ref _limitedInput);
-                if (view != null) return view;
-                var created = new RawRequestBodyStream(ApplicationInput, _bodyPolicy.MaximumBytes, KnownBodyRefusal);
-                view = Interlocked.CompareExchange(ref _limitedInput, created, null) ?? created;
-                if (!ReferenceEquals(created, view)) created.Retire();
+                if (view == null)
+                {
+                    var created = new RawRequestBodyStream(ApplicationInput, _bodyPolicy.MaximumBytes, KnownBodyRefusal,
+                        _exchange.InputStream as IRequestTrailerSource);
+                    view = Interlocked.CompareExchange(ref _limitedInput, created, null) ?? created;
+                    if (!ReferenceEquals(created, view)) created.Retire();
+                }
                 if (Volatile.Read(ref _bodyLimitRetired) != 0) view.Retire();
-                return view;
+                // Only public reads are application bytes. Cleanup and the
+                // private EOF/excess probe use the raw view without this counter.
+                application = _countBody != null ? new CountingReadStream(view, _countBody) : view;
+                return Interlocked.CompareExchange(ref _rawApplicationInput, application, null) ?? application;
             }
         }
         internal bool IsBodyReadTimeoutFailure(Exception error) => Volatile.Read(ref _timedInput)?.IsTimeoutFailure(error) == true;
@@ -173,9 +182,16 @@ namespace EmbedIO.Net.Internal
         }
         public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
         {
-            if (_exchange.InputStream is IRequestTrailerSource source) return source.TryGetTrailers(out trailers);
             trailers = RequestTrailerSnapshot.Empty;
-            return false;
+            var available = _exchange.InputStream is IRequestTrailerSource source && source.TryGetTrailers(out trailers);
+            // Check the monotonic raw outcome after the physical snapshot, so
+            // overlapping disposal cannot publish metadata from a later EOF.
+            if (Volatile.Read(ref _limitedInput) is { } raw && (raw.ReadInProgress || raw.HasLimitFailure || raw.TrailerInputAbandoned))
+            {
+                trailers = RequestTrailerSnapshot.Empty;
+                return false;
+            }
+            return available;
         }
         public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
         {
