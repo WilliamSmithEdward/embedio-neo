@@ -79,7 +79,7 @@ namespace EmbedIO.Serialization
         /// <see cref="JsonSerializerContext"/>. Safe for trimmed and Native AOT applications.</param>
         /// <returns>The JSON text.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="typeInfo"/> is null.</exception>
-        public static string Serialize<T>(T data, JsonTypeInfo<T> typeInfo)
+        public static string SerializeWithMetadata<T>(T data, JsonTypeInfo<T> typeInfo)
             => JsonSerializer.Serialize(data, typeInfo ?? throw new ArgumentNullException(nameof(typeInfo)));
 
         // HTTP JSON already promises UTF-8; avoid a complete UTF-16 intermediate
@@ -120,7 +120,7 @@ namespace EmbedIO.Serialization
         /// <see cref="JsonSerializerContext"/>. Safe for trimmed and Native AOT applications.</param>
         /// <returns>The deserialized value.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="json"/> or <paramref name="typeInfo"/> is null.</exception>
-        public static T? Deserialize<T>(string json, JsonTypeInfo<T> typeInfo)
+        public static T? DeserializeWithMetadata<T>(string json, JsonTypeInfo<T> typeInfo)
             => JsonSerializer.Deserialize(json ?? throw new ArgumentNullException(nameof(json)),
                 typeInfo ?? throw new ArgumentNullException(nameof(typeInfo)));
 
