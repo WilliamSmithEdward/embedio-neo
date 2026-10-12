@@ -330,6 +330,8 @@ namespace EmbedIO
                         return;
 
                     var serverToken = context.CancellationToken;
+                    // A matching route policy replaces the server-wide body and deadline values.
+                    var routeLimits = Options.FindRouteRequestLimits(context.RequestedPath);
                     CancellationTokenSource? deadline = null;
                     try
                     {
@@ -337,7 +339,7 @@ namespace EmbedIO
                         {
                             // The deadline covers queueing and handling. The context token is
                             // restored before completion so a late deadline cannot abort it.
-                            if (Options.RequestTimeout is TimeSpan timeout)
+                            if (RequestLimitPolicy.Resolve(routeLimits?.RequestTimeout, Options.RequestTimeout) is TimeSpan timeout)
                             {
                                 deadline = CancellationTokenSource.CreateLinkedTokenSource(serverToken);
                                 deadline.CancelAfter(timeout);
@@ -346,7 +348,7 @@ namespace EmbedIO
 
                             CheckHeaderLimits(context);
                             admitted = await AdmitAsync(context).ConfigureAwait(false);
-                            ApplyBodyPolicies(context);
+                            ApplyBodyPolicies(context, routeLimits);
 
                             // RFC 10008 requires QUERY media-type information before processing.
                             if (context.Request.HttpMethod == "QUERY"
@@ -557,10 +559,10 @@ namespace EmbedIO
         // rejection, because keep-alive would otherwise drain the unread remainder, which is
         // unbounded for chunked bodies. HTTP/2 and HTTP/3 reset the stream when the response
         // completes before its body.
-        private void ApplyBodyPolicies(IHttpContext context)
+        private void ApplyBodyPolicies(IHttpContext context, RequestLimitPolicy? routeLimits)
         {
-            var limit = Options.MaximumRequestBodyBytes;
-            var readTimeout = Options.RequestBodyReadTimeout;
+            var limit = RequestLimitPolicy.Resolve(routeLimits?.MaximumRequestBodyBytes, Options.MaximumRequestBodyBytes);
+            var readTimeout = RequestLimitPolicy.Resolve(routeLimits?.RequestBodyReadTimeout, Options.RequestBodyReadTimeout);
             if (limit == null && readTimeout == null) return;
             var request = context.Request;
             // CONNECT carries tunnel data, not a request body.
