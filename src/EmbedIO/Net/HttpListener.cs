@@ -24,6 +24,8 @@ namespace EmbedIO.Net
         internal bool DeferContinue { get; set; }
         // Connection limits of the endpoints this listener opens. Set before Start.
         internal Internal.TcpConnectionPolicy ConnectionPolicy { get; set; } = Internal.TcpConnectionPolicy.Default;
+        // Records the connections of the endpoints this listener opens. Set before Start.
+        internal EmbedIO.Internal.ServerTelemetry? Telemetry { get; set; }
         /// <inheritdoc />
         public bool IsListening => _coordinator.IsListening;
         /// <inheritdoc />

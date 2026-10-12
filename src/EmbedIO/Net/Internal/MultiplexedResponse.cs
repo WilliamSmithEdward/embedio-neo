@@ -25,6 +25,9 @@ namespace EmbedIO.Net.Internal
         private int _status = 200;
         private string _contentType = MimeType.Html;
         private bool _headersSent;
+        private long _sentBody;
+        // Body bytes handed to the exchange, for telemetry.
+        internal long SentBodyBytes => Volatile.Read(ref _sentBody);
         private bool _tunnel;
         private bool _capsuleCarrier;
         private bool _contentTypeConfigured;
@@ -289,10 +292,15 @@ namespace EmbedIO.Net.Internal
                 {
                     try { await coalescing.SendHeadersAndWriteAsync(BuildHeaders(false), buffer, offset, count, token).ConfigureAwait(false); }
                     finally { _headersSent = coalescing.FinalHeadersSent; }
+                    Volatile.Write(ref _sentBody, _sentBody + count);
                     return;
                 }
                 await EnsureSentAsync(false, token).ConfigureAwait(false);
-                if (!SuppressBody) await _exchange.WriteAsync(buffer, offset, count, false, token).ConfigureAwait(false);
+                if (!SuppressBody)
+                {
+                    await _exchange.WriteAsync(buffer, offset, count, false, token).ConfigureAwait(false);
+                    Volatile.Write(ref _sentBody, _sentBody + count);
+                }
             }
             finally { Exit(); }
         }

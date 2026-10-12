@@ -53,11 +53,12 @@ namespace EmbedIO.Net.Internal
         public long ContentLength64 => _head.Framed ? _head.Length
             : long.TryParse(Headers[HttpHeaderNames.ContentLength], out var length) ? length : 0;
         public bool HasEntityBody => _head.Chunked || ContentLength64 > 0;
-        public Stream InputStream => !HasEntityBody || (_bodyLimit < 0 && _sendContinue == null && _readTimeout == null) ? RawInputStream
+        public Stream InputStream => !HasEntityBody || (_bodyLimit < 0 && _sendContinue == null && _readTimeout == null && _countBody == null) ? RawInputStream
             : _applicationInput ??= CreateApplicationInput();
         private Stream CreateApplicationInput()
         {
             var input = RawInputStream;
+            if (_countBody != null) input = new EmbedIO.Internal.CountingReadStream(input, _countBody);
             if (_readTimeout is TimeSpan timeout) input = new EmbedIO.Internal.ReadTimeoutStream(input, timeout, _onReadTimeout);
             if (_sendContinue != null) input = new DeferredContinueStream(input, StartContinue);
             return _bodyLimit < 0 ? input
@@ -80,6 +81,12 @@ namespace EmbedIO.Net.Internal
             ? _connection.GetRequestStream(ContentLength64, _head.Chunked) : Stream.Null;
         private TimeSpan? _readTimeout;
         private Action? _onReadTimeout;
+        private EmbedIO.Internal.RequestTelemetry? _countBody;
+        void IRequestPolicyTarget.CountBody(EmbedIO.Internal.RequestTelemetry scope)
+        {
+            if (_applicationInput != null) throw new InvalidOperationException("The request body was already opened.");
+            _countBody = scope;
+        }
         void IRequestPolicyTarget.TimeBodyReads(TimeSpan timeout, Action onTimeout)
         {
             if (_applicationInput != null) throw new InvalidOperationException("The request body was already opened.");
