@@ -451,8 +451,12 @@ namespace EmbedIO
                     // Request cleanup and context closure must run even when flushing fails.
                     try
                     {
-                        await context.Response.OutputStream.FlushAsync(context.CancellationToken)
-                            .ConfigureAwait(false);
+                        // Direct HTTP/1 writes are unbuffered; completion supplies final
+                        // framing and handles already-disposed serializer output. Do not
+                        // turn automatic teardown into an application header flush.
+                        if (context.Response.OutputStream is not Net.Internal.ResponseStream)
+                            await context.Response.OutputStream.FlushAsync(context.CancellationToken)
+                                .ConfigureAwait(false);
                     }
                     finally
                     {

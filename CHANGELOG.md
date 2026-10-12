@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Direct HTTP/1 response `Flush` and `FlushAsync` now commit the final response
+  headers in write order without ending the response. HEAD and bodyless responses
+  retain their payload suppression. Disposed output rejects flushes; automatic
+  request cleanup preserves empty-response framing and higher-level buffering behavior.
 - Add a controller-binding source generator from Neo #138, shipped in the EmbedIO-Neo
   package. `[GeneratedControllerBinding(typeof(TController))]` on a partial class makes it
   generate a `WebApiControllerBinding<TController>`, registered with new
