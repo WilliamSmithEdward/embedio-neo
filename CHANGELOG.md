@@ -1,6 +1,11 @@
-﻿# Changelog
+# Changelog
 
 ## [Unreleased]
+- Let unmatched descendants of WebSocket endpoints reach later modules or the
+  ordinary 404 fallback, rather than returning an empty HTTP 200. Successful
+  managed HTTP/1 upgrades now expose their committed 101 status in response
+  metadata; HTTP/2 extended CONNECT retains 200. See the
+  [handshake guide](docs/guides/websocket-handshake-status.md).
 - Give the server its own lifetime token, evaluated in Neo #43. Modules, session
   managers and request contexts now receive a token that is canceled when the
   server is disposed or its run completes, not only when the caller cancels, so

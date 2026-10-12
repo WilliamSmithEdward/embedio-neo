@@ -153,7 +153,7 @@ namespace EmbedIO.WebSockets
             // The WebSocket endpoint must match exactly, giving a RequestedPath of "/".
             // In all other cases the path is longer, so there's no need to compare strings here.
             if (context.RequestedPath.Length > 1)
-                return;
+                throw RequestHandler.PassThrough();
 
             // A generic CONNECT carrier routed here is not a WebSocket handshake.
             // Reject it as an unsupported route before attempting socket acceptance.

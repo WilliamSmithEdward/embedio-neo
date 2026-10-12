@@ -1,4 +1,4 @@
-﻿# Documentation
+# Documentation
 
 EmbedIO-Neo keeps the existing `EmbedIO` namespaces and offers a small modular
 HTTP/WebSocket server, integrated CLI, JsonServer, and testing helpers.
@@ -13,6 +13,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Routes, verbs, and parameters](guides/getting-started/requests.md): GET, POST, PUT, DELETE, query strings, and JSON bodies.
 
 ## Usage guides
+
+- [WebSocket handshake status](guides/websocket-handshake-status.md): exact endpoints, module order, and HTTP/1 versus extended CONNECT.
 
 - [Response-time diagnostics](guides/response-timing.md): server handling duration, preserved context age and the difference from client latency.
 
