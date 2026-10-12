@@ -41,6 +41,11 @@ namespace EmbedIO
         // in-flight contexts observe every way the server can end.
         private CancellationTokenSource? _lifetime;
 
+        // Opt-in request admission (WebServerOptionsBase.MaximumConcurrentRequests).
+        // Created when the server starts; null keeps the original unlimited dispatch.
+        private SemaphoreSlim? _requestSlots;
+        private int _waitingRequests;
+
         private ISessionManager? _sessionManager;
 
         /// <summary>
@@ -230,6 +235,9 @@ namespace EmbedIO
                 lifetimeToken.ThrowIfCancellationRequested();
                 Prepare(lifetimeToken);
 
+                if (Options.MaximumConcurrentRequests is int slots)
+                    _requestSlots = new SemaphoreSlim(slots, slots);
+
                 lifetimeToken.ThrowIfCancellationRequested();
                 _sessionManager?.Start(lifetimeToken);
                 _modules.StartAll(lifetimeToken);
@@ -303,6 +311,7 @@ namespace EmbedIO
             // Context creation can precede admission by a keep-alive idle interval.
             // Measure this handling operation without changing the public Age clock.
             var requestStarted = Stopwatch.GetTimestamp();
+            var admitted = false;
             context.SupportCompressedRequests = Options.SupportCompressedRequests;
             RequestDecompressionPolicy.Associate(context, Options.DecompressionPolicy);
             context.MimeTypeProviders.Push(this);
@@ -320,20 +329,52 @@ namespace EmbedIO
                     if (context.CancellationToken.IsCancellationRequested)
                         return;
 
+                    var serverToken = context.CancellationToken;
+                    CancellationTokenSource? deadline = null;
                     try
                     {
-                        // RFC 10008 requires QUERY media-type information before processing.
-                        if (context.Request.HttpMethod == "QUERY"
-                            && !System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(context.Request.ContentType, out _))
-                            throw HttpException.BadRequest("QUERY requires a valid Content-Type header.");
-
-                        // Return a 404 (Not Found) response if no module handled the response.
-                        await _modules.DispatchRequestAsync(context).ConfigureAwait(false);
-                        if (!context.IsHandled)
+                        try
                         {
-                            $"[{context.Id}] No module generated a response. Sending 404 - Not Found".Error(LogSource);
-                            throw HttpException.NotFound("No module was able to serve the requested path.");
+                            // The deadline covers queueing and handling. The context token is
+                            // restored before completion so a late deadline cannot abort it.
+                            if (Options.RequestTimeout is TimeSpan timeout)
+                            {
+                                deadline = CancellationTokenSource.CreateLinkedTokenSource(serverToken);
+                                deadline.CancelAfter(timeout);
+                                context.CancellationToken = deadline.Token;
+                            }
+
+                            admitted = await AdmitAsync(context).ConfigureAwait(false);
+                            ApplyBodyLimit(context);
+
+                            // RFC 10008 requires QUERY media-type information before processing.
+                            if (context.Request.HttpMethod == "QUERY"
+                                && !System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(context.Request.ContentType, out _))
+                                throw HttpException.BadRequest("QUERY requires a valid Content-Type header.");
+
+                            // Return a 404 (Not Found) response if no module handled the response.
+                            await _modules.DispatchRequestAsync(context).ConfigureAwait(false);
+                            if (!context.IsHandled)
+                            {
+                                $"[{context.Id}] No module generated a response. Sending 404 - Not Found".Error(LogSource);
+                                throw HttpException.NotFound("No module was able to serve the requested path.");
+                            }
                         }
+                        finally
+                        {
+                            if (deadline != null)
+                            {
+                                context.CancellationToken = serverToken;
+                                deadline.Dispose();
+                            }
+                        }
+                    }
+                    // Exception filters run before the inner finally, so the deadline token is
+                    // still current here; this clause must precede the general cancellation one.
+                    catch (OperationCanceledException) when (deadline != null && deadline.IsCancellationRequested && !serverToken.IsCancellationRequested)
+                    {
+                        await HttpExceptionHandler.Handle(LogSource, context,
+                            new HttpException(503, "The request exceeded its configured deadline."), _onHttpException).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
                     {
@@ -392,13 +433,21 @@ namespace EmbedIO
                         }
                         finally
                         {
-                            // Completion callbacks must run even if flushing or cleanup fails.
-                            // Multiplexed FIN writes must not block a worker waiting for I/O.
-                            if (context is Net.Internal.MultiplexedContext multiplexed)
-                                await multiplexed.CloseAsync().ConfigureAwait(false);
-                            else if (context is Net.Internal.HttpListenerContext managed && managed.HasAcceptedTunnel)
-                                await managed.CloseTunnelAsync().ConfigureAwait(false);
-                            else context.Close();
+                            try
+                            {
+                                // Completion callbacks must run even if flushing or cleanup fails.
+                                // Multiplexed FIN writes must not block a worker waiting for I/O.
+                                if (context is Net.Internal.MultiplexedContext multiplexed)
+                                    await multiplexed.CloseAsync().ConfigureAwait(false);
+                                else if (context is Net.Internal.HttpListenerContext managed && managed.HasAcceptedTunnel)
+                                    await managed.CloseTunnelAsync().ConfigureAwait(false);
+                                else context.Close();
+                            }
+                            finally
+                            {
+                                // A slot covers the whole request, including its response.
+                                if (admitted) ReleaseRequestSlot();
+                            }
                         }
                     }
 
@@ -443,6 +492,67 @@ namespace EmbedIO
             }
         }
 
+        // Returns true when a slot was taken and must be released after the request
+        // completes. Throws HTTP 503 when every slot is busy and the queue is full.
+        private async Task<bool> AdmitAsync(IHttpContext context)
+        {
+            var slots = _requestSlots;
+            if (slots == null) return false;
+            try
+            {
+                if (slots.Wait(0)) return true;
+                if (Interlocked.Increment(ref _waitingRequests) > Options.RequestQueueLimit)
+                {
+                    _ = Interlocked.Decrement(ref _waitingRequests);
+                    throw new HttpException(503, "The server is handling its maximum number of requests.");
+                }
+
+                try { await slots.WaitAsync(context.CancellationToken).ConfigureAwait(false); }
+                finally { _ = Interlocked.Decrement(ref _waitingRequests); }
+                return true;
+            }
+            catch (ObjectDisposedException)
+            {
+                // The server was disposed; its lifetime token is already canceled.
+                throw new OperationCanceledException("The web server has stopped.", context.CancellationToken);
+            }
+        }
+
+        // Disposal may race with a request that is still finishing; the slot no longer matters.
+        private void ReleaseRequestSlot()
+        {
+            try { _requestSlots?.Release(); }
+            catch (ObjectDisposedException) { }
+        }
+
+        // Applies MaximumRequestBodyBytes: a declared length over the limit is rejected
+        // before dispatch, and the body stream counts what is actually read. HTTP/1 stops
+        // connection reuse on either rejection, because keep-alive would otherwise drain
+        // the unread remainder, which is unbounded for chunked bodies. HTTP/2 and HTTP/3
+        // reset the stream when the response completes before its body.
+        private void ApplyBodyLimit(IHttpContext context)
+        {
+            if (!(Options.MaximumRequestBodyBytes is long limit)) return;
+            var request = context.Request;
+            // CONNECT carries tunnel data, not a request body.
+            if (request.HttpMethod == "CONNECT") return;
+            var http1 = context is Net.Internal.HttpListenerContext;
+            void StopReuse()
+            {
+                if (http1 && !EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
+                    context.Response.KeepAlive = false;
+            }
+
+            if (request.HasEntityBody && request.ContentLength64 > limit)
+            {
+                StopReuse();
+                throw new HttpException(413, EmbedIO.Internal.LimitedRequestStream.TransferredLimitMessage);
+            }
+
+            if (request is EmbedIO.Internal.IRequestBodyLimit limited)
+                limited.LimitBody(limit, StopReuse);
+        }
+
         /// <inheritdoc />
         protected override void OnBeforeLockConfiguration()
         {
@@ -468,6 +578,8 @@ namespace EmbedIO
                 return;
 
             CancelLifetime(_lifetime);
+            // Waiters observe the canceled lifetime token; late releases tolerate disposal.
+            _requestSlots?.Dispose();
             _modules.Dispose();
             // A run that never started cannot start now (RunAsync throws), so count
             // its arrival here and release whatever lifetime exists.
