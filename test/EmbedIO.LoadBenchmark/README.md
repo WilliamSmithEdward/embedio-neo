@@ -437,3 +437,10 @@ No production API, defaults, error propagation or dependency changes are involve
 The long cost campaign is deferred while its PR is a draft. Marking the PR ready
 for review schedules it on that source. A skipped draft campaign is not acceptance;
 its successful current-source run and all ordinary checks are required before merge.
+
+The cost and identical-binary A/A arms use `--disable-exception-census`, which does
+not register the inherited lightweight first-chance counter. The actual child
+observer mode is recorded and checked. Those arms report exception counts as
+unavailable, not zero. Detailed profiles and deliberate-fault arms retain counters;
+ordinary harness defaults are unchanged. The earlier counter-enabled campaign is
+preparation evidence and cannot establish observer-free production cost.

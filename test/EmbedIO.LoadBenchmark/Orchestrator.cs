@@ -44,6 +44,8 @@ internal static class Orchestrator
         if (!double.IsFinite(requestRate) || requestRate < 0 || requestRate > 64)
             throw new ArgumentException("Paced comparison rate must be between 0 and 64 requests/second.");
         var census = options.Has("--connection-census");
+        var exceptionCensus = !options.Has("--disable-exception-census");
+        if (census && !exceptionCensus) throw new ArgumentException("Connection profiles require exception accounting.");
         var rounds = options.Integer("--rounds", 3);
         var warmup = options.Number("--warmup", 5);
         var duration = options.Number("--duration", 15);
@@ -110,7 +112,7 @@ internal static class Orchestrator
                     {
                         var sample = await RunSampleAsync(new SampleContext(scenario, target, round, output, certificatePath, password, thumbprint,
                             warmup, duration, idle, serverCpus, clientCpus, profile, options.Optional("--reference-bytes"),
-                            options.Integer("--time-wait-limit", 4000), requestRate, census, options.Optional("--trace-tool") is { } tool ? Path.GetFullPath(tool) : null)).ConfigureAwait(false);
+                            options.Integer("--time-wait-limit", 4000), requestRate, census, exceptionCensus, options.Optional("--trace-tool") is { } tool ? Path.GetFullPath(tool) : null)).ConfigureAwait(false);
                         samples.Add(sample);
                         if (sample["error"] is not null) failures++;
                         Console.Out.WriteLine(Describe(sample));
@@ -143,7 +145,7 @@ internal static class Orchestrator
 
     private sealed record SampleContext(Scenario Scenario, EngineTarget Target, int Round, string Output, string CertificatePath, string Password,
         string Thumbprint, double Warmup, double Duration, double Idle, string? ServerCpus, string? ClientCpus, bool Profile, string? ReferenceBytes,
-        int TimeWaitLimit, double RequestRate, bool ConnectionCensus, string? TraceTool);
+        int TimeWaitLimit, double RequestRate, bool ConnectionCensus, bool ExceptionCensus, string? TraceTool);
 
     private static async Task<JsonObject> RunSampleAsync(SampleContext context)
     {
@@ -161,6 +163,7 @@ internal static class Orchestrator
             ["round"] = context.Round,
             ["requestRate"] = context.RequestRate,
             ["connectionCensus"] = context.ConnectionCensus,
+            ["exceptionCensus"] = context.ExceptionCensus,
             ["startedUtc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
         };
         // Churn workloads and per-connection request caps leave thousands of loopback
@@ -192,6 +195,7 @@ internal static class Orchestrator
         if (scenario.Tls) serverArguments.AddRange(["--tls", "--certificate", context.CertificatePath, "--certificate-password", context.Password]);
         if (context.Profile) serverArguments.Add("--profile");
         if (context.ConnectionCensus) serverArguments.Add("--connection-census");
+        if (!context.ExceptionCensus) serverArguments.Add("--disable-exception-census");
         if (context.ReferenceBytes is not null) serverArguments.AddRange(["--reference-bytes", context.ReferenceBytes]);
         var clientArguments = new List<string>
         {

@@ -143,3 +143,8 @@ Detailed profiles retain both the exception stack and the synchronous first-chan
 notification stack: an exception-dispatch-only rethrow frame cannot identify the
 owned await site by itself. These diagnostic stacks are excluded from cost arms
 and still do not establish original fault ownership across asynchronous boundaries.
+
+Observer-free cost controls explicitly disable even the inherited lightweight
+first-chance counter. Profiles retain it; cost/A/A arms report counts as unavailable.
+The first current-source campaign used that counter and is retained as instrumented
+preparation, not accepted observer-free cost evidence.

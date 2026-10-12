@@ -46,7 +46,7 @@ def validate(root, census, duration, rounds):
         client = sample["client"]
         if client["requests"] != math.ceil(32 * duration) or client["latencyCount"] != client["requests"]:
             raise ValueError("Paced requests or latency samples missing: " + str(path))
-        if sample["requestRate"] != 32 or sample["connectionCensus"] != census:
+        if sample["requestRate"] != 32 or sample["connectionCensus"] != census or sample["exceptionCensus"] != census or identity["exceptionCensus"] != census:
             raise ValueError("Configuration changed")
         measured = sample["machineMeasurementSeconds"]
         if not math.isfinite(measured) or measured <= 0:
@@ -54,7 +54,7 @@ def validate(root, census, duration, rounds):
         background = sample["derived"]["backgroundCpuSeconds"] / measured
         if not math.isfinite(background) or background > 0.5:
             raise ValueError("Quiet sample contaminated: " + str(path))
-        counts = phases(sample)
+        counts = phases(sample) if census else None
         site_phases = None
         if census:
             final = sample["serverStop"]["connections"]
@@ -152,6 +152,7 @@ def main():
                    "--request-rate", "32", "--max-baseline-busy-cpus", "0.5", "--candidate-revision", revision]
         if arm == "aa": command.extend(["--baseline-dir", str(copy), "--modern-baseline", "--baseline-revision", revision])
         if census: command.extend(["--connection-census", "--profile"])
+        else: command.append("--disable-exception-census")
         manifest["commands"].append(command)
         (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2))
         environment = dict(os.environ)

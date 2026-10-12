@@ -12,9 +12,9 @@ class CostCampaignTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.sample = {"warmup": {"requests": 64}, "server": {"protocol": "Http1", "assemblies": [{"sha256": "a" * 64}]}, "client": {"requests": 160, "latencyCount": 160, "connectionsOpened": 2, "p99Milliseconds": 1},
+        self.sample = {"warmup": {"requests": 64}, "server": {"protocol": "Http1", "exceptionCensus": True, "assemblies": [{"sha256": "a" * 64}]}, "client": {"requests": 160, "latencyCount": 160, "connectionsOpened": 2, "p99Milliseconds": 1},
                        "clientExitCode": 0, "serverExitCode": 0, "clientKilled": False, "serverKilled": False,
-                       "requestRate": 32, "connectionCensus": True, "machineMeasurementSeconds": 5,
+                       "requestRate": 32, "connectionCensus": True, "exceptionCensus": True, "machineMeasurementSeconds": 5,
                        "derived": {"requestsPerSecond": 32, "serverCpuMicrosecondsPerRequest": 1,
                                    "serverAllocatedBytesPerRequest": 100, "openServerSocketsAfter": 0, "backgroundCpuSeconds": 0.1},
                        "connectionsBeforeLoad": {"closed": 1}, "connectionsBeforeStop": {"closed": 3},
@@ -36,6 +36,19 @@ class CostCampaignTests(unittest.TestCase):
     def test_complete_census(self):
         self.write()
         self.assertEqual(len(validate(self.root, True, 5, 2)), 28)
+
+    def test_cost_observers_disabled(self):
+        self.sample["connectionCensus"] = False
+        self.sample["exceptionCensus"] = False
+        self.sample["server"]["exceptionCensus"] = False
+        self.write()
+        rows = validate(self.root, False, 5, 2)
+        self.assertTrue(all(row["exceptions"] is None for row in rows))
+
+    def test_server_observer_disagreement_rejected(self):
+        self.sample["server"]["exceptionCensus"] = False
+        self.write()
+        with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
 
     def test_request_loss_rejected(self):
         self.sample["client"]["requests"] = 159

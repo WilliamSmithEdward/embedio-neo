@@ -23,7 +23,8 @@ internal static class ServerHost
         Payloads.Prepare(options.Integer("--reference-bytes", 1 << 20));
         var exceptions = new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
         // Diagnostic opt-in: key by message too and log the first stack per key (bounded).
-        var detail = Environment.GetEnvironmentVariable("EMBEDIO_BENCH_EXCEPTION_DETAIL") == "1";
+        var exceptionCensus = !options.Has("--disable-exception-census");
+        var detail = exceptionCensus && Environment.GetEnvironmentVariable("EMBEDIO_BENCH_EXCEPTION_DETAIL") == "1";
         var sites = new Dictionary<string, long>(StringComparer.Ordinal);
         var siteGate = new object();
         long siteOverflow = 0;
@@ -37,7 +38,7 @@ internal static class ServerHost
                 overflow = siteOverflow,
             };
         }
-        AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
+        if (exceptionCensus) AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
         {
             var key = e.Exception.GetType().FullName ?? "?";
             if (detail)
@@ -77,6 +78,7 @@ internal static class ServerHost
             Control.Write("READY " + JsonSerializer.Serialize(new
             {
                 engine = settings.Engine,
+                exceptionCensus,
                 protocol = settings.Protocol.ToString(),
                 tls,
                 startMilliseconds = started.Elapsed.TotalMilliseconds,
