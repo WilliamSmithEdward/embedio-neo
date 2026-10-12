@@ -313,3 +313,6 @@
 
 - name: Controller compression and response length
   href: guides/controller-compression.md
+
+- name: Standalone native QUIC module lifetime
+  href: project/native-quic-module-lifetime.md

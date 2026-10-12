@@ -58,6 +58,25 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public void IncreasedPathLimitAcceptsAFormerlyOversizedDatagram()
+        {
+            var native = new FakeNative();
+            using var datagrams = Negotiated(native, 1200);
+            var observed = Get<int>(datagrams, "MaxSendLength");
+            Assert.That(TrySend(datagrams, new byte[observed + 1], out var rejected), Is.EqualTo("TooLarge"));
+            Assert.That(rejected, Is.Null);
+            using (var state = NativeEvent.StateChanged(true, 1452)) Deliver(datagrams, state);
+            Assert.That(Get<int>(datagrams, "MaxSendLength"), Is.EqualTo(1452));
+            Assert.That(TrySend(datagrams, new byte[observed + 1], out var accepted), Is.EqualTo("Queued"));
+            Assert.That(native.Calls.Single().Length, Is.EqualTo(1201));
+            Assert.That(TrySend(datagrams, new byte[1453], out rejected), Is.EqualTo("TooLarge"));
+            Assert.That(rejected, Is.Null);
+            Complete(datagrams, native.Calls[0].Context, 4);
+            Assert.That(Outcome(Required(accepted)), Is.EqualTo("Acknowledged"));
+            Assert.That(Get<int>(datagrams, "PendingSendCount"), Is.Zero);
+        }
+
+        [Test]
         public void PeerWithoutDatagramSupportReportsUnavailable()
         {
             var native = new FakeNative();
@@ -557,9 +576,18 @@ namespace EmbedIO.Tests
                 if (mode == "echo")
                 {
                     Assert.That(negotiated, Is.True);
-                    var limit = Get<int>(datagrams, "MaxSendLength");
-                    Assert.That(limit, Is.InRange(1000, 65535));
-                    Assert.That(TrySend(datagrams, new byte[limit + 1], out _), Is.EqualTo("TooLarge"));
+                    // MsQuic can raise another path-MTU indication immediately.
+                    // This locally rejected send must use the same state as the
+                    // observed limit; otherwise a legitimate increase can admit it.
+                    var stateGate = datagrams.GetType().GetField("_sync", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(datagrams)
+                        ?? throw new AssertionException("Missing native datagram state gate.");
+                    lock (stateGate)
+                    {
+                        var limit = Get<int>(datagrams, "MaxSendLength");
+                        Assert.That(limit, Is.InRange(1000, 65535));
+                        Assert.That(TrySend(datagrams, new byte[limit + 1], out var rejected), Is.EqualTo("TooLarge"));
+                        Assert.That(rejected, Is.Null);
+                    }
                     Assert.That(TrySend(datagrams, System.Text.Encoding.ASCII.GetBytes("embedio-native-datagram-hello"), out var greeting), Is.EqualTo("Queued"));
                     completions.Add(Required(greeting));
                     while (await Receive(datagrams, deadline.Token) is { } datagram)
@@ -620,13 +648,17 @@ namespace EmbedIO.Tests
             private NativeServer(SafeHandle api, SafeHandle registration, SafeHandle configuration, SafeHandle listener, X509Certificate2 certificate, IPEndPoint endpoint)
             { _api = api; _registration = registration; Configuration = configuration; _listener = listener; Certificate = certificate; Endpoint = endpoint; }
 
-            internal static Task<NativeServer> StartAsync()
+            internal bool OwnersClosed => _listener.IsClosed && Configuration.IsClosed && _registration.IsClosed && _api.IsClosed;
+
+            internal static Task<NativeServer> StartAsync(bool streams = false)
             {
                 var type = Core.GetType("EmbedIO.Net.Internal.Http3.MsQuicApi") ?? throw new IgnoreException("The retained asset does not include the native provider.");
                 var api = (SafeHandle)(type.GetMethod("Open", BindingFlags.Static | BindingFlags.NonPublic)?.Invoke(null, null)
                     ?? throw new AssertionException("Missing native API owner."));
                 var registration = (SafeHandle)Call(api, "CreateRegistration");
-                var configuration = (SafeHandle)Call(registration, "CreateConfiguration", (object)H3);
+                var configuration = streams
+                    ? (SafeHandle)Call(registration, "CreateStreamConfiguration", H3, (ushort)8, (ushort)8)
+                    : (SafeHandle)Call(registration, "CreateConfiguration", (object)H3);
                 var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
                 Call(configuration, "LoadServerCertificate", certificate);
                 var listener = (SafeHandle)Call(registration, "CreateListener");
