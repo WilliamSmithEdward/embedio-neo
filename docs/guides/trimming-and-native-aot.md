@@ -13,7 +13,7 @@ A Native AOT executable built from the
 [smoke host](../../test/EmbedIO.AotSmoke/Program.cs) serves real HTTP/1.1 with:
 
 - routing modules and action modules with explicit routes and delegates;
-- JSON with source-generated metadata, through the `JsonTypeInfo` overloads;
+- JSON with source-generated metadata, through the `WithMetadata` methods;
 - static files from `WithStaticFolder`;
 - streamed responses;
 - telemetry (`WithTelemetry`);
@@ -33,22 +33,22 @@ internal sealed partial class AppJson : JsonSerializerContext;
 
 server.WithModule(new RoutingModule("/api")
     .OnGet("/items/{id}", (context, route) =>
-        context.SendDataAsync(new Item { Id = int.Parse(route["id"]) }, AppJson.Default.Item))
+        context.SendDataWithMetadataAsync(new Item { Id = int.Parse(route["id"]) }, AppJson.Default.Item))
     .OnPost("/items", async (context, _) =>
     {
-        var item = await context.GetRequestDataAsync(AppJson.Default.Item);
-        await context.SendDataAsync(item, AppJson.Default.Item);
+        var item = await context.GetRequestDataWithMetadataAsync(AppJson.Default.Item);
+        await context.SendDataWithMetadataAsync(item, AppJson.Default.Item);
     }));
 ```
 
 | API | Trimmed and AOT applications |
 | --- | --- |
-| `SendDataAsync(data, JsonTypeInfo<T>)`, `GetRequestDataAsync(JsonTypeInfo<T>)` | supported; UTF-8 `application/json`, malformed input is HTTP 400 |
-| `Json.Serialize(data, JsonTypeInfo<T>)`, `Json.Deserialize(json, JsonTypeInfo<T>)` | supported |
+| `SendDataWithMetadataAsync(data, JsonTypeInfo<T>)`, `GetRequestDataWithMetadataAsync(JsonTypeInfo<T>)` | supported; UTF-8 `application/json`, malformed input is HTTP 400 |
+| `Json.SerializeWithMetadata(data, JsonTypeInfo<T>)`, `Json.DeserializeWithMetadata(json, JsonTypeInfo<T>)` | supported |
 | `Json.Serialize(data, options)`, `ResponseSerializer.Json(options)`, `RequestDeserializer.Json<T>(options)` | supported when `options.TypeInfoResolver` is a `JsonSerializerContext`; types it does not declare throw `NotSupportedException` |
 | `SendDataAsync(data)`, `GetRequestDataAsync<T>()`, `ResponseSerializer.Default`, `Json.CreateOptions` and the other default-option paths | reflection-based; annotated, and they throw `NotSupportedException` when reflection JSON is disabled |
 
-The `JsonTypeInfo` overloads use the metadata's own options; EmbedIO's lenient default
+The `WithMetadata` methods use the metadata's own options; EmbedIO's lenient default
 input handling (quoted numbers, trailing commas and so on) applies only to its default
 options.
 
