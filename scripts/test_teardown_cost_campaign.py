@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from teardown_cost_campaign import SCENARIOS, validate
+from teardown_cost_campaign import SCENARIOS, validate, validate_recovery
 
 
 class CostCampaignTests(unittest.TestCase):
@@ -97,6 +97,40 @@ class CostCampaignTests(unittest.TestCase):
         self.sample["client"]["error"] = "reset"
         self.write()
         with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
+
+
+class RecoveryEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "recovery.json"
+        self.report = {"verdict": [], "serverExitCode": 0, "serverKilled": False,
+                       "healthy-beforeClientKilled": False, "healthy-afterClientKilled": False,
+                       "phases": [{"phase": name, "client": {"requests": 1},
+                                   "exceptionSites": {"counts": {}, "types": {}, "overflow": 0}}
+                                  for name in ("healthy-before", "healthy-after")],
+                       "stop": {"exceptionSites": {"counts": {}, "types": {}, "overflow": 0},
+                                "connections": {"opened": 2, "closed": 2, "active": 0,
+                                                "instrumentSeen": True, "invalidMeasurements": 0}}}
+
+    def check(self):
+        self.path.write_text(json.dumps(self.report))
+        validate_recovery(self.path)
+
+    def test_complete_recovery(self):
+        self.check()
+
+    def test_unsuccessful_server_exit_rejected(self):
+        self.report["serverExitCode"] = 1
+        with self.assertRaises(ValueError): self.check()
+
+    def test_recovery_capture_overflow_rejected(self):
+        self.report["stop"]["exceptionSites"]["overflow"] = 1
+        with self.assertRaises(ValueError): self.check()
+
+    def test_unclosed_recovery_lifetime_rejected(self):
+        self.report["stop"]["connections"]["closed"] = 1
+        with self.assertRaises(ValueError): self.check()
 
 
 if __name__ == "__main__": unittest.main()

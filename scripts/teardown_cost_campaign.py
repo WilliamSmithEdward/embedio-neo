@@ -101,6 +101,29 @@ def validate(root, census, duration, rounds):
     return rows
 
 
+
+def validate_recovery(path):
+    report = json.loads(Path(path).read_text())
+    if report.get("error") or report.get("stopError") or report["verdict"]:
+        raise ValueError("Recovery reports a genuine failure")
+    if report["serverExitCode"] != 0 or report["serverKilled"] is not False:
+        raise ValueError("Recovery server did not exit cleanly")
+    for name in ("healthy-before", "healthy-after"):
+        if report[name + "ClientKilled"] is not False:
+            raise ValueError("Recovery client required forced cleanup")
+        phase = next(p for p in report["phases"] if p["phase"] == name)
+        if phase["client"].get("error") or phase["client"]["requests"] <= 0:
+            raise ValueError("Missing validated healthy recovery traffic")
+    snapshots = [p["exceptionSites"] for p in report["phases"] if "exceptionSites" in p]
+    snapshots.append(report["stop"]["exceptionSites"])
+    for site in snapshots:
+        if site is None or site["overflow"] or sum(site["counts"].values()) != sum(site["types"].values()):
+            raise ValueError("Recovery site census incomplete")
+    final = report["stop"]["connections"]
+    if not final["instrumentSeen"] or final["invalidMeasurements"] or final["active"] != 0 or final["opened"] <= 0 or final["opened"] != final["closed"]:
+        raise ValueError("Recovery server connection accounting incomplete")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runner", type=Path, required=True)
@@ -169,7 +192,8 @@ def main():
                         child.wait()
                         raise
                     if code: raise subprocess.CalledProcessError(code, command)
-                except subprocess.SubprocessError as error:
+                    validate_recovery(args.output / name / "recovery.json")
+                except (ValueError, KeyError, StopIteration, OSError, subprocess.SubprocessError) as error:
                     failures.append(name + ": " + str(error))
     (args.output / "verdict.json").write_text(json.dumps({"passed": not failures, "failures": failures}, indent=2))
     for failure in failures: print(failure)
