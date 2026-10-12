@@ -32,7 +32,7 @@
   <ItemGroup>
     <None Include="..\..\LICENSE" Link="LICENSE" Pack="true" PackagePath="" />
     <!-- Ties EmbedIO's reflection feature switch to the application's System.Text.Json setting. -->
-    <None Include="Packaging\EmbedIO-Neo.targets" Pack="true" PackagePath="build\;buildTransitive\" />
+    <None Include="Packaging/EmbedIO-Neo.targets" Pack="true" PackagePath="build/;buildTransitive/" />
   </ItemGroup>
 
   <ItemGroup>
