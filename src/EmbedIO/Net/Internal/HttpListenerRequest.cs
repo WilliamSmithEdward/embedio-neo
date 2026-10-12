@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
 using System.Net;
@@ -13,7 +14,7 @@ namespace EmbedIO.Net.Internal
 {
     // Application view of one parsed HTTP/1 head. Framing facts belong to the
     // head owner; body access borrows the existing session's request transport.
-    internal sealed class HttpListenerRequest : IHttpRequest, IRequestPolicyTarget
+    internal sealed class HttpListenerRequest : IHttpRequestTrailers, IRequestPolicyTarget
     {
         private readonly HttpConnection _connection;
         private readonly Http1RequestHead _head = new();
@@ -97,6 +98,12 @@ namespace EmbedIO.Net.Internal
             if (_applicationInput != null) throw new InvalidOperationException("The request body was already opened.");
             _bodyLimit = maximumBytes;
             _onBodyLimitExceeded = onExceeded;
+        }
+        public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
+        {
+            if (_inputStream is IRequestTrailerSource source) return source.TryGetTrailers(out trailers);
+            trailers = RequestTrailerSnapshot.Empty;
+            return !HasEntityBody;
         }
         internal bool HasBodyFramingFailure => _inputStream is RequestStream body && body.HasBodyFramingFailure;
         internal bool IsBodyFramingError(Exception error) => _inputStream is RequestStream body && body.IsFramingError(error);
