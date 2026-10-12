@@ -63,6 +63,7 @@ namespace EmbedIO.Net.Internal
         internal HttpListener Listener { get; }
         internal IPEndPoint LocalEndpoint => _endpoint;
         internal bool RoutesEmpty => _routes.IsEmpty;
+        internal EndpointRoutes.ReadSnapshot CaptureRoutes() => _routes.Capture();
         internal bool Secure { get; }
         internal bool AdmissionStopped => _admission.IsStopped;
         internal Socket ListeningSocket => _admission.Socket;
@@ -70,8 +71,10 @@ namespace EmbedIO.Net.Internal
         internal bool TryPendingConnections(out HttpConnection[] connections) => _admission.TryPendingSnapshot(out connections);
 
         public bool BindContext(HttpListenerContext context)
+            => BindContext(context, _routes.Capture());
+        internal bool BindContext(HttpListenerContext context, EndpointRoutes.ReadSnapshot routes)
         {
-            var owner = SearchListener(context.Request.Url, out var prefix);
+            var owner = routes.Find(context.Request.Url, out var prefix);
             if (owner == null) return false;
             context.Listener = owner;
             context.Connection.Prefix = prefix;

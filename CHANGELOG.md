@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+- Complete OpenAPI support from Neo #139. `AddSecurityScheme` adds Basic, Bearer and API key
+  schemes, and `RequireSecurity` requires one on every operation an authentication module
+  handles, decided by the module's own route matching. `AddBasicAuthentication(name, module)`
+  describes a `BasicAuthenticationModule`, including the 401 response and `WWW-Authenticate`
+  header it sends. `AddOperation` declares routes outside generated bindings, such as
+  `RoutingModule` handlers, with typed path, query, header and cookie parameters, bodies and
+  responses; declarations the document cannot hold are reported. `[OpenApiResponse]` media
+  types other than JSON now describe text and binary bodies. See
+  [OpenAPI documents](docs/guides/openapi.md).
 - Write OpenAPI 3.1 documents from generated controller bindings, from Neo #139.
   `OpenApiDocumentBuilder` describes each route's path, query and form parameters, JSON
   body and response types from what the binding binds and returns, with schemas from the

@@ -26,11 +26,11 @@ namespace EmbedIO
         }
 
         /// <summary>
-        /// Sets the maximum number of request body bytes a handler may read.
+        /// Sets the raw entity-byte limit before request content decoding.
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>
         /// <param name="this">The options instance.</param>
-        /// <param name="value">The maximum transferred body bytes, or null for existing unlimited behavior.</param>
+        /// <param name="value">The maximum raw entity bytes, or null for existing unlimited behavior.</param>
         /// <returns>The options instance.</returns>
         /// <exception cref="NullReferenceException">The options instance is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The limit is negative.</exception>

@@ -40,6 +40,8 @@
   items:
     - name: WebSocket handshake status
       href: guides/websocket-handshake-status.md
+    - name: Outstanding WebSocket deliveries (Neo v2, unreleased)
+      href: guides/websocket-receive-limits.md
     - name: Controller base routes and fallback
       href: guides/controller-base-routes.md
     - name: Request trailers (Neo v2, unreleased)
@@ -48,6 +50,8 @@
       href: guides/https.md
     - name: Request limits, admission and deadlines
       href: guides/request-limits.md
+    - name: Request-body byte limits
+      href: guides/request-body-limits.md
     - name: Metrics and tracing
       href: guides/telemetry.md
     - name: Trimming and Native AOT
