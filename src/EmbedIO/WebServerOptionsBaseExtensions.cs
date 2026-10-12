@@ -104,6 +104,25 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Enables HTTP metrics and server spans from the <c>EmbedIO.Server</c> meter and activity source.
+        /// </summary>
+        /// <typeparam name="TOptions">The options type.</typeparam>
+        /// <param name="this">The options instance.</param>
+        /// <param name="serverName">An optional fixed name that identifies this server, or null.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentException">The name is empty or whitespace.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static TOptions WithTelemetry<TOptions>(this TOptions @this, string? serverName = null)
+            where TOptions : WebServerOptionsBase
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.EnableTelemetry = true;
+            @this.TelemetryServerName = serverName;
+            return @this;
+        }
+
+        /// <summary>
         /// Sets how long one read of a request body may wait for data.
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>

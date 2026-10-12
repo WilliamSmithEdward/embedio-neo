@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+- Add opt-in HTTP server telemetry from Neo #137: `WithTelemetry(serverName)` publishes
+  the `EmbedIO.Server` meter (`http.server.request.duration`,
+  `http.server.active_requests`) and activity source (server spans with W3C trace
+  context), following the OpenTelemetry HTTP semantic conventions, with route templates
+  as `http.route`. Off by default; .NET 10 asset only. See
+  [metrics and tracing](docs/guides/telemetry.md).
 - Keep request body read buffers owned until underlying I/O actually settles after
   an optional read timeout or caller cancellation. Application buffers are no
   longer retained by abandoned reads, and pending pooled storage is not returned
