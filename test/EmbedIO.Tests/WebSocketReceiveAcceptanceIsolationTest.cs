@@ -152,6 +152,112 @@ namespace EmbedIO.Tests
             }
         }
 
+        private sealed class NestedModule : WebSocketModule
+        {
+            internal readonly TaskCompletionSource<bool> Connected = Signal();
+            internal IWebSocket? Accepted;
+            internal object? CallbackConstructorBudget;
+
+            internal NestedModule(int? count) : base("/ws", false)
+            {
+                if (count.HasValue) ReceiveLimits = new WebSocketReceiveLimits(count, 8, count, 8);
+            }
+
+            internal Task Dispatch(IHttpContext context) => OnRequestAsync(context);
+
+            protected override Task OnClientConnectedAsync(IWebSocketContext context)
+            {
+                Accepted = context.WebSocket;
+                // Record separately: restoring an outer acceptance scope could
+                // leak its pending reservation into application initialization.
+                using (var unrelated = new SocketOwner())
+                    CallbackConstructorBudget = SocketBudget(unrelated.Socket);
+                Connected.TrySetResult(true);
+                return Task.CompletedTask;
+            }
+
+            protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
+                => throw new AssertionException("The nested acceptance adapter sends no application frames.");
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task NestedAcceptanceKeepsUnlimitedOrConfiguredInnerOwnershipAndRestoresOuter(bool configuredInner)
+        {
+            using var outerModule = new NestedModule(1);
+            using var innerModule = new NestedModule(configuredInner ? 3 : null);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            SocketOwner? outerOwner = null;
+            SocketOwner? innerOwner = null;
+            Task innerOperation = Task.CompletedTask;
+            var outerOperation = outerModule.Dispatch(Context(async () =>
+            {
+                // Nest before the outer constructor consumes its configured
+                // AsyncLocal connection. Both adapters cross a real async boundary.
+                await Task.Yield();
+                innerOperation = innerModule.Dispatch(Context(async () =>
+                {
+                    await Task.Yield();
+                    var owner = new SocketOwner();
+                    innerOwner = owner;
+                    return SocketContext(owner.Socket, timeout.Token);
+                }, timeout.Token));
+                await innerModule.Connected.Task.WaitAsync(timeout.Token);
+                var outer = new SocketOwner();
+                outerOwner = outer;
+                return SocketContext(outer.Socket, timeout.Token);
+            }, timeout.Token));
+            try
+            {
+                await outerModule.Connected.Task.WaitAsync(timeout.Token);
+                var innerSocket = innerModule.Accepted ?? throw new AssertionException("Missing nested socket.");
+                var outerSocket = outerModule.Accepted ?? throw new AssertionException("Missing outer socket.");
+                var innerConnection = SocketBudget(innerSocket);
+                var outerConnection = SocketBudget(outerSocket)
+                    ?? throw new AssertionException("Outer configured acceptance lost its budget.");
+                string Ledger(object? connection)
+                {
+                    if (connection == null) return "none";
+                    var owner = (connection.GetType().GetField("_owner", Hidden)
+                        ?? throw new AssertionException("Missing recorded ledger owner.")).GetValue(connection);
+                    return ReferenceEquals(owner, ModuleBudget(outerModule)) ? "outer"
+                        : ReferenceEquals(owner, ModuleBudget(innerModule)) ? "inner" : "unexpected";
+                }
+                TestContext.Out.WriteLine($"Nested acceptance: configuredInner={configuredInner}, innerConstructor={Ledger(innerConnection)}, "
+                    + $"innerCallbackConstructor={Ledger(innerModule.CallbackConstructorBudget)}, outerConstructor={Ledger(outerConnection)}, "
+                    + $"outerCallbackConstructor={Ledger(outerModule.CallbackConstructorBudget)}");
+                Assert.Multiple(() =>
+                {
+                    Assert.That((outerConnection.GetType().GetField("_owner", Hidden)
+                        ?? throw new AssertionException("Missing outer ledger owner.")).GetValue(outerConnection),
+                        Is.SameAs(ModuleBudget(outerModule)));
+                    if (configuredInner)
+                    {
+                        var configured = innerConnection ?? throw new AssertionException("Inner configured acceptance lost its budget.");
+                        Assert.That((configured.GetType().GetField("_owner", Hidden)
+                            ?? throw new AssertionException("Missing inner ledger owner.")).GetValue(configured),
+                            Is.SameAs(ModuleBudget(innerModule)));
+                        Assert.That(configured, Is.Not.SameAs(outerConnection));
+                    }
+                    else Assert.That(innerConnection, Is.Null,
+                        "An unlimited nested accept must not consume the pending outer module's connection reservation.");
+                    Assert.That(innerModule.CallbackConstructorBudget, Is.Null,
+                        "A callback-created unrelated socket must not consume the pending outer acceptance budget.");
+                    Assert.That(outerModule.CallbackConstructorBudget, Is.Null,
+                        "Outer initialization must not leak its accepted connection's reservation.");
+                });
+                using var later = new SocketOwner();
+                Assert.That(SocketBudget(later.Socket), Is.Null);
+            }
+            finally
+            {
+                innerOwner?.Dispose();
+                outerOwner?.Dispose();
+                timeout.Cancel();
+                await Task.WhenAll(innerOperation, outerOperation).WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+
         [Test]
         public async Task ConcurrentConfiguredAndUnlimitedAcceptsKeepTheirOwnAsyncScopes()
         {
@@ -235,10 +341,11 @@ namespace EmbedIO.Tests
                 release.SetResult(true);
                 if (canceled)
                 {
-                    var error = Assert.CatchAsync<OperationCanceledException>(async () => await failed);
+                    var error = await Assert.CatchAsync<OperationCanceledException>(async () => await failed)
+                        ?? throw new AssertionException("Expected the canceled acceptance error.");
                     Assert.That(error.CancellationToken, Is.EqualTo(failureToken.Token));
                 }
-                else Assert.ThrowsAsync<IOException>(async () => await failed);
+                else await Assert.ThrowsAsync<IOException>(async () => await failed);
                 AssertOwner(unlimited, unlimited.Accepted ?? throw new AssertionException("Ordinary socket lost after failed acceptance."));
             }
             finally

@@ -96,8 +96,9 @@ namespace EmbedIO.Tests
             {
                 var operation = Invoke(reader, "ReadFrameAsync", socket) as Task
                     ?? throw new AssertionException("Missing frame read operation.");
-                var error = Assert.ThrowsAsync<EmbedIO.WebSockets.WebSocketException>(async () =>
-                    await operation.WaitAsync(TimeSpan.FromSeconds(3)));
+                var error = await Assert.ThrowsAsync<EmbedIO.WebSockets.WebSocketException>(async () =>
+                    await operation.WaitAsync(TimeSpan.FromSeconds(3)))
+                    ?? throw new AssertionException("Expected the frame rejection error.");
                 Assert.That(error.Code, Is.EqualTo(expected));
                 Assert.That(input.Reads, Is.EqualTo(1));
                 Assert.That(input.Position, Is.EqualTo(10));
@@ -107,8 +108,9 @@ namespace EmbedIO.Tests
                 {
                     var skip = Invoke(reader, "ReadFrameAsync", socket) as Task
                         ?? throw new AssertionException("Missing skip read.");
-                    var truncated = Assert.ThrowsAsync<EmbedIO.WebSockets.WebSocketException>(async () =>
-                        await skip.WaitAsync(TimeSpan.FromSeconds(3)));
+                    var truncated = await Assert.ThrowsAsync<EmbedIO.WebSockets.WebSocketException>(async () =>
+                        await skip.WaitAsync(TimeSpan.FromSeconds(3)))
+                        ?? throw new AssertionException("Expected the truncated rejected payload error.");
                     Assert.That(truncated.Code, Is.EqualTo(CloseStatusCode.Abnormal));
                     Assert.That(input.Reads, Is.EqualTo(2));
                     AssertEmpty(budget);

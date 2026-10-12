@@ -83,12 +83,8 @@ namespace EmbedIO.WebSockets.Internal
         // current asynchronous flow. Zero disables the check.
         internal static void SetAcceptedMaxMessageSize(int value) => AcceptedMaxMessageSize.Value = value;
         internal static void SetAcceptedMessageConsumerPending(bool value) => AcceptedMessageConsumerPending.Value = value;
-        internal static WebSocketDeliveryBudget.Connection? SetAcceptedDeliveryBudget(WebSocketDeliveryBudget.Connection? value)
-        {
-            var previous = AcceptedDeliveryBudget.Value;
-            AcceptedDeliveryBudget.Value = value;
-            return previous;
-        }
+        internal static void SetAcceptedDeliveryBudget(WebSocketDeliveryBudget.Connection? value)
+            => AcceptedDeliveryBudget.Value = value;
 
         // Failed/canceled module initialization has no consumer to receive queued
         // messages. Release its reservation without retaining a deferred close.

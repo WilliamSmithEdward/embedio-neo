@@ -219,7 +219,8 @@ namespace EmbedIO.WebSockets
             Internal.WebSocket.SetAcceptedMaxMessageSize(_maxMessageSize);
             Internal.WebSocket.SetAcceptedMessageConsumerPending(true);
             var delivery = _deliveryBudget?.CreateConnection();
-            var previousDelivery = delivery == null ? null : Internal.WebSocket.SetAcceptedDeliveryBudget(delivery);
+            // Every acceptance has its own policy, including an unlimited one.
+            Internal.WebSocket.SetAcceptedDeliveryBudget(delivery);
             IWebSocketContext webSocketContext;
             try
             {
@@ -233,7 +234,9 @@ namespace EmbedIO.WebSockets
             catch { delivery?.StopAdmission(); throw; }
             finally
             {
-                if (delivery != null) Internal.WebSocket.SetAcceptedDeliveryBudget(previousDelivery);
+                // Keep this async method's initialization callbacks outside the
+                // acceptance scope. Its caller retains its own execution context.
+                Internal.WebSocket.SetAcceptedDeliveryBudget(null);
                 Internal.WebSocket.SetAcceptedMessageConsumerPending(false);
             }
 

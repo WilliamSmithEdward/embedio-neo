@@ -3,7 +3,8 @@ using System.Threading.Tasks;
 
 namespace EmbedIO.WebSockets.Internal
 {
-    // These are internal preparation limits, not a new public policy or default.
+    // Shared validation and ledger inputs for the optional public receive policy.
+    // No finite limit is configured by default.
     internal sealed class WebSocketDeliveryLimits
     {
         internal WebSocketDeliveryLimits(int? connectionMessages, long? connectionBytes, int? moduleMessages, long? moduleBytes)
