@@ -79,6 +79,15 @@ internal static class QuicChurn
         var environment = DescribeEnvironment(options, serverDirectory, settings, rounds, serverCpus);
         environment["hostIdleBaseline"] = await IdleBaselineAsync(options.Number("--baseline-seconds", 10)).ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(output, "environment.json"), environment.ToJsonString(Indented)).ConfigureAwait(false);
+        if (options.Optional("--max-baseline-busy-cpus") is { } maximumText)
+        {
+            var maximum = double.Parse(maximumText, NumberStyles.Float, CultureInfo.InvariantCulture);
+            if (!double.IsFinite(maximum) || maximum < 0) throw new ArgumentException("Invalid baseline CPU ceiling.");
+            var measured = environment["hostIdleBaseline"]?["busyCpus"]?.GetValue<double>()
+                ?? throw new InvalidOperationException("Missing idle CPU baseline.");
+            if (measured > maximum)
+                throw new InvalidOperationException(FormattableString.Invariant($"Host is not quiet: baseline {measured} busy CPUs exceeds {maximum}. No load started."));
+        }
 
         // Contention control: a separate process spinning this many threads for the whole
         // run, so the overload hypothesis can be tested rather than inferred.
@@ -413,6 +422,15 @@ internal static class QuicChurn
         var runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory();
         var aspnetDirectory = Path.GetDirectoryName(typeof(Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions).Assembly.Location) ?? string.Empty;
         var msquic = new[] { "msquic.dll", "libmsquic.so", "libmsquic.dylib" }.Select(name => Path.Combine(runtimeDirectory, name)).FirstOrDefault(File.Exists);
+        if (msquic is null && OperatingSystem.IsLinux())
+        {
+            // QUIC support was checked before this snapshot, so hash the loaded
+            // system library rather than claiming a runtime-directory copy.
+            msquic = File.ReadLines("/proc/self/maps")
+                .Select(line => line.Split(' ', 6, StringSplitOptions.RemoveEmptyEntries))
+                .Where(fields => fields.Length == 6 && Path.GetFileName(fields[5]).StartsWith("libmsquic.so", StringComparison.Ordinal))
+                .Select(fields => fields[5]).FirstOrDefault(File.Exists);
+        }
         return new JsonObject
         {
             ["capturedUtc"] = Now(),

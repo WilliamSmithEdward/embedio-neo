@@ -117,3 +117,28 @@ not part of these runs.
 3. Longer runs at the endurance campaign's mixed load if refusals or timeouts recur.
 
 Raw evidence is under ignored `TestResults/issue-283` in the issue worktree.
+
+## Current-source disposable CI control
+
+Issue #283 now has a dedicated `HTTP3 quiet-host control` workflow for Windows 2025
+and Ubuntu 24.04. It builds the checked-out core and identical comparison harness,
+uses SDK 10.0.401 and the existing pinned Linux MsQuic 2.6.2 prerequisite, and records
+the actual source revision and loaded core/runtime/native binary hashes.
+
+Each engine receives two alternating rounds of 15-second rate phases. The quiet
+arm uses 4, 16, 64 and 128 connections/second; the contention arm uses 64 and 128.
+Both retain 32 small requests/second and two 1 MiB requests/second over four warm
+HTTP/3 clients. Connection establishment, first-stream service and warm requests
+are measured separately. No handshake deadline is increased.
+
+A 15-second baseline must average at most 0.5 busy CPUs before either arm starts.
+Each quiet phase must also average at most 0.5 background CPUs; the contention arm
+must measure at least 80% host CPU. These thresholds are declared before the run.
+Missing samples, cap omissions, any request failure, unsuccessful server exit or
+missing native hash fail acceptance. A contaminated host is an inconclusive failed
+control, not evidence of an engine defect or a quiet run. The script preserves all
+raw JSON and logs, including failed campaigns, and does not retry them automatically.
+
+The contention arm runs only on disposable GitHub runners. It does not authorize
+an all-core burn on a shared development workstation. CI outcomes will be recorded
+here after the campaigns execute; configuring this workflow alone is not validation.
