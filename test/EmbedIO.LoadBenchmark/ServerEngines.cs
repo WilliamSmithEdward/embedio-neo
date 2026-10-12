@@ -15,7 +15,7 @@ internal enum Protocol
     Http3,
 }
 
-internal sealed record ServerSettings(string Engine, Protocol Protocol, bool Tls, int Port, X509Certificate2? Certificate);
+internal sealed record ServerSettings(string Engine, Protocol Protocol, bool Tls, int Port, X509Certificate2? Certificate, bool ConnectionCensus = false);
 
 internal interface IBenchmarkServer : IAsyncDisposable
 {
@@ -70,6 +70,7 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
             .WithMode(mode)
             .WithoutAutoLoadCertificate()
             .WithoutAutoRegisterCertificate();
+        if (settings.ConnectionCensus) EnableCensus(options);
         if (settings.Tls) options = options.WithCertificate(settings.Certificate);
         _server = new WebServer(options)
             .PreferNoCompressionFor("text/*")
@@ -78,6 +79,8 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
         _running = _server.RunAsync(_stop.Token);
         return WaitForListeningAsync(_server, _running);
     }
+
+    private static void EnableCensus(WebServerOptions options) => options.EnableTelemetry = true;
 
     public async Task StopAsync()
     {

@@ -110,3 +110,21 @@ specific sites and measure material CPU/allocation/tail-latency cost, including
 shutdown races, reset/cancellation and healthy subsequent connections. No
 catch-and-ignore filter, exception suppression or runtime/OS setting change is
 justified by these counts alone. No release is authorized or published.
+
+## Current-source follow-up in progress
+
+The follow-up for #282 adds opt-in paced requests, actual server lifetime counters,
+bounded stack-site counts and isolated profile/A/A/cost controls. Diagnostic
+connection observation enables the existing telemetry API only in test servers;
+unprofiled cost controls retain defaults. Kestrel's connection meter is documented
+in [Microsoft's HTTP metrics reference](https://learn.microsoft.com/en-us/aspnet/core/metrics/http?view=aspnetcore-10.0).
+
+The proposed campaign compares seven protocol/lifetime variants at identical paced
+load, retaining all errors, request counts, hashes, host measurements and original
+samples. A/A copies use identical binaries, with alternating order and three rounds.
+Intentional abandonment and recovery are separate from normal traffic. Linux is the
+proposed quiet-host measurement environment; ordinary cross-platform regressions
+remain required. A configured workflow is not a passing result or proof of material
+production cost. No production optimization is justified until the new evidence has
+been collected and examined. Historical results and remaining limits above are
+preserved.

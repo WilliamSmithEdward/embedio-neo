@@ -17,7 +17,8 @@ internal sealed record LoadSettings(
     int Streams,
     int Pipeline,
     int RequestsPerConnection,
-    string CertificateThumbprint)
+    string CertificateThumbprint,
+    double RequestRate = 0)
 {
     internal bool IsUpload => Route.Kind == RouteKind.Upload;
 }
@@ -40,7 +41,9 @@ internal static class LoadClient
             options.Integer("--streams", 1),
             options.Integer("--pipeline", 1),
             options.Integer("--requests-per-connection", 0),
-            options.Text("--certificate-thumbprint", string.Empty));
+            options.Text("--certificate-thumbprint", string.Empty),
+            options.Number("--request-rate", 0));
+        if (!double.IsFinite(settings.RequestRate) || settings.RequestRate < 0) throw new ArgumentException("Request rate must be finite and nonnegative.");
         if (settings.Connections < 1 || settings.Streams < 1 || settings.Pipeline < 1 || settings.RequestsPerConnection < 0)
             throw new ArgumentException("Connections, streams and pipeline must be positive.");
         if (settings.Protocol != Protocol.Http1 && settings.Pipeline != 1) throw new ArgumentException("Pipelining applies to HTTP/1.1 only.");
@@ -102,7 +105,7 @@ internal static class LoadClient
 
     private static async Task<RunResult> ExerciseAsync(LoadSettings settings, TimeSpan duration, CancellationToken cancellation)
     {
-        var state = new RunState(duration, cancellation);
+        var state = new RunState(duration, cancellation, settings.RequestRate);
         var workers = Enumerable.Range(0, settings.Connections).Select(_ => settings.Protocol == Protocol.Http1
             ? Http1Worker.RunAsync(settings, state)
             : MultiplexedWorker.RunAsync(settings, state)).ToArray();
@@ -121,10 +124,11 @@ internal static class LoadClient
         long ConnectionsOpened, long ServerCloses, long UnansweredRequests, string? Error);
 }
 
-internal sealed class RunState(TimeSpan duration, CancellationToken cancellation)
+internal sealed class RunState(TimeSpan duration, CancellationToken cancellation, double requestRate = 0)
 {
     private readonly CancellationTokenSource _failed = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
     private readonly List<LatencyHistogram> _histograms = [];
+    private long _slots;
     private long _requests;
     private long _responseBytes;
     private long _requestBodyBytes;
@@ -165,6 +169,17 @@ internal sealed class RunState(TimeSpan duration, CancellationToken cancellation
         Interlocked.Increment(ref _requests);
         Interlocked.Add(ref _responseBytes, responseBytes);
         Interlocked.Add(ref _requestBodyBytes, requestBodyBytes);
+    }
+
+    internal async ValueTask<bool> WaitForSlotAsync(int batch = 1)
+    {
+        if (requestRate == 0) return Running;
+        var number = Interlocked.Add(ref _slots, batch) - batch;
+        var due = TimeSpan.FromSeconds(number / requestRate);
+        if (due >= duration) return false;
+        var wait = due - Clock.Elapsed;
+        if (wait > TimeSpan.Zero) await Task.Delay(wait, Token).ConfigureAwait(false);
+        return Running;
     }
 
     internal void Opened() => Interlocked.Increment(ref _connectionsOpened);
@@ -249,6 +264,7 @@ internal static class Http1Worker
                     var open = true;
                     while (open && state.Running)
                     {
+                        if (!await state.WaitForSlotAsync(settings.Pipeline).ConfigureAwait(false)) break;
                         var lastOnConnection = settings.RequestsPerConnection > 0 && sent + settings.Pipeline == settings.RequestsPerConnection;
                         var started = Stopwatch.GetTimestamp();
                         await stream.WriteAsync(lastOnConnection ? finalBatch : batch, state.Token).ConfigureAwait(false);
@@ -470,6 +486,7 @@ internal static class MultiplexedWorker
                     var buffer = new byte[65536];
                     while (state.Running && (settings.RequestsPerConnection == 0 || Interlocked.Increment(ref claimed) <= settings.RequestsPerConnection))
                     {
+                        if (!await state.WaitForSlotAsync().ConfigureAwait(false)) break;
                         var started = Stopwatch.GetTimestamp();
                         // DefaultRequestVersion only applies to convenience methods; set it per message.
                         using var request = new HttpRequestMessage(uploadBody is null ? HttpMethod.Get : HttpMethod.Post, uri)

@@ -83,6 +83,7 @@ internal static class Recovery
         report["phases"] = phases;
         var timeout = TimeSpan.FromMinutes(2);
         var serverArguments = new List<string> { "server", "--engine", engine, "--protocol", protocol.ToString(), "--port", port.ToString(CultureInfo.InvariantCulture) };
+        if (options.Has("--exception-phases")) serverArguments.Add("--connection-census");
         if (tls) serverArguments.AddRange(["--tls", "--certificate", certificatePath, "--certificate-password", password]);
         var server = ChildProcess.Start(serverDirectory, serverArguments, null, Path.Combine(output, "server.stderr.log"));
         var verdict = new JsonArray();
@@ -109,6 +110,9 @@ internal static class Recovery
                     ["phase"] = name,
                     ["utc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                     ["snapshot"] = snapshot?.DeepClone(),
+                    ["exceptions"] = options.Has("--exception-phases") ? await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false) : null,
+                    ["exceptionSites"] = options.Has("--exception-phases") ? await server.RequestJsonAsync("exception-sites", timeout).ConfigureAwait(false) : null,
+                    ["connections"] = options.Has("--exception-phases") ? await server.RequestJsonAsync("connections", timeout).ConfigureAwait(false) : null,
                     ["serverSockets"] = Orchestrator.ServerSockets(port),
                 });
                 return snapshot;

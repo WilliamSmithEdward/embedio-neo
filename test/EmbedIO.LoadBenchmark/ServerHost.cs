@@ -19,17 +19,32 @@ internal static class ServerHost
         using var certificate = tls
             ? X509CertificateLoader.LoadPkcs12FromFile(options.Required("--certificate"), options.Required("--certificate-password"), X509KeyStorageFlags.Exportable)
             : null;
-        var settings = new ServerSettings(options.Required("--engine"), protocol, tls, options.Integer("--port", 0), certificate);
+        var settings = new ServerSettings(options.Required("--engine"), protocol, tls, options.Integer("--port", 0), certificate, options.Has("--connection-census"));
         Payloads.Prepare(options.Integer("--reference-bytes", 1 << 20));
         var exceptions = new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
         // Diagnostic opt-in: key by message too and log the first stack per key (bounded).
         var detail = Environment.GetEnvironmentVariable("EMBEDIO_BENCH_EXCEPTION_DETAIL") == "1";
+        var sites = new Dictionary<string, long>(StringComparer.Ordinal);
+        var siteGate = new object();
+        long siteOverflow = 0;
+        object? SiteSnapshot()
+        {
+            if (!detail) return null;
+            lock (siteGate) return new { counts = new Dictionary<string, long>(sites, StringComparer.Ordinal), overflow = siteOverflow };
+        }
         AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
         {
             var key = e.Exception.GetType().FullName ?? "?";
             if (detail)
             {
                 key += ": " + e.Exception.Message;
+                var site = key + "\n" + (e.Exception.StackTrace ?? "<stack unavailable>");
+                lock (siteGate)
+                {
+                    if (sites.TryGetValue(site, out var count)) sites[site] = count + 1;
+                    else if (sites.Count < 512 && site.Length <= 16384) sites.Add(site, 1);
+                    else siteOverflow++;
+                }
                 if (!exceptions.ContainsKey(key) && exceptions.Count < 64) Console.Error.WriteLine("FIRST " + key + Environment.NewLine + e.Exception.StackTrace);
             }
             exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
@@ -41,6 +56,7 @@ internal static class ServerHost
             "embedio" => new EmbedIOServer(settings),
             _ => throw new ArgumentException("Unknown engine " + settings.Engine),
         };
+        using var connections = settings.ConnectionCensus ? new ConnectionLedger() : null;
         var disposed = false;
         try
         {
@@ -57,6 +73,7 @@ internal static class ServerHost
                 serverGc = GCSettings.IsServerGC,
                 gcLatencyMode = GCSettings.LatencyMode.ToString(),
                 runtime = RuntimeInformation.FrameworkDescription,
+                msquic = AssemblyIdentity.NativeQuic(),
                 assemblies = AssemblyIdentity.Describe(typeof(EmbedIO.WebServer).Assembly, typeof(Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions).Assembly, typeof(System.Net.Quic.QuicListener).Assembly),
             }));
 
@@ -68,6 +85,12 @@ internal static class ServerHost
                 {
                     case "snapshot":
                         Control.Write(JsonSerializer.Serialize(ResourceSnapshot.Capture()));
+                        break;
+                    case "exception-sites":
+                        Control.Write(JsonSerializer.Serialize(SiteSnapshot()));
+                        break;
+                    case "connections":
+                        Control.Write(JsonSerializer.Serialize(connections?.Snapshot()));
                         break;
                     case "exceptions":
                         Control.Write(JsonSerializer.Serialize(new Dictionary<string, long>(exceptions, StringComparer.Ordinal)));
@@ -91,6 +114,8 @@ internal static class ServerHost
                         disposed = true;
                         Control.Write(JsonSerializer.Serialize(new
                         {
+                            exceptionSites = SiteSnapshot(),
+                            connections = connections?.Snapshot(),
                             stopMilliseconds = stopping.Elapsed.TotalMilliseconds,
                             firstChanceExceptions = new Dictionary<string, long>(exceptions, StringComparer.Ordinal),
                         }));
@@ -109,6 +134,23 @@ internal static class ServerHost
 
 internal static class AssemblyIdentity
 {
+    internal static object? NativeQuic()
+    {
+        if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            || !System.Net.Quic.QuicConnection.IsSupported) return null;
+        string? path = null;
+        if (OperatingSystem.IsLinux())
+            path = File.ReadLines("/proc/self/maps").Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Last())
+                .FirstOrDefault(value => value.StartsWith("/", StringComparison.Ordinal) && Path.GetFileName(value).StartsWith("libmsquic", StringComparison.Ordinal));
+        else if (OperatingSystem.IsWindows())
+        {
+            using var process = Process.GetCurrentProcess();
+            foreach (ProcessModule module in process.Modules)
+                if (module.ModuleName.Equals("msquic.dll", StringComparison.OrdinalIgnoreCase)) { path = module.FileName; break; }
+        }
+        return path is null ? null : new { path, sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) };
+    }
+
     internal static object[] Describe(params Assembly[] assemblies) => assemblies.Select(assembly => (object)new
     {
         name = assembly.GetName().Name,

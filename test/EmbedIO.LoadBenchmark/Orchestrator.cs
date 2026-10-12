@@ -24,8 +24,26 @@ internal static class Orchestrator
         if (Directory.Exists(output) && Directory.EnumerateFileSystemEntries(output).Any())
             throw new InvalidOperationException("Use a fresh output directory so earlier evidence is never overwritten: " + output);
         Directory.CreateDirectory(output);
+        if (options.Optional("--max-baseline-busy-cpus") is { } ceilingText)
+        {
+            var ceiling = double.Parse(ceilingText, CultureInfo.InvariantCulture);
+            if (!double.IsFinite(ceiling) || ceiling < 0) throw new ArgumentException("Invalid host baseline ceiling.");
+            var busy = SystemCpu.BusyTime();
+            var baselineClock = Stopwatch.StartNew();
+            await Task.Delay(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+            var busyAfter = SystemCpu.BusyTime();
+            var seconds = baselineClock.Elapsed.TotalSeconds;
+            var measured = (busyAfter - busy).TotalSeconds / seconds;
+            await File.WriteAllTextAsync(Path.Combine(output, "host-baseline.json"),
+                JsonSerializer.Serialize(new { busyCpus = measured, seconds, ceiling })).ConfigureAwait(false);
+            if (measured > ceiling) throw new InvalidOperationException("Host baseline rejected before any server or client load.");
+        }
         var candidate = Path.GetFullPath(options.Text("--candidate-dir", AppContext.BaseDirectory));
         var baseline = options.Optional("--baseline-dir") is { } path ? Path.GetFullPath(path) : null;
+        var requestRate = options.Number("--request-rate", 0);
+        if (!double.IsFinite(requestRate) || requestRate < 0 || requestRate > 64)
+            throw new ArgumentException("Paced comparison rate must be between 0 and 64 requests/second.");
+        var census = options.Has("--connection-census");
         var rounds = options.Integer("--rounds", 3);
         var warmup = options.Number("--warmup", 5);
         var duration = options.Number("--duration", 15);
@@ -40,6 +58,7 @@ internal static class Orchestrator
         var modernBaseline = options.Has("--modern-baseline") || options.Has("--baseline-all-protocols");
         var selected = SelectScenarios(options.Text("--scenarios", "all"));
         // Diagnostic passes can use a smaller, identical workload for each engine.
+        if (requestRate > 0) selected = [.. selected.Select(scenario => scenario with { MaxSeconds = double.MaxValue })];
         var connections = options.Integer("--connections", 0);
         var streams = options.Integer("--streams", 0);
         if (connections < 0 || streams < 0) throw new ArgumentOutOfRangeException(nameof(options), "Concurrency overrides must be positive, or zero to retain the scenario defaults.");
@@ -91,7 +110,7 @@ internal static class Orchestrator
                     {
                         var sample = await RunSampleAsync(new SampleContext(scenario, target, round, output, certificatePath, password, thumbprint,
                             warmup, duration, idle, serverCpus, clientCpus, profile, options.Optional("--reference-bytes"),
-                            options.Integer("--time-wait-limit", 4000), options.Optional("--trace-tool") is { } tool ? Path.GetFullPath(tool) : null)).ConfigureAwait(false);
+                            options.Integer("--time-wait-limit", 4000), requestRate, census, options.Optional("--trace-tool") is { } tool ? Path.GetFullPath(tool) : null)).ConfigureAwait(false);
                         samples.Add(sample);
                         if (sample["error"] is not null) failures++;
                         Console.Out.WriteLine(Describe(sample));
@@ -124,7 +143,7 @@ internal static class Orchestrator
 
     private sealed record SampleContext(Scenario Scenario, EngineTarget Target, int Round, string Output, string CertificatePath, string Password,
         string Thumbprint, double Warmup, double Duration, double Idle, string? ServerCpus, string? ClientCpus, bool Profile, string? ReferenceBytes,
-        int TimeWaitLimit, string? TraceTool);
+        int TimeWaitLimit, double RequestRate, bool ConnectionCensus, string? TraceTool);
 
     private static async Task<JsonObject> RunSampleAsync(SampleContext context)
     {
@@ -140,6 +159,8 @@ internal static class Orchestrator
             ["streams"] = scenario.Streams,
             ["engine"] = context.Target.Name,
             ["round"] = context.Round,
+            ["requestRate"] = context.RequestRate,
+            ["connectionCensus"] = context.ConnectionCensus,
             ["startedUtc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
         };
         // Churn workloads and per-connection request caps leave thousands of loopback
@@ -170,6 +191,7 @@ internal static class Orchestrator
         var serverArguments = new List<string> { "server", "--engine", context.Target.Engine, "--protocol", protocol, "--port", port.ToString(CultureInfo.InvariantCulture) };
         if (scenario.Tls) serverArguments.AddRange(["--tls", "--certificate", context.CertificatePath, "--certificate-password", context.Password]);
         if (context.Profile) serverArguments.Add("--profile");
+        if (context.ConnectionCensus) serverArguments.Add("--connection-census");
         if (context.ReferenceBytes is not null) serverArguments.AddRange(["--reference-bytes", context.ReferenceBytes]);
         var clientArguments = new List<string>
         {
@@ -180,6 +202,7 @@ internal static class Orchestrator
             "--warmup", Math.Min(context.Warmup, scenario.MaxSeconds).ToString(CultureInfo.InvariantCulture),
             "--duration", Math.Min(context.Duration, scenario.MaxSeconds).ToString(CultureInfo.InvariantCulture),
         };
+        if (context.RequestRate > 0) clientArguments.AddRange(["--request-rate", context.RequestRate.ToString(CultureInfo.InvariantCulture)]);
         if (scenario.Tls) clientArguments.Add("--tls");
         var timeout = TimeSpan.FromSeconds(context.Warmup + context.Duration + 90);
 
@@ -192,6 +215,8 @@ internal static class Orchestrator
             if (ready is null || !ready.StartsWith("READY ", StringComparison.Ordinal)) throw new InvalidOperationException("Server did not start: " + ready);
             sample["server"] = JsonNode.Parse(ready[6..]);
             sample["exceptionsAtReady"] = await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false);
+            if (context.ConnectionCensus) sample["exceptionSitesAtReady"] = await server.RequestJsonAsync("exception-sites", timeout).ConfigureAwait(false);
+            if (context.ConnectionCensus) sample["connectionsAtReady"] = await server.RequestJsonAsync("connections", timeout).ConfigureAwait(false);
 
             // The client always runs from the candidate directory; it never loads EmbedIO.
             client = ChildProcess.Start(AppContext.BaseDirectory, clientArguments, context.ClientCpus, stem + ".client.stderr.log");
@@ -204,15 +229,21 @@ internal static class Orchestrator
             sample["serverSocketsBefore"] = ServerSockets(port);
             sample["serverBefore"] = await server.RequestJsonAsync("snapshot", timeout).ConfigureAwait(false);
             sample["exceptionsBeforeLoad"] = await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false);
+            if (context.ConnectionCensus) sample["exceptionSitesBeforeLoad"] = await server.RequestJsonAsync("exception-sites", timeout).ConfigureAwait(false);
+            if (context.ConnectionCensus) sample["connectionsBeforeLoad"] = await server.RequestJsonAsync("connections", timeout).ConfigureAwait(false);
             var busyBefore = SystemCpu.BusyTime();
+            var machineClock = Stopwatch.StartNew();
             using var trace = context.TraceTool is null ? null : StartTrace(context, sample, stem);
             if (await server.RequestAsync("start", timeout).ConfigureAwait(false) != "MEASURING") throw new InvalidOperationException("Server measurement handshake failed.");
             var done = await client.RequestAsync("start", timeout).ConfigureAwait(false);
             var window = await server.RequestJsonAsync("stop", timeout).ConfigureAwait(false);
             var busyAfter = SystemCpu.BusyTime();
+            sample["machineMeasurementSeconds"] = machineClock.Elapsed.TotalSeconds;
             if (done != "DONE") throw new InvalidOperationException("Client measurement did not complete: " + done);
             sample["serverWindow"] = window;
             sample["exceptionsAfterLoad"] = await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false);
+            if (context.ConnectionCensus) sample["exceptionSitesAfterLoad"] = await server.RequestJsonAsync("exception-sites", timeout).ConfigureAwait(false);
+            if (context.ConnectionCensus) sample["connectionsAfterLoad"] = await server.RequestJsonAsync("connections", timeout).ConfigureAwait(false);
             if (trace is not null) sample["trace"] = await FinishTraceAsync(context, trace, stem).ConfigureAwait(false);
             sample["client"] = await client.RequestJsonAsync("report", timeout).ConfigureAwait(false);
             sample["clientExitCode"] = await client.WaitForExitAsync(timeout).ConfigureAwait(false);
@@ -222,6 +253,8 @@ internal static class Orchestrator
             sample["serverSocketsAfter"] = ServerSockets(port);
             sample["serverAfter"] = await server.RequestJsonAsync("snapshot", timeout).ConfigureAwait(false);
             sample["exceptionsBeforeStop"] = await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false);
+            if (context.ConnectionCensus) sample["exceptionSitesBeforeStop"] = await server.RequestJsonAsync("exception-sites", timeout).ConfigureAwait(false);
+            if (context.ConnectionCensus) sample["connectionsBeforeStop"] = await server.RequestJsonAsync("connections", timeout).ConfigureAwait(false);
             sample["serverStop"] = await server.RequestJsonAsync("exit", timeout).ConfigureAwait(false);
             sample["serverExitCode"] = await server.WaitForExitAsync(timeout).ConfigureAwait(false);
             Derive(sample, context);
