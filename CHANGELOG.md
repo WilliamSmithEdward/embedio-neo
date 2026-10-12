@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+- Keep the internal native QUIC module mapped on Linux through process teardown,
+  while closing API tables and child handles. Add fresh-process native-peer and
+  collectible-context checks; see [lifetime guidance](docs/project/native-quic-module-lifetime.md).
 - Document and verify compressed controller response completion and encoded
   response lengths for upstream #394, plus its separate POST control, without
   changing production behavior. Historical Xamarin validation is not claimed.

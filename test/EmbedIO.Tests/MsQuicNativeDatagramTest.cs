@@ -620,13 +620,17 @@ namespace EmbedIO.Tests
             private NativeServer(SafeHandle api, SafeHandle registration, SafeHandle configuration, SafeHandle listener, X509Certificate2 certificate, IPEndPoint endpoint)
             { _api = api; _registration = registration; Configuration = configuration; _listener = listener; Certificate = certificate; Endpoint = endpoint; }
 
-            internal static Task<NativeServer> StartAsync()
+            internal bool OwnersClosed => _listener.IsClosed && Configuration.IsClosed && _registration.IsClosed && _api.IsClosed;
+
+            internal static Task<NativeServer> StartAsync(bool streams = false)
             {
                 var type = Core.GetType("EmbedIO.Net.Internal.Http3.MsQuicApi") ?? throw new IgnoreException("The retained asset does not include the native provider.");
                 var api = (SafeHandle)(type.GetMethod("Open", BindingFlags.Static | BindingFlags.NonPublic)?.Invoke(null, null)
                     ?? throw new AssertionException("Missing native API owner."));
                 var registration = (SafeHandle)Call(api, "CreateRegistration");
-                var configuration = (SafeHandle)Call(registration, "CreateConfiguration", (object)H3);
+                var configuration = streams
+                    ? (SafeHandle)Call(registration, "CreateStreamConfiguration", H3, (ushort)8, (ushort)8)
+                    : (SafeHandle)Call(registration, "CreateConfiguration", (object)H3);
                 var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
                 Call(configuration, "LoadServerCertificate", certificate);
                 var listener = (SafeHandle)Call(registration, "CreateListener");
