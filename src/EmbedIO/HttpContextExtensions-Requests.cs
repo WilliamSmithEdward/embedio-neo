@@ -93,7 +93,7 @@ namespace EmbedIO
         /// <exception cref="HttpException">The body is not valid JSON for <typeparamref name="TData"/> (HTTP 400).</exception>
         /// <remarks>The metadata's own options apply; EmbedIO's lenient default input handling does not.
         /// This overload uses no reflection, so it works in trimmed and Native AOT applications.</remarks>
-        public static Task<TData?> GetRequestDataAsync<TData>(this IHttpContext @this, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TData> typeInfo)
+        public static Task<TData?> GetRequestDataWithMetadataAsync<TData>(this IHttpContext @this, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TData> typeInfo)
         {
             if (@this is null) throw new System.NullReferenceException();
             Validate.NotNull(nameof(typeInfo), typeInfo);
