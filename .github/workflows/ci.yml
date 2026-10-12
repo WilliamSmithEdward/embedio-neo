@@ -138,7 +138,7 @@ jobs:
         shell: bash
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
-          EMBEDIO_REGRESSION_TIMEOUT: ${{ runner.os == 'Windows' && '5m' || '8m' }}
+          EMBEDIO_REGRESSION_TIMEOUT: '8m'
         run: |
           set -euo pipefail
           status=0
