@@ -46,7 +46,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 5033
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 5041
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -60,7 +60,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 5033 executed/reported test cases to catch accidental discovery loss; update
+least 5041 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
 suite budget is eight minutes on all three platforms. William approved the Unix
 allowance on 2026-10-10 and requested loosening the Windows allowance on
@@ -242,3 +242,9 @@ or dispatch CI with the `quic-retirement-gate` input. The gate tolerates no
 retry and applies no quarantine, so a runtime whose MsQuic still keeps a
 disposed listener's port bound fails it by design. See
 [QUIC lifetime and rebind](docs/project/quic-lifetime.md#retirement-gates).
+
+Native QUIC module lifetime is also checked in three fresh processes on every
+desktop CI runner, before coverage. The seven-case subset avoids initializing
+System.Net.Quic and requires normal test-process exit; Linux additionally checks
+stable mappings across 513 API lifecycles. See
+[standalone module lifetime](docs/project/native-quic-module-lifetime.md).

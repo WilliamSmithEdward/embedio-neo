@@ -72,6 +72,23 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly CloseApi _close;
         private readonly OpenRegistration _registrationOpen;
         private readonly CloseRegistration _registrationClose;
+        private static readonly object ModuleGate = new();
+        private static IntPtr _linuxModuleAnchor;
+
+        private static void RetainLinuxModule(string name)
+        {
+            if (!OperatingSystem.IsLinux()) return;
+            lock (ModuleGate)
+            {
+                if (_linuxModuleAnchor == IntPtr.Zero)
+                    // Standalone native use can crash at CLR thread teardown
+                    // after the last Linux module mapping unloads. Keep one
+                    // mapping for this loaded assembly's process lifetime;
+                    // individual API tables and all child handles still close.
+                    _linuxModuleAnchor = NativeLibrary.Load(name, typeof(QuicConnection).Assembly,
+                        DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories);
+            }
+        }
 
         private MsQuicApi(IntPtr library, IntPtr table, CloseApi close) : base(true)
         {
@@ -99,6 +116,7 @@ namespace EmbedIO.Net.Internal.Http3
             CloseApi? close = null;
             try
             {
+                RetainLinuxModule(name);
                 var open = Marshal.GetDelegateForFunctionPointer<OpenApi>(NativeLibrary.GetExport(library, "MsQuicOpenVersion"));
                 close = Marshal.GetDelegateForFunctionPointer<CloseApi>(NativeLibrary.GetExport(library, "MsQuicClose"));
                 var status = open(2, out table);

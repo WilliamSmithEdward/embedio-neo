@@ -114,12 +114,16 @@ namespace EmbedIO.Tests.Issues
             using (var response = await client.SendAsync(Post(client, host.Url, small)))
                 Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("100000"), "A small transfer may decode to more than the transferred limit.");
 
-            var large = new ByteArrayContent(new byte[2000]);
-            using (var response = await client.SendAsync(Post(client, host.Url, large)))
-            {
-                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
-                Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain("Request body exceeds").And.Not.Contain("Decompressed"));
-            }
+            // A declared over-limit HTTP/1 body is rejected before it is read. Do
+            // not race HttpClient's upload against that intentional connection
+            // close: unread uploaded bytes can turn the response into a TCP reset.
+            using var socket = await host.ConnectAsync();
+            await socket.SendAsync($"POST / HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 2000\r\n\r\n");
+            var rejected = await socket.ReadToEndAsync();
+            Assert.That(rejected, Does.StartWith("HTTP/1.1 413"));
+            Assert.That(rejected, Does.Contain("Connection: close"));
+            Assert.That(rejected, Does.Contain("Request body exceeds").And.Not.Contain("Decompressed"));
+            Assert.That(await host.ProbeAsync(), Is.EqualTo("healthy"));
         }
 
         // ------------------------------------------------------------ admission

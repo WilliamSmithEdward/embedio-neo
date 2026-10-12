@@ -106,6 +106,7 @@ namespace EmbedIO.Tests
         [TestCase("dispose")]
         public async Task CombinedDrainCanAbortAllProtocols(string reason)
         {
+            using var handshake = new QuicHandshakeTrace();
             using var certificate = Certificate();
             var prefix = CombinedPrefix();
             var entered = Enumerable.Range(0, 3).Select(_ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).ToArray();
@@ -131,7 +132,17 @@ namespace EmbedIO.Tests
             Exception? failure = null;
             try
             {
-                await Task.WhenAll(entered.Select(signal => signal.Task)).WaitAsync(stop.Token);
+                var admission = Task.WhenAll(entered.Select(signal => signal.Task));
+                var completed = await Task.WhenAny(admission, http1, requests[0], requests[1], running).WaitAsync(stop.Token);
+                if (completed != admission)
+                {
+                    // Surface the original transport failure immediately instead of
+                    // hiding it behind the later admission deadline. No request can
+                    // finish successfully while its handler is waiting for release.
+                    await completed;
+                    throw new AssertionException("A transport or server ended before all three handlers were admitted.");
+                }
+                await admission;
                 phase = "start drain";
                 var drain = server.DrainAsync(reason == "deadline" ? TimeSpan.FromMilliseconds(100) : TimeSpan.FromSeconds(15), cancelDrain.Token);
                 phase = "trigger " + reason;
@@ -150,11 +161,14 @@ namespace EmbedIO.Tests
                 foreach (var request in requests)
                     await Assert.ThatAsync(async () => await request, Throws.InstanceOf<HttpRequestException>());
                 Assert.That(server.Listener.IsListening, Is.False);
+                TestContext.Out.WriteLine($"{nameof(QuicHandshakeTrace)} records: {handshake.Snapshot().Length}");
             }
             catch (Exception error)
             {
                 failure = error;
                 TestContext.Error.WriteLine($"Combined drain failed: reason={reason}, phase={phase}, server={server.State}, run={running.Status}, HTTP/1={http1.Status}, HTTP/2={requests[0].Status}, HTTP/3={requests[1].Status}, admitted={string.Join(",", entered.Select(signal => signal.Task.IsCompleted))}. {error}");
+                TestContext.Error.WriteLine($"HTTP/1 failure: {http1.Exception}\nHTTP/2 failure: {requests[0].Exception}\nHTTP/3 failure: {requests[1].Exception}\nServer failure: {running.Exception}");
+                foreach (var entry in handshake.Snapshot()) TestContext.Error.WriteLine(entry);
                 throw;
             }
             finally
