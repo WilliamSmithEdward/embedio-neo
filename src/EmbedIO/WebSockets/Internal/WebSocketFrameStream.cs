@@ -2,12 +2,13 @@
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace EmbedIO.WebSockets.Internal
 {
-    internal class WebSocketFrameStream
+    internal sealed class WebSocketFrameStream : IDisposable
     {
         // Matches WebSocketModule's receive buffer. Holds every frame header and
         // small payloads, so a burst of small frames needs one transport read.
@@ -19,7 +20,7 @@ namespace EmbedIO.WebSockets.Internal
         internal const int ExactAllocationLimit = 65536;
 
         private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-        private readonly Stream? _stream;
+        private readonly EmbedIO.Internal.BorrowedResource<Stream>? _stream;
         private readonly byte[] _input = new byte[InputBufferLength];
         private int _start;
         private int _end;
@@ -27,16 +28,21 @@ namespace EmbedIO.WebSockets.Internal
         private long _skip;
         private Utf8MessageValidator _textValidator;
         private bool _textMessage;
+        private readonly WebSocketDeliveryBudget.Connection? _deliveryBudget;
+        private WebSocketDeliveryBudget.Lease? _delivery;
+        private WebSocketDeliveryBudget.Lease? _completedDelivery;
 
         // Frames from a client are always masked and are always unmasked here; the
         // flag is retained for existing callers.
-        public WebSocketFrameStream(Stream? stream, bool unmask = false)
+        public WebSocketFrameStream(Stream? stream, bool unmask = false) : this(stream, unmask, null) { }
+        internal WebSocketFrameStream(Stream? stream, bool unmask, WebSocketDeliveryBudget.Connection? deliveryBudget)
         {
-            _stream = stream;
+            _stream = stream == null ? null : new EmbedIO.Internal.BorrowedResource<Stream>(stream);
             _ = unmask;
+            _deliveryBudget = deliveryBudget;
         }
 
-        private Stream Transport => _stream ?? throw new InvalidOperationException("The frame reader has no stream.");
+        private Stream Transport => _stream?.Value ?? throw new InvalidOperationException("The frame reader has no stream.");
 
         // Zero disables the check. Applies to the total payload of a data message.
         internal int MaxMessageSize { get; set; }
@@ -63,6 +69,18 @@ namespace EmbedIO.WebSockets.Internal
 
             await ReadExtendedPayloadLengthAsync(frame).ConfigureAwait(false);
             CheckMessageSize(frame);
+            if (_deliveryBudget != null
+                && (frame.Opcode == Opcode.Text || frame.Opcode == Opcode.Binary || frame.Opcode == Opcode.Cont))
+            {
+                if (webSocket.State != WebSocketState.Open)
+                    throw Reject(frame, 4 + (long)frame.FullPayloadLength, CloseStatusCode.PolicyViolation, "Connection is closing; no new delivery is admitted.");
+                if (frame.Opcode != Opcode.Cont && !_deliveryBudget.TryReserve(out _delivery))
+                    throw Reject(frame, 4 + (long)frame.FullPayloadLength, CloseStatusCode.PolicyViolation, "Outstanding message count exceeds configured policy.");
+                var delivery = _delivery ?? throw new InvalidOperationException("Missing message delivery reservation.");
+                // Charge the logical fragment before any payload storage growth.
+                if (!delivery.TryGrow((long)frame.FullPayloadLength))
+                    throw Reject(frame, 4 + (long)frame.FullPayloadLength, CloseStatusCode.PolicyViolation, "Outstanding message bytes exceed configured policy.");
+            }
             if (!await FillAsync(4).ConfigureAwait(false))
                 throw new WebSocketException("The masking key of a frame cannot be read from the stream.");
             var key = new byte[4];
@@ -73,6 +91,13 @@ namespace EmbedIO.WebSockets.Internal
 
             if (frame.Opcode == Opcode.Close) ValidateClosePayload(frame.PayloadData.ToArray());
             ValidateTextPayload(frame);
+            if (_delivery != null && frame.Fin == Fin.Final
+                && (frame.Opcode == Opcode.Text || frame.Opcode == Opcode.Binary || frame.Opcode == Opcode.Cont))
+            {
+                _delivery.CompleteMessage();
+                _completedDelivery = _delivery;
+                _delivery = null;
+            }
 
             return frame;
         }
@@ -94,11 +119,25 @@ namespace EmbedIO.WebSockets.Internal
         // The rest of the message is discarded, so neither size nor text state carries on.
         private WebSocketException Reject(WebSocketFrame frame, long skip, CloseStatusCode code, string message)
         {
+            _delivery?.Dispose(); _delivery = null;
             Rejected = frame;
             _skip = skip;
             _messageLength = 0;
             _textMessage = false;
             return new WebSocketException(code, message);
+        }
+
+        internal WebSocketDeliveryBudget.Lease? TakeCompletedDelivery()
+        {
+            var completed = _completedDelivery;
+            _completedDelivery = null;
+            return completed;
+        }
+
+        public void Dispose()
+        {
+            _delivery?.Dispose(); _delivery = null;
+            _completedDelivery?.Dispose(); _completedDelivery = null;
         }
 
         private async Task SkipAsync()

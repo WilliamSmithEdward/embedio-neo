@@ -17,11 +17,13 @@ namespace EmbedIO.WebSockets.Internal
     ///   the <see cref="Data"/> or <see cref="RawData"/> property.
     ///   </para>
     /// </remarks>
-    internal class MessageEventArgs : EventArgs
+    internal sealed class MessageEventArgs : EventArgs, IDisposable
     {
         private readonly byte[] _rawData;
         private string? _data;
         private bool _dataSet;
+        internal WebSocketDeliveryBudget.Lease? DeliveryLease { get; set; }
+        public void Dispose() => DeliveryLease?.Dispose();
 
         internal MessageEventArgs(WebSocketFrame frame)
         {
