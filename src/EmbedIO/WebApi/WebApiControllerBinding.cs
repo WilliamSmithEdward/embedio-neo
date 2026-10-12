@@ -69,13 +69,41 @@ namespace EmbedIO.WebApi
             bool isBaseRoute,
             string handlerId,
             Func<WebApiRouteInvoker<TController>> createInvoker)
+            : this(verb, route, isBaseRoute, handlerId, createInvoker, null)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WebApiRouteBinding{TController}"/> class,
+        /// with a description of the controller method for OpenAPI documents.
+        /// </summary>
+        /// <param name="verb">The HTTP verb of the route attribute.</param>
+        /// <param name="route">The route of the route attribute.</param>
+        /// <param name="isBaseRoute"><see langword="true"/> for a base route.</param>
+        /// <param name="handlerId">A string that identifies the controller method, used to tell
+        /// aliases of one method from routes of different methods.</param>
+        /// <param name="createInvoker">Creates the invoker for one registration.</param>
+        /// <param name="operation">The controller method's description, or <see langword="null"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="route"/>, <paramref name="handlerId"/>
+        /// or <paramref name="createInvoker"/> is <see langword="null"/>.</exception>
+        public WebApiRouteBinding(
+            HttpVerbs verb,
+            string route,
+            bool isBaseRoute,
+            string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker,
+            WebApiOperation? operation)
         {
             Verb = verb;
             Route = Validate.NotNull(nameof(route), route);
             IsBaseRoute = isBaseRoute;
             HandlerId = Validate.NotNull(nameof(handlerId), handlerId);
             CreateInvoker = Validate.NotNull(nameof(createInvoker), createInvoker);
+            Operation = operation;
         }
+
+        /// <summary>Gets the controller method's description for OpenAPI documents, if the generator provided one.</summary>
+        public WebApiOperation? Operation { get; }
 
         /// <summary>Gets the HTTP verb of the route.</summary>
         public HttpVerbs Verb { get; }
