@@ -40,6 +40,8 @@
   items:
     - name: WebSocket handshake status
       href: guides/websocket-handshake-status.md
+    - name: Outstanding WebSocket deliveries (Neo v2, unreleased)
+      href: guides/websocket-receive-limits.md
     - name: Controller base routes and fallback
       href: guides/controller-base-routes.md
     - name: Request trailers (Neo v2, unreleased)
