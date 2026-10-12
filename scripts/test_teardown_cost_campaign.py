@@ -62,6 +62,11 @@ class CostCampaignTests(unittest.TestCase):
         next((self.root / "samples").glob("*/*.json")).unlink()
         with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
 
+    def test_invalid_marker_rejected(self):
+        self.write()
+        (self.root / "INVALID.txt").write_text("tool defect")
+        with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
+
     def test_excess_zero_request_churn_rejected(self):
         self.sample["serverStop"]["connections"].update(opened=300, closed=300)
         self.write()

@@ -19,6 +19,8 @@ SCENARIOS = ("h1-plain-small-c64-close100", "h1-tls-small-c64", "h2-plain-small-
 
 def validate(root, census, duration, rounds):
     root = Path(root)
+    if any((root / marker).exists() for marker in ("INVALID.txt", "ABORTED.txt")):
+        raise ValueError("Campaign explicitly marked invalid or aborted")
     files = list((root / "samples").glob("*/*.json"))
     if len(files) != len(SCENARIOS) * 2 * rounds:
         raise ValueError("Missing or additional campaign samples")
