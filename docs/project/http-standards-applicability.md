@@ -25,7 +25,7 @@ a public member an application can call; an internal method is not an API.
 The dated matrices and findings below describe `01e785d` and the separately
 reviewed `a2dc18c` candidate. They remain reproduction history, not a list of
 defects still present in today's source. This source-only reconciliation uses
-accepted engine `367155e835886dace8c70600a6c6c6324aa97fe7`; it does not recapture
+accepted engine `0773460e0321a049274725fe38852dabd57ded58`; it does not recapture
 the 48-RFC inventory, retest the engine or certify complete conformance.
 
 | Historical topic | Current accepted disposition | Evidence and remaining scope |
@@ -85,6 +85,13 @@ physical request values. The module adds 42 cases, bringing the accepted
 discovery floor to 5,517. This origin-side metadata facility does not establish
 gateway forwarding, Early-Data retry handling or complete RFC7239 conformance.
 
+Accepted [PR366](https://github.com/WilliamSmithEdward/embedio-neo/pull/366)
+adds opt-in RFC9457 problem details for application errors. Its 22 cases bring
+the accepted discovery floor to 5,539. This response representation does not
+change protocol framing, establish gateway behavior or complete the conformance
+ledger. The owner separately approved an empty-500 unhandled-exception default;
+that change is isolated on this accepted base and is awaiting its own baseline
+and candidate wire validation. It is not yet integrated or released.
 A separate official-source refresh on 2026-10-12 verified all 72 captured
 responses: the 48 RFC metadata records, RFC index and errata, 14 registries and
 eight draft records. The selected inventory and registry content were unchanged.
