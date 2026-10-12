@@ -371,8 +371,8 @@ namespace EmbedIO.WebSockets.Internal
             var bytes = Encoding.UTF8.GetBytes(handshakeResponse.ToString());
             await httpContext.Connection.Stream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
 
-            // Signal the original response that headers have been sent.
-            httpContext.HttpListenerResponse.HeadersSent = true;
+            // Publish the committed HTTP/1 wire status to the response model.
+            httpContext.HttpListenerResponse.CommitWebSocketHandshake();
 
             var socket = new WebSocket(httpContext.Connection);
             socket.Open();

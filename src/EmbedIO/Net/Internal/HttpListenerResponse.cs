@@ -96,6 +96,15 @@ namespace EmbedIO.Net.Internal
                 StatusDescription = HttpListenerResponseHelper.GetStatusDescription(value);
             }
         }
+        internal void CommitWebSocketHandshake()
+        {
+            // The separate HTTP/1 handshake writer has committed a bodyless 101.
+            // Publish that wire result without accepting 1xx through the public setter.
+            _status = (int)HttpStatusCode.SwitchingProtocols;
+            StatusDescription = HttpListenerResponseHelper.GetStatusDescription(_status);
+            _chunks = false;
+            HeadersSent = true;
+        }
         private void RequireMutableHead()
         {
             if (Volatile.Read(ref _closed) != 0) throw new ObjectDisposedException(_identity);
