@@ -1,6 +1,18 @@
 # Changelog
 
 ## [Unreleased]
+- Make the .NET 10 asset trim- and Native-AOT-analyzable from Neo #138. Reflection-based
+  APIs (Web API controller registration and its request-data attributes,
+  `RoutingModule.AddFrom`/`WithHandlersFrom`, EmbedIO's default JSON options) carry
+  `RequiresUnreferencedCode` and `RequiresDynamicCode`. New AOT-safe overloads take
+  source-generated metadata: `SendDataAsync(data, JsonTypeInfo<T>)`,
+  `GetRequestDataAsync(JsonTypeInfo<T>)`, `Json.Serialize(data, JsonTypeInfo<T>)` and
+  `Json.Deserialize(json, JsonTypeInfo<T>)`. Options-based JSON helpers now resolve
+  metadata through the options, so a `JsonSerializerContext` works without reflection.
+  The package adds a build file that disables EmbedIO's reflection JSON with the
+  application's `JsonSerializerIsReflectionEnabledByDefault`; those paths then throw
+  `NotSupportedException` with guidance. A Native AOT host is published and exercised in
+  CI on Windows and Linux. See [trimming and Native AOT](docs/guides/trimming-and-native-aot.md).
 - Extend the opt-in telemetry from Neo #137 with `http.server.request.body.size`,
   `http.server.response.body.size`, `embedio.server.active_connections` and
   `embedio.server.connection.duration` (TCP and QUIC), and

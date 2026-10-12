@@ -1,10 +1,13 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq.Expressions;
 
 namespace EmbedIO.Internal
 {
+    [RequiresUnreferencedCode(EmbedIO.WebApi.WebApiModuleBase.ReflectionMessage)]
+    [RequiresDynamicCode(EmbedIO.WebApi.WebApiModuleBase.ReflectionMessage)]
     internal static class FromString
     {
         internal static bool TryConvertTo(Type type, string? value, out object? result)

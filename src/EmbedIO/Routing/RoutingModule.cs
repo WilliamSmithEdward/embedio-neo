@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 
 namespace EmbedIO.Routing
 {
@@ -57,6 +58,7 @@ namespace EmbedIO.Routing
         /// <param name="target">Where to look for compatible handlers.</param>
         /// <returns>The number of handlers that were added.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
+        [RequiresUnreferencedCode(RouteVerbResolverCollection.ScanMessage)]
         public int AddFrom(object target) => AddHandlersFrom(target);
     }
 }

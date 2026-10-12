@@ -80,6 +80,27 @@ namespace EmbedIO
             => Validate.NotNull(nameof(deserializer), deserializer)(@this);
 
         /// <summary>
+        /// Asynchronously deserializes a JSON request body, using source-generated or otherwise explicit metadata.
+        /// </summary>
+        /// <typeparam name="TData">The expected type of the deserialized data.</typeparam>
+        /// <param name="this">The <see cref="IHttpContext"/> on which this method is called.</param>
+        /// <param name="typeInfo">Metadata for <typeparamref name="TData"/>, for example from a
+        /// <see cref="System.Text.Json.Serialization.JsonSerializerContext"/>.</param>
+        /// <returns>A <see cref="Task{TResult}">Task</see>, representing the ongoing operation,
+        /// whose result will be the deserialized data.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="typeInfo"/> is <see langword="null"/>.</exception>
+        /// <exception cref="HttpException">The body is not valid JSON for <typeparamref name="TData"/> (HTTP 400).</exception>
+        /// <remarks>The metadata's own options apply; EmbedIO's lenient default input handling does not.
+        /// This overload uses no reflection, so it works in trimmed and Native AOT applications.</remarks>
+        public static Task<TData?> GetRequestDataAsync<TData>(this IHttpContext @this, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TData> typeInfo)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            Validate.NotNull(nameof(typeInfo), typeInfo);
+            return RequestDeserializer.JsonBodyAsync(@this, body => System.Text.Json.JsonSerializer.Deserialize(body, typeInfo));
+        }
+
+        /// <summary>
         /// Asynchronously parses a request body in <c>application/x-www-form-urlencoded</c> format.
         /// </summary>
         /// <param name="this">The <see cref="IHttpContext"/> on which this method is called.</param>
