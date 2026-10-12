@@ -25,7 +25,26 @@ namespace EmbedIO.Generators
             ValueTaskOfT = compilation.GetTypeByMetadataName("System.Threading.Tasks.ValueTask`1");
             JsonSerializerContext = compilation.GetTypeByMetadataName("System.Text.Json.Serialization.JsonSerializerContext");
             TypeConverterAttribute = compilation.GetTypeByMetadataName("System.ComponentModel.TypeConverterAttribute");
+            QueryData = compilation.GetTypeByMetadataName("EmbedIO.WebApi.QueryDataAttribute");
+            FormData = compilation.GetTypeByMetadataName("EmbedIO.WebApi.FormDataAttribute");
+            WebApiOperation = compilation.GetTypeByMetadataName("EmbedIO.WebApi.WebApiOperation");
+            OpenApiOperation = compilation.GetTypeByMetadataName("EmbedIO.OpenApi.OpenApiOperationAttribute");
+            OpenApiResponse = compilation.GetTypeByMetadataName("EmbedIO.OpenApi.OpenApiResponseAttribute");
+            OpenApiIgnore = compilation.GetTypeByMetadataName("EmbedIO.OpenApi.OpenApiIgnoreAttribute");
         }
+
+        internal INamedTypeSymbol? QueryData { get; }
+
+        internal INamedTypeSymbol? FormData { get; }
+
+        // Null when the referenced EmbedIO predates operation metadata; bindings are then generated without it.
+        internal INamedTypeSymbol? WebApiOperation { get; }
+
+        internal INamedTypeSymbol? OpenApiOperation { get; }
+
+        internal INamedTypeSymbol? OpenApiResponse { get; }
+
+        internal INamedTypeSymbol? OpenApiIgnore { get; }
 
         internal INamedTypeSymbol GeneratedControllerBinding { get; }
 

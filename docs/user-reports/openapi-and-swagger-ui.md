@@ -6,6 +6,9 @@ existing APIs. It does **not** automatically generate an OpenAPI document from
 controller attributes. This example works with published EmbedIO-Neo **1.0.2**;
 it adds no library API, target or production dependency.
 
+Source builds after 1.0.3 can also write the document from generated controller
+bindings; see [OpenAPI documents](../guides/openapi.md).
+
 OpenAPI describes an HTTP contract; Swagger UI is a separate browser application
 that reads it. ASP.NET-specific Swashbuckle middleware cannot simply be added to
 an EmbedIO pipeline. An external generator may be used if its output describes
