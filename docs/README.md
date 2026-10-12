@@ -20,7 +20,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Capsule and tunnel carriers](guides/capsule-tunnels.md): unreleased optional APIs, authorization, streamed values, native datagram packet ownership and carrier lifetime.
 
-- [Request limits, admission and deadlines](guides/request-limits.md): opt-in header and body byte limits, bounded concurrent requests and queue, cooperative request deadlines and deferred `100 Continue`.
+- [Request limits, admission and deadlines](guides/request-limits.md): opt-in header and body byte limits, body read and connection deadlines, connection count, bounded concurrent requests and queue, cooperative request deadlines, deferred `100 Continue` and per-route policies.
 - [HTTP/3 listener](guides/http3.md): unreleased QUIC mode, certificates, usage and current limits.
 - [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
 - [Command-line server](guides/cli.md): options, static serving, plugins, and CLI provenance.
@@ -216,3 +216,5 @@ not configured. The old root `CLI.md` and `MIGRATION.md` remain as short entry
 points for existing links.
 
 - [Controller compression and response length](guides/controller-compression.md): streamed framing, buffered encoded lengths and the Xamarin report's validation limits.
+
+- [Standalone native QUIC module lifetime](project/native-quic-module-lifetime.md): Linux unload crash reproduction, retained mapping, collectible contexts and fresh-process acceptance.

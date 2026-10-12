@@ -114,12 +114,16 @@ namespace EmbedIO.Tests.Issues
             using (var response = await client.SendAsync(Post(client, host.Url, small)))
                 Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("100000"), "A small transfer may decode to more than the transferred limit.");
 
-            var large = new ByteArrayContent(new byte[2000]);
-            using (var response = await client.SendAsync(Post(client, host.Url, large)))
-            {
-                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
-                Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain("Request body exceeds").And.Not.Contain("Decompressed"));
-            }
+            // A declared over-limit HTTP/1 body is rejected before it is read. Do
+            // not race HttpClient's upload against that intentional connection
+            // close: unread uploaded bytes can turn the response into a TCP reset.
+            using var socket = await host.ConnectAsync();
+            await socket.SendAsync($"POST / HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 2000\r\n\r\n");
+            var rejected = await socket.ReadToEndAsync();
+            Assert.That(rejected, Does.StartWith("HTTP/1.1 413"));
+            Assert.That(rejected, Does.Contain("Connection: close"));
+            Assert.That(rejected, Does.Contain("Request body exceeds").And.Not.Contain("Decompressed"));
+            Assert.That(await host.ProbeAsync(), Is.EqualTo("healthy"));
         }
 
         // ------------------------------------------------------------ admission
@@ -401,6 +405,30 @@ namespace EmbedIO.Tests.Issues
                 catch (IOException) { }
                 return Encoding.Latin1.GetString(received.ToArray());
             }
+            public Task SendBytesAsync(byte[] bytes) => _client.GetStream().WriteAsync(bytes, 0, bytes.Length);
+
+            // Reads until the end of a response head, leaving the connection open.
+            public async Task<string> ReadHeadAsync()
+            {
+                var received = new StringBuilder();
+                var buffer = new byte[1];
+                using var timeout = new CancellationTokenSource(Deadline);
+                while (!received.ToString().Contains("\r\n\r\n", StringComparison.Ordinal)
+                    && await _client.GetStream().ReadAsync(buffer, 0, 1, timeout.Token) == 1)
+                    received.Append((char)buffer[0]);
+                return received.ToString();
+            }
+
+            // Reads HTTP/2 frames until the server closes and returns their types in order.
+            public async Task<byte[]> ReadFrameTypesToEndAsync()
+            {
+                var bytes = Encoding.Latin1.GetBytes(await ReadToEndAsync());
+                using var types = new MemoryStream();
+                for (var offset = 0; offset + 9 <= bytes.Length; offset += 9 + ((bytes[offset] << 16) | (bytes[offset + 1] << 8) | bytes[offset + 2]))
+                    types.WriteByte(bytes[offset + 3]);
+                return types.ToArray();
+            }
+
             public void Dispose() => _client.Dispose();
         }
 

@@ -43,15 +43,26 @@ namespace EmbedIO.Net.Internal
         private ResponseStream? _oStream;
         private bool _contextBound;
         private bool _tunnel;
-        private int _sTimeout = 90000; // 90k ms for first request, 15k ms from then on
+        private int _sTimeout = 90000; // first request head, then the keep-alive deadline
+        private readonly int _keepAliveTimeout;
+        private readonly int? _http2IdleTimeout;
+        // Connection slot claimed at admission, released once when the transport retires.
+        private TcpConnectionPolicy? _slotOwner;
         private HttpListener? _lastListener;
         private string? _errorMessage;
 
-        public HttpConnection(Socket sock, EndPointListener epl) : this(sock, epl, 90000) { }
+        public HttpConnection(Socket sock, EndPointListener epl) : this(sock, epl, epl.Listener.ConnectionPolicy.HeaderTimeoutMilliseconds) { }
+        internal HttpConnection(Socket sock, EndPointListener epl, TcpConnectionPolicy? slotOwner)
+            : this(sock, epl, epl.Listener.ConnectionPolicy.HeaderTimeoutMilliseconds)
+            => _slotOwner = slotOwner;
         internal HttpConnection(Socket sock, EndPointListener epl, int initialHeaderTimeout)
         {
             if (initialHeaderTimeout <= 0) throw new ArgumentOutOfRangeException(nameof(initialHeaderTimeout));
             _sTimeout = initialHeaderTimeout;
+            var policy = epl.Listener.ConnectionPolicy;
+            _keepAliveTimeout = policy.Http1KeepAliveMilliseconds;
+            _http2IdleTimeout = policy.ConfiguredKeepAliveMilliseconds;
+            KeepAliveHeader = policy.Http1KeepAliveHeader;
             _protocolSocket = sock;
             _epl = epl;
             IsSecure = epl.Secure;
@@ -73,6 +84,9 @@ namespace EmbedIO.Net.Internal
         }
 
         public int Reuses { get; private set; }
+
+        // Value of the HTTP/1 Keep-Alive response header.
+        internal string KeepAliveHeader { get; }
 
         internal bool IsDraining => _draining;
 
@@ -101,7 +115,7 @@ namespace EmbedIO.Net.Internal
                     if (_protocolEnded != 0) return;
                     buffer = _buffer ??= new byte[BufferSize];
                     bufferedInput = _pendingInput.Count > 0;
-                    if (Reuses == 1) _sTimeout = 15000;
+                    if (Reuses == 1) _sTimeout = _keepAliveTimeout;
                     if (Reuses != 0) _lifetime.ArmDeadline(_sTimeout);
                 }
                 var selection = await TcpProtocolInput.ReadAsync(Stream, buffer, bufferedInput,
@@ -432,9 +446,12 @@ namespace EmbedIO.Net.Internal
             CancellationTokenSource? protocolStop;
             HttpListener[] protocolListeners;
             RequestStream? input;
+            TcpConnectionPolicy? slotOwner;
             lock (_connectionSync)
             {
                 if (!_lifetime.TryRetire(deadlineOnly)) return;
+                slotOwner = _slotOwner;
+                _slotOwner = null;
                 _protocolSocket = null;
                 _protocolEnded = 1;
                 EndResponse(false);
@@ -447,7 +464,10 @@ namespace EmbedIO.Net.Internal
                 _buffer = null;
                 _headReader.Reset();
             }
-            _lifetime.FinishRetirement(shutdown, input, () =>
+            try { FinishRetirement(); }
+            finally { slotOwner?.Release(); }
+
+            void FinishRetirement() => _lifetime.FinishRetirement(shutdown, input, () =>
             {
                 try
                 {

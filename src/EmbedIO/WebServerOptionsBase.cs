@@ -54,6 +54,98 @@ namespace EmbedIO
         private TimeSpan? _requestTimeout;
         private int? _maximumRequestHeaderBytes;
         private int? _maximumRequestHeaderCount;
+        private TimeSpan? _requestBodyReadTimeout;
+        private readonly System.Collections.Generic.List<RequestLimitPolicy> _routeRequestLimits = new();
+        private System.Collections.ObjectModel.ReadOnlyCollection<RequestLimitPolicy>? _routeRequestLimitsView;
+
+        /// <summary>
+        /// Gets the per-route request limit policies, in the order they were added.
+        /// </summary>
+        /// <remarks>
+        /// The first policy whose base route matches a request replaces the server-wide body,
+        /// read and request deadline values for it. Header limits, admission and connection
+        /// limits stay server-wide.
+        /// </remarks>
+        public System.Collections.Generic.IReadOnlyList<RequestLimitPolicy> RouteRequestLimits
+            => _routeRequestLimitsView ??= _routeRequestLimits.AsReadOnly();
+
+        /// <summary>
+        /// Adds a request limit policy for requests under a base route.
+        /// </summary>
+        /// <param name="baseRoute">The base route, matched like a module's base route.</param>
+        /// <param name="configure">Sets the policy's limits.</param>
+        /// <returns>The new policy.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="baseRoute"/> or
+        /// <paramref name="configure"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="baseRoute"/> is not a valid base route
+        /// or already has a policy.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public RequestLimitPolicy AddRouteRequestLimits(string baseRoute, Action<RequestLimitPolicy> configure)
+        {
+            EnsureConfigurationNotLocked();
+            if (configure == null) throw new ArgumentNullException(nameof(configure));
+            var policy = new RequestLimitPolicy(baseRoute);
+            foreach (var existing in _routeRequestLimits)
+                if (existing.BaseRoute == policy.BaseRoute)
+                    throw new ArgumentException("The base route already has a request limit policy.", nameof(baseRoute));
+            configure(policy);
+            _routeRequestLimits.Add(policy);
+            return policy;
+        }
+
+        // The first policy that matches the request path, or null.
+        internal RequestLimitPolicy? FindRouteRequestLimits(string requestedPath)
+        {
+            foreach (var policy in _routeRequestLimits)
+                if (policy.Matches(requestedPath)) return policy;
+            return null;
+        }
+
+        // True when any policy sets a body limit, so 100 Continue must wait for the body read.
+        internal bool HasBodyLimits
+        {
+            get
+            {
+                if (_maximumRequestBodyBytes.HasValue) return true;
+                foreach (var policy in _routeRequestLimits)
+                    if (policy.MaximumRequestBodyBytes.HasValue) return true;
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        protected override void OnBeforeLockConfiguration()
+        {
+            base.OnBeforeLockConfiguration();
+            foreach (var policy in _routeRequestLimits) policy.Lock();
+        }
+
+        /// <summary>
+        /// Gets or sets how long one read of a request body may wait for data. The default is
+        /// null, preserving existing behavior without a read deadline.
+        /// </summary>
+        /// <remarks>
+        /// <para>The deadline applies to each read of <see cref="IHttpRequest.InputStream"/>
+        /// separately, so a slow but steady upload is not cut off; a client that stops sending is.
+        /// A read that misses it throws an <see cref="HttpException"/> with status 408, and every
+        /// later read of the same body does too. On HTTP/1.x the connection is not reused.</para>
+        /// <para>The deadline applies to every protocol and listener mode. <c>CONNECT</c> tunnels
+        /// are not request bodies and are not timed.</para>
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The value is not positive or exceeds the
+        /// largest supported timer interval.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public TimeSpan? RequestBodyReadTimeout
+        {
+            get => _requestBodyReadTimeout;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                if (value.HasValue && (value.Value.TotalMilliseconds < 1 || value.Value.TotalMilliseconds > int.MaxValue))
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                _requestBodyReadTimeout = value;
+            }
+        }
 
         /// <summary>
         /// Gets or sets the maximum number of request body bytes a handler may read, counted

@@ -1,11 +1,28 @@
 # Changelog
 
 ## [Unreleased]
+- Add per-route request limit policies from Neo #136:
+  `WithRouteRequestLimits(baseRoute, configure)` and `RequestLimitPolicy` replace the
+  server-wide `MaximumRequestBodyBytes`, `RequestBodyReadTimeout` and `RequestTimeout`
+  under a base route, matched like a module's base route; the first matching policy
+  applies. `long.MaxValue` or `Timeout.InfiniteTimeSpan` lifts a server-wide limit for
+  the route. `WebServerOptionsBase.RouteRequestLimits` lists them.
+- Add opt-in connection limits from Neo #136 on `WebServerOptions`:
+  `MaximumConnections` (connections beyond it closed at once),
+  `RequestHeadersTimeout` (replaces the fixed 90-second first-request deadline) and
+  `KeepAliveTimeout` (replaces the fixed 15-second HTTP/1.1 idle deadline and adds a
+  GOAWAY idle deadline for HTTP/2). They apply to the managed TCP listener; a server
+  that sets them cannot share a port, and an HTTP/3-only server rejects them. Add
+  `RequestBodyReadTimeout` (HTTP 408 when one body read waits too long) for every
+  protocol. Defaults are unchanged.
 - Add opt-in request header limits from Neo #136: `MaximumRequestHeaderBytes` and
   `MaximumRequestHeaderCount` (HTTP 431 before any module runs or a request slot is
   taken). While `MaximumRequestBodyBytes` is set, `100 Continue` is sent when a
   handler first reads the body instead of before dispatch, so a refused body is
   never invited. HTTP/3 is now covered by the request-limit tests.
+- Keep the internal native QUIC module mapped on Linux through process teardown,
+  while closing API tables and child handles. Add fresh-process native-peer and
+  collectible-context checks; see [lifetime guidance](docs/project/native-quic-module-lifetime.md).
 - Add opt-in, server-wide request limits from Neo #136:
   `MaximumRequestBodyBytes` (HTTP 413 on a declared or counted over-limit body,
   with HTTP/1 connection reuse stopped), `MaximumConcurrentRequests` with a bounded

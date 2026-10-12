@@ -215,6 +215,11 @@ namespace EmbedIO
 
         private IHttpListener CreateHttpListener(bool nativeHttp3 = false)
         {
+            // QUIC connections are not governed by the TCP connection limits.
+            if (Options.Mode == HttpListenerMode.EmbedIOHttp3 && Options.HasConnectionLimits)
+                throw new NotSupportedException(
+                    "MaximumConnections, RequestHeadersTimeout and KeepAliveTimeout apply to TCP listeners. Use EmbedIO or EmbedIOCombined mode.");
+
             IHttpListener DoCreate() => Options.Mode switch
             {
                 HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(Options.Certificate, false, nativeHttp3),
@@ -229,12 +234,21 @@ namespace EmbedIO
 
             // With a body limit, 100 Continue waits until a handler reads the body, so a
             // request refused before dispatch never invites its upload.
-            var deferContinue = Options.MaximumRequestBodyBytes.HasValue;
-            if (listener is Net.HttpListener tcp) tcp.DeferContinue = deferContinue;
+            var deferContinue = Options.HasBodyLimits;
+            var connections = Options.CreateConnectionPolicy();
+            if (listener is Net.HttpListener tcp)
+            {
+                tcp.DeferContinue = deferContinue;
+                tcp.ConnectionPolicy = connections;
+            }
 #if NET10_0_OR_GREATER
             else if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
             {
-                if (listener is CombinedHttpListener combined) combined.DeferContinue = deferContinue;
+                if (listener is CombinedHttpListener combined)
+                {
+                    combined.DeferContinue = deferContinue;
+                    combined.ConnectionPolicy = connections;
+                }
                 else if (listener is Net.Internal.Http3.Http3Listener quic) quic.DeferContinue = deferContinue;
             }
 #endif

@@ -173,6 +173,101 @@ namespace EmbedIO
             }
         }
 
+        private int? _maximumConnections;
+        private TimeSpan? _requestHeadersTimeout;
+        private TimeSpan? _keepAliveTimeout;
+
+        /// <summary>
+        /// Gets or sets the maximum number of TCP connections the server keeps open at once.
+        /// The default is null, preserving existing unlimited behavior.
+        /// </summary>
+        /// <remarks>
+        /// <para>A connection accepted while the limit is reached is closed at once, before any
+        /// TLS handshake or HTTP response; it is counted again when an open connection closes.
+        /// The limit covers HTTP/1.1 and HTTP/2 connections of the managed TCP listener, across
+        /// all of this server's endpoints.</para>
+        /// <para>Connection limits apply to the <see cref="HttpListenerMode.EmbedIO"/> and
+        /// <see cref="HttpListenerMode.EmbedIOCombined"/> modes; HTTP/3 connections are not
+        /// counted. A server with connection limits cannot share a port with another server.</para>
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The value is less than one.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public int? MaximumConnections
+        {
+            get => _maximumConnections;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+                _maximumConnections = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets how long a new TCP connection may take to deliver its first complete
+        /// request head, including the TLS handshake. The default is null, preserving the
+        /// existing 90 seconds.
+        /// </summary>
+        /// <remarks>
+        /// When the deadline passes the connection is closed without a response. On HTTP/2 the
+        /// deadline covers the connection preface. Subsequent requests on the same connection are
+        /// governed by <see cref="KeepAliveTimeout"/>.
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The value is not positive or exceeds the
+        /// largest supported timer interval.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public TimeSpan? RequestHeadersTimeout
+        {
+            get => _requestHeadersTimeout;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _requestHeadersTimeout = ValidateTimeout(value);
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets how long an idle TCP connection stays open between requests. The
+        /// default is null, preserving existing behavior: 15 seconds on HTTP/1.1 and no idle
+        /// deadline on HTTP/2.
+        /// </summary>
+        /// <remarks>
+        /// <para>On HTTP/1.1 the deadline runs from the end of a response until the next request
+        /// head is complete, and the <c>Keep-Alive</c> response header advertises it in whole
+        /// seconds, rounded up. When it passes the connection is closed.</para>
+        /// <para>On HTTP/2 the deadline runs while the connection has no open stream. When it
+        /// passes the server sends GOAWAY and closes the connection gracefully.</para>
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The value is not positive or exceeds the
+        /// largest supported timer interval.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public TimeSpan? KeepAliveTimeout
+        {
+            get => _keepAliveTimeout;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _keepAliveTimeout = ValidateTimeout(value);
+            }
+        }
+
+        internal bool HasConnectionLimits => _maximumConnections.HasValue || _requestHeadersTimeout.HasValue || _keepAliveTimeout.HasValue;
+
+        // The listener-level policy; the shared default when no limit is configured.
+        internal Net.Internal.TcpConnectionPolicy CreateConnectionPolicy() => HasConnectionLimits
+            ? new Net.Internal.TcpConnectionPolicy(_maximumConnections,
+                _requestHeadersTimeout.HasValue ? (int)_requestHeadersTimeout.Value.TotalMilliseconds : 90000,
+                _keepAliveTimeout.HasValue ? (int)_keepAliveTimeout.Value.TotalMilliseconds : null)
+            : Net.Internal.TcpConnectionPolicy.Default;
+
+        private static TimeSpan? ValidateTimeout(TimeSpan? value)
+        {
+            // Whole milliseconds from 1 to int.MaxValue: the range a timer deadline accepts.
+            if (value.HasValue && (value.Value.TotalMilliseconds < 1 || value.Value.TotalMilliseconds > int.MaxValue))
+                throw new ArgumentOutOfRangeException(nameof(value));
+            return value;
+        }
+
         /// <summary>
         /// Adds a URL prefix.
         /// </summary>
