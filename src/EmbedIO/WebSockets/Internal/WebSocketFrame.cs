@@ -216,18 +216,6 @@ Extended Payload Length: {extPayloadLen}
             }
         }
 
-        internal void Unmask()
-        {
-            if (Mask == Mask.Off)
-            {
-                return;
-            }
-
-            Mask = Mask.Off;
-            PayloadData.Mask(MaskingKey);
-            MaskingKey = Array.Empty<byte>();
-        }
-
         private static bool IsOpcodeData(Opcode opcode) => opcode == Opcode.Text || opcode == Opcode.Binary;
     }
 }

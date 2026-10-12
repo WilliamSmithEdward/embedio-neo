@@ -28,7 +28,6 @@ namespace EmbedIO.Net.Internal.Http2
         public uint PeerErrorCode { get; private set; }
         internal Action<Exception>? OutputFailed { get; set; }
         internal void UseTransportCancellation(CancellationToken token) => _transport.ConnectionToken = _transportCancellation = token;
-        internal Action<int> AdjustStreamWindows { get; set; } = _ => { };
 
         private Http2Connection(Stream stream) : this(stream, ArrayPool<byte>.Shared) { }
         private Http2Connection(Stream stream, ArrayPool<byte> dataPool)
@@ -102,7 +101,6 @@ namespace EmbedIO.Net.Internal.Http2
                                 Peer.MaximumFrameSize, () => Peer.Apply(frame.Payload, delta =>
                                 {
                                     SendFlow.AdjustInitialWindow(delta);
-                                    AdjustStreamWindows(delta);
                                 }, size => _encoder.SetMaximumTableSize((int)Math.Min(size, 4096u))), token).ConfigureAwait(false);
                         }
                         catch (Exception error) when (_transport.IsWriteFailed)
