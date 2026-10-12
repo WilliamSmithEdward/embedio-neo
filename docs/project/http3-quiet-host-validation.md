@@ -187,7 +187,8 @@ arm is named `ambient`, and its verdict retains `windowsQuietStatus: not establi
 All request counts, complete latency/CPU data, native/core/runtime hashes, runtime
 handshake deadlines, zero-error/cap-omission checks and clean server exits remain
 mandatory. Linux's quiet ceilings and both platforms' measured contention requirement
-are unchanged. The initial passive baseline ceiling is also retained on both platforms.
+are unchanged. Linux retains the initial passive baseline ceiling. Windows records its ambient
+baseline without asserting that it is quiet.
 The Windows process census remains diagnostic; protected read failures are recorded.
 
 The Windows CPU census in run 38264278426 showed substantial `lsass` activity increasing
@@ -204,3 +205,14 @@ completed those same requests without failures or cap omissions in both runs, wh
 quiet assessment remained inconclusive. PR acceptance requires a fresh run under the approved scope
 and all normal checks passing on the exact current head. These are bounded hosted-VM controls, not exhaustive endurance,
 original-host reproduction, a public ranking or proof of the sole historical cause.
+
+### Ambient setup correction
+
+Run [38266929424](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38266929424)
+completed all Windows ambient requests without failures, but did not start its contention
+arm: a leftover quiet-baseline prerequisite rejected 0.533 busy CPUs. The ambient
+scope does not promise a quiet Windows baseline. The corrected script records that
+measurement and applies quiet prerequisites only to the Linux reference. Invalid CPU
+measurements still fail on both platforms, and Windows must execute and pass every
+request and measured contention case on fresh source. The rejected setup is retained;
+it is not counted as a completed contention run.

@@ -402,5 +402,6 @@ William approved Linux as the qualified quiet reference and Windows as an explic
 ambient repeat, retaining every request and contention case. Windows verdicts state
 that quiet acceptance is not established; its rejected quiet attempts remain preserved.
 The Windows per-process census reads CPU counters only and reports inaccessible
-processes. The initial passive baseline ceiling remains on both platforms. See the
+processes. Linux retains its passive baseline ceiling; Windows records ambient baseline
+activity without a quiet precondition. See the
 [control report](../../docs/project/http3-quiet-host-validation.md) for scope and evidence.

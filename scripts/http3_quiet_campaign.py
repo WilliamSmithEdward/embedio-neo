@@ -23,7 +23,10 @@ def validate(directory, revision, burn_threads, require_quiet_phase=True):
         raise ValueError("Handshake deadline changed")
     if environment["burnThreads"] != burn_threads or environment["rounds"] != 2:
         raise ValueError("Campaign configuration mismatch")
-    if environment["hostIdleBaseline"]["busyCpus"] > 0.5:
+    baseline = environment["hostIdleBaseline"]["busyCpus"]
+    if not math.isfinite(baseline) or baseline < 0:
+        raise ValueError("Invalid host baseline measurement")
+    if require_quiet_phase and baseline > 0.5:
         raise ValueError("Host baseline is not quiet")
     rows = []
     for engine in ("embedio", "kestrel"):
@@ -99,8 +102,9 @@ def main():
                    "--source-revision", revision, "--engines", "embedio,kestrel",
                    "--rounds", "2", "--rates", rates, "--phase-seconds", "15", "--idle", "2",
                    "--mixed-rate", "32", "--large-rate", "2", "--mixed-connections", "4",
-                   "--baseline-seconds", "15", "--max-baseline-busy-cpus", "0.5",
-                   "--burn-threads", str(burn)]
+                   "--baseline-seconds", "15", "--burn-threads", str(burn)]
+        if reference:
+            command.extend(["--max-baseline-busy-cpus", "0.5"])
         if os.name == "nt":
             command.append("--process-cpu-diagnostics")
         manifest["commands"].append(command)

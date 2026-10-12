@@ -78,6 +78,19 @@ class CampaignTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate(self.directory, "revision", 0)
 
+    def test_ambient_baseline_is_recorded_without_a_quiet_precondition(self):
+        self.environment["hostIdleBaseline"]["busyCpus"] = 0.6
+        self.write()
+        self.assertEqual(len(validate(self.directory, "revision", 0, require_quiet_phase=False)), 4)
+        with self.assertRaises(ValueError):
+            validate(self.directory, "revision", 0)
+
+    def test_ambient_scope_still_rejects_invalid_measurements(self):
+        self.environment["hostIdleBaseline"]["busyCpus"] = float("nan")
+        self.write()
+        with self.assertRaises(ValueError):
+            validate(self.directory, "revision", 0, require_quiet_phase=False)
+
     def test_ambient_scope_does_not_allow_request_failure(self):
         self.run["phases"][0]["failureCount"] = 1
         self.write()
