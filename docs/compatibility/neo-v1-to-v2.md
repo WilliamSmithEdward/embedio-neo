@@ -209,6 +209,16 @@ disposal is a no-op, and `RunAsync` on a stopped server reports that it cannot
 be restarted. See [server lifetime](../user-reports/server-lifetime.md). This
 correction is on the engine development branch and is unreleased.
 
+`WebServerOptions.UrlPrefixes`, `Modules.WithSafeNames` and `Modules.Named` now
+return read-only wrappers instead of the backing `List` and `Dictionary`. Their
+declared interface types are unchanged and reading or enumerating them behaves as
+before. Code that cast these views to `List<T>` or `Dictionary<TKey, TValue>` gets
+`InvalidCastException`, and casting to `IList<T>` or `IDictionary<TKey, TValue>`
+yields a read-only collection whose mutators throw `NotSupportedException`. Use
+`AddUrlPrefix` and `WithModule` before startup instead. See
+[configuration locking](../user-reports/configuration-locking.md). This
+correction is on the engine development branch and is unreleased.
+
 Use DrainAsync for bounded graceful shutdown instead of assuming Stop waits for
 active responses. Stop/disposal and forced drain cancellation terminate remaining
 work. HTTP/2 and HTTP/3 have different peer-close policies within that deadline;

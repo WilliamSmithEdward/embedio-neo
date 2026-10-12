@@ -197,6 +197,9 @@
     - name: Byte ranges from any module
       href: user-reports/range-responses.md
 
+    - name: Configuration locking
+      href: user-reports/configuration-locking.md
+
     - name: Fluent Basic authentication
       href: user-reports/fluent-basic-authentication.md
 

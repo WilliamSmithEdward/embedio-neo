@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+- Return read-only wrappers from `WebServerOptions.UrlPrefixes`,
+  `IComponentCollection.WithSafeNames` and `IComponentCollection.Named`, evaluated
+  in Neo #49. The views previously were the backing collections, so a cast could
+  add URL prefixes after the options locked or insert a module into a running
+  server. Declared types are unchanged; see
+  [configuration locking](docs/user-reports/configuration-locking.md).
 - Let unmatched descendants of WebSocket endpoints reach later modules or the
   ordinary 404 fallback, rather than returning an empty HTTP 200. Successful
   managed HTTP/1 upgrades now expose their committed 101 status in response
