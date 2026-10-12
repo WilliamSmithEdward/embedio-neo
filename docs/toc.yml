@@ -200,6 +200,9 @@
     - name: Configuration locking
       href: user-reports/configuration-locking.md
 
+    - name: Object initialization and fluent setup
+      href: user-reports/object-initialization.md
+
     - name: Fluent Basic authentication
       href: user-reports/fluent-basic-authentication.md
 
