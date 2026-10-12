@@ -35,6 +35,13 @@
     <None Include="Packaging/EmbedIO-Neo.targets" Pack="true" PackagePath="build/;buildTransitive/" />
   </ItemGroup>
 
+  <!-- The controller-binding source generator ships in this package as an analyzer.
+       It is built with this project but is neither referenced nor a package dependency. -->
+  <ItemGroup>
+    <ProjectReference Include="../EmbedIO.Generators/EmbedIO.Generators.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="../EmbedIO.Generators/bin/$(Configuration)/netstandard2.0/EmbedIO.Generators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
   </ItemGroup>
