@@ -135,6 +135,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Streaming write errors](user-reports/streaming-write-errors.md): error policy, reverse proxies, compression and buffering.
 - [Deferred responses](user-reports/deferred-responses.md): the commitment contract, replaceable error responses and dispose-on-success buffering.
 - [Server lifetime](user-reports/server-lifetime.md): cancel, drain, dispose and stop compared, the server-owned lifetime token, repeat calls and ownership.
+- [Byte ranges from any module](user-reports/range-responses.md): the opt-in representation helper, every range criterion end to end, compression and what is not provided.
 - [Fluent Basic authentication](user-reports/fluent-basic-authentication.md): scoped registration, configuration and preserved authentication behavior.
 - [Context and persistent client banning](user-reports/context-client-banning.md): live controls, CIDR policies and optional restart persistence.
 

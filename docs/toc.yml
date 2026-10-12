@@ -194,6 +194,9 @@
     - name: Server lifetime
       href: user-reports/server-lifetime.md
 
+    - name: Byte ranges from any module
+      href: user-reports/range-responses.md
+
     - name: Fluent Basic authentication
       href: user-reports/fluent-basic-authentication.md
 
