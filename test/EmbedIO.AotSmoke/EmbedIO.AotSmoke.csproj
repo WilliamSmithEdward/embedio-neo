@@ -12,6 +12,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
+    <!-- A package consumer gets the generator from the package's analyzers folder. -->
+    <ProjectReference Include="../../src/EmbedIO.Generators/EmbedIO.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <!-- A package consumer gets this from the package's buildTransitive folder. -->
   <Import Project="../../src/EmbedIO/Packaging/EmbedIO-Neo.targets" />

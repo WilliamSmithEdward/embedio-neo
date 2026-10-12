@@ -19,6 +19,14 @@
     </PackageReference>
     <PackageReference Include="NUnit" PrivateAssets="all" />
     <PackageReference Include="NUnit.Analyzers" PrivateAssets="all" />
+    <!-- Drives the controller-binding generator in diagnostics tests. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Generates the controller bindings the parity tests register, as a package consumer gets it,
+         and is referenced so diagnostics tests can run the generator directly. -->
+    <ProjectReference Include="../../src/EmbedIO.Generators/EmbedIO.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
   </ItemGroup>
 
   <ItemGroup>

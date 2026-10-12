@@ -1,6 +1,18 @@
 # Changelog
 
 ## [Unreleased]
+- Add a controller-binding source generator from Neo #138, shipped in the EmbedIO-Neo
+  package. `[GeneratedControllerBinding(typeof(TController))]` on a partial class makes it
+  generate a `WebApiControllerBinding<TController>`, registered with new
+  `WithController(binding)`, `RegisterController(binding)` and
+  `RegisterControllerWithContext(binding, ...)` overloads that use no reflection, so Web
+  API controllers work in trimmed and Native AOT applications. Bindings keep the
+  reflection-based registration's routes, parameter rules, converters, serialization and
+  controller lifetime; `[JsonData]` can use a `JsonSerializerContext`. Signatures the
+  binding cannot reproduce are reported at build time (EMBEDIO001 to EMBEDIO012).
+  `[QueryField]`, `[FormField]` and `[JsonData]` no longer carry trimming annotations;
+  their runtime-type paths, used only by reflection-based registration, are behind
+  feature switches.
 - Make the .NET 10 asset trim- and Native-AOT-analyzable from Neo #138. Reflection-based
   APIs (Web API controller registration and its request-data attributes,
   `RoutingModule.AddFrom`/`WithHandlersFrom`, EmbedIO's default JSON options) carry

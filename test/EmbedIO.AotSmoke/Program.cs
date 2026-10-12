@@ -8,6 +8,7 @@ using EmbedIO;
 using EmbedIO.Actions;
 using EmbedIO.Files;
 using EmbedIO.Routing;
+using EmbedIO.WebApi;
 
 namespace EmbedIO.AotSmoke;
 
@@ -72,6 +73,8 @@ internal static class Program
                     await context.SendDataAsync(item, SmokeJson.Default.Item);
                 })
                 .OnGet("/reflection", (context, _) => context.SendDataAsync(new Item())))
+            .WithModule(new WebApiModule("/ctl", ResponseSerializer.Json(SmokeJson.Default.Options))
+                .WithController(SmokeControllers.SmokeController))
             .WithModule(new ActionModule("/stream", HttpVerbs.Get, async context =>
             {
                 using var stream = context.OpenResponseStream();
@@ -120,6 +123,32 @@ internal static class Program
             checks["reflection_default_rejected"] = body;
         }
 
+        // A Web API controller registered through its generated binding: route, query and
+        // form values, a JSON body through the JsonSerializerContext, and a rejected route value.
+        var controllerGet = await client.GetStringAsync(url + "ctl/items/5?name=gen");
+        Require(controllerGet.Contains("\"Id\": 5", StringComparison.Ordinal) && controllerGet.Contains("\"Name\": \"gen\"", StringComparison.Ordinal), "Controller GET returned " + controllerGet);
+        checks["controller_get"] = controllerGet;
+
+        using (var posted = await client.PostAsync(url + "ctl/items", new StringContent("{\"Id\":4,\"Name\":\"json\"}", Encoding.UTF8, "application/json")))
+        {
+            var body = await posted.Content.ReadAsStringAsync();
+            Require(posted.StatusCode == HttpStatusCode.OK && body.Contains("\"Name\": \"JSON\"", StringComparison.Ordinal), "Controller POST returned " + (int)posted.StatusCode + " " + body);
+            checks["controller_json"] = body;
+        }
+
+        using (var form = await client.PostAsync(url + "ctl/form", new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("count", "2"), new KeyValuePair<string, string>("tags", "a"), new KeyValuePair<string, string>("tags", "b") })))
+        {
+            var body = await form.Content.ReadAsStringAsync();
+            Require(form.StatusCode == HttpStatusCode.OK && body == "\"2:a,b\"", "Controller form returned " + (int)form.StatusCode + " " + body);
+            checks["controller_form"] = body;
+        }
+
+        using (var invalid = await client.GetAsync(url + "ctl/items/not-a-number"))
+        {
+            Require(invalid.StatusCode == HttpStatusCode.BadRequest, "Invalid controller route value returned " + (int)invalid.StatusCode);
+            checks["controller_invalid_route"] = "400";
+        }
+
         var page = await client.GetStringAsync(url);
         Require(page == "<p>static</p>", "Static file returned " + page);
         checks["static_file"] = page;
@@ -145,6 +174,21 @@ internal static class Program
     {
         if (!condition) throw new InvalidOperationException(message);
     }
+}
+
+[GeneratedControllerBinding(typeof(SmokeController), JsonSerializerContext = typeof(SmokeJson))]
+internal static partial class SmokeControllers;
+
+internal sealed class SmokeController : WebApiController
+{
+    [Route(HttpVerbs.Get, "/items/{id}")]
+    public Item Get(int id, [QueryField] string? name) => new() { Id = id, Name = name ?? string.Empty };
+
+    [Route(HttpVerbs.Post, "/items")]
+    public Item Post([JsonData] Item item) => new() { Id = item.Id, Name = item.Name.ToUpperInvariant() };
+
+    [Route(HttpVerbs.Post, "/form")]
+    public string Form([FormField] int count, [FormField] string[] tags) => count.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + string.Join(",", tags);
 }
 
 internal sealed class Item
@@ -175,5 +219,6 @@ internal sealed class SmokeReport
 
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(Item))]
+[JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(SmokeReport))]
 internal sealed partial class SmokeJson : JsonSerializerContext;
