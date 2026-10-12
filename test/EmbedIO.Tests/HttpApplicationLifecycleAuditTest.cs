@@ -978,7 +978,8 @@ namespace EmbedIO.Tests
             internal int Port { get; }
             internal CancellationToken Token => _stop.Token;
 
-            internal static async Task<Host> StartAsync(HttpListenerMode mode, X509Certificate2? certificate, RequestHandlerCallback handler)
+            internal static async Task<Host> StartAsync(HttpListenerMode mode, X509Certificate2? certificate, RequestHandlerCallback handler,
+                Action<WebServerOptions>? configure = null, Action<WebServer>? configureServer = null)
             {
                 var quic = mode == HttpListenerMode.EmbedIOHttp3;
                 var port = FreePort(quic);
@@ -988,7 +989,9 @@ namespace EmbedIO.Tests
                 {
                     o.WithUrlPrefix(prefix).WithMode(mode);
                     if (certificate != null) o.WithCertificate(certificate);
+                    configure?.Invoke(o);
                 }).WithAction("/", HttpVerbs.Any, handler);
+                configureServer?.Invoke(server);
                 var running = server.RunAsync(stop.Token);
                 var deadline = DateTime.UtcNow + Settle;
                 while (server.State != WebServerState.Listening && !running.IsCompleted && DateTime.UtcNow < deadline) await Task.Delay(10);

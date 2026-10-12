@@ -15,6 +15,7 @@ for a complete app you can run, then choose files or controllers as needed.
 ## Usage guides
 
 - [WebSocket handshake status](guides/websocket-handshake-status.md): exact endpoints, module order, and HTTP/1 versus extended CONNECT.
+- [Outstanding WebSocket deliveries](guides/websocket-receive-limits.md): opt-in connection and module limits covering assembly, queues and unfinished callbacks.
 
 - [Response-time diagnostics](guides/response-timing.md): server handling duration, preserved context age and the difference from client latency.
 - [Request trailers](guides/request-trailers.md): optional completion-aware immutable snapshots separate from initial headers.
@@ -22,6 +23,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Capsule and tunnel carriers](guides/capsule-tunnels.md): unreleased optional APIs, authorization, streamed values, native datagram packet ownership and carrier lifetime.
 
 - [Request limits, admission and deadlines](guides/request-limits.md): opt-in header and body byte limits, body read and connection deadlines, connection count, bounded concurrent requests and queue, cooperative request deadlines, deferred `100 Continue` and per-route policies.
+- [Request-body byte limits](guides/request-body-limits.md): encoded versus decoded budgets, immutable routed ownership, configured error callbacks, unread-input validation and borrowed stream ownership.
 - [Metrics and tracing](guides/telemetry.md): opt-in HTTP server metrics and spans with W3C trace context, route templates and server identity.
 - [Trimming and Native AOT](guides/trimming-and-native-aot.md): AOT-safe JSON with source-generated metadata, Web API controllers through generated bindings and their build-time diagnostics, annotated reflection APIs and what a Native AOT host supports.
 - [OpenAPI documents](guides/openapi.md): unreleased OpenAPI 3.1 documents written from generated controller bindings, with operation attributes, security requirements from authentication modules, declared routes for other modules, routes the document cannot describe and its limits.

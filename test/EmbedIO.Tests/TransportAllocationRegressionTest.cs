@@ -166,7 +166,7 @@ namespace EmbedIO.Tests
                 var fragmented = (bool)((((frameType).GetProperty("IsFragment") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(frame)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
                 var handler = socketType.GetMethod(fragmented ? "ProcessFragmentFrame" : "ProcessDataFrame",
                     BindingFlags.Instance | BindingFlags.NonPublic);
-                await (Task)((handler ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, new[] { frame }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                await (Task)((handler ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, new object?[] { frame, null }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
             var args = new object?[] { null };
             Assert.That(((queue ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetMethod("TryDequeue") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(queue, args), Is.EqualTo(true));

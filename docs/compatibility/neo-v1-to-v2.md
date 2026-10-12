@@ -267,10 +267,21 @@ responses must finish within a deadline.
 
 ## WebSocket applications
 
+The optional protected `WebSocketModule.ReceiveLimits` property accepts immutable
+`WebSocketReceiveLimits` for outstanding message counts and logical payload bytes,
+per connection and per module. It defaults to null; existing applications retain
+their queue and callback behavior. Configured exhaustion closes with 1008, while
+the existing `MaxMessageSize` check retains 1009. Reservations cover partial and
+queued messages and the actual unfinished callback Task; they are not total heap
+limits or application-retained data limits. Configure before startup. See
+[outstanding-delivery limits](../guides/websocket-receive-limits.md).
+
 Managed WebSocket framing and UTF-8 validation are stricter. Configure an
 appropriate MaxMessageSize explicitly; the managed engine now enforces it,
 including HTTP/2 extended CONNECT. Oversized messages close with 1009 and invalid
-text with 1007, with bounded close-handshake completion. Messages accepted before
+text with 1007. After the close frame write completes, acknowledgement waits up to
+the existing one-second timeout; this is not an overall transport-write deadline.
+Messages accepted before
 a peer close are delivered before disconnection. Outgoing frame sizes can differ
 from v1; clients must process WebSocket messages independently of frame boundaries.
 See [WebSocket migration details](migration.md#managed-websocket-framing-unreleased).
@@ -349,6 +360,34 @@ preserves remaining incoming delivery; full closure releases unread packet owner
 See [the carrier guide](../guides/capsule-tunnels.md#native-http-datagrams) before
 adapting a protocol handler. This addition does not change WebSocket queue defaults.
 
+## Actual request-body byte limits
+
+`MaximumRequestBodyBytes` remains optional and unlimited by default. When
+configured, the owned listener now enforces it on actual entity bytes, including
+direct input-stream reads and unknown-length uploads. The raw budget counts
+encoded bytes after HTTP framing and before content decoding; the separate
+decompressed budget applies to compressed-request helpers. Chunk syntax, padding,
+frame headers and request trailers do not count against the raw budget.
+
+The routed server and its first matching route supply an immutable policy before
+automatic `100 Continue` or request admission. An excessive declared length uses
+the normal 413 error callback before module dispatch. A simultaneous header-limit
+failure retains 431 precedence. Automatic refusal does not drain or invite the
+upload; a custom error callback that explicitly reads input still observes the
+captured limit and can send deferred `100 Continue`.
+
+For unknown-length input, an in-limit prefix can reach application code before
+an excess byte is detected. Complete input validation before committing changes
+that cannot be rolled back. Reaching the numeric boundary does not prove EOF or
+make trailers available. Unread input is validated during completion when a raw
+limit is enabled. If output has already committed, an over-limit body terminates
+the affected connection or stream rather than replacing the response status.
+
+Negotiated CONNECT transport is excluded. Custom context adapters retain their
+existing policy path; actual-byte enforcement depends on their own stream
+integration. See [request-body byte limits](../guides/request-body-limits.md)
+for configuration, route inheritance and stream ownership.
+
 ## Optional request body read deadlines
 
 `RequestBodyReadTimeout` is disabled by default. When enabled, a stalled body
@@ -374,6 +413,30 @@ means no trailers, while false means unavailable, incomplete, abandoned or faile
 input. Declaration does not authorize a field, and trailer metadata never changes
 routing or authentication. See [Request trailers](../guides/request-trailers.md)
 for the completion and ownership contract. This addition is unreleased.
+
+## Malformed HTTP/1 request rejection
+
+The HTTP/1 candidate stages transport shutdown after rejecting a malformed or
+oversized request head with HTTP 400, 414 or 431. It attempts the complete error
+response, completes output, and discards remaining raw input without parsing or
+application dispatch. The existing connection owner and admission slot remain
+held until physical transport retirement. Stop, disposal and forced closure can
+still retire that transport promptly.
+
+The whole error-write, output-shutdown and discard interval has a best-effort
+one-second budget. An already earlier configured request-header deadline wins;
+extra input does not renew this interval. A blocked or failed write, expired
+deadline, or concurrent stop can prevent a complete error response. Applications
+must not depend on receiving an error reply after those failures. Valid request
+handling and normal response closure are unchanged.
+
+TLS output shutdown uses public runtime APIs when available. Installed .NET
+Framework 4.8 and .NET 10 were checked with delayed TLS readers. A netstandard
+host lacking public TLS shutdown can only flush and half-close TCP in this path;
+it cannot promise TLS close_notify. That unavailable-capability fallback has not
+been exercised on an actual runtime lacking the API. Accepted tunnels retain
+their existing stricter public TLS-shutdown capability requirement. This correction
+is unreleased and does not establish the cause of an isolated hosted test failure.
 
 ## Release preparation still required
 

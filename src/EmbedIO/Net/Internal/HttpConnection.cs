@@ -193,7 +193,9 @@ namespace EmbedIO.Net.Internal
                 _tunnel = true;
             }
         }
-        internal async Task CompleteTunnelOutputAsync(CancellationToken token)
+        internal Task CompleteTunnelOutputAsync(CancellationToken token) => CompleteOutputAsync(token, true);
+
+        private async Task CompleteOutputAsync(CancellationToken token, bool requireTlsShutdown)
         {
             token.ThrowIfCancellationRequested();
             using var cancellation = token.Register(ForceClose);
@@ -203,7 +205,11 @@ namespace EmbedIO.Net.Internal
 #if NET10_0_OR_GREATER
                 await ssl.ShutdownAsync().ConfigureAwait(false);
 #else
-                await (ShutdownTls ?? throw new NotSupportedException("TLS send-shutdown is unavailable."))(ssl).ConfigureAwait(false);
+                if (ShutdownTls != null) await ShutdownTls(ssl).ConfigureAwait(false);
+                else if (requireTlsShutdown) throw new NotSupportedException("TLS send-shutdown is unavailable.");
+                // When this runtime exposes no public TLS shutdown API,
+                // rejection can only flush the response and stage the TCP close;
+                // additive tunnels continue to require TLS shutdown support.
 #endif
             }
             token.ThrowIfCancellationRequested();
@@ -370,6 +376,7 @@ namespace EmbedIO.Net.Internal
         private void InitWithPendingInput(ArraySegment<byte> pending)
         {
             _contextBound = false;
+            _context?.HttpListenerRequest.RetireBodyLimit();
             _iStream = null;
             _oStream = null;
             Prefix = null;
@@ -451,6 +458,7 @@ namespace EmbedIO.Net.Internal
             CancellationTokenSource? protocolStop;
             HttpListener[] protocolListeners;
             RequestStream? input;
+            HttpListenerRequest request;
             TcpConnectionPolicy? slotOwner;
             EmbedIO.Internal.ServerTelemetry.LifetimeTelemetry? connectionTelemetry;
             string protocolVersion;
@@ -469,12 +477,17 @@ namespace EmbedIO.Net.Internal
                 protocolListeners = _http2Listeners == null ? Array.Empty<HttpListener>() : new List<HttpListener>(_http2Listeners.Keys).ToArray();
                 _http2Listeners?.Clear();
                 input = _iStream;
+                request = _context.HttpListenerRequest;
                 _pendingInput = default;
                 _iStream = null;
                 _buffer = null;
                 _headReader.Reset();
             }
-            try { FinishRetirement(); }
+            try
+            {
+                request.RetireBodyLimit();
+                FinishRetirement();
+            }
             finally
             {
                 slotOwner?.Release();

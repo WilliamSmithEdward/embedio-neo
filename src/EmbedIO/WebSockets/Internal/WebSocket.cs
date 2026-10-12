@@ -35,6 +35,8 @@ namespace EmbedIO.WebSockets.Internal
         // public IHttpContextImpl.AcceptWebSocketAsync contract has no parameter for it.
         private static readonly AsyncLocal<int> AcceptedMaxMessageSize = new();
         private static readonly AsyncLocal<bool> AcceptedMessageConsumerPending = new();
+        private static readonly AsyncLocal<WebSocketDeliveryBudget.Connection?> AcceptedDeliveryBudget = new();
+        private readonly WebSocketDeliveryBudget.Connection? _deliveryBudget;
 
         private readonly object _stateSyncRoot = new();
         private readonly object _messageSyncRoot = new();
@@ -70,6 +72,8 @@ namespace EmbedIO.WebSockets.Internal
             _readyState = WebSocketState.Open;
             _maxMessageSize = AcceptedMaxMessageSize.Value;
             _messageConsumerPending = AcceptedMessageConsumerPending.Value;
+            _deliveryBudget = AcceptedDeliveryBudget.Value;
+            if (_deliveryBudget != null) AcceptedDeliveryBudget.Value = null;
             // The reservation belongs to this accepted socket, not callbacks or
             // unrelated sockets created later in the receive loop's async flow.
             AcceptedMessageConsumerPending.Value = false;
@@ -79,6 +83,8 @@ namespace EmbedIO.WebSockets.Internal
         // current asynchronous flow. Zero disables the check.
         internal static void SetAcceptedMaxMessageSize(int value) => AcceptedMaxMessageSize.Value = value;
         internal static void SetAcceptedMessageConsumerPending(bool value) => AcceptedMessageConsumerPending.Value = value;
+        internal static void SetAcceptedDeliveryBudget(WebSocketDeliveryBudget.Connection? value)
+            => AcceptedDeliveryBudget.Value = value;
 
         // Failed/canceled module initialization has no consumer to receive queued
         // messages. Release its reservation without retaining a deferred close.
@@ -93,7 +99,7 @@ namespace EmbedIO.WebSockets.Internal
                 if (finish)
                 {
                     _closeDeferred = false;
-                    while (_messageEventQueue.TryDequeue(out _)) { }
+                    DiscardQueuedMessages();
                 }
             }
             if (finish) CompleteClose();
@@ -547,6 +553,7 @@ namespace EmbedIO.WebSockets.Internal
                 }
                 try { handler(this, message); }
                 catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { ex.Log(nameof(WebSocket)); }
+                finally { if (_deliveryBudget != null) message.Dispose(); }
             }
             CompleteClose();
         }
@@ -557,7 +564,7 @@ namespace EmbedIO.WebSockets.Internal
         {
             if (!_closeDeferred || _messageConsumerPending) return false;
             _closeDeferred = false;
-            while (_messageEventQueue.TryDequeue(out _)) { }
+            DiscardQueuedMessages();
             return true;
         }
 
@@ -565,11 +572,11 @@ namespace EmbedIO.WebSockets.Internal
 
         private Task ProcessCloseFrame(WebSocketFrame frame) => InternalCloseAsync(frame.PayloadData, !frame.PayloadData.HasReservedCode, false);
 
-        private Task ProcessDataFrame(WebSocketFrame frame)
+        private Task ProcessDataFrame(WebSocketFrame frame, WebSocketDeliveryBudget.Lease? delivery)
         {
             // The reader allocated this payload for the frame alone; the message takes
             // ownership instead of copying it.
-            _messageEventQueue.Enqueue(new MessageEventArgs(frame.Opcode, frame.PayloadData.ToArray()));
+            _messageEventQueue.Enqueue(new MessageEventArgs(frame.Opcode, frame.PayloadData.ToArray()) { DeliveryLease = delivery });
             return Task.CompletedTask;
         }
 
@@ -582,7 +589,7 @@ namespace EmbedIO.WebSockets.Internal
             InContinuation = frame.Fin == Fin.More;
         }
 
-        private Task ProcessFragmentFrame(WebSocketFrame frame)
+        private Task ProcessFragmentFrame(WebSocketFrame frame, WebSocketDeliveryBudget.Lease? delivery)
         {
             if (!InContinuation)
             {
@@ -603,7 +610,9 @@ namespace EmbedIO.WebSockets.Internal
             {
                 using (fragments)
                 {
-                    _messageEventQueue.Enqueue(fragments.GetMessage());
+                    var message = fragments.GetMessage();
+                    message.DeliveryLease = delivery;
+                    _messageEventQueue.Enqueue(message);
                 }
 
                 _fragmentsBuffer = null;
@@ -629,11 +638,11 @@ namespace EmbedIO.WebSockets.Internal
             "Received a pong.".Trace(nameof(ProcessPongFrame));
         }
 
-        private async Task<bool> ProcessReceivedFrame(WebSocketFrame frame)
+        private async Task<bool> ProcessReceivedFrame(WebSocketFrame frame, WebSocketDeliveryBudget.Lease? delivery)
         {
             if (frame.IsFragment)
             {
-                await ProcessFragmentFrame(frame).ConfigureAwait(false);
+                await ProcessFragmentFrame(frame, delivery).ConfigureAwait(false);
             }
             else
             {
@@ -641,7 +650,7 @@ namespace EmbedIO.WebSockets.Internal
                 {
                     case Opcode.Text:
                     case Opcode.Binary:
-                        await ProcessDataFrame(frame).ConfigureAwait(false);
+                        await ProcessDataFrame(frame, delivery).ConfigureAwait(false);
                         break;
                     case Opcode.Ping:
                         await ProcessPingFrame(frame).ConfigureAwait(false);
@@ -665,6 +674,7 @@ namespace EmbedIO.WebSockets.Internal
         {
             if (Interlocked.Exchange(ref _resourcesReleased, 1) != 0)
                 return;
+            _deliveryBudget?.StopAdmission();
             try
             {
                 DisposeSendGatesIfIdle();
@@ -703,7 +713,7 @@ namespace EmbedIO.WebSockets.Internal
                     pending = _messageConsumerPending;
                     drain = _onMessage != null && (_inMessage || !_messageEventQueue.IsEmpty);
                     _closeDeferred = pending || drain;
-                    if (!pending && !drain) while (_messageEventQueue.TryDequeue(out _)) { }
+                    if (!pending && !drain) DiscardQueuedMessages();
                 }
                 if (drain) _ = Task.Run(Message);
                 else if (!pending) CompleteClose();
@@ -834,16 +844,13 @@ namespace EmbedIO.WebSockets.Internal
 
         private void StartReceiving()
         {
-            while (_messageEventQueue.TryDequeue(out _))
-            {
-                // do nothing
-            }
+            DiscardQueuedMessages();
 
             var receivingStopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _exitReceiving = receivingStopped;
             _receivePong = new AutoResetEvent(false);
 
-            var frameStream = new WebSocketFrameStream(_stream?.Value) { MaxMessageSize = _maxMessageSize };
+            var frameStream = new WebSocketFrameStream(_stream?.Value, false, _deliveryBudget) { MaxMessageSize = _maxMessageSize };
 
             _ = Task.Run(async () =>
             {
@@ -861,11 +868,15 @@ namespace EmbedIO.WebSockets.Internal
                             // new application messages once local closing has started.
                             if (_readyState != WebSocketState.Open && frame.Opcode != Opcode.Close)
                             {
+                                frameStream.TakeCompletedDelivery()?.Dispose();
                                 if (frame.IsFragment) DiscardFragmentFrame(frame);
                                 continue;
                             }
 
-                            var result = await ProcessReceivedFrame(frame).ConfigureAwait(false);
+                            var delivery = frameStream.TakeCompletedDelivery();
+                            bool result;
+                            try { result = await ProcessReceivedFrame(frame, delivery).ConfigureAwait(false); }
+                            catch { delivery?.Dispose(); throw; }
 
                             if (!result || frame.Opcode == Opcode.Close || _readyState == WebSocketState.Closed)
                                 return;
@@ -896,8 +907,14 @@ namespace EmbedIO.WebSockets.Internal
                         }
                     }
                 }
-                finally { receivingStopped.TrySetResult(true); }
+                finally { frameStream.Dispose(); receivingStopped.TrySetResult(true); }
             });
+        }
+
+        private void DiscardQueuedMessages()
+        {
+            while (_messageEventQueue.TryDequeue(out var message))
+                if (_deliveryBudget != null) message.Dispose();
         }
     }
 }

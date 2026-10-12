@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Diagnostics;
+using EmbedIO.Internal;
 using EmbedIO.Net.Internal.Http2;
 
 namespace EmbedIO.Net.Internal
@@ -161,6 +162,7 @@ namespace EmbedIO.Net.Internal
                     await context.CloseAsync().ConfigureAwait(false);
                     return;
                 }
+                listener.BodyPolicy?.Apply(context);
                 if (context.Request.IsWebSocketRequest
                     && context.Request.Headers[HttpHeaderNames.SecWebSocketVersion] != "13")
                 {
@@ -179,7 +181,7 @@ namespace EmbedIO.Net.Internal
                 }
                 // Do not hold a connection lock while entering listener lifecycle
                 // synchronization: listener shutdown closes its connections.
-                await context.SendContinueAsync(listener.DeferContinue).ConfigureAwait(false);
+                await context.SendContinueAsync(listener.DeferContinue || RequestBodyPolicy.KnownRefusal(context.Request) != null).ConfigureAwait(false);
                 listener.RegisterMultiplexedContext(context, this);
                 registered = true;
                 var closed = false;
