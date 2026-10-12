@@ -128,3 +128,13 @@ remain required. A configured workflow is not a passing result or proof of mater
 production cost. No production optimization is justified until the new evidence has
 been collected and examined. Historical results and remaining limits above are
 preserved.
+
+Local follow-up preparation now passes 17 evidence-acceptance tests, the existing
+ten phase-accounting tests, executable connection/pacing checks, SDK analysis and
+changed-file formatting. Fourteen corrected, tiny isolated Docker samples cover
+HTTP/1, HTTP/2 and stock-MsQuic HTTP/3 response validation and balanced server
+lifetimes. They are functional checks, not quiet-host cost measurements. The
+original exhausted-slot pacing defect and missing-libnuma startup failure are
+retained as unsuccessful tooling attempts; neither is a production finding.
+Recovery acceptance additionally requires clean child exits, healthy traffic,
+complete atomic stack/type counters and balanced server lifetimes.
