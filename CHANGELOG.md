@@ -13,6 +13,12 @@
   `[QueryField]`, `[FormField]` and `[JsonData]` no longer carry trimming annotations;
   their runtime-type paths, used only by reflection-based registration, are behind
   feature switches.
+- Add the optional `IHttpRequestTrailers` capability on built-in request adapters.
+  Complete valid input exposes an immutable trailer snapshot, separate from
+  initial headers, without reading or draining input. Existing `IHttpRequest`
+  implementations remain compatible. See [request trailers](docs/guides/request-trailers.md).
+  Disposing pending HTTP/3 input cannot publish a successful snapshot on late FIN;
+  snapshots from already completed input remain available after application disposal.
 - Give the new unreleased explicit JSON metadata APIs distinct `WithMetadata` names.
   This restores legacy null-options calls and serializer callbacks with null data;
   reflection defaults and the Native AOT implementation are preserved.

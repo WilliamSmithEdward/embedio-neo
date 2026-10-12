@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Net.Internal.Http2;
@@ -22,13 +23,22 @@ namespace EmbedIO.Net.Internal.Http3
 
     // Pull directly from the request's QUIC stream. No independent body queue
     // releases transport flow-control credit ahead of application consumption.
-    internal sealed class Http3RequestBody : Stream
+    internal sealed class Http3RequestBody : Stream, IRequestTrailerSource
     {
         private readonly Http3RequestStream _reader;
         private readonly long _streamId;
         private readonly IHttp3RequestOwner _owner;
         private bool _data;
-        private bool _ended;
+        private volatile bool _ended;
+        private volatile bool _failed;
+        private IReadOnlyList<KeyValuePair<string, string>> _trailers = RequestTrailerSnapshot.Empty;
+
+        public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
+        {
+            var available = _ended && !_failed && !_inputAbandoned;
+            trailers = available ? _trailers : RequestTrailerSnapshot.Empty;
+            return available;
+        }
         private volatile bool _disposed;
         private volatile bool _inputAbandoned;
         private int _reading;
@@ -71,6 +81,7 @@ namespace EmbedIO.Net.Internal.Http3
                     catch (Http2ProtocolException error) { throw new Http3StreamException(_streamId, 0x10e, error.Message); }
                     _reader.ConfirmTrailers();
                     Trailers = fields;
+                    _trailers = RequestTrailerSnapshot.Copy(fields);
                 }
             }
             // A canceled transport read may have consumed part of a frame and
@@ -78,7 +89,7 @@ namespace EmbedIO.Net.Internal.Http3
             // resume the input parser from an uncertain boundary.
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             { _inputAbandoned = true; throw; }
-            catch (Exception error) when (error is IOException or OperationCanceledException) { _owner.Failed(error); throw; }
+            catch (Exception error) when (error is IOException or OperationCanceledException) { _failed = true; _owner.Failed(error); throw; }
             finally { Volatile.Write(ref _reading, 0); }
         }
         // After the response, reports whether the input has ended, reading only
@@ -105,7 +116,15 @@ namespace EmbedIO.Net.Internal.Http3
             catch (Exception error) when (error is IOException or InvalidOperationException) { return false; }
             finally { if (release) Volatile.Write(ref _reading, 0); }
         }
-        protected override void Dispose(bool disposing) { _disposed = true; base.Dispose(disposing); }
+        protected override void Dispose(bool disposing)
+        {
+            // Keep successful snapshots after complete input, but an application
+            // abandoning a pending read cannot publish metadata from its late FIN.
+            // This stream borrows the transport; the original read still settles.
+            if (disposing && !_ended) _inputAbandoned = true;
+            _disposed = true;
+            base.Dispose(disposing);
+        }
         public override void Flush() { }
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();

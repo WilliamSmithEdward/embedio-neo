@@ -10,7 +10,7 @@ namespace EmbedIO.Net.Internal.Http2
     // The connection reader supplies DATA content only (padding is accounted for
     // separately). Small frames are coalesced so retained memory scales with body
     // bytes, not the number or padded size of the wire frames.
-    internal sealed class Http2RequestBody : Stream
+    internal sealed class Http2RequestBody : Stream, IRequestTrailerSource
     {
         private sealed class Chunk
         {
@@ -31,6 +31,28 @@ namespace EmbedIO.Net.Internal.Http2
         private long _received;
         private bool _complete;
         private bool _disposed;
+        private bool _trailersAvailable;
+        private IReadOnlyList<KeyValuePair<string, string>> _trailers = RequestTrailerSnapshot.Empty;
+
+        public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
+        {
+            lock (_sync)
+            {
+                trailers = _trailersAvailable ? _trailers : RequestTrailerSnapshot.Empty;
+                return _trailersAvailable;
+            }
+        }
+
+        internal void CompleteTrailers(Http2HeaderBlock block)
+        {
+            Http2RequestHeaders.ValidateTrailers(block);
+            var snapshot = RequestTrailerSnapshot.Copy(block.Fields);
+            lock (_sync)
+            {
+                Append(Array.Empty<byte>(), 0, 0, true);
+                _trailers = snapshot;
+            }
+        }
 
         internal Http2RequestBody(int streamId, long? length, Action<int> consumed)
         {
@@ -81,6 +103,7 @@ namespace EmbedIO.Net.Internal.Http2
                     _tail.Written += copied; offset += copied; count -= copied;
                 }
                 _complete = endStream;
+                if (_complete && _buffered == 0) _trailersAvailable = true;
                 Pulse();
             }
         }
@@ -93,6 +116,7 @@ namespace EmbedIO.Net.Internal.Http2
             {
                 if (_disposed || _failure != null) return;
                 _failure = error;
+                _trailersAvailable = false;
                 discarded = Clear();
                 Pulse();
             }
@@ -135,6 +159,7 @@ namespace EmbedIO.Net.Internal.Http2
                                 }
                             }
                             _buffered -= copied;
+                            if (_complete && _buffered == 0) _trailersAvailable = true;
                         }
                         else if (_complete) return 0;
                         else changed = (_changed ??= NewSignal()).Task;
