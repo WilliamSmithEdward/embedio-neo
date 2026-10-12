@@ -46,7 +46,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 4976
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 4976
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -62,9 +62,11 @@ select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--time
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
 least 4976 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
-suite budget is five minutes on Windows and eight minutes on Linux/macOS,
-approved by William on 2026-10-10 after incomplete Unix runs reported no failed
-cases before the former five-minute limit. Use --timeout 8m for a full Unix run.
+suite budget is eight minutes on all three platforms. William approved the Unix
+allowance on 2026-10-10 and requested loosening the Windows allowance on
+2026-10-11 after a coverage run reported all 4,976 cases with zero failures but
+its host ended at the five-minute boundary. A longer budget does not classify
+that host exit as resolved; the changed-source CI run must finish successfully.
 Per-case deadlines, assertions, iterations, coverage and the discovery minimum
 remain enforced; this is a whole-run allowance, not a failure exemption. NUnit 5
 async assertions must be awaited.
