@@ -190,6 +190,7 @@ namespace EmbedIO.Net.Internal
         }
         internal bool HasAcceptedTunnel => _acceptedTunnel != null;
         internal bool ResponseHeadersSent => ((MultiplexedResponse)Response).HeadersSent;
+        internal long SentBodyBytes => ((MultiplexedResponse)Response).SentBodyBytes;
         internal Task AbortTunnelAsync(Exception cause) => AbortExchangeAsync(cause);
         // Resets the request stream so a committed, incomplete response cannot be
         // mistaken for a complete one. A stream that already ended is left alone.
