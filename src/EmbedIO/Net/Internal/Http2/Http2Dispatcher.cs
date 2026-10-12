@@ -98,7 +98,7 @@ namespace EmbedIO.Net.Internal.Http2
                                     started = new Http2Exchange(_connection, state, count => Consumed(state.Id, count), _stop.Token, _abortTunnel);
                                     _exchanges.Add(state.Id, started);
                                 }
-                                else exchange.Body.Append(Array.Empty<byte>(), 0, 0, true);
+                                else exchange.Body.CompleteTrailers(frame.HeaderBlock);
                             }
                             else if (frame.Type == 0 && exchange != null)
                             {
