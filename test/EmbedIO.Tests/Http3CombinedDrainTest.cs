@@ -106,6 +106,7 @@ namespace EmbedIO.Tests
         [TestCase("dispose")]
         public async Task CombinedDrainCanAbortAllProtocols(string reason)
         {
+            using var handshake = new QuicHandshakeTrace();
             using var certificate = Certificate();
             var prefix = CombinedPrefix();
             var entered = Enumerable.Range(0, 3).Select(_ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).ToArray();
@@ -160,12 +161,14 @@ namespace EmbedIO.Tests
                 foreach (var request in requests)
                     await Assert.ThatAsync(async () => await request, Throws.InstanceOf<HttpRequestException>());
                 Assert.That(server.Listener.IsListening, Is.False);
+                TestContext.Out.WriteLine($"{nameof(QuicHandshakeTrace)} records: {handshake.Snapshot().Length}");
             }
             catch (Exception error)
             {
                 failure = error;
                 TestContext.Error.WriteLine($"Combined drain failed: reason={reason}, phase={phase}, server={server.State}, run={running.Status}, HTTP/1={http1.Status}, HTTP/2={requests[0].Status}, HTTP/3={requests[1].Status}, admitted={string.Join(",", entered.Select(signal => signal.Task.IsCompleted))}. {error}");
                 TestContext.Error.WriteLine($"HTTP/1 failure: {http1.Exception}\nHTTP/2 failure: {requests[0].Exception}\nHTTP/3 failure: {requests[1].Exception}\nServer failure: {running.Exception}");
+                foreach (var entry in handshake.Snapshot()) TestContext.Error.WriteLine(entry);
                 throw;
             }
             finally
