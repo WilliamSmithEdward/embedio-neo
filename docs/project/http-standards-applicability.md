@@ -94,12 +94,12 @@ published RFC or an implemented-provider guarantee. The original frozen inventor
 below is retained unchanged. Capture and semantic comparison are not clause-level
 conformance tests. William approved a TLS1.2 minimum with TLS1.3 preserved where
 supported; that candidate passed four Windows modern-asset cases after local
-reconciliation with `367155e8`. Earlier source-qualified controls also ran the
+reconciliation with `367155e8`. Earlier controls on candidate `afc13450` also ran the
 actual Standard asset on a .NET10 host and on installed Framework4.8.1. An
 independent pinned Linux comparison reported 16 passing controls: the baseline
 actually negotiated TLS1.0/1.1 and returned exact responses, while the candidate
 rejected them and preserved TLS1.2 recovery and TLS1.2/1.3 positives on both
-assets. The final candidate's macOS run passed, with TLS1.3 explicitly unavailable
+assets. PR364 head `120e61c4` passed its macOS run, with TLS1.3 explicitly unavailable
 in the public TCP server provider. Accepted source still predates this correction;
 these receipts do not establish final combined discovery, all older runtimes or
 all supported platforms. [PR364](https://github.com/WilliamSmithEdward/embedio-neo/pull/364)
