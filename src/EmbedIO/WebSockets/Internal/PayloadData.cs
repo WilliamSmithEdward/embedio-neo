@@ -61,8 +61,6 @@ namespace EmbedIO.WebSockets.Internal
             return result;
         }
 
-        internal void Mask(byte[] key) => Mask(_data, key);
-
         // XORs data in place with the repeating four-byte key, eight bytes at a time.
         internal static void Mask(byte[] data, byte[] key)
         {
