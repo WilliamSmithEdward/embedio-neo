@@ -163,7 +163,7 @@ namespace EmbedIO.Net.Internal
                 Unbind();
                 InitWithPendingInput(tail);
                 if (Reuses < int.MaxValue) Reuses++;
-                _sTimeout = 15000;
+                _sTimeout = _keepAliveTimeout;
                 _lifetime.ArmDeadline(_sTimeout);
                 return true;
             }

@@ -83,6 +83,24 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Sets how long one read of a request body may wait for data.
+        /// </summary>
+        /// <typeparam name="TOptions">The options type.</typeparam>
+        /// <param name="this">The options instance.</param>
+        /// <param name="value">The read deadline, or null for existing behavior without one.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The deadline is not positive or is too large.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static TOptions WithRequestBodyReadTimeout<TOptions>(this TOptions @this, TimeSpan? value)
+            where TOptions : WebServerOptionsBase
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.RequestBodyReadTimeout = value;
+            return @this;
+        }
+
+        /// <summary>
         /// Limits the total size and the number of a request's header fields.
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>

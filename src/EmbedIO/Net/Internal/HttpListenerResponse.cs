@@ -237,7 +237,8 @@ namespace EmbedIO.Net.Internal
             if (_request.IsContinueOwed) persistent = false;
             _persistent = persistent;
             Headers.Add(HttpHeaderNames.Connection, persistent ? "keep-alive" : "close");
-            if (persistent && ProtocolVersion >= HttpVersion.Version11) Headers.Add(HttpHeaderNames.KeepAlive, "timeout=15");
+            if (persistent && ProtocolVersion >= HttpVersion.Version11)
+                Headers.Add(HttpHeaderNames.KeepAlive, _transport.KeepAliveHeader);
         }
         private MemoryStream WriteHeaders(int bodyCount)
         {

@@ -15,5 +15,9 @@ namespace EmbedIO.Internal
         // Must be applied before InputStream is first read. onExceeded runs once, on the
         // reading thread, when a read crosses the limit.
         void LimitBody(long maximumBytes, Action onExceeded);
+
+        // Must be applied before InputStream is first read. onTimeout runs once, on the
+        // reading thread, when a read waits longer than the timeout for data.
+        void TimeBodyReads(TimeSpan timeout, Action onTimeout);
     }
 }

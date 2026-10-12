@@ -405,6 +405,30 @@ namespace EmbedIO.Tests.Issues
                 catch (IOException) { }
                 return Encoding.Latin1.GetString(received.ToArray());
             }
+            public Task SendBytesAsync(byte[] bytes) => _client.GetStream().WriteAsync(bytes, 0, bytes.Length);
+
+            // Reads until the end of a response head, leaving the connection open.
+            public async Task<string> ReadHeadAsync()
+            {
+                var received = new StringBuilder();
+                var buffer = new byte[1];
+                using var timeout = new CancellationTokenSource(Deadline);
+                while (!received.ToString().Contains("\r\n\r\n", StringComparison.Ordinal)
+                    && await _client.GetStream().ReadAsync(buffer, 0, 1, timeout.Token) == 1)
+                    received.Append((char)buffer[0]);
+                return received.ToString();
+            }
+
+            // Reads HTTP/2 frames until the server closes and returns their types in order.
+            public async Task<byte[]> ReadFrameTypesToEndAsync()
+            {
+                var bytes = Encoding.Latin1.GetBytes(await ReadToEndAsync());
+                using var types = new MemoryStream();
+                for (var offset = 0; offset + 9 <= bytes.Length; offset += 9 + ((bytes[offset] << 16) | (bytes[offset + 1] << 8) | bytes[offset + 2]))
+                    types.WriteByte(bytes[offset + 3]);
+                return types.ToArray();
+            }
+
             public void Dispose() => _client.Dispose();
         }
 
