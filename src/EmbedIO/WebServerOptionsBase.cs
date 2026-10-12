@@ -52,6 +52,8 @@ namespace EmbedIO
         private int? _maximumConcurrentRequests;
         private int _requestQueueLimit;
         private TimeSpan? _requestTimeout;
+        private int? _maximumRequestHeaderBytes;
+        private int? _maximumRequestHeaderCount;
 
         /// <summary>
         /// Gets or sets the maximum number of request body bytes a handler may read, counted
@@ -65,6 +67,9 @@ namespace EmbedIO
         /// after either rejection, because the unread remainder of the body cannot be trusted.</para>
         /// <para>Zero permits only requests without body content. When compressed requests are
         /// enabled, <see cref="MaximumDecompressedRequestBodyBytes"/> separately limits decoded bytes.</para>
+        /// <para>While a limit is set, a request carrying <c>Expect: 100-continue</c> receives its
+        /// interim <c>100 Continue</c> response only when the handler first reads the body, so a
+        /// refused body is never invited.</para>
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
         /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
@@ -145,6 +150,52 @@ namespace EmbedIO
                 if (value.HasValue && (value.Value <= TimeSpan.Zero || value.Value.TotalMilliseconds > int.MaxValue))
                     throw new ArgumentOutOfRangeException(nameof(value));
                 _requestTimeout = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the maximum total size of a request's header fields. The default is null,
+        /// preserving existing behavior.
+        /// </summary>
+        /// <remarks>
+        /// <para>The size is the sum of each received header field's name and value lengths. The
+        /// HTTP/1 request line and HTTP/2 or HTTP/3 pseudo-header fields are not counted. A larger
+        /// request is rejected with HTTP 431 before any module runs.</para>
+        /// <para>Each protocol parser also keeps its fixed 32 KiB ceiling, which applies first;
+        /// this option can only lower the effective limit.</para>
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The value is less than one.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public int? MaximumRequestHeaderBytes
+        {
+            get => _maximumRequestHeaderBytes;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+                _maximumRequestHeaderBytes = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the maximum number of header fields a request may carry. The default is
+        /// null, preserving existing behavior.
+        /// </summary>
+        /// <remarks>
+        /// Every received field line counts, including repeated names and each HTTP/2 or HTTP/3
+        /// cookie field. Pseudo-header fields are not counted. A request with more fields is
+        /// rejected with HTTP 431 before any module runs.
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The value is less than one.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public int? MaximumRequestHeaderCount
+        {
+            get => _maximumRequestHeaderCount;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+                _maximumRequestHeaderCount = value;
             }
         }
 

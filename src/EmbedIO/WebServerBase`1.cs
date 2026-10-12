@@ -344,6 +344,7 @@ namespace EmbedIO
                                 context.CancellationToken = deadline.Token;
                             }
 
+                            CheckHeaderLimits(context);
                             admitted = await AdmitAsync(context).ConfigureAwait(false);
                             ApplyBodyLimit(context);
 
@@ -525,6 +526,31 @@ namespace EmbedIO
             catch (ObjectDisposedException) { }
         }
 
+        // Applies MaximumRequestHeaderBytes and MaximumRequestHeaderCount before admission,
+        // so an oversized request never takes a slot. The parsers count received field lines.
+        private void CheckHeaderLimits(IHttpContext context)
+        {
+            var maximumBytes = Options.MaximumRequestHeaderBytes;
+            var maximumCount = Options.MaximumRequestHeaderCount;
+            if ((maximumBytes == null && maximumCount == null)
+                || !(context.Request is EmbedIO.Internal.IRequestPolicyTarget request))
+                return;
+            if (request.HeaderFieldBytes > maximumBytes || request.HeaderFieldCount > maximumCount)
+            {
+                StopReuseForUnreadBody(context);
+                throw new HttpException(431, "Request header fields exceed the configured limit.");
+            }
+        }
+
+        // HTTP/1 keep-alive would drain a body the server refused to read; close instead.
+        // HTTP/2 and HTTP/3 reset the stream when the response completes before its body.
+        private static void StopReuseForUnreadBody(IHttpContext context)
+        {
+            if (context is Net.Internal.HttpListenerContext && context.Request.HasEntityBody
+                && !EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
+                context.Response.KeepAlive = false;
+        }
+
         // Applies MaximumRequestBodyBytes: a declared length over the limit is rejected
         // before dispatch, and the body stream counts what is actually read. HTTP/1 stops
         // connection reuse on either rejection, because keep-alive would otherwise drain
@@ -549,7 +575,7 @@ namespace EmbedIO
                 throw new HttpException(413, EmbedIO.Internal.LimitedRequestStream.TransferredLimitMessage);
             }
 
-            if (request is EmbedIO.Internal.IRequestBodyLimit limited)
+            if (request is EmbedIO.Internal.IRequestPolicyTarget limited)
                 limited.LimitBody(limit, StopReuse);
         }
 

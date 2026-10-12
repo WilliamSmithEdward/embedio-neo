@@ -141,7 +141,7 @@ namespace EmbedIO.Net.Internal
                 }
                 // Do not hold a connection lock while entering listener lifecycle
                 // synchronization: listener shutdown closes its connections.
-                await context.SendContinueAsync().ConfigureAwait(false);
+                await context.SendContinueAsync(listener.DeferContinue).ConfigureAwait(false);
                 listener.RegisterMultiplexedContext(context, this);
                 registered = true;
                 var closed = false;

@@ -18,7 +18,7 @@ namespace EmbedIO.Tests.Issues
     // Neo #136, first increment: opt-in server-wide request body limits, bounded
     // concurrent dispatch with a bounded queue, and a cooperative request deadline.
     // Every case drives the real TCP engine; HTTP/2 variants use prior-knowledge h2c.
-    public class Issue136_RequestLimits
+    public partial class Issue136_RequestLimits
     {
         private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(10);
 

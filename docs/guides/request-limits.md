@@ -1,13 +1,15 @@
 # Request limits, admission and deadlines
 
 [Neo #136](https://github.com/WilliamSmithEdward/embedio-neo/issues/136) asks for
-opt-in resource policies for HTTP requests. This guide covers the first increment:
-three server-wide options that bound request bodies, the number of requests handled
-at once, and how long a request may be handled. All three default to off, so a
+opt-in resource policies for HTTP requests. This guide covers the server-wide options
+delivered so far: limits on request headers and bodies, the number of requests handled
+at once, and how long a request may be handled. All of them default to off, so a
 server that sets none of them behaves exactly as before.
 
 | Option | Default | Rejection |
 | --- | --- | --- |
+| `MaximumRequestHeaderBytes` | null (no limit) | HTTP 431 |
+| `MaximumRequestHeaderCount` | null (no limit) | HTTP 431 |
 | `MaximumRequestBodyBytes` | null (unlimited) | HTTP 413 |
 | `MaximumConcurrentRequests` with `RequestQueueLimit` | null, queue 0 | HTTP 503 |
 | `RequestTimeout` | null (no deadline) | HTTP 503 |
@@ -23,6 +25,7 @@ alike; each HTTP/2 or HTTP/3 stream counts as one request.
 using var server = new WebServer(o => o
         .WithUrlPrefix("http://localhost:9696/")
         .WithMode(HttpListenerMode.EmbedIO)
+        .WithRequestHeaderLimits(8 * 1024, maximumCount: 64)  // 8 KiB, 64 fields
         .WithMaximumRequestBodyBytes(1024 * 1024)            // 1 MiB transferred
         .WithMaximumConcurrentRequests(64, queueLimit: 128)   // 64 at once, 128 waiting
         .WithRequestTimeout(TimeSpan.FromSeconds(30)))
@@ -32,6 +35,30 @@ using var server = new WebServer(o => o
 Rejections are ordinary HTTP exceptions, so `OnHttpException` renders them; the
 default handler produces an HTML error page and `HttpExceptionHandler.PlainTextResponse`
 a plain-text one.
+
+The checks run in this order before any module: header limits, then admission to a
+request slot, then the declared body length. A request with oversized headers is
+therefore refused without taking or waiting for a slot.
+
+## Request header fields
+
+`MaximumRequestHeaderBytes` bounds the summed name and value lengths of the request's
+header fields. `MaximumRequestHeaderCount` bounds how many field lines the request
+carries. A request over either limit is answered with 431 before any module runs.
+
+- Every received field line counts, including repeated names. HTTP/1.1 stores some
+  repeated fields as one value, but the limit sees each line.
+- The HTTP/1.1 request line and the HTTP/2 and HTTP/3 pseudo-header fields (`:method`,
+  `:path`, `:authority` and so on) are not counted. HTTP/1.1 `Host` is an ordinary
+  field and counts; in HTTP/2 and HTTP/3 the authority is a pseudo-header.
+- HTTP/2 and HTTP/3 clients may split `Cookie` into several fields. Each one counts,
+  although the server joins them into one `Cookie` header.
+- Each protocol parser keeps its fixed 32 KiB header ceiling, which applies first: an
+  HTTP/1.1 head over 32 KiB is refused by the connection with 431, and an HTTP/2 or
+  HTTP/3 header block over it fails at the protocol level. These options can only
+  lower the effective limit.
+- On HTTP/1.1, a refused request that carries a body is answered with
+  `Connection: close`, because its body is never read.
 
 ## Request body bytes
 
@@ -61,14 +88,31 @@ which for a chunked body has no end the server controls. HTTP/2 and HTTP/3 reset
 stream when the response completes before its body, so other streams on the same
 connection continue.
 
-**Known limitations.**
+### `100 Continue`
 
-- The engine sends `100 Continue` before the request reaches the server, so a client
-  that waits for it will start sending a body the server is about to refuse. The early
-  413 and connection close still apply.
-- An HTTP/1.1 client that is still sending when the server answers and closes often
-  sees a connection reset instead of the 413 response. That is TCP behavior when the
-  server closes with unread data; HTTP/2 clients receive the 413.
+A client that sends `Expect: 100-continue` waits for an interim `100 Continue` response
+before uploading its body. Without a body limit the engine sends it as soon as the
+request head arrives, as before. While `MaximumRequestBodyBytes` is set, the engine
+holds it back and sends it when a handler first reads the body:
+
+- A request refused before dispatch, whether by its declared length, its headers, a
+  full queue or a deadline, is answered without `100 Continue`, so the client never
+  uploads the refused body.
+- A handler that reads the body triggers `100 Continue` on its first read, and the
+  client starts sending immediately rather than after its own fallback timer.
+- On HTTP/1.1, a response that completes while `100 Continue` is still owed is sent
+  with `Connection: close`, and the connection closes instead of waiting for a body
+  the client was never invited to send. HTTP/2 and HTTP/3 reset the stream as for
+  any unread body.
+- A handler that starts its response before reading the body cannot send
+  `100 Continue` any more. The client sends its body only when its own expectation
+  timer expires (one second by default in .NET), and on HTTP/1.1 the connection is
+  not reused.
+
+**Known limitation.** A client that does not send `Expect: 100-continue` uploads at
+once. An HTTP/1.1 client that is still sending when the server answers 413 and
+closes often sees a connection reset instead of the response. That is TCP behavior
+when the server closes with unread data; HTTP/2 and HTTP/3 clients receive the 413.
 
 ## Concurrent requests and the queue
 
@@ -109,32 +153,43 @@ in the queue.
 
 ## Measured scenarios
 
-`test/EmbedIO.Tests/Issues/Issue136_RequestLimits.cs` drives the managed engine over
-real connections:
+`test/EmbedIO.Tests/Issues/Issue136_RequestLimits.cs` and
+`Issue136_RequestLimits.Headers.cs` drive the managed engine over real connections.
+HTTP/2 uses cleartext prior knowledge; HTTP/3 uses QUIC with a generated certificate
+and is skipped on hosts without QUIC support.
 
-| Scenario | HTTP/1.1 | HTTP/2 |
-| --- | --- | --- |
-| Declared length over the limit | 413 before dispatch, `Connection: close` | 413 before dispatch |
-| Unknown-length body over the limit | covered by the chunked case | 413, exact-limit body then accepted on the same connection |
-| Chunked body over the limit, client never finishes | 413 and close instead of draining | n/a |
-| Zero limit | bodyless GET 200, any body 413 | n/a |
-| Transferred and decoded limits together | independent, distinct messages | n/a |
-| Slots and queue full | 503, module never entered, slots return | same |
-| Queued request | waits, then served when a slot frees | n/a |
-| Failing handlers | slots returned after each 500 | n/a |
-| Two servers in one process | independent limits | n/a |
-| Deadline with a cooperative handler | 503, handler observed cancellation | same |
-| Handler ignoring the deadline | completes normally | n/a |
-| Deadline after commitment | body left unterminated | n/a |
-| Deadline while queued | 503, module never entered | n/a |
-| False Content-Length, stalled upload | deadline interrupts the read, 503 | n/a |
+| Scenario | HTTP/1.1 | HTTP/2 | HTTP/3 |
+| --- | --- | --- | --- |
+| Header bytes over the limit | 431 before dispatch, smaller request then served | same | same |
+| Header fields over the count | 431 | same | same |
+| Repeated field lines | each line counts | n/a | n/a |
+| Header limit with all slots busy | 431 without waiting for a slot | n/a | n/a |
+| Declared length over the limit | 413 before dispatch, `Connection: close` | 413 before dispatch | 413 |
+| Unknown-length body over the limit | covered by the chunked case | 413, exact-limit body then accepted on the same connection | same |
+| Chunked body over the limit, client never finishes | 413 and close instead of draining | n/a | n/a |
+| `Expect: 100-continue`, body refused | 413 without `100 Continue` | client never sends the body | same |
+| `Expect: 100-continue`, body read | `100 Continue` on first read | same | same |
+| `Expect: 100-continue`, body never read | response with `Connection: close`, then close | n/a | n/a |
+| `Expect: 100-continue` without a body limit | `100 Continue` before dispatch, unchanged | n/a | n/a |
+| Zero limit | bodyless GET 200, any body 413 | n/a | n/a |
+| Transferred and decoded limits together | independent, distinct messages | n/a | n/a |
+| Slots and queue full | 503, module never entered, slots return | same | 503 |
+| Queued request | waits, then served when a slot frees | n/a | n/a |
+| Failing handlers | slots returned after each 500 | n/a | n/a |
+| Two servers in one process | independent limits | n/a | n/a |
+| Deadline with a cooperative handler | 503, handler observed cancellation | same | 503 |
+| Handler ignoring the deadline | completes normally | n/a | n/a |
+| Deadline after commitment | body left unterminated | n/a | n/a |
+| Deadline while queued | 503, module never entered | n/a | n/a |
+| False Content-Length, stalled upload | deadline interrupts the read, 503 | n/a | n/a |
 
-HTTP/3 shares the dispatch path and the multiplexed request type with HTTP/2 but is
-not exercised by this fixture. `TestWebServer` locks its options in its constructor
-and has no way to set these limits.
+The .NET HTTP/1.1 client aborts its own connection after a refusal that arrives
+without `100 Continue`, so the HTTP/1.1 refusal case is checked on the wire with a raw
+socket. `TestWebServer` locks its options in its constructor and has no way to set
+these limits.
 
 ## Not in this increment
 
-The rest of #136 remains open: configurable header byte and field-count limits, active
-connection limits, connection-level header, body and idle deadlines, and per-route
-policies. HTTP/3-specific limits are tracked in #135.
+The rest of #136 remains open: active connection limits, connection-level header,
+body and idle deadlines, and per-route policies. HTTP/3-specific limits are tracked
+in #135.

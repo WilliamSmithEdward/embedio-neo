@@ -14,6 +14,10 @@ namespace EmbedIO.Net.Internal.Http2
         public string? Protocol { get; private set; }
         public long? ContentLength { get; private set; }
         public NameValueCollection Headers { get; } = new(StringComparer.OrdinalIgnoreCase);
+        // Received regular field lines and their summed name and value lengths. Each
+        // cookie field counts, although the fields are joined into one Cookie header.
+        public int FieldCount { get; private set; }
+        public long FieldBytes { get; private set; }
 
         internal static Http2RequestHeaders Parse(Http2HeaderBlock block, bool extendedConnectEnabled = false)
         {
@@ -44,6 +48,8 @@ namespace EmbedIO.Net.Internal.Http2
                 }
                 regular = true;
                 ValidateConnectionField(field, block.StreamId);
+                result.FieldCount++;
+                result.FieldBytes += field.Name.Length + field.Value.Length;
                 if (field.Name == "host")
                 {
                     if (host != null) throw Invalid(block.StreamId, "Duplicate Host.");

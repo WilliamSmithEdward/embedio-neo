@@ -43,6 +43,14 @@ namespace EmbedIO.Net.Internal
         internal HttpListener? Listener { get; set; }
         internal HttpListenerRequest HttpListenerRequest { get; }
         internal HttpListenerResponse HttpListenerResponse { get; }
+
+        // Sends a deferred 100 Continue unless a final response has already started.
+        internal async Task SendDeferredContinueAsync(CancellationToken cancellationToken)
+        {
+            if (HttpListenerResponse.HeadersSent) return;
+            try { await HttpListenerResponse.SendInformationalAsync(100, new WebHeaderCollection(), cancellationToken).ConfigureAwait(false); }
+            catch (InvalidOperationException) when (HttpListenerResponse.HeadersSent) { }
+        }
         public string Id { get; }
         public CancellationToken CancellationToken { get; set; }
         public long Age => _age.ElapsedTime;
