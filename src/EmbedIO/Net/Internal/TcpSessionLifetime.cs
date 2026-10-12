@@ -83,6 +83,25 @@ namespace EmbedIO.Net.Internal
             }
         }
 
+        // Rejection work keeps the existing lifetime owner and can only shorten
+        // its deadline. An earlier configured head deadline is never rearmed.
+        internal bool ShortenDeadline(int milliseconds)
+        {
+            if (milliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(milliseconds));
+            lock (_gate)
+            {
+                if (_state != 0) return false;
+                var now = Stopwatch.GetTimestamp();
+                if (_deadlineArmed && _deadline <= now) return false;
+                var limit = now + (long)(milliseconds * (double)Stopwatch.Frequency / 1000);
+                if (_deadlineArmed && _deadline <= limit) return true;
+                _deadline = limit;
+                _deadlineArmed = true;
+                DeadlineTimer.Change(milliseconds, Timeout.Infinite);
+                return true;
+            }
+        }
+
         internal bool TryRetire(bool deadlineOnly = false)
         {
             lock (_gate)

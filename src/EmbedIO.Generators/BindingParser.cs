@@ -154,8 +154,9 @@ namespace EmbedIO.Generators
             foreach (var (method, routeAttributes) in RoutedMethods(controller, location, ref failed))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var operationName = "__EmbedIO_" + propertyName + "_Operation" + Literals.Int(invokerCount);
                 var invokerName = "__EmbedIO_" + propertyName + "_Invoker" + Literals.Int(invokerCount++);
-                var invoker = GenerateInvoker(controller, method, routeAttributes, jsonContext, invokerName, location);
+                var invoker = GenerateInvoker(controller, method, routeAttributes, jsonContext, invokerName, operationName, location);
                 if (invoker is null)
                 {
                     failed = true;
@@ -168,7 +169,7 @@ namespace EmbedIO.Generators
                 {
                     routes.Add("new global::EmbedIO.WebApi.WebApiRouteBinding<" + controllerName + ">((global::EmbedIO.HttpVerbs)("
                         + Literals.Int(route.Verb) + "), " + Literals.String(route.Route) + ", " + (route.IsBaseRoute ? "true" : "false")
-                        + ", " + handlerId + ", " + invokerName + ")");
+                        + ", " + handlerId + ", " + invokerName + (_types.WebApiOperation is null ? string.Empty : ", " + operationName) + ")");
                 }
             }
 
@@ -321,12 +322,13 @@ namespace EmbedIO.Generators
             return new RouteInfo(verb, route, isBaseRoute);
         }
 
-        private string? GenerateInvoker(INamedTypeSymbol controller, IMethodSymbol method, List<RouteInfo> routes, INamedTypeSymbol? jsonContext, string invokerName, Location? fallback)
+        private string? GenerateInvoker(INamedTypeSymbol controller, IMethodSymbol method, List<RouteInfo> routes, INamedTypeSymbol? jsonContext, string invokerName, string operationName, Location? fallback)
         {
             var methodLocation = method.Locations.FirstOrDefault(l => l.IsInSource) ?? fallback;
             var setup = new StringBuilder();
             var body = new StringBuilder();
             var arguments = new List<string>();
+            var metadata = new List<string>();
             var awaits = false;
             var failed = false;
             var routeParameters = RouteParameterNames(routes);
@@ -345,12 +347,20 @@ namespace EmbedIO.Generators
 
                 body.Append("                ").Append(Literals.TypeName(parameter.Type)).Append(' ').Append(argument).Append(" = ").Append(binding).Append(";\n");
                 arguments.Add(argument);
+                if (_meta is not null)
+                    metadata.Add(ParameterExpression(parameter, _meta));
             }
 
             var call = CallExpression(controller, method, arguments);
             var work = WorkExpression(method, call, methodLocation);
             if (failed || work is null)
                 return null;
+
+            if (_types.WebApiOperation is not null)
+            {
+                _fields.Append("        private static readonly global::EmbedIO.WebApi.WebApiOperation ").Append(operationName)
+                    .Append(" = ").Append(OperationExpression(controller, method, metadata)).Append(";\n\n");
+            }
 
             var invoker = new StringBuilder();
             var invokerType = "global::EmbedIO.WebApi.WebApiRouteInvoker<" + Literals.TypeName(controller) + ">";
@@ -426,6 +436,7 @@ namespace EmbedIO.Generators
             out string? problem)
         {
             problem = null;
+            _meta = null;
             var type = parameter.Type;
             if (parameter.RefKind != RefKind.None)
             {
@@ -498,6 +509,7 @@ namespace EmbedIO.Generators
             var defaultValue = parameter.HasExplicitDefaultValue
                 ? Literals.Constant(parameter.ExplicitDefaultValue, type)
                 : "default(" + typeName + ")";
+            _meta = new ParameterMeta(ParameterSource.RouteOrDefault, name, false, null);
             if (!TryGetConverter(type, out var converter))
             {
                 if (!routeParameters.Contains(parameter.Name))
@@ -526,9 +538,13 @@ namespace EmbedIO.Generators
                     ? (many ? "QueryFieldStrings" : "QueryFieldString")
                     : (many ? "FormFieldStringsAsync" : "FormFieldStringAsync");
                 var call = Services + "." + helper + "(__controller, " + fieldName + ", " + badRequestIfMissing + ")";
+                _meta = new ParameterMeta(isQuery ? ParameterSource.Query : ParameterSource.Form, fieldName, badRequestIfMissing == "true", null);
                 return isQuery ? call : "await " + call + ".ConfigureAwait(false)";
             }
 
+            _meta = IsBuiltIn(attribute, _types.QueryData) ? new ParameterMeta(ParameterSource.QueryCollection, Literals.String(parameter.Name), false, null)
+                : IsBuiltIn(attribute, _types.FormData) ? new ParameterMeta(ParameterSource.FormCollection, Literals.String(parameter.Name), false, null)
+                : CustomMeta(attribute, parameter);
             var instance = CreateAttributeInstance(attribute, setup, argument, ref problem);
             return instance is null
                 ? null
@@ -580,6 +596,7 @@ namespace EmbedIO.Generators
                         + fieldName + ", " + badRequestIfMissing + ", " + name + ", " + converter + ")";
                 }
 
+                _meta = new ParameterMeta(isQuery ? ParameterSource.Query : ParameterSource.Form, fieldName, badRequestIfMissing == "true", null);
                 if (isQuery)
                     return call;
 
@@ -590,6 +607,8 @@ namespace EmbedIO.Generators
             awaits = true;
             if (IsBuiltIn(attribute, _types.JsonData))
             {
+                // With a context, an empty body fails deserialization; default options read it as the default value.
+                _meta = new ParameterMeta(ParameterSource.JsonBody, name, jsonContext is not null, null);
                 if (jsonContext is not null)
                     return "await " + Services + ".JsonDataAsync<" + typeName + ">(__controller, " + Literals.TypeName(jsonContext) + ".Default).ConfigureAwait(false)";
 
@@ -597,6 +616,7 @@ namespace EmbedIO.Generators
                 return "await " + Services + ".JsonDataAsync<" + typeName + ">(__controller, " + name + ").ConfigureAwait(false)";
             }
 
+            _meta = CustomMeta(attribute, parameter);
             var instance = CreateAttributeInstance(attribute, setup, argument, ref problem);
             return instance is null
                 ? null
@@ -852,8 +872,8 @@ namespace EmbedIO.Generators
             return names;
         }
 
-        private static bool IsBuiltIn(AttributeData attribute, INamedTypeSymbol builtIn)
-            => SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, builtIn);
+        private static bool IsBuiltIn(AttributeData attribute, INamedTypeSymbol? builtIn)
+            => builtIn is not null && SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, builtIn);
 
         // Type.IsAssignableFrom for the reference types request data interfaces use.
         private bool IsAssignable(ITypeSymbol source, ITypeSymbol destination)
@@ -962,6 +982,123 @@ namespace EmbedIO.Generators
             => attribute.ApplicationSyntaxReference is { } reference
                 ? reference.SyntaxTree.GetLocation(reference.Span)
                 : null;
+
+        // How the parameter that BindParameter last bound reaches the method, for operation metadata.
+        private ParameterMeta? _meta;
+
+        private static ParameterMeta CustomMeta(AttributeData attribute, IParameterSymbol parameter)
+            => new(ParameterSource.Custom, Literals.String(parameter.Name), false, Literals.String(attribute.AttributeClass?.ToDisplayString() ?? "(unknown)"));
+
+        private static string ParameterExpression(IParameterSymbol parameter, ParameterMeta meta)
+            => "new global::EmbedIO.WebApi.WebApiOperationParameter(" + Literals.String(parameter.Name) + ", " + meta.FieldName
+                + ", (global::EmbedIO.WebApi.WebApiParameterSource)(" + Literals.Int((int)meta.Source) + "), " + TypeOf(parameter.Type)
+                + ", " + (meta.Required ? "true" : "false") + ", " + EnumNames(parameter.Type) + ", " + (meta.CustomAttribute ?? "null") + ")";
+
+        private string OperationExpression(INamedTypeSymbol controller, IMethodSymbol method, List<string> parameters)
+        {
+            var attributes = InheritedAttributes(method);
+            var operation = attributes.FirstOrDefault(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, _types.OpenApiOperation));
+            var responses = attributes.Where(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, _types.OpenApiResponse))
+                .Select(AttributeExpression).Where(e => e is not null).ToArray();
+            var ignored = attributes.Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, _types.OpenApiIgnore));
+            for (var type = controller; type is not null && !ignored; type = type.BaseType)
+                ignored = type.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, _types.OpenApiIgnore));
+
+            return "new global::EmbedIO.WebApi.WebApiOperation(" + Literals.String(controller.Name) + ", " + Literals.String(method.Name) + ", "
+                + ResultTypeOf(method) + ", new global::EmbedIO.WebApi.WebApiOperationParameter[] { " + string.Join(", ", parameters) + " }, "
+                + (operation is null ? "null" : AttributeExpression(operation) ?? "null")
+                + ", new global::EmbedIO.OpenApi.OpenApiResponseAttribute[] { " + string.Join(", ", responses) + " }, "
+                + (ignored ? "true" : "false") + ")";
+        }
+
+        // The type the module's serializer receives, or null when the method returns no value.
+        private string ResultTypeOf(IMethodSymbol method)
+        {
+            if (method.ReturnsVoid || SymbolEqualityComparer.Default.Equals(method.ReturnType, _types.Task))
+                return "null";
+
+            return method.ReturnType is INamedTypeSymbol named && named.IsGenericType && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, _types.TaskOfT)
+                ? TypeOf(named.TypeArguments[0])
+                : TypeOf(method.ReturnType);
+        }
+
+        private static string TypeOf(ITypeSymbol type)
+            => type.TypeKind == TypeKind.Dynamic ? "typeof(object)" : "typeof(" + Literals.TypeName(type) + ")";
+
+        // Enumeration member names for a value converted from a string, captured so documents need no reflection.
+        private static string EnumNames(ITypeSymbol type)
+        {
+            if (type is IArrayTypeSymbol array)
+                type = array.ElementType;
+            if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
+                type = nullable.TypeArguments[0];
+            if (type.TypeKind != TypeKind.Enum)
+                return "null";
+
+            var names = type.GetMembers().OfType<IFieldSymbol>().Where(f => f.HasConstantValue).Select(f => Literals.String(f.Name));
+            return "new string[] { " + string.Join(", ", names) + " }";
+        }
+
+        // The attribute recreated from its constant arguments, or null if one cannot be expressed.
+        private static string? AttributeExpression(AttributeData attribute)
+        {
+            if (attribute.AttributeClass is null || attribute.AttributeConstructor is null)
+                return null;
+
+            var arguments = new List<string>();
+            for (var i = 0; i < attribute.ConstructorArguments.Length; i++)
+            {
+                var value = Literals.TypedConstant(attribute.ConstructorArguments[i]);
+                if (value is null)
+                    return null;
+                arguments.Add("(" + Literals.TypeName(attribute.AttributeConstructor.Parameters[i].Type) + ")" + value);
+            }
+
+            var initializers = new List<string>();
+            foreach (var named in attribute.NamedArguments)
+            {
+                var value = Literals.TypedConstant(named.Value);
+                if (value is null)
+                    return null;
+                initializers.Add(Literals.Identifier(named.Key) + " = " + value);
+            }
+
+            return "new " + Literals.TypeName(attribute.AttributeClass) + "(" + string.Join(", ", arguments) + ")"
+                + (initializers.Count > 0 ? " { " + string.Join(", ", initializers) + " }" : string.Empty);
+        }
+
+        // Matches EmbedIO.WebApi.WebApiParameterSource.
+        private enum ParameterSource
+        {
+            RouteOrDefault,
+            Query,
+            QueryCollection,
+            Form,
+            FormCollection,
+            JsonBody,
+            Custom,
+        }
+
+        private sealed class ParameterMeta
+        {
+            internal ParameterMeta(ParameterSource source, string fieldName, bool required, string? customAttribute)
+            {
+                Source = source;
+                FieldName = fieldName;
+                Required = required;
+                CustomAttribute = customAttribute;
+            }
+
+            internal ParameterSource Source { get; }
+
+            // A C# string literal.
+            internal string FieldName { get; }
+
+            internal bool Required { get; }
+
+            // A C# string literal, for custom request-data attributes.
+            internal string? CustomAttribute { get; }
+        }
 
         private sealed class RouteInfo
         {

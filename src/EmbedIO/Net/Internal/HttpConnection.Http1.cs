@@ -66,8 +66,7 @@ namespace EmbedIO.Net.Internal
                 {
                     var reply = _headReader.ErrorStatusCode == 414 ? UriTooLongResponse
                         : _headReader.ErrorStatusCode == 431 ? HeaderFieldsTooLargeResponse : BadRequestResponse;
-                    try { await Stream.WriteAsync(reply, 0, reply.Length).ConfigureAwait(false); }
-                    finally { CloseTransport(true); }
+                    await RejectHeadAsync(reply).ConfigureAwait(false);
                     return false;
                 }
                 var routes = _epl.CaptureRoutes();
@@ -97,6 +96,23 @@ namespace EmbedIO.Net.Internal
                 owner.RegisterContext(_context);
                 return true;
             }
+        }
+
+        private async Task RejectHeadAsync(byte[] reply)
+        {
+            try
+            {
+                // The lifetime timer bounds the write, send shutdown and raw
+                // discard together, without extending an earlier head deadline.
+                if (!_lifetime.ShortenDeadline(1000)) return;
+                var discard = _buffer ?? throw new ObjectDisposedException(nameof(HttpConnection));
+                await Stream.WriteAsync(reply, 0, reply.Length).ConfigureAwait(false);
+                await CompleteOutputAsync(CancellationToken.None, false).ConfigureAwait(false);
+                // Never interpret or dispatch the rejected request's remaining
+                // bytes. Staged close avoids a reset erasing its final response.
+                while (await Stream.ReadAsync(discard, 0, discard.Length).ConfigureAwait(false) != 0) { }
+            }
+            finally { CloseTransport(true); }
         }
 
 #if NET10_0_OR_GREATER

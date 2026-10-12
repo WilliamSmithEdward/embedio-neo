@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+- Write OpenAPI 3.1 documents from generated controller bindings, from Neo #139.
+  `OpenApiDocumentBuilder` describes each route's path, query and form parameters, JSON
+  body and response types from what the binding binds and returns, with schemas from the
+  JSON serializer options, and `WithOpenApiDocument` serves the result. `[OpenApiOperation]`,
+  `[OpenApiResponse]` and `[OpenApiIgnore]` add summaries, tags and declared responses or
+  leave routes out. Routes OpenAPI cannot express, such as base routes and `HttpVerbs.Any`,
+  are reported rather than approximated. Works in trimmed and Native AOT applications. See
+  [OpenAPI documents](docs/guides/openapi.md).
 - Complete Native AOT support from Neo #138. `EmbedIO.DependencyInjection` adds
   `WithControllerServices(binding)`, which activates a controller from request services
   through its generated binding without reflection, and its .NET 10 asset is now trim- and

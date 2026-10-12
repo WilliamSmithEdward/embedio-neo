@@ -150,7 +150,7 @@ jobs:
             export DOTNET_EnableCrashReportOnly=1
             export DOTNET_DbgMiniDumpName="$RUNNER_TEMP/embedio-crash-reports/crash.%p"
           fi
-          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 5340 --coverlet || status=$?
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 5381 --coverlet || status=$?
           if test "$status" = 0; then exit 0; fi
           # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
           # disposal returns (a deferred close on macOS; accepted connections on every
@@ -161,7 +161,7 @@ jobs:
           counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
           read -r total passed failed defect <<< "$counts"
           # The owner-approved exception cannot hide discovery loss.
-          test "$total" -ge 5340 || exit "$status"
+          test "$total" -ge 5381 || exit "$status"
           if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
             echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
             exit 0
@@ -201,6 +201,17 @@ jobs:
           dotnet restore test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj --locked-mode
           dotnet run --project test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj -c Release --no-restore -- --hpack-corpus TestResults/hpack-independent.jsonl TestResults/hpack-ours.jsonl
           "$RUNNER_TEMP/hpack-venv/bin/python" test/EmbedIO.Fuzz/hpack_interop.py verify TestResults/hpack-independent.jsonl TestResults/hpack-ours.jsonl
+      - name: Validate written OpenAPI documents independently
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/openapi-venv"
+          "$RUNNER_TEMP/openapi-venv/bin/python" -m pip --isolated install --require-hashes --only-binary=:all: -r .github/requirements/openapi.txt
+          # Issue139_OpenApi writes these during the test run above.
+          "$RUNNER_TEMP/openapi-venv/bin/openapi-spec-validator" \
+            test/EmbedIO.Tests/bin/Release/net10.0/openapi/people.json \
+            test/EmbedIO.Tests/bin/Release/net10.0/openapi/values.json
       - name: Verify independent QPACK codecs and feedback
         if: runner.os == 'Linux'
         shell: bash

@@ -54,6 +54,8 @@
       href: guides/telemetry.md
     - name: Trimming and Native AOT
       href: guides/trimming-and-native-aot.md
+    - name: OpenAPI documents (unreleased)
+      href: guides/openapi.md
     - name: HTTP/3 listener (unreleased)
       href: guides/http3.md
     - name: Command-line server
