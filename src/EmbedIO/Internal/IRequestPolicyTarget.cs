@@ -19,5 +19,9 @@ namespace EmbedIO.Internal
         // Must be applied before InputStream is first read. onTimeout runs once, on the
         // reading thread, when a read waits longer than the timeout for data.
         void TimeBodyReads(TimeSpan timeout, Action onTimeout);
+
+        // Must be applied before InputStream is first read. Counts the body bytes the
+        // application reads into the request's telemetry scope.
+        void CountBody(RequestTelemetry scope);
     }
 }

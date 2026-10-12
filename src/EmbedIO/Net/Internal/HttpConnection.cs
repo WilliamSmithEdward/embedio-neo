@@ -48,13 +48,18 @@ namespace EmbedIO.Net.Internal
         private readonly int? _http2IdleTimeout;
         // Connection slot claimed at admission, released once when the transport retires.
         private TcpConnectionPolicy? _slotOwner;
+        private EmbedIO.Internal.ServerTelemetry.LifetimeTelemetry? _connectionTelemetry;
         private HttpListener? _lastListener;
         private string? _errorMessage;
 
         public HttpConnection(Socket sock, EndPointListener epl) : this(sock, epl, epl.Listener.ConnectionPolicy.HeaderTimeoutMilliseconds) { }
         internal HttpConnection(Socket sock, EndPointListener epl, TcpConnectionPolicy? slotOwner)
             : this(sock, epl, epl.Listener.ConnectionPolicy.HeaderTimeoutMilliseconds)
-            => _slotOwner = slotOwner;
+        {
+            _slotOwner = slotOwner;
+            // Admitted connections are counted until their transport retires.
+            _connectionTelemetry = epl.Listener.Telemetry?.ConnectionStarted("tcp", LocalEndPoint.Port);
+        }
         internal HttpConnection(Socket sock, EndPointListener epl, int initialHeaderTimeout)
         {
             if (initialHeaderTimeout <= 0) throw new ArgumentOutOfRangeException(nameof(initialHeaderTimeout));
@@ -447,11 +452,16 @@ namespace EmbedIO.Net.Internal
             HttpListener[] protocolListeners;
             RequestStream? input;
             TcpConnectionPolicy? slotOwner;
+            EmbedIO.Internal.ServerTelemetry.LifetimeTelemetry? connectionTelemetry;
+            string protocolVersion;
             lock (_connectionSync)
             {
                 if (!_lifetime.TryRetire(deadlineOnly)) return;
                 slotOwner = _slotOwner;
                 _slotOwner = null;
+                connectionTelemetry = _connectionTelemetry;
+                _connectionTelemetry = null;
+                protocolVersion = _http2 ? "2" : "1.1";
                 _protocolSocket = null;
                 _protocolEnded = 1;
                 EndResponse(false);
@@ -465,7 +475,11 @@ namespace EmbedIO.Net.Internal
                 _headReader.Reset();
             }
             try { FinishRetirement(); }
-            finally { slotOwner?.Release(); }
+            finally
+            {
+                slotOwner?.Release();
+                connectionTelemetry?.Stop(protocolVersion);
+            }
 
             void FinishRetirement() => _lifetime.FinishRetirement(shutdown, input, () =>
             {

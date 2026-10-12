@@ -240,6 +240,7 @@ namespace EmbedIO
             {
                 tcp.DeferContinue = deferContinue;
                 tcp.ConnectionPolicy = connections;
+                tcp.Telemetry = Telemetry;
             }
 #if NET10_0_OR_GREATER
             else if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
@@ -248,8 +249,13 @@ namespace EmbedIO
                 {
                     combined.DeferContinue = deferContinue;
                     combined.ConnectionPolicy = connections;
+                    combined.Telemetry = Telemetry;
                 }
-                else if (listener is Net.Internal.Http3.Http3Listener quic) quic.DeferContinue = deferContinue;
+                else if (listener is Net.Internal.Http3.Http3Listener quic)
+                {
+                    quic.DeferContinue = deferContinue;
+                    quic.Telemetry = Telemetry;
+                }
             }
 #endif
 

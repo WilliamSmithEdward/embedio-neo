@@ -44,6 +44,8 @@ namespace EmbedIO.Net.Internal
         public string StatusDescription { get; set; } = "OK";
         public Version ProtocolVersion => _request.ProtocolVersion.Minor == 0 ? HttpVersion.Version10 : HttpVersion.Version11;
         public Stream OutputStream => _output ??= _transport.GetResponseStream();
+        // Body bytes sent so far; zero when no body was written.
+        internal long SentBodyBytes => _output?.SentBodyBytes ?? 0;
         public ICookieCollection Cookies => CookieCollection;
         internal CookieList? ExistingCookies => _cookies;
         internal CookieList CookieCollection { get => _cookies ??= new CookieList(); set => _cookies = value; }

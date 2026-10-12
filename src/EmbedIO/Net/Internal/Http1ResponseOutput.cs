@@ -27,6 +27,10 @@ namespace EmbedIO.Net.Internal
         private bool _headCaptured;
         private long? _bodyLimit;
         private long _committedBody;
+        private long _sentBody;
+
+        // Body bytes handed to the transport without a write failure, for telemetry.
+        internal long SentBodyBytes => Volatile.Read(ref _sentBody);
 
         internal ResponseStream(Stream transport, HttpListenerResponse response, bool ignoreErrors)
         {
@@ -172,7 +176,9 @@ namespace EmbedIO.Net.Internal
 
         private void CommitBody(int count)
         {
-            if (Volatile.Read(ref _failed) == 0 && _bodyLimit.HasValue) _committedBody += count;
+            if (Volatile.Read(ref _failed) != 0) return;
+            if (_bodyLimit.HasValue) _committedBody += count;
+            Volatile.Write(ref _sentBody, _sentBody + count);
         }
 
         private async ValueTask SubmitAsync(byte[] bytes, int offset, int count, bool synchronous, CancellationToken token)

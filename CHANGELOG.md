@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+- Extend the opt-in telemetry from Neo #137 with `http.server.request.body.size`,
+  `http.server.response.body.size`, `embedio.server.active_connections` and
+  `embedio.server.connection.duration` (TCP and QUIC), and
+  `embedio.server.active_websockets` and `embedio.server.websocket.duration`. The
+  telemetry guide records a measured allocation and latency comparison.
 - Add opt-in HTTP server telemetry from Neo #137: `WithTelemetry(serverName)` publishes
   the `EmbedIO.Server` meter (`http.server.request.duration`,
   `http.server.active_requests`) and activity source (server spans with W3C trace
