@@ -13,13 +13,16 @@ namespace EmbedIO.Net.Internal
 {
     // Application view of one parsed HTTP/1 head. Framing facts belong to the
     // head owner; body access borrows the existing session's request transport.
-    internal sealed class HttpListenerRequest : IHttpRequest
+    internal sealed class HttpListenerRequest : IHttpRequest, IRequestBodyLimit
     {
         private readonly HttpConnection _connection;
         private readonly Http1RequestHead _head = new();
         private CookieList? _cookies;
         private NameValueCollection? _queryString;
         private Stream? _inputStream;
+        private Stream? _limitedInput;
+        private long _bodyLimit = -1;
+        private Action? _onBodyLimitExceeded;
         private bool? _keepAlive;
 
         internal HttpListenerRequest(HttpListenerContext context) => _connection = context.Connection;
@@ -45,8 +48,18 @@ namespace EmbedIO.Net.Internal
         public long ContentLength64 => _head.Framed ? _head.Length
             : long.TryParse(Headers[HttpHeaderNames.ContentLength], out var length) ? length : 0;
         public bool HasEntityBody => _head.Chunked || ContentLength64 > 0;
-        public Stream InputStream => _inputStream ??= HasEntityBody
+        public Stream InputStream => _bodyLimit < 0 || !HasEntityBody ? RawInputStream
+            : _limitedInput ??= new LimitedRequestStream(RawInputStream, _bodyLimit, LimitedRequestStream.TransferredLimitMessage, _onBodyLimitExceeded);
+        // The transport body without the server's byte limit. Framing and handoff checks
+        // inspect this stream; applications read InputStream.
+        internal Stream RawInputStream => _inputStream ??= HasEntityBody
             ? _connection.GetRequestStream(ContentLength64, _head.Chunked) : Stream.Null;
+        void IRequestBodyLimit.LimitBody(long maximumBytes, Action onExceeded)
+        {
+            if (_limitedInput != null) throw new InvalidOperationException("The request body was already opened.");
+            _bodyLimit = maximumBytes;
+            _onBodyLimitExceeded = onExceeded;
+        }
         internal bool HasBodyFramingFailure => _inputStream is RequestStream body && body.HasBodyFramingFailure;
         internal bool IsBodyFramingError(Exception error) => _inputStream is RequestStream body && body.IsFramingError(error);
         internal bool RequiresContinue => ProtocolVersion >= HttpVersion.Version11 && HasEntityBody

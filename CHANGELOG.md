@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+- Add opt-in, server-wide request limits from Neo #136:
+  `MaximumRequestBodyBytes` (HTTP 413 on a declared or counted over-limit body,
+  with HTTP/1 connection reuse stopped), `MaximumConcurrentRequests` with a bounded
+  `RequestQueueLimit` (HTTP 503 when slots and queue are full) and `RequestTimeout`
+  (cooperative cancellation of the context token, HTTP 503 before commitment). All
+  default to off. See [request limits](docs/guides/request-limits.md).
 - Document and verify compressed controller response completion and encoded
   response lengths for upstream #394, plus its separate POST control, without
   changing production behavior. Historical Xamarin validation is not claimed.

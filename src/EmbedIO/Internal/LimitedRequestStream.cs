@@ -5,19 +5,32 @@ using System.Threading.Tasks;
 
 namespace EmbedIO.Internal
 {
-    // Counts decoded bytes and probes EOF at the exact configured boundary.
+    // Counts bytes read and probes EOF at the exact configured boundary. Used for the
+    // decoded-body limit and, wrapping the transferred stream, for the raw body limit.
     internal sealed class LimitedRequestStream : Stream
     {
+        internal const string DecodedLimitMessage = "Decompressed request body exceeds the configured byte limit.";
+        internal const string TransferredLimitMessage = "Request body exceeds the configured byte limit.";
         private readonly Stream _source;
         private readonly long _maximum;
+        private readonly string _message;
+        private Action? _onExceeded;
         private long _read;
         private int _reading;
         private int _disposed;
         private bool _exceeded;
+        // The two-argument form is the decoded-body limit; tests activate it by reflection.
         internal LimitedRequestStream(Stream source, long maximum)
+            : this(source, maximum, DecodedLimitMessage, null)
+        {
+        }
+
+        internal LimitedRequestStream(Stream source, long maximum, string message, Action? onExceeded)
         {
             _source = source;
             _maximum = maximum;
+            _message = message;
+            _onExceeded = onExceeded;
         }
         public override bool CanRead => Volatile.Read(ref _disposed) == 0;
         public override bool CanSeek => false;
@@ -33,7 +46,14 @@ namespace EmbedIO.Internal
         {
             if (Interlocked.CompareExchange(ref _reading, 1, 0) != 0) throw new InvalidOperationException("Concurrent request body reads.");
         }
-        private HttpException LimitError() => new(413, "Decompressed request body exceeds the configured byte limit.");
+        private HttpException LimitError() => new(413, _message);
+
+        // Runs once, on the reading thread, the first time the limit is crossed.
+        private void MarkExceeded()
+        {
+            _exceeded = true;
+            Interlocked.Exchange(ref _onExceeded, null)?.Invoke();
+        }
         private int Requested(int count)
         {
             var remaining = _maximum - _read;
@@ -41,7 +61,7 @@ namespace EmbedIO.Internal
         }
         private int Account(int count)
         {
-            if (count > _maximum - _read) { _exceeded = true; throw LimitError(); }
+            if (count > _maximum - _read) { MarkExceeded(); throw LimitError(); }
             _read += count;
             return count;
         }

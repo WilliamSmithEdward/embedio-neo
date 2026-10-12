@@ -210,7 +210,7 @@ namespace EmbedIO.Net.Internal
                 throw;
             }
             await Response.OutputStream.FlushAsync(cancellationToken).ConfigureAwait(false);
-            var stream = new Http2DuplexStream(Request.InputStream, Response.OutputStream);
+            var stream = new Http2DuplexStream(_exchange.InputStream, Response.OutputStream);
             var tunnel = new HttpTunnel(stream, ((MultiplexedResponse)Response).CloseAsync, protocol, useCapsules, error => control.AbortTunnelAsync(error, true));
             tunnel.AttachDatagrams((_exchange as IMultiplexedDatagramExchange)?.CreateDatagramChannel());
             lock (_sync)
@@ -231,7 +231,7 @@ namespace EmbedIO.Net.Internal
             // RFC 8441 / RFC 9220 replace the key/accept exchange with :protocol. Headers
             // and cookies still flow through the ordinary response serializer.
             Response.Headers.Remove(HttpHeaderNames.SecWebSocketAccept);
-            var transport = new Http2DuplexStream(Request.InputStream, Response.OutputStream);
+            var transport = new Http2DuplexStream(_exchange.InputStream, Response.OutputStream);
             try
             {
                 await Response.OutputStream.FlushAsync(cancellationToken).ConfigureAwait(false);

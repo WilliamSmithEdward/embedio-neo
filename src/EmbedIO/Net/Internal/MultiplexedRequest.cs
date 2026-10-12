@@ -9,7 +9,7 @@ using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
 {
-    internal sealed class MultiplexedRequest : IHttpRequest
+    internal sealed class MultiplexedRequest : IHttpRequest, EmbedIO.Internal.IRequestBodyLimit
     {
         private readonly IMultiplexedExchange _exchange;
         private CookieList? _cookies;
@@ -51,7 +51,18 @@ namespace EmbedIO.Net.Internal
         public HttpVerbs HttpVerb { get; }
         public Uri Url { get; }
         public bool HasEntityBody { get; }
-        public Stream InputStream => _exchange.InputStream;
+        public Stream InputStream => _bodyLimit < 0 || !HasEntityBody ? _exchange.InputStream
+            : _limitedInput ??= new EmbedIO.Internal.LimitedRequestStream(_exchange.InputStream, _bodyLimit,
+                EmbedIO.Internal.LimitedRequestStream.TransferredLimitMessage, _onBodyLimitExceeded);
+        private Stream? _limitedInput;
+        private long _bodyLimit = -1;
+        private Action? _onBodyLimitExceeded;
+        void EmbedIO.Internal.IRequestBodyLimit.LimitBody(long maximumBytes, Action onExceeded)
+        {
+            if (_limitedInput != null) throw new InvalidOperationException("The request body was already opened.");
+            _bodyLimit = maximumBytes;
+            _onBodyLimitExceeded = onExceeded;
+        }
         public Encoding ContentEncoding
         {
             get
