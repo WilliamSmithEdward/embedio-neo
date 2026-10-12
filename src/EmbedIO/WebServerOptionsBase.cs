@@ -54,6 +54,34 @@ namespace EmbedIO
         private TimeSpan? _requestTimeout;
         private int? _maximumRequestHeaderBytes;
         private int? _maximumRequestHeaderCount;
+        private TimeSpan? _requestBodyReadTimeout;
+
+        /// <summary>
+        /// Gets or sets how long one read of a request body may wait for data. The default is
+        /// null, preserving existing behavior without a read deadline.
+        /// </summary>
+        /// <remarks>
+        /// <para>The deadline applies to each read of <see cref="IHttpRequest.InputStream"/>
+        /// separately, so a slow but steady upload is not cut off; a client that stops sending is.
+        /// A read that misses it throws an <see cref="HttpException"/> with status 408, and every
+        /// later read of the same body does too. On HTTP/1.x the connection is not reused.</para>
+        /// <para>The deadline applies to every protocol and listener mode. <c>CONNECT</c> tunnels
+        /// are not request bodies and are not timed.</para>
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">The value is not positive or exceeds the
+        /// largest supported timer interval.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public TimeSpan? RequestBodyReadTimeout
+        {
+            get => _requestBodyReadTimeout;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                if (value.HasValue && (value.Value.TotalMilliseconds < 1 || value.Value.TotalMilliseconds > int.MaxValue))
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                _requestBodyReadTimeout = value;
+            }
+        }
 
         /// <summary>
         /// Gets or sets the maximum number of request body bytes a handler may read, counted

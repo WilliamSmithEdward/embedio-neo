@@ -295,5 +295,28 @@ namespace EmbedIO
             @this.StoreLocation = location;
             return @this;
         }
+
+        /// <summary>
+        /// Sets the TCP connection limits of the managed listener.
+        /// </summary>
+        /// <param name="this">The options instance.</param>
+        /// <param name="maximumConnections">The maximum open connections, or null for no limit.</param>
+        /// <param name="requestHeadersTimeout">The deadline for a new connection's first request head,
+        /// or null for the existing 90 seconds.</param>
+        /// <param name="keepAliveTimeout">The idle deadline between requests, or null for the existing
+        /// behavior.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">A limit is out of range.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static WebServerOptions WithConnectionLimits(this WebServerOptions @this, int? maximumConnections,
+            TimeSpan? requestHeadersTimeout = null, TimeSpan? keepAliveTimeout = null)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.MaximumConnections = maximumConnections;
+            @this.RequestHeadersTimeout = requestHeadersTimeout;
+            @this.KeepAliveTimeout = keepAliveTimeout;
+            return @this;
+        }
     }
 }

@@ -22,6 +22,8 @@ namespace EmbedIO.Net
         public bool IgnoreWriteExceptions { get; set; } = true;
         // Set by a server with body policies: 100 Continue waits for the first body read.
         internal bool DeferContinue { get; set; }
+        // Connection limits of the endpoints this listener opens. Set before Start.
+        internal Internal.TcpConnectionPolicy ConnectionPolicy { get; set; } = Internal.TcpConnectionPolicy.Default;
         /// <inheritdoc />
         public bool IsListening => _coordinator.IsListening;
         /// <inheritdoc />

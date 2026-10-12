@@ -117,10 +117,15 @@ namespace EmbedIO.Net.Internal
         private void ProcessAcceptedSocket(Socket peer)
         {
             HttpConnection? session = null;
+            var policy = Listener.ConnectionPolicy;
+            var slot = false;
             try
             {
                 if (Secure && Listener.Certificate == null) return;
-                session = _admission.CreatePending(peer, this);
+                // Over MaximumConnections the peer is closed without a response; no TLS or
+                // protocol work starts for it.
+                if (!(slot = policy.TryAcquire())) return;
+                session = _admission.CreatePending(peer, this, policy);
                 if (session == null) return;
                 try
                 {
@@ -138,7 +143,15 @@ namespace EmbedIO.Net.Internal
             }
             catch (Exception error) when (session == null && ExceptionPolicy.IsRecoverable(error))
             { /* No session acquired this peer; the finally releases it. */ }
-            finally { if (session == null) peer.Dispose(); }
+            finally
+            {
+                // A created session owns its slot and releases it when it retires.
+                if (session == null)
+                {
+                    if (slot) policy.Release();
+                    peer.Dispose();
+                }
+            }
         }
 
         private void AcceptBlocking()

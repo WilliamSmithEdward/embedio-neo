@@ -98,6 +98,7 @@ namespace EmbedIO.Net.Internal
                     if (_protocolSocket == null || _protocolEnded != 0) return;
                     _http2Dispatcher = new EmbedIO.Internal.BorrowedResource<Http2Dispatcher>(dispatcher);
                 }
+                using var idle = _http2IdleTimeout is int timeout ? new Http2IdleWatch(this, dispatcher, timeout) : null;
                 try { await dispatcher.RunAsync(DispatchHttp2Async, stop.Token).ConfigureAwait(false); }
                 finally { lock (_connectionSync) _http2Dispatcher = null; }
             }
@@ -106,6 +107,43 @@ namespace EmbedIO.Net.Internal
                 CloseTransport(true);
                 lock (_connectionSync) _http2Stop = null;
             }
+        }
+
+        // KeepAliveTimeout on HTTP/2: once no stream has been open for that long, the
+        // connection drains with GOAWAY. Streams the peer opened before it are completed.
+        private sealed class Http2IdleWatch : IDisposable
+        {
+            private readonly HttpConnection _connection;
+            private readonly Http2Dispatcher _dispatcher;
+            private readonly int _timeout;
+            private readonly Timer _timer;
+
+            internal Http2IdleWatch(HttpConnection connection, Http2Dispatcher dispatcher, int timeout)
+            {
+                _connection = connection;
+                _dispatcher = dispatcher;
+                _timeout = timeout;
+                _timer = new Timer(static state => ((Http2IdleWatch)(state ?? throw new InvalidOperationException("Missing idle watch."))).Check(),
+                    this, timeout, Timeout.Infinite);
+            }
+
+            private void Check()
+            {
+                lock (_connection._connectionSync)
+                {
+                    if (_connection._protocolEnded != 0 || _connection._draining
+                        || !ReferenceEquals(_connection._http2Dispatcher?.Value, _dispatcher)) return;
+                }
+                var since = _dispatcher.IdleSince;
+                var remaining = since is long idle
+                    ? _timeout - (long)((System.Diagnostics.Stopwatch.GetTimestamp() - idle) * 1000.0 / System.Diagnostics.Stopwatch.Frequency)
+                    : _timeout;
+                if (since != null && remaining <= 0) { _ = _connection.DrainAsync(); return; }
+                try { _ = _timer.Change(Math.Max(1, remaining), Timeout.Infinite); }
+                catch (ObjectDisposedException) { }
+            }
+
+            public void Dispose() => _timer.Dispose();
         }
 
         private async Task DispatchHttp2Async(Http2Exchange exchange)

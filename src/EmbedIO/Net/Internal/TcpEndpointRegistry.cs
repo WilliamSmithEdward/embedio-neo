@@ -64,6 +64,11 @@ namespace EmbedIO.Net.Internal
                                 }
                                 if (endpoint.Secure != prefix.Secure)
                                     throw new HttpListenerException(400, "HTTP and HTTPS cannot share a listening endpoint.");
+                                // An endpoint applies its opener's connection limits to every
+                                // connection, so listeners with their own limits do not share one.
+                                if (!ReferenceEquals(endpoint.Listener, owner)
+                                    && (!endpoint.Listener.ConnectionPolicy.IsDefault || !owner.ConnectionPolicy.IsDefault))
+                                    throw new HttpListenerException(400, "A listener with connection limits cannot share a listening endpoint with another listener.");
                                 if (endpoint.AddPrefix(prefix, owner)) changed.Add(endpoint);
                                 selected.Add(endpoint);
                                 activate.Add(endpoint);
