@@ -17,7 +17,7 @@ namespace EmbedIO.Net.Internal
 {
     // Independently authored request context. One cold transition claims
     // completion and detaches callbacks; transport and callback work is outside it.
-    internal sealed class HttpListenerContext : IHttpContextImpl, IHttpTunnelContext
+    internal sealed class HttpListenerContext : IHttpContextImpl, IHttpTunnelContext, ITelemetryContext
     {
         private readonly object _lifetime = new();
         private readonly TimeKeeper _age = new();
@@ -59,6 +59,7 @@ namespace EmbedIO.Net.Internal
         public IHttpRequest Request => HttpListenerRequest;
         public IHttpResponse Response => HttpListenerResponse;
         public RouteMatch Route { get; set; } = RouteMatch.None;
+        public EmbedIO.Internal.RequestTelemetry? Telemetry { get; set; }
         public string RequestedPath => Route.SubPath ?? string.Empty;
         public IPrincipal User { get; set; } = Auth.NoUser;
         public ISessionProxy Session { get; set; } = SessionProxy.None;

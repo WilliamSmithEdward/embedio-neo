@@ -55,6 +55,48 @@ namespace EmbedIO
         private int? _maximumRequestHeaderBytes;
         private int? _maximumRequestHeaderCount;
         private TimeSpan? _requestBodyReadTimeout;
+        private bool _enableTelemetry;
+        private string? _telemetryServerName;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the server emits HTTP metrics and server spans
+        /// through <c>System.Diagnostics</c>. The default is <see langword="false"/>.
+        /// </summary>
+        /// <remarks>
+        /// <para>When enabled, the server publishes the <c>EmbedIO.Server</c> meter and activity
+        /// source, following the OpenTelemetry HTTP semantic conventions. Nothing is exported
+        /// unless the application listens, for example through an OpenTelemetry SDK.</para>
+        /// <para>Telemetry requires the .NET 10 asset; a server built on the .NET Standard 2.0
+        /// asset throws <see cref="PlatformNotSupportedException"/> when it is enabled.</para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public bool EnableTelemetry
+        {
+            get => _enableTelemetry;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _enableTelemetry = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets a name that identifies this server in its metrics and spans, as the
+        /// <c>embedio.server.name</c> attribute. The default is null, which omits the attribute.
+        /// </summary>
+        /// <remarks>Use a fixed, low-cardinality name such as <c>"public-api"</c>; it becomes a metric dimension.</remarks>
+        /// <exception cref="ArgumentException">The value is empty or whitespace.</exception>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public string? TelemetryServerName
+        {
+            get => _telemetryServerName;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                if (value != null && value.Trim().Length == 0) throw new ArgumentException("The name cannot be empty.", nameof(value));
+                _telemetryServerName = value;
+            }
+        }
         private readonly System.Collections.Generic.List<RequestLimitPolicy> _routeRequestLimits = new();
         private System.Collections.ObjectModel.ReadOnlyCollection<RequestLimitPolicy>? _routeRequestLimitsView;
 
