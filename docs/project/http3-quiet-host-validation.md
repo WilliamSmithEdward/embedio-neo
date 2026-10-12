@@ -156,3 +156,19 @@ This is preparation, not a discarded baseline or automatic retry, and no accepta
 threshold or deadline changed. A fresh campaign is still required. The initial security
 report also exposed PowerShell syntax that a Bash-specific Semgrep rule could not
 parse; separate plain restore/build steps replace that block without a scanner waiver.
+
+### Windows residual CPU investigation
+
+Run [38261965704](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38261965704)
+passed both Linux arms. Its quiet baseline measured 0.010 busy CPUs and its contention
+baseline 0.008. Windows completed every request without errors or cap omissions, but
+several quiet phases exceeded the residual/background CPU ceiling. Its quiet baseline
+was 0.106 busy CPUs; higher residual activity during load is not sufficient to identify
+which external process or kernel work caused it. Windows quiet acceptance remains
+unconfirmed; the threshold is not relaxed.
+
+The next diagnostic captures per-process CPU time, names and instance identities on
+Windows, with inaccessible or exited processes explicitly recorded. It reads no
+process memory, command lines or credentials. This adds attribution evidence without
+excluding processes or changing the quiet-host gate. Artifact names include the run
+attempt so an explicit rerun cannot replace earlier failure evidence.

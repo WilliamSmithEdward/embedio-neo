@@ -80,6 +80,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=False)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     manifest = {"revision": revision, "githubRun": os.environ.get("GITHUB_RUN_ID"),
+                "githubRunAttempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
                 "runner": str(args.runner.resolve()),
                 "runnerSha256": hashlib.sha256(args.runner.read_bytes()).hexdigest(),
                 "cpus": os.cpu_count(), "commands": []}
@@ -97,6 +98,8 @@ def main():
                    "--mixed-rate", "32", "--large-rate", "2", "--mixed-connections", "4",
                    "--baseline-seconds", "15", "--max-baseline-busy-cpus", "0.5",
                    "--burn-threads", str(burn)]
+        if os.name == "nt":
+            command.append("--process-cpu-diagnostics")
         manifest["commands"].append(command)
         (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         with (args.output / (arm + ".log")).open("w") as log:
