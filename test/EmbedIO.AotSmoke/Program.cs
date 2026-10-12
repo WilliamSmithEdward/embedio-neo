@@ -15,7 +15,8 @@ namespace EmbedIO.AotSmoke;
 // Serves real HTTP from a Native AOT executable and checks it with a client in the same
 // process: typed JSON in and out, invalid input, a static file, a streamed response, the
 // reflection-based default JSON path failing with its explicit message, telemetry and
-// shutdown. Writes result.json to the folder given as the first argument. With
+// shutdown. ProtocolChecks then covers HTTPS, HTTP/1.1, HTTP/2, HTTP/3, WebSockets,
+// sessions and dependency injection. Writes result.json to the folder given as the first argument. With
 // --jit-comparison the same checks run on a JIT build for startup and size comparison,
 // where the reflection-based default JSON path is expected to work.
 internal static class Program
@@ -32,7 +33,7 @@ internal static class Program
         {
             await RunAsync(checks, started, jitComparison);
         }
-        catch (Exception error) when (error is InvalidOperationException or HttpRequestException or IOException or TimeoutException or OperationCanceledException or JsonException or HttpListenerException)
+        catch (Exception error) when (error is InvalidOperationException or HttpRequestException or IOException or TimeoutException or OperationCanceledException or JsonException or HttpListenerException or System.Net.WebSockets.WebSocketException or System.Security.Authentication.AuthenticationException)
         {
             failure = error.ToString();
         }
@@ -161,6 +162,8 @@ internal static class Program
         await running.WaitAsync(TimeSpan.FromSeconds(10));
         checks["shutdown"] = "completed";
         Directory.Delete(root, true);
+
+        await ProtocolChecks.RunAsync(checks);
     }
 
     private static int FreePort()
@@ -177,6 +180,7 @@ internal static class Program
 }
 
 [GeneratedControllerBinding(typeof(SmokeController), JsonSerializerContext = typeof(SmokeJson))]
+[GeneratedControllerBinding(typeof(GreetingController))]
 internal static partial class SmokeControllers;
 
 internal sealed class SmokeController : WebApiController
