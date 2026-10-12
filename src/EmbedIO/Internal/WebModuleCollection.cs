@@ -30,6 +30,9 @@ namespace EmbedIO.Internal
                 return;
 
             var requestedPath = context.RequestedPath;
+            // A module group dispatches with its own base route as the template prefix.
+            var telemetry = RequestTelemetry.Of(context);
+            var prefix = telemetry?.Route;
             foreach (var (name, module) in SafeNamedComponents)
             {
                 var routeMatch = module.MatchUrlPath(requestedPath);
@@ -37,6 +40,7 @@ namespace EmbedIO.Internal
                     continue;
 
                 $"[{context.Id}] Processing with {name}.".Debug(_logSource);
+                if (telemetry != null) telemetry.Route = RequestTelemetry.Combine(prefix, module.BaseRoute);
                 context.GetImplementation().Route = routeMatch;
                 await module.HandleRequestAsync(context).ConfigureAwait(false);
                 if (context.IsHandled)

@@ -126,11 +126,14 @@ namespace EmbedIO.Routing
 
             var contextData = GetContextData(context);
             var result = RouteResolutionResult.NoHandlerSelected;
+            var telemetry = Internal.RequestTelemetry.Of(context);
+            var moduleRoute = telemetry?.Route;
             foreach (var (data, handler) in _dataHandlerPairs)
             {
                 if (!MatchContextData(contextData, data))
                     continue;
 
+                if (telemetry != null) telemetry.Route = Internal.RequestTelemetry.Combine(moduleRoute, Route);
                 try
                 {
                     await handler(context, match).ConfigureAwait(false);
@@ -139,6 +142,7 @@ namespace EmbedIO.Routing
                 catch (RequestHandlerPassThroughException)
                 {
                     result = RouteResolutionResult.NoHandlerSuccessful;
+                    if (telemetry != null) telemetry.Route = moduleRoute;
                 }
             }
 

@@ -86,7 +86,10 @@ namespace EmbedIO
 
             configure?.Invoke(Options);
             Options.Lock();
+            if (Options.EnableTelemetry) _telemetry = EmbedIO.Internal.ServerTelemetry.Create(Options.TelemetryServerName);
         }
+
+        private readonly EmbedIO.Internal.ServerTelemetry? _telemetry;
 
         /// <summary>
         /// Finalizes an instance of the <see cref="WebServerBase{TOptions}"/> class.
@@ -305,17 +308,33 @@ namespace EmbedIO
         /// </summary>
         /// <param name="context">The context of the request.</param>
         /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
-        protected async Task DoHandleContextAsync(IHttpContextImpl context)
+        protected Task DoHandleContextAsync(IHttpContextImpl context)
         {
-            if (context is null) throw new System.NullReferenceException();
+            // Preserve the asynchronous failure the async method reported for a null context.
+            if (context is null) return Task.FromException(new System.NullReferenceException());
             // Context creation can precede admission by a keep-alive idle interval.
             // Measure this handling operation without changing the public Age clock.
             var requestStarted = Stopwatch.GetTimestamp();
-            var admitted = false;
             context.SupportCompressedRequests = Options.SupportCompressedRequests;
             RequestDecompressionPolicy.Associate(context, Options.DecompressionPolicy);
             context.MimeTypeProviders.Push(this);
+            // Without telemetry the request runs in a single state machine, as before.
+            return _telemetry is { } telemetry
+                ? HandleWithTelemetryAsync(context, requestStarted, telemetry)
+                : HandleContextCoreAsync(context, requestStarted, null);
+        }
 
+        // Telemetry spans the whole request, through response completion and context close.
+        private async Task HandleWithTelemetryAsync(IHttpContextImpl context, long requestStarted, EmbedIO.Internal.ServerTelemetry telemetry)
+        {
+            var scope = telemetry.Start(context);
+            try { await HandleContextCoreAsync(context, requestStarted, scope).ConfigureAwait(false); }
+            finally { telemetry.Stop(context, scope); }
+        }
+
+        private async Task HandleContextCoreAsync(IHttpContextImpl context, long requestStarted, EmbedIO.Internal.RequestTelemetry? telemetry)
+        {
+            var admitted = false;
             try
             {
                 $"[{context.Id}] {context.Request.SafeGetRemoteEndpointStr()}: {context.Request.HttpMethod} {context.Request.Url.PathAndQuery} - {context.Request.UserAgent}"
@@ -371,6 +390,10 @@ namespace EmbedIO
                                 deadline.Dispose();
                             }
                         }
+                    }
+                    catch (Exception exception) when (EmbedIO.Internal.ServerTelemetry.Observe(telemetry, exception))
+                    {
+                        throw; // Never reached: the filter only records the exception type.
                     }
                     // Exception filters run before the inner finally, so the deadline token is
                     // still current here; this clause must precede the general cancellation one.
@@ -462,6 +485,10 @@ namespace EmbedIO
                     $"[{context.Id}] {context.Request.HttpMethod} {context.Request.Url.AbsolutePath}: \"{statusCode} {statusDescription}\" sent in {handlingMilliseconds}ms ({(sendChunked ? "chunked" : contentLength.ToString(CultureInfo.InvariantCulture) + " bytes")})"
                         .Info(LogSource);
                 }
+            }
+            catch (Exception exception) when (EmbedIO.Internal.ServerTelemetry.ObserveCleanup(telemetry, exception))
+            {
+                throw; // Never reached: the filter only records the exception type.
             }
             catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
             {

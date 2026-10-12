@@ -17,7 +17,7 @@ using EmbedIO.WebSockets.Internal;
 
 namespace EmbedIO.Net.Internal
 {
-    internal sealed class MultiplexedContext : IHttpContextImpl, IHttpTunnelContext, IDisposable
+    internal sealed class MultiplexedContext : IHttpContextImpl, IHttpTunnelContext, IDisposable, EmbedIO.Internal.ITelemetryContext
     {
         private readonly object _sync = new();
         private readonly long _started = Stopwatch.GetTimestamp();
@@ -64,6 +64,7 @@ namespace EmbedIO.Net.Internal
         public IHttpRequest Request { get; }
         public IHttpResponse Response { get; }
         public RouteMatch Route { get; set; } = RouteMatch.None;
+        public EmbedIO.Internal.RequestTelemetry? Telemetry { get; set; }
         public string RequestedPath => Route.SubPath ?? string.Empty;
         public IPrincipal User { get; set; } = Auth.NoUser;
         public ISessionProxy Session { get; set; } = SessionProxy.None;
