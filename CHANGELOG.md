@@ -13,6 +13,10 @@
   application's `JsonSerializerIsReflectionEnabledByDefault`; those paths then throw
   `NotSupportedException` with guidance. A Native AOT host is published and exercised in
   CI on Windows and Linux. See [trimming and Native AOT](docs/guides/trimming-and-native-aot.md).
+- Release both cancellation registrations when an uncommitted HTTP/2 output write
+  is canceled and removed from the queue. An independent uncanceled token no longer
+  retains the dropped write and its retired connection. Wire ordering, cancellation
+  behavior and flow-control refunds are unchanged.
 - Extend the opt-in telemetry from Neo #137 with `http.server.request.body.size`,
   `http.server.response.body.size`, `embedio.server.active_connections` and
   `embedio.server.connection.duration` (TCP and QUIC), and

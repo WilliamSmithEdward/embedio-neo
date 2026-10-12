@@ -192,6 +192,8 @@ namespace EmbedIO.Net.Internal.Http2
             var previousBatch = 0;
             while (true)
             {
+                List<Http2OutputWrite>? canceled = null;
+                var finished = false;
                 lock (_outputSync)
                 {
                     // Take queued writes in order up to the batch bound. A write
@@ -201,7 +203,11 @@ namespace EmbedIO.Net.Internal.Http2
                     while (_queue.Count != 0 && (estimate == 0 || estimate + _queue.Peek().EstimatedBytes <= OutputBatchBytes))
                     {
                         var write = _queue.Dequeue();
-                        if (write.Canceled) continue;
+                        if (write.Canceled)
+                        {
+                            (canceled ??= new List<Http2OutputWrite>()).Add(write);
+                            continue;
+                        }
                         write.Committed = true;
                         estimate += write.EstimatedBytes;
                         _batch.Add(write);
@@ -211,9 +217,18 @@ namespace EmbedIO.Net.Internal.Http2
                         _flushing = false;
                         _deferFlush = previousBatch > 1;
                         _output.Release();
-                        break;
+                        finished = true;
                     }
                 }
+                // Canceled writes never join the committed batch, but their other
+                // token registration must not retain them after queue removal.
+                // Dispose outside the lock, including when only canceled work remained.
+                if (canceled != null)
+                {
+                    foreach (var write in canceled) write.Unregister();
+                    canceled.Clear();
+                }
+                if (finished) break;
                 // Committed writes ignore later request cancellation. Dispose
                 // outside the output lock: a running callback waits for that lock.
                 foreach (var write in _batch) write.Unregister();
