@@ -9,7 +9,7 @@ import contextlib
 import io
 import subprocess
 
-from teardown_cost_campaign import SCENARIOS, validate, validate_recovery, validate_sites, validate_lifetime, record_fault_failure, wait_with_progress
+from teardown_cost_campaign import SCENARIOS, validate, validate_recovery, validate_sites, validate_lifetime, record_fault_failure, wait_with_progress, UnsettledLifetimeObserver, validate_expected_core
 
 
 class CostCampaignTests(unittest.TestCase):
@@ -34,6 +34,8 @@ class CostCampaignTests(unittest.TestCase):
                 for number in (1, 2):
                     sample = copy.deepcopy(self.sample)
                     sample.update(scenario=scenario, engine=engine, round=number)
+                    sample["server"]["engine"] = "kestrel" if engine == "kestrel" else "embedio"
+                    sample["server"].setdefault("controlHardCleanup", False)
                     if engine == "kestrel" and sample["serverStop"]["connections"]["source"] == "server-meter":
                         sample["serverStop"]["connections"]["source"] = "kestrel-connection-delegate"
                         c = sample["serverStop"]["connections"]
@@ -57,6 +59,19 @@ class CostCampaignTests(unittest.TestCase):
 
     def test_server_observer_disagreement_rejected(self):
         self.sample["server"]["exceptionCensus"] = False
+        self.write()
+        with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
+
+    def test_wrong_actual_engine_rejected(self):
+        self.write()
+        p = next((self.root / "samples").glob("*/kestrel-r1.json"))
+        sample = json.loads(p.read_text())
+        sample["server"]["engine"] = "embedio"
+        p.write_text(json.dumps(sample))
+        with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
+
+    def test_experimental_cleanup_not_a_cost_baseline(self):
+        self.sample["server"]["controlHardCleanup"] = True
         self.write()
         with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
 
@@ -167,6 +182,20 @@ class WitnessEvidenceTests(unittest.TestCase):
         self.assertEqual(validate_lifetime(self.census, self.census["source"]), "balanced")
 
 
+class CoreIdentityTests(unittest.TestCase):
+    def test_matching_loaded_identity(self):
+        validate_expected_core({"assemblies": [{"name": "EmbedIO", "sha256": "a" * 64}]}, "A" * 64)
+
+    def test_unexpected_loaded_identity_rejected(self):
+        with self.assertRaises(ValueError):
+            validate_expected_core({"assemblies": [{"name": "EmbedIO", "sha256": "b" * 64}]}, "a" * 64)
+
+    def test_missing_or_ambiguous_core_rejected(self):
+        for assemblies in ([], [{"name": "EmbedIO", "sha256": "a" * 64}] * 2):
+            with self.assertRaises(ValueError):
+                validate_expected_core({"assemblies": assemblies}, "a" * 64)
+
+
 class SiteEvidenceTests(unittest.TestCase):
     def setUp(self):
         self.site = {"schema": "throw-site-v2", "counts": {"site": 1}, "types": {"IO": 1},
@@ -199,7 +228,7 @@ class RecoveryEvidenceTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / "recovery.json"
-        self.report = {"engine": "embedio", "server": {"exceptionCensus": True},
+        self.report = {"engine": "embedio", "server": {"exceptionCensus": True, "engine": "embedio", "controlHardCleanup": False},
                        "healthy-beforeClientExitCode": 0, "healthy-afterClientExitCode": 0, "verdict": [], "serverExitCode": 0, "serverKilled": False,
                        "healthy-beforeClientKilled": False, "healthy-afterClientKilled": False,
                        "phases": [{"phase": name, "client": {"requests": 1, "latencyCount": 1},
@@ -216,6 +245,14 @@ class RecoveryEvidenceTests(unittest.TestCase):
     def test_complete_recovery(self):
         self.check()
 
+    def test_wrong_recovery_engine_rejected(self):
+        self.report["server"]["engine"] = "kestrel"
+        with self.assertRaises(ValueError): self.check()
+
+    def test_experimental_cleanup_not_required_recovery(self):
+        self.report["server"]["controlHardCleanup"] = True
+        with self.assertRaises(ValueError): self.check()
+
     def test_unsuccessful_client_exit_rejected(self):
         self.report["healthy-beforeClientExitCode"] = 137
         with self.assertRaises(ValueError): self.check()
@@ -231,6 +268,17 @@ class RecoveryEvidenceTests(unittest.TestCase):
     def test_recovery_capture_overflow_rejected(self):
         self.report["stop"]["exceptionSites"]["overflow"] = 1
         with self.assertRaises(ValueError): self.check()
+
+    def test_false_settle_marker_without_pending_work_is_not_exempt(self):
+        self.report["stop"]["observerComplete"] = False
+        with self.assertRaises(ValueError) as caught: self.check()
+        self.assertNotIsInstance(caught.exception, UnsettledLifetimeObserver)
+
+    def test_malformed_unsettled_tuple_is_not_exempt(self):
+        self.report["stop"]["observerComplete"] = False
+        self.report["stop"]["connections"].update(closed=1, active=0)
+        with self.assertRaises(ValueError) as caught: self.check()
+        self.assertNotIsInstance(caught.exception, UnsettledLifetimeObserver)
 
     def test_unclosed_recovery_lifetime_rejected(self):
         self.report["stop"]["connections"]["closed"] = 1
@@ -295,9 +343,21 @@ class AcceptanceScopeTests(unittest.TestCase):
 
     def test_kestrel_failure_remains_explicit(self):
         failures, controls = [], []
-        record_fault_failure("kestrel", "fault-H3", ValueError("unfinished tasks"), failures, controls)
+        record_fault_failure("kestrel", "fault-H3", UnsettledLifetimeObserver("unfinished tasks"), failures, controls)
         self.assertEqual(failures, [])
         self.assertEqual(controls, [{"sample": "fault-H3", "status": "failed-control", "error": "unfinished tasks"}])
+
+    def test_unknown_kestrel_failure_remains_required(self):
+        failures, controls = [], []
+        record_fault_failure("kestrel", "fault-H3", ValueError("invalid evidence"), failures, controls)
+        self.assertEqual(failures, ["fault-H3: invalid evidence"])
+        self.assertEqual(controls, [])
+
+    def test_kestrel_timeout_remains_required(self):
+        failures, controls = [], []
+        record_fault_failure("kestrel", "fault-H3", subprocess.TimeoutExpired("child", 180), failures, controls)
+        self.assertTrue(failures)
+        self.assertEqual(controls, [])
 
     def test_unknown_engine_is_not_exempt(self):
         with self.assertRaises(ValueError):

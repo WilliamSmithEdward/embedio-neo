@@ -40,7 +40,11 @@ def validate_sites(site):
         raise ValueError("Atomic per-type throw-site census disagrees")
 
 
-def validate_lifetime(final, expected_source):
+class UnsettledLifetimeObserver(ValueError):
+    """The specifically tracked control gap, after other evidence has qualified."""
+
+
+def validate_count_tuples(final):
     for counts in (final, final.get("reportedMeter")):
         if counts is None: continue
         for key in ("opened", "closed", "active", "invalidMeasurements"):
@@ -49,6 +53,10 @@ def validate_lifetime(final, expected_source):
                 raise ValueError("Invalid lifetime count")
         if counts["closed"] > counts["opened"] or counts["active"] != counts["opened"] - counts["closed"]:
             raise ValueError("Contradictory lifetime count tuple")
+
+
+def validate_lifetime(final, expected_source):
+    validate_count_tuples(final)
     if not final["available"] or final["source"] != expected_source or final["invalidMeasurements"] or final["active"] != 0:
         raise ValueError("Server lifetime accounting unavailable or incomplete")
     if final["opened"] <= 0 or final["closed"] != final["opened"]:
@@ -69,7 +77,15 @@ def validate_lifetime(final, expected_source):
     return "balanced"
 
 
-def validate(root, census, duration, rounds):
+def validate_expected_core(identity, expected_hash):
+    if expected_hash is None:
+        return
+    assemblies = [a for a in identity["assemblies"] if a.get("name") == "EmbedIO"]
+    if len(assemblies) != 1 or assemblies[0]["sha256"].lower() != expected_hash.lower():
+        raise ValueError("Loaded core differs from campaign identity")
+
+
+def validate(root, census, duration, rounds, expected_core_hash=None):
     root = Path(root)
     if any((root / marker).exists() for marker in ("INVALID.txt", "ABORTED.txt")):
         raise ValueError("Campaign explicitly marked invalid or aborted")
@@ -87,6 +103,10 @@ def validate(root, census, duration, rounds):
         if not complete_sample(sample):
             raise ValueError("Failed sample or unsuccessful cleanup: " + str(path))
         identity = sample["server"]
+        validate_expected_core(identity, expected_core_hash)
+        expected_engine = "kestrel" if sample["engine"] == "kestrel" else "embedio"
+        if identity.get("engine") != expected_engine or identity.get("controlHardCleanup") is not False:
+            raise ValueError("Actual engine or diagnostic-cleanup mode differs from comparison")
         for assembly in identity["assemblies"]:
             value = assembly["sha256"]
             if not isinstance(value, str) or len(value) != 64 or any(c not in "0123456789abcdefABCDEF" for c in value):
@@ -153,8 +173,13 @@ def validate(root, census, duration, rounds):
 
 
 
-def validate_recovery(path):
+def validate_recovery(path, expected_core_hash=None, expected_engine=None):
     report = json.loads(Path(path).read_text())
+    validate_expected_core(report["server"], expected_core_hash)
+    if (report["server"].get("engine") != report["engine"]
+            or (expected_engine is not None and report["engine"] != expected_engine)
+            or report["server"].get("controlHardCleanup") is not False):
+        raise ValueError("Actual recovery engine or cleanup mode differs from campaign")
     if report.get("error") or report.get("stopError") or report["verdict"]:
         raise ValueError("Recovery reports a genuine failure")
     if report["serverExitCode"] != 0 or report["serverKilled"] is not False:
@@ -172,9 +197,20 @@ def validate_recovery(path):
     for site in snapshots:
         validate_sites(site)
     final = report["stop"]["connections"]
-    if report["stop"]["observerComplete"] is not True:
-        raise ValueError("Recovery lifetime observer did not settle")
     expected_source = "kestrel-connection-delegate" if report["engine"] == "kestrel" else "server-meter"
+    if report["stop"]["observerComplete"] is not True:
+        validate_count_tuples(final)
+        if (report["stop"]["observerComplete"] is not False or not final["available"]
+                or final["source"] != expected_source or final["invalidMeasurements"]
+                or not final["instrumentSeen"] or final["active"] <= 0):
+            raise ValueError("Invalid unsettled lifetime evidence")
+        if report["engine"] == "kestrel":
+            witness = final["reportedMeter"]
+            if witness["invalidMeasurements"] or witness["opened"] != final["opened"]:
+                raise ValueError("Invalid unsettled meter witness")
+            if witness["completed"] and witness["activeAtCompletion"] != witness["active"]:
+                raise ValueError("Contradictory unsettled meter witness")
+        raise UnsettledLifetimeObserver("Recovery lifetime observer did not settle")
     return validate_lifetime(final, expected_source)
 
 
@@ -205,9 +241,9 @@ def record_fault_failure(engine, name, error, failures, control_limitations):
     fault cases and both engines' normal profile/cost arms remain required.
     """
     message = name + ": " + str(error)
-    if engine == "kestrel":
+    if engine == "kestrel" and isinstance(error, UnsettledLifetimeObserver):
         control_limitations.append({"sample": name, "status": "failed-control", "error": str(error)})
-    elif engine == "embedio":
+    elif engine in ("embedio", "kestrel"):
         failures.append(message)
     else:
         raise ValueError("Unknown recovery engine")
@@ -233,6 +269,9 @@ def main():
                 "plannedSamples": {"profile": 28, "aa": 42, "cost": 42, "faultControls": 8}}
     copy = args.output / "identical-runner"
     shutil.copytree(args.runner.parent, copy)
+    manifest["aaRunnerHash"] = hashlib.sha256((copy / args.runner.name).read_bytes()).hexdigest()
+    if manifest["aaRunnerHash"] != manifest["runnerHash"]:
+        raise ValueError("A/A runner identity differs")
     manifest["aaCoreHash"] = hashlib.sha256((copy / "EmbedIO.dll").read_bytes()).hexdigest()
     if manifest["aaCoreHash"] != manifest["coreHash"]:
         raise ValueError("A/A core identity differs")
@@ -269,7 +308,7 @@ def main():
                     raise
                 if code:
                     raise subprocess.CalledProcessError(code, command)
-                rows = validate(args.output / arm, census, duration, rounds)
+                rows = validate(args.output / arm, census, duration, rounds, manifest["coreHash"])
                 (args.output / (arm + "-validated.json")).write_text(json.dumps(rows, indent=2))
             except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
                 failures.append(arm + ": " + str(error))
@@ -297,7 +336,7 @@ def main():
                         child.wait(timeout=10)
                         raise
                     if code: raise subprocess.CalledProcessError(code, command)
-                    validate_recovery(args.output / name / "recovery.json")
+                    validate_recovery(args.output / name / "recovery.json", manifest["coreHash"], engine)
                 except (ValueError, KeyError, StopIteration, OSError, subprocess.SubprocessError) as error:
                     record_fault_failure(engine, name, error, failures, control_limitations)
     elapsed = time.monotonic() - campaign_started

@@ -485,3 +485,11 @@ process group and waits at most ten seconds for exit. Unattempted phases/control
 overall expiry and incomplete required results are recorded as failures, never
 partial success. All original requests, rounds, quiet ceilings and acceptance
 checks remain required; the campaign does not retry unsuccessful measurements.
+
+
+Only the verified unfinished Kestrel lifetime observation qualifies for the
+separate control limitation after clean driver/healthy traffic, complete site
+capture and valid counter/witness evidence. Unknown failures, crashes, timeouts,
+invalid identities or malformed evidence remain blocking for either engine.
+The campaign enforces the actual child engine, disabled experimental hard cleanup,
+loaded core hash and byte-identical copied A/A runner, rather than trusting labels.
