@@ -91,6 +91,9 @@ namespace EmbedIO
 
         private readonly EmbedIO.Internal.ServerTelemetry? _telemetry;
 
+        // The server's telemetry, or null when it is disabled; listeners record connections with it.
+        internal EmbedIO.Internal.ServerTelemetry? Telemetry => _telemetry;
+
         /// <summary>
         /// Finalizes an instance of the <see cref="WebServerBase{TOptions}"/> class.
         /// </summary>
