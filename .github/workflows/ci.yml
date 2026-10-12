@@ -506,6 +506,14 @@ jobs:
         run: dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --verify-listener-allocations > TestResults/listener-allocation-verification.json
       - name: Verify POST body consumption over HTTP and HTTPS
         run: dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --verify-listener-http --request-body-bytes 65536 --body-consumption full > TestResults/listener-body-full-verification.json
+      - name: Repeat Windows POST connection churn in fresh processes
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for repetition in 1 2 3; do
+            dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --verify-listener-http --request-body-bytes 65536 --body-consumption full --connection-policy close --requests 100 > "TestResults/listener-body-churn-$repetition.json"
+          done
       - name: Verify partial POST bodies over HTTP and HTTPS
         run: dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --verify-listener-http --request-body-bytes 65536 --body-consumption partial > TestResults/listener-body-partial-verification.json
       - name: Verify unread POST bodies over HTTP and HTTPS

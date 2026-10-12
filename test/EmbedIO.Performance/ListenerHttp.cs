@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -40,6 +41,8 @@ internal static class ListenerHttp
         if (bodySize > 0 && consumption != "full" && (policy != "keep-alive" || 8L + (long)requests * rounds >= 100))
             throw new ArgumentException("Partial/unread POST workloads need keep-alive and fewer than 100 requests per worker including eight warmups; the existing forced-close lifetime can reset a request body still being sent.");
         var churnModes = policy == "keep-alive" ? new[] { false } : policy == "close" ? new[] { true } : new[] { false, true };
+        if (verify && OperatingSystem.IsWindows() && churnModes.Contains(true))
+            await ExclusiveLoopbackPorts.VerifyAsync().ConfigureAwait(false);
         var retain = verify || args.Contains("--retain-connections", StringComparer.Ordinal);
         EmbedIO.Diagnostics.Log.Source.Switch.Level = SourceLevels.Off;
         var results = new List<object>();
@@ -95,7 +98,13 @@ internal static class ListenerHttp
                         }));
                     using var stop = new CancellationTokenSource();
                     var running = server.RunAsync(stop.Token);
-                    using var client = secure ? HttpsSmoke.CreateClient(((certificate) ?? throw new System.InvalidOperationException("Expected a non-null test value."))) : new HttpClient();
+                    var handler = new SocketsHttpHandler();
+                    var exclusiveBinding = churn && OperatingSystem.IsWindows();
+                    using var clientPorts = exclusiveBinding ? new ExclusiveLoopbackPorts(new IPEndPoint(IPAddress.Parse(new Uri(url).Host), new Uri(url).Port)) : null;
+                    if (exclusiveBinding)
+                        handler.ConnectCallback = (context, token) => ConnectExclusiveLoopbackAsync(context, token,
+                            clientPorts ?? throw new InvalidOperationException("Missing client port owner."));
+                    using var client = secure ? HttpsSmoke.CreateClient(((certificate) ?? throw new System.InvalidOperationException("Expected a non-null test value.")), handler) : new HttpClient(handler);
                     client.DefaultRequestVersion = HttpVersion.Version11;
                     client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
                     client.Timeout = TimeSpan.FromSeconds(20);
@@ -154,10 +163,15 @@ internal static class ListenerHttp
                                 collections = Enumerable.Range(0, 3).Select(index => GC.CollectionCount(index) - gcBefore[index]).ToArray()
                             });
                         }
+                        if (verify && exclusiveBinding && ports.Count != workers * requests * rounds)
+                            throw new InvalidOperationException("Exclusive churn connections reused a measured client port.");
+                        if (verify && clientPorts != null && clientPorts.SelectedCount != workers * (8 + requests * rounds))
+                            throw new InvalidOperationException("Exclusive churn connections reused a warmup client port.");
                         phase = "shutdown verification";
                         stop.Cancel();
                         await running.WaitAsync(TimeSpan.FromSeconds(10));
                         client.Dispose();
+                        clientPorts?.Dispose();
                         server.Dispose();
                         await Task.Delay(100);
                         var openStreams = 0;
@@ -180,6 +194,10 @@ internal static class ListenerHttp
                         {
                             protocol = secure ? "https" : "http",
                             connectionPolicy = churn ? "close-per-request" : "keep-alive",
+                            clientSocketBinding = exclusiveBinding ? "exclusive-loopback" : "runtime-default",
+                            rejectedClientPortCandidates = clientPorts?.ReservationCount,
+                            preexistingClientTuplePorts = clientPorts?.PreexistingCount,
+                            openClientPortReservationsAfterShutdown = clientPorts?.OpenReservations,
                             workers,
                             payloadBytes = payload.Length,
                             responseChunkBytes = chunkSize,
@@ -196,8 +214,8 @@ internal static class ListenerHttp
                             processWorkingSetBytesAfterShutdown = process.WorkingSet64,
                             rows
                         });
-                        if (verify && (openStreams != 0 || activeTimers != 0))
-                            throw new InvalidOperationException($"Shutdown retained {openStreams} transport wrappers and {activeTimers} timers.");
+                        if (verify && (openStreams != 0 || activeTimers != 0 || clientPorts?.OpenReservations > 0))
+                            throw new InvalidOperationException($"Shutdown retained {openStreams} transport wrappers, {activeTimers} timers and {clientPorts?.OpenReservations ?? 0} client port reservations.");
                     }
                     catch (Exception error)
                     {
@@ -205,7 +223,7 @@ internal static class ListenerHttp
                             $"HTTP workload failed: url={url}, phase={phase}, closePerRequest={churn}, workers={workers}, "
                             + $"requestBodyBytes={bodySize}, bodyConsumption={consumption}, responseBytes={payloadSize}, "
                             + $"responseChunkBytes={chunkSize}, observedPeerPorts={ports.Count}, retainedConnections={connections.Count}, "
-                            + $"serverState={server.State}, serverTask={running.Status}, diagnostics={CaptureFailureState(connections)}.", error);
+                            + $"serverState={server.State}, serverTask={running.Status}, diagnostics={CaptureFailureState(connections)}, tcp={CaptureConnectingTcpState(new Uri(url).Port)}.", error);
                     }
                     finally
                     {
@@ -320,6 +338,39 @@ internal static class ListenerHttp
 
     private static double Percentile(double[] values, double percentile)
         => values[Math.Clamp((int)Math.Ceiling(values.Length * percentile) - 1, 0, values.Length - 1)];
+
+    private static string CaptureConnectingTcpState(int port)
+    {
+        try
+        {
+            var table = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections();
+            return JsonSerializer.Serialize(table.Where(row => row.RemoteEndPoint.Port == port
+                    && row.State == System.Net.NetworkInformation.TcpState.SynSent).Take(32)
+                .Select(row => new
+                {
+                    local = row.LocalEndPoint.ToString(),
+                    remote = row.RemoteEndPoint.ToString(),
+                    reverseTimeWait = table.Any(peer => peer.State == System.Net.NetworkInformation.TcpState.TimeWait
+                        && peer.LocalEndPoint.Equals(row.RemoteEndPoint) && peer.RemoteEndPoint.Equals(row.LocalEndPoint))
+                }));
+        }
+        catch (Exception error) when (error is System.Net.NetworkInformation.NetworkInformationException or PlatformNotSupportedException)
+        { return $"Snapshot unavailable: {error.GetType().FullName}"; }
+    }
+
+    private static async ValueTask<Stream> ConnectExclusiveLoopbackAsync(SocketsHttpConnectionContext context, CancellationToken token, ExclusiveLoopbackPorts ports)
+    {
+        var address = IPAddress.Parse(context.DnsEndPoint.Host);
+        if (!IPAddress.IsLoopback(address)) throw new InvalidOperationException("The workload requires a loopback endpoint.");
+        var socket = ports.Bind(address, token);
+        try
+        {
+            socket.NoDelay = true;
+            await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), token).ConfigureAwait(false);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch { socket.Dispose(); throw; }
+    }
 
     private static int Integer(string[] args, string option, int fallback)
     {
