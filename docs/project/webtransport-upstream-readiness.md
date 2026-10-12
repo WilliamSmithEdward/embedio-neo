@@ -38,7 +38,8 @@ The isolated local prototype was reconciled onto accepted engine source,
 including Linux module retention and request-timeout buffer ownership. Its
 experiments use pinned test-only native builds, independent peers, ordinary TLS
 trust plus certificate pins, and isolated loopback networking. All original
-failed runs remain preserved. The prototype is not part of this documentation PR.
+failed runs remain preserved. The prototype is not part of this documentation PR. These selections span
+local checkpoints and overlap; they are not one final-head acceptance run.
 
 | Experiment | Verified result | Limit |
 | --- | --- | --- |
