@@ -279,7 +279,9 @@ limits or application-retained data limits. Configure before startup. See
 Managed WebSocket framing and UTF-8 validation are stricter. Configure an
 appropriate MaxMessageSize explicitly; the managed engine now enforces it,
 including HTTP/2 extended CONNECT. Oversized messages close with 1009 and invalid
-text with 1007, with bounded close-handshake completion. Messages accepted before
+text with 1007. After the close frame write completes, acknowledgement waits up to
+the existing one-second timeout; this is not an overall transport-write deadline.
+Messages accepted before
 a peer close are delivered before disconnection. Outgoing frame sizes can differ
 from v1; clients must process WebSocket messages independently of frame boundaries.
 See [WebSocket migration details](migration.md#managed-websocket-framing-unreleased).
