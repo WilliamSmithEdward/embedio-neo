@@ -44,14 +44,16 @@ internal static class ServerHost
             {
                 key += ": " + e.Exception.Message;
                 var site = key + "\n" + (e.Exception.StackTrace ?? "<stack unavailable>");
+                bool first;
                 lock (siteGate)
                 {
+                    first = !exceptions.ContainsKey(key) && exceptions.Count < 64;
                     if (sites.TryGetValue(site, out var count)) sites[site] = count + 1;
                     else if (sites.Count < 512 && site.Length <= 16384) sites.Add(site, 1);
                     else siteOverflow++;
                     exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
                 }
-                if (!exceptions.ContainsKey(key) && exceptions.Count < 64) Console.Error.WriteLine("FIRST " + key + Environment.NewLine + e.Exception.StackTrace);
+                if (first) Console.Error.WriteLine("FIRST " + key + Environment.NewLine + e.Exception.StackTrace);
             }
             else exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
         };
