@@ -31,7 +31,9 @@ namespace EmbedIO.WebApi
         private static readonly MethodInfo SerializeResultAsyncMethod = typeof(WebApiModuleBase).GetMethod(nameof(SerializeResultAsync), BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new MissingMemberException("SerializeResultAsyncMethod");
 
         private readonly HashSet<Type> _controllerTypes = new HashSet<Type>();
-        private List<(HttpVerbs Verb, RouteMatcher Matcher, MethodInfo Method, Type ControllerType)>? _caseInsensitiveDeclarations;
+        // Method identifies the handler: a MethodInfo for reflection registration,
+        // a generated handler ID string for a WebApiControllerBinding.
+        private List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, Type ControllerType)>? _caseInsensitiveDeclarations;
         private bool _caseInsensitiveRoutes;
 
         /// <summary>
@@ -678,7 +680,7 @@ namespace EmbedIO.WebApi
         {
             var handlerCount = 0;
             var caseInsensitive = _caseInsensitiveRoutes;
-            var pending = caseInsensitive ? new List<(HttpVerbs Verb, RouteMatcher Matcher, MethodInfo Method, RouteHandlerCallback Handler)>() : null;
+            var pending = caseInsensitive ? new List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, RouteHandlerCallback Handler)>() : null;
             var methods = controllerType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
                 .Where(m => !m.ContainsGenericParameters);
 
@@ -695,18 +697,10 @@ namespace EmbedIO.WebApi
                     if (caseInsensitive)
                     {
                         var matcher = attribute.Matcher.WithCaseInsensitiveLiterals();
-                        _caseInsensitiveDeclarations ??= new List<(HttpVerbs, RouteMatcher, MethodInfo, Type)>();
-                        var declarations = _caseInsensitiveDeclarations.Concat((pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Select(p => (p.Verb, p.Matcher, p.Method, ControllerType: controllerType)));
-                        var overlapping = declarations.Where(d => (d.Verb == attribute.Verb || d.Verb == HttpVerbs.Any || attribute.Verb == HttpVerbs.Any)
-                            && matcher.HasCaseEquivalentTemplate(d.Matcher)).ToArray();
-                        if (overlapping.Any(d => d.Method != method || d.ControllerType != controllerType))
-                            throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' has conflicting handlers for overlapping HTTP verbs.");
-                        // Existing case-only aliases on one method need no duplicate handler.
-                        if (overlapping.Any(d => !d.Matcher.ParameterNames.SequenceEqual(matcher.ParameterNames)))
-                            throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' must retain the same parameter names.");
-                        if (overlapping.Any(d => d.Verb == attribute.Verb && d.Method == method))
+                        var staged = pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.");
+                        if (!AcceptCaseInsensitiveDeclaration(attribute.Verb, matcher, method, controllerType, staged.Select(p => (p.Verb, p.Matcher, p.Method))))
                             continue;
-                        (pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Add((attribute.Verb, matcher, method, CompileHandler(factoryExpression, method, matcher, contextFactory, release)));
+                        staged.Add((attribute.Verb, matcher, method, CompileHandler(factoryExpression, method, matcher, contextFactory, release)));
                     }
                     else
                     {
@@ -730,6 +724,211 @@ namespace EmbedIO.WebApi
 
             _controllerTypes.Add(controllerType);
             return true;
+        }
+
+        /// <summary>
+        /// <para>Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
+        /// constructing a new instance for each request.</para>
+        /// <para>The routes, parameter binding, result serialization and disposal behave as in
+        /// <see cref="RegisterControllerType{TController}()"/>, without reflection or runtime code generation.</para>
+        /// </summary>
+        /// <typeparam name="TController">The type of the controller.</typeparam>
+        /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
+        /// <exception cref="InvalidOperationException">The module's configuration is locked.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException">
+        /// <para><typeparamref name="TController"/> is already registered in this module.</para>
+        /// <para>- or -</para>
+        /// <para><paramref name="binding"/> contains no routes.</para>
+        /// </exception>
+        /// <seealso cref="GeneratedControllerBindingAttribute"/>
+        protected void RegisterControllerType<TController>(WebApiControllerBinding<TController> binding)
+            where TController : WebApiController, new()
+            => RegisterBinding(binding, static () => new TController());
+
+        /// <summary>
+        /// <para>Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
+        /// using a factory method.</para>
+        /// <para>The routes, parameter binding, result serialization and disposal behave as in
+        /// <see cref="RegisterControllerType{TController}(Func{TController})"/>, without reflection or runtime code generation.</para>
+        /// </summary>
+        /// <typeparam name="TController">The type of the controller.</typeparam>
+        /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
+        /// <param name="factory">The factory method used to construct instances of <typeparamref name="TController"/>.</param>
+        /// <exception cref="InvalidOperationException">The module's configuration is locked.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/> or <paramref name="factory"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException">
+        /// <para><typeparamref name="TController"/> is already registered in this module.</para>
+        /// <para>- or -</para>
+        /// <para><paramref name="binding"/> contains no routes.</para>
+        /// </exception>
+        /// <seealso cref="GeneratedControllerBindingAttribute"/>
+        protected void RegisterControllerType<TController>(WebApiControllerBinding<TController> binding, Func<TController> factory)
+            where TController : WebApiController
+            => RegisterBinding(binding, Validate.NotNull(nameof(factory), factory));
+
+        /// <summary>
+        /// Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
+        /// with request-aware activation and explicit ownership, as in
+        /// <see cref="RegisterControllerTypeWithContext(Type, Func{IHttpContext, WebApiController}, Func{IHttpContext, WebApiController, Task})"/>.
+        /// Release is awaited after the handler and serializer, including when either throws.
+        /// </summary>
+        /// <typeparam name="TController">The type of the controller.</typeparam>
+        /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
+        /// <param name="factory">Creates a fresh controller for the request.</param>
+        /// <param name="release">Releases the controller, or does nothing for container-owned instances.</param>
+        /// <exception cref="InvalidOperationException">The module's configuration is locked.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/>, <paramref name="factory"/>
+        /// or <paramref name="release"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException">
+        /// <para><typeparamref name="TController"/> is already registered in this module.</para>
+        /// <para>- or -</para>
+        /// <para><paramref name="binding"/> contains no routes.</para>
+        /// </exception>
+        /// <seealso cref="GeneratedControllerBindingAttribute"/>
+        protected void RegisterControllerTypeWithContext<TController>(
+            WebApiControllerBinding<TController> binding,
+            Func<IHttpContext, TController?> factory,
+            Func<IHttpContext, TController, Task> release)
+            where TController : WebApiController
+        {
+            Validate.NotNull(nameof(factory), factory);
+            Validate.NotNull(nameof(release), release);
+            RegisterBinding(binding, invoker => CreateBoundHandler(invoker, Serializer, factory, release));
+        }
+
+        private void RegisterBinding<TController>(WebApiControllerBinding<TController> binding, Func<TController> factory)
+            where TController : WebApiController
+            => RegisterBinding(binding, invoker => CreateBoundHandler(invoker, Serializer, factory));
+
+        private void RegisterBinding<TController>(
+            WebApiControllerBinding<TController> binding,
+            Func<WebApiRouteInvoker<TController>, RouteHandlerCallback> createHandler)
+            where TController : WebApiController
+        {
+            EnsureConfigurationNotLocked();
+            binding = Validate.NotNull(nameof(binding), binding);
+            var controllerType = ValidateControllerType(nameof(binding), typeof(TController), true);
+
+            // Parse every route before adding any handler, so an invalid route leaves the module unchanged.
+            var routes = binding.Routes;
+            if (routes.Count < 1)
+                throw new ArgumentException($"Type {controllerType.Name} contains no controller methods.", nameof(binding));
+
+            var matchers = new RouteMatcher[routes.Count];
+            for (var i = 0; i < routes.Count; i++)
+                matchers[i] = RouteMatcher.Parse(routes[i].Route, routes[i].IsBaseRoute);
+
+            if (!_caseInsensitiveRoutes)
+            {
+                for (var i = 0; i < routes.Count; i++)
+                    AddHandler(routes[i].Verb, matchers[i], createHandler(routes[i].CreateInvoker()));
+            }
+            else
+            {
+                var pending = new List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, RouteHandlerCallback Handler)>();
+                for (var i = 0; i < routes.Count; i++)
+                {
+                    var route = routes[i];
+                    var matcher = matchers[i].WithCaseInsensitiveLiterals();
+                    if (!AcceptCaseInsensitiveDeclaration(route.Verb, matcher, route.HandlerId, controllerType, pending.Select(p => (p.Verb, p.Matcher, p.Method))))
+                        continue;
+
+                    pending.Add((route.Verb, matcher, route.HandlerId, createHandler(route.CreateInvoker())));
+                }
+
+                foreach (var entry in pending)
+                {
+                    AddHandler(entry.Verb, entry.Matcher, entry.Handler);
+                    (_caseInsensitiveDeclarations ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Add((entry.Verb, entry.Matcher, entry.Method, controllerType));
+                }
+            }
+
+            _controllerTypes.Add(controllerType);
+        }
+
+        // Returns false for a case-only alias of a declaration of the same method and verb,
+        // which needs no handler of its own; throws for a conflicting declaration.
+        private bool AcceptCaseInsensitiveDeclaration(
+            HttpVerbs verb,
+            RouteMatcher matcher,
+            object method,
+            Type controllerType,
+            IEnumerable<(HttpVerbs Verb, RouteMatcher Matcher, object Method)> pending)
+        {
+            _caseInsensitiveDeclarations ??= new List<(HttpVerbs, RouteMatcher, object, Type)>();
+            var declarations = _caseInsensitiveDeclarations.Concat(pending.Select(p => (p.Verb, p.Matcher, p.Method, ControllerType: controllerType)));
+            var overlapping = declarations.Where(d => (d.Verb == verb || d.Verb == HttpVerbs.Any || verb == HttpVerbs.Any)
+                && matcher.HasCaseEquivalentTemplate(d.Matcher)).ToArray();
+            if (overlapping.Any(d => !Equals(d.Method, method) || d.ControllerType != controllerType))
+                throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' has conflicting handlers for overlapping HTTP verbs.");
+            if (overlapping.Any(d => !d.Matcher.ParameterNames.SequenceEqual(matcher.ParameterNames)))
+                throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' must retain the same parameter names.");
+
+            // Existing case-only aliases on one method need no duplicate handler.
+            return !overlapping.Any(d => d.Verb == verb && Equals(d.Method, method));
+        }
+
+        // The per-request sequence of a compiled reflection handler: create the controller,
+        // initialize it, call OnBeforeHandler, bind and call the method, then dispose a
+        // disposable controller as soon as the method has returned its task, before awaiting it.
+        private static RouteHandlerCallback CreateBoundHandler<TController>(
+            WebApiRouteInvoker<TController> invoker,
+            ResponseSerializerCallback serializer,
+            Func<TController> factory)
+            where TController : WebApiController
+        {
+            invoker = Validate.NotNull(nameof(invoker), invoker);
+            var disposable = typeof(IDisposable).IsAssignableFrom(typeof(TController));
+            return async (context, route) =>
+            {
+                var controller = factory();
+                controller.HttpContext = context;
+                controller.Route = route;
+                Task work;
+                try
+                {
+                    controller.PreProcessRequest();
+                    work = await invoker(controller, context, route, serializer).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (disposable)
+                        ((IDisposable)controller).Dispose();
+                }
+
+                await work.ConfigureAwait(false);
+            };
+        }
+
+        // The request-aware sequence of RegisterControllerTypeWithContext: release is awaited
+        // after binding, invocation and serialization, including failures.
+        private static RouteHandlerCallback CreateBoundHandler<TController>(
+            WebApiRouteInvoker<TController> invoker,
+            ResponseSerializerCallback serializer,
+            Func<IHttpContext, TController?> factory,
+            Func<IHttpContext, TController, Task> release)
+            where TController : WebApiController
+        {
+            invoker = Validate.NotNull(nameof(invoker), invoker);
+            return async (context, route) =>
+            {
+                var controller = factory(context)
+                    ?? throw new InvalidOperationException($"The factory for {typeof(TController).FullName} returned null.");
+
+                try
+                {
+                    controller.HttpContext = context;
+                    controller.Route = route;
+                    controller.PreProcessRequest();
+                    var work = await invoker(controller, context, route, serializer).ConfigureAwait(false);
+                    await work.ConfigureAwait(false);
+                }
+                finally
+                {
+                    await release(context, controller).ConfigureAwait(false);
+                }
+            };
         }
     }
 }
