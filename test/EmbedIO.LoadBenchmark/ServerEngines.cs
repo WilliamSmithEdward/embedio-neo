@@ -4,6 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 using EmbedIO;
 using EmbedIO.Actions;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -15,7 +16,7 @@ internal enum Protocol
     Http3,
 }
 
-internal sealed record ServerSettings(string Engine, Protocol Protocol, bool Tls, int Port, X509Certificate2? Certificate);
+internal sealed record ServerSettings(string Engine, Protocol Protocol, bool Tls, int Port, X509Certificate2? Certificate, bool ConnectionCensus = false, bool ControlHardCleanup = false);
 
 internal interface IBenchmarkServer : IAsyncDisposable
 {
@@ -70,6 +71,7 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
             .WithMode(mode)
             .WithoutAutoLoadCertificate()
             .WithoutAutoRegisterCertificate();
+        if (settings.ConnectionCensus) EnableCensus(options);
         if (settings.Tls) options = options.WithCertificate(settings.Certificate);
         _server = new WebServer(options)
             .PreferNoCompressionFor("text/*")
@@ -78,6 +80,10 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
         _running = _server.RunAsync(_stop.Token);
         return WaitForListeningAsync(_server, _running);
     }
+
+    // Keep the opt-in API out of the legacy-baseline startup JIT path.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void EnableCensus(WebServerOptions options) => options.EnableTelemetry = true;
 
     public async Task StopAsync()
     {
@@ -167,9 +173,36 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
     }
 }
 
-internal sealed class KestrelServer(ServerSettings settings) : IBenchmarkServer
+internal sealed class KestrelServer(ServerSettings settings, ConnectionLedger? census = null) : IBenchmarkServer
 {
     private WebApplication? _application;
+    private readonly object _ownedGate = new();
+    private readonly Dictionary<string, BaseConnectionContext> _owned = new(StringComparer.Ordinal);
+    private int _hardCleanupCalls;
+
+    internal object CleanupSnapshot()
+    {
+        lock (_ownedGate) return new { enabled = settings.ControlHardCleanup, retainedContexts = _owned.Count, abortCalls = _hardCleanupCalls };
+    }
+
+    private Task TrackOwned(BaseConnectionContext connection, Func<Task> next)
+    {
+        lock (_ownedGate) _owned.Add(connection.ConnectionId, connection);
+        var attached = false;
+        try
+        {
+            var task = next();
+            void Remove() { lock (_ownedGate) _owned.Remove(connection.ConnectionId); }
+            if (task.IsCompleted) Remove();
+            else _ = task.ContinueWith(_ => Remove(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            attached = true;
+            return task;
+        }
+        finally
+        {
+            if (!attached) { lock (_ownedGate) _owned.Remove(connection.ConnectionId); }
+        }
+    }
 
     public Task StartAsync()
     {
@@ -186,6 +219,23 @@ internal sealed class KestrelServer(ServerSettings settings) : IBenchmarkServer
                     Protocol.Http2 => HttpProtocols.Http2,
                     _ => HttpProtocols.Http1,
                 };
+                if (census is not null)
+                {
+                    census.ConfigureDelegates();
+                    if (settings.Protocol == Protocol.Http3)
+                        ((IMultiplexedConnectionBuilder)listen).Use(next => connection => census.TrackAsync(() => next(connection), connection.ConnectionId));
+                    else
+                        listen.Use(next => connection => census.TrackAsync(() => next(connection), connection.ConnectionId));
+                }
+
+                if (settings.ControlHardCleanup)
+                {
+                    if (settings.Protocol == Protocol.Http3)
+                        ((IMultiplexedConnectionBuilder)listen).Use(next => connection => TrackOwned(connection, () => next(connection)));
+                    else
+                        listen.Use(next => connection => TrackOwned(connection, () => next(connection)));
+                }
+
                 if (settings.Tls) listen.UseHttps(settings.Certificate ?? throw new InvalidOperationException("TLS requires a certificate."));
             });
         });
@@ -195,7 +245,21 @@ internal sealed class KestrelServer(ServerSettings settings) : IBenchmarkServer
         return _application.StartAsync();
     }
 
-    public Task StopAsync() => _application?.StopAsync() ?? Task.CompletedTask;
+    public Task StopAsync()
+    {
+        if (settings.ControlHardCleanup)
+        {
+            BaseConnectionContext[] active;
+            lock (_ownedGate) active = _owned.Values.ToArray();
+            foreach (var connection in active)
+            {
+                Interlocked.Increment(ref _hardCleanupCalls);
+                connection.Abort(new ConnectionAbortedException("Explicit diagnostic control hard cleanup."));
+            }
+        }
+
+        return _application?.StopAsync() ?? Task.CompletedTask;
+    }
 
     public async ValueTask DisposeAsync()
     {
