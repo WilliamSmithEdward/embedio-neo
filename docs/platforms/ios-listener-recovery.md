@@ -1,4 +1,4 @@
-# Listener replacement and iOS suspension
+﻿# Listener replacement and iOS suspension
 
 [Upstream #402](https://github.com/unosquare/embedio/issues/402) reported an iOS
 application that could not start a replacement server after suspension made its
@@ -92,6 +92,7 @@ The reporter's exact historical environment has not been tested. MAUI CI is
 [temporarily paused at the owner's direction](maui-https-validation.md#temporary-owner-requested-pause),
 and existing HTTPS smoke checks do not exercise background suspension. The fork
 [tracking issue #320](https://github.com/WilliamSmithEdward/embedio-neo/issues/320)
-remains open for this specific iOS validation gap; the desktop endpoint-lifetime
-claim is answered by the controls above. Credit to JRosanowski for the report and
+is closed as answered for the current endpoint-retirement concern at the owner's
+direction. The historical iOS sequence remains untested; reopen with a minimal
+reproduction if orderly foreground replacement still fails. Credit to JRosanowski for the report and
 to geoperez and rdeago for the original investigation and platform discussion.
