@@ -18,7 +18,8 @@ internal static class SystemCpu
         {
             var fields = File.ReadLines("/proc/stat").First().Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1)
                 .Select(value => long.Parse(value, CultureInfo.InvariantCulture)).ToArray();
-            var busy = fields.Sum() - fields[3] - fields[4];
+            // guest and guest_nice are already included in user and nice.
+            var busy = fields.Take(8).Sum() - fields[3] - fields[4];
             return TimeSpan.FromSeconds(busy / 100.0);
         }
 

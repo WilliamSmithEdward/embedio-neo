@@ -377,3 +377,31 @@ records on stderr and `--warmup-streams 4` for a reduced diagnostic warm-up; the
 native default remains 500 warm-up streams. Preserve failed or stalled attempts
 alongside subsequent runs. Missing native heap counters fail the measurement;
 unknown runtime-private fields produce an inconclusive count and nonzero exit.
+
+### Disposable quiet-host control
+
+`http3-quiet-host.yml` runs the issue #283 control on separate Windows and Linux
+GitHub runners. `scripts/http3_quiet_campaign.py` is restricted to those disposable
+runners because its contention arm spins one thread per logical processor. It must
+not be used for an all-core burn on a development workstation.
+
+Both engines receive identical paced churn and warm small/1 MiB requests, with
+alternating engine order and two rounds. The runtime handshake deadline is unchanged.
+`--max-baseline-busy-cpus 0.5` rejects a busy 15-second baseline before starting any
+load. The Linux quiet arm additionally requires mean background activity at most 0.5
+busy CPUs in every phase. Windows retains the same first-arm requests as an ambient
+repeat, with no quiet claim. Both contention arms must measure at least 80% host CPU.
+Every attempted request, cap omission, latency histogram, CPU timeline, error and
+server exit is checked. Missing data or a failed request fails the campaign rather
+than being retried or discarded. Loaded Linux MsQuic and runtime/core hashes are
+recorded. Original artifacts remain available even if acceptance fails.
+
+These are bounded controls, not an exhaustive endurance or public performance claim.
+
+William approved Linux as the qualified quiet reference and Windows as an explicitly
+ambient repeat, retaining every request and contention case. Windows verdicts state
+that quiet acceptance is not established; its rejected quiet attempts remain preserved.
+The Windows per-process census reads CPU counters only and reports inaccessible
+processes. Linux retains its passive baseline ceiling; Windows records ambient baseline
+activity without a quiet precondition. See the
+[control report](../../docs/project/http3-quiet-host-validation.md) for scope and evidence.
