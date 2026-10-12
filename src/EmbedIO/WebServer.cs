@@ -234,7 +234,7 @@ namespace EmbedIO
 
             // With a body limit, 100 Continue waits until a handler reads the body, so a
             // request refused before dispatch never invites its upload.
-            var deferContinue = Options.MaximumRequestBodyBytes.HasValue;
+            var deferContinue = Options.HasBodyLimits;
             var connections = Options.CreateConnectionPolicy();
             if (listener is Net.HttpListener tcp)
             {

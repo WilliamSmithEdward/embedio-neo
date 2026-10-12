@@ -183,6 +183,34 @@ namespace EmbedIO.Tests.Issues
             Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("100"));
         }
 
+        // A client that disconnects mid-upload must not keep its request slot or its
+        // connection slot: the next client is served with both limits at one.
+        [Test]
+        public async Task DisconnectedUploadReleasesItsRequestAndConnectionSlots()
+        {
+            var failed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            await using var host = Host.Start(o => o.WithMaximumConcurrentRequests(1, 1).WithConnectionLimits(1), async context =>
+            {
+                try { await Host.EchoLength(context); }
+                catch (Exception) when (context.Request.Url.AbsolutePath == "/upload") { failed.TrySetResult(true); throw; }
+            }, HttpVerbs.Any);
+            using (var socket = await host.ConnectAsync())
+            {
+                await socket.SendAsync($"POST /upload HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 1000\r\n\r\n0123456789");
+                await Task.Delay(200);
+            }
+            Assert.That(await failed.Task.WaitAsync(Deadline), Is.True, "The handler observed the disconnect.");
+            using var client = Host.CreateClient(1);
+            var stop = DateTime.UtcNow + Deadline;
+            string? body = null;
+            while (body == null && DateTime.UtcNow < stop)
+            {
+                try { body = await PostLengthAsync(client, host.Url, 10); }
+                catch (HttpRequestException) { await Task.Delay(20); }
+            }
+            Assert.That(body, Is.EqualTo("10"));
+        }
+
         // ---------------------------------------------------------------- helpers
 
         // Sends a prefix of its body and then waits until disposed.
