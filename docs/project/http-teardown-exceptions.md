@@ -319,6 +319,18 @@ directly as well as checking the PR head, checks and synthetic merge tree.
 
 The performance evidence remains specific to `c154244e` and its recorded binaries,
 not the newer combined core. Fresh ordinary correctness checks on the combined
-integration are required for this final documentation PR, retaining the 5,517
-discovery floor. No newest-core timing comparison or performance improvement is
+integration are required for this final documentation PR. The current accepted
+base `0773460e` also includes optional problem-details handling from PR #366,
+raising the unchanged discovery floor to 5,539. No newest-core timing comparison
+or performance improvement is
 claimed.
+
+The first combined validation, run 38319118404 on documentation head
+`a1ad06be` and base `367155e8`, retained all 5,517 reported cases. Windows
+and Linux passed; macOS had one initial HTTP/3 listener bind failure,
+`AddressAlreadyInUse`, before its drain assertions ran. Its failed result and
+artifacts remain preserved. Separate Linux startup controls subsequently
+confirmed that probing one UDP address family does not establish availability
+in the other family; this does not establish the natural macOS failure's cause.
+Refreshing the documentation onto the accepted base schedules fresh ordinary
+validation and is not a production port-allocation repair or a performance rerun.
