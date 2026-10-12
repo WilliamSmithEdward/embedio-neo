@@ -18,10 +18,10 @@ class CostCampaignTests(unittest.TestCase):
                        "derived": {"requestsPerSecond": 32, "serverCpuMicrosecondsPerRequest": 1,
                                    "serverAllocatedBytesPerRequest": 100, "openServerSocketsAfter": 0, "backgroundCpuSeconds": 0.1},
                        "connectionsBeforeLoad": {"closed": 1}, "connectionsBeforeStop": {"closed": 3},
-                       "serverStop": {"firstChanceExceptions": {"IO": 2}, "connections": {"opened": 3, "closed": 3, "active": 0, "instrumentSeen": True, "invalidMeasurements": 0}}}
+                       "serverStop": {"exceptionSites": {"counts": {}, "types": {}, "overflow": 0}, "firstChanceExceptions": {"IO": 2}, "connections": {"opened": 3, "closed": 3, "active": 0, "instrumentSeen": True, "invalidMeasurements": 0}}}
         for name in ("AtReady", "BeforeLoad", "AfterLoad", "BeforeStop"):
             self.sample["exceptions" + name] = {"IO": 1}
-            self.sample["exceptionSites" + name] = {"counts": {}, "overflow": 0}
+            self.sample["exceptionSites" + name] = {"counts": {}, "types": {}, "overflow": 0}
 
     def write(self):
         for scenario in SCENARIOS:
@@ -60,6 +60,11 @@ class CostCampaignTests(unittest.TestCase):
     def test_missing_matrix_rejected(self):
         self.write()
         next((self.root / "samples").glob("*/*.json")).unlink()
+        with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
+
+    def test_site_type_disagreement_rejected(self):
+        self.sample["exceptionSitesAfterLoad"]["types"] = {"IO": 1}
+        self.write()
         with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
 
     def test_invalid_marker_rejected(self):

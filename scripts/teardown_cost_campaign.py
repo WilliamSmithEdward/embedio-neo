@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 
-from summarize_teardown_exceptions import complete_sample, phases
+from summarize_teardown_exceptions import complete_sample, difference, phases
 
 SCENARIOS = ("h1-plain-small-c64-close100", "h1-tls-small-c64", "h2-plain-small-c64x1",
              "h2-tls-small-c64x1", "h2-tls-churn-c32", "h3-small-c64x1", "h3-churn-c16")
@@ -55,6 +55,7 @@ def validate(root, census, duration, rounds):
         if not math.isfinite(background) or background > 0.5:
             raise ValueError("Quiet sample contaminated: " + str(path))
         counts = phases(sample)
+        site_phases = None
         if census:
             final = sample["serverStop"]["connections"]
             if not final["instrumentSeen"] or final["invalidMeasurements"] or final["active"] != 0:
@@ -67,15 +68,26 @@ def validate(root, census, duration, rounds):
                 raise ValueError("Unexpected zero-request connection churn")
             before, after = sample["connectionsBeforeLoad"], sample["connectionsBeforeStop"]
             closed = after["closed"] - before["closed"]
+            points = []
             for point in ("AtReady", "BeforeLoad", "AfterLoad", "BeforeStop"):
                 site = sample["exceptionSites" + point]
                 if site is None or site["overflow"]:
                     raise ValueError("Exception site capture unavailable or overflowed")
+                if sum(site["counts"].values()) != sum(site["types"].values()):
+                    raise ValueError("Atomic exception site/type census disagrees")
+                points.append(site)
+            stop_site = sample["serverStop"]["exceptionSites"]
+            if stop_site["overflow"] or sum(stop_site["counts"].values()) != sum(stop_site["types"].values()):
+                raise ValueError("Incomplete stop site census")
+            points.append(stop_site)
+            names = ("warmup-and-settle", "load-and-client-close", "post-load-idle", "listener-stop")
+            site_phases = {name: difference(after["counts"], before["counts"]) for name, before, after in zip(names, points, points[1:])}
+            counts = {name: difference(after["types"], before["types"]) for name, before, after in zip(names, points, points[1:])}
         else:
             closed = None
         rows.append({"sample": str(path.relative_to(root)), "requests": client["requests"],
                      "clientConnectionsOpened": client["connectionsOpened"], "serverClosedDuringLoadAndIdle": closed,
-                     "exceptions": counts, "metrics": sample["derived"], "p99Milliseconds": client["p99Milliseconds"],
+                     "exceptions": counts, "stackSites": site_phases, "metrics": sample["derived"], "p99Milliseconds": client["p99Milliseconds"],
                      "backgroundBusyCpus": background})
     expected_engines = {"candidate", "kestrel"} if census else None
     engines = {key[1] for key in seen}
