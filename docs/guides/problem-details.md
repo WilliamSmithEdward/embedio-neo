@@ -1,6 +1,7 @@
 # Problem details for API errors
 
-By default EmbedIO answers errors with an HTML page. For an HTTP API, `ProblemDetailsHandler`
+By default Neo v2 answers unhandled application exceptions with an empty 500 and
+application-authored HTTP errors with the configured HTTP error handler. For an HTTP API, `ProblemDetailsHandler`
 answers them with [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details instead: a
 JSON object sent as `application/problem+json`, which API clients and tools understand.
 

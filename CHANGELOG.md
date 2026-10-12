@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Use an empty 500 response for unhandled application exceptions by default in Neo v2,
+  without exposing their type or message. Explicit HTML and diagnostic-header handlers,
+  custom handlers, logging and application-authored HTTP errors remain available. See
+  [Neo v1-to-v2 migration](docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500).
 - Add opt-in RFC 9457 problem details from Neo #143. `WithProblemDetails()`, or
   `ProblemDetailsHandler.ForHttpExceptions()` and `ForUnhandledExceptions()` on a server or module,
   answer errors with `application/problem+json`: HTTP exceptions and Web API binding failures keep
