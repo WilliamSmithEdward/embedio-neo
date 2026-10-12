@@ -33,7 +33,7 @@ using var server = new WebServer(o => o
     .WithUrlPrefix("http://127.0.0.1:8877/")
     .WithMode(HttpListenerMode.EmbedIO))
     .WithModule(new EchoModule());
-Console.WriteLine("WebSocket endpoint: ws://127.0.0.1:8877/socket; press Ctrl+C to stop.");
+Console.WriteLine(new Uri("ws://127.0.0.1:8877/socket"));
 await server.RunAsync(stop.Token);
 
 public sealed class EchoModule : WebSocketModule
@@ -104,3 +104,44 @@ Concurrent client/server shutdown with Windows' native HttpListener WebSockets a
 Two controlled managed ClientWebSocket cases lost early text/binary bursts before correction, while the equivalent native cases passed. A separate deterministic transport test showed messages being discarded before subscription. Four initialization-failure/cancellation cases also failed to clean up accepted contexts before the cleanup fix.
 
 Twenty-five focused cases cover late subscription, concurrent enqueue/dispatch handoff, real text/binary/fragmented/empty startup bursts, initialization-before-message ordering, ping/pong while initialization is pending, failed/cancelled initialization, client close/server stop, independent clients and asynchronous managed-message callback faults. The reported package version and exact original application were not supplied; this reproduces the mechanism rather than claiming that exact environment. Required Windows/Linux/macOS and security checks apply before merge.
+
+## Historical startup race and current-source verification
+
+[Upstream #401](https://github.com/unosquare/embedio/issues/401), reported by
+DennisKuypers, identified the accept-to-subscription interval in
+[revision 96f0fcc](https://github.com/unosquare/embedio/blob/96f0fcc72db73e45f61240e0134de9bf1348a212/src/EmbedIO/WebSockets/WebSocketModule.cs#L192).
+The initial application handshake was sent from Chrome 78 on Windows 10 to a
+.NET Framework 4.8 server. DennisKuypers reported a higher failure frequency under
+debug/load and suggested delaying server processing to expose the race. geoperez
+and rdeago investigated; a subsequently deleted account also pointed out that
+reception began before event subscription.
+
+The same managed startup mechanism was corrected through
+[Neo #103 / PR #104](https://github.com/WilliamSmithEdward/embedio-neo/pull/104).
+For this older report, 24 additional controls hold connection initialization open,
+observe that the transport has actually queued the complete application handshake
+and burst, and only then release initialization. They verify exactly-once,
+in-order callbacks and independent client transcripts for text/binary and fragmented
+messages over HTTP/1 and HTTP/2, with both plain TCP and TLS. All pass on unchanged
+current integration source; no new production fix, API or callback guarantee is
+introduced. The initialization gate is a test control, not a recommended client delay.
+
+The actual published **EmbedIO-Neo 1.0.3** package also passes all 12 HTTP/1 controls
+with each of its .NET 10 and .NET Standard 2.0 assemblies on a .NET 10 host. This
+verifies the package's fix for the controlled timing window; it does not reproduce
+the unavailable original application or Chrome 78/.NET Framework 4.8 environment.
+HTTP/2 startup controls apply to the unreleased integration engine, not that v1
+package. [Fork tracking issue #324](https://github.com/WilliamSmithEdward/embedio-neo/issues/324)
+records the attributed report, discussion, reactions and validation.
+
+### Current v2 listener selection
+
+The original discussion suggested `HttpListenerMode.Microsoft` as a comparison.
+That backend remains a historical v1 detail. William approved its removal from
+Neo v2: current integration applications use the replacement engine, and cannot
+select Microsoft mode. See the
+[v2 listener migration](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
+Do not restore the removed backend or add a client sleep to address startup loss.
+The complete server/client examples above use `HttpListenerMode.EmbedIO` and send
+immediately after connection. Application-level authentication or readiness can
+still be an intentional protocol choice, but is not required to repair this race.

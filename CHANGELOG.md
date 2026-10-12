@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+- Verify the historical WebSocket accept-to-subscription race against the
+  existing startup fix, including application handshake bursts over HTTP/1 and
+  HTTP/2 TCP/TLS. Extend the startup guide without changing production behavior.
 - Return read-only wrappers from `WebServerOptions.UrlPrefixes`,
   `IComponentCollection.WithSafeNames` and `IComponentCollection.Named`, evaluated
   in Neo #49. The views previously were the backing collections, so a cast could
