@@ -7,6 +7,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
 using System.Text.Json.Serialization.Metadata;
+using EmbedIO.Authentication;
+using EmbedIO.Routing;
 using EmbedIO.Utilities;
 using EmbedIO.WebApi;
 
@@ -21,8 +23,11 @@ namespace EmbedIO.OpenApi
     /// </summary>
     public sealed class OpenApiDocumentBuilder
     {
-        private readonly List<(string BasePath, IReadOnlyList<RouteDescription> Routes)> _controllers = new();
+        // Controllers and declared operations, in the order they were added.
+        private readonly List<Action<DocumentWriter>> _entries = new();
         private readonly List<(string Url, string? Description)> _servers = new();
+        private readonly List<(string Name, OpenApiSecurityScheme Scheme)> _schemes = new();
+        private readonly List<SecurityRequirement> _requirements = new();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="OpenApiDocumentBuilder"/> class.
@@ -74,8 +79,117 @@ namespace EmbedIO.OpenApi
             if (baseRoute.Length == 0 || baseRoute[0] != '/')
                 throw new ArgumentException("A base route must start with a slash.", nameof(baseRoute));
 
-            _controllers.Add((baseRoute.TrimEnd('/'), binding.Routes.Select(r => new RouteDescription(r.Verb, r.Route, r.IsBaseRoute, r.Operation)).ToArray()));
+            var basePath = baseRoute.TrimEnd('/');
+            var routes = binding.Routes.Select(r => new RouteDescription(r.Verb, r.Route, r.IsBaseRoute, r.Operation)).ToArray();
+            _entries.Add(writer =>
+            {
+                foreach (var route in routes)
+                    writer.AddRoute(basePath, route);
+            });
             return this;
+        }
+
+        /// <summary>
+        /// Adds an operation the builder cannot read from a generated binding, such as a route
+        /// handled by a <see cref="Routing.RoutingModule"/> or a custom module.
+        /// </summary>
+        /// <param name="verb">The HTTP method the route answers.</param>
+        /// <param name="route">The route's full path, including any module base route, such as
+        /// <c>/files/{name}</c>. Parameters use EmbedIO route syntax.</param>
+        /// <param name="describe">A callback that declares the operation's parameters, body and responses.</param>
+        /// <returns>This builder.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="route"/> or <paramref name="describe"/> is <see langword="null"/>.</exception>
+        public OpenApiDocumentBuilder AddOperation(HttpVerbs verb, string route, Action<OpenApiOperationDeclaration> describe)
+        {
+            route = Validate.NotNull(nameof(route), route);
+            describe = Validate.NotNull(nameof(describe), describe);
+            var declaration = new OpenApiOperationDeclaration();
+            describe(declaration);
+            _entries.Add(writer => writer.AddDeclared(verb, route, declaration));
+            return this;
+        }
+
+        /// <summary>Adds a security scheme to the document's components.</summary>
+        /// <param name="name">The scheme's name, which requirements refer to. Letters, digits,
+        /// <c>.</c>, <c>-</c> and <c>_</c> only.</param>
+        /// <param name="scheme">The scheme.</param>
+        /// <returns>This builder.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="scheme"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is not a valid component name, or is already used.</exception>
+        public OpenApiDocumentBuilder AddSecurityScheme(string name, OpenApiSecurityScheme scheme)
+        {
+            name = Validate.NotNull(nameof(name), name);
+            scheme = Validate.NotNull(nameof(scheme), scheme);
+            if (name.Length == 0 || name.Any(c => !(c is >= 'a' and <= 'z' || c is >= 'A' and <= 'Z' || c is >= '0' and <= '9' || c == '.' || c == '-' || c == '_')))
+                throw new ArgumentException("A component name contains only letters, digits, '.', '-' and '_'.", nameof(name));
+            if (_schemes.Any(s => s.Name == name))
+                throw new ArgumentException($"A security scheme named '{name}' is already added.", nameof(name));
+
+            _schemes.Add((name, scheme));
+            return this;
+        }
+
+        /// <summary>
+        /// Requires a security scheme for every operation whose path <paramref name="module"/> handles,
+        /// as decided by the module's own <see cref="IWebModule.MatchUrlPath"/>. Use the module that
+        /// authenticates the requests.
+        /// </summary>
+        /// <param name="module">The module that authenticates the requests. It protects only the requests
+        /// it sees, so it must come before the modules that serve them.</param>
+        /// <param name="schemeName">The name of a scheme added with <see cref="AddSecurityScheme"/>.</param>
+        /// <returns>This builder.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="module"/> or <paramref name="schemeName"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException">No scheme named <paramref name="schemeName"/> has been added.</exception>
+        public OpenApiDocumentBuilder RequireSecurity(IWebModule module, string schemeName)
+        {
+            module = Validate.NotNull(nameof(module), module);
+            _requirements.Add(new SecurityRequirement(path => module.MatchUrlPath(path) != null, KnownScheme(schemeName), false));
+            return this;
+        }
+
+        /// <summary>
+        /// Requires a security scheme for every operation under <paramref name="baseRoute"/>, matched
+        /// as an EmbedIO base route, for authentication that is not a module of its own.
+        /// </summary>
+        /// <param name="baseRoute">The base route, such as <c>/admin</c>.</param>
+        /// <param name="schemeName">The name of a scheme added with <see cref="AddSecurityScheme"/>.</param>
+        /// <returns>This builder.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="baseRoute"/> or <paramref name="schemeName"/> is <see langword="null"/>.</exception>
+        /// <exception cref="FormatException"><paramref name="baseRoute"/> is not a valid base route.</exception>
+        /// <exception cref="ArgumentException">No scheme named <paramref name="schemeName"/> has been added.</exception>
+        public OpenApiDocumentBuilder RequireSecurity(string baseRoute, string schemeName)
+        {
+            var matcher = RouteMatcher.Parse(Validate.NotNull(nameof(baseRoute), baseRoute), true);
+            _requirements.Add(new SecurityRequirement(path => matcher.Match(path) != null, KnownScheme(schemeName), false));
+            return this;
+        }
+
+        /// <summary>
+        /// Describes a Basic authentication module: adds a Basic scheme named <paramref name="schemeName"/>,
+        /// requires it for every operation whose path the module handles, and adds the 401 response
+        /// the module sends for missing or wrong credentials.
+        /// </summary>
+        /// <param name="schemeName">The name to give the scheme.</param>
+        /// <param name="module">The module. It protects only the requests it sees, so it must come
+        /// before the modules that serve them.</param>
+        /// <returns>This builder.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="schemeName"/> or <paramref name="module"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="schemeName"/> is not a valid component name, or is already used.</exception>
+        public OpenApiDocumentBuilder AddBasicAuthentication(string schemeName, BasicAuthenticationModuleBase module)
+        {
+            module = Validate.NotNull(nameof(module), module);
+            AddSecurityScheme(schemeName, OpenApiSecurityScheme.Basic($"HTTP Basic authentication, realm \"{module.Realm}\"."));
+            _requirements.Add(new SecurityRequirement(path => module.MatchUrlPath(path) != null, schemeName, true));
+            return this;
+        }
+
+        private string KnownScheme(string schemeName)
+        {
+            schemeName = Validate.NotNull(nameof(schemeName), schemeName);
+            if (!_schemes.Any(s => s.Name == schemeName))
+                throw new ArgumentException($"No security scheme named '{schemeName}' has been added.", nameof(schemeName));
+
+            return schemeName;
         }
 
         /// <summary>
@@ -121,15 +235,18 @@ namespace EmbedIO.OpenApi
                 root["servers"] = servers;
             }
 
-            foreach (var (basePath, routes) in _controllers)
-            {
-                foreach (var route in routes)
-                    writer.AddRoute(basePath, route);
-            }
+            foreach (var entry in _entries)
+                entry(writer);
 
+            writer.ApplySecurity(_requirements);
             root["paths"] = writer.Paths;
+            var components = new JsonObject();
             if (writer.Schemas.Count > 0)
-                root["components"] = new JsonObject { ["schemas"] = writer.Schemas };
+                components["schemas"] = writer.Schemas;
+            if (_schemes.Count > 0)
+                components["securitySchemes"] = new JsonObject(_schemes.Select(s => new KeyValuePair<string, JsonNode?>(s.Name, s.Scheme.ToJson())));
+            if (components.Count > 0)
+                root["components"] = components;
 
             if (writer.Tags.Count > 0)
                 root["tags"] = new JsonArray(writer.Tags.Select(t => (JsonNode)new JsonObject { ["name"] = t }).ToArray());
@@ -138,6 +255,24 @@ namespace EmbedIO.OpenApi
                 throw new OpenApiDocumentException(writer.Problems);
 
             return new OpenApiDocument(root, writer.Problems);
+        }
+
+        // Operations whose sample path Covers returns true for require Scheme.
+        private sealed class SecurityRequirement
+        {
+            internal SecurityRequirement(Func<string, bool> covers, string scheme, bool unauthorizedResponse)
+            {
+                Covers = covers;
+                Scheme = scheme;
+                UnauthorizedResponse = unauthorizedResponse;
+            }
+
+            internal Func<string, bool> Covers { get; }
+
+            internal string Scheme { get; }
+
+            // Whether the requirement's module answers missing or wrong credentials with 401.
+            internal bool UnauthorizedResponse { get; }
         }
 
         private sealed class RouteDescription
@@ -202,14 +337,114 @@ namespace EmbedIO.OpenApi
                     return;
                 }
 
-                if (route.Verb == HttpVerbs.Any)
+                var method = MethodName(route.Verb, where, " Add [OpenApiIgnore] to leave it out.");
+                if (method == null)
+                    return;
+
+                var (path, routeParameters) = PathTemplate(basePath, route.Route);
+                if (IsTaken(path, method, where))
+                    return;
+
+                // Only an operation described without problems enters the document.
+                var problemCount = Problems.Count;
+                var described = Describe(operation, routeParameters, where);
+                if (Problems.Count == problemCount)
+                    Insert(path, method, described);
+            }
+
+            internal void AddDeclared(HttpVerbs verb, string route, OpenApiOperationDeclaration declaration)
+            {
+                var where = $"{verb.ToString().ToUpperInvariant()} {route} (declared)";
+                var method = MethodName(verb, where, string.Empty);
+                if (method == null)
+                    return;
+
+                if (!RouteMatcher.TryParse(route, false, out var matcher) || matcher == null)
                 {
-                    Problems.Add(where + ": HttpVerbs.Any answers every method, which OpenAPI operations cannot express. Add [OpenApiIgnore] to leave it out.");
+                    Problems.Add(where + ": the route is not a valid EmbedIO route.");
                     return;
                 }
 
-                var (path, routeParameters) = PathTemplate(basePath, route.Route);
-                var method = route.Verb switch
+                var (path, routeParameters) = PathTemplate(string.Empty, matcher.Route);
+                if (IsTaken(path, method, where))
+                    return;
+
+                var problemCount = Problems.Count;
+                var described = DescribeDeclared(declaration, routeParameters, where);
+                if (Problems.Count == problemCount)
+                    Insert(path, method, described);
+            }
+
+            // Every operation whose path a requirement covers needs that requirement's scheme.
+            // Requirements that cover the same operation all apply, as their modules all run.
+            internal void ApplySecurity(IReadOnlyList<SecurityRequirement> requirements)
+            {
+                if (requirements.Count == 0)
+                    return;
+
+                foreach (var pathItem in Paths)
+                {
+                    var sample = SamplePath(pathItem.Key);
+                    var applying = requirements.Where(r => r.Covers(sample)).ToArray();
+                    if (applying.Length == 0)
+                        continue;
+
+                    foreach (var operation in ((JsonObject?)pathItem.Value ?? new JsonObject()).Select(o => o.Value).OfType<JsonObject>())
+                    {
+                        var schemes = new JsonObject();
+                        foreach (var requirement in applying)
+                        {
+                            if (!schemes.ContainsKey(requirement.Scheme))
+                                schemes[requirement.Scheme] = new JsonArray();
+                        }
+
+                        operation["security"] = new JsonArray((JsonNode)schemes);
+                        if (applying.Any(r => r.UnauthorizedResponse) && operation["responses"] is JsonObject responses && !responses.ContainsKey("401"))
+                        {
+                            responses["401"] = new JsonObject
+                            {
+                                ["description"] = "The credentials are missing or wrong.",
+                                ["headers"] = new JsonObject { [HttpHeaderNames.WWWAuthenticate] = new JsonObject { ["schema"] = StringSchema() } },
+                            };
+                        }
+                    }
+                }
+            }
+
+            // A concrete path the template stands for, to match against a module's base route.
+            private static string SamplePath(string template)
+            {
+                var sample = new StringBuilder(template.Length);
+                var inParameter = false;
+                foreach (var c in template)
+                {
+                    if (c == '{')
+                    {
+                        inParameter = true;
+                        sample.Append('x');
+                    }
+                    else if (c == '}')
+                    {
+                        inParameter = false;
+                    }
+                    else if (!inParameter)
+                    {
+                        sample.Append(c);
+                    }
+                }
+
+                return sample.ToString();
+            }
+
+            private string? MethodName(HttpVerbs verb, string where, string remedy)
+            {
+                if (verb == HttpVerbs.Any)
+                {
+                    Problems.Add(where + ": HttpVerbs.Any answers every method, which OpenAPI operations cannot express." + remedy);
+                    return null;
+                }
+
+                var method = verb switch
                 {
                     HttpVerbs.Delete => "delete",
                     HttpVerbs.Get => "get",
@@ -221,25 +456,23 @@ namespace EmbedIO.OpenApi
                     _ => null,
                 };
                 if (method == null)
-                {
-                    Problems.Add(where + ": OpenAPI 3.1 has no operation for the " + route.Verb.ToString().ToUpperInvariant() + " method. Add [OpenApiIgnore] to leave it out.");
-                    return;
-                }
+                    Problems.Add(where + ": OpenAPI 3.1 has no operation for the " + verb.ToString().ToUpperInvariant() + " method." + remedy);
 
-                var pathItem = Paths[path] as JsonObject;
-                if (pathItem != null && pathItem.ContainsKey(method))
-                {
-                    Problems.Add(where + ": another operation already uses this method and path, so the document cannot say which one answers.");
-                    return;
-                }
+                return method;
+            }
 
-                // Only an operation described without problems enters the document.
-                var problemCount = Problems.Count;
-                var described = Describe(operation, routeParameters, where);
-                if (Problems.Count > problemCount)
-                    return;
+            private bool IsTaken(string path, string method, string where)
+            {
+                if (Paths[path] is not JsonObject pathItem || !pathItem.ContainsKey(method))
+                    return false;
 
-                if (pathItem == null)
+                Problems.Add(where + ": another operation already uses this method and path, so the document cannot say which one answers.");
+                return true;
+            }
+
+            private void Insert(string path, string method, JsonObject described)
+            {
+                if (Paths[path] is not JsonObject pathItem)
                 {
                     pathItem = new JsonObject();
                     Paths[path] = pathItem;
@@ -251,6 +484,161 @@ namespace EmbedIO.OpenApi
                     if (tag != null && !Tags.Contains(tag))
                         Tags.Add(tag);
                 }
+            }
+
+            private JsonObject DescribeDeclared(OpenApiOperationDeclaration declaration, List<(string Name, bool Optional)> routeParameters, string where)
+            {
+                var result = new JsonObject();
+                if (declaration.Tags is { Count: > 0 } tags)
+                    result["tags"] = new JsonArray(tags.Select(t => (JsonNode)JsonValue.Create(t)).ToArray());
+                if (declaration.Summary != null)
+                    result["summary"] = declaration.Summary;
+                if (declaration.Description != null)
+                    result["description"] = declaration.Description;
+                if (declaration.OperationId != null)
+                    result["operationId"] = UniqueOperationId(declaration.OperationId);
+                if (declaration.Deprecated)
+                    result["deprecated"] = true;
+
+                var parameters = new JsonArray();
+                foreach (var (name, optional) in routeParameters)
+                {
+                    var declared = declaration.Parameters.FirstOrDefault(p => p.Location == OpenApiParameterLocation.Path && p.Name == name);
+                    var parameter = new JsonObject
+                    {
+                        ["name"] = name,
+                        ["in"] = "path",
+                        ["required"] = true,
+                        ["schema"] = declared == null ? StringSchema() : ValueSchema(declared.Type, EnumNames(declared.Type)),
+                    };
+                    var description = declared?.Description ?? (optional ? "May be empty." : null);
+                    if (description != null)
+                        parameter["description"] = description;
+
+                    parameters.Add((JsonNode)parameter);
+                }
+
+                var seen = new HashSet<(OpenApiParameterLocation, string)>();
+                foreach (var declared in declaration.Parameters)
+                {
+                    // Header names are case-insensitive; other names are not.
+                    var key = declared.Location == OpenApiParameterLocation.Header ? declared.Name.ToUpperInvariant() : declared.Name;
+                    if (!seen.Add((declared.Location, key)))
+                    {
+                        Problems.Add($"{where}: parameter '{declared.Name}' is declared more than once.");
+                        continue;
+                    }
+
+                    if (declared.Location == OpenApiParameterLocation.Path)
+                    {
+                        if (!routeParameters.Any(p => p.Name == declared.Name))
+                            Problems.Add($"{where}: path parameter '{declared.Name}' is not in the route.");
+                        continue;
+                    }
+
+                    if (declared.Location == OpenApiParameterLocation.Header && IsReservedHeader(declared.Name))
+                    {
+                        Problems.Add($"{where}: OpenAPI ignores a '{declared.Name}' header parameter; describe it with the request body, the response or a security scheme.");
+                        continue;
+                    }
+
+                    var parameter = new JsonObject
+                    {
+                        ["name"] = declared.Name,
+                        ["in"] = declared.Location switch
+                        {
+                            OpenApiParameterLocation.Query => "query",
+                            OpenApiParameterLocation.Header => "header",
+                            _ => "cookie",
+                        },
+                        ["required"] = declared.Required,
+                        ["schema"] = ValueSchema(declared.Type, EnumNames(declared.Type)),
+                    };
+                    if (declared.Description != null)
+                        parameter["description"] = declared.Description;
+
+                    parameters.Add((JsonNode)parameter);
+                }
+
+                if (parameters.Count > 0)
+                    result["parameters"] = parameters;
+
+                if (declaration.Body is { } body)
+                {
+                    var media = Media(body.Type, body.ContentType, where);
+                    if (media != null)
+                    {
+                        result["requestBody"] = new JsonObject
+                        {
+                            ["required"] = body.Required,
+                            ["content"] = new JsonObject { [body.ContentType] = media },
+                        };
+                    }
+                }
+
+                if (declaration.Responses.Count == 0)
+                {
+                    Problems.Add(where + ": the declaration lists no responses. Declare every status the handler sends.");
+                    return result;
+                }
+
+                var responses = new JsonObject();
+                foreach (var declared in declaration.Responses)
+                    AddResponse(responses, declared.StatusCode, declared.Description, declared.Type, declared.ContentType, where);
+
+                result["responses"] = responses;
+                return result;
+            }
+
+            private static bool IsReservedHeader(string name)
+                => string.Equals(name, HttpHeaderNames.Accept, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, HttpHeaderNames.ContentType, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, HttpHeaderNames.Authorization, StringComparison.OrdinalIgnoreCase);
+
+            private static IReadOnlyList<string> EnumNames(Type type)
+            {
+                var element = ElementType(type);
+                return element.IsEnum ? Enum.GetNames(element) : Array.Empty<string>();
+            }
+
+            // A media type object for a body of the given type. JSON media types take a schema
+            // from the serializer options; others describe text, binary content or nothing.
+            private JsonObject? Media(Type? type, string contentType, string where)
+            {
+                var media = new JsonObject();
+                if (type == null)
+                    return media;
+
+                if (IsJson(contentType))
+                {
+                    var schema = BodySchema(type, where);
+                    if (schema == null)
+                        return null;
+
+                    media["schema"] = schema;
+                    return media;
+                }
+
+                if (type == typeof(string))
+                {
+                    media["schema"] = StringSchema();
+                    return media;
+                }
+
+                // OpenAPI 3.1 describes binary content by its media type alone.
+                if (type == typeof(byte[]) || typeof(System.IO.Stream).IsAssignableFrom(type))
+                    return media;
+
+                Problems.Add($"{where}: a {type.FullName} body cannot be described as {contentType}; use a JSON media type, a string, a byte array or a stream.");
+                return null;
+            }
+
+            private static bool IsJson(string contentType)
+            {
+                var semicolon = EmbedIO.Internal.StringOperations.IndexOfOrdinal(contentType, ';');
+                var mediaType = (semicolon < 0 ? contentType : contentType.Substring(0, semicolon)).Trim();
+                return string.Equals(mediaType, JsonMediaType, StringComparison.OrdinalIgnoreCase)
+                    || mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase);
             }
 
             private JsonObject Describe(WebApiOperation operation, List<(string Name, bool Optional)> routeParameters, string where)
@@ -402,36 +790,40 @@ namespace EmbedIO.OpenApi
                 }
 
                 foreach (var declared in operation.Responses)
-                {
-                    var key = declared.StatusCode.ToString(CultureInfo.InvariantCulture);
-                    if (declared.StatusCode < 100 || declared.StatusCode > 599)
-                    {
-                        Problems.Add($"{where}: response status {key} is not between 100 and 599.");
-                        continue;
-                    }
-
-                    if (responses.ContainsKey(key))
-                    {
-                        Problems.Add($"{where}: response status {key} is declared more than once.");
-                        continue;
-                    }
-
-                    var phrase = EmbedIO.Net.Internal.HttpListenerResponseHelper.GetStatusDescription(declared.StatusCode);
-                    var response = new JsonObject { ["description"] = declared.Description ?? (phrase.Length > 0 ? phrase : "Status " + key) };
-                    if (declared.Type != null)
-                    {
-                        var schema = BodySchema(declared.Type, where);
-                        if (schema != null)
-                            response["content"] = new JsonObject { [declared.ContentType ?? JsonMediaType] = new JsonObject { ["schema"] = schema } };
-                    }
-
-                    responses[key] = response;
-                }
+                    AddResponse(responses, declared.StatusCode, declared.Description, declared.Type, declared.ContentType, where);
 
                 if (canFailBinding && !responses.ContainsKey("400"))
                     responses["400"] = new JsonObject { ["description"] = "The request data could not be bound to the method's parameters." };
 
                 return responses;
+            }
+
+            private void AddResponse(JsonObject responses, int statusCode, string? description, Type? type, string? contentType, string where)
+            {
+                var key = statusCode.ToString(CultureInfo.InvariantCulture);
+                if (statusCode < 100 || statusCode > 599)
+                {
+                    Problems.Add($"{where}: response status {key} is not between 100 and 599.");
+                    return;
+                }
+
+                if (responses.ContainsKey(key))
+                {
+                    Problems.Add($"{where}: response status {key} is declared more than once.");
+                    return;
+                }
+
+                var phrase = EmbedIO.Net.Internal.HttpListenerResponseHelper.GetStatusDescription(statusCode);
+                var response = new JsonObject { ["description"] = description ?? (phrase.Length > 0 ? phrase : "Status " + key) };
+                if (type != null || contentType != null)
+                {
+                    var mediaType = contentType ?? JsonMediaType;
+                    var media = Media(type, mediaType, where);
+                    if (media != null)
+                        response["content"] = new JsonObject { [mediaType] = media };
+                }
+
+                responses[key] = response;
             }
 
             // A JSON body schema: a reference to a component exported from the serializer's metadata.
