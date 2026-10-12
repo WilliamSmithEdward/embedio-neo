@@ -80,6 +80,8 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
         return WaitForListeningAsync(_server, _running);
     }
 
+    // Keep the opt-in API out of the legacy-baseline startup JIT path.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static void EnableCensus(WebServerOptions options) => options.EnableTelemetry = true;
 
     public async Task StopAsync()
