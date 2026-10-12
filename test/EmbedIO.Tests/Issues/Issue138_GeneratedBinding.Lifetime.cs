@@ -57,6 +57,12 @@ namespace EmbedIO.Tests.Issues
             await using var server = Issue138_GeneratedBinding.RunningServer.Start(module);
             using var client = new HttpClient();
             Assert.That(await client.GetStringAsync(server.Url + "dispose/30"), Is.EqualTo("\"worked\""));
+
+            // Release follows the response write, so the client can finish reading first.
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (log.Count < 3 && DateTime.UtcNow < deadline)
+                await Task.Delay(10);
+
             Assert.That(log, Is.EqualTo(new[] { "handler-start", "handler-end", "release" }));
 
             log.Clear();
