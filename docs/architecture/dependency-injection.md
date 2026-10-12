@@ -133,6 +133,22 @@ For a controller discovered at runtime, use:
 api.WithControllerServices(typeof(GreetingController));
 ```
 
+Both forms bind the controller through reflection. Trimmed and Native AOT
+applications register a binding from the package's source generator instead;
+activation from request services, disposal and `[FromServices]` parameters work
+the same way:
+
+```csharp
+[GeneratedControllerBinding(typeof(GreetingController))]
+internal static partial class ApiControllers
+{
+}
+
+api.WithControllerServices(ApiControllers.GreetingController);
+```
+
+See [trimming and Native AOT](../guides/trimming-and-native-aot.md#web-api-controllers).
+
 Controllers need a concrete, closed type and a public constructor that Microsoft
 DI can select. An ambiguous constructor selection can fail during route
 registration. A missing constructor dependency fails during activation and
