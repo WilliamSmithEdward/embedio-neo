@@ -247,6 +247,15 @@ responses must finish within a deadline.
 
 ## WebSocket applications
 
+The optional protected `WebSocketModule.ReceiveLimits` property accepts immutable
+`WebSocketReceiveLimits` for outstanding message counts and logical payload bytes,
+per connection and per module. It defaults to null; existing applications retain
+their queue and callback behavior. Configured exhaustion closes with 1008, while
+the existing `MaxMessageSize` check retains 1009. Reservations cover partial and
+queued messages and the actual unfinished callback Task; they are not total heap
+limits or application-retained data limits. Configure before startup. See
+[outstanding-delivery limits](../guides/websocket-receive-limits.md).
+
 Managed WebSocket framing and UTF-8 validation are stricter. Configure an
 appropriate MaxMessageSize explicitly; the managed engine now enforces it,
 including HTTP/2 extended CONNECT. Oversized messages close with 1009 and invalid

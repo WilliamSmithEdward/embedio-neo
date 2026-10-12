@@ -45,6 +45,28 @@ namespace EmbedIO.WebSockets
         private readonly ConcurrentDictionary<string, IWebSocketContext> _contexts = new ConcurrentDictionary<string, IWebSocketContext>();
         private bool _isDisposing;
         private int _maxMessageSize;
+        private Internal.WebSocketDeliveryBudget? _deliveryBudget;
+        private WebSocketReceiveLimits? _receiveLimits;
+        internal Internal.WebSocketDeliveryBudget? DeliveryBudget => _deliveryBudget;
+        /// <summary>Gets or sets optional outstanding-delivery limits; null preserves existing behavior.</summary>
+        /// <remarks>
+        /// Configure before the module starts. Exhaustion rejects a new message with close status 1008.
+        /// This does not change MaxMessageSize, callback overlap, initialization deadlines or drain behavior.
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">Module configuration is locked.</exception>
+        protected WebSocketReceiveLimits? ReceiveLimits
+        {
+            get => _receiveLimits;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                var limits = value?.Limits;
+                var budget = limits != null && (limits.ConnectionMessages.HasValue || limits.ConnectionBytes.HasValue
+                    || limits.ModuleMessages.HasValue || limits.ModuleBytes.HasValue) ? new Internal.WebSocketDeliveryBudget(limits) : null;
+                _receiveLimits = value;
+                _deliveryBudget = budget;
+            }
+        }
         private TimeSpan _keepAliveInterval;
         private Encoding _encoding;
         private PeriodicTask? _connectionWatchdog;
@@ -196,6 +218,8 @@ namespace EmbedIO.WebSockets
             // The managed socket enforces the limit from its first frame.
             Internal.WebSocket.SetAcceptedMaxMessageSize(_maxMessageSize);
             Internal.WebSocket.SetAcceptedMessageConsumerPending(true);
+            var delivery = _deliveryBudget?.CreateConnection();
+            var previousDelivery = delivery == null ? null : Internal.WebSocket.SetAcceptedDeliveryBudget(delivery);
             IWebSocketContext webSocketContext;
             try
             {
@@ -206,7 +230,12 @@ namespace EmbedIO.WebSockets
                     KeepAliveInterval,
                     context.CancellationToken).ConfigureAwait(false);
             }
-            finally { Internal.WebSocket.SetAcceptedMessageConsumerPending(false); }
+            catch { delivery?.StopAdmission(); throw; }
+            finally
+            {
+                if (delivery != null) Internal.WebSocket.SetAcceptedDeliveryBudget(previousDelivery);
+                Internal.WebSocket.SetAcceptedMessageConsumerPending(false);
+            }
 
             PurgeDisconnectedContexts();
             _ = _contexts.TryAdd(webSocketContext.Id, webSocketContext);
@@ -578,11 +607,13 @@ namespace EmbedIO.WebSockets
                     }
                     else
                     {
-                        await OnMessageReceivedAsync(
+                        if (e.DeliveryLease == null) await OnMessageReceivedAsync(
                                 context,
                                 e.RawData,
                                 new Internal.WebSocketReceiveResult(e.RawData.Length, e.Opcode))
                             .ConfigureAwait(false);
+                        else await e.DeliveryLease.DeliverAsync(() => OnMessageReceivedAsync(context, e.RawData,
+                            new Internal.WebSocketReceiveResult(e.RawData.Length, e.Opcode))).ConfigureAwait(false);
                     }
                 }
                 catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested) { }
