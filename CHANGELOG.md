@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+- Add opt-in request header limits from Neo #136: `MaximumRequestHeaderBytes` and
+  `MaximumRequestHeaderCount` (HTTP 431 before any module runs or a request slot is
+  taken). While `MaximumRequestBodyBytes` is set, `100 Continue` is sent when a
+  handler first reads the body instead of before dispatch, so a refused body is
+  never invited. HTTP/3 is now covered by the request-limit tests.
 - Add opt-in, server-wide request limits from Neo #136:
   `MaximumRequestBodyBytes` (HTTP 413 on a declared or counted over-limit body,
   with HTTP/1 connection reuse stopped), `MaximumConcurrentRequests` with a bounded

@@ -9,7 +9,7 @@ using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
 {
-    internal sealed class MultiplexedRequest : IHttpRequest, EmbedIO.Internal.IRequestBodyLimit
+    internal sealed class MultiplexedRequest : IHttpRequest, EmbedIO.Internal.IRequestPolicyTarget
     {
         private readonly IMultiplexedExchange _exchange;
         private CookieList? _cookies;
@@ -51,15 +51,26 @@ namespace EmbedIO.Net.Internal
         public HttpVerbs HttpVerb { get; }
         public Uri Url { get; }
         public bool HasEntityBody { get; }
-        public Stream InputStream => _bodyLimit < 0 || !HasEntityBody ? _exchange.InputStream
-            : _limitedInput ??= new EmbedIO.Internal.LimitedRequestStream(_exchange.InputStream, _bodyLimit,
+        public Stream InputStream => !HasEntityBody || (_bodyLimit < 0 && _sendContinue == null) ? _exchange.InputStream
+            : _applicationInput ??= CreateApplicationInput();
+        private Stream CreateApplicationInput()
+        {
+            var input = _exchange.InputStream;
+            if (_sendContinue != null) input = new EmbedIO.Internal.DeferredContinueStream(input, _sendContinue);
+            return _bodyLimit < 0 ? input : new EmbedIO.Internal.LimitedRequestStream(input, _bodyLimit,
                 EmbedIO.Internal.LimitedRequestStream.TransferredLimitMessage, _onBodyLimitExceeded);
-        private Stream? _limitedInput;
+        }
+        // Set by the protocol layer instead of sending 100 Continue before dispatch.
+        internal void DeferContinue(Func<System.Threading.CancellationToken, System.Threading.Tasks.Task> send) => _sendContinue = send;
+        private Func<System.Threading.CancellationToken, System.Threading.Tasks.Task>? _sendContinue;
+        private Stream? _applicationInput;
         private long _bodyLimit = -1;
         private Action? _onBodyLimitExceeded;
-        void EmbedIO.Internal.IRequestBodyLimit.LimitBody(long maximumBytes, Action onExceeded)
+        int EmbedIO.Internal.IRequestPolicyTarget.HeaderFieldCount => _exchange.Request.FieldCount;
+        long EmbedIO.Internal.IRequestPolicyTarget.HeaderFieldBytes => _exchange.Request.FieldBytes;
+        void EmbedIO.Internal.IRequestPolicyTarget.LimitBody(long maximumBytes, Action onExceeded)
         {
-            if (_limitedInput != null) throw new InvalidOperationException("The request body was already opened.");
+            if (_applicationInput != null) throw new InvalidOperationException("The request body was already opened.");
             _bodyLimit = maximumBytes;
             _onBodyLimitExceeded = onExceeded;
         }

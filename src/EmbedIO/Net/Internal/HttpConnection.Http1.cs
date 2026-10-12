@@ -70,12 +70,16 @@ namespace EmbedIO.Net.Internal
                     finally { CloseTransport(true); }
                     return false;
                 }
-                if (_context.HttpListenerRequest.RequiresContinue)
-                    await Stream.WriteAsync(ContinueResponse, 0, ContinueResponse.Length).ConfigureAwait(false);
                 StopRequestTimer();
                 if (!_epl.BindContext(_context)) { CloseTransport(true); return false; }
 
                 var owner = _context.Listener ?? throw new InvalidOperationException("Missing request owner.");
+                if (_context.HttpListenerRequest.RequiresContinue)
+                {
+                    // A server with body policies invites the upload only when a handler reads it.
+                    if (owner.DeferContinue) _context.HttpListenerRequest.DeferContinue(_context.SendDeferredContinueAsync);
+                    else await Stream.WriteAsync(ContinueResponse, 0, ContinueResponse.Length).ConfigureAwait(false);
+                }
                 lock (_connectionSync)
                 {
                     if (_protocolSocket == null || _protocolEnded != 0 || _forceClosing != 0 || _draining)
