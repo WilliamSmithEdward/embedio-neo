@@ -65,12 +65,12 @@ internal static class Program
         using var stop = new CancellationTokenSource();
         using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithTelemetry("aot-smoke"))
             .WithModule(new RoutingModule("/api")
-                .OnGet("/items/{id}", (context, route) => context.SendDataAsync(new Item { Id = int.Parse(route["id"], System.Globalization.CultureInfo.InvariantCulture), Name = "item" }, SmokeJson.Default.Item))
+                .OnGet("/items/{id}", (context, route) => context.SendDataWithMetadataAsync(new Item { Id = int.Parse(route["id"], System.Globalization.CultureInfo.InvariantCulture), Name = "item" }, SmokeJson.Default.Item))
                 .OnPost("/items", async (context, _) =>
                 {
-                    var item = await context.GetRequestDataAsync(SmokeJson.Default.Item) ?? throw HttpException.BadRequest("Missing item.");
+                    var item = await context.GetRequestDataWithMetadataAsync(SmokeJson.Default.Item) ?? throw HttpException.BadRequest("Missing item.");
                     item.Name = item.Name.ToUpperInvariant();
-                    await context.SendDataAsync(item, SmokeJson.Default.Item);
+                    await context.SendDataWithMetadataAsync(item, SmokeJson.Default.Item);
                 })
                 .OnGet("/reflection", (context, _) => context.SendDataAsync(new Item())))
             .WithModule(new WebApiModule("/ctl", ResponseSerializer.Json(SmokeJson.Default.Options))

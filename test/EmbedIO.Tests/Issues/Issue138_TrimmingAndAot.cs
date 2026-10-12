@@ -26,17 +26,71 @@ namespace EmbedIO.Tests.Issues
         private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(10);
 
         [Test]
+        public void LegacyNullOptionsDeserializeRetainsDefaultInputHandling()
+        {
+            var dto = Json.Deserialize<Dto>("{\"id\":\"7\",\"name\":\"legacy\",}", null);
+            Assert.That(dto?.Id, Is.EqualTo(7));
+            Assert.That(dto?.Name, Is.EqualTo("legacy"));
+        }
+
+        [Test]
+        public void LegacyNullOptionsSerializeRetainsOptionsValidation()
+        {
+            var error = Assert.Throws<ArgumentNullException>(() =>
+                InvalidInput.Invoke((Func<object?, JsonSerializerOptions, string>)Json.Serialize, new Dto(), null));
+            Assert.That(error?.ParamName, Is.EqualTo("options"));
+        }
+
+        [Test]
+        public async Task LegacySerializerReceivesNullDataOverRealHttp()
+        {
+            var url = Resources.GetServerAddress();
+            var calls = 0;
+            object? suppliedData = new object();
+            ResponseSerializerCallback serializer = (context, data) =>
+            {
+                suppliedData = data;
+                Interlocked.Increment(ref calls);
+                return ResponseSerializer.Default(context, data);
+            };
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new RoutingModule("/")
+                    .OnGet("/default", (context, _) => context.SendDataAsync(ResponseSerializer.Default, null))
+                    .OnGet("/custom", (context, _) => context.SendDataAsync(serializer, null)));
+            using var stop = new CancellationTokenSource();
+            var running = server.RunAsync(stop.Token);
+            using var client = new HttpClient { Timeout = Deadline };
+            try
+            {
+                foreach (var route in new[] { "default", "custom" })
+                {
+                    using var response = await client.GetAsync(url + route);
+                    Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                    Assert.That(response.Content.Headers.ContentType?.MediaType, Is.EqualTo("application/json"));
+                    Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("null"));
+                }
+                Assert.That(Volatile.Read(ref calls), Is.EqualTo(1));
+                Assert.That(suppliedData, Is.Null);
+            }
+            finally
+            {
+                stop.Cancel();
+                await running.WaitAsync(Deadline);
+            }
+        }
+
+        [Test]
         public async Task TypedOverloadsSendAndReadJsonOverRealHttp()
         {
             var url = Resources.GetServerAddress();
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
                 .WithModule(new RoutingModule("/")
-                    .OnGet("/item", (context, _) => context.SendDataAsync(new Dto { Id = 7, Name = "seven" }, TestJson.Default.Dto))
+                    .OnGet("/item", (context, _) => context.SendDataWithMetadataAsync(new Dto { Id = 7, Name = "seven" }, TestJson.Default.Dto))
                     .OnPost("/item", async (context, _) =>
                     {
-                        var dto = await context.GetRequestDataAsync(TestJson.Default.Dto) ?? throw HttpException.BadRequest("Missing.");
+                        var dto = await context.GetRequestDataWithMetadataAsync(TestJson.Default.Dto) ?? throw HttpException.BadRequest("Missing.");
                         dto.Id++;
-                        await context.SendDataAsync(dto, TestJson.Default.Dto);
+                        await context.SendDataWithMetadataAsync(dto, TestJson.Default.Dto);
                     }));
             using var stop = new CancellationTokenSource();
             var running = server.RunAsync(stop.Token);
@@ -64,12 +118,15 @@ namespace EmbedIO.Tests.Issues
         [Test]
         public void JsonHelpersWithTypeInfoRoundTrip()
         {
-            var json = Json.Serialize(new Dto { Id = 3, Name = "three" }, TestJson.Default.Dto);
+            var json = Json.SerializeWithMetadata(new Dto { Id = 3, Name = "three" }, TestJson.Default.Dto);
             Assert.That(json, Is.EqualTo("{\"Id\":3,\"Name\":\"three\"}"));
-            var dto = Json.Deserialize(json, TestJson.Default.Dto);
+            var dto = Json.DeserializeWithMetadata(json, TestJson.Default.Dto);
             Assert.That(dto?.Id, Is.EqualTo(3));
             Assert.That(dto?.Name, Is.EqualTo("three"));
-            Assert.That(() => InvalidInput.Invoke((Func<Dto, System.Text.Json.Serialization.Metadata.JsonTypeInfo<Dto>, string>)Json.Serialize, new Dto(), null), Throws.ArgumentNullException);
+            Assert.That(() => InvalidInput.Invoke((Func<Dto, System.Text.Json.Serialization.Metadata.JsonTypeInfo<Dto>, string>)Json.SerializeWithMetadata, new Dto(), null), Throws.ArgumentNullException);
+            var error = Assert.Throws<ArgumentNullException>(() => InvalidInput.Invoke(
+                (Func<string, System.Text.Json.Serialization.Metadata.JsonTypeInfo<Dto>, Dto?>)Json.DeserializeWithMetadata, json, null));
+            Assert.That(error?.ParamName, Is.EqualTo("typeInfo"));
         }
 
         // Options carrying only a source-generated context resolve through it; no reflection
@@ -150,7 +207,7 @@ namespace EmbedIO.Tests.Issues
         [Test]
         public void TypedAndOptionsBasedApisAreNotAnnotated()
         {
-            var typed = typeof(HttpContextExtensions).GetMethods().Where(m => (m.Name == nameof(HttpContextExtensions.SendDataAsync) || m.Name == nameof(HttpContextExtensions.GetRequestDataAsync))
+            var typed = typeof(HttpContextExtensions).GetMethods().Where(m => (m.Name == nameof(HttpContextExtensions.SendDataWithMetadataAsync) || m.Name == nameof(HttpContextExtensions.GetRequestDataWithMetadataAsync))
                 && m.GetParameters().Any(p => p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition() == typeof(System.Text.Json.Serialization.Metadata.JsonTypeInfo<>))).ToList();
             Assert.That(typed, Has.Count.EqualTo(2));
             Assert.That(typed.Select(m => m.GetCustomAttribute<RequiresUnreferencedCodeAttribute>()), Is.All.Null);
