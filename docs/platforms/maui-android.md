@@ -17,10 +17,12 @@ var server = new WebServer(options => options
     .WithMode(HttpListenerMode.EmbedIO));
 ```
 
-`HttpListenerMode.Microsoft` selects `System.Net.HttpListener` when its support
-check succeeds; it is not Kestrel. JoaquinC539's original comment recommends
-trying EmbedIO mode. The Android fixture uses that mode and a nonprivileged
-loopback port. This does not prove that changing modes cures every startup error.
+Neo v2 removes the Microsoft and inherited Mono listener backends; the retained
+`EmbedIO` mode selects the original TCP engine. JoaquinC539's historical comment
+recommended comparing the v1 listener modes. The Android fixture uses EmbedIO
+mode and a nonprivileged loopback port. Its historical results do not establish
+validation of the replacement engine on Android or the cause of every startup
+error. See the [v1-to-v2 migration guide](../compatibility/neo-v1-to-v2.md).
 
 Ensure the merged Android manifest declares
 `android.permission.INTERNET`. A local HTTP client or WebView may also need a
@@ -118,7 +120,10 @@ with .NET 10, the EmbedIO listener, and real HTTP requests. They check caught
 worker errors, rotation, explicit activity recreation, brief Home/resume, and
 orderly listener replacement while recording process IDs and listener
 generations. CI retains JSON observations, logcat, activity state, and emulator
-logs in the `android-smoke` artifact. Android is included in the `CI passed` gate.
+logs in the `android-smoke` artifact when those jobs run. William has temporarily
+paused all MAUI CI, including Android; the aggregate gate currently expects that
+job to be skipped. A skipped job is not replacement-engine validation. See the
+[pause and re-enablement record](maui-https-validation.md#temporary-owner-requested-pause).
 The [verified emulator run](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37267444705)
 passed on API 29 with runtime 10.0.12: the process ID stayed unchanged across all
 phases, and only the explicit listener replacement advanced its generation.

@@ -769,21 +769,25 @@ requirements remain checked, and HEADERS compression state remains synchronized.
 Use the Priority header or PRIORITY_UPDATE for extensible urgency/incremental
 signals. These are scheduling hints, not guaranteed response completion order.
 
-## Default managed listener transition (planned, unreleased)
+## Default managed listener transition (unreleased)
 
-The completed modern engine will become the default managed listener. The old
-Mono-derived implementation will be deprecated, with its migration and support
-policy documented before that transition. Immediate removal is not implied.
-Existing valid public entry points, including `HttpListenerMode.EmbedIO`, are to
-remain usable; changing the implementation does not itself require renaming this
-mode. The Microsoft listener remains an explicit compatibility option.
+The Neo v2 engine branch has removed both the Microsoft backend and the inherited
+Mono-derived listener implementation. The earlier plan to retain Microsoft mode
+and only deprecate Mono was superseded by William's approved removal decision.
+`HttpListenerMode.EmbedIO` remains the default name for the original HTTP/1.1 and
+HTTP/2 TCP engine. Remove `WithMicrosoftHttpListener()` and
+`HttpListenerMode.Microsoft`; persisted numeric mode 1 is rejected rather than
+silently selecting a replacement. See the
+[v1-to-v2 guide](neo-v1-to-v2.md#listener-selection-and-deployment) for API and
+deployment migration, including removed runtime adapters and HTTP.sys configuration.
 
-This transition is still in development. In the current branch HTTP/3 uses the
-separate opt-in `EmbedIOHttp3` mode and its documented .NET 10, certificate and
-native QUIC prerequisites. Do not interpret the planned default switch as current
-combined HTTP/1, HTTP/2 and HTTP/3 hosting or identical capabilities across target
-assets. See the [default listener transition acceptance criteria](../project/http-engine.md#default-listener-transition)
-and [HTTP/3 guide](../guides/http3.md) for the implementation and validation scope.
+HTTP/3 remains opt-in through `EmbedIOHttp3`, or `EmbedIOCombined` for TCP and QUIC
+hosting together, with the documented .NET 10, certificate and native QUIC
+prerequisites. Public HTTP/3 selection uses System.Net.Quic, which is distinct
+from the removed System.Net.HttpListener backend. Implementation retirement does
+not establish final program, extension or platform acceptance, and v2 is not yet
+published. See the [default listener transition acceptance criteria](../project/http-engine.md#default-listener-transition)
+and [HTTP/3 guide](../guides/http3.md) for the remaining validation scope.
 
 ## QUERY routing (unreleased, development increment)
 
