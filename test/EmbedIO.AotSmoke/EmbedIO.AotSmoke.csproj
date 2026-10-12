@@ -14,5 +14,5 @@
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
   </ItemGroup>
   <!-- A package consumer gets this from the package's buildTransitive folder. -->
-  <Import Project="../../src/EmbedIO/build/EmbedIO-Neo.targets" />
+  <Import Project="../../src/EmbedIO/Packaging/EmbedIO-Neo.targets" />
 </Project>
