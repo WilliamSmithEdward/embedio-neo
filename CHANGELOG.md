@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Keep request body read buffers owned until underlying I/O actually settles after
+  an optional read timeout or caller cancellation. Application buffers are no
+  longer retained by abandoned reads, and pending pooled storage is not returned
+  prematurely. Deadlines, HTTP 408 responses and default-off behavior are unchanged.
 - Add per-route request limit policies from Neo #136:
   `WithRouteRequestLimits(baseRoute, configure)` and `RequestLimitPolicy` replace the
   server-wide `MaximumRequestBodyBytes`, `RequestBodyReadTimeout` and `RequestTimeout`
