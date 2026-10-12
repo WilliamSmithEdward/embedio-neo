@@ -23,6 +23,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Request limits, admission and deadlines](guides/request-limits.md): opt-in header and body byte limits, body read and connection deadlines, connection count, bounded concurrent requests and queue, cooperative request deadlines, deferred `100 Continue` and per-route policies.
 - [Request-body byte limits](guides/request-body-limits.md): encoded versus decoded budgets, immutable routed ownership, configured error callbacks, unread-input validation and borrowed stream ownership.
 - [Metrics and tracing](guides/telemetry.md): opt-in HTTP server metrics and spans with W3C trace context, route templates and server identity.
+- [Trimming and Native AOT](guides/trimming-and-native-aot.md): AOT-safe JSON with source-generated metadata, annotated reflection APIs and what a Native AOT host supports.
 - [HTTP/3 listener](guides/http3.md): unreleased QUIC mode, certificates, usage and current limits.
 - [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
 - [Command-line server](guides/cli.md): options, static serving, plugins, and CLI provenance.

@@ -164,6 +164,8 @@ TestResult.xml
 /src/EmbedIO.Samples/nuget.config
 /test/EmbedIO.Tests/nuget.config
 *.targets
+# The package build file that ties EmbedIO's reflection switch to System.Text.Json (Neo #138).
+!/src/EmbedIO/Packaging/EmbedIO-Neo.targets
 /.vscode
 /_site
 /_api

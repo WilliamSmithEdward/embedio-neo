@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 using System.Threading.Tasks;
 using EmbedIO.Utilities;
 
@@ -48,6 +49,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="RegisterController{TController}(Func{TController})"/>
         /// <seealso cref="RegisterController(Type)"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType{TController}()"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public void RegisterController<TController>()
             where TController : WebApiController, new()
             => RegisterControllerType(typeof(TController));
@@ -62,6 +65,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="RegisterController{TController}()"/>
         /// <seealso cref="RegisterController(Type,Func{WebApiController})"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType{TController}(Func{TController})"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public void RegisterController<TController>(Func<TController> factory)
             where TController : WebApiController
             => RegisterControllerType(typeof(TController), factory);
@@ -75,6 +80,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="RegisterController(Type,Func{WebApiController})"/>
         /// <seealso cref="RegisterController{TController}()"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type)"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public void RegisterController(Type controllerType)
             => RegisterControllerType(controllerType);
 
@@ -88,6 +95,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="RegisterController(Type)"/>
         /// <seealso cref="RegisterController{TController}(Func{TController})"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type,Func{WebApiController})"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public void RegisterController(Type controllerType, Func<WebApiController> factory)
             => RegisterControllerType(controllerType, factory);
 
@@ -99,6 +108,8 @@ namespace EmbedIO.WebApi
         /// <param name="controllerType">The controller type.</param>
         /// <param name="factory">Creates a fresh instance for each request.</param>
         /// <param name="release">Releases the instance; use a completed task when its container owns it.</param>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public void RegisterControllerWithContext(
             Type controllerType,
             Func<IHttpContext, WebApiController?> factory,

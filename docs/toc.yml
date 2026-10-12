@@ -50,6 +50,8 @@
       href: guides/request-body-limits.md
     - name: Metrics and tracing
       href: guides/telemetry.md
+    - name: Trimming and Native AOT
+      href: guides/trimming-and-native-aot.md
     - name: HTTP/3 listener (unreleased)
       href: guides/http3.md
     - name: Command-line server
