@@ -45,7 +45,8 @@ internal static class QuicChurn
             options.Optional("--handshake-timeout") is { } handshake ? TimeSpan.FromSeconds(double.Parse(handshake, NumberStyles.Float, CultureInfo.InvariantCulture)) : null,
             options.Number("--mixed-rate", 0),
             options.Number("--large-rate", 0),
-            options.Integer("--mixed-connections", 4));
+            options.Integer("--mixed-connections", 4),
+            options.Has("--process-cpu-diagnostics"));
         var rounds = options.Integer("--rounds", 1);
         if (engines.Length == 0 || engines.Any(engine => engine is not ("embedio" or "kestrel")))
             throw new ArgumentException("--engines takes embedio and/or kestrel.");
@@ -79,6 +80,15 @@ internal static class QuicChurn
         var environment = DescribeEnvironment(options, serverDirectory, settings, rounds, serverCpus);
         environment["hostIdleBaseline"] = await IdleBaselineAsync(options.Number("--baseline-seconds", 10)).ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(output, "environment.json"), environment.ToJsonString(Indented)).ConfigureAwait(false);
+        if (options.Optional("--max-baseline-busy-cpus") is { } maximumText)
+        {
+            var maximum = double.Parse(maximumText, NumberStyles.Float, CultureInfo.InvariantCulture);
+            if (!double.IsFinite(maximum) || maximum < 0) throw new ArgumentException("Invalid baseline CPU ceiling.");
+            var measured = environment["hostIdleBaseline"]?["busyCpus"]?.GetValue<double>()
+                ?? throw new InvalidOperationException("Missing idle CPU baseline.");
+            if (measured > maximum)
+                throw new InvalidOperationException(FormattableString.Invariant($"Host is not quiet: baseline {measured} busy CPUs exceeds {maximum}. No load started."));
+        }
 
         // Contention control: a separate process spinning this many threads for the whole
         // run, so the overload hypothesis can be tested rather than inferred.
@@ -220,7 +230,7 @@ internal static class QuicChurn
         var clock = Stopwatch.StartNew();
         var startedUtc = Now();
         using var stop = new CancellationTokenSource();
-        var timeline = Task.Run(() => TimelineAsync(clock, counters, mixed, serverProcess, stop.Token));
+        var timeline = Task.Run(() => TimelineAsync(clock, counters, mixed, serverProcess, settings.ProcessCpuDiagnostics, stop.Token));
         var mixedTasks = new List<Task>();
         if (mixed is not null)
         {
@@ -309,15 +319,18 @@ internal static class QuicChurn
 
     // Per-second host, server and client CPU with the churn counters, so any failure
     // can be read against the load at that moment.
-    private static async Task<JsonArray> TimelineAsync(Stopwatch clock, PhaseCounters counters, MixedLoad? mixed, Process server, CancellationToken stop)
+    private static async Task<JsonArray> TimelineAsync(Stopwatch clock, PhaseCounters counters, MixedLoad? mixed, Process server, bool processDiagnostics, CancellationToken stop)
     {
         var samples = new JsonArray();
         using var self = Process.GetCurrentProcess();
         var busy = SystemCpu.BusyTime();
+        var hostLast = clock.Elapsed;
         server.Refresh();
         var serverCpu = server.TotalProcessorTime;
+        var serverLast = clock.Elapsed;
         var clientCpu = self.TotalProcessorTime;
-        var last = clock.Elapsed;
+        var clientLast = clock.Elapsed;
+        var processCpu = processDiagnostics ? ReadProcessCpu() : null;
         long started = 0, completed = 0, failed = 0, mixedDone = 0;
         while (true)
         {
@@ -332,39 +345,98 @@ internal static class QuicChurn
 
             var now = clock.Elapsed;
             var busyNow = SystemCpu.BusyTime();
+            var hostNow = clock.Elapsed;
             server.Refresh();
             self.Refresh();
             var serverNow = server.HasExited ? serverCpu : server.TotalProcessorTime;
+            var serverAt = clock.Elapsed;
             var clientNow = self.TotalProcessorTime;
-            var seconds = (now - last).TotalSeconds;
-            var host = (busyNow - busy).TotalSeconds;
-            var serverUsed = (serverNow - serverCpu).TotalSeconds;
-            var clientUsed = (clientNow - clientCpu).TotalSeconds;
-            samples.Add(new JsonObject
+            var clientAt = clock.Elapsed;
+            // Counter reads can block during a host stall. Match each CPU delta
+            // to its own acquisition interval rather than the earlier loop timestamp.
+            var host = (busyNow - busy).TotalSeconds / (hostNow - hostLast).TotalSeconds;
+            var serverUsed = (serverNow - serverCpu).TotalSeconds / (serverAt - serverLast).TotalSeconds;
+            var clientUsed = (clientNow - clientCpu).TotalSeconds / (clientAt - clientLast).TotalSeconds;
+            var sample = new JsonObject
             {
                 ["t"] = Math.Round(now.TotalSeconds, 3),
-                ["hostBusyCpus"] = Math.Round(host / seconds, 3),
-                ["serverCpus"] = Math.Round(serverUsed / seconds, 3),
-                ["clientCpus"] = Math.Round(clientUsed / seconds, 3),
-                ["backgroundCpus"] = Math.Round((host - serverUsed - clientUsed) / seconds, 3),
+                ["hostBusyCpus"] = Math.Round(host, 3),
+                ["serverCpus"] = Math.Round(serverUsed, 3),
+                ["clientCpus"] = Math.Round(clientUsed, 3),
+                ["backgroundCpus"] = Math.Round(host - serverUsed - clientUsed, 3),
                 ["started"] = counters.Started - started,
                 ["completed"] = counters.Completed - completed,
                 ["failed"] = counters.Failed - failed,
                 ["inFlight"] = counters.InFlight,
                 ["mixedCompleted"] = (mixed?.Completed ?? 0) - mixedDone,
                 ["handshakeMaxMilliseconds"] = Math.Round(counters.TakeIntervalHandshakeMax() * 1000.0 / Stopwatch.Frequency, 3),
-            });
+            };
+            if (processDiagnostics && processCpu is not null)
+            {
+                var current = ReadProcessCpu();
+                var rows = new JsonArray();
+                foreach (var (pid, entry) in current.Values)
+                {
+                    if (!processCpu.Values.TryGetValue(pid, out var previous) || previous.StartTicks != entry.StartTicks) continue;
+                    var seconds = (entry.SampleTicks - previous.SampleTicks) / (double)Stopwatch.Frequency;
+                    var used = (entry.CpuSeconds - previous.CpuSeconds) / seconds;
+                    if (used > 0.001) rows.Add(new JsonObject
+                    {
+                        ["pid"] = pid,
+                        ["name"] = entry.Name,
+                        ["busyCpus"] = Math.Round(used, 4),
+                        ["role"] = pid == server.Id ? "server" : pid == self.Id ? "client" : "other",
+                    });
+                }
+
+                sample["processCpu"] = rows;
+                sample["processCpuReadErrors"] = current.Errors;
+                processCpu = current;
+            }
+
+            samples.Add(sample);
             started = counters.Started;
             completed = counters.Completed;
             failed = counters.Failed;
             mixedDone = mixed?.Completed ?? 0;
             busy = busyNow;
+            hostLast = hostNow;
             serverCpu = serverNow;
+            serverLast = serverAt;
             clientCpu = clientNow;
-            last = now;
+            clientLast = clientAt;
         }
 
         return samples;
+    }
+
+    private sealed record ProcessCpuEntry(string Name, long StartTicks, double CpuSeconds, long SampleTicks);
+    private sealed record ProcessCpuSnapshot(Dictionary<int, ProcessCpuEntry> Values, JsonArray Errors);
+
+    // CPU accounting only: no process memory, command lines or credentials are read.
+    // Missing/protected/exited processes are reported rather than treated as idle.
+    private static ProcessCpuSnapshot ReadProcessCpu()
+    {
+        var values = new Dictionary<int, ProcessCpuEntry>();
+        var errors = new JsonArray();
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                var pid = process.Id;
+                try
+                {
+                    values[pid] = new ProcessCpuEntry(process.ProcessName, process.StartTime.ToUniversalTime().Ticks,
+                        process.TotalProcessorTime.TotalSeconds, Stopwatch.GetTimestamp());
+                }
+                catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
+                {
+                    errors.Add(new JsonObject { ["pid"] = pid, ["error"] = error.GetType().Name + ": " + error.Message });
+                }
+            }
+        }
+
+        return new ProcessCpuSnapshot(values, errors);
     }
 
     // Child process for --burn-threads: busy-spins until "stop" arrives on stdin.
@@ -413,6 +485,15 @@ internal static class QuicChurn
         var runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory();
         var aspnetDirectory = Path.GetDirectoryName(typeof(Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions).Assembly.Location) ?? string.Empty;
         var msquic = new[] { "msquic.dll", "libmsquic.so", "libmsquic.dylib" }.Select(name => Path.Combine(runtimeDirectory, name)).FirstOrDefault(File.Exists);
+        if (msquic is null && OperatingSystem.IsLinux())
+        {
+            // QUIC support was checked before this snapshot, so hash the loaded
+            // system library rather than claiming a runtime-directory copy.
+            msquic = File.ReadLines("/proc/self/maps")
+                .Select(line => line.Split(' ', 6, StringSplitOptions.RemoveEmptyEntries))
+                .Where(fields => fields.Length == 6 && Path.GetFileName(fields[5]).StartsWith("libmsquic.so", StringComparison.Ordinal))
+                .Select(fields => fields[5]).FirstOrDefault(File.Exists);
+        }
         return new JsonObject
         {
             ["capturedUtc"] = Now(),
@@ -445,6 +526,7 @@ internal static class QuicChurn
             ["mixedRate"] = settings.MixedRate,
             ["largeRate"] = settings.LargeRate,
             ["mixedConnections"] = settings.MixedConnections,
+            ["processCpuDiagnostics"] = settings.ProcessCpuDiagnostics,
             ["method"] = "One server process per engine run; paced open-loop QUIC churn (connect, one validated GET on a new request stream, graceful close) per rate phase; optional paced warm-connection HttpClient HTTP/3 traffic; every failure recorded with its phase; no retries.",
         };
     }
@@ -479,7 +561,7 @@ internal static class QuicChurn
     private static string Now() => DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
 
     private sealed record ChurnSettings(double[] Rates, double PhaseSeconds, double IdleSeconds, int MaxOutstanding, TimeSpan? HandshakeTimeout,
-        double MixedRate, double LargeRate, int MixedConnections);
+        double MixedRate, double LargeRate, int MixedConnections, bool ProcessCpuDiagnostics);
 
     private sealed class PhaseCounters
     {

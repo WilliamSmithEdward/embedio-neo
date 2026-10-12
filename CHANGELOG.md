@@ -7,6 +7,18 @@
   implementations remain compatible. See [request trailers](docs/guides/request-trailers.md).
   Disposing pending HTTP/3 input cannot publish a successful snapshot on late FIN;
   snapshots from already completed input remain available after application disposal.
+- Make the .NET 10 asset trim- and Native-AOT-analyzable from Neo #138. Reflection-based
+  APIs (Web API controller registration and its request-data attributes,
+  `RoutingModule.AddFrom`/`WithHandlersFrom`, EmbedIO's default JSON options) carry
+  `RequiresUnreferencedCode` and `RequiresDynamicCode`. New AOT-safe overloads take
+  source-generated metadata: `SendDataAsync(data, JsonTypeInfo<T>)`,
+  `GetRequestDataAsync(JsonTypeInfo<T>)`, `Json.Serialize(data, JsonTypeInfo<T>)` and
+  `Json.Deserialize(json, JsonTypeInfo<T>)`. Options-based JSON helpers now resolve
+  metadata through the options, so a `JsonSerializerContext` works without reflection.
+  The package adds a build file that disables EmbedIO's reflection JSON with the
+  application's `JsonSerializerIsReflectionEnabledByDefault`; those paths then throw
+  `NotSupportedException` with guidance. A Native AOT host is published and exercised in
+  CI on Windows and Linux. See [trimming and Native AOT](docs/guides/trimming-and-native-aot.md).
 - Release both cancellation registrations when an uncommitted HTTP/2 output write
   is canceled and removed from the queue. An independent uncanceled token no longer
   retains the dropped write and its retired connection. Wire ordering, cancellation

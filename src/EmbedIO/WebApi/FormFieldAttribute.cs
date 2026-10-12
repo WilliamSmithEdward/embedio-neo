@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using EmbedIO.Utilities;
@@ -28,6 +29,8 @@ namespace EmbedIO.WebApi
     /// <seealso cref="IRequestDataAttribute{TController,TData}" />
     /// <seealso cref="IRequestDataAttribute{TController}" />
     [AttributeUsage(AttributeTargets.Parameter)]
+    [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+    [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
     public sealed class FormFieldAttribute :
         Attribute,
         IRequestDataAttribute<WebApiController, string>,

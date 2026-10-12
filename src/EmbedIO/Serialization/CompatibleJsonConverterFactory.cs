@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -6,6 +7,9 @@ using System.Text.Json.Serialization;
 namespace EmbedIO.Serialization
 {
     // Presence in the options also identifies EmbedIO defaults after options are cloned.
+    // Part of EmbedIO's reflection-based default options; enum conversion builds generic converters.
+    [RequiresUnreferencedCode(ReflectionSerialization.Message)]
+    [RequiresDynamicCode(ReflectionSerialization.Message)]
     internal sealed class CompatibleJsonConverterFactory : JsonConverterFactory
     {
         public override bool CanConvert(Type typeToConvert)
@@ -41,6 +45,8 @@ namespace EmbedIO.Serialization
             public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options) => writer.WriteBooleanValue(value);
         }
 
+        [RequiresUnreferencedCode(ReflectionSerialization.Message)]
+        [RequiresDynamicCode(ReflectionSerialization.Message)]
         private sealed class EnumConverter<T> : JsonConverter<T> where T : struct, Enum
         {
             public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
