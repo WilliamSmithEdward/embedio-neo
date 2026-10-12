@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+- Add opt-in rate limiting from Neo #141. `RateLimitingModule` admits the requests under its
+  base route through a `PartitionedRateLimiter<IHttpContext>` from Microsoft's
+  `System.Threading.RateLimiting` (fixed window, sliding window, token bucket, concurrency or a
+  chain), holds each permit until the request completes, and answers rejections with 429 and
+  `Retry-After` when the limiter knows the wait. `RejectionStatusCode` and `OnRejected` customize
+  rejections; `ClientKey` keys by connection address, IPv6 by /64, without trusting forwarded
+  headers. EmbedIO-Neo now depends on the `System.Threading.RateLimiting` package (10.0.12) on
+  both targets. See [Rate limiting](docs/guides/rate-limiting.md).
 - Complete OpenAPI support from Neo #139. `AddSecurityScheme` adds Basic, Bearer and API key
   schemes, and `RequireSecurity` requires one on every operation an authentication module
   handles, decided by the module's own route matching. `AddBasicAuthentication(name, module)`
