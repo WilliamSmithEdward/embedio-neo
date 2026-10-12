@@ -59,6 +59,10 @@ def validate(root, census, duration, rounds):
                 raise ValueError("Server connection accounting unavailable or incomplete")
             if final["opened"] <= 0 or final["closed"] != final["opened"]:
                 raise ValueError("Server accepted/closed connections do not balance")
+            # One worker can create at most one final empty connection per phase.
+            # An excess catches exhausted pacing loops even when all bodies validate.
+            if final["opened"] > client["requests"] + sample["warmup"]["requests"] + 2:
+                raise ValueError("Unexpected zero-request connection churn")
             before, after = sample["connectionsBeforeLoad"], sample["connectionsBeforeStop"]
             closed = after["closed"] - before["closed"]
             for point in ("AtReady", "BeforeLoad", "AfterLoad", "BeforeStop"):

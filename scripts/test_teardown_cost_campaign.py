@@ -12,7 +12,7 @@ class CostCampaignTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.sample = {"server": {"protocol": "Http1", "assemblies": [{"sha256": "a" * 64}]}, "client": {"requests": 160, "latencyCount": 160, "connectionsOpened": 2, "p99Milliseconds": 1},
+        self.sample = {"warmup": {"requests": 64}, "server": {"protocol": "Http1", "assemblies": [{"sha256": "a" * 64}]}, "client": {"requests": 160, "latencyCount": 160, "connectionsOpened": 2, "p99Milliseconds": 1},
                        "clientExitCode": 0, "serverExitCode": 0, "clientKilled": False, "serverKilled": False,
                        "requestRate": 32, "connectionCensus": True, "machineMeasurementSeconds": 5,
                        "derived": {"requestsPerSecond": 32, "serverCpuMicrosecondsPerRequest": 1,
@@ -60,6 +60,11 @@ class CostCampaignTests(unittest.TestCase):
     def test_missing_matrix_rejected(self):
         self.write()
         next((self.root / "samples").glob("*/*.json")).unlink()
+        with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
+
+    def test_excess_zero_request_churn_rejected(self):
+        self.sample["serverStop"]["connections"].update(opened=300, closed=300)
+        self.write()
         with self.assertRaises(ValueError): validate(self.root, True, 5, 2)
 
     def test_invalid_cpu_interval_rejected(self):
