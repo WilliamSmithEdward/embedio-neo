@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+- Document and verify compressed controller response completion and encoded
+  response lengths for upstream #394, plus its separate POST control, without
+  changing production behavior. Historical Xamarin validation is not claimed.
 - Verify the historical WebSocket accept-to-subscription race against the
   existing startup fix, including application handshake bursts over HTTP/1 and
   HTTP/2 TCP/TLS. Extend the startup guide without changing production behavior.

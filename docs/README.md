@@ -213,3 +213,5 @@ DocFX configuration remains at the repository root in `docfx.json`. Its content
 includes these guides and generated API metadata; documentation deployment is
 not configured. The old root `CLI.md` and `MIGRATION.md` remain as short entry
 points for existing links.
+
+- [Controller compression and response length](guides/controller-compression.md): streamed framing, buffered encoded lengths and the Xamarin report's validation limits.

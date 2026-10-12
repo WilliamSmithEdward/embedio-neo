@@ -308,3 +308,6 @@
 
 - name: Response-time diagnostics
   href: guides/response-timing.md
+
+- name: Controller compression and response length
+  href: guides/controller-compression.md
