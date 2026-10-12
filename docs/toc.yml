@@ -218,6 +218,8 @@
       href: compatibility/migration.md
 - name: Platforms
   items:
+    - name: iOS listener recovery
+      href: platforms/ios-listener-recovery.md
     - name: MAUI HTTPS validation
       href: platforms/maui-https-validation.md
     - name: MAUI Android
