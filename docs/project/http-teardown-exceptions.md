@@ -168,3 +168,52 @@ normal samples, unbalanced lifetimes and census overflow remain blocking.
 PR #351 is unmerged pending a fresh current-source campaign and every exact-head
 check. Historical source-specific evidence remains unchanged. No production API,
 default, target or runtime dependency changes or release are included.
+
+
+The final campaign tooling reports coarse phase/sample-file progress without
+claiming that file presence is a validated result. It retains the original
+per-child ceilings and adds a 52-minute overall ceiling within the existing
+60-minute job, reserving artifact-upload time. Overall expiry and unattempted work
+remain failed results, with bounded owned-process cleanup and retained provenance.
+
+
+## Qualified preliminary observer-v2 campaign
+
+[Run 38302277640](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38302277640)
+completed the approved scope on head `c92a1b4055efa63e3a3c1880bb4d4659f52d6522`,
+engine base `7ca4a860b362c0c1f633fbc255e32aa65440dc5a`. Its checkout was
+`15a197558a7538bc7b26d70db95c2fbe275a5577`; artifact `11772353682` is retained.
+The [compact evidence record](evidence/teardown-cost-282-preliminary.json) preserves
+all 112 normal sample hashes, actual observer modes, phased counts, final lifetime
+and meter witnesses, and all eight recovery controls. Every sample used the same
+core SHA-256 `560005ee2bc5125fc78c637bac5f5464eb5464a55d057f848ab33e1bcc117da2`;
+A/A copies matched. Loaded framework/runtime 10.0.12 and MsQuic identities agree
+across engines and samples.
+
+All 28 profiles, 42 A/A and 42 cost samples qualified, as did all four EmbedIO
+recovery cases. Its four logical lifetime pairs were 6,017/6,017 (HTTP/1 plain),
+1,555/1,555 (HTTP/1 TLS), 279/279 (HTTP/2 TLS) and 322/322 (HTTP/3), with no pending
+entries. Kestrel's deliberate HTTP/2 TLS control remained 973/971 with two pending;
+HTTP/3 remained 622/589 with 33 pending. They are recorded as `failed-control`,
+not passing comparisons, and remain actionable in #361. Logical completion still
+does not establish native heap release.
+
+Normal persistent HTTP/1 and HTTP/2 observed no load/idle throws in the first
+profiled round. HTTP/2 churn observed three EmbedIO cancellation notifications
+and one Kestrel disposed-socket notification across 160 validated responses.
+EmbedIO's observable sites show the cancellation token and dispatch/await rethrows;
+this is not three distinct failed responses or a demonstrated material cost.
+HTTP/3 recorded 18 versus 12 notifications per persistent lifetime, and 2,880
+versus 1,920 across 160 churned lifetimes. All measured responses validated.
+
+The observer-free HTTP/3 persistent CPU comparison was within its 13% noise band;
+allocation differences were observable. HTTP/1 and persistent HTTP/2 CPU/allocation
+differences occurred without routine notifications. These whole-process
+comparisons do not isolate exception cost, and justify no catch-and-ignore change
+or production optimization. Later accepted transport changes require their own
+comparison; this preliminary record is not relabeled as final engine evidence.
+
+All 37 exact-head PR checks were terminal: 30 successful and seven intentional
+skips. Desktop results reported all 5,250 cases per platform with no failures,
+plus passing reset/module/ZIP stress receipts. PR #351 remains unmerged while the
+final accepted-source comparison is prepared. No main merge or release occurred.

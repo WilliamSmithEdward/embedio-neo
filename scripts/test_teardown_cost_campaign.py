@@ -4,8 +4,12 @@ import hashlib
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
+import contextlib
+import io
+import subprocess
 
-from teardown_cost_campaign import SCENARIOS, validate, validate_recovery, validate_sites, validate_lifetime, record_fault_failure
+from teardown_cost_campaign import SCENARIOS, validate, validate_recovery, validate_sites, validate_lifetime, record_fault_failure, wait_with_progress
 
 
 class CostCampaignTests(unittest.TestCase):
@@ -231,6 +235,55 @@ class RecoveryEvidenceTests(unittest.TestCase):
     def test_unclosed_recovery_lifetime_rejected(self):
         self.report["stop"]["connections"]["closed"] = 1
         with self.assertRaises(ValueError): self.check()
+
+
+class ProgressDeadlineTests(unittest.TestCase):
+    def test_progress_does_not_extend_original_deadline(self):
+        child = Mock(args=["fake"])
+        child.wait.side_effect = subprocess.TimeoutExpired(child.args, 30)
+        with tempfile.TemporaryDirectory() as output, contextlib.redirect_stdout(io.StringIO()) as log:
+            with patch("teardown_cost_campaign.time.monotonic", side_effect=[0, 0, 30, 30]):
+                with self.assertRaises(subprocess.TimeoutExpired) as caught:
+                    wait_with_progress(child, 30, output, "profile")
+            self.assertEqual(caught.exception.timeout, 30)
+            child.wait.assert_called_once_with(timeout=30)
+            self.assertIn("validation pending", log.getvalue())
+
+    def test_overall_budget_caps_child_without_extension(self):
+        child = Mock(args=["fake"])
+        child.wait.side_effect = subprocess.TimeoutExpired(child.args, 5)
+        with tempfile.TemporaryDirectory() as output, contextlib.redirect_stdout(io.StringIO()):
+            with patch("teardown_cost_campaign.time.monotonic", side_effect=[0, 0, 5, 5]):
+                with self.assertRaises(subprocess.TimeoutExpired) as caught:
+                    wait_with_progress(child, 1500, output, "profile", deadline=5)
+            self.assertEqual(caught.exception.timeout, 5)
+            child.wait.assert_called_once_with(timeout=5)
+
+    def test_expired_overall_budget_does_not_wait(self):
+        child = Mock(args=["fake"])
+        with tempfile.TemporaryDirectory() as output, contextlib.redirect_stdout(io.StringIO()):
+            with patch("teardown_cost_campaign.time.monotonic", return_value=10):
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    wait_with_progress(child, 1500, output, "profile", deadline=5)
+            child.wait.assert_not_called()
+
+    def test_unsuccessful_exit_is_preserved(self):
+        child = Mock(args=["fake"])
+        child.wait.return_value = 137
+        with tempfile.TemporaryDirectory() as output, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(wait_with_progress(child, 1500, output, "profile"), 137)
+
+    def test_sample_presence_is_not_reported_as_success(self):
+        child = Mock(args=["fake"])
+        child.wait.side_effect = [subprocess.TimeoutExpired(child.args, 30), 0]
+        with tempfile.TemporaryDirectory() as output, contextlib.redirect_stdout(io.StringIO()) as log:
+            sample = Path(output) / "samples" / "scenario" / "candidate-r1.json"
+            sample.parent.mkdir(parents=True)
+            sample.write_text("incomplete JSON")
+            with patch("teardown_cost_campaign.time.monotonic", side_effect=[0, 0, 30, 30]):
+                self.assertEqual(wait_with_progress(child, 1500, output, "profile"), 0)
+            self.assertIn("sample files present 1", log.getvalue())
+            self.assertIn("validation pending", log.getvalue())
 
 
 class AcceptanceScopeTests(unittest.TestCase):

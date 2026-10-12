@@ -471,3 +471,17 @@ strongly retains active contexts and records actual public Abort calls. It is of
 by default, is not enabled in ordinary campaign comparisons, and did not qualify
 as a shutdown fix in the captured HTTP/3 probe. Strong references can themselves
 alter lifetime observability. Retain the actual pending-task and exit evidence.
+
+
+Campaign progress output reports the active phase, elapsed time, sample-file count
+and newest file every 30 seconds. File presence is explicitly not validation or
+acceptance. This reporting runs in the campaign parent; cost server children still
+have their exception observers disabled.
+
+A 52-minute whole-campaign ceiling reserves time for artifact retention within the
+existing 60-minute job. Individual arm/fault ceilings remain 1,500/180 seconds and
+are capped by the remaining overall budget. Timeout cleanup kills only the owned
+process group and waits at most ten seconds for exit. Unattempted phases/controls,
+overall expiry and incomplete required results are recorded as failures, never
+partial success. All original requests, rounds, quiet ceilings and acceptance
+checks remain required; the campaign does not retry unsuccessful measurements.

@@ -178,6 +178,26 @@ def validate_recovery(path):
     return validate_lifetime(final, expected_source)
 
 
+
+def wait_with_progress(child, timeout, output, label, deadline=None):
+    """Report coarse artifact progress without changing the child deadline or verdict."""
+    started = time.monotonic()
+    effective_timeout = min(timeout, max(0, deadline - started)) if deadline is not None else timeout
+    print(f"{label}: started; child ceiling {timeout}s; remaining budget {effective_timeout:.0f}s", flush=True)
+    while True:
+        remaining = effective_timeout - (time.monotonic() - started)
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(child.args, effective_timeout)
+        try:
+            return child.wait(timeout=min(30, remaining))
+        except subprocess.TimeoutExpired:
+            files = list((Path(output) / "samples").glob("*/*.json"))
+            newest = max(files, key=lambda path: path.stat().st_mtime) if files else None
+            last = str(newest.relative_to(output)) if newest else "none"
+            print(f"{label}: elapsed {time.monotonic() - started:.0f}s; "
+                  f"sample files present {len(files)}; newest {last}; validation pending", flush=True)
+
+
 def record_fault_failure(engine, name, error, failures, control_limitations):
     """Keep deliberate comparison failures visible without accepting them as passes.
 
@@ -201,10 +221,16 @@ def main():
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "linux":
         raise SystemExit("Sustained profiling uses disposable GitHub runners only.")
     args.output.mkdir(parents=True, exist_ok=False)
+    campaign_started = time.monotonic()
+    campaign_budget = 52 * 60
+    campaign_deadline = campaign_started + campaign_budget
+    unattempted = []
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     manifest = {"revision": revision, "run": os.environ.get("GITHUB_RUN_ID"), "attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
                 "runnerHash": hashlib.sha256(args.runner.read_bytes()).hexdigest(),
-                "coreHash": hashlib.sha256((args.runner.parent / "EmbedIO.dll").read_bytes()).hexdigest(), "commands": []}
+                "coreHash": hashlib.sha256((args.runner.parent / "EmbedIO.dll").read_bytes()).hexdigest(), "commands": [],
+                "overallBudgetSeconds": campaign_budget, "unattempted": unattempted,
+                "plannedSamples": {"profile": 28, "aa": 42, "cost": 42, "faultControls": 8}}
     copy = args.output / "identical-runner"
     shutil.copytree(args.runner.parent, copy)
     manifest["aaCoreHash"] = hashlib.sha256((copy / "EmbedIO.dll").read_bytes()).hexdigest()
@@ -216,6 +242,10 @@ def main():
     for arm, engines, duration, rounds, census in (("profile", "candidate,kestrel", 5, 2, True),
                                                    ("aa", "candidate,baseline", 15, 3, False),
                                                    ("cost", "candidate,kestrel", 15, 3, False)):
+        if time.monotonic() >= campaign_deadline:
+            unattempted.append(arm)
+            failures.append("Overall deadline reached before " + arm)
+            continue
         command = ["dotnet", str(args.runner), "run", "--output", str(args.output / arm),
                    "--engines", engines, "--scenarios", ",".join(SCENARIOS), "--connections", "1", "--streams", "1",
                    "--rounds", str(rounds), "--warmup", "2", "--duration", str(duration), "--idle", "2",
@@ -232,10 +262,10 @@ def main():
             try:
                 child = subprocess.Popen(command, env=environment, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
                 try:
-                    code = child.wait(timeout=1500)
+                    code = wait_with_progress(child, 1500, args.output / arm, arm, campaign_deadline)
                 except subprocess.TimeoutExpired:
                     os.killpg(child.pid, signal.SIGKILL)
-                    child.wait()
+                    child.wait(timeout=10)
                     raise
                 if code:
                     raise subprocess.CalledProcessError(code, command)
@@ -246,6 +276,10 @@ def main():
     for protocol, tls in (("Http1", False), ("Http1", True), ("Http2", True), ("Http3", True)):
         for engine in ("embedio", "kestrel"):
             name = f"fault-{protocol}-{tls}-{engine}"
+            if time.monotonic() >= campaign_deadline:
+                unattempted.append(name)
+                failures.append("Overall deadline reached before " + name)
+                continue
             command = ["dotnet", str(args.runner), "recovery", "--output", str(args.output / name), "--engine", engine,
                        "--protocol", protocol, "--connections", "1", "--streams", "1", "--healthy-seconds", "5",
                        "--storm-seconds", "5", "--storm-workers", "2", "--idle", "2", "--exception-phases"]
@@ -257,17 +291,22 @@ def main():
                 try:
                     child = subprocess.Popen(command, env=environment, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
                     try:
-                        code = child.wait(timeout=180)
+                        code = wait_with_progress(child, 180, args.output / name, name, campaign_deadline)
                     except subprocess.TimeoutExpired:
                         os.killpg(child.pid, signal.SIGKILL)
-                        child.wait()
+                        child.wait(timeout=10)
                         raise
                     if code: raise subprocess.CalledProcessError(code, command)
                     validate_recovery(args.output / name / "recovery.json")
                 except (ValueError, KeyError, StopIteration, OSError, subprocess.SubprocessError) as error:
                     record_fault_failure(engine, name, error, failures, control_limitations)
+    elapsed = time.monotonic() - campaign_started
+    if elapsed >= campaign_budget:
+        failures.append("Overall campaign deadline exceeded; unfinished work is not accepted")
+    (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2))
     (args.output / "verdict.json").write_text(json.dumps({"passed": not failures, "acceptanceScope": "normal-profile-aa-cost-and-EmbedIO-recovery",
-        "failures": failures, "kestrelFaultControls": {"required": False, "limitations": control_limitations}}, indent=2))
+        "failures": failures, "overallBudgetSeconds": campaign_budget, "elapsedSeconds": elapsed,
+        "unattempted": unattempted, "kestrelFaultControls": {"required": False, "limitations": control_limitations}}, indent=2))
     for limitation in control_limitations: print("FAILED COMPARISON CONTROL: " + json.dumps(limitation))
     for failure in failures: print(failure)
     return 1 if failures else 0
