@@ -116,7 +116,15 @@ namespace EmbedIO.Net.Internal.Http3
             catch (Exception error) when (error is IOException or InvalidOperationException) { return false; }
             finally { if (release) Volatile.Write(ref _reading, 0); }
         }
-        protected override void Dispose(bool disposing) { _disposed = true; base.Dispose(disposing); }
+        protected override void Dispose(bool disposing)
+        {
+            // Keep successful snapshots after complete input, but an application
+            // abandoning a pending read cannot publish metadata from its late FIN.
+            // This stream borrows the transport; the original read still settles.
+            if (disposing && !_ended) _inputAbandoned = true;
+            _disposed = true;
+            base.Dispose(disposing);
+        }
         public override void Flush() { }
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();

@@ -199,6 +199,77 @@ namespace EmbedIO.Tests
 
         [TestCase(false)]
         [TestCase(true)]
+        public async Task Http3ApplicationDisposalCannotPublishLateFinButKeepsCompletedSnapshot(bool abandon)
+        {
+            RequireQuic();
+            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            await RunRequestTrailerDisposal(abandon);
+        }
+
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task RunRequestTrailerDisposal(bool abandon)
+        {
+            var entered = new TaskCompletionSource<(Stream Input, Task<int> Read, IHttpRequestTrailers Request)>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var readSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var certificate = Certificate();
+            await using var host = await Host.StartAsync(HttpListenerMode.EmbedIOHttp3, certificate, async context =>
+            {
+                try
+                {
+                    var request = context.Request as IHttpRequestTrailers ?? throw new AssertionException("Missing request capability.");
+                    var input = context.Request.InputStream;
+                    var pending = input.ReadAsync(new byte[1], 0, 1, context.CancellationToken);
+                    entered.SetResult((input, pending, request));
+                    Assert.That(await pending, Is.Zero);
+                    readSettled.SetResult();
+                    await release.Task.WaitAsync(context.CancellationToken);
+                }
+                catch (Exception error)
+                {
+                    entered.TrySetException(error);
+                    readSettled.TrySetException(error);
+                    throw;
+                }
+            });
+            await using var peer = await H3Peer.ConnectAsync(host, certificate);
+            await using var stream = await peer.OpenRequestAsync("POST", "/", false);
+            try
+            {
+                var observed = await entered.Task.WaitAsync(Settle);
+                Assert.That(observed.Read.IsCompleted, Is.False, "The original body read must be pending before disposal or peer FIN.");
+                Assert.That(observed.Request.TryGetTrailers(out var initial), Is.False);
+                Assert.That(initial, Is.Empty);
+                if (abandon)
+                {
+                    observed.Input.Dispose();
+                    Assert.That(observed.Read.IsCompleted, Is.False, "Application disposal cannot settle or dispose the borrowed QUIC read.");
+                }
+                else
+                    await H3Peer.SendFieldsAsync(stream, new[] { ("x-check", "one"), ("x-check", "two") }, false, host.Token);
+                stream.CompleteWrites();
+                await readSettled.Task.WaitAsync(Settle);
+                Assert.That(observed.Read.IsCompletedSuccessfully, Is.True);
+                if (abandon)
+                {
+                    Assert.That(observed.Request.TryGetTrailers(out var unavailable), Is.False,
+                        "Late valid FIN cannot turn an application-abandoned input into successful metadata.");
+                    Assert.That(unavailable, Is.Empty);
+                }
+                else
+                {
+                    AssertTrailerSnapshot(observed.Request);
+                    observed.Input.Dispose();
+                    AssertTrailerSnapshot(observed.Request);
+                }
+            }
+            finally { release.TrySetResult(); }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
         public async Task Http3RequestTrailersWaitForFinAndInvalidFollowingDataCannotPublish(bool malformed)
         {
             RequireQuic();

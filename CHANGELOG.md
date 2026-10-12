@@ -5,6 +5,8 @@
   Complete valid input exposes an immutable trailer snapshot, separate from
   initial headers, without reading or draining input. Existing `IHttpRequest`
   implementations remain compatible. See [request trailers](docs/guides/request-trailers.md).
+  Disposing pending HTTP/3 input cannot publish a successful snapshot on late FIN;
+  snapshots from already completed input remain available after application disposal.
 - Extend the opt-in telemetry from Neo #137 with `http.server.request.body.size`,
   `http.server.response.body.size`, `embedio.server.active_connections` and
   `embedio.server.connection.duration` (TCP and QUIC), and
