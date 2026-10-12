@@ -78,9 +78,10 @@ separately maintained forks or external dependencies on the archived packages.
   Their Tubular, Dynamic LINQ, frontend, Xamarin, and WebView dependencies are gone.
   Two sample-only grid tests were removed; library regression coverage was retained.
 
-The .NET 10 production projects have no external runtime packages beyond .NET
-and references to our own projects. The .NET Standard build retains Microsoft's
-System.Text.Json 10.0.12 and its supporting packages. Inherited source, including
+The .NET 10 production projects reference one external runtime package, Microsoft's
+System.Threading.RateLimiting 10.0.12, which `RateLimitingModule` uses and which is not part
+of the base .NET runtime; otherwise they depend only on .NET and our own projects. The .NET
+Standard build also retains Microsoft's System.Text.Json 10.0.12 and its supporting packages. Inherited source, including
 the MIME table and Mono-derived networking, remains part of the core and retains
 its attribution. Dependency-free packaging does not mean all source was authored
 by Neo's maintainer.
