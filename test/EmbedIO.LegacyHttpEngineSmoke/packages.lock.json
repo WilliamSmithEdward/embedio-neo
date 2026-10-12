@@ -85,7 +85,8 @@
       "EmbedIO-Neo": {
         "type": "Project",
         "dependencies": {
-          "System.Text.Json": "[10.0.12, )"
+          "System.Text.Json": "[10.0.12, )",
+          "System.Threading.RateLimiting": "[10.0.12, )"
         }
       },
       "System.Text.Json": {
@@ -102,6 +103,16 @@
           "System.Text.Encodings.Web": "10.0.12",
           "System.Threading.Tasks.Extensions": "4.6.3",
           "System.ValueTuple": "4.6.2"
+        }
+      },
+      "System.Threading.RateLimiting": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.12",
+        "contentHash": "Y3f2aLAgynO44Q9xYHR35NC1KuSTcZwo49xjHuq0gQWyOWw8fvipIdoc+1e8FS+9neYZuQ1K4iwl5frNJXekgw==",
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "10.0.12",
+          "System.Threading.Tasks.Extensions": "4.6.3"
         }
       }
     },
