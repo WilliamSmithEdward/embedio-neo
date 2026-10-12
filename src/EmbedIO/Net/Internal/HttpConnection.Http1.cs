@@ -69,14 +69,16 @@ namespace EmbedIO.Net.Internal
                     await RejectHeadAsync(reply).ConfigureAwait(false);
                     return false;
                 }
+                var routes = _epl.CaptureRoutes();
                 StopRequestTimer();
-                if (!_epl.BindContext(_context)) { CloseTransport(true); return false; }
+                if (!_epl.BindContext(_context, routes)) { CloseTransport(true); return false; }
 
                 var owner = _context.Listener ?? throw new InvalidOperationException("Missing request owner.");
+                owner.BodyPolicy?.Apply(_context);
                 if (_context.HttpListenerRequest.RequiresContinue)
                 {
                     // A server with body policies invites the upload only when a handler reads it.
-                    if (owner.DeferContinue) _context.HttpListenerRequest.DeferContinue(_context.SendDeferredContinueAsync);
+                    if (owner.DeferContinue || _context.HttpListenerRequest.KnownBodyRefusal != null) _context.HttpListenerRequest.DeferContinue(_context.SendDeferredContinueAsync);
                     else await Stream.WriteAsync(ContinueResponse, 0, ContinueResponse.Length).ConfigureAwait(false);
                 }
                 lock (_connectionSync)

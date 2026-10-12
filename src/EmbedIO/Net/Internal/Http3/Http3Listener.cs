@@ -25,17 +25,20 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly object _sync = new();
         private readonly X509Certificate2 _certificate;
         private readonly bool _native;
+        private readonly RequestPolicyResolver? _bodyPolicy;
         private readonly List<string> _prefixes = new();
         private Session? _session;
         private bool _disposed;
         private bool _stopping;
         internal Http3Listener(X509Certificate2? certificate) : this(certificate, false) { }
-        internal Http3Listener(X509Certificate2? certificate, bool native)
+        internal Http3Listener(X509Certificate2? certificate, bool native) : this(certificate, native, null) { }
+        internal Http3Listener(X509Certificate2? certificate, bool native, RequestPolicyResolver? bodyPolicy)
         {
             if (certificate == null || !certificate.HasPrivateKey)
                 throw new ArgumentException("HTTP/3 requires a certificate with its private key.", nameof(certificate));
             _certificate = certificate;
             _native = native;
+            _bodyPolicy = bodyPolicy;
         }
         public bool IgnoreWriteExceptions { get; set; } = true;
         // Set by a server with body policies: 100 Continue waits for the first body read.
@@ -67,7 +70,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_session != null) return;
                 if (_stopping) throw new InvalidOperationException("The previous HTTP/3 listener is still stopping.");
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificate, _native, DeferContinue, Telemetry);
+                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificate, _native, DeferContinue, Telemetry, _bodyPolicy);
             }
         }
         public void Stop()
@@ -157,11 +160,12 @@ namespace EmbedIO.Net.Internal.Http3
             private int _pendingHandshakes;
             private int _activeConnections;
             private bool _deferContinue;
+            private RequestPolicyResolver? _bodyPolicy;
             private EmbedIO.Internal.ServerTelemetry? _telemetry;
             private Session() { }
-            internal static Session Start(ListenerPrefix[] prefixes, X509Certificate2 certificate, bool native, bool deferContinue, EmbedIO.Internal.ServerTelemetry? telemetry)
+            internal static Session Start(ListenerPrefix[] prefixes, X509Certificate2 certificate, bool native, bool deferContinue, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
             {
-                var session = new Session { _deferContinue = deferContinue, _telemetry = telemetry };
+                var session = new Session { _deferContinue = deferContinue, _telemetry = telemetry, _bodyPolicy = bodyPolicy };
                 try
                 {
                     var endpoints = new Dictionary<IPEndPoint, List<ListenerPrefix>>();
@@ -324,7 +328,8 @@ namespace EmbedIO.Net.Internal.Http3
                             return;
                         }
                     }
-                    await context.SendContinueAsync(_deferContinue).ConfigureAwait(false);
+                    _bodyPolicy?.Apply(context);
+                    await context.SendContinueAsync(_deferContinue || RequestBodyPolicy.KnownRefusal(context.Request) != null).ConfigureAwait(false);
                     await Contexts.Writer.WriteAsync(context, exchange.CancellationToken).ConfigureAwait(false);
                     await context.Completion.WaitAsync(exchange.CancellationToken).ConfigureAwait(false);
                 }

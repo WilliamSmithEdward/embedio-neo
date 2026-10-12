@@ -170,7 +170,7 @@ namespace EmbedIO.Tests.Issues
             // No body is sent: the server must answer and close rather than wait to drain it.
             var wire = await socket.ReadToEndAsync();
             Assert.That(wire, Does.StartWith("HTTP/1.1 200"));
-            Assert.That(wire, Does.Not.Contain("100 Continue"));
+            Assert.That(wire, Does.Not.Contain("HTTP/1.1 100"));
             Assert.That(wire, Does.Contain("Connection: close"), "The response announces that the connection will not be reused.");
             Assert.That(wire, Does.Contain("\r\n\r\n7\r\nignored\r\n"));
         }
@@ -223,6 +223,148 @@ namespace EmbedIO.Tests.Issues
             Assert.That(await response.Content.ReadAsStringAsync(), Does.Contain("deadline"));
         }
 
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task RawBodyHeaderRejectionPrecedesBodyAndOccupiedAdmission(int protocol)
+        {
+            using var gate = new Gate(1);
+            var posts = 0;
+            await using var host = await MultiHost.StartAsync(protocol,
+                options => options.WithMaximumRequestBodyBytes(2).WithRequestHeaderLimits(256)
+                    .WithMaximumConcurrentRequests(1), async context =>
+                {
+                    if (context.Request.HttpMethod == "POST") Interlocked.Increment(ref posts);
+                    await gate.HandleAsync(context);
+                }, HttpVerbs.Any);
+            var held = host.SendAsync(HttpMethod.Get, null);
+            try
+            {
+                await gate.Entered.WaitAsync(Deadline);
+                if (protocol == 1)
+                {
+                    // Observe the actual interim-response wire. HttpClient may
+                    // serialize content after a final refusal, so its Sent flag
+                    // alone cannot establish an HTTP/1 upload invitation.
+                    var endpoint = new Uri(host.Url);
+                    using var tcp = new TcpClient();
+                    using var connectTimeout = new CancellationTokenSource(Deadline);
+                    await tcp.ConnectAsync(IPAddress.Loopback, endpoint.Port, connectTimeout.Token);
+                    using var peer = new RawSocket(tcp);
+                    await peer.SendAsync($"POST / HTTP/1.1\r\nHost: {endpoint.Authority}\r\nContent-Length: 3\r\nExpect: 100-continue\r\nX-Large: {new string('a', 300)}\r\n\r\n");
+                    var wire = await peer.ReadToEndAsync();
+                    Assert.That(wire, Does.StartWith("HTTP/1.1 431"),
+                        "Header policy must precede known-length 413 and occupied-slot 503.");
+                    Assert.That(wire, Does.Not.Contain("HTTP/1.1 100"));
+                    Assert.That(wire, Does.Contain("Request header fields exceed the configured limit."));
+                    Assert.That(wire, Does.Contain("Connection: close"));
+                }
+                else
+                {
+                    var content = new TrackingContent(3);
+                    using var rejected = await host.SendAsync(HttpMethod.Post, content, request =>
+                    {
+                        request.Headers.ExpectContinue = true;
+                        request.Headers.Add("X-Large", new string('a', 300));
+                    });
+                    Assert.That(rejected.StatusCode, Is.EqualTo(HttpStatusCode.RequestHeaderFieldsTooLarge),
+                        "Header policy must precede known-length 413 and occupied-slot 503.");
+                    Assert.That(await rejected.Content.ReadAsStringAsync(), Does.Contain("header fields exceed"));
+                    Assert.That(content.Sent, Is.False, "A simultaneous policy rejection must not invite the entity.");
+                }
+                Assert.That(Volatile.Read(ref posts), Is.Zero);
+                Assert.That(gate.EnteredCount, Is.EqualTo(1));
+            }
+            finally { gate.Release(); }
+            using var first = await held;
+            Assert.That(await first.Content.ReadAsStringAsync(), Is.EqualTo("released"));
+            await host.WaitForAdmissionReleaseAsync();
+            using var healthy = await host.SendAsync(HttpMethod.Get, null);
+            Assert.That(healthy.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(await healthy.Content.ReadAsStringAsync(), Is.EqualTo("released"));
+            Assert.That(gate.EnteredCount, Is.EqualTo(2));
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task RawBodyRouteEffectiveLimitPrecedesContinueAndGlobalRefusal(int protocol)
+        {
+            var posts = 0;
+            await using var host = await MultiHost.StartAsync(protocol, options => options.WithMaximumRequestBodyBytes(2)
+                .WithRouteRequestLimits("/raised/{id}", policy => policy.MaximumRequestBodyBytes = 4)
+                .WithRouteRequestLimits("/raised", policy => policy.MaximumRequestBodyBytes = 0)
+                .WithRouteRequestLimits("/lifted", policy => policy.MaximumRequestBodyBytes = long.MaxValue)
+                .WithRouteRequestLimits("/empty", policy => policy.MaximumRequestBodyBytes = 0), async context =>
+                {
+                    if (context.Request.HttpMethod == "GET")
+                    { await context.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding); return; }
+                    Interlocked.Increment(ref posts);
+                    var lifted = context.Request.Url.AbsolutePath.StartsWith("/lifted", StringComparison.Ordinal);
+                    Assert.That(context.Request.InputStream.GetType().Name,
+                        lifted ? Is.Not.EqualTo("RawRequestBodyStream") : Is.EqualTo("RawRequestBodyStream"));
+                    var body = await context.GetRequestBodyAsByteArrayAsync();
+                    await context.SendStringAsync(body.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        "text/plain", WebServer.Utf8NoBomEncoding);
+                }, HttpVerbs.Any);
+            async Task Post(string path, int length)
+            {
+                using var response = await host.SendAsync(HttpMethod.Post, new ByteArrayContent(new byte[length]), request =>
+                {
+                    request.RequestUri = new Uri(host.Url + path);
+                    // RFC 9110 section 10.1.1 forbids Expect: 100-continue
+                    // without content; zero still exercises the zero-byte policy.
+                    // https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.1
+                    request.Headers.ExpectContinue = length > 0;
+                });
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo(length.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            }
+            async Task Refuse(string path, int length)
+            {
+                var before = Volatile.Read(ref posts);
+                if (protocol == 1)
+                {
+                    var endpoint = new Uri(host.Url);
+                    using var tcp = new TcpClient();
+                    using var timeout = new CancellationTokenSource(Deadline);
+                    await tcp.ConnectAsync(IPAddress.Loopback, endpoint.Port, timeout.Token);
+                    using var peer = new RawSocket(tcp);
+                    await peer.SendAsync($"POST /{path} HTTP/1.1\r\nHost: {endpoint.Authority}\r\nContent-Length: {length}\r\nExpect: 100-continue\r\n\r\n");
+                    var wire = await peer.ReadToEndAsync();
+                    Assert.That(wire, Does.StartWith("HTTP/1.1 413"));
+                    Assert.That(wire, Does.Not.Contain("HTTP/1.1 100"));
+                    Assert.That(wire, Does.Contain("Request body exceeds the configured byte limit."),
+                        "Known refusal retains the existing error formatter.");
+                }
+                else
+                {
+                    var content = new TrackingContent(length);
+                    using var response = await host.SendAsync(HttpMethod.Post, content, request =>
+                    {
+                        request.RequestUri = new Uri(host.Url + path);
+                        request.Headers.ExpectContinue = true;
+                    });
+                    Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
+                    Assert.That(await response.Content.ReadAsStringAsync(),
+                        Does.Contain("Request body exceeds the configured byte limit."),
+                        "Known refusal retains the existing error formatter.");
+                    Assert.That(content.Sent, Is.False);
+                }
+                Assert.That(Volatile.Read(ref posts), Is.EqualTo(before));
+            }
+            // The parameterized first match raises the global cap before Continue.
+            await Post("raised/%34%32/items", 4);
+            await Refuse("raised/42/items", 5);
+            await Post("lifted/nested", 6);
+            await Post("empty", 0);
+            await Refuse("empty", 1);
+            await Refuse("other", 3);
+            using var healthy = await host.SendAsync(HttpMethod.Get, null);
+            Assert.That(await healthy.Content.ReadAsStringAsync(), Is.EqualTo("healthy"));
+            Assert.That(posts, Is.EqualTo(3));
+        }
+
         // ---------------------------------------------------------------- helpers
 
         private sealed class TrackingContent : HttpContent
@@ -256,7 +398,7 @@ namespace EmbedIO.Tests.Issues
             }
             public string Url { get; }
 
-            public static async Task<MultiHost> StartAsync(int protocol, Action<WebServerOptions> configure, Func<IHttpContext, Task> handler, HttpVerbs verbs = HttpVerbs.Get)
+            public static async Task<MultiHost> StartAsync(int protocol, Action<WebServerOptions> configure, Func<IHttpContext, Task> handler, HttpVerbs verbs = HttpVerbs.Get, Action<WebServer>? configureServer = null)
             {
                 X509Certificate2? certificate = null;
                 string url;
@@ -282,6 +424,7 @@ namespace EmbedIO.Tests.Issues
                     configure(o);
                 }).WithModule(new ActionModule("/", verbs, context => handler(context)));
                 server.OnHttpException = HttpExceptionHandler.PlainTextResponse;
+                configureServer?.Invoke(server);
 
                 var expected = certificate?.GetCertHashString(HashAlgorithmName.SHA256);
                 var client = new HttpClient(new SocketsHttpHandler
@@ -299,6 +442,19 @@ namespace EmbedIO.Tests.Issues
                 var host = new MultiHost(server, url, client, protocol switch { 1 => HttpVersion.Version11, 2 => HttpVersion.Version20, _ => HttpVersion.Version30 }, certificate);
                 if (host._running.IsCompleted) await host._running;
                 return host;
+            }
+
+            internal async Task WaitForAdmissionReleaseAsync()
+            {
+                // Response bytes can arrive before the handler's finally returns
+                // its admission slot. Observe that real settlement before probing
+                // listener health; never release or mutate the engine semaphore.
+                var owner = _server.GetType().BaseType ?? throw new AssertionException("Missing server base.");
+                var slots = owner.GetField("_requestSlots", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    ?.GetValue(_server) as SemaphoreSlim ?? throw new AssertionException("Missing owned admission slots.");
+                using var timeout = new CancellationTokenSource(Deadline);
+                while (slots.CurrentCount == 0) await Task.Delay(1, timeout.Token);
+                Assert.That(slots.CurrentCount, Is.EqualTo(1));
             }
 
             public Task<HttpResponseMessage> SendAsync(HttpMethod method, HttpContent? content, Action<HttpRequestMessage>? prepare = null)

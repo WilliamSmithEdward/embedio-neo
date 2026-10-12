@@ -16,7 +16,10 @@ namespace EmbedIO.Net.Internal
         }
         private sealed class Snapshot
         {
-            internal Snapshot(Route[] named, Route[] star, Route[] plus) { Named = named; Star = star; Plus = plus; }
+            internal Snapshot(Route[] named, Route[] star, Route[] plus)
+            {
+                Named = named; Star = star; Plus = plus;
+            }
             internal Route[] Named { get; }
             internal Route[] Star { get; }
             internal Route[] Plus { get; }
@@ -26,6 +29,13 @@ namespace EmbedIO.Net.Internal
                     : host == "+" ? new Snapshot(Named, Star, routes) : new Snapshot(routes, Star, Plus);
         }
         private Snapshot _snapshot = new(Array.Empty<Route>(), Array.Empty<Route>(), Array.Empty<Route>());
+        internal readonly struct ReadSnapshot
+        {
+            private readonly Snapshot _snapshot;
+            internal ReadSnapshot(EndpointRoutes routes) { _snapshot = Volatile.Read(ref routes._snapshot); }
+            internal HttpListener? Find(Uri uri, out ListenerPrefix? prefix) => FindInSnapshot(_snapshot, uri, out prefix);
+        }
+        internal ReadSnapshot Capture() => new(this);
         internal bool IsEmpty
         {
             get
@@ -88,10 +98,11 @@ namespace EmbedIO.Net.Internal
             => first.Host == second.Host && first.Path == second.Path
                 && (first.Host is "*" or "+" || first.Port == second.Port && first.Secure == second.Secure);
         internal HttpListener? Find(Uri uri, out ListenerPrefix? prefix)
+            => FindInSnapshot(Volatile.Read(ref _snapshot), uri, out prefix);
+        private static HttpListener? FindInSnapshot(Snapshot snapshot, Uri uri, out ListenerPrefix? prefix)
         {
             prefix = null;
             if (uri == null) return null;
-            var snapshot = Volatile.Read(ref _snapshot);
             var host = uri.Host;
             var port = uri.Port;
             var path = WebUtility.UrlDecode(uri.AbsolutePath);

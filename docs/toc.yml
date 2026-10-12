@@ -50,6 +50,8 @@
       href: guides/https.md
     - name: Request limits, admission and deadlines
       href: guides/request-limits.md
+    - name: Request-body byte limits
+      href: guides/request-body-limits.md
     - name: Metrics and tracing
       href: guides/telemetry.md
     - name: Trimming and Native AOT
