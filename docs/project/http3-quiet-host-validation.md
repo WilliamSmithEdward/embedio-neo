@@ -117,3 +117,119 @@ not part of these runs.
 3. Longer runs at the endurance campaign's mixed load if refusals or timeouts recur.
 
 Raw evidence is under ignored `TestResults/issue-283` in the issue worktree.
+
+## Current-source disposable CI control
+
+Issue #283 has a dedicated `HTTP3 host controls` workflow: Ubuntu 24.04 is the
+qualified quiet reference; Windows 2025 retains ambient and contention repeats. It builds the checked-out core and identical comparison harness,
+uses SDK 10.0.401 and the existing pinned Linux MsQuic 2.6.2 prerequisite, and records
+the actual source revision and loaded core/runtime/native binary hashes.
+
+Each engine receives two alternating rounds of 15-second rate phases. The quiet
+arm uses 4, 16, 64 and 128 connections/second; the contention arm uses 64 and 128.
+Both retain 32 small requests/second and two 1 MiB requests/second over four warm
+HTTP/3 clients. Connection establishment, first-stream service and warm requests
+are measured separately. No handshake deadline is increased.
+
+On Linux, a 15-second baseline must average at most 0.5 busy CPUs before either arm starts.
+Windows records its ambient baseline without a quiet assertion.
+Each quiet phase must also average at most 0.5 background CPUs; the contention arm
+must measure at least 80% host CPU. These thresholds are declared before the run.
+Missing samples, cap omissions, any request failure, unsuccessful server exit or
+missing native hash fail acceptance. A contaminated host is an inconclusive failed
+control, not evidence of an engine defect or a quiet run. The script preserves all
+raw JSON and logs, including failed campaigns, and does not retry them automatically.
+
+The contention arm runs only on disposable GitHub runners. It does not authorize
+an all-core burn on a shared development workstation. Actual outcomes and exact-source acceptance are recorded in
+[issue #283](https://github.com/WilliamSmithEdward/embedio-neo/issues/283) and the
+[PR #346 checks](https://github.com/WilliamSmithEdward/embedio-neo/pull/346/checks).
+Configuring this workflow alone is not validation.
+
+### Retained initial control attempt
+
+Run [38260741994](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38260741994)
+rejected both quiet baselines before generating load: Linux measured 0.682 busy CPUs
+and Windows 0.943, exceeding the declared 0.5 ceiling. These are inconclusive quiet
+controls. The subsequent contention arms completed without request failures or cap
+omissions on both platforms; every original sample is retained in their run artifacts.
+
+The setup now waits a fixed 30 seconds after compilation before starting measurement.
+This is preparation, not a discarded baseline or automatic retry, and no acceptance
+threshold or deadline changed. A fresh campaign is still required. The initial security
+report also exposed PowerShell syntax that a Bash-specific Semgrep rule could not
+parse; separate plain restore/build steps replace that block without a scanner waiver.
+
+### Windows residual CPU investigation
+
+Run [38261965704](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38261965704)
+passed both Linux arms. Its quiet baseline measured 0.010 busy CPUs and its contention
+baseline 0.008. Windows completed every request without errors or cap omissions, but
+several quiet phases exceeded the residual/background CPU ceiling. Its quiet baseline
+was 0.106 busy CPUs; higher residual activity during load is not sufficient to identify
+which external process or kernel work caused it. Windows quiet acceptance remains
+unconfirmed; the threshold is not relaxed.
+
+The next diagnostic captures per-process CPU time, names and instance identities on
+Windows, with inaccessible or exited processes explicitly recorded. It reads no
+process memory, command lines or credentials. This adds attribution evidence without
+excluding processes or changing the quiet-host gate. Artifact names include the run
+attempt so an explicit rerun cannot replace earlier failure evidence.
+
+### Approved reference scope
+
+William approved using Linux as the qualified quiet-host reference, with every Windows
+case retained as an explicitly ambient platform repeat and a measured contention arm.
+Windows quiet acceptance is **not established**. This does not retroactively pass the
+rejected Windows quiet runs or exclude OS processes from their CPU records.
+
+New artifact manifests and verdicts identify `quietReference` explicitly; Windows' first
+arm is named `ambient`, and its verdict retains `windowsQuietStatus: not established`.
+All request counts, complete latency/CPU data, native/core/runtime hashes, runtime
+handshake deadlines, zero-error/cap-omission checks and clean server exits remain
+mandatory. Linux's quiet ceilings and both platforms' measured contention requirement
+are unchanged. Linux retains the initial passive baseline ceiling. Windows records its ambient
+baseline without asserting that it is quiet.
+The Windows process census remains diagnostic; protected read failures are recorded.
+
+The Windows CPU census in run 38264278426 showed substantial `lsass` activity increasing
+with handshake rate for both engines (up to about 0.43 busy CPUs in phase means), plus
+update and compatibility tasks. Microsoft's [CNG key-storage documentation](https://learn.microsoft.com/en-us/windows/win32/seccng/key-storage-and-retrieval)
+explains that private-key operations can run in the LSA process. Workload-related crypto
+is therefore a plausible contributor to the residual; the census does not establish
+exact attribution of all service activity. No process is excluded to obtain a quiet result.
+
+Linux passed quiet and contention controls in both runs 38261965704 and 38264278426.
+Each complete per-platform campaign measured 24,240 connection handshakes/first-stream
+GETs and 12,240 mixed warm requests, excluding setup and health requests. Windows
+completed those same requests without failures or cap omissions in both runs, while its
+quiet assessment remained inconclusive. PR acceptance requires a fresh run under the approved scope
+and all normal checks passing on the exact current head. These are bounded hosted-VM controls, not exhaustive endurance,
+original-host reproduction, a public ranking or proof of the sole historical cause.
+
+### Ambient setup correction
+
+Run [38266929424](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38266929424)
+completed all Windows ambient requests without failures, but did not start its contention
+arm: a leftover quiet-baseline prerequisite rejected 0.533 busy CPUs. The ambient
+scope does not promise a quiet Windows baseline. The corrected script records that
+measurement and applies quiet prerequisites only to the Linux reference. Invalid CPU
+measurements still fail on both platforms, and Windows must execute and pass every
+request and measured contention case on fresh source. The rejected setup is retained;
+it is not counted as a completed contention run.
+
+### Retained Windows handshake failure and timing correction
+
+Run [38269242512](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38269242512)
+passed Linux and the Windows contention arm, but Windows ambient EmbedIO round two
+at 16 connections/second recorded 22 handshake refusals out of 240 attempts. Warm
+requests completed, with multi-second latency. The host's compatibility process was
+active and the scheduler accumulated substantial lag, but this does not establish
+the refusals' root cause. The run remains failed; no request failure is accepted.
+
+The stall also exposed mismatched CPU sampling intervals: the initial counter read
+preceded the process census while its timestamp followed it, and subsequent loop
+timestamps preceded potentially blocking reads. CPU deltas now use each counter's
+own acquisition interval, including a timestamp for each process CPU read. This
+corrects telemetry only, without changing request scheduling, deadlines or gates.
+Fresh source validation remains required and the original failure is preserved.
