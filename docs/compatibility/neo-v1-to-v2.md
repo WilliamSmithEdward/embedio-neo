@@ -386,6 +386,30 @@ input. Declaration does not authorize a field, and trailer metadata never change
 routing or authentication. See [Request trailers](../guides/request-trailers.md)
 for the completion and ownership contract. This addition is unreleased.
 
+## Malformed HTTP/1 request rejection
+
+The HTTP/1 candidate stages transport shutdown after rejecting a malformed or
+oversized request head with HTTP 400, 414 or 431. It attempts the complete error
+response, completes output, and discards remaining raw input without parsing or
+application dispatch. The existing connection owner and admission slot remain
+held until physical transport retirement. Stop, disposal and forced closure can
+still retire that transport promptly.
+
+The whole error-write, output-shutdown and discard interval has a best-effort
+one-second budget. An already earlier configured request-header deadline wins;
+extra input does not renew this interval. A blocked or failed write, expired
+deadline, or concurrent stop can prevent a complete error response. Applications
+must not depend on receiving an error reply after those failures. Valid request
+handling and normal response closure are unchanged.
+
+TLS output shutdown uses public runtime APIs when available. Installed .NET
+Framework 4.8 and .NET 10 were checked with delayed TLS readers. A netstandard
+host lacking public TLS shutdown can only flush and half-close TCP in this path;
+it cannot promise TLS close_notify. That unavailable-capability fallback has not
+been exercised on an actual runtime lacking the API. Accepted tunnels retain
+their existing stricter public TLS-shutdown capability requirement. This correction
+is unreleased and does not establish the cause of an isolated hosted test failure.
+
 ## Release preparation still required
 
 Before v2 ships, reconcile every approved behavior change into this guide,

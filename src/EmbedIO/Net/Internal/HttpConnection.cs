@@ -193,7 +193,9 @@ namespace EmbedIO.Net.Internal
                 _tunnel = true;
             }
         }
-        internal async Task CompleteTunnelOutputAsync(CancellationToken token)
+        internal Task CompleteTunnelOutputAsync(CancellationToken token) => CompleteOutputAsync(token, true);
+
+        private async Task CompleteOutputAsync(CancellationToken token, bool requireTlsShutdown)
         {
             token.ThrowIfCancellationRequested();
             using var cancellation = token.Register(ForceClose);
@@ -203,7 +205,11 @@ namespace EmbedIO.Net.Internal
 #if NET10_0_OR_GREATER
                 await ssl.ShutdownAsync().ConfigureAwait(false);
 #else
-                await (ShutdownTls ?? throw new NotSupportedException("TLS send-shutdown is unavailable."))(ssl).ConfigureAwait(false);
+                if (ShutdownTls != null) await ShutdownTls(ssl).ConfigureAwait(false);
+                else if (requireTlsShutdown) throw new NotSupportedException("TLS send-shutdown is unavailable.");
+                // When this runtime exposes no public TLS shutdown API,
+                // rejection can only flush the response and stage the TCP close;
+                // additive tunnels continue to require TLS shutdown support.
 #endif
             }
             token.ThrowIfCancellationRequested();
