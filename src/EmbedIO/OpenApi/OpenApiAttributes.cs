@@ -50,7 +50,9 @@ namespace EmbedIO.OpenApi
         /// <summary>Gets or sets the response description. The default is the status code's reason phrase.</summary>
         public string? Description { get; set; }
 
-        /// <summary>Gets or sets the type of the response body, described as JSON; <see langword="null"/> for no body.</summary>
+        /// <summary>Gets or sets the type of the response body; <see langword="null"/> for no body or an unstated one.
+        /// A JSON media type takes its schema from the serializer options; other media types accept
+        /// <see cref="string"/>, a byte array or a <see cref="System.IO.Stream"/>.</summary>
         public Type? Type { get; set; }
 
         /// <summary>Gets or sets the body's media type. The default is <c>application/json</c>.</summary>
