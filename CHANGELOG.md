@@ -5,6 +5,18 @@
   headers in write order without ending the response. HEAD and bodyless responses
   retain their payload suppression. Disposed output rejects flushes; automatic
   request cleanup preserves empty-response framing and higher-level buffering behavior.
+- Add a controller-binding source generator from Neo #138, shipped in the EmbedIO-Neo
+  package. `[GeneratedControllerBinding(typeof(TController))]` on a partial class makes it
+  generate a `WebApiControllerBinding<TController>`, registered with new
+  `WithController(binding)`, `RegisterController(binding)` and
+  `RegisterControllerWithContext(binding, ...)` overloads that use no reflection, so Web
+  API controllers work in trimmed and Native AOT applications. Bindings keep the
+  reflection-based registration's routes, parameter rules, converters, serialization and
+  controller lifetime; `[JsonData]` can use a `JsonSerializerContext`. Signatures the
+  binding cannot reproduce are reported at build time (EMBEDIO001 to EMBEDIO012).
+  `[QueryField]`, `[FormField]` and `[JsonData]` no longer carry trimming annotations;
+  their runtime-type paths, used only by reflection-based registration, are behind
+  feature switches.
 - Add the optional `IHttpRequestTrailers` capability on built-in request adapters.
   Complete valid input exposes an immutable trailer snapshot, separate from
   initial headers, without reading or draining input. Existing `IHttpRequest`

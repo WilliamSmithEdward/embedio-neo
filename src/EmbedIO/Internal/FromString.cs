@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System;
 using System.ComponentModel;
-using System.Globalization;
 using System.Linq.Expressions;
 
 namespace EmbedIO.Internal
@@ -16,37 +15,7 @@ namespace EmbedIO.Internal
         // Distinguish client input from unsupported/missing binding configuration.
         // Query/form callers keep their existing boolean conversion contract.
         private static bool TryConvertTo(Type type, string? value, out object? result, out bool invalidValue)
-        {
-            result = null;
-            invalidValue = false;
-            var underlying = Nullable.GetUnderlyingType(type);
-            if (underlying != null && string.IsNullOrEmpty(value)) return true;
-            if (value == null) return false;
-            type = underlying ?? type;
-            if (type == typeof(string)) { result = value; return true; }
-            try
-            {
-                if (type.IsEnum)
-                {
-                    invalidValue = !string.IsNullOrEmpty(value);
-                    result = Enum.Parse(type, value, true);
-                }
-                else
-                {
-                    var converter = TypeDescriptor.GetConverter(type);
-                    if (!converter.CanConvertFrom(typeof(string))) return false;
-                    invalidValue = !string.IsNullOrEmpty(value);
-                    result = converter.ConvertFrom(null, CultureInfo.InvariantCulture, value);
-                }
-                invalidValue = false;
-                return true;
-            }
-            catch (Exception exception) when (exception is ArgumentException || exception is FormatException || exception is OverflowException || exception is NotSupportedException)
-            {
-                if (exception is NotSupportedException) invalidValue = false;
-                return false;
-            }
-        }
+            => StringConversion.TryConvert(type, value, (object?)null, static (_, t) => TypeDescriptor.GetConverter(t), out result, out invalidValue);
 
         internal static bool TryConvertTo(Type type, string[] values, out object? result)
         {
