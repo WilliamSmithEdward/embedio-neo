@@ -12,6 +12,7 @@ using EmbedIO.Actions;
 using EmbedIO.Routing;
 using EmbedIO.Tests.TestObjects;
 using EmbedIO.WebApi;
+using EmbedIO.WebSockets;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests.Issues
@@ -225,6 +226,127 @@ namespace EmbedIO.Tests.Issues
             Assert.That(capture.Durations.Count(m => Equals(m.Tag("embedio.server.name"), second)), Is.EqualTo(2));
         }
 
+        // ---------------------------------------------------------------- second increment
+
+        [TestCase(1)]
+        [TestCase(2)]
+        public async Task BodySizesCountWhatWasReadAndSent(int protocol)
+        {
+            using var capture = new Capture();
+            var name = Name();
+            var url = Resources.GetServerAddress();
+            await using (var host = Host.Start(url, o => o.WithTelemetry(name), server => server.WithAction("/", HttpVerbs.Any, EchoLength), protocol))
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = new ByteArrayContent(new byte[12345]) };
+                using var posted = await host.Client.SendAsync(request);
+                Assert.That(await posted.Content.ReadAsStringAsync(), Is.EqualTo("12345"));
+                Assert.That(await host.Client.GetStringAsync(url), Is.EqualTo("0"));
+            }
+            var requests = capture.WaitFor("http.server.request.body.size", name, 1);
+            Assert.That(requests.Select(m => m.Value), Is.EqualTo(new double[] { 12345 }), "A bodyless GET records no request size.");
+            var responses = capture.WaitFor("http.server.response.body.size", name, 2);
+            Assert.That(responses.Select(m => m.Value), Is.EquivalentTo(new double[] { 5, 1 }));
+            Assert.That(responses.All(m => Equals(m.Tag("http.response.status_code"), 200)), Is.True, "Body sizes carry the duration attributes.");
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        public async Task ConnectionsAreCountedFromAdmissionToClose(int protocol)
+        {
+            using var capture = new Capture();
+            var name = Name();
+            var url = Resources.GetServerAddress();
+            await using (var host = Host.Start(url, o => o.WithTelemetry(name), server => server.WithAction("/", HttpVerbs.Get, Ok), protocol))
+            {
+                Assert.That(await host.Client.GetStringAsync(url), Is.EqualTo("ok"));
+                Assert.That(await host.Client.GetStringAsync(url), Is.EqualTo("ok"));
+                var open = capture.WaitFor("embedio.server.active_connections", name, 1);
+                Assert.That(open.Select(m => m.Value), Is.EqualTo(new double[] { 1 }), "Two requests reuse one connection.");
+            }
+            var active = capture.WaitFor("embedio.server.active_connections", name, 2);
+            Assert.That(active.Select(m => m.Value), Is.EqualTo(new double[] { 1, -1 }));
+            Assert.That(active.All(m => Equals(m.Tag("network.transport"), "tcp") && Equals(m.Tag("server.port"), new Uri(url).Port)), Is.True);
+            var duration = capture.WaitFor("embedio.server.connection.duration", name, 1).Single();
+            Assert.That(duration.Tag("network.protocol.version"), Is.EqualTo(protocol == 2 ? "2" : "1.1"));
+            Assert.That(duration.Value, Is.GreaterThan(0));
+        }
+
+        [Test]
+        public async Task QuicConnectionsAreCounted()
+        {
+            var supported = System.Net.Quic.QuicListener.IsSupported && System.Net.Quic.QuicConnection.IsSupported;
+            if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1") Assert.That(supported, Is.True);
+            if (!supported) Assert.Ignore("The host has no QUIC transport.");
+            using var capture = new Capture();
+            var name = Name();
+            using var certificate = PlatformTests.HttpsSmoke.CreateCertificate(System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.Exportable);
+            using var probe = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Dgram, System.Net.Sockets.ProtocolType.Udp);
+            probe.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+            var url = $"https://localhost:{((IPEndPoint)(probe.LocalEndPoint ?? throw new AssertionException("Missing UDP endpoint."))).Port}/";
+            probe.Dispose();
+            var expected = certificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256);
+            using (var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIOHttp3).WithCertificate(certificate).WithTelemetry(name)).WithAction("/", HttpVerbs.Get, Ok))
+            using (var stop = new CancellationTokenSource())
+            {
+                var running = server.RunAsync(stop.Token);
+                using (var client = new HttpClient(new SocketsHttpHandler
+                {
+                    UseProxy = false,
+                    SslOptions = new System.Net.Security.SslClientAuthenticationOptions
+                    {
+                        RemoteCertificateValidationCallback = (_, peer, _, _) => peer?.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256) == expected,
+                    },
+                })
+                { DefaultRequestVersion = HttpVersion.Version30, DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact, Timeout = Deadline })
+                {
+                    Assert.That(await client.GetStringAsync(url), Is.EqualTo("ok"));
+                }
+                stop.Cancel();
+                await running.WaitAsync(Deadline);
+            }
+            var active = capture.WaitFor("embedio.server.active_connections", name, 2);
+            Assert.That(active.Select(m => m.Value), Is.EqualTo(new double[] { 1, -1 }));
+            Assert.That(active.All(m => Equals(m.Tag("network.transport"), "quic")), Is.True);
+            Assert.That(capture.WaitFor("embedio.server.connection.duration", name, 1).Single().Tag("network.protocol.version"), Is.EqualTo("3"));
+        }
+
+        [Test]
+        public async Task WebSocketLifetimeIsRecorded()
+        {
+            using var capture = new Capture();
+            var name = Name();
+            var url = Resources.GetServerAddress();
+            await using (var host = Host.Start(url, o => o.WithTelemetry(name), server => server.WithModule(new EchoSocket("/echo"))))
+            {
+                using var socket = new System.Net.WebSockets.ClientWebSocket();
+                await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://", StringComparison.Ordinal) + "echo"), CancellationToken.None);
+                var opened = capture.WaitFor("embedio.server.active_websockets", name, 1);
+                Assert.That(opened.Select(m => m.Value), Is.EqualTo(new double[] { 1 }));
+                await socket.SendAsync(new byte[] { 7 }, System.Net.WebSockets.WebSocketMessageType.Binary, true, CancellationToken.None);
+                var buffer = new byte[4];
+                var received = await socket.ReceiveAsync(buffer, CancellationToken.None);
+                Assert.That(received.Count, Is.EqualTo(1));
+                await Task.Delay(200);
+                await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+            }
+            var active = capture.WaitFor("embedio.server.active_websockets", name, 2);
+            Assert.That(active.Select(m => m.Value), Is.EqualTo(new double[] { 1, -1 }));
+            var duration = capture.WaitFor("embedio.server.websocket.duration", name, 1).Single();
+            Assert.That(duration.Tag("http.route"), Is.EqualTo("/echo/"));
+            Assert.That(duration.Value, Is.GreaterThanOrEqualTo(0.15));
+        }
+
+        [Test]
+        public async Task ConnectionsOfAServerWithoutTelemetryAreNotRecorded()
+        {
+            using var capture = new Capture();
+            var url = Resources.GetServerAddress();
+            await using (var host = Host.Start(url, o => { }, server => server.WithAction("/", HttpVerbs.Get, Ok)))
+                Assert.That(await host.Client.GetStringAsync(url), Is.EqualTo("ok"));
+            var port = new Uri(url).Port;
+            Assert.That(capture.Instruments.Values.SelectMany(q => q).Where(m => Equals(m.Tag("server.port"), port)), Is.Empty);
+        }
+
         [Test]
         public void OptionsDefaultsValidationAndLocking()
         {
@@ -246,6 +368,21 @@ namespace EmbedIO.Tests.Issues
 
         private static Task Ok(IHttpContext context) => context.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding);
 
+        private sealed class EchoSocket : WebSocketModule
+        {
+            public EchoSocket(string path) : base(path, true) { }
+            protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result) => SendAsync(context, buffer);
+        }
+
+        private static async Task EchoLength(IHttpContext context)
+        {
+            var total = 0L;
+            var buffer = new byte[4096];
+            int read;
+            while ((read = await context.Request.InputStream.ReadAsync(buffer, 0, buffer.Length, context.CancellationToken)) > 0) total += read;
+            await context.SendStringAsync(total.ToString(System.Globalization.CultureInfo.InvariantCulture), "text/plain", WebServer.Utf8NoBomEncoding);
+        }
+
         public sealed class ItemsController : WebApiController
         {
             [Route(HttpVerbs.Get, "/items/{id}")]
@@ -265,6 +402,20 @@ namespace EmbedIO.Tests.Issues
             public ConcurrentQueue<Measurement> Durations { get; } = new();
             public ConcurrentQueue<Measurement> Active { get; } = new();
             public ConcurrentQueue<Activity> Spans { get; } = new();
+            public ConcurrentDictionary<string, ConcurrentQueue<Measurement>> Instruments { get; } = new();
+
+            // Every EmbedIO.Server measurement of one instrument, in arrival order.
+            public IEnumerable<Measurement> Of(string instrument, string serverName)
+                => Instruments.GetOrAdd(instrument, _ => new ConcurrentQueue<Measurement>())
+                    .Where(m => Equals(m.Tag("embedio.server.name"), serverName));
+
+            // Waits for at least count measurements of an instrument; recording follows closure.
+            public List<Measurement> WaitFor(string instrument, string serverName, int count)
+            {
+                var stop = DateTime.UtcNow + Deadline;
+                while (Of(instrument, serverName).Count() < count && DateTime.UtcNow < stop) Thread.Sleep(10);
+                return Of(instrument, serverName).ToList();
+            }
 
             public Capture()
             {
@@ -274,11 +425,15 @@ namespace EmbedIO.Tests.Issues
                 };
                 _meters.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
                 {
-                    if (instrument.Name == "http.server.request.duration") Durations.Enqueue(new Measurement(value, tags.ToArray()));
+                    var measurement = new Measurement(value, tags.ToArray());
+                    Instruments.GetOrAdd(instrument.Name, _ => new ConcurrentQueue<Measurement>()).Enqueue(measurement);
+                    if (instrument.Name == "http.server.request.duration") Durations.Enqueue(measurement);
                 });
                 _meters.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
                 {
-                    if (instrument.Name == "http.server.active_requests") Active.Enqueue(new Measurement(value, tags.ToArray()));
+                    var measurement = new Measurement(value, tags.ToArray());
+                    Instruments.GetOrAdd(instrument.Name, _ => new ConcurrentQueue<Measurement>()).Enqueue(measurement);
+                    if (instrument.Name == "http.server.active_requests") Active.Enqueue(measurement);
                 });
                 _meters.Start();
                 _spans = new ActivityListener

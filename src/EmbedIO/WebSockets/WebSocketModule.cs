@@ -210,6 +210,8 @@ namespace EmbedIO.WebSockets
 
             PurgeDisconnectedContexts();
             _ = _contexts.TryAdd(webSocketContext.Id, webSocketContext);
+            var request = EmbedIO.Internal.RequestTelemetry.Of(context);
+            var session = request?.Owner?.WebSocketStarted(request);
 
             $"{BaseRoute} - WebSocket connection accepted - There are now {_contexts.Count} sockets connected."
                 .Debug(nameof(WebSocketModule));
@@ -230,6 +232,7 @@ namespace EmbedIO.WebSockets
             }
             finally
             {
+                session?.Stop();
                 ((Internal.WebSocket)webSocketContext.WebSocket).AbandonPendingMessageConsumer();
                 // once the loop is completed or connection aborted, remove the WebSocket
                 RemoveWebSocket(webSocketContext);

@@ -39,6 +39,15 @@ Meter `EmbedIO.Server`, versioned with the assembly.
 | --- | --- | --- | --- |
 | `http.server.request.duration` | histogram | `s` | `http.request.method`, `url.scheme`, `server.port`, `network.protocol.name`, `network.protocol.version`, `http.response.status_code`, `http.route`, `error.type`, `embedio.server.name` |
 | `http.server.active_requests` | up-down counter | `{request}` | `http.request.method`, `url.scheme`, `server.port`, `embedio.server.name` |
+| `http.server.request.body.size` | histogram | `By` | as for duration |
+| `http.server.response.body.size` | histogram | `By` | as for duration |
+| `embedio.server.active_connections` | up-down counter | `{connection}` | `network.transport`, `server.port`, `embedio.server.name` |
+| `embedio.server.connection.duration` | histogram | `s` | as for active connections, plus `network.protocol.version` |
+| `embedio.server.active_websockets` | up-down counter | `{connection}` | `http.request.method`, `url.scheme`, `server.port`, `http.route`, `embedio.server.name` |
+| `embedio.server.websocket.duration` | histogram | `s` | as for active WebSockets |
+
+The `http.server.*` instruments follow the semantic conventions; the conventions define
+no connection or WebSocket instruments, so those use the `embedio.server` prefix.
 
 The duration histogram advertises the bucket boundaries the semantic conventions
 recommend, from 5 ms to 10 s.
@@ -61,6 +70,20 @@ recommend, from 5 ms to 10 s.
   intended response: a 4xx one is not an error, and a 5xx one reports its status code.
   Cancellation while completing an already handled request, for example when the server
   stops, is not recorded as an error.
+
+- **Body sizes.** The request size counts the body bytes the application read, so an
+  unread or partly read body reports what was read; a request without a body records no
+  request size. The response size counts the body bytes sent, which is zero for a `HEAD`
+  response. Both are recorded with the duration's attributes.
+- **Connections.** A TCP connection is counted from admission until its transport
+  closes, whether it carries HTTP/1.1 or HTTP/2; its duration reports `1.1` or `2`. A
+  QUIC connection is counted from a completed handshake until it closes, with
+  `network.transport` `quic` and version `3`. Connections refused by
+  `MaximumConnections` or rejected before their handshake completes are not counted. A
+  port shared with another server reports through the server that opened it.
+- **WebSockets.** A WebSocket is counted from the accepted handshake until the
+  `WebSocketModule` finishes with it. The upgrade request's own duration also covers the
+  whole WebSocket lifetime, because the request ends when the socket does.
 
 No query string, header value, body content or user identity becomes a metric attribute.
 
@@ -91,9 +114,25 @@ dimension.
 ## Cost
 
 With telemetry disabled, requests run through the same single state machine as before;
-routing records no route templates. With it enabled, each request allocates one small
-state object and its tag lists, and builds its route template by string concatenation.
-The overhead has not been measured yet and no figure is claimed.
+routing records no route templates and no counting stream is added. The response writers
+keep one byte counter in every mode.
+
+A sequential measurement on one Windows workstation sent 5000 keep-alive GET requests
+over one HTTP/1.1 connection per round, after 2000 warm-up requests, in six alternating
+rounds per mode. Allocations, counted for the whole process including the client, were
+steady:
+
+| Mode | Allocated per request (median) |
+| --- | --- |
+| Telemetry off | 16,095 B |
+| Enabled, nothing listening | 16,258 B (about 160 B more) |
+| Enabled, meter and activity listeners attached | 17,116 B (about 1 KB more) |
+
+Latency fell from round to round as the runtime warmed up, and in the last three rounds
+the modes measured between 45 and 60 µs per request with no consistent order, so the
+latency cost is below this measurement's resolution. The figures come from one machine
+shared with other work and a single connection; they are not throughput or concurrency
+results.
 
 ## Measured scenarios
 
@@ -113,8 +152,14 @@ connections with a `MeterListener` and an `ActivityListener`:
 | Streamed response with a 400 ms pause | duration covers the whole response |
 | Two named servers | measurements separated by `embedio.server.name` |
 | Options | off by default, empty name rejected, locked with the options |
+| 12,345-byte POST and a GET over HTTP/1.1 and HTTP/2 | request size 12,345 only for the POST; response sizes 5 and 1 |
+| Two requests on one connection, HTTP/1.1 and HTTP/2 | one connection counted +1 then -1; duration with version `1.1` or `2` |
+| One HTTP/3 request | QUIC connection counted +1 then -1; version `3` |
+| WebSocket echo held for 200 ms | active WebSockets +1 then -1; duration with route `/echo/` |
+| Server without telemetry | no connection measurements for its port |
 
-## Not yet covered
+## Not covered
 
-Connection counts, WebSocket lifetime, request and response body sizes, and a measured
-overhead comparison are the next part of #137.
+Concurrency and throughput overhead under load has not been measured. Request
+instrumentation for HTTP/3 shares the dispatch path with HTTP/1.1 and HTTP/2; the HTTP/3
+test covers its connection metrics.

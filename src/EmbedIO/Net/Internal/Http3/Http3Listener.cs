@@ -40,6 +40,8 @@ namespace EmbedIO.Net.Internal.Http3
         public bool IgnoreWriteExceptions { get; set; } = true;
         // Set by a server with body policies: 100 Continue waits for the first body read.
         internal bool DeferContinue { get; set; }
+        // Records QUIC connections. Set before Start.
+        internal EmbedIO.Internal.ServerTelemetry? Telemetry { get; set; }
         public bool IsListening { get { lock (_sync) return _session?.IsRunning ?? false; } }
         public string Name => "EmbedIO HTTP/3 listener";
         public List<string> Prefixes { get { lock (_sync) return new List<string>(_prefixes); } }
@@ -65,7 +67,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_session != null) return;
                 if (_stopping) throw new InvalidOperationException("The previous HTTP/3 listener is still stopping.");
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificate, _native, DeferContinue);
+                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificate, _native, DeferContinue, Telemetry);
             }
         }
         public void Stop()
@@ -155,10 +157,11 @@ namespace EmbedIO.Net.Internal.Http3
             private int _pendingHandshakes;
             private int _activeConnections;
             private bool _deferContinue;
+            private EmbedIO.Internal.ServerTelemetry? _telemetry;
             private Session() { }
-            internal static Session Start(ListenerPrefix[] prefixes, X509Certificate2 certificate, bool native, bool deferContinue)
+            internal static Session Start(ListenerPrefix[] prefixes, X509Certificate2 certificate, bool native, bool deferContinue, EmbedIO.Internal.ServerTelemetry? telemetry)
             {
-                var session = new Session { _deferContinue = deferContinue };
+                var session = new Session { _deferContinue = deferContinue, _telemetry = telemetry };
                 try
                 {
                     var endpoints = new Dictionary<IPEndPoint, List<ListenerPrefix>>();
@@ -253,6 +256,7 @@ namespace EmbedIO.Net.Internal.Http3
             private async Task RunConnectionAsync(long id, Http3AcceptedConnection connection, ListenerPrefix[] prefixes, bool pending)
             {
                 var active = !pending;
+                ServerTelemetry.LifetimeTelemetry? counted = null;
                 try
                 {
                     await connection.WaitReadyAsync(_stop.Token).ConfigureAwait(false);
@@ -272,6 +276,8 @@ namespace EmbedIO.Net.Internal.Http3
                             return;
                         }
                     }
+                    // Only handshaken connections the session admitted are counted.
+                    if (prefixes.Length != 0) counted = _telemetry?.ConnectionStarted("quic", prefixes[0].Port);
                     await connection.RunAsync((exchange, local, remote) => DispatchAsync(exchange, local, remote, prefixes),
                         _stop.Token, _drain.Token).ConfigureAwait(false);
                 }
@@ -282,6 +288,7 @@ namespace EmbedIO.Net.Internal.Http3
                     try { await connection.DisposeAsync().ConfigureAwait(false); }
                     finally
                     {
+                        counted?.Stop("3");
                         lock (_gate)
                         {
                             if (pending) _pendingHandshakes--;
