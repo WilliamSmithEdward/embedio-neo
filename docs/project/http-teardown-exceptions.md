@@ -1,16 +1,22 @@
 # HTTP connection teardown exception attribution
 
 [Issue #282](https://github.com/WilliamSmithEdward/embedio-neo/issues/282)
-tracks profiling and reduction of routine connection-teardown exceptions under
-[PR #182](https://github.com/WilliamSmithEdward/embedio-neo/pull/182). This is an
-initial attribution result, not a production performance correction or completed
-resolution of the issue. No production code, error propagation, cancellation
-contract, dependency or listener default changes in this work.
+investigated whether routine teardown notifications justify a production change.
+The qualified normal profiles and observer-free comparisons below support keeping
+production error and cancellation behavior unchanged. First-chance notifications
+include runtime notifications and rethrows; they are not failed-response counts.
+Whole-process comparisons do not isolate incremental exception cost.
 
-The engine measured here is `b3e55b5a41e68fb252a95f2ba22dafc1a6637cbb`.
-The historical roughly 25 throws per 1,000 requests came from a different
-revision and workload under PR #276. That rate cannot be treated as a current
-per-request constant: changing requests per connection changes the denominator.
+The source work was accepted into [PR #182's integration branch](https://github.com/WilliamSmithEdward/embedio-neo/pull/182)
+as `367155e835886dace8c70600a6c6c6324aa97fe7` through [PR #351](https://github.com/WilliamSmithEdward/embedio-neo/pull/351).
+This work changes test tooling and documentation, with no production API, default,
+target, dependency or error-contract change relative to the accepted engine base.
+It has not been merged to main or published in a release.
+
+Historical measurements remain attributed to their actual source and workload.
+The initial Windows engine was `b3e55b5a41e68fb252a95f2ba22dafc1a6637cbb`.
+The historical roughly 25 throws per 1,000 requests came from another revision
+and workload under PR #276; changing requests per connection changes that rate.
 
 ## Measurement correction
 
@@ -36,7 +42,7 @@ capture by type/message is not an exhaustive ownership attribution.
 
 The retained final campaign uses the same frozen runner for EmbedIO and Kestrel
 on Windows 10.0.26300 x64, .NET/ASP.NET Core 10.0.12, Ryzen 7 9800X3D (16 logical
-CPUs), with server CPU set 0–1 and client CPU set 2–3. It uses one connection and
+CPUs), with server CPU set 0â€“1 and client CPU set 2â€“3. It uses one connection and
 one stream, 0.2-second warmup, 0.5-second load and 0.5-second idle, two rounds with
 engine order reversed on round two. Diagnostic stacks are enabled. The engine
 assembly and runner identities are retained in the campaign's environment record.
@@ -168,8 +174,8 @@ in [#361](https://github.com/WilliamSmithEdward/embedio-neo/issues/361). All gen
 EmbedIO recovery failures, missing requests, incomplete identities, contaminated
 normal samples, unbalanced lifetimes and census overflow remain blocking.
 
-PR #351 is unmerged pending a fresh current-source campaign and every exact-head
-check. Historical source-specific evidence remains unchanged. No production API,
+The failed campaigns remain historical source-specific evidence. The qualified
+source-specific campaign below completes the approved scope. No production API,
 default, target or runtime dependency changes or release are included.
 
 
@@ -218,5 +224,113 @@ comparison; this preliminary record is not relabeled as final engine evidence.
 
 All 37 exact-head PR checks were terminal: 30 successful and seven intentional
 skips. Desktop results reported all 5,250 cases per platform with no failures,
-plus passing reset/module/ZIP stress receipts. PR #351 remains unmerged while the
-final accepted-source comparison is prepared. No main merge or release occurred.
+plus passing reset/module/ZIP stress receipts. These preliminary measurements
+remain source-specific; the qualified source-specific result follows. No main merge
+or release occurred.
+
+## Qualified source-specific campaign
+
+[Run 38314623765](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38314623765)
+qualified head `fd0a8ee08465772f3e1a1686c4afac370aafa46d` against accepted engine base
+`c154244ee217096b391e29fda9eb0076739f46a4`. The checkout was `d10fba27cbc8bb89a851064cdd959791c0c39154`;
+artifact `11777053681` is retained. The [compact evidence record](evidence/teardown-cost-282-final.json)
+preserves hashes of all 112 normal samples and eight recovery controls, actual
+observer modes, phased counts, logical lifetime/meter witnesses, metrics and
+loaded binary identities. All 28 profiles, 42 identical-binary A/A samples and
+42 Kestrel comparisons passed independent qualification. All four required
+EmbedIO intentional-abort/recovery cases passed, including validated healthy
+traffic before and after the faults and clean child exits.
+
+Core SHA-256 was `1ee9af4a41c2414fdddb228bafad62a323d6fd612ea3c0bcabbb2a436e12cc79`; copied A/A core and runner identities
+matched. The loaded framework/runtime was .NET 10.0.12 and the official
+MsQuic 2.6.2 LTTng library was verified against its pinned package.
+Measurements apply to this source and these identities, not later changes.
+
+Normal samples retain a 32-request-per-second pace, complete responses and
+clean cleanup. Cost/A/A arms have both exception observers disabled; missing
+counts are unavailable, not zero. Profile runs provide attribution, not timing
+ratios. Quiet-host ceilings, workload, discovery minimums and recovery assertions
+remain enforced; no failed sample was converted to a passing result.
+
+| Protocol | Engine | Entered / completed / pending after recovery | Outcome |
+| --- | --- | --- | --- |
+| Http1 plain | embedio | 4955 / 4955 / 0 | balanced |
+| Http1 plain | kestrel | 8947 / 8947 / 0 | balanced |
+| Http1 TLS | embedio | 1401 / 1401 / 0 | balanced |
+| Http1 TLS | kestrel | 1431 / 1431 / 0 | balanced |
+| Http2 TLS | embedio | 235 / 235 / 0 | balanced |
+| Http2 TLS | kestrel | 837 / 836 / 1 | failed-control |
+| Http3 TLS | embedio | 286 / 286 / 0 | balanced |
+| Http3 TLS | kestrel | 551 / 522 / 29 | failed-control |
+
+This run records 2 Kestrel fault controls as `failed-control`.
+These and the retained earlier control limitations are tracked in
+[#361](https://github.com/WilliamSmithEdward/embedio-neo/issues/361). Other
+errors, unknown failures, crashes, timeouts, identity mismatches, malformed
+counters or failed healthy traffic would still block qualification for either
+engine. These task observations do not establish a production Kestrel defect
+or native leak. Logical lifetime completion is not native heap release.
+
+Median unprofiled whole-process costs follow. The CPU comparison band is the
+largest observed A/A difference or within-engine spread, with a 3% floor;
+it is a descriptive noise bound, not a statistical confidence interval.
+
+| Workload | EmbedIO CPU us/request | Kestrel CPU us/request | EmbedIO bytes/request | Kestrel bytes/request | CPU comparison band |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| h1-plain-small-c64-close100 | 2,832 | 1,874 | 12,720 | 5,602 | 6% |
+| h1-tls-small-c64 | 3,015 | 2,045 | 12,758 | 5,538 | 13% |
+| h2-plain-small-c64x1 | 3,021 | 2,184 | 14,203 | 5,612 | 7% |
+| h2-tls-churn-c32 | 6,479 | 5,848 | 37,748 | 42,737 | 6% |
+| h2-tls-small-c64x1 | 3,040 | 2,291 | 14,258 | 5,826 | 17% |
+| h3-churn-c16 | 7,693 | 6,392 | 125,999 | 140,488 | 8% |
+| h3-small-c64x1 | 2,853 | 2,733 | 19,543 | 9,202 | 10% |
+
+No catch-and-ignore change, exception suppression or production optimization
+is justified by the whole-process comparisons. A future targeted optimization
+would need its own reproduction, causal measurement and compatibility checks.
+The long campaign is scoped to benchmark/tooling changes and manual dispatch;
+ordinary documentation changes do not schedule it.
+
+Every check on the measured PR #351 head was terminal and passing or an
+intentional skip, with overall success. The desktop regression matrix reported
+all 5,475 cases per platform: Windows 5,463 passes/12 expected skips, Linux
+5,461/14, and macOS 5,458/17. All 20 main and supplemental TRX reports had
+zero unsuccessful counters. The source campaign also ran the 54 evidence
+acceptance tests and executable census/pacing controls.
+
+## Combined integration provenance
+
+The measured checkout `d10fba27cbc8bb89a851064cdd959791c0c39154` and
+PR head `fd0a8ee08465772f3e1a1686c4afac370aafa46d` had tree
+`e7cd43062e1de3ec0247504540d378e0dd98fd8c`, based on `c154244e`.
+Before source PR #351 merged, independent [PR #363](https://github.com/WilliamSmithEdward/embedio-neo/pull/363)
+advanced the integration branch to `916621b3`, adding optional forwarded-header
+handling and raising the desktop discovery floor to 5,517. Source PR #351 was
+accepted as `367155e835886dace8c70600a6c6c6324aa97fe7`, with parent
+`916621b3941822238ea91911281cf15cef7a26b8` and combined tree
+`1dbbb931c12dfeeca6cadfed63ea72e8c330963f`.
+
+The ten-file difference is exactly the independent forwarded-header contribution;
+the measured source work is retained unchanged. GitHub's PR base and synthetic
+merge reference still reported the earlier base at final inspection. These views
+were insufficient to establish the live integration tree, which was checked
+after acceptance. Future merge verification must fetch the live base branch
+directly as well as checking the PR head, checks and synthetic merge tree.
+
+The performance evidence remains specific to `c154244e` and its recorded binaries,
+not the newer combined core. Fresh ordinary correctness checks on the combined
+integration are required for this final documentation PR. The current accepted
+base `0773460e` also includes optional problem-details handling from PR #366,
+raising the unchanged discovery floor to 5,539. No newest-core timing comparison
+or performance improvement is
+claimed.
+
+The first combined validation, run 38319118404 on documentation head
+`a1ad06be` and base `367155e8`, retained all 5,517 reported cases. Windows
+and Linux passed; macOS had one initial HTTP/3 listener bind failure,
+`AddressAlreadyInUse`, before its drain assertions ran. Its failed result and
+artifacts remain preserved. Separate Linux startup controls subsequently
+confirmed that probing one UDP address family does not establish availability
+in the other family; this does not establish the natural macOS failure's cause.
+Refreshing the documentation onto the accepted base schedules fresh ordinary
+validation and is not a production port-allocation repair or a performance rerun.

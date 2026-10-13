@@ -32,6 +32,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [OpenAPI documents](guides/openapi.md): unreleased OpenAPI 3.1 documents written from generated controller bindings, with operation attributes, security requirements from authentication modules, declared routes for other modules, routes the document cannot describe and its limits.
 - [HTTP/3 listener](guides/http3.md): unreleased QUIC mode, certificates, usage and current limits.
 - [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
+- [Rotating the server certificate](guides/certificate-rotation.md): unreleased `ServerCertificateSource`, replacing certificates while TCP and QUIC listeners run.
 - [Command-line server](guides/cli.md): options, static serving, plugins, and CLI provenance.
 - [Multiple static folders](guides/multiple-static-folders.md): mount order and explicit fallback.
 - [Asynchronous outbound requests](guides/async-outbound-requests.md): controller return types,
@@ -225,6 +226,8 @@ not configured. The old root `CLI.md` and `MIGRATION.md` remain as short entry
 points for existing links.
 
 - [Controller compression and response length](guides/controller-compression.md): streamed framing, buffered encoded lengths and the Xamarin report's validation limits.
+
+- [Precompressed static files](guides/precompressed-files.md): opt-in .br and .gz variants, selection, validators, ranges, the 406 correction and measured compression levels.
 
 - [Standalone native QUIC module lifetime](project/native-quic-module-lifetime.md): Linux unload crash reproduction, retained mapping, collectible contexts and fresh-process acceptance.
 
