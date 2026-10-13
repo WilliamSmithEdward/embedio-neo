@@ -23,6 +23,11 @@ is a minimum-version change, not a restriction to TLS 1.2 alone. The Standard
 asset resolves the executing runtime's public TLS 1.3 flag rather than imposing
 an unknown protocol value on an older runtime.
 
+The same minimum applies with an explicit `ServerTlsPolicy`. Its default
+`EnabledProtocols = SslProtocols.None` selects supported TLS 1.2/1.3, rather than
+allowing legacy protocols through OS defaults. Explicit masks may choose TLS 1.2,
+TLS 1.3 or both; legacy and unknown bits throw before changing the policy.
+
 Update old client runtimes and embedded-device TLS stacks. Check reverse proxies,
 gateways and inspection appliances too: their connection to this server must use
 TLS 1.2 or later, regardless of what version the end user's browser negotiates
