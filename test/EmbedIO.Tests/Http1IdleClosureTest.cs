@@ -59,7 +59,7 @@ namespace EmbedIO.Tests
             if (orderlyControl)
             {
                 // Test-only comparison using the existing public-API tunnel
-                // send-shutdown primitive. Production idle closure is untouched.
+                // send-shutdown primitive, compared with the idle policy.
                 var shutdown = type.GetMethod("CompleteTunnelOutputAsync", Hidden)?.CreateDelegate<Func<CancellationToken, Task>>(connection)
                     ?? throw new AssertionException("Missing TLS send shutdown.");
                 await shutdown(deadline.Token);
@@ -78,7 +78,6 @@ namespace EmbedIO.Tests
             catch (IOException error) { TestContext.Out.WriteLine(error); }
             var bytes = records.ToArray();
             TestContext.Out.WriteLine($"TLS 1.2 {(orderlyControl ? "send-shutdown control" : "timeout")}: raw trailing bytes={bytes.Length}; hex={Convert.ToHexString(bytes)}");
-            if (orderlyControl)
             {
                 Assert.That(bytes.Length, Is.GreaterThanOrEqualTo(5));
                 Assert.That(bytes[0], Is.EqualTo(21), "The public TLS shutdown control must produce an alert record.");
@@ -208,6 +207,7 @@ namespace EmbedIO.Tests
                 catch (IOException error)
                 {
                     TestContext.Out.WriteLine($"{scenario}/{(secure ? "TLS" : "TCP")}: trailing bytes={observed.Length}; {error}");
+                    if (scenario == "idle") Assert.Fail("A completed idle exchange reset instead of closing orderly: " + error);
                 }
                 if (scenario != "reuse-race") Assert.That(observed.Length, Is.Zero, "Closure must not synthesize a response or finish an aborted body.");
                 else if (observed.Length != 0)
