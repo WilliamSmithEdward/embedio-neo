@@ -106,6 +106,7 @@ namespace EmbedIO.Tests
         [TestCase("dispose")]
         public async Task CombinedDrainCanAbortAllProtocols(string reason)
         {
+            using var capture = new SharedPortCapture(taskRoles: "Combined server / not used");
             using var handshake = new QuicHandshakeTrace();
             using var certificate = Certificate();
             var prefix = CombinedPrefix();
@@ -125,6 +126,8 @@ namespace EmbedIO.Tests
                 client.DefaultRequestVersion = version == 1 ? HttpVersion.Version11 : new Version(version, 0);
                 return client;
             }).ToArray();
+            capture.Mark("certificate", $"thumbprint={certificate.Thumbprint};hasPrivateKey={certificate.HasPrivateKey}");
+            capture.Mark("before-initial-handshake", prefix + ";reason=" + reason);
             var running = server.RunAsync(stop.Token);
             var requests = clients.Select(client => client.GetStringAsync(prefix)).ToArray();
             var http1 = Http1AbortProbe.AssertClosedWithoutResponseAsync(prefix, certificate);
@@ -143,8 +146,10 @@ namespace EmbedIO.Tests
                     throw new AssertionException("A transport or server ended before all three handlers were admitted.");
                 }
                 await admission;
+                capture.Mark("all-protocols-admitted", prefix);
                 phase = "start drain";
                 var drain = server.DrainAsync(reason == "deadline" ? TimeSpan.FromMilliseconds(100) : TimeSpan.FromSeconds(15), cancelDrain.Token);
+                capture.Mark("drain-started", reason ?? "<null>");
                 phase = "trigger " + reason;
                 if (reason == "drain-cancel") cancelDrain.Cancel();
                 if (reason == "run-cancel") stop.Cancel();
@@ -166,6 +171,7 @@ namespace EmbedIO.Tests
             catch (Exception error)
             {
                 failure = error;
+                capture.Mark("primary-failure", phase + ";reason=" + reason);
                 TestContext.Error.WriteLine($"Combined drain failed: reason={reason}, phase={phase}, server={server.State}, run={running.Status}, HTTP/1={http1.Status}, HTTP/2={requests[0].Status}, HTTP/3={requests[1].Status}, admitted={string.Join(",", entered.Select(signal => signal.Task.IsCompleted))}. {error}");
                 TestContext.Error.WriteLine($"HTTP/1 failure: {http1.Exception}\nHTTP/2 failure: {requests[0].Exception}\nHTTP/3 failure: {requests[1].Exception}\nServer failure: {running.Exception}");
                 foreach (var entry in handshake.Snapshot()) TestContext.Error.WriteLine(entry);
@@ -179,11 +185,15 @@ namespace EmbedIO.Tests
                     foreach (var client in clients) client.Dispose();
                     await running.WaitAsync(TimeSpan.FromSeconds(5));
                 }
-                catch (Exception error) when (failure != null)
+                catch (Exception error) when (failure != null && IsRecoverableSharedPortCleanup(error))
                 {
                     // Preserve the original assertion or transport failure instead of
                     // replacing it with a secondary listener-stop cleanup exception.
                     TestContext.Error.WriteLine($"Combined drain cleanup also failed: {error}");
+                }
+                finally
+                {
+                    if (failure != null) capture.WriteFailure(failure, running, null);
                 }
             }
         }

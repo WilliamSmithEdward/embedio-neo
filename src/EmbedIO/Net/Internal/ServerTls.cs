@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Security;
 using System.Security.Authentication;
@@ -10,6 +11,25 @@ namespace EmbedIO.Net.Internal
     // TCP server handshakes under a listener's certificate and optional ServerTlsPolicy.
     internal static class ServerTls
     {
+        private static readonly SslProtocols DefaultProtocols = SelectDefaultProtocols();
+
+        private static SslProtocols SelectDefaultProtocols()
+        {
+#if NET10_0_OR_GREATER
+            return SslProtocols.Tls12 | SslProtocols.Tls13;
+#else
+            // Resolve the executing runtime's public flag without requiring an
+            // older runtime to accept a protocol its reference assembly lacks.
+            return Enum.TryParse<SslProtocols>("Tls13", out var tls13)
+                && Enum.IsDefined(typeof(SslProtocols), tls13)
+                ? SslProtocols.Tls12 | tls13 : SslProtocols.Tls12;
+#endif
+        }
+
+        private static SslProtocols GetProtocols(ServerTlsPolicy? policy)
+            => policy == null || policy.EnabledProtocols == SslProtocols.None
+                ? DefaultProtocols : policy.EnabledProtocols;
+
         internal static SslStream CreateStream(Stream inner, ServerTlsPolicy? policy)
         {
 #if NET10_0_OR_GREATER
@@ -28,7 +48,7 @@ namespace EmbedIO.Net.Internal
 #if NET10_0_OR_GREATER
             var options = new SslServerAuthenticationOptions
             {
-                EnabledSslProtocols = policy?.EnabledProtocols ?? SslProtocols.None,
+                EnabledSslProtocols = GetProtocols(policy),
                 ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http2, SslApplicationProtocol.Http11 },
             };
             // The runtime refuses both a certificate and a selection callback.
@@ -51,7 +71,7 @@ namespace EmbedIO.Net.Internal
             return tls.AuthenticateAsServerAsync(
                 certificate,
                 policy != null && policy.RequestsClientCertificate,
-                policy?.EnabledProtocols ?? SslProtocols.None,
+                GetProtocols(policy),
                 policy != null && policy.CheckCertificateRevocation);
 #endif
         }

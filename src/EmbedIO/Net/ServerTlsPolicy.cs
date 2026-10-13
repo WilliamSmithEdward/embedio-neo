@@ -14,7 +14,7 @@ namespace EmbedIO.Net
     /// </summary>
     /// <remarks>
     /// <para>With the default settings the policy changes nothing: no client certificate is requested,
-    /// the operating system chooses the TLS protocol versions, and the configured server certificate is used.</para>
+    /// TLS 1.2 or later is allowed where the runtime supports it, and the configured server certificate is used.</para>
     /// <para>A listener refuses to start with a setting it cannot honor, rather than ignoring it; see
     /// the documentation of each property.</para>
     /// </remarks>
@@ -90,17 +90,21 @@ namespace EmbedIO.Net
 
         /// <summary>
         /// <para>Gets or sets the TLS protocol versions that TCP listeners allow.
-        /// The default, <see cref="SslProtocols.None"/>, lets the operating system choose; prefer it unless a
+        /// The default, <see cref="SslProtocols.None"/>, allows supported TLS 1.2 and TLS 1.3; prefer it unless a
         /// requirement says otherwise.</para>
         /// <para>QUIC always uses TLS 1.3, so HTTP/3 listeners refuse to start with a value that excludes it.</para>
         /// </summary>
         /// <exception cref="InvalidOperationException">This property is being set, and the policy is locked.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The mask contains a protocol other than TLS 1.2 or TLS 1.3.</exception>
         public SslProtocols EnabledProtocols
         {
             get => _enabledProtocols;
             set
             {
                 EnsureConfigurationNotLocked();
+                if (value != SslProtocols.None && value != SslProtocols.Tls12
+                    && value != Tls13 && value != (SslProtocols.Tls12 | Tls13))
+                    throw new ArgumentOutOfRangeException(nameof(value), "HTTPS requires TLS 1.2 or later and a known protocol mask.");
                 _enabledProtocols = value;
             }
         }

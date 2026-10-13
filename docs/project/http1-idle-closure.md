@@ -4,9 +4,9 @@
 reviews the timeout reset reported by the historical #276 campaign. This work
 is based on PR #182 head `b3e55b5`. It adds observations and a proposed design;
 it changes no production closure path, timeout, public API or runtime dependency.
-The issue remains open for the client-visible policy decision and its implementation.
+Those historical observations did not change closure behavior. William has since approved the scoped policy; its implementation and remaining validation are described below.
 
-## Current behavior
+## Behavior observed before the approved change
 
 After a reusable response completes and its request input is consumed, the
 HTTP/1 actor resets the context and arms the existing fifteen-second timer.
@@ -74,7 +74,7 @@ complete response receipt from terminal idle-read failure. Earlier fixture-only
 failures (timer-disposal assertion and incompatible whole-suite discovery during
 assembly substitution) are retained under ignored TestResults.
 
-## Proposed policy for discussion
+## Historical proposal before approval
 
 [RFC 9112 sections 9.6 and 9.8](https://www.rfc-editor.org/rfc/rfc9112.html#section-9.6)
 describe staged TCP teardown to avoid losing the final response through a reset,
@@ -93,7 +93,7 @@ Any TLS send-shutdown operation must finish or be aborted within the existing
 cleanup budget. It must not wait indefinitely for a peer's closure alert, add a
 new grace period, or leave a detached socket outside tracked cleanup.
 
-Before implementation, agree whether changing reset to orderly EOF for that idle
+The original decision was whether changing reset to orderly EOF for that idle
 state is desired, including the policy for the .NET Standard asset on runtimes
 without a usable public TLS shutdown method. The current fifteen-second deadline
 and advertised keep-alive timeout remain unchanged. Implementation then needs
@@ -119,3 +119,130 @@ run. Each artifact records runtime identity, assembly hashes, peer observations
 and TRX results. Configuring those jobs is not evidence that they passed.
 Older-runtime/.NET Native application models and packet-level FIN/ACK ordering
 remain outside this investigation's evidence.
+
+## Approved orderly-idle candidate
+
+William approved the scoped policy in issue #281 on 2026-10-12. The candidate
+starts from accepted PR #182 base `6b943c77`; it is unreleased. The preceding
+sections retain historical observations and the design discussion, rather than
+claiming current-source or cross-platform acceptance.
+
+Completed and fully consumed HTTP/1 exchanges waiting for a successor can
+attempt orderly send shutdown when the existing timeout wins admission
+arbitration. Ready/decrypted, buffered or partial successor input conservatively
+retains abort behavior. Head processing and stopping its deadline share the
+retirement gate. A request that loses that arbitration is not dispatched or
+retried invisibly. Socket readiness is checked too; bytes can still arrive after
+that decision, so an orderly wire outcome is not guaranteed for a racing peer.
+
+Plain TCP uses send shutdown before disposal. TLS calls public SslStream shutdown;
+TCP send shutdown follows only actual successful TLS shutdown completion. If the
+TLS write is pending, the socket and stream are disposed immediately, without
+adding a grace period. That write remains lifetime-owned and registered for
+listener drain until its actual terminal state is observed. Expected interrupted
+write errors are diagnosed as fallback aborts; resource-release and unexpected
+operation failures remain observable through lifetime completion. Cancellation
+alone is not completion, and the server does not wait for a peer closure alert.
+
+The .NET Standard asset uses the existing public-method capability detection.
+Older runtimes without that method retain their existing TLS closure behavior.
+There is no private runtime shim or new dependency. The fifteen-second default,
+configured deadlines, public APIs and partial-request/response aborts remain
+unchanged. Clients should handle terminal idle closure and open a new connection
+as needed, rather than depending specifically on a reset exception. See the
+[Neo v1-to-v2 migration guide](../compatibility/neo-v1-to-v2.md#http1-idle-closure).
+
+The first candidate Windows/.NET 10 run passed 29 focused cases, including both
+actual fifteen-second idle cases, four deterministic admission/expiry cases and
+four pending-write ownership cases. Both TLS 1.2 timeout and explicit shutdown
+controls emitted a complete 31-byte alert record; its encrypted description was
+not decoded. This is not packet-level FIN/ACK proof or older-runtime acceptance.
+Additional actual blocked public TLS-write interruption controls, an unchanged
+current-source baseline comparison and full platform gates remain required.
+### Qualified Windows asset controls
+
+A forced, warning-free rebuild on accepted base `685f6a05` passed all 33 focused
+cases for each core asset on Windows 10.0.26300 / .NET 10.0.12. Actual loaded
+framework attributes and core hashes matched the compiled and staged files;
+the modern runner was restored and hash-verified afterward. The same actual
+public SslStream blocked-write controls passed for IOException and cancellation,
+with terminal write observation preceding listener detach. The controlled
+critical exception-object case retained exact fault identity, physical socket
+closure and a faulted lifetime completion; it creates no real memory pressure.
+
+The accepted production baseline `02283f13` reproduced the three targeted
+idle EOF/TLS-alert assertion failures, with its other eleven controls passing.
+An intermediate run labelled candidate reused that baseline DLL after
+source restoration preserved timestamps. Its real 13 failures are retained
+as invalid candidate qualification, not accepted or labelled a production
+regression. Forced rebuilding, compiled/staged identity guards and actual
+runtime identity checks correct that validation procedure. The earlier failed
+TLS fixture's pending-task terminal state was not observed; its corrected
+fixture resolves prerequisites before starting a write and observes the task
+in finally, including on assertion failure.
+
+[Compact source-qualified evidence](evidence/http1-idle-closure-281.json)
+retains source hashes, loaded identities, actual case outcomes and unsuccessful
+qualification. Those focused modern-host runs alone do not establish full platform acceptance
+or older-runtime proof. Subsequent source-qualified controls are recorded below;
+current acceptance is tracked in issue #281 and its implementation PR #372.
+### Framework and hosted controls
+
+The `net472` legacy smoke executable passed all 545 assertions on installed
+.NET Framework 4.8 (release 533509), loading the actual .NET Standard 2.0 core
+from source `db89aaa1`. Plain and TLS idle connections reached EOF after the
+existing fifteen-second deadline, and fresh connections remained healthy.
+This runtime exposes the public TLS shutdown method. It therefore does not
+establish acceptance on a runtime lacking that method; the unsupported-capability
+fallback remains unchanged.
+
+Dedicated HTTP/1 run 38330403988 passed all 33 focused cases on Windows, Linux
+and macOS for PR head `d9a36d0f`. Both current modern and .NET Standard public
+probes observed idle EOF on each platform. The ordinary Windows full suite on
+that head still had a genuine initial QUIC handshake failure, retained in its
+run evidence. These controls do not replace full combined-source validation or
+establish that the PR is ready to merge.
+
+### TLS-policy base reconciliation
+
+The initially final head `6a747f82` passed all 38 checks on accepted base
+`e2566f35`, with all 33 idle-closure controls passing per desktop platform.
+Its macOS full report retained one raw MsQuic rebind failure accepted by the
+existing narrow runtime-only policy; this is not a zero-failure test report.
+Before integration, the base advanced to `cdab7ec5` with TLS-policy changes.
+That source replaces stream construction and handshake configuration, so the
+earlier full and Framework receipts remain qualified to their recorded source.
+They are not acceptance proof for the new combination. Reconciliation retains
+the base's TLS policy unchanged and requires fresh exact-source checks with all
+5,650 reported cases (5,638 on the base plus twelve idle-retirement regressions).
+The HTTP/1 expiry, partial-input and pending-write behavior remains the scoped
+change described above. The current outcome is tracked in issue #281 / PR #372.
+
+### Handshake diagnostics and current combined validation
+
+The later integration base `61ff7d4a` adds opt-in WebSocket drain controls;
+its delta does not modify the three idle-retirement production files. The
+combined suite retains all 5,659 base cases, twelve idle-retirement regressions
+and seven diagnostic controls, for a minimum of 5,678 reported cases.
+
+Windows CI on earlier `ade927eb` reported all 5,650 cases but failed an initial
+HTTP/3 handshake in `CombinedDrainCanAbortAllProtocols("deadline")`, before
+request admission or draining. All 33 idle controls passed on every desktop
+platform, and the actual Framework smoke passed 545 assertions. That genuine
+failure remains unwaived and its cause is not established by the idle fix.
+
+Test-only diagnostic commit `56732b45` adds bounded public EventListener capture
+to the existing shared-port and combined-drain scenarios. It preserves their
+request counts, assertions and deadlines, reserves error records through info
+floods, reports dropped/truncated data and attempts both cancellations plus the
+bounded join while retaining critical aggregate faults. Failure snapshots may
+record the current file SHA/version at a publicly mapped MsQuic path; they do
+not establish native-memory identity or capture TLS keys or request payloads.
+
+The recorded handoff built both targets without warnings and passed all seven
+capture controls plus all thirteen original scenarios on its `ade927eb` basis.
+The historical handshake failure was not reproduced in those scoped runs, and
+failure-only native file capture was not triggered. These results validate the
+diagnostic preparation, not a handshake repair or the later combined source.
+Current acceptance remains tracked in issue #281 and PR #372, with fresh
+exact-head platform checks required before integration.

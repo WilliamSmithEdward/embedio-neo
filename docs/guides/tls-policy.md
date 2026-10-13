@@ -10,7 +10,7 @@ server certificate:
 
 It is opt-in through `WebServerOptions.TlsPolicy` (or `WithTlsPolicy`). A server
 without a policy, or with a new `ServerTlsPolicy()`, behaves as before: no client
-certificate is requested, the operating system chooses the protocol versions, and
+certificate is requested, TLS 1.2 or later is allowed where supported, and
 the configured certificate is used. It combines with a fixed `Certificate` or a
 [`ServerCertificateSource`](certificate-rotation.md).
 
@@ -91,9 +91,10 @@ Do not dispose it: requests on the same connection share it.
 ## Protocol versions
 
 `EnabledProtocols` limits the TLS versions of TCP listeners. Its default,
-`SslProtocols.None`, lets the operating system choose, which is what the
-[HTTPS guide](https.md) describes and what most servers should keep. HTTP/2 still
-requires TLS 1.2 or later. QUIC always uses TLS 1.3, so an HTTP/3 or combined server
+`SslProtocols.None`, allows TLS 1.2 and supported TLS 1.3, as described in the
+[HTTPS guide](https.md). Explicit masks can restrict those versions; legacy or
+unknown protocol bits are rejected before changing the policy. TLS 1.0 and TLS 1.1
+cannot be enabled through this property. QUIC always uses TLS 1.3, so an HTTP/3 or combined server
 refuses to start with a value that excludes it.
 
 ## Choosing the certificate by server name (SNI)
