@@ -154,8 +154,12 @@ namespace EmbedIO.Net.Internal
                             {
                                 ValidateTrailer(line);
                                 var colon = EmbedIO.Internal.StringOperations.IndexOfOrdinal(line, ':');
+                                var valueStart = colon + 1;
+                                var valueEnd = line.Length;
+                                while (valueStart < valueEnd && line[valueStart] is ' ' or '\t') valueStart++;
+                                while (valueEnd > valueStart && line[valueEnd - 1] is ' ' or '\t') valueEnd--;
                                 (_trailerLines ??= new List<KeyValuePair<string, string>>()).Add(
-                                    new KeyValuePair<string, string>(line.Substring(0, colon), line.Substring(colon + 1).Trim(' ', '\t')));
+                                    new KeyValuePair<string, string>(line.Substring(0, colon), line.Substring(valueStart, valueEnd - valueStart)));
                             }
                         }
                         else if (next == 13) _lineCr = true;

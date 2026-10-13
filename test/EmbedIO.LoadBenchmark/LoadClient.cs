@@ -103,13 +103,14 @@ internal static class LoadClient
         return result.Error is null ? 0 : 3;
     }
 
-    private static async Task<RunResult> ExerciseAsync(LoadSettings settings, TimeSpan duration, CancellationToken cancellation)
+    internal static async Task<RunResult> ExerciseAsync(LoadSettings settings, TimeSpan duration, CancellationToken cancellation, Func<HttpMessageHandler>? handlerFactory = null)
     {
-        var state = new RunState(duration, cancellation, settings.RequestRate);
+        using var state = new RunState(duration, cancellation, settings.RequestRate);
         var workers = Enumerable.Range(0, settings.Connections).Select(_ => settings.Protocol == Protocol.Http1
             ? Http1Worker.RunAsync(settings, state)
-            : MultiplexedWorker.RunAsync(settings, state)).ToArray();
+            : MultiplexedWorker.RunAsync(settings, state, handlerFactory)).ToArray();
         await Task.WhenAll(workers).ConfigureAwait(false);
+        if (cancellation.IsCancellationRequested) state.Fail(new OperationCanceledException("The caller aborted the load phase.", cancellation));
         var latency = new LatencyHistogram();
         foreach (var histogram in state.Histograms) latency.Add(histogram);
         return new RunResult(state.Requests, state.Clock.Elapsed.TotalSeconds, latency, state.ResponseBytes, state.RequestBodyBytes,
@@ -120,11 +121,11 @@ internal static class LoadClient
         => (_, certificate, _, _) => certificate is not null
             && string.Equals(certificate.GetCertHashString(), thumbprint, StringComparison.OrdinalIgnoreCase);
 
-    private sealed record RunResult(long Requests, double Seconds, LatencyHistogram Latency, long ResponseBytes, long RequestBodyBytes,
+    internal sealed record RunResult(long Requests, double Seconds, LatencyHistogram Latency, long ResponseBytes, long RequestBodyBytes,
         long ConnectionsOpened, long ServerCloses, long UnansweredRequests, string? Error);
 }
 
-internal sealed class RunState(TimeSpan duration, CancellationToken cancellation, double requestRate = 0)
+internal sealed class RunState(TimeSpan duration, CancellationToken cancellation, double requestRate = 0) : IDisposable
 {
     private readonly CancellationTokenSource _failed = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
     private readonly List<LatencyHistogram> _histograms = [];
@@ -188,6 +189,8 @@ internal sealed class RunState(TimeSpan duration, CancellationToken cancellation
         return Clock.Elapsed < duration && !_failed.IsCancellationRequested;
     }
 
+    public void Dispose() => _failed.Dispose();
+
     internal void Opened() => Interlocked.Increment(ref _connectionsOpened);
 
     internal long UnansweredRequests => Interlocked.Read(ref _unanswered);
@@ -201,7 +204,7 @@ internal sealed class RunState(TimeSpan duration, CancellationToken cancellation
     // Records the first failure and stops every worker; nothing is retried.
     internal void Fail(Exception exception)
     {
-        if (exception is OperationCanceledException && _failed.IsCancellationRequested) return;
+        if (exception is OperationCanceledException && Error is not null) return;
         Interlocked.CompareExchange(ref _error, Describe(exception), null);
         _failed.Cancel();
     }
@@ -456,9 +459,10 @@ internal sealed class Http1ResponseReader(Stream stream)
 // therefore one connection, with a fixed number of concurrent streams on it.
 internal static class MultiplexedWorker
 {
-    internal static async Task RunAsync(LoadSettings settings, RunState state)
+    internal static async Task RunAsync(LoadSettings settings, RunState state, Func<HttpMessageHandler>? handlerFactory = null)
     {
-        var histogram = state.CreateHistogram();
+        // Each stream records independently; reuse its histogram across connection rotations.
+        var histograms = Enumerable.Range(0, settings.Streams).Select(_ => state.CreateHistogram()).ToArray();
         var version = settings.Protocol == Protocol.Http3 ? HttpVersion.Version30 : HttpVersion.Version20;
         var expected = settings.IsUpload ? Payloads.UploadAcknowledgement(settings.UploadBytes) : Payloads.Get(settings.Route.ResponseLength);
         if (settings.Route.Kind is RouteKind.Plaintext or RouteKind.Inspect) expected = Payloads.Plaintext;
@@ -468,7 +472,7 @@ internal static class MultiplexedWorker
         {
             while (state.Running)
             {
-                using var handler = new SocketsHttpHandler
+                using var handler = handlerFactory?.Invoke() ?? new SocketsHttpHandler
                 {
                     UseProxy = false,
                     UseCookies = false,
@@ -487,46 +491,55 @@ internal static class MultiplexedWorker
                 };
                 state.Opened();
                 long claimed = 0;
-                await Task.WhenAll(Enumerable.Range(0, settings.Streams).Select(async _ =>
+                await Task.WhenAll(Enumerable.Range(0, settings.Streams).Select(async streamIndex =>
                 {
-                    var buffer = new byte[65536];
-                    while (state.Running && (settings.RequestsPerConnection == 0 || Interlocked.Increment(ref claimed) <= settings.RequestsPerConnection))
+                    try
                     {
-                        if (!await state.WaitForSlotAsync().ConfigureAwait(false)) break;
-                        var started = Stopwatch.GetTimestamp();
-                        // DefaultRequestVersion only applies to convenience methods; set it per message.
-                        using var request = new HttpRequestMessage(uploadBody is null ? HttpMethod.Get : HttpMethod.Post, uri)
+                        var histogram = histograms[streamIndex];
+                        var buffer = new byte[65536];
+                        while (state.Running && (settings.RequestsPerConnection == 0 || Interlocked.Increment(ref claimed) <= settings.RequestsPerConnection))
                         {
-                            Version = version,
-                            VersionPolicy = HttpVersionPolicy.RequestVersionExact,
-                        };
-                        if (uploadBody is not null) request.Content = new ByteArrayContent(uploadBody);
-                        if (settings.Route.Kind == RouteKind.Inspect)
-                        {
-                            foreach (var (name, value) in InspectRequest.Headers) request.Headers.TryAddWithoutValidation(name, value);
-                        }
+                            if (!await state.WaitForSlotAsync().ConfigureAwait(false)) break;
+                            var started = Stopwatch.GetTimestamp();
+                            // DefaultRequestVersion only applies to convenience methods; set it per message.
+                            using var request = new HttpRequestMessage(uploadBody is null ? HttpMethod.Get : HttpMethod.Post, uri)
+                            {
+                                Version = version,
+                                VersionPolicy = HttpVersionPolicy.RequestVersionExact,
+                            };
+                            if (uploadBody is not null) request.Content = new ByteArrayContent(uploadBody);
+                            if (settings.Route.Kind == RouteKind.Inspect)
+                            {
+                                foreach (var (name, value) in InspectRequest.Headers) request.Headers.TryAddWithoutValidation(name, value);
+                            }
 
-                        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, state.Token).ConfigureAwait(false);
-                        if (response.StatusCode != HttpStatusCode.OK)
-                        {
-                            var detail = await response.Content.ReadAsStringAsync(state.Token).ConfigureAwait(false);
-                            throw new InvalidDataException("Unexpected status " + (int)response.StatusCode + ": " + detail[..Math.Min(detail.Length, 200)]);
-                        }
-                        if (response.Version != version) throw new InvalidDataException("Negotiated HTTP/" + response.Version);
-                        if (response.Content.Headers.ContentEncoding.Count != 0) throw new InvalidDataException("Unexpected content coding.");
-                        await using var content = await response.Content.ReadAsStreamAsync(state.Token).ConfigureAwait(false);
-                        long offset = 0;
-                        int read;
-                        while ((read = await content.ReadAsync(buffer, state.Token).ConfigureAwait(false)) > 0)
-                        {
-                            if (offset + read > expected.Length || !buffer.AsSpan(0, read).SequenceEqual(expected.AsSpan((int)offset, read)))
-                                throw new InvalidDataException("Response body mismatch.");
-                            offset += read;
-                        }
+                            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, state.Token).ConfigureAwait(false);
+                            if (response.StatusCode != HttpStatusCode.OK)
+                            {
+                                var detail = await response.Content.ReadAsStringAsync(state.Token).ConfigureAwait(false);
+                                throw new InvalidDataException("Unexpected status " + (int)response.StatusCode + ": " + detail[..Math.Min(detail.Length, 200)]);
+                            }
+                            if (response.Version != version) throw new InvalidDataException("Negotiated HTTP/" + response.Version);
+                            if (response.Content.Headers.ContentEncoding.Count != 0) throw new InvalidDataException("Unexpected content coding.");
+                            await using var content = await response.Content.ReadAsStreamAsync(state.Token).ConfigureAwait(false);
+                            long offset = 0;
+                            int read;
+                            while ((read = await content.ReadAsync(buffer, state.Token).ConfigureAwait(false)) > 0)
+                            {
+                                if (offset + read > expected.Length || !buffer.AsSpan(0, read).SequenceEqual(expected.AsSpan((int)offset, read)))
+                                    throw new InvalidDataException("Response body mismatch.");
+                                offset += read;
+                            }
 
-                        if (offset != expected.Length) throw new InvalidDataException($"Body {offset} bytes, expected {expected.Length}.");
-                        histogram.RecordTicks(Stopwatch.GetTimestamp() - started);
-                        state.Completed(offset, uploadBody?.Length ?? 0);
+                            if (offset != expected.Length) throw new InvalidDataException($"Body {offset} bytes, expected {expected.Length}.");
+                            histogram.RecordTicks(Stopwatch.GetTimestamp() - started);
+                            state.Completed(offset, uploadBody?.Length ?? 0);
+                        }
+                    }
+                    catch (Exception exception) when (exception is HttpRequestException or IOException or InvalidDataException or OperationCanceledException or AuthenticationException)
+                    {
+                        // Cancel siblings immediately; WhenAll still joins their cleanup.
+                        state.Fail(exception);
                     }
                 })).ConfigureAwait(false);
             }

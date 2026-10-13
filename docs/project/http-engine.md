@@ -58,9 +58,15 @@ independently tested behavior, not a codec or roadmap alone.
 Release publication, HTTP Arena submission and the contributor reply are outside
 this development goal unless separately authorized.
 
-## Protocol support and milestones
+<a id="protocol-support-and-milestones"></a>
+## Initial protocol scope and milestone checkpoint
 
-| Area | Required scope | Current replacement status |
+The following table records the initial implementation checkpoint. Later sections
+retain their own tested revisions and unresolved work; these historical pending
+items are not a fresh assessment of the current source. Current acceptance is
+tracked by the completion criteria above and the linked standards audit.
+
+| Area | Required scope | Replacement status at the initial checkpoint |
 | --- | --- | --- |
 | HTTP semantics | RFC 9110; methods, status, authority, informational responses, headers and trailers | Existing application layer; full conformance audit pending |
 | HTTP/1.1 | RFC 9112; incremental parsing, fixed/chunked bodies, pipelines, persistence, bounded input and errors | First implementation under test |

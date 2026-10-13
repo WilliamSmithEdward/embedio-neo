@@ -11,6 +11,8 @@ import time
 
 
 def validate(directory, revision, burn_threads, require_quiet_phase=True):
+    if any((directory / marker).exists() for marker in ("INVALID.txt", "ABORTED.txt")):
+        raise ValueError("Campaign explicitly marked invalid or aborted")
     environment = json.loads((directory / "environment.json").read_text())
     if environment["sourceRevision"] != revision:
         raise ValueError("Source revision mismatch")
@@ -55,7 +57,7 @@ def validate(directory, revision, burn_threads, require_quiet_phase=True):
                     if mixed[key]["count"] != math.ceil(environment[rate_key] * environment["phaseSeconds"]):
                         raise ValueError("Incomplete mixed traffic: " + key)
                 samples = phase["timeline"]
-                if len(samples) < environment["phaseSeconds"] - 2:
+                if not samples or len(samples) < environment["phaseSeconds"] - 2:
                     raise ValueError("Missing CPU timeline")
                 host = sum(s["hostBusyCpus"] for s in samples) / len(samples)
                 background = sum(s["backgroundCpus"] for s in samples) / len(samples)

@@ -70,23 +70,33 @@ internal static class TeardownAccountingCheck
         using var capped = JsonDocument.Parse(JsonSerializer.Serialize(sites.Snapshot()));
         if (capped.RootElement.GetProperty("overflow").GetInt64() == 0) return 21;
         using var cancellation = new CancellationTokenSource();
-        var pacing = new RunState(TimeSpan.FromSeconds(5), cancellation.Token, 1);
+        using var pacing = new RunState(TimeSpan.FromSeconds(5), cancellation.Token, 1);
         if (!await pacing.WaitForSlotAsync().ConfigureAwait(false)) return 5;
         cancellation.Cancel();
         try { await pacing.WaitForSlotAsync().ConfigureAwait(false); return 6; }
         catch (OperationCanceledException) { }
-        var expired = new RunState(TimeSpan.Zero, CancellationToken.None, 1);
+        using var expired = new RunState(TimeSpan.Zero, CancellationToken.None, 1);
         if (await expired.WaitForSlotAsync().ConfigureAwait(false)) return 7;
-        var unlimited = new RunState(TimeSpan.FromSeconds(5), CancellationToken.None);
+        using var unlimited = new RunState(TimeSpan.FromSeconds(5), CancellationToken.None);
         if (!await unlimited.WaitForSlotAsync(16).ConfigureAwait(false)) return 8;
-        var bounded = new RunState(TimeSpan.FromMilliseconds(100), CancellationToken.None, 1);
+        using var bounded = new RunState(TimeSpan.FromMilliseconds(100), CancellationToken.None, 1);
         if (!await bounded.WaitForSlotAsync().ConfigureAwait(false)) return 9;
         if (await bounded.WaitForSlotAsync().ConfigureAwait(false) || bounded.Running) return 10;
-        var concurrent = new RunState(TimeSpan.FromSeconds(2), CancellationToken.None, 1);
+        using var concurrent = new RunState(TimeSpan.FromSeconds(2), CancellationToken.None, 1);
         if (!await concurrent.WaitForSlotAsync().ConfigureAwait(false)) return 11;
         var waiting = concurrent.WaitForSlotAsync().AsTask();
         if (await concurrent.WaitForSlotAsync().ConfigureAwait(false)) return 12;
         if (!await waiting.ConfigureAwait(false)) return 13;
+        // Disposal must settle the sampler before releasing its Process owner,
+        // including disposal without FinishAsync and repeated disposal.
+        for (var iteration = 0; iteration < 8; iteration++)
+        {
+            var measurement = new Measurement(new System.Collections.Concurrent.ConcurrentDictionary<string, long>(StringComparer.Ordinal));
+            if (iteration % 2 == 0) await measurement.FinishAsync().ConfigureAwait(false);
+            await measurement.DisposeAsync().ConfigureAwait(false);
+            await measurement.DisposeAsync().ConfigureAwait(false);
+        }
+
         Control.Write("CONNECTION CENSUS AND PACING OK");
         return 0;
     }

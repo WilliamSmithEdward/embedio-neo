@@ -131,6 +131,12 @@ namespace EmbedIO.Files
             if (!localPath.StartsWith(FileSystemPath, StringComparison.Ordinal))
                 return null;
 
+            var baseEndsWithSeparator = FileSystemPath[FileSystemPath.Length - 1] == Path.DirectorySeparatorChar
+                || FileSystemPath[FileSystemPath.Length - 1] == Path.AltDirectorySeparatorChar;
+            if (localPath.Length > FileSystemPath.Length && !baseEndsWithSeparator
+                && localPath[FileSystemPath.Length] != Path.DirectorySeparatorChar
+                && localPath[FileSystemPath.Length] != Path.AltDirectorySeparatorChar)
+                return null;
             if (File.Exists(localPath))
                 return GetMappedFileInfo(mimeTypeProvider, localPath);
 

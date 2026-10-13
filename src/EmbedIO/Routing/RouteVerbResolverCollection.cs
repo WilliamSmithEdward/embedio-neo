@@ -128,7 +128,7 @@ namespace EmbedIO.Routing
                 Expression.Parameter(typeof(RouteMatch), "route"),
             };
 
-            Expression body = Expression.Call(Expression.Constant(target), method, parameters.Cast<Expression>());
+            Expression body = Expression.Call(method.IsStatic ? null : Expression.Constant(target), method, parameters.Cast<Expression>());
             if (isSynchronous)
             {
                 // Convert void to Task by evaluating Task.CompletedTask

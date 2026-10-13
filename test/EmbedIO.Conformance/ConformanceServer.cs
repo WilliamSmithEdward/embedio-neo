@@ -298,7 +298,7 @@ internal sealed class ConformanceServer : IDisposable
     // Applicability probes. Each uses only the public response API an application
     // would reach for, so the observed wire behavior is what applications get.
 
-    // An application attempting Early Hints through the only public status setter.
+    // Legacy StatusCode setter probe; explicit Early Hints use IHttpResponseSections.
     private static async Task Status103Async(IHttpContext context)
     {
         context.Response.StatusCode = 103;
@@ -319,7 +319,10 @@ internal sealed class ConformanceServer : IDisposable
         using var buffer = new MemoryStream();
         await context.Request.InputStream.CopyToAsync(buffer, context.CancellationToken).ConfigureAwait(false);
         var names = context.Request.Headers.AllKeys.OfType<string>().Select(k => k.ToLowerInvariant()).OrderBy(k => k, StringComparer.Ordinal);
-        await context.SendStringAsync($"body={buffer.Length};fields={string.Join(",", names)}", "text/plain", WebServer.Utf8NoBomEncoding).ConfigureAwait(false);
+        var trailers = context.Request is IHttpRequestTrailers capability && capability.TryGetTrailers(out var fields)
+            ? string.Join(",", fields.Select(field => field.Key.ToLowerInvariant()).OrderBy(name => name, StringComparer.Ordinal))
+            : string.Empty;
+        await context.SendStringAsync($"body={buffer.Length};fields={string.Join(",", names)};trailers={trailers}", "text/plain", WebServer.Utf8NoBomEncoding).ConfigureAwait(false);
     }
 
     // Resource snapshot after a full blocking collection. Not a production endpoint.

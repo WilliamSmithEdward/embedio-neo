@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.WebSockets;
@@ -49,19 +48,13 @@ namespace EmbedIO.Tests.Issues
         {
             using var fixture = new Fixture(mode, scenario);
             using var client = await fixture.Connect();
-            using var trace = new CapturingTraceListener();
-            EmbedIO.Diagnostics.Log.Source.Listeners.Add(trace);
             var data = scenario == "invalid" ? new byte[] { 0xc0, 0xaf }
                 : Encoding.UTF8.GetBytes(scenario == "oversize" ? "12345" : scenario == "failure" ? "fail" : scenario == "away" ? "away" : "binary");
-            try
-            {
-                await client.SendAsync(new ArraySegment<byte>(data), scenario == "unsupported" ? WebSocketMessageType.Binary : WebSocketMessageType.Text, true, fixture.Timeout.Token);
-                var result = await client.ReceiveAsync(new ArraySegment<byte>(new byte[256]), fixture.Timeout.Token);
-                Assert.That(result.MessageType, Is.EqualTo(WebSocketMessageType.Close));
-                Assert.That((int?)result.CloseStatus, Is.EqualTo(expected));
-                await client.CloseOutputAsync(result.CloseStatus ?? throw new AssertionException("Expected a close status."), "ack", fixture.Timeout.Token);
-            }
-            finally { EmbedIO.Diagnostics.Log.Source.Listeners.Remove(trace); }
+            await client.SendAsync(new ArraySegment<byte>(data), scenario == "unsupported" ? WebSocketMessageType.Binary : WebSocketMessageType.Text, true, fixture.Timeout.Token);
+            var result = await client.ReceiveAsync(new ArraySegment<byte>(new byte[256]), fixture.Timeout.Token);
+            Assert.That(result.MessageType, Is.EqualTo(WebSocketMessageType.Close));
+            Assert.That((int?)result.CloseStatus, Is.EqualTo(expected));
+            await client.CloseOutputAsync(result.CloseStatus ?? throw new AssertionException("Expected a close status."), "ack", fixture.Timeout.Token);
             using var healthy = await fixture.Connect();
             await healthy.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("ok")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
             Assert.That(Encoding.UTF8.GetString((await Read(healthy, fixture.Timeout.Token)).Data), Is.EqualTo("ok"));
@@ -270,27 +263,6 @@ namespace EmbedIO.Tests.Issues
             return (result.MessageType, output.ToArray());
         }
 
-        private sealed class CapturingTraceListener : TraceListener
-        {
-            private readonly object _sync = new();
-            private readonly StringBuilder _messages = new();
-
-            public override void Write(string? message)
-            {
-                lock (_sync) _messages.Append(message);
-            }
-
-            public override void WriteLine(string? message)
-            {
-                lock (_sync) _messages.AppendLine(message);
-            }
-
-            internal string Snapshot()
-            {
-                lock (_sync) return _messages.ToString();
-            }
-        }
-
         private sealed class Fixture : IDisposable
         {
             private readonly WebServer _server;
@@ -332,13 +304,7 @@ namespace EmbedIO.Tests.Issues
             public TaskCompletionSource<bool> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public TaskCompletionSource<bool> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public TaskCompletionSource<bool> CallbackFinished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            public TaskCompletionSource<bool> Disconnected { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public Task Dispatch(IWebSocketContext context, byte[] bytes) => base.OnMessageReceivedAsync(context, bytes, new Result(bytes.Length));
-            protected override Task OnClientDisconnectedAsync(IWebSocketContext context)
-            {
-                Disconnected.TrySetResult(true);
-                return Task.CompletedTask;
-            }
             protected override async Task OnTextMessageReceivedAsync(IWebSocketContext context, string text)
             {
                 if (_scenario == "failure" && text == "fail") throw new InvalidOperationException("deliberate callback failure");

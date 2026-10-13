@@ -145,7 +145,7 @@ namespace EmbedIO.Tests
             await client.ConnectAsync("127.0.0.1", new Uri(url).Port, stop.Token);
             using var tls = secure ? new SslStream(client.GetStream(), false,
                 (_, peer, _, _) => peer?.GetCertHashString() == certificate.GetCertHashString()) : null;
-            if (tls != null) await tls.AuthenticateAsClientAsync("localhost");
+            if (tls != null) await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "localhost" }, stop.Token);
             Stream stream = tls ?? (Stream)client.GetStream();
             var wire = "CONNECT " + authority + " HTTP/1.1\r\nHost: " + authority
                 + "\r\n\r\nGET /must-not-dispatch HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
@@ -172,7 +172,7 @@ namespace EmbedIO.Tests
             await healthy.ConnectAsync("127.0.0.1", new Uri(url).Port, stop.Token);
             using var healthyTls = secure ? new SslStream(healthy.GetStream(), false,
                 (_, peer, _, _) => peer?.GetCertHashString() == certificate.GetCertHashString()) : null;
-            if (healthyTls != null) await healthyTls.AuthenticateAsClientAsync("localhost");
+            if (healthyTls != null) await healthyTls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = "localhost" }, stop.Token);
             Stream healthyStream = healthyTls ?? (Stream)healthy.GetStream();
             await healthyStream.WriteAsync(Encoding.ASCII.GetBytes(
                 "GET /healthy HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"), stop.Token);

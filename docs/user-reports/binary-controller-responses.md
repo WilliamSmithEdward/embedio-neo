@@ -159,6 +159,7 @@ unconfirmed header-clear defect or reproduce the original application.
 Real-listener tests cover header clearing followed by JSON serialization, exact
 binary transport, one media type, null charset encoding, both buffering modes,
 gzip decoding, custom headers and independent JSON endpoints under both listener
-modes. A separate automatic `ushort` route-binding investigation currently
-reproduces HTTP 500 for malformed input before controller execution; the explicit validation
-in the complete example avoids depending on that behavior.
+modes in the original investigation. Automatic `ushort` route binding originally
+returned HTTP 500 for malformed input before controller execution; current source
+returns [HTTP 400 for invalid typed parameters](typed-route-validation.md). The
+explicit validation in the complete example works with both behaviors.

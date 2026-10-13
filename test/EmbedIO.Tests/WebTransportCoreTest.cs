@@ -20,7 +20,7 @@ namespace EmbedIO.Tests
         private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
         private const string Namespace = "EmbedIO.Net.Internal.WebTransport.";
         private const long CloseType = 0x2843, DrainType = 0x78ae, MaxData = 0x190B4D3D, MaxStreamsBidi = 0x190B4D3F, MaxStreamsUni = 0x190B4D40;
-        private const long DataBlocked = 0x190B4D41, StreamsBlockedBidi = 0x190B4D43, StreamsBlockedUni = 0x190B4D44, MaxStreamData = 0x190B4D3E;
+        private const long StreamsBlockedBidi = 0x190B4D43, MaxStreamData = 0x190B4D3E;
         private const long SessionGone = 0x170d7b68, BufferedRejected = 0x3994bd84, FlowControlError = 0x045d4487;
         private const long H3IdError = 0x108, H3SettingsError = 0x109, H3MessageError = 0x10e, H3DatagramError = 0x33;
 
@@ -82,8 +82,11 @@ namespace EmbedIO.Tests
         private static int Skip(long type) => type < 64 ? 2 : type < 16384 ? 3 : type < 1073741824 ? 5 : 9;
 
         private static object Session(long id, bool flowControl, object? local = null, object? peer = null, Recorder? recorder = null, object? limits = null)
-            => New("WebTransportSession", id, flowControl, local ?? Settings(true, 1000, 2, 3), peer ?? Settings(true, 500, 1, 2), limits ?? New("WebTransportSessionLimits"),
-                (recorder ?? new Recorder()).StreamHandler, (recorder ?? new Recorder()).DatagramHandler);
+        {
+            recorder ??= new Recorder();
+            return New("WebTransportSession", id, flowControl, local ?? Settings(true, 1000, 2, 3), peer ?? Settings(true, 500, 1, 2), limits ?? New("WebTransportSessionLimits"),
+                recorder.StreamHandler, recorder.DatagramHandler);
+        }
 
         private static object Registry(object local, object peer, Recorder recorder, bool transportParameters = true, object? limits = null)
             => New("WebTransportSessionRegistry", local, peer, transportParameters, limits ?? New("WebTransportRegistryLimits"), recorder.StreamHandler, recorder.DatagramHandler);
@@ -939,8 +942,9 @@ namespace EmbedIO.Tests
             private readonly byte[] _bytes;
             private readonly int _fragment;
             private int _position;
+            private bool _disposed;
             public FragmentedInput(byte[] bytes, int fragment) { _bytes = bytes; _fragment = fragment; }
-            public override bool CanRead => true;
+            public override bool CanRead => !_disposed;
             public override bool CanSeek => false;
             public override bool CanWrite => false;
             public override long Length => _bytes.Length;
@@ -948,6 +952,7 @@ namespace EmbedIO.Tests
             public override void Flush() { }
             public override int Read(byte[] buffer, int offset, int count)
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
                 var available = Math.Min(Math.Min(count, _fragment), _bytes.Length - _position);
                 Array.Copy(_bytes, _position, buffer, offset, available);
                 _position += available;
@@ -957,6 +962,11 @@ namespace EmbedIO.Tests
             {
                 await Task.Yield();
                 return Read(buffer, offset, count);
+            }
+            protected override void Dispose(bool disposing)
+            {
+                _disposed = true;
+                base.Dispose(disposing);
             }
             public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
             public override void SetLength(long value) => throw new NotSupportedException();

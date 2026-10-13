@@ -455,7 +455,8 @@ namespace EmbedIO.WebSockets
         {
             protocols = Validate.NotNull(nameof(protocols), protocols);
 
-            if (protocols.Select(p => Validate.Rfc2616Token(nameof(protocols), p)).Any(protocol => _protocols.Contains(protocol)))
+            var names = new HashSet<string>(_protocols, StringComparer.Ordinal);
+            if (protocols.Select(p => Validate.Rfc2616Token(nameof(protocols), p)).Any(protocol => !names.Add(protocol)))
                 throw new ArgumentException("Duplicate WebSocket protocol name.", nameof(protocols));
 
             EnsureConfigurationNotLocked();

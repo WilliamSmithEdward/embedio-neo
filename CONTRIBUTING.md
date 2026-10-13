@@ -44,7 +44,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 5705
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 5943
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -58,7 +58,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 5705 executed/reported test cases to catch accidental discovery loss; update
+least 5943 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
 suite budget is eight minutes on all three platforms. William approved the Unix
 allowance on 2026-10-10 and requested loosening the Windows allowance on
@@ -147,7 +147,7 @@ tools separate from shipped runtime dependencies. Do not replace dependencies
 by copying their public types into a different assembly and claiming binary
 compatibility.
 
-SWAN has been fully removed with William's explicit approval. Built-in .NET APIs and local helpers replace its services. The .NET 10 core has no runtime package dependencies; .NET Standard 2.0 requires Microsoft System.Text.Json and its support packages. See [MIGRATION.md](docs/compatibility/migration.md) for the approved breaking changes.
+SWAN has been fully removed with William's explicit approval. Built-in .NET APIs and local helpers replace its services. The core references the pinned System.Threading.RateLimiting package for the optional limiter integration. The .NET Standard 2.0 asset additionally requires System.Text.Json and its support packages; inspect each package dependency group when upgrading. See [MIGRATION.md](docs/compatibility/migration.md) for the approved breaking changes.
 
 The unused Nullable polyfill and legacy FxCop package have been removed. SDK
 analyzers and EditorConfig-based style checks replace StyleCop. Builds treat warnings

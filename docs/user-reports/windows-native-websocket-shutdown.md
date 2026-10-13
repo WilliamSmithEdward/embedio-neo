@@ -1,5 +1,10 @@
 # Windows native WebSocket shutdown
 
+This page preserves the v1 native-backend correction and its runtime recheck.
+Neo v2 removes the Microsoft listener and its adapter; the workaround below is
+not a current v2 deployment option. See the
+[listener migration guide](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
+
 This correction is included starting with EmbedIO-Neo 1.0.3. It affects
 `HttpListenerMode.Microsoft` on Windows. The default `HttpListenerMode.EmbedIO`
 uses a different WebSocket implementation.

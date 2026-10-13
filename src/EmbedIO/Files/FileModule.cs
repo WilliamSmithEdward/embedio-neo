@@ -663,12 +663,14 @@ namespace EmbedIO.Files
                 {
                     using (var compressor = new CompressionStream(memoryStream, compressionMethod))
                     {
-                        using var source = Provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path);
+                        using var source = Provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path);
                         await source.CopyToAsync(compressor, WebServer.StreamCopyBufferSize, context.CancellationToken)
                             .ConfigureAwait(false);
                     }
 
-                    content = memoryStream.ToArray();
+                    // The provider sees only CompressionStream; dispose this private buffer before publishing it.
+                    var buffer = memoryStream.GetBuffer();
+                    content = buffer.Length == memoryStream.Length ? buffer : memoryStream.ToArray();
                     // Caching reads the entire file; a range response still sends only
                     // the selected slice. Compression and ranges are mutually exclusive.
                     if (!isPartial)
@@ -690,7 +692,7 @@ namespace EmbedIO.Files
             }
 
             // Read and transfer content without caching.
-            using (var source = Provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path))
+            using (var source = Provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path))
             {
                 context.Response.SendChunked = true;
 
@@ -709,29 +711,20 @@ namespace EmbedIO.Files
                             var read = await source.ReadAsync(buffer, 0, (int)Math.Min(skipLength, buffer.Length), context.CancellationToken)
                                 .ConfigureAwait(false);
 
+                            if (read == 0) throw new EndOfStreamException("The file ended before the requested range.");
                             skipLength -= read;
                         }
                     }
 
                     var transferSize = responseContentLength;
-                    while (transferSize >= WebServer.StreamCopyBufferSize)
+                    while (transferSize > 0)
                     {
-                        var read = await source.ReadAsync(buffer, 0, WebServer.StreamCopyBufferSize, context.CancellationToken)
+                        var read = await source.ReadAsync(buffer, 0, (int)Math.Min(transferSize, buffer.Length), context.CancellationToken)
                             .ConfigureAwait(false);
-
+                        if (read == 0) throw new EndOfStreamException("The file ended before the requested range was complete.");
                         await context.Response.OutputStream.WriteAsync(buffer, 0, read, context.CancellationToken)
                             .ConfigureAwait(false);
-
                         transferSize -= read;
-                    }
-
-                    if (transferSize > 0)
-                    {
-                        var read = await source.ReadAsync(buffer, 0, (int)transferSize, context.CancellationToken)
-                            .ConfigureAwait(false);
-
-                        await context.Response.OutputStream.WriteAsync(buffer, 0, read, context.CancellationToken)
-                            .ConfigureAwait(false);
                     }
                 }
                 else

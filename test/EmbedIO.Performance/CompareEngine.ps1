@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory=$true)][string]$BaselineRunner,
     [Parameter(Mandatory=$true)][string]$CandidateRunner,
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
@@ -7,22 +7,11 @@
     [int]$Concurrency = 16
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'ComparisonProcesses.ps1')
 $BaselineRunner=(Resolve-Path -LiteralPath $BaselineRunner).Path
 $CandidateRunner=(Resolve-Path -LiteralPath $CandidateRunner).Path
 $OutputDirectory=[IO.Path]::GetFullPath($OutputDirectory)
 [IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
-function Launch([string]$Runner,[string[]]$Options) {
-    $info=[Diagnostics.ProcessStartInfo]::new('dotnet')
-    $info.UseShellExecute=$false
-    $info.CreateNoWindow=$true
-    $info.RedirectStandardInput=$true
-    $info.RedirectStandardOutput=$true
-    $info.RedirectStandardError=$true
-    $info.ArgumentList.Add($Runner)
-    foreach($option in $Options) { $info.ArgumentList.Add($option) }
-    $process=[Diagnostics.Process]::Start($info)
-    return @{ Process=$process; Errors=$process.StandardError.ReadToEndAsync() }
-}
 function Line($process) {
     return $process.StandardOutput.ReadLineAsync().WaitAsync([TimeSpan]::FromSeconds(90)).GetAwaiter().GetResult()
 }
@@ -35,10 +24,10 @@ foreach($pipeline in 1,16) {
             $reservation.Stop()
             $url="http://127.0.0.1:$port/"
             $runner=if($side -eq 'before'){$BaselineRunner}else{$CandidateRunner}
-            $server=Launch $runner @('--benchmark-endpoints','--measure','--url',$url)
-            if([Environment]::ProcessorCount -ge 8){$server.Process.ProcessorAffinity=[IntPtr]15}
+            $server=Start-ComparisonProcess $runner @('--benchmark-endpoints','--measure','--url',$url)
             $client=$null
             try {
+                if([Environment]::ProcessorCount -ge 8){$server.Process.ProcessorAffinity=[IntPtr]15}
                 $greeting=Line $server.Process
                 if($greeting -notlike 'Benchmark endpoints:*'){throw "Host failed: $greeting"}
                 # The host prints before entering its accept loop; confirm readiness separately.
@@ -52,7 +41,7 @@ foreach($pipeline in 1,16) {
                     }
                     if(!$ready){throw 'Host never became ready.'}
                 } finally {$probe.Dispose()}
-                $client=Launch $CandidateRunner @('--engine-load','--url',($url+'plaintext'),'--seconds',"$Seconds",'--concurrency',"$Concurrency",'--pipeline',"$pipeline")
+                $client=Start-ComparisonProcess $CandidateRunner @('--engine-load','--url',($url+'plaintext'),'--seconds',"$Seconds",'--concurrency',"$Concurrency",'--pipeline',"$pipeline")
                 if([Environment]::ProcessorCount -ge 8){$client.Process.ProcessorAffinity=[IntPtr]240}
                 if((Line $client.Process) -ne 'READY'){throw 'Client warmup failed.'}
                 $server.Process.StandardInput.WriteLine('start')
@@ -70,13 +59,7 @@ foreach($pipeline in 1,16) {
                 $result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutputDirectory "$side-p$pipeline-r$round.json")
                 Write-Output "$side pipeline=$pipeline round=$round requests=$($clientResult.requests) rps=$([math]::Round($clientResult.requestsPerSecond))"
             } finally {
-                foreach($child in @($client,$server)) {
-                    if($null -eq $child){continue}
-                    if(!$child.Process.HasExited){$child.Process.Kill($true);$child.Process.WaitForExit()}
-                    $errorText=$child.Errors.GetAwaiter().GetResult()
-                    if($errorText){$errorText | Add-Content -LiteralPath (Join-Path $OutputDirectory 'stderr.log')}
-                    $child.Process.Dispose()
-                }
+                Stop-ComparisonProcesses @($client,$server) (Join-Path $OutputDirectory 'stderr.log')
             }
         }
     }

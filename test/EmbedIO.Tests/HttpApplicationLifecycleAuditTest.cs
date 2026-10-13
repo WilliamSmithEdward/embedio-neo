@@ -799,6 +799,55 @@ namespace EmbedIO.Tests
             if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
             await Http3BodyTimeoutCore(pendingInput);
         }
+        [TestCase(0)]
+        [TestCase(2)]
+        public async Task BodyTimeoutFixtureRejectsEofBeforeItsInitialPrefix(int availableBytes)
+        {
+            using var input = new PrefixEofStream(availableBytes);
+            var request = System.Reflection.DispatchProxy.Create<IHttpRequest, PrefixRequestProxy>();
+            ((PrefixRequestProxy)(object)request).Input = input;
+            var context = System.Reflection.DispatchProxy.Create<IHttpContext, PrefixContextProxy>();
+            ((PrefixContextProxy)(object)context).Request = request;
+            await Assert.ThrowsAsync<EndOfStreamException>(() => BodyTimeoutHandler(context));
+        }
+
+        private sealed class PrefixEofStream(int length) : MemoryStream(new byte[length])
+        {
+            private int _ends;
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                // Bound the pre-fix zero-read spin without a native listener or background task.
+                if (Position == Length && ++_ends > 1)
+                    throw new InvalidOperationException("The fixture read EOF repeatedly instead of rejecting it.");
+                return base.ReadAsync(buffer, cancellationToken);
+            }
+        }
+
+        public class PrefixRequestProxy : System.Reflection.DispatchProxy
+        {
+            public Stream Input { get; set; } = Stream.Null;
+            protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? args)
+                => method?.Name switch
+                {
+                    "get_Url" => new Uri("http://localhost/upload"),
+                    "get_ProtocolVersion" => HttpVersion.Version20,
+                    "get_InputStream" => Input,
+                    _ => throw new AssertionException("Unexpected request access: " + method?.Name),
+                };
+        }
+
+        public class PrefixContextProxy : System.Reflection.DispatchProxy
+        {
+            public IHttpRequest? Request { get; set; }
+            protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? args)
+                => method?.Name switch
+                {
+                    "get_Request" => Request,
+                    "get_CancellationToken" => CancellationToken.None,
+                    _ => throw new AssertionException("Unexpected context access: " + method?.Name),
+                };
+        }
+
         // Reads what arrives, times out the rest of the upload and answers 408.
         private static async Task BodyTimeoutHandler(IHttpContext context)
         {
@@ -815,7 +864,12 @@ namespace EmbedIO.Tests
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
             try
             {
-                while (total < 3) total += await context.Request.InputStream.ReadAsync(buffer, context.CancellationToken);
+                while (total < 3)
+                {
+                    var prefixBytes = await context.Request.InputStream.ReadAsync(buffer, context.CancellationToken);
+                    if (prefixBytes == 0) throw new EndOfStreamException("The timeout fixture requires three initial request bytes.");
+                    total += prefixBytes;
+                }
                 deadline.CancelAfter(TimeSpan.FromMilliseconds(300));
                 int count;
                 while ((count = await context.Request.InputStream.ReadAsync(buffer, deadline.Token)) != 0) total += count;
@@ -985,18 +1039,36 @@ namespace EmbedIO.Tests
                 var port = FreePort(quic);
                 var prefix = (quic ? "https" : "http") + "://localhost:" + port + "/";
                 var stop = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-                var server = new WebServer(o =>
+                WebServer? server = null;
+                Task running = Task.CompletedTask;
+                try
                 {
-                    o.WithUrlPrefix(prefix).WithMode(mode);
-                    if (certificate != null) o.WithCertificate(certificate);
-                    configure?.Invoke(o);
-                }).WithAction("/", HttpVerbs.Any, handler);
-                configureServer?.Invoke(server);
-                var running = server.RunAsync(stop.Token);
-                var deadline = DateTime.UtcNow + Settle;
-                while (server.State != WebServerState.Listening && !running.IsCompleted && DateTime.UtcNow < deadline) await Task.Delay(10);
-                if (running.IsCompleted) await running;
-                return new Host(server, port, stop, running);
+                    server = new WebServer(o =>
+                    {
+                        o.WithUrlPrefix(prefix).WithMode(mode);
+                        if (certificate != null) o.WithCertificate(certificate);
+                        configure?.Invoke(o);
+                    }).WithAction("/", HttpVerbs.Any, handler);
+                    configureServer?.Invoke(server);
+                    running = server.RunAsync(stop.Token);
+                    var deadline = DateTime.UtcNow + Settle;
+                    while (server.State != WebServerState.Listening && !running.IsCompleted && DateTime.UtcNow < deadline) await Task.Delay(10);
+                    if (running.IsCompleted) await running;
+                    return new Host(server, port, stop, running);
+                }
+                catch (Exception failure) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(failure))
+                {
+                    stop.Cancel();
+                    try { await running.WaitAsync(Settle); }
+                    catch (Exception cleanup) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(cleanup))
+                    { failure.Data["HostStartupCleanup"] = cleanup.ToString(); }
+                    finally
+                    {
+                        try { server?.Dispose(); }
+                        finally { stop.Dispose(); }
+                    }
+                    throw;
+                }
             }
 
             public async ValueTask DisposeAsync()
@@ -1034,21 +1106,30 @@ namespace EmbedIO.Tests
             internal static async Task<H2Peer> ConnectAsync(Host host)
             {
                 var tcp = new TcpClient { NoDelay = true };
-                await tcp.ConnectAsync(IPAddress.Loopback, host.Port, host.Token);
-                var peer = new H2Peer(tcp, host);
-                await peer._wire.WriteAsync(Encoding.ASCII.GetBytes("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"), host.Token);
-                await peer.SendAsync(Http2Settings, 0, 0, Array.Empty<byte>());
-                var settings = false;
-                var acknowledged = false;
-                while (!settings || !acknowledged)
+                var connected = false;
+                try
                 {
-                    var frame = await peer.ReceiveAsync();
-                    if (frame.Type != Http2Settings) continue;
-                    if ((frame.Flags & 1) != 0) { acknowledged = true; continue; }
-                    settings = true;
-                    await peer.SendAsync(Http2Settings, 1, 0, Array.Empty<byte>());
+                    await tcp.ConnectAsync(IPAddress.Loopback, host.Port, host.Token);
+                    var peer = new H2Peer(tcp, host);
+                    await peer._wire.WriteAsync(Encoding.ASCII.GetBytes("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"), host.Token);
+                    await peer.SendAsync(Http2Settings, 0, 0, Array.Empty<byte>());
+                    var settings = false;
+                    var acknowledged = false;
+                    while (!settings || !acknowledged)
+                    {
+                        var frame = await peer.ReceiveAsync();
+                        if (frame.Type != Http2Settings) continue;
+                        if ((frame.Flags & 1) != 0) { acknowledged = true; continue; }
+                        settings = true;
+                        await peer.SendAsync(Http2Settings, 1, 0, Array.Empty<byte>());
+                    }
+                    connected = true;
+                    return peer;
                 }
-                return peer;
+                finally
+                {
+                    if (!connected) tcp.Dispose();
+                }
             }
 
             internal byte[] Request(string method, string path)

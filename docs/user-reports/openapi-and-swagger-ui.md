@@ -2,8 +2,8 @@
 
 This guide answers [upstream #539](https://github.com/unosquare/embedio/issues/539).
 EmbedIO-Neo can serve an application-owned OpenAPI document and Swagger UI using
-existing APIs. It does **not** automatically generate an OpenAPI document from
-controller attributes. This example works with published EmbedIO-Neo **1.0.2**;
+existing APIs. Published EmbedIO-Neo **1.0.2** does not automatically generate an
+OpenAPI document from controller attributes. This example uses that version;
 it adds no library API, target or production dependency.
 
 Source builds after 1.0.3 can also write the document from generated controller

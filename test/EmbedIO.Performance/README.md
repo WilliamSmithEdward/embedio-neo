@@ -1,5 +1,12 @@
 # Performance checks
 
+`--audit-allocations` measures fresh WebSocket text delivery, optional field
+binding, charset parameter lookup and chunked trailer parsing.
+`--verify-audit-allocations` checks the first two workloads against allocation
+budgets; all workloads validate their results. See the
+[cleanup audit](../../docs/project/performance-cleanup-audit.md) for the baseline,
+scope, compatibility coverage and rejected experiments.
+
 Run the allocation checks from the repository root:
 
 ```sh
@@ -88,8 +95,9 @@ unchanged. `--connection-policy keep-alive`, `close` or `both` controls connecti
 churn; the default is both for GET/full POST and keep-alive for partial/unread POST.
 
 Partial/unread POST requires keep-alive and fewer than 100 requests per worker,
-including eight warmups. The existing connection reuse limit can force an early
-close while an unread body is still being sent. A larger baseline workload hit a
+including eight warmups. This is a retained comparison bound for historical
+baselines with a connection reuse limit; the current engine has no fixed 100-request
+cap. An older baseline can close while an unread body is still being sent. A larger baseline workload hit a
 TLS connection reset; it was not a valid performance sample. The library's close
 and drain policy is preserved. Benchmarks do not retry failures or hide them.
 

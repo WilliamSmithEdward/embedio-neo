@@ -161,15 +161,16 @@ namespace EmbedIO.Tests.Issues
             var source = new PatternStream(total);
             await using var host = await Host.StartAsync(context => context.SendRepresentationAsync(source, "application/octet-stream", Tag));
             using var client = Host.CreateClient(protocol);
+            using var deadline = new CancellationTokenSource(Deadline);
             const long start = 1_000_003, end = 9_000_002;
-            using var response = await client.SendAsync(Request(client, host.Url, $"bytes={start}-{end}"), HttpCompletionOption.ResponseHeadersRead);
+            using var response = await client.SendAsync(Request(client, host.Url, $"bytes={start}-{end}"), HttpCompletionOption.ResponseHeadersRead, deadline.Token);
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.PartialContent));
             Assert.That(response.Content.Headers.ContentLength, Is.EqualTo(end - start + 1));
-            using var body = await response.Content.ReadAsStreamAsync();
+            using var body = await response.Content.ReadAsStreamAsync(deadline.Token);
             var buffer = new byte[81920];
             long position = start, received = 0;
             int read;
-            while ((read = await body.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            while ((read = await body.ReadAsync(buffer, 0, buffer.Length, deadline.Token)) > 0)
             {
                 for (var i = 0; i < read; i++)
                     if (buffer[i] != PatternStream.ByteAt(position + i)) Assert.Fail($"Byte mismatch at offset {position + i}.");

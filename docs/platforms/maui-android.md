@@ -18,7 +18,7 @@ var server = new WebServer(options => options
 ```
 
 Neo v2 removes the Microsoft and inherited Mono listener backends; the retained
-`EmbedIO` mode selects the original TCP engine. JoaquinC539's historical comment
+`EmbedIO` mode selects the replacement TCP engine. JoaquinC539's historical comment
 recommended comparing the v1 listener modes. The Android fixture uses EmbedIO
 mode and a nonprivileged loopback port. Its historical results do not establish
 validation of the replacement engine on Android or the cause of every startup
@@ -120,10 +120,10 @@ with .NET 10, the EmbedIO listener, and real HTTP requests. They check caught
 worker errors, rotation, explicit activity recreation, brief Home/resume, and
 orderly listener replacement while recording process IDs and listener
 generations. CI retains JSON observations, logcat, activity state, and emulator
-logs in the `android-smoke` artifact when those jobs run. William has temporarily
-paused all MAUI CI, including Android; the aggregate gate currently expects that
-job to be skipped. A skipped job is not replacement-engine validation. See the
-[pause and re-enablement record](maui-https-validation.md#temporary-owner-requested-pause).
+logs in the `android-smoke` artifact. The Android job is enabled and required by
+the aggregate gate. A configured or skipped job is not replacement-engine
+validation; verify the run and artifact for the relevant source. See the
+[CI status and retained evidence](maui-https-validation.md#ci-status-and-retained-evidence).
 The [verified emulator run](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37267444705)
 passed on API 29 with runtime 10.0.12: the process ID stayed unchanged across all
 phases, and only the explicit listener replacement advanced its generation.

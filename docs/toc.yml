@@ -259,6 +259,8 @@
       href: platforms/quic-datagrams-macos-validation.md
 - name: Project
   items:
+    - name: Performance and cleanup audit
+      href: project/performance-cleanup-audit.md
     - name: Baseline and direction
       href: project/embed_io_neo.md
     - name: Modern HTTP engine program

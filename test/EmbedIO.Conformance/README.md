@@ -39,8 +39,11 @@ dotnet run --project test/EmbedIO.Conformance -c Release -- self --out TestResul
 ```
 
 Full campaign in the pinned container. Heavy runs belong here so host socket
-pressure stays isolated. Capture the exact commit as a snapshot first; the archive
-keeps LF endings through `.gitattributes`:
+pressure stays isolated. Capture the exact commit as a snapshot first. Run this
+example from a Linux checkout and verify that archived shell scripts use LF.
+The repository's `text=auto` attribute does not guarantee LF archives on Windows;
+the Windows audit exports raw `git cat-file blob` bytes and verifies their Git
+blob identities before execution:
 
 ```sh
 docker build -f test/EmbedIO.Conformance/docker/Dockerfile -t embedio-conformance test/EmbedIO.Conformance

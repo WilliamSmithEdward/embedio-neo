@@ -205,6 +205,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
+- [Performance and cleanup audit](project/performance-cleanup-audit.md): allocation measurements, compatibility-preserving simplifications and TLS callback regression coverage.
+
 - [Shared HTTP/1 listener shutdown](project/shared-http1-owner-shutdown.md): logical-owner retirement, idle transport handoff and final-endpoint cleanup.
 
 - [HTTP/1 idle closure investigation](project/http1-idle-closure.md): TCP/TLS timeout observations, released/main controls and the approved orderly-idle policy with validation limits.

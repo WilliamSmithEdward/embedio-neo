@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace EmbedIO.Utilities
 {
@@ -31,11 +30,13 @@ namespace EmbedIO.Utilities
         /// <inheritdoc />
         public string? GetMimeType(string extension)
         {
-            var result = _providers.Select(p => p.GetMimeType(extension))
-                .FirstOrDefault(m => m != null);
+            foreach (var provider in _providers)
+            {
+                var mimeType = provider.GetMimeType(extension);
+                if (mimeType != null) return mimeType;
+            }
 
-            if (result == null)
-                _ = MimeType.Associations.TryGetValue(extension, out result);
+            _ = MimeType.Associations.TryGetValue(extension, out var result);
 
             return result;
         }

@@ -262,17 +262,7 @@ namespace EmbedIO.Net.Internal
         public bool KeepAlive => _keepAlive ??= !Headers.Contains(HttpHeaderNames.Connection, "close", StringComparison.OrdinalIgnoreCase)
             && (ProtocolVersion >= HttpVersion.Version11 || Headers.Contains(HttpHeaderNames.Connection, "keep-alive", StringComparison.OrdinalIgnoreCase));
         public Encoding ContentEncoding
-        {
-            get
-            {
-                var type = ContentType;
-                if (!HasEntityBody || type == null) return WebServer.DefaultEncoding;
-                var charset = HeaderUtility.GetCharset(type);
-                if (string.IsNullOrEmpty(charset)) return WebServer.DefaultEncoding;
-                try { return Encoding.GetEncoding(charset); }
-                catch (ArgumentException) { return WebServer.DefaultEncoding; }
-            }
-        }
+            => HasEntityBody ? HeaderUtility.GetEncoding(ContentType) : WebServer.DefaultEncoding;
         public NameValueCollection QueryString
         {
             get
@@ -310,17 +300,7 @@ namespace EmbedIO.Net.Internal
             if (error != null) { _connection.SetError(error); return; }
             var query = Url.Query;
             if (query.Length == 0) return;
-            for (var start = query[0] == '?' ? 1 : 0; ;)
-            {
-                var end = query.IndexOf('&', start);
-                if (end < 0) end = query.Length;
-                var separator = query.IndexOf('=', start, end - start);
-                if (separator < 0) QueryString.Add(null, WebUtility.UrlDecode(query.Substring(start, end - start)));
-                else QueryString.Add(WebUtility.UrlDecode(query.Substring(start, separator - start)),
-                    WebUtility.UrlDecode(query.Substring(separator + 1, end - separator - 1)));
-                if (end == query.Length) return;
-                start = end + 1;
-            }
+            QueryStringFields.AddTo(query, QueryString);
         }
         internal bool FlushInput()
         {

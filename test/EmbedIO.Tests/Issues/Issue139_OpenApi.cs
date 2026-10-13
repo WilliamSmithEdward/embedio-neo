@@ -56,7 +56,7 @@ namespace EmbedIO.Tests.Issues
             var operations = paths.SelectMany(p => p.Value?.AsObject().Select(m => m.Key + " " + p.Key) ?? Enumerable.Empty<string>()).OrderBy(s => s, StringComparer.Ordinal);
             Assert.That(operations, Is.EqualTo(new[]
             {
-                "delete /api/people/{key}",
+                "delete /api/people/{index}",
                 "get /api/people",
                 "get /api/people/{index}",
                 "get /api/tree",
@@ -92,7 +92,7 @@ namespace EmbedIO.Tests.Issues
             Assert.That(get?["required"]?.GetValue<bool>(), Is.True);
             Assert.That(get?["schema"]?["type"]?.GetValue<string>(), Is.EqualTo("integer"));
             Assert.That(get?["description"], Is.Null);
-            var remove = Operation(document, "/api/people/{key}", "delete");
+            var remove = Operation(document, "/api/people/{index}", "delete");
             Assert.That(remove["parameters"]?[0]?["required"]?.GetValue<bool>(), Is.True);
             Assert.That(remove["parameters"]?[0]?["description"]?.GetValue<string>(), Is.EqualTo("May be empty."));
             Assert.That(remove["operationId"]?.GetValue<string>(), Is.EqualTo("RemovePerson"));
@@ -130,7 +130,7 @@ namespace EmbedIO.Tests.Issues
             Assert.That(create.Select(r => r.Key), Is.EqualTo(new[] { "201", "400" }));
 
             // No result, no content; nothing to bind, no 400.
-            var remove = Operation(document, "/api/people/{key}", "delete")["responses"]?.AsObject() ?? throw new AssertionException("No responses.");
+            var remove = Operation(document, "/api/people/{index}", "delete")["responses"]?.AsObject() ?? throw new AssertionException("No responses.");
             Assert.That(remove.Select(r => r.Key), Is.EqualTo(new[] { "200" }));
             Assert.That(remove["200"]?["content"], Is.Null);
         }
@@ -253,11 +253,12 @@ namespace EmbedIO.Tests.Issues
             using (var posted = await client.PostAsync(server.Url + "openapi.json", new StringContent(string.Empty)))
                 Assert.That(posted.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
 
-            async Task Expect(HttpMethod method, string path, string documentedPath, HttpContent? content, int status)
+            async Task Expect(HttpMethod method, string path, string documentedPath, HttpContent? content, int status, string? expectedBody = null)
             {
                 using var request = new HttpRequestMessage(method, server.Url + path.TrimStart('/')) { Content = content };
                 using var response = await client.SendAsync(request);
                 Assert.That((int)response.StatusCode, Is.EqualTo(status), method + " " + path);
+                if (expectedBody != null) Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo(expectedBody));
                 var key = method == HttpMethod.Get ? "get" : method == HttpMethod.Post ? "post" : method == HttpMethod.Put ? "put" : "delete";
                 var responses = Operation(document, documentedPath, key)["responses"]?.AsObject();
                 Assert.That(responses?.ContainsKey(status.ToString(System.Globalization.CultureInfo.InvariantCulture)), Is.True, $"{method} {path} answered {status}, which the document does not list.");
@@ -266,6 +267,8 @@ namespace EmbedIO.Tests.Issues
             Issue139PeopleController.People.Clear();
             Issue139PeopleController.People.Add(new Issue139Person { Name = "Ada", Age = 36 });
             await Expect(HttpMethod.Get, "/api/people?limit=1&status=Active", "/api/people", null, 200);
+            await Expect(HttpMethod.Get, "/api/people?status=Retired", "/api/people", null, 200, "[]");
+            await Expect(HttpMethod.Get, "/api/people?limit=1&status=Retired", "/api/people", null, 200, "[]");
             await Expect(HttpMethod.Get, "/api/people?limit=x", "/api/people", null, 400);
             await Expect(HttpMethod.Get, "/api/people/0", "/api/people/{index}", null, 200);
             await Expect(HttpMethod.Get, "/api/people/9", "/api/people/{index}", null, 404);
@@ -275,7 +278,7 @@ namespace EmbedIO.Tests.Issues
             await Expect(HttpMethod.Put, "/api/people/0/name", "/api/people/{index}/name", new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("name", "Ada L") }), 200);
             await Expect(HttpMethod.Put, "/api/people/0/name", "/api/people/{index}/name", new FormUrlEncodedContent(Array.Empty<KeyValuePair<string, string>>()), 400);
             await Expect(HttpMethod.Get, "/api/tree", "/api/tree", null, 200);
-            await Expect(HttpMethod.Delete, "/api/people/Bo", "/api/people/{key}", null, 200);
+            await Expect(HttpMethod.Delete, "/api/people/Bo", "/api/people/{index}", null, 200);
             Assert.That(Issue139PeopleController.People.Select(p => p.Name), Is.EqualTo(new[] { "Ada L" }));
         }
 

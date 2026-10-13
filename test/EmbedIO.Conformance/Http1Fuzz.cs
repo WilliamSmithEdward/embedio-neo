@@ -1,4 +1,4 @@
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -230,9 +230,9 @@ internal static class Http1Fuzz
                     if (rejected.Status is < 400 or >= 500 and not (501 or 505))
                         throw new InvalidDataException($"Invalid request '{op.Label}' answered {rejected.Status}.");
                 }
-                catch (Exception error) when (error is IOException) { }
+                catch (Exception error) when (Http1Conformance.IsConnectionClosure(error)) { }
                 if (!client.WaitClosed(out var extra)) throw new InvalidDataException($"Connection stayed usable after '{op.Label}' ({extra} extra bytes).");
-                writer.Wait(TimeSpan.FromSeconds(5));
+                if (!writer.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("Request writer did not finish after rejection.");
                 return;
             }
             var response = client.Read(op.Method == "HEAD");

@@ -316,18 +316,19 @@ namespace EmbedIO.Tests.Issues
             using var capture = new Capture();
             var name = Name();
             var url = Resources.GetServerAddress();
+            using var deadline = new CancellationTokenSource(Deadline);
             await using (var host = Host.Start(url, o => o.WithTelemetry(name), server => server.WithModule(new EchoSocket("/echo"))))
             {
                 using var socket = new System.Net.WebSockets.ClientWebSocket();
-                await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://", StringComparison.Ordinal) + "echo"), CancellationToken.None);
+                await socket.ConnectAsync(new Uri(url.Replace("http://", "ws://", StringComparison.Ordinal) + "echo"), deadline.Token);
                 var opened = capture.WaitFor("embedio.server.active_websockets", name, 1);
                 Assert.That(opened.Select(m => m.Value), Is.EqualTo(new double[] { 1 }));
-                await socket.SendAsync(new byte[] { 7 }, System.Net.WebSockets.WebSocketMessageType.Binary, true, CancellationToken.None);
+                await socket.SendAsync(new byte[] { 7 }, System.Net.WebSockets.WebSocketMessageType.Binary, true, deadline.Token);
                 var buffer = new byte[4];
-                var received = await socket.ReceiveAsync(buffer, CancellationToken.None);
+                var received = await socket.ReceiveAsync(buffer, deadline.Token);
                 Assert.That(received.Count, Is.EqualTo(1));
                 await Task.Delay(200);
-                await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+                await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "done", deadline.Token);
             }
             var active = capture.WaitFor("embedio.server.active_websockets", name, 2);
             Assert.That(active.Select(m => m.Value), Is.EqualTo(new double[] { 1, -1 }));

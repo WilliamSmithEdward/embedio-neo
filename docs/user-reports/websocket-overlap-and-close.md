@@ -1,5 +1,11 @@
 # Overlapping WebSocket traffic and close requests
 
+The native Microsoft listener comparisons and validation below describe the v1
+implementation at the time of this report. Neo v2 uses the replacement engine
+and has removed that backend; see [listener migration](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
+Historical test counts and native runtime workarounds are not current-engine
+validation.
+
 [Upstream #502](https://github.com/unosquare/embedio/issues/502) reported browsers
 closing a busy connection with “Received start of new message but previous
 message is unfinished.” bdurrer's [sample](https://github.com/bdurrer/embedio-websocket-example)

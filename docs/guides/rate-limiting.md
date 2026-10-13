@@ -44,12 +44,13 @@ using var uploads = PartitionedRateLimiter.Create<IHttpContext, string>(_ =>
         "uploads",
         _ => new ConcurrencyLimiterOptions { PermitLimit = 4, QueueLimit = 8 }));
 
+using var combined = PartitionedRateLimiter.CreateChained(overall, perClient);
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 
 // Declared after the limiters, so it is disposed before them.
 using var server = new WebServer("http://localhost:9696/")
-    .WithModule(new RateLimitingModule("/", PartitionedRateLimiter.CreateChained(overall, perClient)))
+    .WithModule(new RateLimitingModule("/", combined))
     .WithModule(new RateLimitingModule("/uploads", uploads))
     .WithModule(new ActionModule(context => context.SendStringAsync("ok", "text/plain", WebServer.DefaultEncoding)));
 
@@ -96,10 +97,10 @@ limiter counts requests in progress. With a `QueueLimit`, a request that finds n
 for one, in the queue order the limiter is configured with; once the queue is full, further
 requests are rejected at once.
 
-A queued request's wait is canceled when the server stops. It is not canceled when the client
-disconnects, because EmbedIO's request cancellation follows the server, not the connection: an
-abandoned request keeps its queue slot until it gets a permit, then runs and returns the permit.
-Keep queues short where clients are likely to give up.
+A queued request's wait is canceled when the server stops. HTTP/2 and HTTP/3 stream
+resets also cancel the request's wait. HTTP/1.1 does not promptly detect a disconnected
+client while waiting for a permit, so an abandoned request can retain its queue slot
+until it receives a permit. Keep queues short where clients are likely to give up.
 
 ## Memory
 

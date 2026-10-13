@@ -97,10 +97,8 @@ namespace EmbedIO.Tests
                 await client.ConnectAsync("localhost", port);
                 var stream = client.GetStream();
                 await stream.WriteAsync(Encoding.ASCII.GetBytes($"POST /echo HTTP/1.1\r\nHost: localhost:{port}\r\nTransfer-Encoding: chunked\r\n\r\n{body}"));
-                var buffer = new byte[256];
                 using var reading = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                var read = await stream.ReadAsync(buffer, reading.Token);
-                var statusLine = Encoding.ASCII.GetString(buffer, 0, read).Split("\r\n")[0];
+                var statusLine = (await HttpTunnelLifetimeTest.ReadHeadAsync(stream, reading.Token)).Split("\r\n")[0];
                 Assert.That(statusLine, Is.EqualTo("HTTP/1.1 400 Bad Request"));
             }
             finally
@@ -189,10 +187,9 @@ namespace EmbedIO.Tests
                 await wireClient.ConnectAsync("localhost", port);
                 var stream = wireClient.GetStream();
                 await stream.WriteAsync(Encoding.ASCII.GetBytes($"POST / HTTP/1.1\r\nHost: localhost:{port}\r\nTransfer-Encoding: chunked\r\n\r\n 3\r\nabc\r\n0\r\n\r\n"));
-                var bytes = new byte[256];
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                var length = await stream.ReadAsync(bytes, deadline.Token);
-                Assert.That(Encoding.ASCII.GetString(bytes, 0, length), Does.StartWith("HTTP/1.1 400 Bad Request"));
+                var response = await HttpTunnelLifetimeTest.ReadHeadAsync(stream, deadline.Token);
+                Assert.That(response, Does.StartWith("HTTP/1.1 400 Bad Request"));
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
         }

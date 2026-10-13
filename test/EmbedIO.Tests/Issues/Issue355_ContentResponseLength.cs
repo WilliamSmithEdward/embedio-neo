@@ -29,7 +29,7 @@ namespace EmbedIO.Tests.Issues
             using var response = await client.GetAsync(DefaultUrl).ConfigureAwait(false);
             var responseArray = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
 
-            Assert.AreEqual(ok[0], responseArray[0]);
+            Assert.That(responseArray, Is.EqualTo(ok));
         }
 
         [Test]
@@ -52,7 +52,7 @@ namespace EmbedIO.Tests.Issues
             using var response = await client.GetAsync("http://localhost:1234/").ConfigureAwait(false);
             var responseArray = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
 
-            Assert.AreEqual(ok[0], responseArray[0]);
+            Assert.That(responseArray, Is.EqualTo(ok));
         }
     }
 }

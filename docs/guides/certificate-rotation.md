@@ -44,30 +44,42 @@ Console.WriteLine(new Uri("https://localhost:8443/"));
 
 try
 {
-    while (true)
+    while (!running.IsCompleted)
     {
-        await Task.Delay(reloadInterval, cancellation.Token);
+        var nextReload = Task.Delay(reloadInterval, cancellation.Token);
+        if (await Task.WhenAny(running, nextReload) == running)
+            break;
+        await nextReload;
+
+        X509Certificate2? renewed = null;
         try
         {
-            var renewed = Load(path, password);
-            if (renewed.Thumbprint == certificates.Current.Thumbprint)
-                renewed.Dispose(); // Unchanged file.
-            else
+            renewed = Load(path, password);
+            if (renewed.Thumbprint != certificates.Current.Thumbprint)
+            {
                 certificates.Publish(renewed);
+                renewed = null; // The source and active connections retain this certificate.
+            }
         }
         catch (Exception error) when (error is ArgumentException or CryptographicException or IOException)
         {
             // The current certificate stays in use; try again at the next interval.
             Console.Error.WriteLine("Certificate not replaced: " + error.Message);
         }
+        finally
+        {
+            renewed?.Dispose(); // Unchanged or rejected certificate, never published.
+        }
     }
 }
-catch (OperationCanceledException)
+catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
 {
 }
-
-await running;
-
+finally
+{
+    cancellation.Cancel();
+    await running; // Observe startup failures and completion without waiting for the reload timer.
+}
 static X509Certificate2 Load(string path, string? password)
     => X509CertificateLoader.LoadPkcs12FromFile(path, password, X509KeyStorageFlags.Exportable);
 ```

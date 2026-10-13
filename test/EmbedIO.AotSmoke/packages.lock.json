@@ -75,7 +75,7 @@
       "EmbedIO-Neo.DependencyInjection": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[1.0.3, )",
+          "EmbedIO-Neo": "[2.0.0, )",
           "Microsoft.Extensions.DependencyInjection": "[10.0.12, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.12, )"
         }

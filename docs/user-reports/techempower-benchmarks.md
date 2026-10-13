@@ -82,6 +82,10 @@ dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-bu
 
 ## Native Unix runtime limitation
 
+This section records the v1 investigation and its former CI policy. The native
+backend and its probes are retired in v2. The command below applies only to the
+v1 source revision containing those tests, not the current checkout.
+
 Linux and macOS CI on .NET 10.0.12 found six native `System.Net.HttpListener`
 pipeline/body-boundary failures. A standalone reproduction without EmbedIO on
 Ubuntu 24.04.5 also answered the first of two pipelined requests and reset the

@@ -97,6 +97,30 @@ class CampaignTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate(self.directory, "revision", 0, require_quiet_phase=False)
 
+    def test_invalid_or_aborted_campaign_is_rejected_even_with_complete_samples(self):
+        self.write()
+        for marker in ("INVALID.txt", "ABORTED.txt"):
+            with self.subTest(marker=marker):
+                path = self.directory / marker
+                path.write_text("rejected attempt")
+                try:
+                    with self.assertRaisesRegex(ValueError, "invalid or aborted"):
+                        validate(self.directory, "revision", 0)
+                finally:
+                    path.unlink()
+
+    def test_empty_timeline_has_explicit_validation_error_for_short_phases(self):
+        self.environment.update(phaseSeconds=1)
+        phase = self.run["phases"][0]
+        phase.update(started=4, completed=4, timeline=[])
+        for key in ("handshake", "firstStream", "close"):
+            phase[key]["count"] = 4
+        phase["mixed"]["small"]["count"] = 2
+        phase["mixed"]["large"]["count"] = 1
+        self.write()
+        with self.assertRaisesRegex(ValueError, "Missing CPU timeline"):
+            validate(self.directory, "revision", 0)
+
     def test_insufficient_contention_is_not_accepted(self):
         self.environment["burnThreads"] = 4
         self.write()

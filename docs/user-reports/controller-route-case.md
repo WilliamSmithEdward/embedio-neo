@@ -60,9 +60,10 @@ public sealed class TestController : WebApiController
 The example binds the optional value as text and validates it explicitly, giving
 bad input a deliberate 400 response. That is application validation, not a new
 library binding policy. The original valid `int? id` handler also works with the
-opt-in setting; automatic invalid nullable-integer conversion currently returns
-500 in both default and opted-in routing, and this change does not repair that
-separate behavior.
+opt-in setting. Published 1.0.3 returns 500 for invalid automatic nullable-integer
+conversion in both routing modes. Current source returns 400 through the separate
+[typed-route correction](typed-route-validation.md); case matching itself does
+not change that binding policy.
 
 Run the program, then issue requests from another terminal:
 

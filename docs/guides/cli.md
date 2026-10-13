@@ -89,12 +89,12 @@ repository. The distinct package ID avoids overwriting the archived tool's
 identity; the command remains `embedio-cli`.
 
 ```sh
-dotnet pack src/EmbedIO.Cli -c Release -o ./artifacts
-dotnet tool install EmbedIO-Neo.Cli --add-source ./artifacts --tool-path ./tools --version 1.0.0
+dotnet pack src/EmbedIO.Cli -c Release -o ./artifacts -p:Version=1.0.3-local
+dotnet tool install EmbedIO-Neo.Cli --add-source ./artifacts --tool-path ./tools --version 1.0.3-local
 ./tools/embedio-cli --help
 ```
 
-These commands build and install locally. For the released tool, use
+These commands use an explicit local prerelease version so installation selects the package just built, independently of the checkout version. For the released tool, use
 `dotnet tool install --global EmbedIO-Neo.Cli --version 1.0.0` instead. The standards Publish
 workflow prepares GitHub assets and NuGet publication through trusted publishing.
 The package identities and 1.0.0 release were approved by William. Use an

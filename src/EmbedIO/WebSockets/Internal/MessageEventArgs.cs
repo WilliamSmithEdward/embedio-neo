@@ -1,5 +1,4 @@
 ﻿using System;
-using EmbedIO.Internal;
 
 namespace EmbedIO.WebSockets.Internal
 {
@@ -14,14 +13,12 @@ namespace EmbedIO.WebSockets.Internal
     ///   </para>
     ///   <para>
     ///   If you would like to get the message data, you should access
-    ///   the <see cref="Data"/> or <see cref="RawData"/> property.
+    ///   the <see cref="RawData"/> property.
     ///   </para>
     /// </remarks>
     internal sealed class MessageEventArgs : EventArgs, IDisposable
     {
         private readonly byte[] _rawData;
-        private string? _data;
-        private bool _dataSet;
         internal WebSocketDeliveryBudget.Lease? DeliveryLease { get; set; }
         public void Dispose() => DeliveryLease?.Dispose();
 
@@ -41,52 +38,13 @@ namespace EmbedIO.WebSockets.Internal
         }
 
         /// <summary>
-        /// Gets the message data as a <see cref="string"/>.
-        /// </summary>
-        /// <value>
-        /// A <see cref="string"/> that represents the message data if its type is
-        /// text or ping and if decoding it to a string has successfully done;
-        /// otherwise, <see langword="null"/>.
-        /// </value>
-        public string? Data
-        {
-            get
-            {
-                SetData();
-                return _data;
-            }
-        }
-
-        /// <summary>
         /// Gets the message data as an array of <see cref="byte"/>.
         /// </summary>
         /// <value>
         /// An array of <see cref="byte"/> that represents the message data.
         /// </value>
-        public byte[] RawData
-        {
-            get
-            {
-                SetData();
-                return _rawData;
-            }
-        }
+        public byte[] RawData => _rawData;
 
         internal Opcode Opcode { get; }
-
-        private void SetData()
-        {
-            if (_dataSet)
-                return;
-
-            if (Opcode == Opcode.Binary)
-            {
-                _dataSet = true;
-                return;
-            }
-
-            _data = _rawData.ToText();
-            _dataSet = true;
-        }
     }
 }

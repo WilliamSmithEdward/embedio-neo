@@ -11,7 +11,7 @@
       "EmbedIO-Neo.Testing": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[1.0.3, )"
+          "EmbedIO-Neo": "[2.0.0, )"
         }
       },
       "System.Threading.RateLimiting": {

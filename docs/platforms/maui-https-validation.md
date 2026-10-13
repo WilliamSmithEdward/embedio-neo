@@ -55,7 +55,7 @@ The fixture uses port 59626. Results retain the exact OS/runtime, native platfor
 individual check statuses and host URL. Failures retain app/logcat reports where
 available. Generated private keys and app binaries are excluded from uploaded
 test artifacts. The existing Android HTTP lifecycle and Mac Catalyst HTTP/WebView
-smokes continue to run independently.
+smokes run as separate required jobs.
 
 ## Reproduce CI
 

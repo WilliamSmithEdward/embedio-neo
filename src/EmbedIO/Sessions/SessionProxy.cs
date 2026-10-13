@@ -109,8 +109,7 @@ namespace EmbedIO.Sessions
             if (_session != null)
                 _sessionManager.Delete(_context, _session.Id);
 
-            EnsureSessionManagerExists();
-            _session = _sessionManager.Create(_context);
+            CreateSession();
         }
 
         /// <inheritdoc/>
@@ -158,9 +157,14 @@ namespace EmbedIO.Sessions
             if (_session != null)
                 return;
 
+            CreateSession();
+        }
+
+        [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_session), nameof(_sessionManager))]
+        private void CreateSession()
+        {
             EnsureSessionManagerExists();
             _session = _sessionManager.Create(_context);
-
             if (_onCloseRegistered)
                 return;
 

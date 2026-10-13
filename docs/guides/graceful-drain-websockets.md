@@ -42,8 +42,15 @@ server.DrainStarted.Register(() => Console.WriteLine("Draining..."));
 var running = server.RunAsync();
 Console.WriteLine(new Uri("ws://localhost:8686/chat"));
 
-try { await Task.Delay(Timeout.Infinite, shutdown.Token); }
-catch (OperationCanceledException) { }
+var stopping = Task.Delay(Timeout.Infinite, shutdown.Token);
+if (await Task.WhenAny(running, stopping) == running)
+{
+    await running; // Surface a startup or listener failure promptly.
+    return;
+}
+
+try { await stopping; }
+catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
 
 // Clients get 1001 Going Away; the drain ends once they have closed, or after 10 seconds.
 await server.DrainAsync(TimeSpan.FromSeconds(10));
@@ -73,9 +80,9 @@ With `CloseOnDrain`, as the drain starts:
   upgrade request was already in progress, is closed the same way.
 - `OnClientDisconnectedAsync` runs once per connection, as for any close. This
   holds when the application or the client closes the socket at the same time.
-- A client that never answers the close is cut at the drain's deadline. If the
-  drain's cancellation token is canceled, remaining connections are aborted at
-  once.
+- A client that never answers the close is bounded by the existing WebSocket
+  close policy and the drain's deadline. If the drain's cancellation token is
+  canceled, remaining connections are aborted at once.
 
 The setting applies over HTTP/1.1 upgrades and over HTTP/2 and HTTP/3 extended
 CONNECT. On HTTP/2, closing a WebSocket stream does not affect other requests on
@@ -89,7 +96,7 @@ starts; the module's configuration is locked from then on.
 ## `DrainStarted`
 
 The token is canceled once, on the first call to `DrainAsync`, after modules with
-`CloseOnDrain` have sent their closes and before the listener stops admitting
+`CloseOnDrain` have initiated their closes and before the listener stops admitting
 work. Callbacks registered on it run synchronously within that call, so keep them
 short. An exception a callback throws is logged and does not stop the drain. Disposal
 and `RunAsync` cancellation do not cancel it.

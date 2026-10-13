@@ -51,5 +51,26 @@ by this acceptance.
 
 The GitHub code-scanning open-alert API returned an empty array on 2026-10-08;
 this workflow reports artifacts/checks and exposes no matching alert to dismiss.
-No dismissal is claimed. The owner's matching-alert dismissal requirement remains
-a pre-merge limitation; this acceptance does not authorize merging with red checks.
+No dismissal is claimed. On 2026-10-13 William explicitly waived only the
+matching-alert dismissal requirement for this rule and path because GitHub exposes
+no corresponding alert. Written source review, successful scans and every other
+exact-head merge check remain required.
+
+## Audit documentation re-review (2026-10-13)
+
+The audit adds one introductory paragraph describing the local `--audit-allocations`
+and `--verify-audit-allocations` workloads and linking their measurement report.
+Compared with accepted engine `899261a3`, no existing command example, shell
+spelling, input origin or executable instruction changes. The new switches select
+fixed in-repository allocation probes; they accept no executable or remote payload.
+The canonical LF README at audit checkpoint `61044907` has SHA-256
+`5d05e088bac36b495373453551f92ff69804c9fcd341a2e8fee3938e41262566`. Earlier offsets/hashes above remain historical evidence.
+The existing exact rule/path acceptance is unchanged; final audit-head scans remain
+required, with every other finding and scanner error handled by the existing gate.
+
+The later audit prose correction identifies the partial/unread POST bound as a
+retained comparison restriction for historical baselines, and states that the
+current engine has no fixed 100-request cap. Commands, matched text, input origins
+and scanner pins remain unchanged. Canonical LF source SHA-256 after this prose
+correction: `36e5a92e21e8af8695adb53a894c67f768bfd1984f99a7691afe22ce52d1a397`. Final-head full scanning remains required.
+

@@ -19,7 +19,8 @@ The `5f08f99` runs predate the correction and do not validate it.
 
 This is local evidence, not a hosted CI result. It does not cover Intel Macs,
 other macOS versions, the .NET Standard 2.0 asset, HTTP/3 datagram association
-or WebTransport, none of which this provider integrates yet.
+or WebTransport. These are limits of the recorded runs, not a current provider
+capability or acceptance statement.
 
 ## Environment
 

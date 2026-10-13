@@ -30,8 +30,7 @@ namespace EmbedIO.WebApi
 
         internal static T? Get<T>(NameValueCollection data, string fieldName, bool badRequestIfMissing, string kind, string parameterName, TypeConverter? converter)
         {
-            EnsurePresent(data, fieldName, badRequestIfMissing, kind);
-            var fieldValue = data.GetValues(fieldName)?.LastOrDefault();
+            var fieldValue = GetString(data, fieldName, badRequestIfMissing, kind);
             if (fieldValue == null)
                 return default;
 
@@ -43,8 +42,7 @@ namespace EmbedIO.WebApi
 
         internal static TElement?[] GetArray<TElement>(NameValueCollection data, string fieldName, bool badRequestIfMissing, string kind, TypeConverter? converter)
         {
-            EnsurePresent(data, fieldName, badRequestIfMissing, kind);
-            var fieldValues = data.GetValues(fieldName) ?? Array.Empty<string>();
+            var fieldValues = GetStrings(data, fieldName, badRequestIfMissing, kind);
             var array = new TElement?[fieldValues.Length];
             for (var i = 0; i < fieldValues.Length; i++)
             {
@@ -106,7 +104,7 @@ namespace EmbedIO.WebApi
 
         private static void EnsurePresent(NameValueCollection data, string fieldName, bool badRequestIfMissing, string kind)
         {
-            if (!data.ContainsKey(fieldName) && badRequestIfMissing)
+            if (badRequestIfMissing && !data.ContainsKey(fieldName))
                 throw HttpException.BadRequest($"Missing {kind} field {fieldName}.");
         }
     }

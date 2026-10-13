@@ -9,8 +9,13 @@ is a separate opt-in setting; these callbacks do not rewrite URLs.
 
 ## Run a file server with your own MIME policy
 
-These APIs are included starting with EmbedIO-Neo 1.0.3. Use that package version
-or later, or a source reference as shown below. From this repository with its selected SDK installed:
+These APIs were introduced in EmbedIO-Neo 1.0.3. The complete program below
+targets the v2 source candidate, whose MIME-provider interface correctly declares
+an unanswered lookup as nullable. Published 1.0.3 declares that return type
+non-nullable, so this nullable implementation produces a compiler warning against
+that package. For a small mapping on 1.0.3, use `WithCustomMimeType` instead.
+
+From this repository with its selected SDK installed:
 
 ```sh
 dotnet new console --framework net10.0 --output TestResults/customization-demo --no-restore
@@ -46,14 +51,14 @@ using var server = new WebServer(options => options
         return Task.CompletedTask;
     }))
     .WithModule(files);
-Console.WriteLine("Try /files/hello.note. Press Ctrl+C to stop.");
+Console.WriteLine(new Uri("http://localhost:8877/files/hello.note"));
 await server.RunAsync(stop.Token);
 
 public sealed class NoteMimePolicy : IMimeTypeProvider
 {
-    public string GetMimeType(string extension)
+    public string? GetMimeType(string extension)
         => string.Equals(extension, ".note", StringComparison.OrdinalIgnoreCase)
-            ? "text/plain" : null!;
+            ? "text/plain" : null;
 
     public bool TryDetermineCompression(string mimeType, out bool preferCompression)
     {
@@ -135,7 +140,9 @@ Regression coverage uses real managed and Microsoft listeners for local/provider
 server/built-in precedence, unknown defaults, content-encoding negotiation,
 cache isolation, provider ownership/configuration, callback ordering, untouched
 request data, early responses, rejection, failure recovery and cancellation.
-Defaults, target frameworks and production dependencies are retained. NuGet consumers need EmbedIO-Neo 1.0.3 or later for these APIs.
+The original additive APIs retain their defaults and target frameworks. This
+example uses the v2 nullable contract; it is not a claim that the corrected
+program compiles unchanged against published 1.0.3.
 
 Thanks to captainjono for explaining the configuration gaps, and to Unosquare and
 the original EmbedIO maintainers for the extensible module and MIME-provider

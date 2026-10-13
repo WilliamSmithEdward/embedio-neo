@@ -262,7 +262,10 @@ namespace EmbedIO.Utilities
             foreach (var value in values)
             {
                 if (value == null)
+                {
+                    i++;
                     continue;
+                }
 
                 if (TryGetCandidateValue(value, out var candidateValue) && CompareQualities(candidateValue, bestValue) > 0)
                 {

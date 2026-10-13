@@ -23,9 +23,11 @@ fault `RunAsync` with the underlying error; the state is `Stopped` either way.
 
 ## The server-owned lifetime token
 
-The token a module receives in `OnStart`, the token a session manager receives in
-`Start`, and `IHttpContext.CancellationToken` are one server-owned token. It is
-linked to the token passed to `RunAsync` and is also canceled when the server is
+The token a module receives in `OnStart` and the token a session manager receives
+in `Start` are the server-owned lifetime token. Request cancellation observes that
+lifetime too; request deadlines and HTTP/2 or HTTP/3 stream cancellation may add
+request-specific cancellation. The lifetime token is linked to the token passed
+to `RunAsync` and is also canceled when the server is
 disposed and when `RunAsync` completes for any reason. The caller's token is
 never canceled by the server.
 
@@ -97,8 +99,9 @@ restart reported the wrong reason.
 | `TestWebServer` started and disposed 100 times | Disposal racing run completion never throws; the lifetime source is released only after both have canceled it |
 
 Independent servers and shutdown during concurrent traffic remain covered by the
-existing Neo #595 fixtures. MAUI platform validation is paused in CI, so no app
-model beyond the desktop runtimes is exercised here.
+existing Neo #595 fixtures. These particular controls exercise desktop runtimes,
+not mobile app lifecycles. MAUI CI is enabled separately; its smoke results do not
+establish suspension or background-lifetime behavior.
 
 ## Decision
 

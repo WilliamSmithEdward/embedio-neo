@@ -118,7 +118,7 @@ application cookie, or at session-manager startup. Creation and deletion use the
 same selected policy. Do not turn off Secure after selecting None on an
 application cookie. No automatic CSRF defense is implied by this setting alone.
 
-The response overload supports the built-in managed and native listener adapters;
+The response overload supports the built-in listener response;
 foreign response serializers fail explicitly rather than silently ignoring
 metadata. Such custom implementations can use their own valid raw cookie fields.
 

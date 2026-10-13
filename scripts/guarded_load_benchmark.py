@@ -60,20 +60,24 @@ def utc_now():
 
 
 def process_table():
-    """Return (pid, parent pid, command line) for every process, best effort."""
+    """Return the process inventory, refusing failed or empty enumeration."""
     if platform.system() == "Windows":
         script = ("Get-CimInstance Win32_Process | ForEach-Object { "
                   "'{0}\t{1}\t{2}' -f $_.ProcessId, $_.ParentProcessId, ($_.CommandLine -replace '[\\r\\n]', ' ') }")
-        output = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, check=False).stdout
+        completed = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, check=False)
         separator = "\t"
     else:
-        output = subprocess.run(["ps", "-eo", "pid=,ppid=,args="], capture_output=True, text=True, check=False).stdout
+        completed = subprocess.run(["ps", "-eo", "pid=,ppid=,args="], capture_output=True, text=True, check=False)
         separator = None
+    if completed.returncode != 0:
+        raise RuntimeError(f"Cannot establish process inventory: enumeration exited {completed.returncode}: {completed.stderr.strip()}")
     rows = []
-    for line in output.splitlines():
+    for line in completed.stdout.splitlines():
         parts = line.strip().split(separator, 2)
         if len(parts) == 3 and parts[0].strip().isdigit() and parts[1].strip().isdigit():
             rows.append((int(parts[0]), int(parts[1]), parts[2]))
+    if not rows:
+        raise RuntimeError("Cannot establish process inventory: enumeration returned no valid process rows")
     return rows
 
 
@@ -195,7 +199,7 @@ def main():
     owner_line = f"owner: {args.owner}"
     prefix = args.output.resolve()
     prefix.parent.mkdir(parents=True, exist_ok=True)
-    own_markers = list(args.own_marker) + [str(prefix.parent)]
+    own_markers = list(args.own_marker)
     journal = prefix.parent / (prefix.name + ".guard.log")
 
     def log(message):
@@ -236,6 +240,17 @@ def main():
                         process.wait()
                         break
                 verdict["exitCode"] = process.returncode
+        except BaseException as error:
+            # Partial samples must remain rejected even when monitoring itself
+            # fails. Preserve the exception and let finally clean up ownership.
+            verdict.update(status="invalid", reason=f"guard interrupted: {error}", endedUtc=utc_now())
+            try:
+                out.mkdir(parents=True, exist_ok=True)
+                (out / "INVALID.txt").write_text(verdict["reason"] + "\n", encoding="utf-8")
+                (out / "attempt.json").write_text(json.dumps(verdict, indent=2) + "\n", encoding="utf-8")
+            except OSError as evidence_error:
+                error.add_note(f"Could not retain invalid-attempt evidence: {evidence_error}")
+            raise
         finally:
             # An exception in monitoring must not leave our child running after
             # releasing the coordination lock. If cleanup fails, retain our lock.

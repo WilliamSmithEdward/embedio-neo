@@ -358,11 +358,12 @@ namespace EmbedIO.Tests.Issues
             await using (var server = new Running(null))
             {
                 using var client = new HttpClient();
-                using (var response = await client.GetAsync(server.Url + "stream", HttpCompletionOption.ResponseHeadersRead))
+                using var deadline = new CancellationTokenSource(client.Timeout);
+                using (var response = await client.GetAsync(server.Url + "stream", HttpCompletionOption.ResponseHeadersRead, deadline.Token))
                 {
                     Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
                     Assert.That(response.Content.Headers.ContentType?.MediaType, Is.Not.EqualTo("application/problem+json"));
-                    var failure = await Assert.CatchAsync(async () => await response.Content.ReadAsStringAsync());
+                    var failure = await Assert.CatchAsync(async () => await response.Content.ReadAsStringAsync(deadline.Token));
                     Assert.That(failure, Is.InstanceOf<HttpRequestException>().Or.InstanceOf<System.IO.IOException>());
                 }
 

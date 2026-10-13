@@ -106,8 +106,16 @@ public static partial class Program
     private static TcpClient Connect(int port)
     {
         var client = new TcpClient { NoDelay = true, ReceiveTimeout = 10000, SendTimeout = 10000 };
-        client.Connect(IPAddress.Loopback, port);
-        return client;
+        try
+        {
+            client.Connect(IPAddress.Loopback, port);
+            return client;
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
     }
 
     private static void RejectAmbiguousFraming(int port)

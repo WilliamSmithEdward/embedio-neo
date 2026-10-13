@@ -5,6 +5,11 @@ binary breaking change. Rebuild downstream applications and libraries against
 this fork. Neo starts its independent version sequence at 1.0.0; this is not a
 compatible upstream 3.x update.
 
+This page records the initial upstream-to-Neo migration and later additions in
+chronological sections. Earlier implementation and validation statements apply to
+the source/version they describe. For the current engine transition, also read the
+[v1-to-v2 migration guide](neo-v1-to-v2.md).
+
 ## API replacements
 
 Neo's approved NuGet identities are `EmbedIO-Neo`, `EmbedIO-Neo.JsonServer`,
@@ -22,8 +27,10 @@ command remain unchanged. Neo packages start at version 1.0.0.
 
 Remove the SWAN package reference if your application no longer uses it directly.
 SWAN extension methods and attributes are no longer available transitively.
-The .NET 10 core requires no runtime NuGet packages. The .NET Standard 2.0 build
-uses Microsoft's pinned System.Text.Json package and its support dependencies.
+The initial Neo 1.0.0 .NET 10 core required no runtime NuGet packages; its
+.NET Standard 2.0 build used Microsoft's pinned System.Text.Json package and
+support dependencies. Current source also references System.Threading.RateLimiting
+on both targets for the later rate-limiting module.
 Build analyzers and test tools remain. The console sample has been removed, including its Tubular, Dynamic LINQ, and frontend dependencies. The legacy Xamarin sample and its platform/WebView dependencies have also been removed. Both .NET Standard 2.0 and .NET 10 library targets are retained.
 
 ## JSON
@@ -111,10 +118,10 @@ example, the audited serializers represent the same string differently:
 
 | Serializer | JSON string |
 | --- | --- |
-| Upstream SWAN defaults | `"café <>&"` |
+| Upstream SWAN defaults | `"cafÃ© <>&"` |
 | Neo defaults | `"caf\u00E9 \u003C\u003E\u0026"` |
 
-After JSON parsing, both values are `café <>&`. Neo also uses compact spacing
+After JSON parsing, both values are `cafÃ© <>&`. Neo also uses compact spacing
 where the audited SWAN output included spaces. Member ordering can differ;
 JSON object member order is not the same contract as JSON array element order.
 These textual differences do not imply changed string values or reordered list
@@ -333,7 +340,7 @@ changes as follows:
 
 | Serializer | JSON timestamp |
 | --- | --- |
-| Upstream SWAN defaults | `"café <>&"` |
+| Upstream SWAN defaults | `"2026-10-07T12:34:56"` |
 | Neo defaults | `"2026-10-07T12:34:56.1234567Z"` |
 
 Neo preserves the tested fractional seconds and marks the UTC value with `Z`.
@@ -1075,7 +1082,7 @@ Content-Length and Transfer-Encoding. A 304 retains an explicitly supplied
 selected-representation length rather than replacing it with zero. Callers remain
 responsible for supplying the corresponding unconditional response's length.
 See [HTTP semantics section 8.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6)
-and [HTTP/1.1 sections 6.1–6.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.1).
+and [HTTP/1.1 sections 6.1â€“6.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.1).
 Applications must not rely on writing content for a bodyless status. Ordinary
 responses and existing HEAD metadata behavior are preserved. The Microsoft
 backend is unchanged.

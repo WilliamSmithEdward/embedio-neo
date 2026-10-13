@@ -42,7 +42,7 @@ earlier behavior.
 | Operation | Commits when |
 | --- | --- |
 | `Response.OutputStream.Write`/`WriteAsync` | The first write, together with the headers. |
-| `Response.OutputStream.FlushAsync` | HTTP/2 and HTTP/3: immediately, even with no body bytes. HTTP/1.1: a flush without body bytes sends nothing; the first write commits. |
+| `Response.OutputStream.Flush` / `FlushAsync` | A successful first flush commits final headers, including on HTTP/1 with no body bytes. Set response metadata before flushing. |
 | `OpenResponseStream(buffered: false)` | The first write through the returned stream, or the first `Flush` of a compressing wrapper. |
 | `OpenResponseStream(buffered: true)` | Disposal of the returned stream, which sets `Content-Length` and copies the buffer. |
 | `SendStringAsync`, `SendDataAsync`, `SendStandardHtmlAsync` | Inside the call; serialization runs fully in memory first. |
@@ -86,13 +86,18 @@ bound is exceeded:
 
 ```csharp
 const int Limit = 4 * 1024 * 1024;
-using var buffer = new MemoryStream();
-await WriteReportAsync(buffer);
-if (buffer.Length > Limit)
-    throw HttpException.InternalServerError("Report exceeds the deferred size limit.");
+using var buffer = new MemoryStream(new byte[Limit], 0, Limit, writable: true);
+buffer.SetLength(0);
+await WriteReportAsync(buffer); // Growing past the fixed capacity throws before commitment.
 context.Response.ContentType = MimeType.Json;
 await context.SendDataAsync(ResponseSerializer.None(bufferResponse: true), buffer.ToArray());
 ```
+
+This allocates the 4 MiB backing array up front and prevents the report stream
+from growing beyond it. An oversized write throws `NotSupportedException` before
+response commitment and reaches the normal exception handler. This bounds only
+the report buffer, not allocations inside `WriteReportAsync`, the `ToArray` copy
+or subsequent response serialization/buffering.
 
 ### Streaming escape path
 

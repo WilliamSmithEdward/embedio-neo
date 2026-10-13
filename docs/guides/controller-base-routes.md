@@ -103,7 +103,11 @@ by this work.
 parameterized prefixes, invalid binding, module boundaries, registration-order
 fallbacks, HTTP verbs, literal regex metacharacters and preserved query/URL data.
 These 23 cases run through TestWebServer's in-process HTTP/module pipeline; that
-does not claim native-listener or original-2020-application reproduction. The exact\nprogram above also compiled without warnings and passed six independent curl\nchecks against the real managed HTTP listener in a pinned Linux/.NET 10.0.12\ncontainer, including the scoped outside-path 404. No native listener was claimed\ntested by that program.
+does not claim native-listener or original-2020-application reproduction. The exact
+program above also compiled without warnings and passed six independent curl
+checks against the real managed HTTP listener in a pinned Linux/.NET 10.0.12
+container, including the scoped outside-path 404. No native listener was claimed
+tested by that program.
 
 Thanks to Temtaime and k3z0 for describing the use cases, and to Giovanni Perez
 and rdeago for the original discussion and base-route design. EmbedIO-Neo continues

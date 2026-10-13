@@ -30,9 +30,11 @@ accept returns a consumed queue signal rather than stranding another waiter's
 request; dequeue continues past keys removed by another operation.
 
 Caller cancellation retains the caller's token. Explicit listener termination
-can fault an outstanding accept/`RunAsync` with `HttpListenerException` error 995;
-observe that task instead of discarding it. Canceling the token passed to
-`RunAsync` remains the usual graceful stop: await completion, then dispose.
+can fault a direct outstanding accept with `HttpListenerException` error 995.
+`WebServer.RunAsync` treats expected listener shutdown as normal completion;
+unexpected failures still propagate, so observe its task. Canceling the token
+passed to `RunAsync` stops immediately: await completion, then dispose. Use
+`DrainAsync` when accepted work should have a bounded opportunity to finish.
 `StateChanged` reaches `Stopped` when the accept loop ends, including after fatal
 listener cleanup. Stop/start of the underlying listener remains supported;
 create a fresh `WebServer` for a host restart, as its run lifecycle is one-shot.

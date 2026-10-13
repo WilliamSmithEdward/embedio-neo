@@ -22,7 +22,7 @@ namespace EmbedIO.Files.Internal
 
         public static IDirectoryLister Instance => LazyInstance.Value;
 
-        public string ContentType { get; } = MimeType.Html + "; encoding=" + WebServer.DefaultEncoding.WebName;
+        public string ContentType { get; } = MimeType.Html + "; charset=" + WebServer.DefaultEncoding.WebName;
 
         public async Task ListDirectoryAsync(
             MappedResourceInfo info,
@@ -52,7 +52,7 @@ namespace EmbedIO.Files.Internal
 
             foreach (var directory in entries.Where(m => m.IsDirectory).OrderBy(e => e.Name))
             {
-                text.Write($"<a href=\"{Uri.EscapeDataString(directory.Name)}{Path.DirectorySeparatorChar}\">{WebUtility.HtmlEncode(directory.Name)}</a>");
+                text.Write($"<a href=\"{Uri.EscapeDataString(directory.Name)}/\">{WebUtility.HtmlEncode(directory.Name)}</a>");
                 text.Write(new string(' ', Math.Max(1, MaxEntryLength - directory.Name.Length + 1)));
                 text.Write(HttpDate.Format(directory.LastModifiedUtc));
                 text.Write('\n');

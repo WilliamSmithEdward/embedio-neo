@@ -303,6 +303,7 @@ namespace EmbedIO.OpenApi
             private readonly JsonSerializerOptions _options;
             private readonly Dictionary<Type, string> _schemaNames = new();
             private readonly HashSet<string> _operationIds = new(StringComparer.Ordinal);
+            private readonly Dictionary<string, string> _pathTemplates = new(StringComparer.Ordinal);
 
             internal DocumentWriter(JsonSerializerOptions options)
             {
@@ -463,6 +464,7 @@ namespace EmbedIO.OpenApi
 
             private bool IsTaken(string path, string method, string where)
             {
+                if (_pathTemplates.TryGetValue(TemplateKey(path), out var canonical)) path = canonical;
                 if (Paths[path] is not JsonObject pathItem || !pathItem.ContainsKey(method))
                     return false;
 
@@ -472,6 +474,21 @@ namespace EmbedIO.OpenApi
 
             private void Insert(string path, string method, JsonObject described)
             {
+                var template = TemplateKey(path);
+                if (_pathTemplates.TryGetValue(template, out var canonical) && canonical != path)
+                {
+                    var (_, originalNames) = PathTemplate(string.Empty, path);
+                    var (_, canonicalNames) = PathTemplate(string.Empty, canonical);
+                    if (described["parameters"] is JsonArray parameters)
+                        foreach (var parameter in parameters.OfType<JsonObject>())
+                            if (parameter["in"]?.GetValue<string>() == "path")
+                            {
+                                var index = originalNames.FindIndex(p => p.Name == parameter["name"]?.GetValue<string>());
+                                if (index >= 0) parameter["name"] = canonicalNames[index].Name;
+                            }
+                    path = canonical;
+                }
+                else _pathTemplates[template] = path;
                 if (Paths[path] is not JsonObject pathItem)
                 {
                     pathItem = new JsonObject();
@@ -486,6 +503,19 @@ namespace EmbedIO.OpenApi
                 }
             }
 
+            // Parameter spelling does not distinguish OpenAPI paths of the same shape.
+            private static string TemplateKey(string path)
+            {
+                var key = new StringBuilder(path.Length);
+                var parameter = false;
+                foreach (var character in path)
+                {
+                    if (character == '{') { parameter = true; key.Append("{}"); }
+                    else if (character == '}') parameter = false;
+                    else if (!parameter) key.Append(character);
+                }
+                return key.ToString();
+            }
             private JsonObject DescribeDeclared(OpenApiOperationDeclaration declaration, List<(string Name, bool Optional)> routeParameters, string where)
             {
                 var result = new JsonObject();
@@ -660,6 +690,7 @@ namespace EmbedIO.OpenApi
 
                 var parameters = new JsonArray();
                 var canFailBinding = false;
+                var queryParameters = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
                 foreach (var (name, optional) in routeParameters)
                 {
                     var bound = operation.Parameters.FirstOrDefault(p => p.Source == WebApiParameterSource.RouteOrDefault && p.FieldName == name);
@@ -686,25 +717,25 @@ namespace EmbedIO.OpenApi
                     switch (parameter.Source)
                     {
                         case WebApiParameterSource.Query:
-                            parameters.Add((JsonNode)new JsonObject
+                            AddQueryParameter(parameters, queryParameters, new JsonObject
                             {
                                 ["name"] = parameter.FieldName,
                                 ["in"] = "query",
                                 ["required"] = parameter.IsRequired,
                                 ["schema"] = ValueSchema(parameter.Type, parameter.EnumNames),
-                            });
+                            }, where);
                             canFailBinding |= parameter.IsRequired || ElementType(parameter.Type) != typeof(string);
                             break;
 
                         case WebApiParameterSource.QueryCollection:
-                            parameters.Add((JsonNode)new JsonObject
+                            AddQueryParameter(parameters, queryParameters, new JsonObject
                             {
                                 ["name"] = parameter.Name,
                                 ["in"] = "query",
                                 ["style"] = "form",
                                 ["explode"] = true,
                                 ["schema"] = new JsonObject { ["type"] = "object", ["additionalProperties"] = StringSchema() },
-                            });
+                            }, where);
                             break;
 
                         case WebApiParameterSource.Form:
@@ -772,6 +803,24 @@ namespace EmbedIO.OpenApi
                 return result;
             }
 
+            private void AddQueryParameter(JsonArray parameters, Dictionary<string, JsonObject> queries, JsonObject parameter, string where)
+            {
+                var name = parameter["name"]?.GetValue<string>() ?? throw new InvalidOperationException("A query parameter must have a name.");
+                if (!queries.TryGetValue(name, out var existing))
+                {
+                    queries.Add(name, parameter);
+                    parameters.Add((JsonNode)parameter);
+                    return;
+                }
+                if (!JsonNode.DeepEquals(existing["schema"], parameter["schema"])
+                    || !JsonNode.DeepEquals(existing["style"], parameter["style"])
+                    || !JsonNode.DeepEquals(existing["explode"], parameter["explode"]))
+                {
+                    Problems.Add($"{where}: query parameter '{name}' has conflicting binding schemas.");
+                    return;
+                }
+                if (parameter["required"]?.GetValue<bool>() == true) existing["required"] = true;
+            }
             private JsonObject Responses(WebApiOperation operation, bool canFailBinding, string where)
             {
                 // The success response described from the return type comes first, unless a 2xx response is declared.

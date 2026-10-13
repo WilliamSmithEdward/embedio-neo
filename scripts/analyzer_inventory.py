@@ -75,10 +75,18 @@ def inventory(root, out):
         rows.append(summary_row(label, restore_kind, status, warnings, errors))
 
     code, _ = run(["dotnet", "restore", "EmbedIO.sln", "--locked-mode"], root, out / "solution.restore.log")
-    build("EmbedIO.sln", "EmbedIO.sln", "locked" if code == 0 else "locked-FAILED")
+    if code != 0:
+        failures += 1
+        rows.append(summary_row("EmbedIO.sln", "locked-FAILED", "skipped-restore-failed", "-", "-"))
+    else:
+        build("EmbedIO.sln", "EmbedIO.sln", "locked")
 
     code, listing = run(["dotnet", "sln", "EmbedIO.sln", "list"], root, out / "solution.list.log")
-    members = solution_members(listing) if code == 0 else set()
+    if code != 0:
+        rows.append(summary_row("solution-list", "n/a", "FAILED", "-", "-"))
+        (out / "summary.tsv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+        return rows, failures + 1
+    members = solution_members(listing)
 
     for csproj in sorted(root.glob("**/*.csproj")):
         relative = csproj.relative_to(root).as_posix()
@@ -94,7 +102,11 @@ def inventory(root, out):
         restore_command = ["dotnet", "restore", relative] + (["--locked-mode"] if locked else [])
         code, _ = run(restore_command, root, out / f"{label}.restore.log")
         restore_kind = ("locked" if locked else "unlocked") + ("" if code == 0 else "-FAILED")
-        build(label, relative, restore_kind)
+        if code != 0:
+            failures += 1
+            rows.append(summary_row(label, restore_kind, "skipped-restore-failed", "-", "-"))
+        else:
+            build(label, relative, restore_kind)
 
     (out / "summary.tsv").write_text("\n".join(rows) + "\n", encoding="utf-8")
     return rows, failures

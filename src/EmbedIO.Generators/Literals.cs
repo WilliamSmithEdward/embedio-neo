@@ -101,8 +101,16 @@ namespace EmbedIO.Generators
         internal static string HintName(INamedTypeSymbol type)
         {
             var name = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat.WithGlobalNamespaceStyle(SymbolDisplayGlobalNamespaceStyle.Omitted));
-            var chars = name.Select(c => char.IsLetterOrDigit(c) || c == '.' || c == '_' ? c : '_').ToArray();
-            return new string(chars) + ".ControllerBindings.g.cs";
+            var encoded = new System.Text.StringBuilder(name.Length);
+            foreach (var character in name)
+            {
+                if (character is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '.')
+                    encoded.Append(character);
+                else
+                    // Escape the marker too, so a literal "_0040" cannot collide with '@'.
+                    encoded.Append('_').Append(((int)character).ToString("X4", CultureInfo.InvariantCulture));
+            }
+            return encoded.ToString() + ".ControllerBindings.g.cs";
         }
     }
 }

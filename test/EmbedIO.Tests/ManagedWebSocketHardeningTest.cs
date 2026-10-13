@@ -63,18 +63,27 @@ namespace EmbedIO.Tests
             internal static async Task<RawClient> ConnectAsync(string url, CancellationToken token, byte[]? pipelined = null)
             {
                 var client = new RawClient();
-                await client._tcp.ConnectAsync(IPAddress.Loopback, new Uri(url).Port, token);
-                client.Stream = client._tcp.GetStream();
-                var handshake = Encoding.ASCII.GetBytes($"GET /ws HTTP/1.1\r\nHost: {new Uri(url).Authority}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n");
-                await client.Stream.WriteAsync(pipelined == null ? handshake : handshake.Concat(pipelined).ToArray(), token);
-                var header = new StringBuilder(); var single = new byte[1];
-                while (!header.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal))
+                var connected = false;
+                try
                 {
-                    Assert.That(header.Length, Is.LessThan(8192));
-                    await client.Stream.ReadExactlyAsync(single, token); header.Append((char)single[0]);
+                    await client._tcp.ConnectAsync(IPAddress.Loopback, new Uri(url).Port, token);
+                    client.Stream = client._tcp.GetStream();
+                    var handshake = Encoding.ASCII.GetBytes($"GET /ws HTTP/1.1\r\nHost: {new Uri(url).Authority}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n");
+                    await client.Stream.WriteAsync(pipelined == null ? handshake : handshake.Concat(pipelined).ToArray(), token);
+                    var header = new StringBuilder(); var single = new byte[1];
+                    while (!header.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal))
+                    {
+                        Assert.That(header.Length, Is.LessThan(8192));
+                        await client.Stream.ReadExactlyAsync(single, token); header.Append((char)single[0]);
+                    }
+                    Assert.That(header.ToString(), Does.StartWith("HTTP/1.1 101"));
+                    connected = true;
+                    return client;
                 }
-                Assert.That(header.ToString(), Does.StartWith("HTTP/1.1 101"));
-                return client;
+                finally
+                {
+                    if (!connected) client.Dispose();
+                }
             }
 
             internal static byte[] Frame(byte flags, byte[] payload, long? announced = null)

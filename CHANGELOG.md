@@ -1,6 +1,25 @@
 # Changelog
 
 ## [Unreleased]
+
+## [2.0.0] - Unreleased
+
+This major HTTP-engine upgrade requires rebuilding consumers. Follow the
+[Neo v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md) for the approved
+API and behavior changes: the Microsoft listener backend is retired, `RawUrl`
+becomes `RawTarget`, selected APIs return `Uri`, named parameters change, HTTPS
+requires TLS 1.2 or later, and unhandled exceptions return an empty 500 by default.
+HTTP/1.1 and HTTP/2 use the replacement engine; opt-in HTTP/3 uses `System.Net.Quic`
+on the .NET 10 asset. Strict framing, first-flush commitment and lifecycle rules
+are documented in the migration guide.
+
+Release acceptance remains in progress. The retained Windows HTTP/2 drain
+response-loss failure has no established cause or repair despite later passing
+validation. Native application-provider selection, unreliable datagrams and
+WebTransport remain outside public deployment support, with their investigation
+deferred. Combined mode requires TCP and UDP bindings, and Alt-Svc discovery is
+not automatic. Performance results apply only to their recorded source and host.
+
 - Replace the new one-argument certificate-source listener constructor with
   `HttpListener.CreateWithCertificateSource(source)`, preserving published v1
   positional null/default certificate calls. The source and its certificates
@@ -364,7 +383,7 @@
   [migration notes](docs/compatibility/migration.md#managed-http-framing-unreleased)
   and [protocol roadmap](docs/project/http-engine.md). The development branch now
   includes HTTP/2, HPACK and RFC 8441 WebSockets, plus internal HTTP/3/QPACK/QUIC
-  connection dispatch; public HTTP/3 listener integration remains in development.
+  connection dispatch. Public HTTP/3 and combined listeners are now integrated.
   See the roadmap for target restrictions and outstanding conformance work.
 
 - Reject malformed managed WebSocket frame metadata before consuming payloads,
@@ -512,7 +531,7 @@ The five package identities, target frameworks and runtime dependencies are reta
   Preserve APIs, defaults and supported request/routing behavior; add measured queue
   allocation budgets and focused compatibility coverage.
 
-- Use true asynchronous managed response writes with caller cancellation; preserve write-error policy. Repair premature chunk termination on empty writes and large-header body-prefix calculations. Add 42 regression cases for 1â€“6 MB files, compression/cache variants, action/JSON responses and backpressure.
+- Use true asynchronous managed response writes with caller cancellation; preserve write-error policy. Repair premature chunk termination on empty writes and large-header body-prefix calculations. Add 42 regression cases for 1-6 MB files, compression/cache variants, action/JSON responses and backpressure.
 - Avoid compiling unused parameterless base-route regexes during configuration.
   Signal synchronous startup readiness without polling; stop failed listeners,
   honor startup cancellation and enforce the documented single RunAsync call.

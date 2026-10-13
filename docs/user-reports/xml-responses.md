@@ -1,5 +1,11 @@
 # Return XML from a controller
 
+The native Microsoft listener comparisons and validation below describe the v1
+implementation at the time of this report. Neo v2 uses the replacement engine
+and has removed that backend; see [listener migration](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
+Historical test counts and native runtime workarounds are not current-engine
+validation.
+
 [Upstream #575](https://github.com/unosquare/embedio/issues/575), reported by
 `Muhomorik` on EmbedIO 3.5.2, asks how to return XML text, `XElement` or
 `XDocument` without manually opening a response writer. Changing ContentType

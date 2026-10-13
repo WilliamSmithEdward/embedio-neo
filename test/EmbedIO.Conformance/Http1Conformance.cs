@@ -34,7 +34,7 @@ internal static class Http1Conformance
         client.Send(request);
         Http1Response? response = null;
         try { response = client.Read(head); }
-        catch (Exception error) when (error is IOException or InvalidDataException)
+        catch (Exception error) when (IsConnectionClosure(error))
         {
             return (null, true, error.GetType().Name + ": " + error.Message);
         }
@@ -98,7 +98,7 @@ internal static class Http1Conformance
             client.Send(request);
             Http1Response r;
             try { r = client.Read(false); }
-            catch (Exception error) when (error is IOException or InvalidDataException) { return (Conforms, "closed without response"); }
+            catch (Exception error) when (IsConnectionClosure(error)) { return (Conforms, "closed without response"); }
             var closed = client.WaitClosed(out var extra);
             return Expect((r.Status is >= 400 and < 500 || r.Header("X-Body-Length") == "0") && closed,
                 Describe(r) + (closed ? "; closed" : $"; open, {extra} extra bytes (smuggled request answered)"));
@@ -257,7 +257,7 @@ internal static class Http1Conformance
             client.Send("CONNECT a.example:443 HTTP/1.1\r\nHost: a.example:443\r\n\r\nGET /plain HTTP/1.1\r\nHost: a\r\n\r\n");
             Http1Response r;
             try { r = client.Read(false); }
-            catch (Exception error) when (error is IOException or InvalidDataException) { return (Conforms, "closed"); }
+            catch (Exception error) when (IsConnectionClosure(error)) { return (Conforms, "closed"); }
             var closed = client.WaitClosed(out var extra);
             return Expect(r.Status >= 400 && closed, Describe(r) + (closed ? "; closed" : $"; {extra} extra bytes after rejection"));
         }),
@@ -359,7 +359,7 @@ internal static class Http1Conformance
                 var r = client.Read(false);
                 return Expect(r.Status >= 400, $"responded after truncated body: {Describe(r)}; application saw {r.Header("X-Body-Length") ?? "?"} bytes");
             }
-            catch (Exception error) when (error is IOException or InvalidDataException) { return (Conforms, "closed without a success response"); }
+            catch (Exception error) when (IsConnectionClosure(error)) { return (Conforms, "closed without a success response"); }
         }),
         new("incomplete-chunked-then-eof", "RFC9112 8", "MUST", t =>
         {
@@ -373,7 +373,7 @@ internal static class Http1Conformance
                 return (r.Status is >= 400 and < 500 ? Conforms : r.Status >= 500 ? Policy : Violation,
                     $"responded after truncated chunked body: {Describe(r)}");
             }
-            catch (Exception error) when (error is IOException or InvalidDataException) { return (Conforms, "closed without a success response"); }
+            catch (Exception error) when (IsConnectionClosure(error)) { return (Conforms, "closed without a success response"); }
         }),
     };
 
@@ -403,6 +403,17 @@ internal static class Http1Conformance
         }
         catch (Exception error) when (IsDriverFailure(error)) { return error.GetType().Name + ": " + error.Message; }
     }
+
+    // A receive timeout or malformed response is an observation failure, not proof of rejection.
+    internal static bool IsConnectionClosure(Exception error) => error is EndOfStreamException
+        or IOException
+    {
+        InnerException: System.Net.Sockets.SocketException
+        {
+            SocketErrorCode:
+            System.Net.Sockets.SocketError.ConnectionReset or System.Net.Sockets.SocketError.ConnectionAborted or System.Net.Sockets.SocketError.Shutdown
+        }
+    };
 
     // Failures a driver records as an outcome; anything else (for example out of memory) propagates.
     internal static bool IsDriverFailure(Exception error) => error is IOException or InvalidDataException or System.Net.Sockets.SocketException

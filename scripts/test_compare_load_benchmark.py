@@ -1,8 +1,14 @@
 """Check sample accounting and zero-valued metrics in benchmark comparisons."""
+import contextlib
+import io
+import json
 import math
+from pathlib import Path
+import tempfile
+from unittest.mock import patch
 import unittest
 
-from compare_load_benchmark import median, ratio_magnitude, spread, valid_sample
+from compare_load_benchmark import main, median, noise, ratio_magnitude, samples, spread, valid_sample
 
 
 def sample(rate=100, cpu=2, allocation=10, error=None):
@@ -44,6 +50,36 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(ratio_magnitude(100, 200), 2)
         self.assertEqual(ratio_magnitude(200, 100), 2)
 
+
+    def test_rejected_runs_cannot_supply_comparison_or_noise_samples(self):
+        for marker in ("INVALID.txt", "ABORTED.txt"):
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                scenario = root / "samples/ordinary"
+                scenario.mkdir(parents=True)
+                for engine in ("baseline", "candidate"):
+                    (scenario / f"{engine}-r1.json").write_text(json.dumps(sample()))
+                (root / marker).write_text("foreign workload invalidated this run")
+                with self.assertRaisesRegex(ValueError, marker):
+                    samples(root)
+                with self.assertRaisesRegex(ValueError, marker):
+                    noise([root])
+
+    def test_cli_reports_rejected_comparison_and_aa_runs_without_claims(self):
+        for rejected in ("comparison", "aa"):
+            with self.subTest(rejected=rejected), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                comparison, aa = root / "comparison", root / "aa"
+                comparison.mkdir()
+                aa.mkdir()
+                (root / rejected / "ABORTED.txt").write_text("bounded run aborted")
+                output, errors = io.StringIO(), io.StringIO()
+                with patch("sys.argv", ["compare_load_benchmark.py", str(comparison), "--aa", str(aa)]), contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                    with self.assertRaises(SystemExit) as caught:
+                        main()
+                self.assertEqual(caught.exception.code, 2)
+                self.assertIn("ABORTED.txt", errors.getvalue())
+                self.assertEqual(output.getvalue(), "")
 
 if __name__ == "__main__":
     unittest.main()

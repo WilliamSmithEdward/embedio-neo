@@ -39,9 +39,9 @@ Echoing incoming cookies is legacy behavior of the managed EmbedIO listener.
 It is not required by WebSocket: the handshake may contain cookies, but the
 protocol does not require reflecting incoming cookies into `Set-Cookie`.
 See [RFC 6455 section 4.2.2](https://www.rfc-editor.org/rfc/rfc6455.html#section-4.2.2).
-The native Microsoft listener does not automatically echo request cookies;
-switching listener modes solely to change cookies can introduce other platform
-and hosting differences and is not required for this fix.
+The historical v1 Microsoft listener did not automatically echo request cookies.
+Neo v2 removes that backend; it is not an alternative configuration for current
+source. See the [listener migration guide](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
 
 The managed handshake emits cookies configured with `context.Response.SetCookie`
 or `context.Response.Cookies.Add`, using the same attribute formatter as ordinary

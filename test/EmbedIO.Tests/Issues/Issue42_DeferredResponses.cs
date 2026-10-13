@@ -274,11 +274,12 @@ namespace EmbedIO.Tests.Issues
                 throw new InvalidOperationException("after commitment");
             });
             using var client = Host.CreateClient(2);
-            using var response = await client.GetAsync(host.Url, HttpCompletionOption.ResponseHeadersRead);
+            using var deadline = new CancellationTokenSource(Deadline);
+            using var response = await client.GetAsync(host.Url, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
             Assert.That(response.Version, Is.EqualTo(HttpVersion.Version20));
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(
-                async () => await response.Content.ReadAsStringAsync(),
+                async () => await response.Content.ReadAsStringAsync(deadline.Token),
                 Throws.InstanceOf<IOException>().Or.InstanceOf<HttpRequestException>(),
                 "The stream is reset instead of ending the partial body cleanly.");
             Assert.That(await client.GetStringAsync(host.Url + "probe"), Is.EqualTo("healthy"), "Other streams on the connection are unaffected.");

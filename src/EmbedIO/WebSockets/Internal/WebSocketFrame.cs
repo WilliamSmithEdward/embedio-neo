@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Globalization;
 using EmbedIO.Net.Internal;
 using EmbedIO.Internal;
@@ -113,8 +112,6 @@ namespace EmbedIO.WebSockets.Internal
                     : BinaryPrimitives.ReadUInt64BigEndian(ExtendedPayloadLength);
             }
         }
-
-        public IEnumerator<byte> GetEnumerator() => ((IEnumerable<byte>)ToArray()).GetEnumerator();
 
         public string PrintToString()
         {

@@ -39,8 +39,12 @@ Unmodified h2spec still reports failure: 141/146 cleartext and 142/146 TLS.
 Its four common failures use older closed-stream/priority expectations, assessed
 against RFC 9113 and RFC 9218 in the [engine program](http-engine.md). The
 [application lifecycle audit](#application-lifecycle-audit-2026-10-10) reran it
-on the current engine and refines that assessment: the two closed-stream DATA
-cases sit on a tension inside RFC 9113 and are not classified as permitted.
+on the current engine and refines that assessment. The current interpretation
+applies section 5.1's specific permission for minimal processing of fully closed
+streams, including normal completion, to section 6.1's general receiving-state
+rule. Active half-closed streams still require STREAM_CLOSED; peer-reset
+restrictions remain separate. The detailed assessment below records this
+interpretation of unchanged behavior.
 The exact plaintext invalid-preface input was captured separately: it received
 HTTP/1.1 400 with Content-Length 0 and Connection: close, then clean EOF. TLS h2
 received clean EOF. These observations do not relabel h2spec's aggregate as passing.
@@ -50,6 +54,39 @@ These are focused Linux campaigns, not completion of Windows/macOS, browser,
 WebSocket, long-running soak, performance or the full standards inventory.
 No production source or package change was needed for these peer corrections.
 
+## v2 audit validation (2026-10-13)
+
+A fresh working-tree snapshot of the v2 audit candidate completed all 22 HTTP/2
+cases separately over cleartext and TLS: 16 conforming cases and six policy
+observations in each mode, zero active handlers afterward, and clean server
+shutdown. All case bodies and trial counts were retained. The resource oracle
+now rejects missing, malformed or unsettled counter observations; 16 offline
+controls and the SETTINGS ACK wire controls passed before the live runs.
+
+A separate single-attempt check sent the exact 30-byte invalid-preface payload
+from the pinned h2spec source. The shared cleartext port returned 66 bytes of
+HTTP/1.1 400, Content-Length 0 and Connection: close, followed by EOF. A fresh
+ordinary request then returned 200 with the exact five-byte body `hello`.
+These captured bytes explain the legacy frame parser's unexpected-EOF outcome;
+they do not turn the failed h2spec aggregate into a pass. The tested core SHA-256
+was `d3ec4d8c04e1037f5959f950a404e60e54c93eb47453b1fe179925f6aa3a2af8`.
+The cached h2spec executable reports `Version: 2.0.0 ((Unknown))`, the source's
+unstamped defaults. On 2026-10-13, an independent offline rebuild reproduced its
+exact SHA-256
+`e6ff68a74716e61866b3c2e47d0183c26549a216a796dc27382b52202c1eb325`
+from the full clean source commit
+`70ac2294010887f48b18e2d64f5cccd48421fad1`, original Git history and tags, and
+Go 1.25.14 in the pinned compiler image
+`golang@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437`.
+All 115 raw source blobs, file modes and the root tree were verified. The original
+go.mod/go.sum and source/module-cache bytes stayed unchanged; module checksums
+passed online and offline verification. The network-disabled build used the
+original CGO-disabled trimpath recipe, with no version overrides, and matched
+the cached executable byte for byte. This establishes source-to-binary
+correspondence for the recorded tool. It does not relabel its failed conformance
+aggregate or execute any additional protocol cases.
+This proof covers Linux HTTP/2 and cleartext fallback only; current-source
+HTTP/3, endurance and cross-platform release gates remain separate.
 ## Application lifecycle audit (2026-10-10)
 
 Application-level conformance of the behavior added most recently: informational
@@ -176,7 +213,7 @@ its processing.
 | --- | --- | --- |
 | 3.5/2 invalid preface, cleartext only | Section 3.4: an invalid preface is a connection error, and "A GOAWAY frame ... MAY be omitted" | Permitted. The shared HTTP/1.1 and h2c port answers HTTP/1.1 400 and closes (captured earlier); h2spec fails parsing those bytes as frames. TLS passes. |
 | 5.1/8 DATA after the peer's RST_STREAM | Sections [5.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1) and [6.4](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.4) distinguish reset closure from normal completion. Section 6.4 prohibits sending further stream frames after receiving a reset, except PRIORITY. | A blanket RST_STREAM reply would conflict with the reset rule. The engine discards the DATA and returns connection credit. The older h2spec expectation and section 6.1's general DATA rule must be assessed with this specific reset restriction, rather than treating a reset reply as satisfying every section. No production change or new passing campaign is claimed. |
-| 5.1/11 DATA after normal stream completion | Section [6.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.1) requires a STREAM_CLOSED stream error for DATA outside the receiving states; section 5.1 also permits minimal processing for closed streams. | The assessment remains unresolved. The current registry discards retired-stream DATA and returns connection credit, retaining only its stream-ID high-water mark. Any proposed change must preserve close cause, bounded retained state, HPACK processing and connection credit, and distinguish normal completion from received or sent resets. The peer-reset case cannot justify a blanket reset policy. |
+| 5.1/11 DATA after normal stream completion | Section [6.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.1) requires a STREAM_CLOSED stream error for DATA outside the receiving states; section 5.1 also permits minimal processing for closed streams. | Apply section 5.1's specific closed-state permission: minimal processing is allowed for every fully closed stream, including normal completion. This qualifies section 6.1's general receiving-state rule; it does not relax the STREAM_CLOSED requirement for an active half-closed stream. The registry discards retired-stream DATA, returns connection credit and retains only its stream-ID high-water mark. HPACK processing remains active. Peer-reset restrictions still apply separately; no blanket reset reply is introduced. This is an explicit standards interpretation of unchanged behavior, not a passing h2spec result. |
 | 5.3.1/1 and 5.3.1/2 self-dependency | Section 5.3.2 deprecates RFC 7540 priority signaling; the captured RFC 9113 text has no self-dependency rule. The server advertises SETTINGS_NO_RFC7540_PRIORITIES=1 (RFC 9218 section 2.1) | Obsolete RFC 7540 section 5.3.1 expectation. The server answered the request normally. |
 
 The previous joint assessment of 5.1/8 and 5.1/11 omitted section 6.4's

@@ -1,7 +1,10 @@
 """The inventory must count distinct diagnostics and skip only workload projects."""
+import tempfile
+from pathlib import Path
 import unittest
+from unittest.mock import patch
 
-from analyzer_inventory import count_diagnostics, requires_workload, solution_members, summary_row
+from analyzer_inventory import count_diagnostics, inventory, requires_workload, solution_members, summary_row
 
 
 class InventoryTests(unittest.TestCase):
@@ -33,6 +36,39 @@ class InventoryTests(unittest.TestCase):
     def test_summary_row_is_tab_separated(self):
         self.assertEqual(summary_row("EmbedIO.sln", "locked", "ok", 0, 0), "EmbedIO.sln\tlocked\tok\t0\t0")
 
+
+    def test_failed_locked_restore_cannot_pass_using_cached_build(self):
+        for failed_target in ("EmbedIO.sln", "test/Probe/Probe.csproj"):
+            with self.subTest(target=failed_target), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                project = root / "test/Probe/Probe.csproj"
+                project.parent.mkdir(parents=True)
+                project.write_text("<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>")
+                (project.parent / "packages.lock.json").write_text("{}")
+
+                def command(arguments, cwd, log_path):
+                    if arguments[1] == "restore" and arguments[2] == failed_target:
+                        return 1, "locked restore failed"
+                    if arguments[1] == "sln":
+                        return 0, "Project(s)\n----------\n"
+                    return 0, "Build succeeded."
+
+                with patch("analyzer_inventory.run", side_effect=command) as invoked:
+                    rows, failures = inventory(root, root / "results")
+                self.assertGreater(failures, 0)
+                self.assertTrue(any("locked-FAILED" in row for row in rows))
+                self.assertFalse(any(call.args[0][1:3] == ["build", failed_target] for call in invoked.call_args_list))
+
+    def test_failed_solution_listing_fails_inventory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+
+            def command(arguments, cwd, log_path):
+                return (1, "cannot list solution") if arguments[1] == "sln" else (0, "Build succeeded.")
+
+            with patch("analyzer_inventory.run", side_effect=command):
+                _, failures = inventory(root, root / "results")
+            self.assertGreater(failures, 0)
 
 if __name__ == "__main__":
     unittest.main()

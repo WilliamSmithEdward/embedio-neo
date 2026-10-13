@@ -62,9 +62,9 @@ this inventory makes no claim about them.
 
 ## Classification
 
-- Correctness, nullable-contract and resource-lifetime findings: none remain.
+- Analyzer diagnostics classified as correctness, nullable-contract or resource-lifetime findings: none remained in the recorded build.
   The cleanup that reached this state is the owner-approved API work recorded in
-  the migration guide; this inventory confirms the result rather than repeating it.
+  the migration guide; this inventory confirms that diagnostic result rather than repeating it. A warning-free build does not establish absence of semantic bugs.
 - Justified suppressions: none exist. The repository policy is to fix the
   diagnostic, and the two guards fail CI on any suppression, so there is nothing
   to document as an accepted exemption.

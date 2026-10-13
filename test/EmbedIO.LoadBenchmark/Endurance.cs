@@ -24,6 +24,7 @@ internal static class Endurance
 
     internal static async Task<int> RunAsync(CommandLine options)
     {
+        var profile = EnduranceProfile.Parse(options);
         var output = Path.GetFullPath(options.Required("--output"));
         if (Directory.Exists(output) && Directory.EnumerateFileSystemEntries(output).Any())
             throw new InvalidOperationException("Use a fresh output directory so earlier evidence is never overwritten: " + output);
@@ -64,13 +65,15 @@ internal static class Endurance
             ["runtimeDirectory"] = RuntimeEnvironment.GetRuntimeDirectory(),
             ["powerScheme"] = OperatingSystem.IsWindows() ? SystemCpu.Command("powercfg", "/getactivescheme") : null,
             ["revision"] = options.Optional("--revision"),
-            ["engine"] = options.Text("--engine", "embedio"),
-            ["transports"] = options.Optional("--transports"),
+            ["engine"] = profile.Engine,
+            ["listenerProfile"] = profile.Name,
+            ["tlsListenerMode"] = profile.TlsListenerDisplay,
+            ["transports"] = profile.Transports,
             ["kinds"] = options.Optional("--kinds"),
             ["runnerSha256"] = Hash(Path.Combine(AppContext.BaseDirectory, "EmbedIO.LoadBenchmark.dll")),
             ["embedioSha256"] = Hash(Path.Combine(AppContext.BaseDirectory, "EmbedIO.dll")),
-            ["msquicSha256"] = Hash(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "msquic.dll")),
-            ["systemNetQuicSha256"] = Hash(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "System.Net.Quic.dll")),
+            ["msquicSha256"] = profile.TcpOnly ? null : Hash(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "msquic.dll")),
+            ["systemNetQuicSha256"] = profile.TcpOnly ? null : Hash(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "System.Net.Quic.dll")),
             ["plan"] = new JsonArray([.. plan.Select(step => (JsonNode)step)]),
             ["settleSeconds"] = settle,
             ["drainTimeoutSeconds"] = drainTimeout,
@@ -79,9 +82,8 @@ internal static class Endurance
             ["clientCpus"] = clientCpus,
             ["plainPort"] = plainPort,
             ["tlsPort"] = tlsPort,
-            ["dotnetEnvironment"] = new JsonObject(Environment.GetEnvironmentVariables().Keys.Cast<string>()
-                .Where(key => key.StartsWith("DOTNET_", StringComparison.OrdinalIgnoreCase))
-                .Select(key => KeyValuePair.Create(key, (JsonNode?)Environment.GetEnvironmentVariable(key)))),
+            ["environmentVariablesCaptured"] = false,
+            ["runtimeConfigurationSource"] = "Server READY records server GC and latency mode; environment values are not collected.",
         };
         await File.WriteAllTextAsync(Path.Combine(output, "environment.json"), environment.ToJsonString(Indented)).ConfigureAwait(false);
 
@@ -93,17 +95,17 @@ internal static class Endurance
             server = ChildProcess.Start(AppContext.BaseDirectory, [
                 "endurance-server", "--plain-port", plainPort.ToString(CultureInfo.InvariantCulture), "--tls-port", tlsPort.ToString(CultureInfo.InvariantCulture),
                 "--certificate", certificatePath, "--certificate-password", password, "--sample-file", Path.Combine(output, "server-samples.jsonl"),
-                "--sample-seconds", options.Text("--sample-seconds", "5"), "--engine", options.Text("--engine", "embedio")], serverCpus, Path.Combine(output, "server.stderr.log"));
+                "--sample-seconds", options.Text("--sample-seconds", "5"), "--engine", profile.Engine, "--listener-profile", profile.Name], serverCpus, Path.Combine(output, "server.stderr.log"));
             var ready = await server.ReadLineAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(false);
             if (ready is null || !ready.StartsWith("READY ", StringComparison.Ordinal)) throw new InvalidOperationException("Server did not start: " + ready);
             File.Delete(certificatePath);
             await Write(new JsonObject { ["step"] = "server-start", ["server"] = JsonNode.Parse(ready[6..]) }).ConfigureAwait(false);
 
             var filters = new List<string>();
-            if (options.Optional("--transports") is { } transports) filters.AddRange(["--transports", transports]);
+            if (profile.Transports is { } transports) filters.AddRange(["--transports", transports]);
             if (options.Optional("--kinds") is { } kinds) filters.AddRange(["--kinds", kinds]);
             // The Kestrel control has no WebSocket endpoint, so its health checks use plain requests only.
-            var healthKinds = options.Text("--engine", "embedio") == "kestrel" ? "small" : null;
+            var healthKinds = profile.Engine == "kestrel" ? "small" : null;
             var context = new StepContext(server, output, plainPort, tlsPort, thumbprint, clientCpus, rateScale, interval, settle, drainTimeout, filters, healthKinds);
             var index = 0;
             foreach (var step in plan)
@@ -193,14 +195,13 @@ internal static class Endurance
         record["serverBefore"] = await context.Server.RequestJsonAsync("sample", TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         var report = await RunClientAsync(context, record, index, mix, seconds, drainCycles).ConfigureAwait(false);
         record["client"] = report;
-        var errors = report?["errors"]?.GetValue<long>() ?? -1;
-        if (errors != 0) record["failed"] = true;
+        if (ClientFailed(report)) record["failed"] = true;
         // Immediately after traffic stops, before any settling: what is still in flight.
         record["serverAtStop"] = await context.Server.RequestJsonAsync("sample", TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         await QuiesceAsync(context, record).ConfigureAwait(false);
         var health = await RunClientAsync(context, null, index, "health", 10, 0).ConfigureAwait(false);
         record["health"] = Brief(health);
-        if ((health?["errors"]?.GetValue<long>() ?? -1) != 0 || health?["workloads"]?.AsArray().Any(workload => (workload?["ok"]?.GetValue<long>() ?? 0) == 0) != false)
+        if (ClientFailed(health) || health?["workloads"]?.AsArray().Any(workload => (workload?["ok"]?.GetValue<long>() ?? 0) == 0) != false)
             record["failed"] = true;
     }
 
@@ -274,6 +275,12 @@ internal static class Endurance
             await client.DisposeAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         }
     }
+
+    internal static bool ClientFailed(JsonNode? result)
+        => result is not JsonObject report
+            || report["errors"] is not JsonValue errors || !errors.TryGetValue<long>(out var count) || count != 0
+            || report["workersDrainedWithin60Seconds"] is not JsonValue drained
+            || !drained.TryGetValue<bool>(out var completed) || !completed;
 
     internal static void RecordDrain(JsonObject record, JsonNode? result)
     {

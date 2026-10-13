@@ -49,7 +49,10 @@ listener closes pending connections.
 
 The initial implementation and tests are tracked by
 [feature #26](https://github.com/WilliamSmithEdward/embedio-neo/issues/26).
-Until CI results are recorded, configured coverage is not a verified support claim.
+Configured coverage is not a verified support claim until its exact-source run
+and results have been checked. MAUI jobs are enabled and required; the rows below
+describe fixture coverage, while each verified result applies to its tested source
+and platform. See the [CI status and retained evidence](../platforms/maui-https-validation.md#ci-status-and-retained-evidence).
 
 | Platform/app model | Coverage and current limits |
 | --- | --- |

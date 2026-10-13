@@ -20,7 +20,6 @@ namespace EmbedIO.Net.Internal
                 var equals = StringOperations.IndexOfOrdinal(piece, '=');
                 var name = equals < 0 ? piece : piece.Substring(0, equals).TrimEnd(' ');
                 var content = equals < 0 || equals == piece.Length - 1 ? null : piece.Substring(equals + 1).Trim();
-                var attribute = current != null;
                 if (current != null && name.Equals("version", StringComparison.OrdinalIgnoreCase))
                     current.Version = Number(content);
                 else if (current != null && name.Equals("expires", StringComparison.OrdinalIgnoreCase))

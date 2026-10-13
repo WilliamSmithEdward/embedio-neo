@@ -478,20 +478,31 @@ namespace EmbedIO.Tests
             internal async Task<TunnelPeer> ConnectAsync(string? protocol)
             {
                 var tcp = new TcpClient();
-                await tcp.ConnectAsync(Endpoint.Host, Endpoint.Port, Token);
-                Stream wire = tcp.GetStream();
-                if (Tls)
+                Stream? wire = null;
+                TunnelPeer connectedPeer;
+                try
                 {
-                    var fingerprint = _certificate.GetCertHashString(HashAlgorithmName.SHA256);
-                    var ssl = new SslStream(wire, false, (_, peer, _, _) => peer?.GetCertHashString(HashAlgorithmName.SHA256) == fingerprint);
-                    wire = ssl;
-                    // Platform default: Apple server-side SslStream negotiates TLS 1.2.
-                    await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
-                    { TargetHost = "localhost", EnabledSslProtocols = SslProtocols.None }, Token);
-                    Assert.That(ssl.SslProtocol, Is.EqualTo(OperatingSystem.IsMacOS() ? SslProtocols.Tls12 : SslProtocols.Tls13));
+                    await tcp.ConnectAsync(Endpoint.Host, Endpoint.Port, Token);
+                    wire = tcp.GetStream();
+                    if (Tls)
+                    {
+                        var fingerprint = _certificate.GetCertHashString(HashAlgorithmName.SHA256);
+                        var ssl = new SslStream(wire, false, (_, peer, _, _) => peer?.GetCertHashString(HashAlgorithmName.SHA256) == fingerprint);
+                        wire = ssl;
+                        // Platform default: Apple server-side SslStream negotiates TLS 1.2.
+                        await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+                        { TargetHost = "localhost", EnabledSslProtocols = SslProtocols.None }, Token);
+                        Assert.That(ssl.SslProtocol, Is.EqualTo(OperatingSystem.IsMacOS() ? SslProtocols.Tls12 : SslProtocols.Tls13));
+                    }
+                    connectedPeer = new TunnelPeer(tcp, wire);
+                    lock (_peers) _peers.Add(connectedPeer);
                 }
-                var peer = new TunnelPeer(tcp, wire);
-                lock (_peers) _peers.Add(peer);
+                catch
+                {
+                    try { wire?.Dispose(); }
+                    finally { tcp.Dispose(); }
+                    throw;
+                }
                 var authority = Endpoint.Host + ":" + Endpoint.Port;
                 var head = protocol == null
                     ? $"CONNECT {authority} HTTP/1.1\r\nHost: {authority}\r\n\r\n"
@@ -499,7 +510,7 @@ namespace EmbedIO.Tests
                 await wire.WriteAsync(Encoding.ASCII.GetBytes(head), Token);
                 var response = await ReadHeadAsync(wire, Token);
                 Assert.That(response.StartsWith(protocol == null ? "HTTP/1.1 200 " : "HTTP/1.1 101 ", StringComparison.Ordinal), Is.True, response);
-                return peer;
+                return connectedPeer;
             }
             internal async Task WaitForClosesAsync(int count)
             {

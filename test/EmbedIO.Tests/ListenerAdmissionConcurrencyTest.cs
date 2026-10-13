@@ -230,6 +230,7 @@ namespace EmbedIO.Tests
                         // Keep registering after Stop: every later attempt must be refused.
                         for (var index = 0; Volatile.Read(ref stopped) == 0 || index % 64 != 0; index++)
                         {
+                            timeout.Token.ThrowIfCancellationRequested();
                             var context = FakeContext.Create($"{producer}:{index}");
                             var afterStop = Volatile.Read(ref stopped) == 2;
                             try
@@ -347,11 +348,13 @@ namespace EmbedIO.Tests
             var handled = 0;
             var handledIds = new ConcurrentQueue<string>();
             var completedIds = new ConcurrentQueue<string>();
+            var completions = new ConcurrentDictionary<string, Task>();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var server = new WebServer(HttpListenerMode.EmbedIO, prefix)
                 .WithModule(new ActionModule("/", HttpVerbs.Get, async context =>
                 {
                     var requestId = context.Request.QueryString["__embedio_drain_id"] ?? "<missing>";
+                    if (http2) _ = completions.TryAdd(requestId, ContextCompletion(context));
                     handledIds.Enqueue(requestId);
                     _ = Interlocked.Increment(ref handled);
                     await context.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding);
@@ -376,9 +379,18 @@ namespace EmbedIO.Tests
             Assert.That(outcome.Succeeded, Is.EqualTo(Volatile.Read(ref handled)),
                 "Handler entries: " + string.Join(",", handledIds.TakeLast(32))
                 + "; handler writes completed: " + completedIds.Count
-                + "; handled without a client response: " + string.Join(",", handledIds.Except(outcome.Delivered))
+                + "; handled without a client response: " + string.Join(",", handledIds.Except(outcome.Delivered)
+                    .Select(id => http2 && completions.TryGetValue(id, out var completion)
+                        ? id + " [" + CompletionStatus(completion) + "]" : id))
                 + "; duplicate handler entries: " + string.Join(",", handledIds.GroupBy(id => id).Where(group => group.Count() > 1).Select(group => group.Key))
                 + "; terminal failures: " + string.Join(" | ", outcome.Refused));
+            if (http2)
+            {
+                Assert.That(completions.Count, Is.EqualTo(Volatile.Read(ref handled)),
+                    "Every admitted HTTP/2 request must have its context completion captured.");
+                Assert.That(completions.Values.Select(completion => completion.IsCompletedSuccessfully), Is.All.True,
+                    "Context completions: " + string.Join(" | ", completions.Select(pair => pair.Key + ": " + CompletionStatus(pair.Value))));
+            }
             await AssertPortRefusesAsync(prefix);
         }
 
@@ -388,12 +400,14 @@ namespace EmbedIO.Tests
         {
             var prefix = Resources.GetServerAddress();
             var lateHandled = 0;
+            var heldCompletions = new ConcurrentQueue<Task>();
             var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var server = new WebServer(HttpListenerMode.EmbedIO, prefix)
                 .WithModule(new ActionModule("/held", HttpVerbs.Get, async context =>
                 {
+                    if (http2) heldCompletions.Enqueue(ContextCompletion(context));
                     entered.TrySetResult(true);
                     await release.Task.ConfigureAwait(false);
                     await context.SendStringAsync("held", "text/plain", WebServer.Utf8NoBomEncoding);
@@ -407,40 +421,50 @@ namespace EmbedIO.Tests
             var connector = new DrainConnector();
             using var client = connector.Client(http2);
             var held = client.GetStringAsync(prefix + "held", timeout.Token);
-            await entered.Task.WaitAsync(timeout.Token);
-
-            // The admitted request keeps the drain open while later requests are refused:
-            // HTTP/2 streams past the GOAWAY cutoff are refused and retried on a new connection.
-            connector.BeginDrain();
-            var drain = server.DrainAsync(TimeSpan.FromSeconds(20));
-            var clock = System.Diagnostics.Stopwatch.StartNew();
-            var late = Enumerable.Range(0, 4).Select(async index =>
+            try
             {
-                try
-                {
-                    var body = await client.GetStringAsync(prefix + "late/" + index, timeout.Token);
-                    return (index, clock.ElapsedMilliseconds, (Exception?)new InvalidOperationException($"Answered '{body}'."));
-                }
-                catch (Exception error) when (error is HttpRequestException or TaskCanceledException) { return (index, clock.ElapsedMilliseconds, (Exception?)error); }
-            }).ToArray();
-            var outcomes = await Task.WhenAll(late).WaitAsync(timeout.Token);
-            foreach (var (index, elapsed, error) in outcomes)
-                TestContext.Out.WriteLine($"late {index}: {elapsed} ms {error?.GetType().Name}: {error?.Message}");
-            release.TrySetResult(true);
-            string heldOutcome;
-            try { heldOutcome = await held.WaitAsync(timeout.Token); }
-            catch (Exception error) when (error is HttpRequestException or TaskCanceledException) { heldOutcome = error.GetType().Name; }
-            TestContext.Out.WriteLine($"held: {heldOutcome} at {clock.ElapsedMilliseconds} ms");
-            await drain.WaitAsync(timeout.Token);
-            await running.WaitAsync(timeout.Token);
+                await entered.Task.WaitAsync(timeout.Token);
 
-            Assert.That(lateHandled, Is.Zero, "A request sent after drain began was admitted.");
-            Assert.That(heldOutcome, Is.EqualTo("held"), "The admitted request must complete during drain.");
-            Assert.That(outcomes.Select(outcome => outcome.Item3), Is.All.InstanceOf<HttpRequestException>(),
-                "Every request refused before admission must observe a refusal, not the client timeout.");
-            Assert.That(outcomes.Select(outcome => DrainConnector.RefusedAtConnect(outcome.Item3)), Is.All.True,
-                "Each late request was refused when the client opened a connection, never by a handler.");
-            await AssertPortRefusesAsync(prefix);
+                // The admitted request keeps the drain open while later requests are refused:
+                // HTTP/2 streams past the GOAWAY cutoff are refused and retried on a new connection.
+                connector.BeginDrain();
+                var drain = server.DrainAsync(TimeSpan.FromSeconds(20));
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                var late = Enumerable.Range(0, 4).Select(async index =>
+                {
+                    try
+                    {
+                        var body = await client.GetStringAsync(prefix + "late/" + index, timeout.Token);
+                        return (index, clock.ElapsedMilliseconds, (Exception?)new InvalidOperationException($"Answered '{body}'."));
+                    }
+                    catch (Exception error) when (error is HttpRequestException or TaskCanceledException) { return (index, clock.ElapsedMilliseconds, (Exception?)error); }
+                }).ToArray();
+                var outcomes = await Task.WhenAll(late).WaitAsync(timeout.Token);
+                foreach (var (index, elapsed, error) in outcomes)
+                    TestContext.Out.WriteLine($"late {index}: {elapsed} ms {error?.GetType().Name}: {error?.Message}");
+                release.TrySetResult(true);
+                string heldOutcome;
+                try { heldOutcome = await held.WaitAsync(timeout.Token); }
+                catch (Exception error) when (error is HttpRequestException or TaskCanceledException) { heldOutcome = error.GetType().Name; }
+                TestContext.Out.WriteLine($"held: {heldOutcome} at {clock.ElapsedMilliseconds} ms");
+                await drain.WaitAsync(timeout.Token);
+                await running.WaitAsync(timeout.Token);
+
+                Assert.That(lateHandled, Is.Zero, "A request sent after drain began was admitted.");
+                if (http2)
+                {
+                    Assert.That(heldCompletions.Count, Is.EqualTo(1), "Capture the admitted HTTP/2 context completion.");
+                    Assert.That(heldCompletions.Select(completion => completion.IsCompletedSuccessfully), Is.All.True,
+                        "Held context completion: " + string.Join(" | ", heldCompletions.Select(CompletionStatus)));
+                }
+                Assert.That(heldOutcome, Is.EqualTo("held"), "The admitted request must complete during drain.");
+                Assert.That(outcomes.Select(outcome => outcome.Item3), Is.All.InstanceOf<HttpRequestException>(),
+                    "Every request refused before admission must observe a refusal, not the client timeout.");
+                Assert.That(outcomes.Select(outcome => DrainConnector.RefusedAtConnect(outcome.Item3)), Is.All.True,
+                    "Each late request was refused when the client opened a connection, never by a handler.");
+                await AssertPortRefusesAsync(prefix);
+            }
+            finally { release.TrySetResult(true); }
         }
 
         // Connections a client opens after drain begins can only reach the closed listening
@@ -491,6 +515,13 @@ namespace EmbedIO.Tests
                 }
             }
         }
+
+        private static Task ContextCompletion(IHttpContext context)
+            => context.GetType().GetProperty("Completion", PrivateInstance)?.GetValue(context) as Task
+                ?? throw new AssertionException("Missing HTTP/2 context Completion task.");
+
+        private static string CompletionStatus(Task completion)
+            => completion.Status + (completion.Exception == null ? string.Empty : ": " + completion.Exception);
 
         private static async Task AssertPortRefusesAsync(string prefix)
         {

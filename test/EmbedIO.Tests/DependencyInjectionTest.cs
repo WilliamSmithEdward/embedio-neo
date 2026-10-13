@@ -52,12 +52,16 @@ namespace EmbedIO.Tests
                 {
                     var first = client.GetStringAsync("/api/wait?name=first");
                     var second = client.GetStringAsync("/api/wait?name=second");
-                    await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                    var requests = probe.Requests.ToArray();
-                    Assert.That(requests.Length, Is.EqualTo(2));
-                    Assert.That(requests[0].Id, Is.Not.EqualTo(requests[1].Id));
-                    Assert.That(requests.All(service => service.DisposeCount == 0), Is.True);
-                    probe.Release.TrySetResult(true);
+                    RequestService[] requests;
+                    try
+                    {
+                        await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                        requests = probe.Requests.ToArray();
+                        Assert.That(requests.Length, Is.EqualTo(2));
+                        Assert.That(requests[0].Id, Is.Not.EqualTo(requests[1].Id));
+                        Assert.That(requests.All(service => service.DisposeCount == 0), Is.True);
+                    }
+                    finally { probe.Release.TrySetResult(true); }
                     var replies = await Task.WhenAll(first, second);
                     Assert.That(replies, Is.EquivalentTo(new[] { "\"first\"", "\"second\"" }));
                     Assert.That(probe.SharedInstances.Distinct().Count(), Is.EqualTo(1));
@@ -307,9 +311,12 @@ namespace EmbedIO.Tests
                 })), async client =>
                 {
                     var request = client.GetAsync("/api/manual");
-                    await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                    Assert.That(probe.Events, Is.Empty);
-                    probe.Release.TrySetResult(true);
+                    try
+                    {
+                        await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                        Assert.That(probe.Events, Is.Empty);
+                    }
+                    finally { probe.Release.TrySetResult(true); }
                     await request;
                     Assert.That(probe.Events.ToArray(), Is.EqualTo(new[] { "action", "release" }));
                 });
@@ -343,9 +350,12 @@ namespace EmbedIO.Tests
                 {
                     using var cancel = new CancellationTokenSource();
                     var request = client.GetAsync("/api/wait?name=cancelled", cancel.Token);
-                    await probe.FirstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                    cancel.Cancel();
-                    probe.Release.TrySetResult(true);
+                    try
+                    {
+                        await probe.FirstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                        cancel.Cancel();
+                    }
+                    finally { probe.Release.TrySetResult(true); }
                     await Assert.ThatAsync(async () => await request, Throws.InstanceOf<OperationCanceledException>());
                     Assert.That(probe.ControllerDisposeCount, Is.EqualTo(1));
                     Assert.That(probe.Requests.Single().DisposeCount, Is.EqualTo(1));
@@ -412,9 +422,12 @@ namespace EmbedIO.Tests
             await TestWebServer.UseAsync(server => server.WithWebApi("/api", module => module.WithController(() => controller)), async client =>
             {
                 var request = client.GetAsync("/api/legacy");
-                await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                Assert.That(controller.Disposed, Is.True);
-                probe.Release.TrySetResult(true);
+                try
+                {
+                    await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                    Assert.That(controller.Disposed, Is.True);
+                }
+                finally { probe.Release.TrySetResult(true); }
                 await request;
             });
         }

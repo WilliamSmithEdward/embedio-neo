@@ -102,19 +102,28 @@ internal static class WebSocketEcho
         internal static async Task<Connection> OpenAsync(Uri uri, CancellationToken token)
         {
             var connection = new Connection();
-            await connection._tcp.ConnectAsync(IPAddress.Loopback, uri.Port, token).ConfigureAwait(false);
-            connection._stream = connection._tcp.GetStream();
-            var request = Encoding.ASCII.GetBytes($"GET /ws HTTP/1.1\r\nHost: {uri.Authority}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n");
-            await connection.Transport.WriteAsync(request, token).ConfigureAwait(false);
-            var head = new StringBuilder();
-            while (!head.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal))
+            var connected = false;
+            try
             {
-                await connection.FillAsync(1, token).ConfigureAwait(false);
-                head.Append((char)connection._input[connection._start++]);
-                if (head.Length > 8192) throw new InvalidDataException("Oversized handshake.");
+                await connection._tcp.ConnectAsync(IPAddress.Loopback, uri.Port, token).ConfigureAwait(false);
+                connection._stream = connection._tcp.GetStream();
+                var request = Encoding.ASCII.GetBytes($"GET /ws HTTP/1.1\r\nHost: {uri.Authority}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n");
+                await connection.Transport.WriteAsync(request, token).ConfigureAwait(false);
+                var head = new StringBuilder();
+                while (!head.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal))
+                {
+                    await connection.FillAsync(1, token).ConfigureAwait(false);
+                    head.Append((char)connection._input[connection._start++]);
+                    if (head.Length > 8192) throw new InvalidDataException("Oversized handshake.");
+                }
+                if (!head.ToString().StartsWith("HTTP/1.1 101", StringComparison.Ordinal)) throw new InvalidDataException("Upgrade refused: " + head);
+                connected = true;
+                return connection;
             }
-            if (!head.ToString().StartsWith("HTTP/1.1 101", StringComparison.Ordinal)) throw new InvalidDataException("Upgrade refused: " + head);
-            return connection;
+            finally
+            {
+                if (!connected) connection.Dispose();
+            }
         }
 
         // Build the masked frames of one message. The payload is copied per call
@@ -203,74 +212,80 @@ internal static class WebSocketEcho
         var connections = int.Parse(Option(args, "--connections", "1"), System.Globalization.CultureInfo.InvariantCulture);
         var seconds = double.Parse(Option(args, "--seconds", "10"), System.Globalization.CultureInfo.InvariantCulture);
         var text = args.Contains("--text", StringComparer.Ordinal);
-        if (size < 8 || fragments < 1 || fragments > size || connections < 1) throw new ArgumentException("Invalid workload.");
+        if (size < 8 || fragments < 1 || fragments > size || connections < 1 || !double.IsFinite(seconds) || seconds <= 0) throw new ArgumentException("Invalid workload.");
         using var abort = new CancellationTokenSource(TimeSpan.FromSeconds(seconds + 120));
         var sockets = new Connection[connections];
-        for (var i = 0; i < connections; ++i) sockets[i] = await Connection.OpenAsync(uri, abort.Token).ConfigureAwait(false);
-        var measuring = 0;
-        var stopAt = long.MaxValue;
-        var latencies = new List<long>[connections];
-        var counts = new long[connections];
-        async Task Drive(int index, long deadline)
+        try
         {
-            var socket = sockets[index];
-            var payload = new byte[size];
-            for (var i = 0; i < size; ++i) payload[i] = (byte)('a' + (i + index) % 26);
-            var wire = new byte[size + fragments * 14];
-            var echo = new byte[size];
-            var recorded = latencies[index] ??= new List<long>(1 << 16);
-            for (long sequence = 0; Stopwatch.GetTimestamp() < Math.Min(deadline, Volatile.Read(ref stopAt)); ++sequence)
+            for (var i = 0; i < connections; ++i) sockets[i] = await Connection.OpenAsync(uri, abort.Token).ConfigureAwait(false);
+            var measuring = 0;
+            var latencies = new List<long>[connections];
+            var counts = new long[connections];
+            async Task Drive(int index, long deadline)
             {
-                // Stamp eight ASCII digits so a stale or reordered echo cannot pass.
-                var stamp = sequence;
-                for (var d = 7; d >= 0; --d) { payload[d] = (byte)('0' + stamp % 10); stamp /= 10; }
-                var count = Connection.Encode(payload, fragments, text, wire);
-                var started = Stopwatch.GetTimestamp();
-                await socket.SendAsync(wire, count, abort.Token).ConfigureAwait(false);
-                var (length, opcode) = await socket.ReceiveAsync(echo, abort.Token).ConfigureAwait(false);
-                var elapsed = Stopwatch.GetTimestamp() - started;
-                if (length != size || opcode != (text ? 1 : 2) || !echo.AsSpan().SequenceEqual(payload))
-                    throw new InvalidDataException($"Echo mismatch on connection {index} message {sequence}.");
-                if (Volatile.Read(ref measuring) == 1) { recorded.Add(elapsed); counts[index]++; }
+                var socket = sockets[index];
+                var payload = new byte[size];
+                for (var i = 0; i < size; ++i) payload[i] = (byte)('a' + (i + index) % 26);
+                var wire = new byte[size + fragments * 14];
+                var echo = new byte[size];
+                var recorded = latencies[index] ??= new List<long>(1 << 16);
+                for (long sequence = 0; Stopwatch.GetTimestamp() < deadline; ++sequence)
+                {
+                    // Stamp eight ASCII digits so a stale or reordered echo cannot pass.
+                    var stamp = sequence;
+                    for (var d = 7; d >= 0; --d) { payload[d] = (byte)('0' + stamp % 10); stamp /= 10; }
+                    var count = Connection.Encode(payload, fragments, text, wire);
+                    var started = Stopwatch.GetTimestamp();
+                    await socket.SendAsync(wire, count, abort.Token).ConfigureAwait(false);
+                    var (length, opcode) = await socket.ReceiveAsync(echo, abort.Token).ConfigureAwait(false);
+                    var elapsed = Stopwatch.GetTimestamp() - started;
+                    if (length != size || opcode != (text ? 1 : 2) || !echo.AsSpan().SequenceEqual(payload))
+                        throw new InvalidDataException($"Echo mismatch on connection {index} message {sequence}.");
+                    if (Volatile.Read(ref measuring) == 1) { recorded.Add(elapsed); counts[index]++; }
+                }
             }
+            // Warm up JIT, pools and TCP windows on every connection before measuring.
+            var warm = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 2;
+            await Task.WhenAll(Enumerable.Range(0, connections).Select(i => Task.Run(() => Drive(i, warm)))).ConfigureAwait(false);
+            foreach (var list in latencies) list.Clear();
+            BenchmarkControl.Write("READY");
+            if (Console.ReadLine() != "start") throw new InvalidOperationException("Expected start.");
+            Volatile.Write(ref measuring, 1);
+            var begin = Stopwatch.GetTimestamp();
+            var end = begin + (long)(Stopwatch.Frequency * seconds);
+            await Task.WhenAll(Enumerable.Range(0, connections).Select(i => Task.Run(() => Drive(i, end)))).ConfigureAwait(false);
+            var elapsedSeconds = Stopwatch.GetElapsedTime(begin).TotalSeconds;
+            BenchmarkControl.Write("DONE");
+            if (Console.ReadLine() != "report") throw new InvalidOperationException("Expected report.");
+            var all = latencies.SelectMany(l => l).Select(t => t * 1_000_000.0 / Stopwatch.Frequency).ToArray();
+            Array.Sort(all);
+            double Percentile(double p) => all.Length == 0 ? 0 : all[(int)Math.Min(all.Length - 1, Math.Ceiling(all.Length * p) - 1)];
+            var messages = counts.Sum();
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                size,
+                fragments,
+                connections,
+                text,
+                seconds = elapsedSeconds,
+                messages,
+                messagesPerSecond = messages / elapsedSeconds,
+                payloadMegabytesPerSecond = messages * (double)size * 2 / elapsedSeconds / (1024 * 1024),
+                p50Microseconds = Percentile(.5),
+                p90Microseconds = Percentile(.9),
+                p99Microseconds = Percentile(.99),
+                p999Microseconds = Percentile(.999),
+                maxMicroseconds = all.Length == 0 ? 0 : all[^1],
+                runtime = RuntimeInformation.FrameworkDescription,
+                os = RuntimeInformation.OSDescription,
+                note = "Closed-loop echo; latency spans client send through complete verified echo. Payload throughput counts both directions.",
+            }));
+            foreach (var socket in sockets) { await socket.CloseAsync(abort.Token).ConfigureAwait(false); socket.Dispose(); }
+            BenchmarkControl.Write("CLOSED");
         }
-        // Warm up JIT, pools and TCP windows on every connection before measuring.
-        var warm = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 2;
-        await Task.WhenAll(Enumerable.Range(0, connections).Select(i => Task.Run(() => Drive(i, warm)))).ConfigureAwait(false);
-        foreach (var list in latencies) list.Clear();
-        BenchmarkControl.Write("READY");
-        if (Console.ReadLine() != "start") throw new InvalidOperationException("Expected start.");
-        Volatile.Write(ref measuring, 1);
-        var begin = Stopwatch.GetTimestamp();
-        var end = begin + (long)(Stopwatch.Frequency * seconds);
-        await Task.WhenAll(Enumerable.Range(0, connections).Select(i => Task.Run(() => Drive(i, end)))).ConfigureAwait(false);
-        var elapsedSeconds = Stopwatch.GetElapsedTime(begin).TotalSeconds;
-        BenchmarkControl.Write("DONE");
-        if (Console.ReadLine() != "report") throw new InvalidOperationException("Expected report.");
-        var all = latencies.SelectMany(l => l).Select(t => t * 1_000_000.0 / Stopwatch.Frequency).ToArray();
-        Array.Sort(all);
-        double Percentile(double p) => all.Length == 0 ? 0 : all[(int)Math.Min(all.Length - 1, Math.Ceiling(all.Length * p) - 1)];
-        var messages = counts.Sum();
-        Console.WriteLine(JsonSerializer.Serialize(new
+        finally
         {
-            size,
-            fragments,
-            connections,
-            text,
-            seconds = elapsedSeconds,
-            messages,
-            messagesPerSecond = messages / elapsedSeconds,
-            payloadMegabytesPerSecond = messages * (double)size * 2 / elapsedSeconds / (1024 * 1024),
-            p50Microseconds = Percentile(.5),
-            p90Microseconds = Percentile(.9),
-            p99Microseconds = Percentile(.99),
-            p999Microseconds = Percentile(.999),
-            maxMicroseconds = all.Length == 0 ? 0 : all[^1],
-            runtime = RuntimeInformation.FrameworkDescription,
-            os = RuntimeInformation.OSDescription,
-            note = "Closed-loop echo; latency spans client send through complete verified echo. Payload throughput counts both directions.",
-        }));
-        foreach (var socket in sockets) { await socket.CloseAsync(abort.Token).ConfigureAwait(false); socket.Dispose(); }
-        BenchmarkControl.Write("CLOSED");
+            foreach (var socket in sockets) socket?.Dispose();
+        }
     }
 }

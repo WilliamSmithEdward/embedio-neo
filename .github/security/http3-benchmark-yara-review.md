@@ -40,5 +40,7 @@ printed-match logs, canonical bytes and extracted rule remain under ignored
 
 The repository's open code-scanning alert query returned an empty array. This
 artifact-based YARA finding has no corresponding alert to dismiss, and no
-dismissal is claimed. The owner's matching-alert dismissal requirement remains
-an explicit pre-merge limitation; PR #182 remains draft and unmerged.
+dismissal is claimed. On 2026-10-13 William explicitly waived only the
+matching-alert dismissal requirement for this rule and path because GitHub exposes
+no corresponding alert. Written source review, successful scans and every other
+exact-head merge check remain required. PR #182 remains draft and unmerged.

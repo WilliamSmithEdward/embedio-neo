@@ -16,7 +16,7 @@ serializers own and dispose that wrapper; applications writing directly through
 `OpenResponseStream` or `OpenResponseText` must dispose their returned stream or
 writer too. Merely flushing a compressor does not complete its encoded body.
 
-Default JSON serialization streams the response. HTTP/1.1 uses chunked framing;
+The default JSON serializer first materializes the complete UTF-8 JSON byte array, then writes it through the response stream. This requires memory proportional to the serialized JSON even when response buffering is disabled. HTTP/1.1 uses chunked framing;
 HTTP/2 uses DATA frames. Neither requires a Content-Length. An absent length is
 not zero bytes. With existing opt-in buffering, Content-Length describes the
 **encoded** bytes, including compression framing, rather than the JSON length:
@@ -26,7 +26,7 @@ server.WithWebApi("/api", ResponseSerializer.Json(true),
     module => module.WithController<TestController>());
 ```
 
-Buffering uses memory proportional to the response and should be selected for
+Response buffering adds storage proportional to the encoded response and should be selected for
 bounded payloads when a known length is useful. Do not set Content-Length to the
 uncompressed JSON size when sending compressed bytes. Enable client automatic
 decompression, or explicitly decode the negotiated Content-Encoding; do not treat
@@ -49,8 +49,8 @@ requires distinguishing absent streamed length from an empty body.
 
 These are modern desktop-runtime controls, not a reproduction of Xamarin Forms,
 Android API 19, an old WebView, or the original .NET Framework 4.6.2 application.
-MAUI CI is paused at the owner's request, and a modern MAUI pass would not establish
-historical Xamarin behavior. No historical Android defect is claimed repaired.
+Modern MAUI CI is enabled, but a pass would not establish historical Xamarin
+behavior. No historical Android defect is claimed repaired.
 For recurrence, provide the minimal application, runtime/package versions, full
 response headers and undecoded response bytes, plus a comparison with compression
 disabled. Keep the listener task observed so startup/handler faults are visible.

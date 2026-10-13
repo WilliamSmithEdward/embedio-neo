@@ -88,8 +88,8 @@ namespace EmbedIO.Tests
                 var outcome = await Outcome(tunnel.Stream.ReadAsync(new byte[16], 0, 16));
                 probe.Observed.TrySetResult(outcome);
             }, false);
-            var response = await host.ConnectAsync(false);
-            var stream = await response.Content.ReadAsStreamAsync(host.Token);
+            using var response = await host.ConnectAsync(false);
+            using var stream = await response.Content.ReadAsStreamAsync(host.Token);
             await host.Probe.Accepted.Task.WaitAsync(host.Token);
             // HttpClient decides which frame ends a disposed tunnel; HttpTunnelPeerAbortTest
             // pins the explicit RST_STREAM versus END_STREAM distinction with a raw peer.
@@ -121,8 +121,8 @@ namespace EmbedIO.Tests
                 }
                 catch (Exception error) when (IsTransportOutcome(error)) { probe.Observed.TrySetResult(error.GetType().Name); }
             }, false);
-            var response = await host.ConnectAsync(false);
-            var stream = await response.Content.ReadAsStreamAsync(host.Token);
+            using var response = await host.ConnectAsync(false);
+            using var stream = await response.Content.ReadAsStreamAsync(host.Token);
             await host.Probe.Accepted.Task.WaitAsync(host.Token);
             await WaitForStallAsync(() => Interlocked.Read(ref written), host.Token);
             var stalled = Interlocked.Read(ref written);
@@ -437,10 +437,19 @@ namespace EmbedIO.Tests
                 request.Headers.Protocol = Protocol;
                 if (capsules) request.Headers.TryAddWithoutValidation("capsule-protocol", "?1");
                 var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, Token);
-                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-                Assert.That(response.Version, Is.EqualTo(HttpVersion.Version20));
-                Assert.That(response.Content.Headers.ContentLength, Is.Null);
-                return response;
+                var accepted = false;
+                try
+                {
+                    Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                    Assert.That(response.Version, Is.EqualTo(HttpVersion.Version20));
+                    Assert.That(response.Content.Headers.ContentLength, Is.Null);
+                    accepted = true;
+                    return response;
+                }
+                finally
+                {
+                    if (!accepted) response.Dispose();
+                }
             }
             internal static readonly byte[] LargeBody = Payload(262144, 17);
             internal async Task<byte[]> GetLargeAsync()

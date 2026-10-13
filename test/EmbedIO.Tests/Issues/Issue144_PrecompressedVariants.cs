@@ -368,15 +368,16 @@ namespace EmbedIO.Tests.Issues
             module.ContentCaching = false;
             await using var server = Issue138_GeneratedBinding.RunningServer.Start(module);
             using var client = Client();
+            using var deadline = new CancellationTokenSource(client.Timeout);
             using (var request = new HttpRequestMessage(HttpMethod.Get, server.Url + "large.js"))
             {
                 request.Headers.TryAddWithoutValidation("Accept-Encoding", "br");
-                using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
                 Assert.That(response.Content.Headers.ContentEncoding, Does.Contain("br"));
                 Assert.That(response.Content.Headers.ContentLength, Is.EqualTo(large.Length));
-                using var stream = await response.Content.ReadAsStreamAsync();
+                using var stream = await response.Content.ReadAsStreamAsync(deadline.Token);
                 var buffer = new byte[4096];
-                Assert.That(await stream.ReadAsync(buffer), Is.GreaterThan(0));
+                Assert.That(await stream.ReadAsync(buffer, deadline.Token), Is.GreaterThan(0));
             }
 
             var after = await Get(client, server.Url + "app.js", "br");

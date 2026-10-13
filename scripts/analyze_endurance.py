@@ -17,6 +17,9 @@ parser.add_argument("output", type=Path)
 parser.add_argument("--warmup-snapshots", type=int, default=2, help="quiesced snapshots excluded from the slope as warm-up")
 args = parser.parse_args()
 root = args.output.resolve()
+for marker in ("INVALID.txt", "ABORTED.txt"):
+    if (root / marker).exists():
+        parser.error(f"Rejected endurance evidence: {root / marker}")
 
 
 def lines(path):
@@ -231,6 +234,7 @@ if trend:
     out.append("| Workload | Intervals | p99 median ms | p99 first quarter median | p99 last quarter median | Worst p99 | Worst max |")
     out.append("| --- | --- | --- | --- | --- | --- | --- |")
     for name, rows in sorted(trend.items()):
+        rows.sort(key=lambda row: utc(row[0]))
         p99 = [row[1] for row in rows]
         quarter = max(1, len(p99) // 4)
         out.append(f"| {name} | {len(rows)} | {statistics.median(p99):.2f} | {statistics.median(p99[:quarter]):.2f} | {statistics.median(p99[-quarter:]):.2f} | {max(p99):.1f} | {max(row[2] for row in rows):.1f} |")

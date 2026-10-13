@@ -114,6 +114,7 @@ internal static class WebSocketFuzz
         object socket;
         try { socket = FromStream.Invoke(null, new object[] { transport, (Action)(() => Interlocked.Increment(ref closes)) }) ?? throw new InvalidOperationException("Missing socket."); }
         finally { SetLimit.Invoke(null, new object[] { 0 }); }
+        using var ownedSocket = (IDisposable)socket;
         var collector = new Collector();
         var eventInfo = SocketType.GetEvent("OnMessage") ?? throw new InvalidOperationException("Missing OnMessage.");
         eventInfo.AddEventHandler(socket, Delegate.CreateDelegate(eventInfo.EventHandlerType ?? throw new InvalidOperationException("Missing handler type."), collector, typeof(Collector).GetMethod(nameof(Collector.Handle)) ?? throw new InvalidOperationException("Missing handler.")));

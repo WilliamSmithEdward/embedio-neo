@@ -15,7 +15,7 @@ internal static class ExceptionAccountingCheck
         {
             for (var iteration = 0; iteration < 10; iteration++)
             {
-                using var measurement = new Measurement(counts);
+                await using var measurement = new Measurement(counts);
                 // Both immediate and outstanding-tick disposal must be exception-free.
                 if (iteration % 2 == 0) await Task.Delay(1).ConfigureAwait(false);
                 var window = JsonSerializer.SerializeToElement(await measurement.FinishAsync().ConfigureAwait(false));
@@ -25,7 +25,7 @@ internal static class ExceptionAccountingCheck
 
             // Genuine caught errors and caller cancellation remain observable.
             ThrowControl();
-            using var control = new Measurement(counts);
+            await using var control = new Measurement(counts);
             ThrowControl();
             using var cancellation = new CancellationTokenSource();
             cancellation.Cancel();

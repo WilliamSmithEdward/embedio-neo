@@ -93,9 +93,15 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
 
     public async ValueTask DisposeAsync()
     {
-        await StopAsync().ConfigureAwait(false);
-        _server?.Dispose();
-        _stop.Dispose();
+        try
+        {
+            await StopAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            try { _server?.Dispose(); }
+            finally { _stop.Dispose(); }
+        }
     }
 
     private static async Task WaitForListeningAsync(WebServer server, Task running)
@@ -103,7 +109,11 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
         // RunAsync reports Listening once the listener has bound its endpoints.
         while (server.State is not WebServerState.Listening)
         {
-            if (running.IsCompleted) await running.ConfigureAwait(false);
+            if (running.IsCompleted)
+            {
+                await running.ConfigureAwait(false);
+                throw new InvalidOperationException("Server stopped before reaching Listening.");
+            }
             await Task.Delay(10).ConfigureAwait(false);
         }
     }

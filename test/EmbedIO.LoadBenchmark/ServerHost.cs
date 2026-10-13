@@ -48,6 +48,7 @@ internal static class ServerHost
             _ => throw new ArgumentException("Unknown engine " + settings.Engine),
         };
         var disposed = false;
+        Measurement? measurement = null;
         try
         {
             var started = Stopwatch.StartNew();
@@ -65,11 +66,10 @@ internal static class ServerHost
                 serverGc = GCSettings.IsServerGC,
                 gcLatencyMode = GCSettings.LatencyMode.ToString(),
                 runtime = RuntimeInformation.FrameworkDescription,
-                msquic = AssemblyIdentity.NativeQuic(),
+                msquic = settings.Protocol == Protocol.Http3 ? AssemblyIdentity.NativeQuic() : null,
                 assemblies = AssemblyIdentity.Describe(typeof(EmbedIO.WebServer).Assembly, typeof(Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions).Assembly, typeof(System.Net.Quic.QuicListener).Assembly),
             }));
 
-            Measurement? measurement = null;
             while (true)
             {
                 var command = await Console.In.ReadLineAsync().ConfigureAwait(false);
@@ -89,7 +89,7 @@ internal static class ServerHost
                         break;
                     case "start":
                         profile?.Begin();
-                        measurement?.Dispose();
+                        if (measurement is not null) await measurement.DisposeAsync().ConfigureAwait(false);
                         measurement = new Measurement(exceptions);
                         Control.Write("MEASURING");
                         break;
@@ -99,7 +99,7 @@ internal static class ServerHost
                         break;
                     case "exit":
                     case null:
-                        measurement?.Dispose();
+                        if (measurement is not null) await measurement.DisposeAsync().ConfigureAwait(false);
                         var connectionsBeforeHostStop = connections?.Snapshot();
                         var stopping = Stopwatch.StartNew();
                         await server.StopAsync().ConfigureAwait(false);
@@ -126,7 +126,14 @@ internal static class ServerHost
         }
         finally
         {
-            if (!disposed) await server.DisposeAsync().ConfigureAwait(false);
+            try
+            {
+                if (measurement is not null) await measurement.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                if (!disposed) await server.DisposeAsync().ConfigureAwait(false);
+            }
         }
     }
 }
@@ -187,7 +194,7 @@ internal static class ResourceSnapshot
     }
 }
 
-internal sealed class Measurement : IDisposable
+internal sealed class Measurement : IAsyncDisposable
 {
     private readonly Process _process = Process.GetCurrentProcess();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -206,6 +213,7 @@ internal sealed class Measurement : IDisposable
     private long _peakPrivate;
     private int _peakThreads;
     private int _peakPoolThreads;
+    private bool _disposed;
 
     internal Measurement(ConcurrentDictionary<string, long> exceptions)
     {
@@ -256,10 +264,13 @@ internal sealed class Measurement : IDisposable
         };
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
+        if (_disposed) return;
+        _disposed = true;
         _timer.Dispose();
-        _process.Dispose();
+        try { await _sampler.ConfigureAwait(false); }
+        finally { _process.Dispose(); }
     }
 
     private async Task SampleAsync()

@@ -150,7 +150,7 @@ jobs:
             export DOTNET_EnableCrashReportOnly=1
             export DOTNET_DbgMiniDumpName="$RUNNER_TEMP/embedio-crash-reports/crash.%p"
           fi
-          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 5705 --coverlet || status=$?
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 5943 --coverlet || status=$?
           if test "$status" = 0; then exit 0; fi
           # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
           # disposal returns (a deferred close on macOS; accepted connections on every
@@ -161,7 +161,7 @@ jobs:
           counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
           read -r total passed failed defect <<< "$counts"
           # The owner-approved exception cannot hide discovery loss.
-          test "$total" -ge 5705 || exit "$status"
+          test "$total" -ge 5943 || exit "$status"
           if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
             echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
             exit 0
@@ -420,6 +420,7 @@ jobs:
           set -euo pipefail
           results=TestResults/quic-retirement-gate
           printf 'repetition\texit\n' > "$results/repetitions.tsv"
+          [[ "$GATE_REPETITIONS" =~ ^[1-9][0-9]*$ ]] || { echo 'Gate repetitions must be a positive integer.' >&2; exit 2; }
           failed=0
           for repetition in $(seq 1 "$GATE_REPETITIONS"); do
             status=0
@@ -511,6 +512,7 @@ jobs:
         run: |
           dotnet restore test/EmbedIO.Performance/EmbedIO.Performance.csproj --locked-mode
           dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-restore -- --verify-allocations
+          dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --verify-audit-allocations
           dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --listener-queue --verify-allocations
           dotnet run --project test/EmbedIO.Performance/EmbedIO.Performance.csproj -c Release --no-build -- --verify-cold-start
       - name: Verify HTTP/HTTPS terminal resource cleanup
@@ -560,15 +562,30 @@ jobs:
       - name: Reject compiler and analyzer suppressions
         run: |
           python3 scripts/test_analyzer_suppressions.py
+          python3 scripts/test_analyzer_inventory.py
+          python3 scripts/test_merge_review.py
           python3 scripts/check_analyzer_suppressions.py
           dotnet run --project tools/EmbedIO.AnalyzerGuard -c Release --no-restore -- .
       - name: Verify formatting
         run: dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes
       - name: Run the SDK and NUnit analyzers
         run: dotnet build EmbedIO.sln -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
+      - name: Validate offline HTTP2/HTTP3 campaign oracles and comparison ownership
+        run: |
+          python3 -m venv "$RUNNER_TEMP/conformance-oracles-venv"
+          "$RUNNER_TEMP/conformance-oracles-venv/bin/python" -m pip --isolated install --require-hashes --only-binary=:all: -r .github/requirements/conformance-oracles.txt
+          "$RUNNER_TEMP/conformance-oracles-venv/bin/python" -I test/EmbedIO.Conformance/drivers/test_campaign_oracles.py
+          "$RUNNER_TEMP/conformance-oracles-venv/bin/python" -I test/EmbedIO.Conformance/drivers/resource_oracle_test.py
+          "$RUNNER_TEMP/conformance-oracles-venv/bin/python" -I test/EmbedIO.Conformance/drivers/resource_framing_test.py
+          "$RUNNER_TEMP/conformance-oracles-venv/bin/python" -I test/EmbedIO.Conformance/drivers/h3_resource_oracle_test.py
+          "$RUNNER_TEMP/conformance-oracles-venv/bin/python" -I test/EmbedIO.Conformance/drivers/settings_ack_test.py
+          pwsh -NoProfile -File scripts/test_comparison_processes.ps1
       - name: Validate standalone load benchmark tooling
         run: |
           python3 scripts/test_compare_load_benchmark.py
+          python3 scripts/test_analyze_endurance.py
+          python3 scripts/test_conformance_repro.py
+          python3 scripts/test_conformance_campaigns.py
           python3 scripts/test_guarded_load_benchmark.py
           python3 scripts/test_summarize_teardown_exceptions.py
           python3 scripts/test_teardown_cost_campaign.py
@@ -577,6 +594,7 @@ jobs:
           dotnet build test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
           dotnet test/EmbedIO.LoadBenchmark/bin/Release/net10.0/EmbedIO.LoadBenchmark.dll exception-accounting-check
           dotnet test/EmbedIO.LoadBenchmark/bin/Release/net10.0/EmbedIO.LoadBenchmark.dll teardown-accounting-check
+          dotnet test/EmbedIO.LoadBenchmark/bin/Release/net10.0/EmbedIO.LoadBenchmark.dll load-failure-check
 
   build:
     name: Build and check the NuGet packages

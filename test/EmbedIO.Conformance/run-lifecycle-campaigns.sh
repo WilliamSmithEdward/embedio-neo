@@ -5,6 +5,7 @@
 # every phase's exit status recorded. Failed phases are kept; nothing is retried.
 # Usage: run-lifecycle-campaigns.sh <source-dir> <output-dir> <seed> <scale>
 set -uo pipefail
+if (( $# < 3 )); then echo "Expected source, output and seed." >&2; exit 2; fi
 src=$1
 out=$2
 seed=$3
@@ -16,7 +17,21 @@ case "$provider" in
   native) provider_args=(--native-http3) ;;
   *) echo "Unknown HTTP/3 provider: $provider" >&2; exit 2 ;;
 esac
-mkdir -p "$out"
+[[ "$scale" =~ ^[1-9][0-9]*$ ]] || { echo "Scale must be a positive integer." >&2; exit 2; }
+# Reject typos instead of emitting a successful zero-phase report.
+if [[ -n "${ONLY:-}" ]]; then
+  selected=false
+  for requested in $ONLY; do
+    case "$requested" in
+      sections|capsules|lifecycle-h2|lifecycle-h2-tls|lifecycle-h3|drain-h2|drain-h3|h2spec) selected=true;;
+      *) echo "Unknown phase: $requested" >&2; exit 2;;
+    esac
+  done
+  [[ "$selected" == true ]] || { echo "No phases selected." >&2; exit 2; }
+fi
+mkdir -p "$out" || exit 2
+out=$(cd "$out" && pwd) || exit 2
+src=$(cd "$src" && pwd) || exit 2
 status=0
 record() { printf '%s\n' "$*" | tee -a "$out/summary.txt"; }
 
@@ -33,31 +48,7 @@ sha256sum /tmp/conformance/EmbedIO.dll | tee -a "$out/summary.txt"
 http=18080; https=18443; h3=18444
 phase=""
 
-start_server() {
-  phase=$1
-  coproc SERVER { cd "$out" && exec dotnet /tmp/conformance/EmbedIO.Conformance.dll serve --http $http --https $https --h3 $h3 "${provider_args[@]}" --log --cert-out "$out/conformance-cert.pem" 2> "$out/server-$phase.stderr.log"; }
-  exec 3>&"${SERVER[1]}" 4<&"${SERVER[0]}"
-  local ready=""
-  while read -r -t 60 line <&4; do
-    printf '%s\n' "$line" >> "$out/server-$phase.log"
-    case $line in READY*) ready=$line;; IDENTITY*) break;; esac
-  done
-  [ -n "$ready" ] || { record "SERVER DID NOT START for $phase"; exit 2; }
-  record "== phase $phase: $ready"
-  stats "$phase:start"
-}
-
-stats() { echo stats >&3; read -r -t 30 line <&4; printf '%s %s\n' "$1" "$line" | tee -a "$out/stats.log"; }
-
-stop_server() {
-  echo stop >&3
-  while read -r -t 30 line <&4; do printf '%s\n' "$line" >> "$out/server-$phase.log"; done
-  wait "$SERVER_PID"
-  local code=$?
-  exec 3>&- 4<&-
-  record "server $phase exit=$code $(grep -h ENDPOINT-STOPPED "$out/server-$phase.log" | tr '\n' ' ')"
-  [ $code -eq 0 ] || status=1
-}
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/campaign-server.sh" || exit 2
 
 step() {
   local name=$1; shift

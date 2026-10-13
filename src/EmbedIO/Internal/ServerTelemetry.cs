@@ -131,10 +131,15 @@ namespace EmbedIO.Internal
                         if (error != null) activity.SetTag("error.type", error);
                     }
                     if (error != null) activity.SetStatus(ActivityStatusCode.Error);
-                    activity.Stop();
                 }
             }
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { }
+            finally
+            {
+                // Observer failures must not leave the request span current or unfinished.
+                try { scope.Activity?.Stop(); }
+                catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { }
+            }
         }
 
         // Starts recording one TCP or QUIC connection. Returns null if the observer failed.

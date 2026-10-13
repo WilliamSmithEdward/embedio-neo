@@ -60,108 +60,134 @@ internal static class Program
             jitComparison ? "The comparison build must run with the JIT." : "The host must run as Native AOT.");
         var root = Path.Combine(Path.GetTempPath(), "embedio-aot-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        await File.WriteAllTextAsync(Path.Combine(root, "index.html"), "<p>static</p>");
-        var url = $"http://127.0.0.1:{FreePort()}/";
-
         using var stop = new CancellationTokenSource();
-        using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithTelemetry("aot-smoke"))
-            .WithModule(new RoutingModule("/api")
-                .OnGet("/items/{id}", (context, route) => context.SendDataWithMetadataAsync(new Item { Id = int.Parse(route["id"], System.Globalization.CultureInfo.InvariantCulture), Name = "item" }, SmokeJson.Default.Item))
-                .OnPost("/items", async (context, _) =>
+        Task? running = null;
+        Exception? primary = null;
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "index.html"), "<p>static</p>");
+            var url = $"http://127.0.0.1:{FreePort()}/";
+
+            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithTelemetry("aot-smoke"))
+                .WithModule(new RoutingModule("/api")
+                    .OnGet("/items/{id}", (context, route) => context.SendDataWithMetadataAsync(new Item { Id = int.Parse(route["id"], System.Globalization.CultureInfo.InvariantCulture), Name = "item" }, SmokeJson.Default.Item))
+                    .OnPost("/items", async (context, _) =>
+                    {
+                        var item = await context.GetRequestDataWithMetadataAsync(SmokeJson.Default.Item) ?? throw HttpException.BadRequest("Missing item.");
+                        item.Name = item.Name.ToUpperInvariant();
+                        await context.SendDataWithMetadataAsync(item, SmokeJson.Default.Item);
+                    })
+                    .OnGet("/reflection", (context, _) => context.SendDataAsync(new Item())))
+                .WithModule(new WebApiModule("/ctl", ResponseSerializer.Json(SmokeJson.Default.Options))
+                    .WithController(SmokeControllers.SmokeController))
+                .WithModule(new ActionModule("/stream", HttpVerbs.Get, async context =>
                 {
-                    var item = await context.GetRequestDataWithMetadataAsync(SmokeJson.Default.Item) ?? throw HttpException.BadRequest("Missing item.");
-                    item.Name = item.Name.ToUpperInvariant();
-                    await context.SendDataWithMetadataAsync(item, SmokeJson.Default.Item);
-                })
-                .OnGet("/reflection", (context, _) => context.SendDataAsync(new Item())))
-            .WithModule(new WebApiModule("/ctl", ResponseSerializer.Json(SmokeJson.Default.Options))
-                .WithController(SmokeControllers.SmokeController))
-            .WithModule(new ActionModule("/stream", HttpVerbs.Get, async context =>
+                    using var stream = context.OpenResponseStream();
+                    for (var i = 0; i < 3; i++)
+                    {
+                        await stream.WriteAsync(Encoding.ASCII.GetBytes("chunk" + i + ";"), context.CancellationToken);
+                        await stream.FlushAsync(context.CancellationToken);
+                    }
+                }))
+                .WithStaticFolder("/", root, false);
+            server.OnUnhandledException = (context, error) =>
             {
-                using var stream = context.OpenResponseStream();
-                for (var i = 0; i < 3; i++)
+                context.Response.StatusCode = 500;
+                return context.SendStringAsync(error.GetType().Name + ": " + error.Message, "text/plain", Encoding.UTF8);
+            };
+            running = server.RunAsync(stop.Token);
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            var first = await client.GetStringAsync(url + "api/items/7");
+            checks["startup_to_first_response_ms"] = Stopwatch.GetElapsedTime(started).TotalMilliseconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+            var item = JsonSerializer.Deserialize(first, SmokeJson.Default.Item);
+            Require(item?.Id == 7 && item.Name == "item", "Typed GET returned " + first);
+            checks["typed_get"] = first;
+
+            using (var posted = await client.PostAsync(url + "api/items", new StringContent("{\"Id\":3,\"Name\":\"posted\"}", Encoding.UTF8, "application/json")))
+            {
+                var body = await posted.Content.ReadAsStringAsync();
+                Require(posted.StatusCode == HttpStatusCode.OK && body.Contains("POSTED", StringComparison.Ordinal), "Typed POST returned " + (int)posted.StatusCode + " " + body);
+                checks["typed_post"] = body;
+            }
+
+            using (var invalid = await client.PostAsync(url + "api/items", new StringContent("{not json", Encoding.UTF8, "application/json")))
+            {
+                Require(invalid.StatusCode == HttpStatusCode.BadRequest, "Invalid JSON returned " + (int)invalid.StatusCode);
+                checks["invalid_json"] = "400";
+            }
+
+            using (var reflection = await client.GetAsync(url + "api/reflection"))
+            {
+                var body = await reflection.Content.ReadAsStringAsync();
+                if (jitComparison)
+                    Require(reflection.StatusCode == HttpStatusCode.OK, "The reflection path returned " + (int)reflection.StatusCode + " " + body);
+                else
+                    Require(reflection.StatusCode == HttpStatusCode.InternalServerError && body.StartsWith("NotSupportedException: Reflection-based JSON serialization is disabled", StringComparison.Ordinal),
+                        "The reflection path returned " + (int)reflection.StatusCode + " " + body);
+                checks["reflection_default_rejected"] = body;
+            }
+
+            // A Web API controller registered through its generated binding: route, query and
+            // form values, a JSON body through the JsonSerializerContext, and a rejected route value.
+            var controllerGet = await client.GetStringAsync(url + "ctl/items/5?name=gen");
+            Require(controllerGet.Contains("\"Id\": 5", StringComparison.Ordinal) && controllerGet.Contains("\"Name\": \"gen\"", StringComparison.Ordinal), "Controller GET returned " + controllerGet);
+            checks["controller_get"] = controllerGet;
+
+            using (var posted = await client.PostAsync(url + "ctl/items", new StringContent("{\"Id\":4,\"Name\":\"json\"}", Encoding.UTF8, "application/json")))
+            {
+                var body = await posted.Content.ReadAsStringAsync();
+                Require(posted.StatusCode == HttpStatusCode.OK && body.Contains("\"Name\": \"JSON\"", StringComparison.Ordinal), "Controller POST returned " + (int)posted.StatusCode + " " + body);
+                checks["controller_json"] = body;
+            }
+
+            using (var form = await client.PostAsync(url + "ctl/form", new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("count", "2"), new KeyValuePair<string, string>("tags", "a"), new KeyValuePair<string, string>("tags", "b") })))
+            {
+                var body = await form.Content.ReadAsStringAsync();
+                Require(form.StatusCode == HttpStatusCode.OK && body == "\"2:a,b\"", "Controller form returned " + (int)form.StatusCode + " " + body);
+                checks["controller_form"] = body;
+            }
+
+            using (var invalid = await client.GetAsync(url + "ctl/items/not-a-number"))
+            {
+                Require(invalid.StatusCode == HttpStatusCode.BadRequest, "Invalid controller route value returned " + (int)invalid.StatusCode);
+                checks["controller_invalid_route"] = "400";
+            }
+
+            var page = await client.GetStringAsync(url);
+            Require(page == "<p>static</p>", "Static file returned " + page);
+            checks["static_file"] = page;
+
+            var streamed = await client.GetStringAsync(url + "stream");
+            Require(streamed == "chunk0;chunk1;chunk2;", "Streaming returned " + streamed);
+            checks["streaming"] = streamed;
+
+            stop.Cancel();
+            await running.WaitAsync(TimeSpan.FromSeconds(10));
+            checks["shutdown"] = "completed";
+
+        }
+        catch (Exception error) { primary = error; throw; }
+        finally
+        {
+            try
+            {
+                try
                 {
-                    await stream.WriteAsync(Encoding.ASCII.GetBytes("chunk" + i + ";"), context.CancellationToken);
-                    await stream.FlushAsync(context.CancellationToken);
+                    await stop.CancelAsync();
+                    if (running != null) await running.WaitAsync(TimeSpan.FromSeconds(10));
                 }
-            }))
-            .WithStaticFolder("/", root, false);
-        server.OnUnhandledException = (context, error) =>
-        {
-            context.Response.StatusCode = 500;
-            return context.SendStringAsync(error.GetType().Name + ": " + error.Message, "text/plain", Encoding.UTF8);
-        };
-        var running = server.RunAsync(stop.Token);
-
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        var first = await client.GetStringAsync(url + "api/items/7");
-        checks["startup_to_first_response_ms"] = Stopwatch.GetElapsedTime(started).TotalMilliseconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
-        var item = JsonSerializer.Deserialize(first, SmokeJson.Default.Item);
-        Require(item?.Id == 7 && item.Name == "item", "Typed GET returned " + first);
-        checks["typed_get"] = first;
-
-        using (var posted = await client.PostAsync(url + "api/items", new StringContent("{\"Id\":3,\"Name\":\"posted\"}", Encoding.UTF8, "application/json")))
-        {
-            var body = await posted.Content.ReadAsStringAsync();
-            Require(posted.StatusCode == HttpStatusCode.OK && body.Contains("POSTED", StringComparison.Ordinal), "Typed POST returned " + (int)posted.StatusCode + " " + body);
-            checks["typed_post"] = body;
+                finally
+                {
+                    File.Delete(Path.Combine(root, "index.html"));
+                    Directory.Delete(root);
+                }
+            }
+            catch (Exception cleanupError) when (primary != null && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(cleanupError))
+            {
+                Console.Error.WriteLine("Cleanup after smoke failure: " + cleanupError);
+            }
         }
-
-        using (var invalid = await client.PostAsync(url + "api/items", new StringContent("{not json", Encoding.UTF8, "application/json")))
-        {
-            Require(invalid.StatusCode == HttpStatusCode.BadRequest, "Invalid JSON returned " + (int)invalid.StatusCode);
-            checks["invalid_json"] = "400";
-        }
-
-        using (var reflection = await client.GetAsync(url + "api/reflection"))
-        {
-            var body = await reflection.Content.ReadAsStringAsync();
-            if (jitComparison)
-                Require(reflection.StatusCode == HttpStatusCode.OK, "The reflection path returned " + (int)reflection.StatusCode + " " + body);
-            else
-                Require(reflection.StatusCode == HttpStatusCode.InternalServerError && body.StartsWith("NotSupportedException: Reflection-based JSON serialization is disabled", StringComparison.Ordinal),
-                    "The reflection path returned " + (int)reflection.StatusCode + " " + body);
-            checks["reflection_default_rejected"] = body;
-        }
-
-        // A Web API controller registered through its generated binding: route, query and
-        // form values, a JSON body through the JsonSerializerContext, and a rejected route value.
-        var controllerGet = await client.GetStringAsync(url + "ctl/items/5?name=gen");
-        Require(controllerGet.Contains("\"Id\": 5", StringComparison.Ordinal) && controllerGet.Contains("\"Name\": \"gen\"", StringComparison.Ordinal), "Controller GET returned " + controllerGet);
-        checks["controller_get"] = controllerGet;
-
-        using (var posted = await client.PostAsync(url + "ctl/items", new StringContent("{\"Id\":4,\"Name\":\"json\"}", Encoding.UTF8, "application/json")))
-        {
-            var body = await posted.Content.ReadAsStringAsync();
-            Require(posted.StatusCode == HttpStatusCode.OK && body.Contains("\"Name\": \"JSON\"", StringComparison.Ordinal), "Controller POST returned " + (int)posted.StatusCode + " " + body);
-            checks["controller_json"] = body;
-        }
-
-        using (var form = await client.PostAsync(url + "ctl/form", new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("count", "2"), new KeyValuePair<string, string>("tags", "a"), new KeyValuePair<string, string>("tags", "b") })))
-        {
-            var body = await form.Content.ReadAsStringAsync();
-            Require(form.StatusCode == HttpStatusCode.OK && body == "\"2:a,b\"", "Controller form returned " + (int)form.StatusCode + " " + body);
-            checks["controller_form"] = body;
-        }
-
-        using (var invalid = await client.GetAsync(url + "ctl/items/not-a-number"))
-        {
-            Require(invalid.StatusCode == HttpStatusCode.BadRequest, "Invalid controller route value returned " + (int)invalid.StatusCode);
-            checks["controller_invalid_route"] = "400";
-        }
-
-        var page = await client.GetStringAsync(url);
-        Require(page == "<p>static</p>", "Static file returned " + page);
-        checks["static_file"] = page;
-
-        var streamed = await client.GetStringAsync(url + "stream");
-        Require(streamed == "chunk0;chunk1;chunk2;", "Streaming returned " + streamed);
-        checks["streaming"] = streamed;
-
-        stop.Cancel();
-        await running.WaitAsync(TimeSpan.FromSeconds(10));
-        checks["shutdown"] = "completed";
-        Directory.Delete(root, true);
 
         await ProtocolChecks.RunAsync(checks);
     }

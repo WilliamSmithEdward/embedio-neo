@@ -192,7 +192,9 @@ or latency improvement is claimed by these interoperability tests.
 The listener advertises extended CONNECT support (RFC 9220) and routes
 `:protocol=websocket` requests through existing WebSocket modules. Successful
 negotiation returns HTTP 200; subprotocols and cookies use the shared adapters.
-Unsupported extended CONNECT protocols return 501. A WebSocket version other
+Other valid extended CONNECT protocols reach application routing; an unmatched
+route returns the ordinary 404. See [CONNECT capsules](capsule-tunnels.md).
+A WebSocket version other
 than 13 returns 400 with `Sec-WebSocket-Version: 13`.
 
 The .NET 10 ClientWebSocket implementation negotiates only through HTTP/2;

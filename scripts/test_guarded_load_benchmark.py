@@ -1,4 +1,5 @@
 """Verify benchmark process ownership and shared-lock boundaries without load."""
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -67,7 +68,37 @@ class GuardTests(unittest.TestCase):
             kill.assert_called_once_with(child)
             child.wait.assert_called_once_with(timeout=15)
             self.assertFalse(lock.exists())
+            attempt = Path(directory) / "out-a1"
+            self.assertIn("monitor failed", (attempt / "INVALID.txt").read_text(encoding="utf-8"))
+            verdict = json.loads((attempt / "attempt.json").read_text(encoding="utf-8"))
+            self.assertEqual(verdict["status"], "invalid")
+            self.assertIn("monitor failed", verdict["reason"])
 
+
+    def test_failed_or_empty_process_inventory_is_not_idle(self):
+        for system in ("Windows", "Linux"):
+            for status in (0, 1):
+                with self.subTest(system=system, status=status), patch.object(guard.platform, "system", return_value=system), patch.object(guard.subprocess, "run", return_value=Mock(returncode=status, stdout="", stderr="enumeration unavailable")):
+                    with self.assertRaisesRegex(RuntimeError, "process inventory"):
+                        guard.process_table()
+
+    def test_output_parent_does_not_exempt_foreign_sibling_jobs(self):
+        with tempfile.TemporaryDirectory(dir=TEMP_ROOT) as directory:
+            root = Path(directory)
+            child = Mock()
+            child.poll.return_value = 0
+            child.returncode = 0
+            sibling = f"dotnet test --results-directory {root / 'another-agent'}"
+            table = [(200, 1, "guard"), (400, 1, sibling), (500, 1, "LoadBenchmark explicitly-authorized")]
+            def inspect_idle(_lock, _seconds, markers, pids, _log):
+                found = guard.foreign_processes(markers, pids)
+                self.assertEqual([pid for pid, _ in found], [400])
+            args = ["guard", "--owner", "test", "--output", str(root / "out"), "--lock", str(root / "lock"),
+                    "--own-marker", "explicitly-authorized", "--", "fake"]
+            with patch.object(guard.sys, "argv", args), patch.object(guard.os, "getpid", return_value=200), \
+                    patch.object(guard, "process_table", return_value=table), patch.object(guard, "wait_idle", side_effect=inspect_idle), \
+                    patch.object(guard.subprocess, "Popen", return_value=child):
+                self.assertEqual(guard.main(), 0)
 
 if __name__ == "__main__":
     unittest.main()

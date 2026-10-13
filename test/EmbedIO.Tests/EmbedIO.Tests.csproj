@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../EmbedIO.Performance/ListenerAdmission.cs" Link="BenchmarkTools/ListenerAdmission.cs" />
     <Compile Include="../Shared/HttpsSmoke.cs" Link="PlatformTests/HttpsSmoke.cs" />
     <Compile Include="../Shared/BasicAuthenticationSmoke.cs" Link="PlatformTests/BasicAuthenticationSmoke.cs" />
     <EmbeddedResource Include="Data/StructuredFields/dictionary.json" />

@@ -1,5 +1,11 @@
 # Text and binary WebSocket callbacks
 
+The native Microsoft listener comparisons and validation below describe the v1
+implementation at the time of this report. Neo v2 uses the replacement engine
+and has removed that backend; see [listener migration](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
+Historical test counts and native runtime workarounds are not current-engine
+validation.
+
 [Upstream #547](https://github.com/unosquare/embedio/issues/547), proposed by
 original maintainer `rdeago`, identified a useful goal: receive complete text or
 binary messages without repeatedly interpreting a byte buffer and receive-result

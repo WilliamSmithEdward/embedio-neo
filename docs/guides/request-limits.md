@@ -52,9 +52,10 @@ Rejections are ordinary HTTP exceptions, so `OnHttpException` renders them; the
 default handler produces an HTML error page and `HttpExceptionHandler.PlainTextResponse`
 a plain-text one.
 
-The checks run in this order before any module: header limits, then admission to a
-request slot, then the declared body length. A request with oversized headers is
-therefore refused without taking or waiting for a slot.
+The owned listeners reject oversized headers and known oversized bodies before
+admission to a request slot. The shared dispatch path also checks declared body
+length after admission, covering custom listener adapters. These checks all run
+before any module; oversized headers never take or wait for a slot.
 
 ## Request header fields
 
@@ -70,7 +71,8 @@ carries. A request over either limit is answered with 431 before any module runs
 - HTTP/2 and HTTP/3 clients may split `Cookie` into several fields. Each one counts,
   although the server joins them into one `Cookie` header.
 - Each protocol parser keeps its fixed 32 KiB header ceiling, which applies first: an
-  HTTP/1.1 head over 32 KiB is refused by the connection with 431, and an HTTP/2 or
+  oversized HTTP/1.1 request target receives 414 and oversized header fields receive
+  431, while an HTTP/2 or
   HTTP/3 header block over it fails at the protocol level. These options can only
   lower the effective limit.
 - On HTTP/1.1, a refused request that carries a body is answered with

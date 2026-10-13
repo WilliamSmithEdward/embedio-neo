@@ -48,4 +48,8 @@
     <PackageReference Include="System.Threading.RateLimiting" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="../ResponseCookieFormatter.cs" Link="Internal/ResponseCookieFormatter.cs" />
+  </ItemGroup>
+
 </Project>

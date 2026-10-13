@@ -9,6 +9,7 @@ param(
 # directories must contain the same harness build and differ only in EmbedIO.dll;
 # the client always comes from the candidate directory so it is identical on both sides.
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'ComparisonProcesses.ps1')
 $BaselineRunner=(Resolve-Path -LiteralPath $BaselineRunner).Path
 $CandidateRunner=(Resolve-Path -LiteralPath $CandidateRunner).Path
 $OutputDirectory=[IO.Path]::GetFullPath($OutputDirectory)
@@ -21,18 +22,6 @@ $workloads=@(
     @{name='fragmented-64k-4';size=65536;fragments=16;connections=4;text=$false},
     @{name='binary-1m-1';size=1048576;fragments=1;connections=1;text=$false}
 )
-function Launch([string]$Runner,[string[]]$Options) {
-    $info=[Diagnostics.ProcessStartInfo]::new('dotnet')
-    $info.UseShellExecute=$false
-    $info.CreateNoWindow=$true
-    $info.RedirectStandardInput=$true
-    $info.RedirectStandardOutput=$true
-    $info.RedirectStandardError=$true
-    $info.ArgumentList.Add($Runner)
-    foreach($option in $Options) { $info.ArgumentList.Add($option) }
-    $process=[Diagnostics.Process]::Start($info)
-    return @{ Process=$process; Errors=$process.StandardError.ReadToEndAsync() }
-}
 function Line($process) {
     $line=$process.StandardOutput.ReadLineAsync().WaitAsync([TimeSpan]::FromSeconds(180)).GetAwaiter().GetResult()
     if($null -eq $line){throw 'Child process ended without output.'}
@@ -47,15 +36,15 @@ foreach($workload in $workloads) {
             $reservation.Stop()
             $url="http://127.0.0.1:$port/"
             $runner=if($side -eq 'before'){$BaselineRunner}else{$CandidateRunner}
-            $server=Launch $runner @('--websocket-host','--url',$url)
-            if([Environment]::ProcessorCount -ge 8){$server.Process.ProcessorAffinity=[IntPtr]15}
+            $server=Start-ComparisonProcess $runner @('--websocket-host','--url',$url)
             $client=$null
             try {
+                if([Environment]::ProcessorCount -ge 8){$server.Process.ProcessorAffinity=[IntPtr]15}
                 if((Line $server.Process) -notlike 'HOST *'){throw 'Host failed to start.'}
                 $options=@('--websocket-load','--url',$url,'--size',"$($workload.size)",'--fragments',"$($workload.fragments)",
                     '--connections',"$($workload.connections)",'--seconds',"$Seconds")
                 if($workload.text){$options+='--text'}
-                $client=Launch $CandidateRunner $options
+                $client=Start-ComparisonProcess $CandidateRunner $options
                 if([Environment]::ProcessorCount -ge 8){$client.Process.ProcessorAffinity=[IntPtr]240}
                 if((Line $client.Process) -ne 'READY'){throw 'Client warmup failed.'}
                 $server.Process.StandardInput.WriteLine('start')
@@ -78,13 +67,7 @@ foreach($workload in $workloads) {
                 $perMessage=[math]::Round($serverResult.allocatedBytes / [math]::Max(1,$clientResult.messages))
                 Write-Output "$($workload.name) $side r$round msg/s=$([math]::Round($clientResult.messagesPerSecond)) p50=$([math]::Round($clientResult.p50Microseconds,1))us p99=$([math]::Round($clientResult.p99Microseconds,1))us alloc/msg=$perMessage"
             } finally {
-                foreach($child in @($client,$server)) {
-                    if($null -eq $child){continue}
-                    if(!$child.Process.HasExited){$child.Process.Kill($true);$child.Process.WaitForExit()}
-                    $errorText=$child.Errors.GetAwaiter().GetResult()
-                    if($errorText){$errorText | Add-Content -LiteralPath (Join-Path $OutputDirectory 'stderr.log')}
-                    $child.Process.Dispose()
-                }
+                Stop-ComparisonProcesses @($client,$server) (Join-Path $OutputDirectory 'stderr.log')
             }
         }
     }

@@ -83,6 +83,8 @@ internal static class Orchestrator
         targets.Add(new("kestrel", "kestrel", candidate));
         if (engineFilter is not null) targets = [.. targets.Where(target => engineFilter.Contains(target.Name, StringComparer.Ordinal))];
 
+        ValidateRunSettings(rounds, warmup, duration, idle, selected.Count, targets.Count);
+
         var certificateDirectory = Path.Combine(output, "certificate");
         Directory.CreateDirectory(certificateDirectory);
         var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
@@ -132,6 +134,15 @@ internal static class Orchestrator
         await File.WriteAllTextAsync(Path.Combine(output, "summary.md"), summary.Markdown).ConfigureAwait(false);
         Console.Out.WriteLine($"{samples.Count} samples, {failures} failed. Output: {output}");
         return failures == 0 ? 0 : 1;
+    }
+
+    internal static void ValidateRunSettings(int rounds, double warmup, double duration, double idle, int scenarios, int targets)
+    {
+        if (rounds <= 0 || scenarios <= 0 || targets <= 0)
+            throw new ArgumentException("A comparison requires positive rounds and at least one scenario and engine.");
+        if (!double.IsFinite(warmup) || warmup < 0 || !double.IsFinite(duration) || duration <= 0
+            || !double.IsFinite(idle) || idle < 0)
+            throw new ArgumentException("Durations must be finite; measurement duration must be positive, and warmup/idle may be zero.");
     }
 
     private static List<Scenario> SelectScenarios(string selection)
@@ -212,6 +223,7 @@ internal static class Orchestrator
 
         ChildProcess? server = null;
         ChildProcess? client = null;
+        Process? trace = null;
         try
         {
             server = ChildProcess.Start(context.Target.Directory, serverArguments, context.ServerCpus, stem + ".server.stderr.log");
@@ -237,7 +249,7 @@ internal static class Orchestrator
             if (context.ConnectionCensus) sample["connectionsBeforeLoad"] = await server.RequestJsonAsync("connections", timeout).ConfigureAwait(false);
             var busyBefore = SystemCpu.BusyTime();
             var machineClock = Stopwatch.StartNew();
-            using var trace = context.TraceTool is null ? null : StartTrace(context, sample, stem);
+            trace = context.TraceTool is null ? null : StartTrace(context, sample, stem);
             if (await server.RequestAsync("start", timeout).ConfigureAwait(false) != "MEASURING") throw new InvalidOperationException("Server measurement handshake failed.");
             var done = await client.RequestAsync("start", timeout).ConfigureAwait(false);
             var window = await server.RequestJsonAsync("stop", timeout).ConfigureAwait(false);
@@ -269,6 +281,20 @@ internal static class Orchestrator
         }
         finally
         {
+            if (trace is not null)
+            {
+                try
+                {
+                    if (!trace.HasExited)
+                    {
+                        trace.Kill(entireProcessTree: true);
+                        sample["traceKilled"] = true;
+                        await trace.WaitForExitAsync().ConfigureAwait(false);
+                    }
+                }
+                finally { trace.Dispose(); }
+            }
+
             foreach (var child in new[] { client, server })
             {
                 if (child is null) continue;
@@ -311,20 +337,37 @@ internal static class Orchestrator
 
     private static async Task<JsonObject> FinishTraceAsync(SampleContext context, Process trace, string stem)
     {
-        var collected = await trace.StandardOutput.ReadToEndAsync().ConfigureAwait(false) + await trace.StandardError.ReadToEndAsync().ConfigureAwait(false);
-        await trace.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(2)).ConfigureAwait(false);
+        var collected = await ReadTraceOutputAsync(trace, TimeSpan.FromMinutes(2)).ConfigureAwait(false);
         await File.WriteAllTextAsync(stem + ".trace-collect.log", collected).ConfigureAwait(false);
         foreach (var (name, extra) in new[] { ("exclusive", Array.Empty<string>()), ("inclusive", ["--inclusive"]) })
         {
             var info = new ProcessStartInfo(context.TraceTool ?? string.Empty) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
             foreach (var argument in new[] { "report", stem + ".nettrace", "topN", "-n", "60" }.Concat(extra)) info.ArgumentList.Add(argument);
             using var report = Process.Start(info) ?? throw new InvalidOperationException("dotnet-trace report did not start.");
-            var text = await report.StandardOutput.ReadToEndAsync().ConfigureAwait(false) + await report.StandardError.ReadToEndAsync().ConfigureAwait(false);
-            await report.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+            var text = await ReadTraceOutputAsync(report, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
             await File.WriteAllTextAsync($"{stem}.top-{name}.txt", text).ConfigureAwait(false);
         }
 
         return new JsonObject { ["collectExitCode"] = trace.ExitCode, ["file"] = Path.GetFileName(stem + ".nettrace") };
+    }
+
+    private static async Task<string> ReadTraceOutputAsync(Process process, TimeSpan timeout)
+    {
+        // Drain both redirected pipes concurrently; either pipe can fill before EOF.
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        try
+        {
+            await Task.WhenAll(stdout, stderr, process.WaitForExitAsync()).WaitAsync(timeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await Task.WhenAll(stdout, stderr, process.WaitForExitAsync()).ConfigureAwait(false);
+            throw;
+        }
+
+        return await stdout.ConfigureAwait(false) + await stderr.ConfigureAwait(false);
     }
 
     private static void Derive(JsonObject sample, SampleContext context)
@@ -531,7 +574,9 @@ internal sealed class ChildProcess
 
     internal static ChildProcess Start(string directory, IReadOnlyList<string> arguments, string? cpus, string stderrPath)
     {
-        var host = Environment.ProcessPath ?? "dotnet";
+        var host = ResolveHost(Environment.ProcessPath, Environment.GetEnvironmentVariable("DOTNET_HOST_PATH"));
+        if (cpus is not null && !OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+            throw new PlatformNotSupportedException("CPU affinity is supported only on Windows and Linux.");
         var runner = Path.Combine(directory, "EmbedIO.LoadBenchmark.dll");
         var info = new ProcessStartInfo
         {
@@ -639,14 +684,25 @@ internal sealed class ChildProcess
         return killed;
     }
 
+    internal static string ResolveHost(string? processPath, string? configuredHost)
+    {
+        var name = Path.GetFileNameWithoutExtension(processPath);
+        return string.Equals(name, "dotnet", StringComparison.OrdinalIgnoreCase)
+            ? processPath ?? "dotnet"
+            : string.IsNullOrWhiteSpace(configuredHost) ? "dotnet" : configuredHost;
+    }
+
     internal static IntPtr Mask(string cpus)
     {
         long mask = 0;
-        foreach (var part in cpus.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var part in cpus.Split(','))
         {
             var range = part.Split('-');
-            var first = int.Parse(range[0], CultureInfo.InvariantCulture);
-            var last = range.Length > 1 ? int.Parse(range[1], CultureInfo.InvariantCulture) : first;
+            if (range.Length is < 1 or > 2
+                || !int.TryParse(range[0], NumberStyles.None, CultureInfo.InvariantCulture, out var first)
+                || !int.TryParse(range[^1], NumberStyles.None, CultureInfo.InvariantCulture, out var last)
+                || first < 0 || last < first || last >= IntPtr.Size * 8)
+                throw new ArgumentException("CPU indices must form nonempty ascending ranges within the native affinity mask.", nameof(cpus));
             for (var cpu = first; cpu <= last; cpu++) mask |= 1L << cpu;
         }
 

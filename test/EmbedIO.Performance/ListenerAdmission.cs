@@ -1,7 +1,12 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using EmbedIO;
 
 // Measures managed listener admission and accept under concurrent registration.
@@ -14,8 +19,10 @@ internal static class ListenerAdmission
     {
         if (!args.Contains("--listener-admission", StringComparer.Ordinal)) return false;
         var seconds = ReadOption(args, "--seconds", 1.0);
-        var rounds = (int)ReadOption(args, "--rounds", 5);
-        var depth = (int)ReadOption(args, "--depth", 256);
+        var rounds = ReadCount(args, "--rounds", 5, int.MaxValue - 1);
+        var depth = ReadCount(args, "--depth", 256, int.MaxValue / 16);
+        if (!double.IsFinite(seconds) || seconds <= 0 || seconds * 1000 > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(args), "--seconds must be finite, positive and fit the supported sleep duration.");
         var contextType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpListenerContext", true)
             ?? throw new InvalidOperationException("Missing HttpListenerContext.");
         var id = contextType.GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -79,57 +86,101 @@ internal static class ListenerAdmission
             catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
         });
         var running = 1;
+        var failures = new ConcurrentQueue<Exception>();
         var threads = Enumerable.Range(0, producers).Select(producer => new Thread(() =>
         {
-            var pool = pools[producer];
-            while (Volatile.Read(ref running) != 0)
+            try
             {
-                if (!available[producer].Wait(50)) continue;
-                if (!pool.TryDequeue(out var context)) throw new InvalidOperationException("A returned context was missing.");
-                register(listener, context);
+                var pool = pools[producer];
+                while (Volatile.Read(ref running) != 0)
+                {
+                    if (!available[producer].Wait(50)) continue;
+                    if (!pool.TryDequeue(out var context)) throw new InvalidOperationException("A returned context was missing.");
+                    register(listener, context);
+                }
+            }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                failures.Enqueue(error);
+                Volatile.Write(ref running, 0);
             }
         })
         { IsBackground = true }).ToArray();
 
-        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-        foreach (var thread in threads) thread.Start();
-        Thread.Sleep(100); // Reach steady state before the measured window.
-        var process = Process.GetCurrentProcess();
-        process.Refresh();
-        var cpuBefore = process.TotalProcessorTime;
-        var contentionBefore = Monitor.LockContentionCount;
-        var bytesBefore = GC.GetTotalAllocatedBytes(true);
-        var countBefore = Interlocked.Read(ref accepted);
-        var clock = Stopwatch.StartNew();
-        Thread.Sleep(TimeSpan.FromSeconds(seconds));
-        var count = Interlocked.Read(ref accepted) - countBefore;
-        var elapsed = clock.Elapsed.TotalSeconds;
-        var bytes = GC.GetTotalAllocatedBytes(true) - bytesBefore;
-        var contentions = Monitor.LockContentionCount - contentionBefore;
-        process.Refresh();
-        var cpu = (process.TotalProcessorTime - cpuBefore).TotalMilliseconds * 1000;
-        Volatile.Write(ref running, 0);
-        foreach (var thread in threads) thread.Join();
-        // Accept every queued context before disposal; these placeholders have no connection to close.
-        var drained = Stopwatch.StartNew();
-        while (pools.Sum(pool => pool.Count) != producers * depth)
+        var started = new List<Thread>();
+        try
         {
-            if (drained.Elapsed > TimeSpan.FromSeconds(10)) throw new InvalidOperationException("Queued contexts were not accepted.");
-            Thread.Sleep(1);
+            GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+            foreach (var thread in threads) { thread.Start(); started.Add(thread); }
+            Thread.Sleep(100); // Reach steady state before the measured window.
+            using var process = Process.GetCurrentProcess();
+            process.Refresh();
+            var cpuBefore = process.TotalProcessorTime;
+            var contentionBefore = Monitor.LockContentionCount;
+            var bytesBefore = GC.GetTotalAllocatedBytes(true);
+            var countBefore = Interlocked.Read(ref accepted);
+            var clock = Stopwatch.StartNew();
+            Thread.Sleep(TimeSpan.FromSeconds(seconds));
+            var count = Interlocked.Read(ref accepted) - countBefore;
+            var elapsed = clock.Elapsed.TotalSeconds;
+            var bytes = GC.GetTotalAllocatedBytes(true) - bytesBefore;
+            var contentions = Monitor.LockContentionCount - contentionBefore;
+            process.Refresh();
+            var cpu = (process.TotalProcessorTime - cpuBefore).TotalMilliseconds * 1000;
+            if (!failures.IsEmpty) throw new AggregateException(failures);
+            if (count == 0) throw new InvalidOperationException("No contexts were accepted.");
+            return new Sample(count / elapsed, cpu / count, contentions / (double)count, bytes / (double)count);
         }
-        stop.Cancel();
-        consumer.GetAwaiter().GetResult();
-        foreach (var gate in available) gate.Dispose();
-        if (count == 0) throw new InvalidOperationException("No contexts were accepted.");
-        return new Sample(count / elapsed, cpu / count, contentions / (double)count, bytes / (double)count);
+        finally
+        {
+            Volatile.Write(ref running, 0);
+            var cleanup = Stopwatch.StartNew();
+            try
+            {
+                foreach (var thread in started)
+                {
+                    var remaining = TimeSpan.FromSeconds(10) - cleanup.Elapsed;
+                    if (remaining <= TimeSpan.Zero || !thread.Join(remaining))
+                        throw new TimeoutException("Listener admission producer did not stop.");
+                }
+                // Accept every queued context; placeholders have no connection to close.
+                while (pools.Sum(pool => pool.Count) != producers * depth)
+                {
+                    if (consumer.IsCompleted) consumer.GetAwaiter().GetResult();
+                    if (cleanup.Elapsed > TimeSpan.FromSeconds(10))
+                        throw new InvalidOperationException("Queued contexts were not accepted.");
+                    Thread.Sleep(1);
+                }
+                if (!failures.IsEmpty) throw new AggregateException(failures);
+            }
+            finally
+            {
+                stop.Cancel();
+                try { consumer.WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult(); }
+                finally
+                {
+                    // A still-running failed worker must not race a disposed semaphore.
+                    if (started.All(thread => !thread.IsAlive) && consumer.IsCompleted)
+                        foreach (var gate in available) gate.Dispose();
+                }
+            }
+        }
+    }
+
+    private static int ReadCount(string[] args, string name, int fallback, int maximum)
+    {
+        var value = ReadOption(args, name, fallback);
+        if (!double.IsFinite(value) || value < 1 || value > maximum || value != Math.Truncate(value))
+            throw new ArgumentOutOfRangeException(nameof(args), name + " must be a positive whole number within the supported range.");
+        return (int)value;
     }
 
     private static double ReadOption(string[] args, string name, double fallback)
     {
         var index = Array.IndexOf(args, name);
-        return index >= 0 && index + 1 < args.Length
-            ? double.Parse(args[index + 1], System.Globalization.CultureInfo.InvariantCulture)
-            : fallback;
+        if (index < 0) return fallback;
+        if (index + 1 >= args.Length) throw new ArgumentException(name + " requires a value.", nameof(args));
+        return double.Parse(args[index + 1], System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private readonly record struct Sample(double RequestsPerSecond, double CpuMicroseconds, double Contentions, double Bytes);

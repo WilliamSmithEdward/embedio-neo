@@ -214,6 +214,26 @@ public sealed class C : WebApiController { [Route(HttpVerbs.Get, ""/{id}"")] pub
             Assert.That(outputs.Select(o => o.Reason), Is.All.EqualTo(IncrementalStepRunReason.Cached).Or.EqualTo(IncrementalStepRunReason.Unchanged));
         }
 
+        [TestCase(LanguageVersion.CSharp7_3)]
+        [TestCase(LanguageVersion.Latest)]
+        public void EscapedIdentifiersHaveDistinctDeterministicSourceHints(LanguageVersion language)
+        {
+            var source = Usings + @"
+public sealed class C : WebApiController { [Route(HttpVerbs.Get, ""/"")] public string Get() { return """"; } }
+namespace N {
+[GeneratedControllerBinding(typeof(C))] internal static partial class @event { }
+[GeneratedControllerBinding(typeof(C))] internal static partial class _event { }
+[GeneratedControllerBinding(typeof(C))] internal static partial class _0040event { }
+internal static class Use { internal static object[] All() { return new object[] { @event.C, _event.C, _0040event.C }; } }
+}";
+            var first = Run(source, language);
+            var second = Run(source, language);
+            Assert.That(first.GeneratorDiagnostics, Is.Empty);
+            Assert.That(first.CompilationDiagnostics.Where(d => d.Severity >= DiagnosticSeverity.Warning), Is.Empty,
+                string.Join("\n", first.CompilationDiagnostics));
+            Assert.That(first.Generated, Is.EqualTo(second.Generated));
+            Assert.That(Regex.Matches(first.Generated, "ControllerBinding<global::C> C").Count, Is.EqualTo(3));
+        }
         private static GeneratorResult Run(string source, LanguageVersion language = LanguageVersion.Latest, bool trimAnalyzed = false)
         {
             var parse = new CSharpParseOptions(language);

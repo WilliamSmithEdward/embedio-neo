@@ -4,6 +4,7 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using EmbedIO.Configuration;
 using EmbedIO.Diagnostics;
+using EmbedIO.Internal;
 
 namespace EmbedIO.Net
 {
@@ -59,7 +60,8 @@ namespace EmbedIO.Net
         /// <remarks>
         /// <para>The function runs during the handshake, for clients that send a certificate. Whether a client
         /// may connect without one is decided by <see cref="ClientCertificateMode"/>. An exception thrown by
-        /// the function fails the handshake and is logged.</para>
+        /// the function fails the handshake and is logged, except for critical runtime exceptions,
+        /// which propagate through the callback boundary.</para>
         /// <para>The function may be called concurrently, and must not keep the chain, which the runtime disposes.</para>
         /// </remarks>
         /// <exception cref="InvalidOperationException">This property is being set, and the policy is locked.</exception>
@@ -118,7 +120,8 @@ namespace EmbedIO.Net
         /// <remarks>
         /// <para>Supported on the .NET 10 asset over TCP and by the default HTTP/3 binding. The .NET Standard 2.0
         /// asset and the native HTTP/3 binding refuse to start with a selector.</para>
-        /// <para>The function may be called concurrently. An exception thrown by it fails the handshake and is logged.
+        /// <para>The function may be called concurrently. An ordinary exception thrown by it fails the handshake and is logged.
+        /// Critical runtime exceptions propagate through the callback boundary.
         /// The application owns the certificates it returns.</para>
         /// </remarks>
         /// <exception cref="InvalidOperationException">This property is being set, and the policy is locked.</exception>
@@ -182,7 +185,7 @@ namespace EmbedIO.Net
             {
                 return validator(certificate as X509Certificate2 ?? new X509Certificate2(certificate), chain, errors);
             }
-            catch (Exception error) when (error is not OutOfMemoryException)
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
                 error.Log(nameof(ServerTlsPolicy), "The client certificate validator threw; the handshake was refused.");
                 return false;
@@ -201,7 +204,7 @@ namespace EmbedIO.Net
             {
                 selected = selector(string.IsNullOrEmpty(hostName) ? null : hostName);
             }
-            catch (Exception error) when (error is not OutOfMemoryException)
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
                 error.Log(nameof(ServerTlsPolicy), "The server certificate selector threw; the handshake was refused.");
                 throw new AuthenticationException("The server certificate selector failed.", error);

@@ -15,14 +15,15 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 // Long-lived endurance server. One process hosts a cleartext managed listener
 // (HTTP/1.1 and HTTP/2 prior knowledge) and a combined TLS listener (HTTP/1.1 and
-// HTTP/2 by ALPN, HTTP/3 over QUIC) with the same handler as the comparison runs
-// plus a WebSocket echo endpoint. A background sampler appends resource figures
+// HTTP/2 by ALPN, HTTP/3 over QUIC), or explicitly TCP-only TLS. Both use the
+// comparison handler plus a WebSocket echo endpoint. A background sampler appends resource figures
 // to a JSON Lines file; the orchestrator drives drain, restart and forced-GC
 // snapshots over stdin/stdout.
 internal static class EnduranceServer
 {
     internal static async Task<int> RunAsync(CommandLine options)
     {
+        var profile = EnduranceProfile.Parse(options);
         using var certificate = X509CertificateLoader.LoadPkcs12FromFile(options.Required("--certificate"), options.Required("--certificate-password"), X509KeyStorageFlags.Exportable);
         var plainPort = options.Integer("--plain-port", 0);
         var tlsPort = options.Integer("--tls-port", 0);
@@ -32,63 +33,78 @@ internal static class EnduranceServer
         AppDomain.CurrentDomain.FirstChanceException += (_, e) => counters.Exception(e.Exception);
         EmbedIO.Diagnostics.Log.Source.Switch.Level = System.Diagnostics.SourceLevels.Off;
 
-        IEnduranceHost host = options.Text("--engine", "embedio") switch
+        IEnduranceHost host = profile.Engine switch
         {
-            "embedio" => new EnduranceHost(certificate, plainPort, tlsPort, counters),
+            "embedio" => new EnduranceHost(certificate, plainPort, tlsPort, counters, profile),
             "kestrel" => new KestrelEnduranceHost(certificate, plainPort, tlsPort, counters),
             var other => throw new ArgumentException("Unknown engine " + other),
         };
-        var started = await host.StartAsync().ConfigureAwait(false);
-        await using var sampler = new EnduranceSampler(options.Required("--sample-file"), interval, counters, host, plainPort, tlsPort);
-        Control.Write("READY " + JsonSerializer.Serialize(new
+        try
         {
-            startMilliseconds = started,
-            processId = Environment.ProcessId,
-            processorCount = Environment.ProcessorCount,
-            serverGc = GCSettings.IsServerGC,
-            gcLatencyMode = GCSettings.LatencyMode.ToString(),
-            runtime = RuntimeInformation.FrameworkDescription,
-            quicSupported = System.Net.Quic.QuicListener.IsSupported,
-            assemblies = AssemblyIdentity.Describe(typeof(WebServer).Assembly, typeof(System.Net.Quic.QuicListener).Assembly),
-            // The MsQuic module actually loaded, which differs from the runtime directory's
-            // copy when System.Net.Quic.AppLocalMsQuic selects an application-local build.
-            msquic = LoadedModule("msquic.dll"),
-        }));
-
-        while (true)
-        {
-            var command = await Console.In.ReadLineAsync().ConfigureAwait(false);
-            var parts = command?.Split(' ', 2) ?? ["exit"];
-            switch (parts[0])
+            var started = await host.StartAsync().ConfigureAwait(false);
+            await using var sampler = new EnduranceSampler(options.Required("--sample-file"), interval, counters, host, plainPort, tlsPort, profile);
+            Control.Write("READY " + JsonSerializer.Serialize(new
             {
-                case "sample":
-                    Control.Write(JsonSerializer.Serialize(sampler.Capture()));
-                    break;
-                case "quiesce":
-                    // Forced, compacting collections first so the figures are retained state.
-                    for (var pass = 0; pass < 2; pass++)
-                    {
-                        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
-                        GC.WaitForPendingFinalizers();
-                    }
+                startMilliseconds = started,
+                processId = Environment.ProcessId,
+                processorCount = Environment.ProcessorCount,
+                serverGc = GCSettings.IsServerGC,
+                gcLatencyMode = GCSettings.LatencyMode.ToString(),
+                runtime = RuntimeInformation.FrameworkDescription,
+                listenerProfile = profile.Name,
+                tlsListenerMode = profile.TlsListenerDisplay,
+                nativeDiagnostics = profile.TcpOnly ? "not-probed-tcp-only" : "enabled",
+                quicSupported = profile.TcpOnly ? (bool?)null : System.Net.Quic.QuicListener.IsSupported,
+                assemblies = profile.TcpOnly ? AssemblyIdentity.Describe(typeof(WebServer).Assembly) : AssemblyIdentity.Describe(typeof(WebServer).Assembly, typeof(System.Net.Quic.QuicListener).Assembly),
+                // The MsQuic module actually loaded, which differs from the runtime directory's
+                // copy when System.Net.Quic.AppLocalMsQuic selects an application-local build.
+                msquic = profile.TcpOnly ? null : LoadedModule("msquic.dll"),
+            }));
 
-                    Control.Write(JsonSerializer.Serialize(sampler.Capture(forced: true)));
-                    break;
-                case "drain":
-                    var timeout = TimeSpan.FromSeconds(double.Parse(parts[1], CultureInfo.InvariantCulture));
-                    Control.Write(JsonSerializer.Serialize(await host.DrainAsync(timeout).ConfigureAwait(false)));
-                    break;
-                case "start":
-                    Control.Write(JsonSerializer.Serialize(new { startMilliseconds = await host.StartAsync().ConfigureAwait(false) }));
-                    break;
-                case "exit":
-                    var stopping = Stopwatch.StartNew();
-                    await host.StopAsync().ConfigureAwait(false);
-                    Control.Write(JsonSerializer.Serialize(new { stopMilliseconds = stopping.Elapsed.TotalMilliseconds, final = sampler.Capture() }));
-                    return 0;
-                default:
-                    throw new InvalidOperationException("Unknown endurance server command: " + command);
+            while (true)
+            {
+                var command = await Console.In.ReadLineAsync().ConfigureAwait(false);
+                var parts = command?.Split(' ', 2) ?? ["exit"];
+                switch (parts[0])
+                {
+                    case "sample":
+                        Control.Write(JsonSerializer.Serialize(sampler.Capture()));
+                        break;
+                    case "quiesce":
+                        // Forced, compacting collections first so the figures are retained state.
+                        for (var pass = 0; pass < 2; pass++)
+                        {
+                            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+                            GC.WaitForPendingFinalizers();
+                        }
+
+                        Control.Write(JsonSerializer.Serialize(sampler.Capture(forced: true)));
+                        break;
+                    case "drain":
+                        var timeout = TimeSpan.FromSeconds(double.Parse(parts[1], CultureInfo.InvariantCulture));
+                        Control.Write(JsonSerializer.Serialize(await host.DrainAsync(timeout).ConfigureAwait(false)));
+                        break;
+                    case "start":
+                        Control.Write(JsonSerializer.Serialize(new { startMilliseconds = await host.StartAsync().ConfigureAwait(false) }));
+                        break;
+                    case "exit":
+                        var stopping = Stopwatch.StartNew();
+                        await host.StopAsync().ConfigureAwait(false);
+                        Control.Write(JsonSerializer.Serialize(new { stopMilliseconds = stopping.Elapsed.TotalMilliseconds, final = sampler.Capture() }));
+                        return 0;
+                    default:
+                        throw new InvalidOperationException("Unknown endurance server command: " + command);
+                }
             }
+        }
+        catch
+        {
+            try { await host.StopAsync().ConfigureAwait(false); }
+            catch (Exception cleanup) when (cleanup is not (OutOfMemoryException or AccessViolationException or InsufficientExecutionStackException))
+            {
+                Console.Error.WriteLine("Endurance host cleanup after failure: " + cleanup);
+            }
+            throw;
         }
     }
 
@@ -277,13 +293,19 @@ internal interface IEnduranceHost
     Task StopAsync();
 }
 
-internal sealed class EnduranceHost(X509Certificate2 certificate, int plainPort, int tlsPort, EnduranceCounters counters) : IEnduranceHost
+internal sealed class EnduranceHost(X509Certificate2 certificate, int plainPort, int tlsPort, EnduranceCounters counters, EnduranceProfile profile) : IEnduranceHost
 {
     private readonly List<(WebServer Server, Task Running, CancellationTokenSource Stop)> _servers = [];
 
     public int Generation { get; private set; }
 
-    public string State => _servers.Count == 0 ? "stopped" : string.Join(',', _servers.Select(server => server.Server.State.ToString()));
+    public string State
+    {
+        get
+        {
+            lock (_servers) return _servers.Count == 0 ? "stopped" : string.Join(',', _servers.Select(server => server.Server.State.ToString()));
+        }
+    }
 
     public async Task<double> StartAsync()
     {
@@ -292,12 +314,16 @@ internal sealed class EnduranceHost(X509Certificate2 certificate, int plainPort,
         Generation++;
         counters.Generation = Generation;
         Add(new WebServerOptions().WithUrlPrefix($"http://localhost:{plainPort}/").WithMode(HttpListenerMode.EmbedIO));
-        Add(new WebServerOptions().WithUrlPrefix($"https://localhost:{tlsPort}/").WithMode(HttpListenerMode.EmbedIOCombined).WithCertificate(certificate));
+        Add(new WebServerOptions().WithUrlPrefix($"https://localhost:{tlsPort}/").WithMode(profile.TlsMode).WithCertificate(certificate));
         foreach (var (server, running, _) in _servers)
         {
             while (server.State is not WebServerState.Listening)
             {
-                if (running.IsCompleted) await running.ConfigureAwait(false);
+                if (running.IsCompleted)
+                {
+                    await running.ConfigureAwait(false);
+                    throw new InvalidOperationException("Server stopped before reaching Listening.");
+                }
                 await Task.Delay(10).ConfigureAwait(false);
             }
         }
@@ -346,20 +372,22 @@ internal sealed class EnduranceHost(X509Certificate2 certificate, int plainPort,
 
     public async Task StopAsync()
     {
-        foreach (var entry in _servers) await entry.Stop.CancelAsync().ConfigureAwait(false);
-        foreach (var entry in _servers)
+        try
         {
-            try
+            foreach (var entry in _servers) await entry.Stop.CancelAsync().ConfigureAwait(false);
+            await Task.WhenAll(_servers.Select(async entry =>
             {
-                await entry.Running.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // Cancellation is the requested stop.
-            }
+                try
+                {
+                    await entry.Running.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (entry.Stop.IsCancellationRequested)
+                {
+                    // Cancellation is the requested stop.
+                }
+            })).ConfigureAwait(false);
         }
-
-        Dispose();
+        finally { Dispose(); }
     }
 
     private void Add(WebServerOptions options)
@@ -371,7 +399,8 @@ internal sealed class EnduranceHost(X509Certificate2 certificate, int plainPort,
             .WithModule(new EnduranceEchoModule(counters, Generation))
             .WithModule(new ActionModule("/", HttpVerbs.Any, context => counters.HandleAsync(context, generation)));
         var stop = new CancellationTokenSource();
-        _servers.Add((server, server.RunAsync(stop.Token), stop));
+        var running = server.RunAsync(stop.Token);
+        lock (_servers) _servers.Add((server, running, stop));
     }
 
     private void Dispose()
@@ -382,7 +411,7 @@ internal sealed class EnduranceHost(X509Certificate2 certificate, int plainPort,
             entry.Stop.Dispose();
         }
 
-        _servers.Clear();
+        lock (_servers) _servers.Clear();
     }
 }
 
@@ -473,18 +502,20 @@ internal sealed class EnduranceSampler : IAsyncDisposable
     private readonly IEnduranceHost _host;
     private readonly int _plainPort;
     private readonly int _tlsPort;
+    private readonly bool _nativeDiagnostics;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _loop;
     private readonly Lock _gate = new();
 
-    internal EnduranceSampler(string path, TimeSpan interval, EnduranceCounters counters, IEnduranceHost host, int plainPort, int tlsPort)
+    internal EnduranceSampler(string path, TimeSpan interval, EnduranceCounters counters, IEnduranceHost host, int plainPort, int tlsPort, EnduranceProfile profile)
     {
         _file = new StreamWriter(path, append: false) { AutoFlush = true };
         _counters = counters;
         _host = host;
         _plainPort = plainPort;
         _tlsPort = tlsPort;
+        _nativeDiagnostics = !profile.TcpOnly;
         _loop = LoopAsync(interval, _stop.Token);
     }
 
@@ -542,7 +573,7 @@ internal sealed class EnduranceSampler : IAsyncDisposable
             availablePhysicalBytes = GuestMemory.AvailablePhysicalBytes(),
             machineBusyCpuSeconds = SystemCpu.BusyTime().TotalSeconds,
             // Only quiesced snapshots walk the process heaps; periodic samples stay cheap.
-            nativeHeaps = forced ? NativeHeaps.Summarize() : null,
+            nativeHeaps = forced && _nativeDiagnostics ? NativeHeaps.Summarize() : null,
         };
     }
 

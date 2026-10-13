@@ -20,12 +20,12 @@ Legend for the matrix: **V** implemented and checked by an independent peer;
 **P** partial; **M** missing; **N/A** not an origin-server requirement. "API" means
 a public member an application can call; an internal method is not an API.
 
-## Current accepted source and pending work (2026-10-12)
+## Current accepted source and pending work (2026-10-13)
 
 The dated matrices and findings below describe `01e785d` and the separately
 reviewed `a2dc18c` candidate. They remain reproduction history, not a list of
 defects still present in today's source. This source-only reconciliation uses
-accepted checkpoint `61ff7d4a7263505794ada8b470f70a8032d515a9`; it does not recapture
+accepted checkpoint `16c6385bd028bfe61350831b7c60e64166121123`; it does not recapture
 the 48-RFC inventory, retest the engine or certify complete conformance.
 
 | Historical topic | Current accepted disposition | Evidence and remaining scope |
@@ -109,10 +109,11 @@ independent pinned Linux comparison reported 16 passing controls: the baseline
 actually negotiated TLS1.0/1.1 and returned exact responses, while the candidate
 rejected them and preserved TLS1.2 recovery and TLS1.2/1.3 positives on both
 assets. Historical PR364 head `120e61c4` passed its macOS run, with TLS1.3 explicitly unavailable
-in the public TCP server provider. Accepted source still predates this correction;
-these receipts do not establish final combined discovery, all older runtimes or
-all supported platforms. [PR364](https://github.com/WilliamSmithEdward/embedio-neo/pull/364)
-remains pending final reconciliation, validation and integration. The separately prepared `34d3de30` correction is based on `61ff7d4a` and includes explicit-policy enforcement plus ten cases (proposed floor 5,669). It is private and unrun; earlier `34f02564` preparation and inherited candidate receipts do not validate that combined source. Earlier candidate receipts are not final accepted-source proof.
+in the public TCP server provider. [PR364](https://github.com/WilliamSmithEdward/embedio-neo/pull/364)
+merged as `d2e733009c813ef433ea0d9dfe89dcf5231fb6eb` on 2026-10-13.
+Its TLS minimum and explicit-policy enforcement are now accepted source. The
+historical candidate receipts above retain their own scope; they do not establish
+all older runtimes or certify every later combined source tree.
 
 Accepted TLS remains platform-mediated; private TLS1.2 negotiated-EMS attestation
 and WebTransport activation are not ordinary listener integration. Resource-owned
@@ -126,11 +127,11 @@ final platform/discovery checks, native early-data provenance and gateway
 behavior remain separate requirements.
 Accepted [PR371](https://github.com/WilliamSmithEdward/embedio-neo/pull/371), at `f1980ba7`, adds opt-in [certificate rotation](../guides/certificate-rotation.md) through `ServerCertificateSource` and 24 new controls. New handshakes capture the current certificate; existing connections retain their captured certificate, and fixed `Certificate` configuration remains supported. This accepted renewal surface is distinct from full shared-owner certificate/SNI/ALPN selection, client-authentication policy and final retained-platform acceptance, which still need concrete contracts and source-pinned evidence.
 
-Accepted [PR373](https://github.com/WilliamSmithEdward/embedio-neo/pull/373), at `cdab7ec5`, adds opt-in client-certificate and protocol policies plus modern-asset SNI selection; unsupported provider/asset configurations are refused. See [TLS policy](../guides/tls-policy.md). Its green checks establish that checkpoint's validation, not the separately approved TLS minimum or final shared-endpoint policy acceptance. Separate shared-endpoint controls reproduced one anonymous request reaching a Require-client-certificate owner on their stated baseline. The owner-approved registration rejection is prepared but unrun; this is not an accepted policy repair. The owner approved replacing only the new one-argument certificate-source constructor with a named factory to preserve published null/default calls. That `e1b81daa` correction is private and has not been built or tested.
+Accepted [PR373](https://github.com/WilliamSmithEdward/embedio-neo/pull/373), at `cdab7ec5`, adds opt-in client-certificate and protocol policies plus modern-asset SNI selection; unsupported provider/asset configurations are refused. See [TLS policy](../guides/tls-policy.md). Its green checks establish that checkpoint's validation, not the separately approved TLS minimum or final shared-endpoint policy acceptance. Separate shared-endpoint controls reproduced one anonymous request reaching a Require-client-certificate owner on their stated baseline. Accepted [PR376](https://github.com/WilliamSmithEdward/embedio-neo/pull/376), merged as `2ac3a44e`, rejects incompatible shared-endpoint TLS policy before publishing routes. Accepted [PR377](https://github.com/WilliamSmithEdward/embedio-neo/pull/377), merged as `16c6385b`, replaces only the new one-argument certificate-source constructor with a named factory to preserve published null/default calls. Its tested head `87080baf` and actual merge have identical trees; all 38 checks passed or intentionally skipped. Windows and Linux each reported 5,705 cases without failures. The macOS suite reported one raw bind-stage AddressAlreadyInUse failure matching the existing approved native QUIC quarantine; its new factory cases passed. This records acceptance, not a repair of that native failure or completion of the broader program.
 
 Accepted [PR374](https://github.com/WilliamSmithEdward/embedio-neo/pull/374), at `61ff7d4a`, adds opt-in `WebSocketModule.CloseOnDrain` and `WebServer.DrainStarted`. The option defaults to false; configured modules initiate a 1001 close during graceful drain. See [WebSocket drain](../guides/graceful-drain-websockets.md). This source-only refresh does not independently certify that merge's CI or establish final endurance acceptance. Issue281 is the remaining selected backlog item; its scope is distinct from the unfinished modern-engine criteria in #181.
 
-[PR372](https://github.com/WilliamSmithEdward/embedio-neo/pull/372) remains unmerged: its Windows initial-handshake failure is genuine retained evidence, with cause unconfirmed. Separately, seven HTTP/2 modern-asset h2c wire cases passed on Windows on their stated `430da012`-based source; that scoped receipt does not establish all assets, older CLR behavior or a later combined tree. The private native `e113` module and ownership controls retain their source/provider scope and are not integrated. Its later compile attempt and failed formatting gate do not constitute acceptance; native attempt11 remains unrun. The separate shared-port diagnostic compilation stopped on CA1062; its source correction is queued and establishes no handshake-cause repair. These results do not activate the native provider, establish complete WebTransport support or authorize shipping.
+[PR372](https://github.com/WilliamSmithEdward/embedio-neo/pull/372) merged as `475af3ec44210410fa59f709ef60f3d104e56604` on 2026-10-13. Its earlier Windows initial-handshake failure remains genuine retained evidence with cause unconfirmed; later acceptance does not establish a repair of that failure. Separately, seven HTTP/2 modern-asset h2c wire cases passed on Windows on their stated `430da012`-based source; that scoped receipt does not establish all assets, older CLR behavior or a later combined tree. The private native `e113` module and ownership controls retain their source/provider scope and are not integrated. Its later compile attempt and failed formatting gate do not constitute acceptance; native attempt11 remains unrun. The separate shared-port diagnostic compilation stopped on CA1062; its source correction is queued and establishes no handshake-cause repair. These results do not activate the native provider, establish complete WebTransport support or authorize shipping.
 [Issue361](https://github.com/WilliamSmithEdward/embedio-neo/issues/361) was closed as NOT_PLANNED at the owner's request. Its failed controls remain retained and unresolved; closure is not a passing protocol or performance gate. The private F338 checkpoint has a completed native build and a separately completed managed compilation. Those build receipts do not establish current native ABI compatibility, real application-peer interoperation, fairness or accepted WebTransport activation. Private priority and native evidence must retain their own source/provider identities rather than inherit this overlay's accepted basis.
 
 The default System.Net.Quic provider's diagnosed per-stream send-buffer retention

@@ -1,4 +1,4 @@
-﻿# Listener replacement and iOS suspension
+# Listener replacement and iOS suspension
 
 [Upstream #402](https://github.com/unosquare/embedio/issues/402) reported an iOS
 application that could not start a replacement server after suspension made its
@@ -6,7 +6,7 @@ old listener unusable. JRosanowski proposed that removal reconstructed a prefix
 whose reference did not match a dictionary key. The original application,
 runtime/version and a minimal suspension reproduction were not supplied.
 
-## What current source verifies
+## Endpoint-retirement evidence from the integration branch
 
 The PR #182 integration branch uses an owner-scoped prefix-lease ledger. Shutdown
 retires the registered leases themselves, detaches the final endpoint binding and
@@ -19,8 +19,9 @@ Twenty-two HTTP/TLS controls verify owner inventories, closed listening sockets,
 port release, distinct replacement endpoints and independent client responses.
 They cover Stop, Dispose, graceful drain, cancellation awaited at the WebServer
 level, equivalent newly allocated prefix strings, localhost aliases, shared
-owners and a deliberately closed physical listening socket. All pass on unchanged
-integration source; no new production fix or API is introduced for this report.
+owners and a deliberately closed physical listening socket. The recorded controls
+passed on the integration source reviewed for that report; they do not validate
+later source changes. No new production fix or API was introduced for this report.
 A forced socket failure is a controlled desktop test, not iOS suspension.
 
 ## Await the previous generation before replacement
@@ -89,8 +90,8 @@ certificate configuration separately from endpoint retirement; preserve platform
 policies and certificate validation.
 
 The reporter's exact historical environment has not been tested. MAUI CI is
-[temporarily paused at the owner's direction](maui-https-validation.md#temporary-owner-requested-pause),
-and existing HTTPS smoke checks do not exercise background suspension. The fork
+[enabled](maui-https-validation.md#ci-status-and-retained-evidence), but its HTTPS
+smoke checks do not exercise background suspension. The fork
 [tracking issue #320](https://github.com/WilliamSmithEdward/embedio-neo/issues/320)
 is closed as answered for the current endpoint-retirement concern at the owner's
 direction. The historical iOS sequence remains untested; reopen with a minimal

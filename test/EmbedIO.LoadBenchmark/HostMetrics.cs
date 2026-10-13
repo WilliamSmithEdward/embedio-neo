@@ -80,8 +80,27 @@ internal static class SystemCpu
         {
             using var process = Process.Start(new ProcessStartInfo(file, arguments) { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true })
                 ?? throw new InvalidOperationException(file + " did not start.");
-            var output = process.StandardOutput.ReadToEnd().Trim();
-            return process.WaitForExit(10000) ? output : "timed out";
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            try
+            {
+                var output = process.StandardOutput.ReadToEndAsync(deadline.Token);
+                Task.WhenAll(output, process.WaitForExitAsync(deadline.Token)).GetAwaiter().GetResult();
+                return output.GetAwaiter().GetResult().Trim();
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                return "timed out";
+            }
+            finally
+            {
+                if (!process.HasExited)
+                {
+                    try { process.Kill(entireProcessTree: true); }
+                    catch (InvalidOperationException) when (process.HasExited) { }
+                    if (!process.WaitForExit(1000))
+                        throw new TimeoutException(file + " did not terminate after cancellation.");
+                }
+            }
         }
         catch (System.ComponentModel.Win32Exception exception)
         {

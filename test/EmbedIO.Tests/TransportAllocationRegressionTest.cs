@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -119,7 +120,7 @@ namespace EmbedIO.Tests
             Assert.That(wire, Does.StartWith("HTTP/1.1 200 OK\r\n"));
             var body = wire.Substring(wire.IndexOf("\r\n\r\n", StringComparison.Ordinal) + 4);
             var expected = chunked && length > 0
-                ? (length == 0 ? "" : $"{length:x}\r\n{new string('a', length)}\r\n") + "0\r\n\r\n"
+                ? $"{length:x}\r\n{new string('a', length)}\r\n0\r\n\r\n"
                 : new string('a', length);
             Assert.That(body, Is.EqualTo(expected));
         }
@@ -201,6 +202,36 @@ namespace EmbedIO.Tests
             Assert.That(raw, Is.EqualTo(new byte[] { 1, 2, 3 }));
             raw[1] = 8;
             Assert.That(data[1], Is.EqualTo(2));
+        }
+
+        [TestCase("Text")]
+        [TestCase("Binary")]
+        [TestCase("Ping")]
+        public void WebSocketRawMessageAccessPreservesBytesWithoutDecoding(string opcodeName)
+        {
+            var eventType = Core.GetType("EmbedIO.WebSockets.Internal.MessageEventArgs", true)
+                ?? throw new AssertionException("Expected message event type.");
+            var opcodeType = Core.GetType("EmbedIO.WebSockets.Opcode", true)
+                ?? throw new AssertionException("Expected opcode type.");
+            var opcode = Enum.Parse(opcodeType, opcodeName);
+            var parameter = Expression.Parameter(typeof(object));
+            var readRawData = Expression.Lambda<Func<object, byte[]>>(
+                Expression.Property(Expression.Convert(parameter, eventType), "RawData"), parameter).Compile();
+            // Include malformed UTF-8: raw callbacks must preserve the supplied bytes.
+            var data = new byte[] { 0x61, 0xC3, 0xA9, 0xF0, 0x9F, 0x98, 0x80, 0xFF };
+            object CreateMessage() => Activator.CreateInstance(eventType, BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new[] { opcode, data }, null) ?? throw new AssertionException("Expected message event.");
+            using var warmup = (IDisposable)CreateMessage();
+            for (var i = 0; i < 100; i++)
+                readRawData(warmup);
+            using var message = (IDisposable)CreateMessage();
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            var raw = readRawData(message);
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.That(raw, Is.SameAs(data));
+            Assert.That(eventType.GetProperty("Opcode", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(message), Is.EqualTo(opcode));
+            Assert.That(allocated, Is.Zero, "Accessing raw bytes must not allocate a discarded decoded string.");
         }
 
         [TestCase(false)]

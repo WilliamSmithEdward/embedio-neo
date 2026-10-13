@@ -260,7 +260,9 @@ namespace EmbedIO
                 context.CancellationToken = cancellationToken;
                 context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
 
-                _ = Task.Run(() => DoHandleContextAsync(context), cancellationToken);
+                // Once accepted, the context must reach the handler's cleanup even
+                // if shutdown wins before dispatch. The context still carries cancellation.
+                _ = Task.Run(() => DoHandleContextAsync(context));
             }
         }
 

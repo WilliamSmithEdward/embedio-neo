@@ -322,7 +322,7 @@ internal static class EnduranceClient
         // Optional filters for attribution runs, for example --transports h3 --kinds small,churn.
         if (options.Optional("--transports") is { } transports)
         {
-            var allowed = transports.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(name => Enum.Parse<Transport>(name, ignoreCase: true)).ToHashSet();
+            var allowed = EnduranceProfile.ParseTransports(transports);
             mix = [.. mix.Where(workload => allowed.Contains(workload.Transport))];
         }
 
@@ -469,27 +469,29 @@ internal static class Workers
     private static async Task<(Socket Socket, Stream Stream)> OpenHttp1Async(EnduranceRun run, bool tls, CancellationToken cancellation)
     {
         var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        Stream? stream = null;
         try
         {
             await socket.ConnectAsync(IPAddress.Loopback, tls ? run.TlsPort : run.PlainPort, cancellation).ConfigureAwait(false);
-            Stream stream = new NetworkStream(socket, ownsSocket: false);
+            stream = new NetworkStream(socket, ownsSocket: false);
             if (tls)
             {
                 var secure = new SslStream(stream, leaveInnerStreamOpen: false, LoadClient.Pinned(run.Thumbprint));
+                stream = secure;
                 await secure.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
                 {
                     TargetHost = "localhost",
                     ApplicationProtocols = [SslApplicationProtocol.Http11],
                     EnabledSslProtocols = SslProtocols.None,
                 }, cancellation).ConfigureAwait(false);
-                stream = secure;
             }
 
             return (socket, stream);
         }
         catch
         {
-            socket.Dispose();
+            try { stream?.Dispose(); }
+            finally { socket.Dispose(); }
             throw;
         }
     }
@@ -877,7 +879,7 @@ internal static class Workers
     {
         await pacer.WaitAsync(run.Token).ConfigureAwait(false);
         var handler = Handler(run);
-        var client = new HttpMessageInvoker(handler, disposeHandler: true);
+        using var client = new HttpMessageInvoker(handler, disposeHandler: true);
         stats.Connected();
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(run.Token);
         var inFlight = Enumerable.Range(0, 4).Select(async index =>

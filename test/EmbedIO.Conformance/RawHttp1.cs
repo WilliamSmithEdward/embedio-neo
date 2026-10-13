@@ -16,6 +16,7 @@ internal sealed record Http1Response(int Status, string Reason, string Version, 
 
 internal sealed class RawHttp1 : IDisposable
 {
+    private const long MaximumBodyLength = 256L << 20;
     private readonly TcpClient _client;
     private readonly NetworkStream _stream;
     private readonly byte[] _buffer = new byte[65536];
@@ -25,8 +26,22 @@ internal sealed class RawHttp1 : IDisposable
     internal RawHttp1(string host, int port, TimeSpan timeout)
     {
         _client = new TcpClient { NoDelay = true, ReceiveTimeout = (int)timeout.TotalMilliseconds, SendTimeout = (int)timeout.TotalMilliseconds };
-        _client.Connect(host, port);
-        _stream = _client.GetStream();
+        try
+        {
+            using var deadline = new CancellationTokenSource(timeout);
+            _client.ConnectAsync(host, port, deadline.Token).AsTask().GetAwaiter().GetResult();
+            _stream = _client.GetStream();
+        }
+        catch (OperationCanceledException error)
+        {
+            _client.Dispose();
+            throw new TimeoutException("Connection did not complete within the driver timeout.", error);
+        }
+        catch
+        {
+            _client.Dispose();
+            throw;
+        }
         Authority = host + ":" + port.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
@@ -128,7 +143,7 @@ internal sealed class RawHttp1 : IDisposable
 
     private byte[] ReadExact(long count)
     {
-        if (count > 256L << 20) throw new InvalidDataException("Response body exceeds the 256 MiB driver limit.");
+        if (count > MaximumBodyLength) throw new InvalidDataException("Response body exceeds the 256 MiB driver limit.");
         var result = new byte[count];
         var offset = 0;
         while (offset < count)
@@ -147,6 +162,8 @@ internal sealed class RawHttp1 : IDisposable
         using var body = new MemoryStream();
         while (true)
         {
+            if (body.Length > MaximumBodyLength - (_end - _start))
+                throw new InvalidDataException("Response body exceeds the 256 MiB driver limit.");
             body.Write(_buffer, _start, _end - _start);
             _start = _end = 0;
             if (!Fill()) return body.ToArray();
@@ -215,6 +232,8 @@ internal sealed class RawHttp1 : IDisposable
                 while (ReadLine().Length != 0) { }
                 return body.ToArray();
             }
+            if (count > MaximumBodyLength - body.Length)
+                throw new InvalidDataException("Response body exceeds the 256 MiB driver limit.");
             body.Write(ReadExact(count));
             if (ReadLine().Length != 0) throw new InvalidDataException("Chunk data not followed by CRLF.");
         }

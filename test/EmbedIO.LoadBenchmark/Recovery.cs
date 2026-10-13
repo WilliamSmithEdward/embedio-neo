@@ -236,13 +236,23 @@ internal static class Recovery
             }
 
             report["serverKilled"] = await server.DisposeAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            RecordShutdownVerdict(report, verdict);
             report["shutdownSeconds"] = stopping.Elapsed.TotalSeconds;
             report["endedUtc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            File.Delete(certificatePath);
             await File.WriteAllTextAsync(Path.Combine(output, "recovery.json"), report.ToJsonString(Indented)).ConfigureAwait(false);
         }
 
         Control.Write(verdict.Count == 0 ? "RECOVERY OK " + output : "RECOVERY FINDINGS " + string.Join(" | ", verdict.Select(item => item?.ToString())));
         return verdict.Count == 0 ? 0 : 1;
+    }
+
+    internal static void RecordShutdownVerdict(JsonObject report, JsonArray verdict)
+    {
+        if (report["serverExitCode"] is not JsonValue exit || !exit.TryGetValue<int>(out var code) || code != 0)
+            verdict.Add("server did not report a successful exit");
+        if (report["serverKilled"] is not JsonValue killed || !killed.TryGetValue<bool>(out var forced) || forced)
+            verdict.Add("server required forced cleanup or did not report cleanup completion");
     }
 
     private static double? Slope(double?[] values)

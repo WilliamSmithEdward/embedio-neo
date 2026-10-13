@@ -5,10 +5,7 @@ namespace EmbedIO.Net.Internal
     internal static class HttpRequestFraming
     {
         internal static bool IsTokenCharacter(char c)
-            => c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
-                || c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\''
-                || c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_'
-                || c == '`' || c == '|' || c == '~';
+            => EmbedIO.Internal.HttpTokenSyntax.IsTokenCharacter(c);
 
         internal static bool IsValidPathAndQuery(string value, int start = 0)
         {

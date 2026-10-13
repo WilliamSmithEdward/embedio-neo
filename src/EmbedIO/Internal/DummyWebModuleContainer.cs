@@ -1,5 +1,4 @@
-﻿using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using EmbedIO.Utilities;
 using EmbedIO.Internal;
 
@@ -14,8 +13,6 @@ namespace EmbedIO.Internal
         }
 
         public IComponentCollection<IWebModule> Modules => throw UnexpectedCall();
-
-        public ConcurrentDictionary<object, object> SharedItems => throw UnexpectedCall();
 
         public void Dispose()
         {

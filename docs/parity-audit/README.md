@@ -2,7 +2,12 @@
 
 This audit compares the same consumer program against published
 [EmbedIO 3.5.2](https://www.nuget.org/packages/EmbedIO/3.5.2), pinned SWAN 3.1.0,
-and both current Neo library assets. It measures specific compatibility behavior;
+and both Neo library assets at the revisions recorded below. The area reports
+retain that historical snapshot, including its v1 native-listener comparisons;
+they are not an inventory or acceptance receipt for the current v2 engine. See the
+[v1-to-v2 migration guide](../compatibility/neo-v1-to-v2.md) for backend retirement
+and later API changes. The current runner must produce its own exact-source
+report when validating a new revision. This audit measures specific compatibility behavior;
 it does not establish that Neo has no bugs or that every upstream application is
 binary compatible. Findings are kept in one file per major functional area.
 

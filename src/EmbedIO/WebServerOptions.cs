@@ -465,7 +465,7 @@ namespace EmbedIO
             foreach (var url in UrlPrefixes.Where(x =>
                 x.StartsWith("https:", StringComparison.OrdinalIgnoreCase)))
             {
-                var match = Regex.Match(url, @":(\d+)");
+                var match = Regex.Match(url, @"^https://(?:\[[^\]]+\]|[^/:]+):(\d+)(?:/|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
                 if (match.Success && int.TryParse(match.Groups[1].Value, out port))
                     break;

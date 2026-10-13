@@ -10,6 +10,8 @@ Usage:
 """
 
 import argparse
+import importlib.util
+from pathlib import Path
 import asyncio
 import gzip
 import json
@@ -125,31 +127,17 @@ async def healthy(session):
         return f"{type(error).__name__}: {error}"
 
 
-def stats(host, port):
-    try:
-        return _stats(host, port)
-    except OSError as error:  # A stopped listener is itself a recorded outcome.
-        return {"error": f"{type(error).__name__}: {error}", "activeHandlers": 0, "handles": 0, "managedBytes": 0}
-
-
-def _stats(host, port):
-    with socket.create_connection((host, port), timeout=10) as sock:
-        sock.sendall(f"GET /__stats HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n".encode())
-        data = b""
-        while chunk := sock.recv(65536):
-            data += chunk
-    head, _, body = data.partition(b"\r\n\r\n")
-    if b"transfer-encoding: chunked" in head.lower():
-        decoded = b""
-        while body:
-            size_line, _, rest = body.partition(b"\r\n")
-            size = int(size_line.split(b";")[0], 16)
-            if size == 0:
-                break
-            decoded += rest[:size]
-            body = rest[size + 2:]
-        body = decoded
-    return json.loads(body)
+# Isolated (-I) launches omit sibling directories from sys.path. Load the exact
+# adjacent helper rather than resolving an unrelated installed module.
+_resource_spec = importlib.util.spec_from_file_location(
+    "embedio_resource_observation", Path(__file__).with_name("resource_observation.py"))
+if _resource_spec is None or _resource_spec.loader is None:
+    raise ImportError("Cannot load campaign resource observation helper")
+_resource = importlib.util.module_from_spec(_resource_spec)
+_resource_spec.loader.exec_module(_resource)
+stats = _resource.stats
+_stats = _resource._stats
+resource_error = _resource.resource_error
 
 
 CASES = []
@@ -294,13 +282,14 @@ async def run_cases(session, stats_port):
                         "detail": detail, "seconds": round(time.monotonic() - started, 3)})
         print(f"{result:<10} {identifier:<26} {level:<7} {reference:<30} {detail}", flush=True)
     after = await settle(session, stats_port) if stats_port else None
-    return {"outcomes": results, "stats_before": before, "stats_after": after}
+    report = {"outcomes": results, "stats_before": before, "stats_after": after}
+    return _resource.apply_resource_verdict(report, before, after, required=bool(stats_port))
 
 
 async def settle(session, stats_port):
     snapshot = stats(session.host, stats_port)
     for _ in range(50):
-        if snapshot["activeHandlers"] == 0:
+        if _resource.observation_error(snapshot) or snapshot["activeHandlers"] == 0:
             break
         await asyncio.sleep(0.1)
         snapshot = stats(session.host, stats_port)
@@ -371,13 +360,7 @@ async def run_fuzz(session, seed, iterations, stats_port):
                 return {"result": "FAIL", "seed": seed, "iteration": iteration, "error": "unhealthy: " + health}
     after = await settle(session, stats_port) if stats_port else None
     report = {"result": "PASS", "seed": seed, "iterations": iterations, "totals": totals, "stats_before": before, "stats_after": after}
-    if before and after:
-        report["handleGrowth"] = after["handles"] - before["handles"]
-        report["managedGrowth"] = after["managedBytes"] - before["managedBytes"]
-        if after["activeHandlers"] or report["handleGrowth"] > 64 or report["managedGrowth"] > 32 << 20:
-            report["result"] = "FAIL"
-            report["error"] = "resources did not settle"
-    return report
+    return _resource.apply_resource_verdict(report, before, after, check_growth=True, required=bool(stats_port))
 
 
 def main():
@@ -398,7 +381,7 @@ def main():
     identity = {"aioquic": aioquic.__version__, "python": sys.version, "target": f"{args.host}:{args.port}"}
     if args.mode == "cases":
         report = asyncio.run(run_cases(session, args.stats_port))
-        failed = any(o["result"] in ("violation", "error") for o in report["outcomes"])
+        failed = "error" in report or any(o["result"] in ("violation", "error") for o in report["outcomes"])
     else:
         report = asyncio.run(run_fuzz(session, args.seed, args.iterations, args.stats_port))
         failed = report["result"] != "PASS"

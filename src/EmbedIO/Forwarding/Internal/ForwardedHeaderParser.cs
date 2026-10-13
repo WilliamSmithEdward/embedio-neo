@@ -10,10 +10,9 @@ namespace EmbedIO.Forwarding.Internal
     // One proxy's record of the request it received: who sent it, and the scheme and host it was sent to.
     internal sealed class ForwardedHop
     {
-        internal ForwardedHop(IPAddress? client, bool hasClient, string? proto, string? host)
+        internal ForwardedHop(IPAddress? client, string? proto, string? host)
         {
             Client = client;
-            HasClient = hasClient;
             Proto = proto;
             Host = host;
         }
@@ -21,7 +20,6 @@ namespace EmbedIO.Forwarding.Internal
         // Null when the hop names no client, or an "unknown" or obfuscated one.
         internal IPAddress? Client { get; }
 
-        internal bool HasClient { get; }
 
         internal string? Proto { get; }
 
@@ -98,7 +96,7 @@ namespace EmbedIO.Forwarding.Internal
                     }
                 }
 
-                hops.Add(new ForwardedHop(client, hasFor, proto, host));
+                hops.Add(new ForwardedHop(client, proto, host));
             }
 
             return hops;
@@ -131,7 +129,7 @@ namespace EmbedIO.Forwarding.Internal
                 if (fromEnd <= hosts.Count && (host = Authority(hosts[hosts.Count - fromEnd])) == null)
                     return null;
 
-                hops[count - fromEnd] = new ForwardedHop(client, hasFor, proto, host);
+                hops[count - fromEnd] = new ForwardedHop(client, proto, host);
             }
 
             return new List<ForwardedHop>(hops);

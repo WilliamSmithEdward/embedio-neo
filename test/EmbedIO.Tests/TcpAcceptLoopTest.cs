@@ -65,9 +65,12 @@ namespace EmbedIO.Tests
             finally
             {
                 stop.Cancel(); listener.Dispose();
-                if (running != null) await running.WaitAsync(TimeSpan.FromSeconds(5));
-                foreach (var socket in owned) socket.Dispose();
-                foreach (var peer in peers) peer.Dispose();
+                try { if (running != null) await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+                finally
+                {
+                    foreach (var socket in owned) socket.Dispose();
+                    foreach (var peer in peers) peer.Dispose();
+                }
             }
         }
         [Test]
@@ -133,8 +136,8 @@ namespace EmbedIO.Tests
                 finally
                 {
                     Interlocked.Exchange(ref closed, 1); listener.Dispose();
-                    await running.WaitAsync(TimeSpan.FromSeconds(5));
-                    foreach (var peer in peers) peer.Dispose();
+                    try { await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+                    finally { foreach (var peer in peers) peer.Dispose(); }
                 }
             }
         }
@@ -223,15 +226,18 @@ namespace EmbedIO.Tests
             {
                 source.Listeners.Remove(failingTrace); source.Switch.Level = previousLevel;
                 listener.Dispose();
-                if (running != null)
+                try
                 {
-                    try { await running.WaitAsync(TimeSpan.FromSeconds(5)); }
-                    catch (ObjectDisposedException) when (mode == "disposed") { }
-                    catch (SocketException) when (mode == "socket") { }
-                    catch (IOException) when (mode == "io") { }
-                    catch (OutOfMemoryException) when (!diagnostic) { }
+                    if (running != null)
+                    {
+                        try { await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+                        catch (ObjectDisposedException) when (mode == "disposed") { }
+                        catch (SocketException) when (mode == "socket") { }
+                        catch (IOException) when (mode == "io") { }
+                        catch (OutOfMemoryException) when (!diagnostic) { }
+                    }
                 }
-                foreach (var peer in peers) peer.Dispose();
+                finally { foreach (var peer in peers) peer.Dispose(); }
             }
         }
     }

@@ -26,6 +26,13 @@ namespace EmbedIO.Routing
         public override bool IsFinalHandler => true;
 
         /// <inheritdoc />
+        protected override void OnBeforeLockConfiguration()
+        {
+            base.OnBeforeLockConfiguration();
+            _resolvers.Lock();
+        }
+
+        /// <inheritdoc />
         protected override async Task OnRequestAsync(IHttpContext context)
         {
             var result = await _resolvers.ResolveAsync(context).ConfigureAwait(false);

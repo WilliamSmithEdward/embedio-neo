@@ -61,7 +61,10 @@ namespace EmbedIO.Tests.Issues
         [Route(HttpVerbs.Get, "/people")]
         [OpenApiOperation(Summary = "List people", Tags = new[] { "People", "Directory" })]
         public List<Issue139Person> List([QueryField] int? limit, [QueryField("status")] Issue139Status[] statuses, [QueryData] NameValueCollection query)
-            => People.FindAll(p => statuses.Length == 0 || Array.IndexOf(statuses, p.Status) >= 0).GetRange(0, Math.Min(limit ?? People.Count, People.Count));
+        {
+            var filtered = People.FindAll(p => statuses.Length == 0 || Array.IndexOf(statuses, p.Status) >= 0);
+            return filtered.GetRange(0, Math.Min(limit ?? filtered.Count, filtered.Count));
+        }
 
         [Route(HttpVerbs.Get, "/people/{index}")]
         [OpenApiResponse(404, Type = typeof(Issue139Error), Description = "No person has that index.")]

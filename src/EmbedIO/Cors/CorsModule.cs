@@ -88,12 +88,9 @@ namespace EmbedIO.Cors
             if (string.IsNullOrWhiteSpace(currentOrigin) && context.Request.IsLocal)
                 return Task.CompletedTask;
 
-            if (_origins == All)
-                return Task.CompletedTask;
-
-            if (_validOrigins.Contains(currentOrigin?.ToUpperInvariant()))
+            if (_origins == All || _validOrigins.Contains(currentOrigin?.ToUpperInvariant()))
             {
-                context.Response.Headers.Set(HttpHeaderNames.AccessControlAllowOrigin, currentOrigin);
+                context.Response.Headers.Set(HttpHeaderNames.AccessControlAllowOrigin, _origins == All ? All : currentOrigin);
 
                 if (isOptions)
                 {
@@ -110,8 +107,8 @@ namespace EmbedIO.Cors
             var requestHeadersHeader = context.Request.Headers[HttpHeaderNames.AccessControlRequestHeaders];
             if (!string.IsNullOrWhiteSpace(requestHeadersHeader))
             {
-                // TODO: Remove unwanted headers from request
-                context.Response.Headers.Set(HttpHeaderNames.AccessControlAllowHeaders, requestHeadersHeader);
+                // A restricted configuration advertises only its allowed header names.
+                context.Response.Headers.Set(HttpHeaderNames.AccessControlAllowHeaders, _headers == All ? requestHeadersHeader : _headers);
             }
 
             var requestMethodHeader = context.Request.Headers[HttpHeaderNames.AccessControlRequestMethod];

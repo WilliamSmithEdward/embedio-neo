@@ -84,43 +84,58 @@ namespace EmbedIO.Tests
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                     Assert.Ignore("OSX doesn't support FileSystemWatcher");
 
-                var root = Path.GetTempPath();
+                var root = Directory.CreateTempSubdirectory("embedio-writable-").FullName;
                 var file = Path.Combine(root, "index.html");
-                File.WriteAllText(file, Resources.Index);
+                try
+                {
+                    File.WriteAllText(file, Resources.Index);
 
-                using var server = new TestWebServer();
-                server
-                    .WithStaticFolder("/", root, false)
-                    .Start();
+                    using var server = new TestWebServer();
+                    server
+                        .WithStaticFolder("/", root, false)
+                        .Start();
 
-                var remoteFile = await server.Client.GetStringAsync(UrlPath.Root);
-                File.WriteAllText(file, Resources.SubIndex);
+                    var remoteFile = await server.Client.GetStringAsync(UrlPath.Root);
+                    File.WriteAllText(file, Resources.SubIndex);
 
-                var remoteUpdatedFile = await server.Client.GetStringAsync(UrlPath.Root);
-                File.WriteAllText(file, nameof(WebServer));
+                    var remoteUpdatedFile = await server.Client.GetStringAsync(UrlPath.Root);
+                    File.WriteAllText(file, nameof(WebServer));
 
-                Assert.AreEqual(Resources.Index, remoteFile);
-                Assert.AreEqual(Resources.SubIndex, remoteUpdatedFile);
+                    Assert.AreEqual(Resources.Index, remoteFile);
+                    Assert.AreEqual(Resources.SubIndex, remoteUpdatedFile);
+                }
+                finally
+                {
+                    File.Delete(file);
+                    Directory.Delete(root);
+                }
             }
 
             [Test]
             public async Task SensitiveFile()
             {
                 var file = Path.GetTempPath() + Guid.NewGuid().ToString().ToLower();
-                File.WriteAllText(file, string.Empty);
-
-                Assert.IsTrue(File.Exists(file), "File was created");
-
-                if (File.Exists(file.ToUpper()))
+                try
                 {
-                    Assert.Ignore("File-system is not case sensitive.");
+                    File.WriteAllText(file, string.Empty);
+
+                    Assert.IsTrue(File.Exists(file), "File was created");
+
+                    if (File.Exists(file.ToUpper()))
+                    {
+                        Assert.Ignore("File-system is not case sensitive.");
+                    }
+
+                    var htmlUpperCase = await Client.GetStringAsync(StaticFolder.WithDataFiles.UppercaseFile);
+                    Assert.AreEqual(nameof(StaticFolder.WithDataFiles.UppercaseFile), htmlUpperCase, "Same content upper case");
+
+                    var htmlLowerCase = await Client.GetStringAsync(StaticFolder.WithDataFiles.LowercaseFile);
+                    Assert.AreEqual(nameof(StaticFolder.WithDataFiles.LowercaseFile), htmlLowerCase, "Same content lower case");
                 }
-
-                var htmlUpperCase = await Client.GetStringAsync(StaticFolder.WithDataFiles.UppercaseFile);
-                Assert.AreEqual(nameof(StaticFolder.WithDataFiles.UppercaseFile), htmlUpperCase, "Same content upper case");
-
-                var htmlLowerCase = await Client.GetStringAsync(StaticFolder.WithDataFiles.LowercaseFile);
-                Assert.AreEqual(nameof(StaticFolder.WithDataFiles.LowercaseFile), htmlLowerCase, "Same content lower case");
+                finally
+                {
+                    File.Delete(file);
+                }
             }
         }
 

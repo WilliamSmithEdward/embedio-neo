@@ -235,9 +235,15 @@ namespace EmbedIO.Tests
             }
             finally
             {
-                ((IDisposable)endpoint).Dispose();
-                if (running != null) await running.WaitAsync(TimeSpan.FromSeconds(5));
-                foreach (var peer in clients) peer.Dispose();
+                try
+                {
+                    ((IDisposable)endpoint).Dispose();
+                    if (running != null) await running.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                finally
+                {
+                    foreach (var peer in clients) peer.Dispose();
+                }
             }
         }
 

@@ -69,7 +69,10 @@ tracking issue remains open pending that confirmation.
 A dedicated CI smoke fixture in `test/EmbedIO.MacCatalystSmoke` builds a MAUI
 app with a pinned Apple workload on `macos-26`, verifies its ad-hoc signature
 and sandbox entitlements, and requires successful HTTP and WebView checks.
-Its result is captured as `mac-catalyst-smoke`; the CI gate requires this job.
+Its result is captured as `mac-catalyst-smoke`, and the CI gate requires this job
+to succeed. MAUI jobs are enabled; see the
+[CI status and retained evidence](maui-https-validation.md#ci-status-and-retained-evidence).
+A configured or skipped job supplies no validation of the replacement engine.
 This is an automated test configuration, not App Store signing or the original
 Sonoma/M1 environment. A passing run must be verified before citing it as evidence.
 

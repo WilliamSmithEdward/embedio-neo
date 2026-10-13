@@ -119,7 +119,6 @@ namespace EmbedIO.Tests
         [Test]
         public async Task SynchronousResponseStreamDisposeDoesNotBlockOnSharedOutput()
         {
-            var bodySent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var disposeReturned = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             DrainGateStream? gate = null;
             await WithRawServer(Array.Empty<byte>(), async (wire, token) =>
@@ -143,7 +142,6 @@ namespace EmbedIO.Tests
                     var text = context.OpenResponseText(new System.Text.UTF8Encoding(false));
                     await text.WriteAsync("abc");
                     await text.FlushAsync();
-                    bodySent.TrySetResult();
                     await Task.Run(() => { text.Dispose(); disposeReturned.TrySetResult(true); });
                 }
                 finally { await ((Task)(context.GetType().GetMethod("CloseAsync", Flags)?.Invoke(context, null) ?? throw new AssertionException("Missing CloseAsync."))); }

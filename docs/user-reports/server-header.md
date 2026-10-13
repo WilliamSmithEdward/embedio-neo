@@ -1,5 +1,11 @@
 ﻿# Customize the Server response header
 
+The native Microsoft listener comparisons and validation below describe the v1
+implementation at the time of this report. Neo v2 uses the replacement engine
+and has removed that backend; see [listener migration](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
+Historical test counts and native runtime workarounds are not current-engine
+validation.
+
 [Upstream #579](https://github.com/unosquare/embedio/issues/579), reported by
 `mirror222`, asks how to replace the default `Server` header with `MYOWN`.
 `etherealbacon` asks about applying it across responses; `zhangzhezh` suggests

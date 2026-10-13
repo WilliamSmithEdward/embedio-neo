@@ -83,6 +83,41 @@ mismatched property. Body framing is read but HasEntityBody is not required to b
 false over HTTP/3, where a GET without content-length reports an unknown length. Churn scenarios are capped (5 s for HTTP/1.1,
 1.5 s for HTTP/2) to stay within the host's TIME_WAIT and ephemeral-port capacity.
 
+## Load failure accounting controls
+
+Run the bounded, socket-free controls against the prepared runner:
+
+```sh
+dotnet <runner>/EmbedIO.LoadBenchmark.dll load-failure-check
+```
+
+The six controls exercise the actual multiplexed worker through an internal
+`HttpMessageHandler` factory, without starting a listener. They cover:
+
+- A response-header failure canceling a blocked sibling stream.
+- A body mismatch after a valid byte canceling a blocked sibling stream.
+- Caller cancellation during active work and before worker entry, both producing
+  a non-null result error.
+- Sibling cancellation preserving an already recorded primary error.
+- Exactly one fully validated response and latency sample retained before a later
+  stream fails; failed work does not enter the totals.
+- Two healthy streams preserving both validated responses and latency samples.
+
+HTTP/2 and HTTP/3 stream failures are recorded and cancel siblings before the
+worker awaits their combined completion. The worker still joins all streams and
+owns handler disposal; status, protocol, body and byte-count validation remain
+required. Cancellation is skipped as a secondary error only when a primary error
+has already been recorded. A caller abort cannot become a successful result merely
+because workers observe cancellation and leave their loops without throwing.
+
+These are the V46/V47 harness corrections described in the
+[audit report](../../docs/project/performance-cleanup-audit.md). The retained
+pre-fix run timed out in the first blocked-sibling control; it did not reach the
+caller-cancellation control and is not separate negative baseline proof for V47.
+All six controls passed after correction. This socket-free evidence does not prove
+that the original Kestrel measurement stall was caused or repaired by these
+changes, nor does it establish HTTP/3 transport or native-provider acceptance.
+
 ## Cancellation and recovery
 
 `recovery` keeps one server process alive through healthy load, an abort storm, idle drain,
@@ -259,6 +294,20 @@ with the historical main baseline. Build identical runner copies and swap only
 the core DLL, retaining revision and binary hashes for both.
 
 ## Endurance mode
+
+Use `--listener-profile tcp-only` for ordinary TCP-only endurance. Both endpoints
+then use the managed EmbedIO listener: cleartext HTTP/1.1 and HTTP/2 prior knowledge,
+and TLS HTTP/1.1 and HTTP/2 by ALPN. This profile requires `--engine embedio`,
+defaults client and health transports to `h1,h1tls,h2c,h2tls`, and rejects HTTP/3
+before starting a host. A narrower `--transports` list is allowed. Client filtering
+alone does not change the default `combined` server, which still enables HTTP/3.
+
+The TCP-only profile skips QUIC capability/module probing and native process-heap
+walking; it retains ordinary GC/process/socket metrics and forced managed-GC
+snapshots. Profile and listener mode are recorded explicitly. Endurance records
+runtime/GC facts and explicit options without enumerating environment values.
+`endurance-profile-check` validates accepted/rejected configuration without starting
+a host; it also runs as part of `endurance-verdict-check`.
 
 `endurance` keeps one server process alive for a whole plan, so retained state
 accumulates as it would in a long-running application. The server hosts two

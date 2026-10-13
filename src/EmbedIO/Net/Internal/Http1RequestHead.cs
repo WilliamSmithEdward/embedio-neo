@@ -57,7 +57,11 @@ namespace EmbedIO.Net.Internal
             for (var index = separator + 1; index < line.Length; index++)
                 if ((line[index] < 32 && line[index] != '\t') || line[index] == 127) return "Invalid header value.";
             name = line.Substring(0, separator);
-            value = line.Substring(separator + 1).Trim(' ', '\t');
+            var valueStart = separator + 1;
+            var valueEnd = line.Length;
+            while (valueStart < valueEnd && line[valueStart] is ' ' or '\t') valueStart++;
+            while (valueEnd > valueStart && line[valueEnd - 1] is ' ' or '\t') valueEnd--;
+            value = line.Substring(valueStart, valueEnd - valueStart);
             var preceding = Fields[name];
             if (name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
             {

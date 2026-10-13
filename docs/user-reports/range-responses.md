@@ -59,7 +59,7 @@ anything is written to the response; it sets status, `Content-Type`,
 | `If-Range` with a stale tag or a weak date | 200 and the whole representation | same |
 | `If-None-Match`, `If-Match`, `If-Modified-Since` | 304 or 412 decided before range selection, with no source read | `Issue47_RangeResponses`, `RequestPreconditionsTest` |
 | HEAD | 200 metadata with the full length and `Accept-Ranges`; the source is never read | `Issue47_RangeResponses`, `RepresentationStreamingTest` |
-| Non-GET methods | `Range` ignored; the full representation is sent | same |
+| Methods other than GET and QUERY (HEAD metadata as above) | `Range` ignored; the full representation is sent | same |
 | `Accept-Encoding` on the request | Ignored; ranges address stored bytes and no coding is applied | `Issue47_RangeResponses` |
 | Multiple ranges | 206 `multipart/byteranges` with per-part headers and exact total length; overlapping and adjacent parts coalesce; more than `maximumRanges` specifications fall back to the whole representation | `RepresentationRangeWireTest`, `RepresentationStreamingTest` |
 | Unknown length or non-seekable source | Rejected with `ArgumentException` before anything is committed, so the exception handler still owns the response | `Issue47_RangeResponses` |

@@ -91,7 +91,7 @@ namespace EmbedIO.Tests.Issues
 
             Assert.That(document.Root["components"]?["securitySchemes"]?["basic"]?.ToJsonString(),
                 Is.EqualTo("{\"type\":\"http\",\"scheme\":\"basic\",\"description\":\"HTTP Basic authentication, realm \\u0022People\\u0022.\"}"));
-            foreach (var (path, method) in new[] { ("/api/people", "get"), ("/api/people", "post"), ("/api/people/{index}", "get"), ("/api/people/{key}", "delete"), ("/api/tree", "get") })
+            foreach (var (path, method) in new[] { ("/api/people", "get"), ("/api/people", "post"), ("/api/people/{index}", "get"), ("/api/people/{index}", "delete"), ("/api/tree", "get") })
             {
                 var operation = Operation(document, path, method);
                 Assert.That(Security(operation), Is.EqualTo("[{\"basic\":[]}]"), method + " " + path);

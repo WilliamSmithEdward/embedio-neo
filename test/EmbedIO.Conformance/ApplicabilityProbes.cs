@@ -21,12 +21,12 @@ internal static class ApplicabilityProbes
 
     private static string Describe(Http1Response r) => $"{r.Version} {r.Status}; body={r.Body.Length}B";
 
-    // Reads interim and final responses; a timeout after interim responses is recorded, not thrown.
+    // Reads interim and final responses; closure is recorded, while timeouts remain observation errors.
     private static (List<Http1Response> Interim, Http1Response? Final, string Error) ReadAll(RawHttp1 client)
     {
         var interim = new List<Http1Response>();
         try { return (interim, client.Read(false, interim), string.Empty); }
-        catch (Exception error) when (error is IOException or InvalidDataException)
+        catch (Exception error) when (Http1Conformance.IsConnectionClosure(error))
         {
             return (interim, null, error.GetType().Name);
         }
@@ -51,8 +51,8 @@ internal static class ApplicabilityProbes
             using var client = t.Connect();
             client.Send("GET /probe/status-103 HTTP/1.1\r\nHost: a\r\n\r\n");
             var (interim, final, error) = ReadAll(client);
-            return Task.FromResult((final == null || final.Status < 200 ? Violation : Gap,
-                $"{Interim(interim)}; final={(final == null ? "none (" + error + ")" : Describe(final))}; no public API sends an interim response before a final one"));
+            return Task.FromResult((final == null || final.Status < 200 ? Violation : Policy,
+                $"{Interim(interim)}; final={(final == null ? "none (" + error + ")" : Describe(final))}; legacy StatusCode setter probe; IHttpResponseSections provides explicit informational responses"));
         }),
         new("h1-expect-app-rejects", "RFC9110 10.1.1", "MAY", t =>
         {
@@ -111,9 +111,9 @@ internal static class ApplicabilityProbes
             {
                 using var response = await client.SendAsync(request).ConfigureAwait(false);
                 var body = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                return (Gap, $"final={(int)response.StatusCode} body={body.Length}B; the application's 103 became the only header block or was replaced");
+                return (Policy, $"final={(int)response.StatusCode} body={body.Length}B; legacy StatusCode setter probe; IHttpResponseSections provides explicit informational responses");
             }
-            catch (HttpRequestException error) { return (Gap, "request failed: " + error.InnerException?.GetType().Name + " " + error.Message); }
+            catch (HttpRequestException error) { return (Policy, "legacy StatusCode setter rejected: " + error.InnerException?.GetType().Name + " " + error.Message); }
         }),
     };
 

@@ -26,6 +26,10 @@ METRICS = (
 
 
 def samples(directory):
+    directory = Path(directory)
+    markers = [directory / name for name in ("INVALID.txt", "ABORTED.txt") if (directory / name).exists()]
+    if markers:
+        raise ValueError(f"Rejected benchmark run {directory}: " + ", ".join(marker.name for marker in markers))
     rows = {}
     for path in sorted(Path(directory, "samples").glob("*/*.json")):
         sample = json.loads(path.read_text(encoding="utf-8"))
@@ -94,8 +98,11 @@ def main():
     args = parser.parse_args()
     if not math.isfinite(args.floor) or args.floor < 0:
         parser.error("--floor must be finite and nonnegative")
-    rows = samples(args.comparison)
-    band = noise(args.aa)
+    try:
+        rows = samples(args.comparison)
+        band = noise(args.aa)
+    except ValueError as error:
+        parser.error(str(error))
     scenarios = sorted({key[0] for key in rows}, key=lambda name: min(
         s.get("startedUtc", "") for key, group in rows.items() if key[0] == name for s in group))
     lines = ["| Scenario | Engine | Valid | " + " | ".join(f"{label} (vs {args.reference})" for _, label in METRICS) + " | A/A noise (req/s) |",

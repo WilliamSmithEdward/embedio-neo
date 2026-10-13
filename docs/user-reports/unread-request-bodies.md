@@ -5,7 +5,7 @@ this report's managed chunked-input and synchronous-read limitations, and tighte
 ambiguous framing. Measurements below describe the earlier source; see the
 [migration notes](../compatibility/migration.md#managed-http-framing-unreleased).
 
-[Upstream #558](https://github.com/unosquare/embedio/issues/558), reported by bdurrer, described the fourth request in a .NET Framework HttpClient sequence failing with EmbedIO 3.4.3 when a POST controller ignored its body. Current source completes that sequence with both listeners. Applications do not need to read a fixed-length body merely to make the response work.
+[Upstream #558](https://github.com/unosquare/embedio/issues/558), reported by bdurrer, described the fourth request in a .NET Framework HttpClient sequence failing with EmbedIO 3.4.3 when a POST controller ignored its body. The source tested for that v1 investigation completed the sequence with both listeners. Applications do not need to read a fixed-length body merely to make the response work.
 
 ## Read when the application needs the data
 
@@ -85,6 +85,6 @@ When reading data is necessary, use the declared body framing and the appropriat
 
 ## Investigation and validation
 
-The [supplied proof of concept](https://github.com/bdurrer/embedio_post_test/tree/445088d571328b55aba822b8daa86e4310c761ae) was inspected at its pinned commit. Its controller and four-request HttpClient sequence passed against current source with both listeners. The legacy client was compiled against installed Windows .NET Framework assemblies, with diagnostic output redirected to Console, a shorter client timeout and fail-fast exceptions. The available runtime reports registry Version `4.8.09221`, Release `533509`; this is not a reproduction on the reporter's exact 4.7.2 runtime. The original 3.4.3 failure was not reproduced or attributed to a specific historical commit.
+The [supplied proof of concept](https://github.com/bdurrer/embedio_post_test/tree/445088d571328b55aba822b8daa86e4310c761ae) was inspected at its pinned commit. Its controller and four-request HttpClient sequence passed against the then-current v1 source with both listeners. The legacy client was compiled against installed Windows .NET Framework assemblies, with diagnostic output redirected to Console, a shorter client timeout and fail-fast exceptions. The available runtime reports registry Version `4.8.09221`, Release `533509`; this is not a reproduction on the reporter's exact 4.7.2 runtime. The original 3.4.3 failure was not reproduced or attributed to a specific historical commit.
 
 Twenty-six real-listener cases cover the original sequence with and without Expect: 100-continue, unread/partial/full fixed-length consumption, successful and early 403 responses, multiple requests, raw same-connection delayed uploads, independent healthy requests while an upload is incomplete, disconnect/stop, and native chunked uploads. Production code, defaults, public APIs and package dependencies are unchanged. Cross-platform CI verifies the cases before merge. If a maintained version still fails, provide the complete exception, package/runtime version, listener mode, request framing and a minimal client/server example so the investigation can be reopened.

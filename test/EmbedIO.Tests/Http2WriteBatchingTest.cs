@@ -81,7 +81,6 @@ namespace EmbedIO.Tests
             internal List<int> Sizes { get; } = new();
             internal bool FailSecond { get; init; }
             internal TaskCompletionSource FirstStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            internal TaskCompletionSource SecondStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal TaskCompletionSource FirstRelease { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             internal TaskCompletionSource SecondRelease { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken token)
@@ -90,7 +89,7 @@ namespace EmbedIO.Tests
                 if (Sizes.Count == 1) { FirstStarted.TrySetResult(); await FirstRelease.Task.WaitAsync(TimeSpan.FromSeconds(5), token); }
                 if (Sizes.Count == 2)
                 {
-                    SecondStarted.TrySetResult(); await SecondRelease.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+                    await SecondRelease.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
                     if (FailSecond) { base.Write(buffer, offset, 4); throw new IOException("Injected partial shared write."); }
                 }
                 base.Write(buffer, offset, count);
