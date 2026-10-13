@@ -1,15 +1,13 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
 using EmbedIO.Net.Internal.Http3;
 
 namespace EmbedIO.Net.Internal.WebTransport
 {
     // The HTTP/3 SETTINGS values WebTransport depends on (draft-ietf-webtrans-http3-16
-    // sections 3.1, 5.1 and 5.5). Parsing reads the same SETTINGS payload the
-    // connection already validates with Http3PeerSettings, so the connection's
-    // duplicate and HTTP/2-only checks are not repeated here beyond the identifiers
-    // this extension owns. Transport parameters (max_datagram_frame_size and
+    // sections 3.1, 5.1 and 5.5). Parsing walks the same SETTINGS payload the
+    // connection already validates with Http3PeerSettings, through the same pair
+    // reader, so framing and duplicate checks match; HTTP/2-only identifiers are
+    // left to the connection's parse. Transport parameters (max_datagram_frame_size and
     // reset_stream_at) are not visible to this layer and are reported separately.
     internal sealed class WebTransportSettings
     {
@@ -47,31 +45,19 @@ namespace EmbedIO.Net.Internal.WebTransport
 
         internal static WebTransportSettings Parse(byte[] payload, int maximumEntries = 1024)
         {
-            if (payload == null) throw new ArgumentNullException(nameof(payload));
-            if (maximumEntries < 0) throw new ArgumentOutOfRangeException(nameof(maximumEntries));
             var settings = new WebTransportSettings();
-            var seen = new HashSet<long>();
-            var offset = 0;
-            try
+            Http3PeerSettings.ReadPairs(payload, maximumEntries, (id, value) =>
             {
-                while (offset < payload.Length)
+                switch (id)
                 {
-                    if (seen.Count == maximumEntries) throw new Http3ProtocolException(WebTransportProtocol.H3ExcessiveLoad, "Too many HTTP/3 settings.");
-                    var id = QuicInteger.Read(payload, ref offset, payload.Length);
-                    var value = QuicInteger.Read(payload, ref offset, payload.Length);
-                    if (!seen.Add(id)) throw new Http3ProtocolException(WebTransportProtocol.H3SettingsError, "Duplicate HTTP/3 setting identifier.");
-                    switch (id)
-                    {
-                        case WebTransportProtocol.SettingEnableConnectProtocol: settings.ExtendedConnect = Boolean(value); break;
-                        case WebTransportProtocol.SettingH3Datagram: settings.Datagrams = Boolean(value); break;
-                        case WebTransportProtocol.SettingEnabled: settings.Enabled = Boolean(value); break;
-                        case WebTransportProtocol.SettingInitialMaxData: settings.InitialMaxData = value; break;
-                        case WebTransportProtocol.SettingInitialMaxStreamsUnidirectional: settings.InitialMaxStreamsUnidirectional = StreamCount(value); break;
-                        case WebTransportProtocol.SettingInitialMaxStreamsBidirectional: settings.InitialMaxStreamsBidirectional = StreamCount(value); break;
-                    }
+                    case WebTransportProtocol.SettingEnableConnectProtocol: settings.ExtendedConnect = Http3PeerSettings.Boolean(value); break;
+                    case WebTransportProtocol.SettingH3Datagram: settings.Datagrams = Http3PeerSettings.Boolean(value); break;
+                    case WebTransportProtocol.SettingEnabled: settings.Enabled = Http3PeerSettings.Boolean(value); break;
+                    case WebTransportProtocol.SettingInitialMaxData: settings.InitialMaxData = value; break;
+                    case WebTransportProtocol.SettingInitialMaxStreamsUnidirectional: settings.InitialMaxStreamsUnidirectional = StreamCount(value); break;
+                    case WebTransportProtocol.SettingInitialMaxStreamsBidirectional: settings.InitialMaxStreamsBidirectional = StreamCount(value); break;
                 }
-            }
-            catch (EndOfStreamException) { throw new Http3ProtocolException(WebTransportProtocol.H3FrameError, "Truncated HTTP/3 setting."); }
+            });
             return settings;
         }
 
@@ -103,12 +89,6 @@ namespace EmbedIO.Net.Internal.WebTransport
         {
             var count = QuicInteger.Write(bytes, offset, id);
             return count + QuicInteger.Write(bytes, offset + count, value);
-        }
-
-        private static bool Boolean(long value)
-        {
-            if (value > 1) throw new Http3ProtocolException(WebTransportProtocol.H3SettingsError, "Invalid HTTP/3 boolean setting.");
-            return value != 0;
         }
 
         // A stream count the peer could never use is treated like any other invalid

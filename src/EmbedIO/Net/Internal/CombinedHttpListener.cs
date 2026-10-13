@@ -28,8 +28,6 @@ namespace EmbedIO.Net.Internal
         private bool _drained;
         private bool _ignoreWriteExceptions = true;
 
-        internal CombinedHttpListener(X509Certificate2? certificate) : this(certificate, false) { }
-        internal CombinedHttpListener(X509Certificate2? certificate, bool native) : this(certificate, native, null) { }
         internal CombinedHttpListener(X509Certificate2? certificate, bool native, RequestPolicyResolver? bodyPolicy)
             : this(FixedSource(certificate), native, bodyPolicy) { }
         // One source serves both transports, so a published certificate reaches TCP and QUIC handshakes alike.

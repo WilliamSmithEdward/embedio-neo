@@ -53,8 +53,6 @@ namespace EmbedIO.Net.Internal
         public bool IsAuthenticated => false;
         public string? ContentType => Headers[HttpHeaderNames.ContentType];
         public string? UserAgent => Headers[HttpHeaderNames.UserAgent];
-        public string UserHostAddress => LocalEndPoint.ToString();
-        public string? UserHostName => Headers[HttpHeaderNames.Host];
         public Uri? UrlReferrer { get; private set; }
         public string[] AcceptTypes { get; private set; } = Array.Empty<string>();
         public string[] UserLanguages { get; private set; } = Array.Empty<string>();

@@ -64,9 +64,9 @@ namespace EmbedIO.Net.Internal.Http2
                 }
                 else result.Headers.Add(field.Name, field.Value);
             }
-            if (!Token(result.Method)) throw Invalid(block.StreamId, "Missing or invalid method.");
+            if (!EmbedIO.Utilities.Validate.IsRfc2616Token(result.Method)) throw Invalid(block.StreamId, "Missing or invalid method.");
             var connect = result.Method == "CONNECT";
-            if (result.Protocol != null && (!connect || !extendedConnectEnabled || !Token(result.Protocol)))
+            if (result.Protocol != null && (!connect || !extendedConnectEnabled || !EmbedIO.Utilities.Validate.IsRfc2616Token(result.Protocol)))
                 throw Invalid(block.StreamId, "Extended CONNECT was not negotiated or is invalid.");
             if (connect && result.Protocol != null && (seen & 4) == 0) throw Invalid(block.StreamId, "Extended CONNECT requires authority.");
             if (connect && result.Protocol == null)
@@ -117,7 +117,7 @@ namespace EmbedIO.Net.Internal.Http2
             var start = field.Name.Length > 0 && field.Name[0] == ':' ? 1 : 0;
             if (field.Name.Length == start) throw Invalid(id, "Empty field name.");
             for (var i = start; i < field.Name.Length; i++)
-                if (!TokenChar(field.Name[i]) || (field.Name[i] >= 'A' && field.Name[i] <= 'Z')) throw Invalid(id, "Invalid lowercase field name.");
+                if (!EmbedIO.Internal.HttpTokenSyntax.IsTokenCharacter(field.Name[i]) || (field.Name[i] >= 'A' && field.Name[i] <= 'Z')) throw Invalid(id, "Invalid lowercase field name.");
             if (field.Value.Length > 0 && (Whitespace(field.Value[0]) || Whitespace(field.Value[field.Value.Length - 1])))
                 throw Invalid(id, "Field value has surrounding whitespace.");
             foreach (var ch in field.Value)
@@ -191,13 +191,6 @@ namespace EmbedIO.Net.Internal.Http2
         }
         private static bool Letter(char ch) => (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
         private static bool Whitespace(char ch) => ch == ' ' || ch == '\t';
-        private static bool Token(string value)
-        {
-            if (value.Length == 0) return false;
-            foreach (var ch in value) if (!TokenChar(ch)) return false;
-            return true;
-        }
-        private static bool TokenChar(char ch) => Letter(ch) || (ch >= '0' && ch <= '9') || EmbedIO.Internal.StringOperations.IndexOfOrdinal("!#$%&'*+-.^_`|~", ch) >= 0;
         private static Http2ProtocolException Invalid(int id, string reason) => new(1, reason, id);
     }
 }

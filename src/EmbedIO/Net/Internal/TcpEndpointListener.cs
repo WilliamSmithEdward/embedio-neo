@@ -70,8 +70,6 @@ namespace EmbedIO.Net.Internal
         internal HttpConnection[] PendingConnections() => _admission.PendingSnapshot();
         internal bool TryPendingConnections(out HttpConnection[] connections) => _admission.TryPendingSnapshot(out connections);
 
-        public bool BindContext(HttpListenerContext context)
-            => BindContext(context, _routes.Capture());
         internal bool BindContext(HttpListenerContext context, EndpointRoutes.ReadSnapshot routes)
         {
             var owner = routes.Find(context.Request.Url, out var prefix);

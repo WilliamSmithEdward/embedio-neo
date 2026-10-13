@@ -1,7 +1,6 @@
 ﻿#if NET10_0_OR_GREATER
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net.Quic;
 using System.Runtime.Versioning;
@@ -578,11 +577,7 @@ namespace EmbedIO.Net.Internal.Http3
                     }
                 }
             }
-            catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
-            catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
-            { CancelRequests(_stop); }
-            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
-            { if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, error.Message)); }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { CriticalOutputFailed(error); }
             finally
             {
                 try { if (stream != null) await stream.DisposeAsync().ConfigureAwait(false); }
@@ -601,11 +596,7 @@ namespace EmbedIO.Net.Internal.Http3
                     if (bytes.Length != 0) await stream.WriteAsync(bytes, _token).ConfigureAwait(false);
                 }
             }
-            catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
-            catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
-            { CancelRequests(_stop); } // Connection closure is not a critical-stream reset.
-            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
-            { if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, error.Message)); }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { CriticalOutputFailed(error); }
         }
         private async Task WatchCriticalOutputAsync(Http3TransportStream stream)
         {
@@ -614,11 +605,18 @@ namespace EmbedIO.Net.Internal.Http3
                 await stream.WritesClosed.WaitAsync(_token).ConfigureAwait(false);
                 if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, "Peer closed critical output."));
             }
-            catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
-            catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
-            { CancelRequests(_stop); } // Connection closure is not a critical-stream reset.
-            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
-            { if (!_token.IsCancellationRequested) Fail(new Http3ProtocolException(0x104, error.Message)); }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { CriticalOutputFailed(error); }
+        }
+        // The failure policy shared by the critical output streams: shutdown cancellation is quiet,
+        // connection closure is not a critical-stream reset, and anything else closes the connection
+        // with H3_CLOSED_CRITICAL_STREAM.
+        private void CriticalOutputFailed(Exception error)
+        {
+            if (error is OperationCanceledException && _token.IsCancellationRequested) return;
+            if (error is QuicException quic && quic.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
+                CancelRequests(_stop);
+            else if (!_token.IsCancellationRequested)
+                Fail(new Http3ProtocolException(0x104, error.Message));
         }
         private async Task<long?> ReadStreamTypeAsync(Http3TransportStream stream)
         {

@@ -30,7 +30,6 @@ namespace EmbedIO.Net.Internal.Http3
             _feedback = feedback ?? throw new ArgumentNullException(nameof(feedback));
         }
         internal int StoredBytes => _bytes;
-        internal int Count => _entries.Count;
         internal long Find(string name, string value) => _exact.TryGetValue((name, value), out var index) ? index : -1;
 
         internal Insertion? TryInsert(HpackField field, int maximumInstructionBytes)
@@ -38,7 +37,7 @@ namespace EmbedIO.Net.Internal.Http3
             if (maximumInstructionBytes < 0) throw new ArgumentOutOfRangeException(nameof(maximumInstructionBytes));
             if (field.Name == null || field.Value == null) throw new ArgumentException("Missing QPACK field data.", nameof(field));
             var size = (long)field.Name.Length + field.Value.Length + 32;
-            if (field.NeverIndexed || QpackEncoder.Sensitive(field.Name) || size > _capacity || Find(field.Name, field.Value) >= 0) return null;
+            if (field.NeverIndexed || HpackEncoder.IsSensitive(field.Name) || size > _capacity || Find(field.Name, field.Value) >= 0) return null;
             var evictions = 0;
             var available = _capacity - _bytes;
             foreach (var entry in _entries)

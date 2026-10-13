@@ -1,6 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
 using EmbedIO.Utilities;
-using EmbedIO.Internal;
 
 namespace EmbedIO.Internal
 {

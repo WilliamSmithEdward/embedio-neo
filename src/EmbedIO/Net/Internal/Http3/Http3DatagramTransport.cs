@@ -23,7 +23,6 @@ namespace EmbedIO.Net.Internal.Http3
 
     internal abstract class Http3DatagramTransport
     {
-        internal abstract Task<bool> SendNegotiated { get; }
         internal abstract int MaximumSendLength { get; }
         internal abstract Http3DatagramSendStatus TrySend(ReadOnlyMemory<byte> payload);
         internal abstract ValueTask<Http3DatagramPacket?> ReceiveAsync(CancellationToken token);
@@ -33,7 +32,6 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly MsQuicNativeDatagrams _datagrams;
         internal MsQuicHttp3DatagramTransport(MsQuicNativeDatagrams datagrams) => _datagrams = datagrams;
-        internal override Task<bool> SendNegotiated => _datagrams.SendNegotiated;
         internal override int MaximumSendLength => _datagrams.MaxSendLength;
         internal override Http3DatagramSendStatus TrySend(ReadOnlyMemory<byte> payload)
             => _datagrams.TrySend(payload, out _) switch

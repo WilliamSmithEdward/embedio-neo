@@ -80,7 +80,7 @@ namespace EmbedIO.Net.Internal.Http2
             }
         }
 
-        private static bool IsSensitive(string name) => name.Equals("authorization", StringComparison.OrdinalIgnoreCase)
+        internal static bool IsSensitive(string name) => name.Equals("authorization", StringComparison.OrdinalIgnoreCase)
             || name.Equals("proxy-authorization", StringComparison.OrdinalIgnoreCase)
             || name.Equals("cookie", StringComparison.OrdinalIgnoreCase)
             || name.Equals("set-cookie", StringComparison.OrdinalIgnoreCase);

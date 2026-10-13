@@ -2,7 +2,6 @@
 using System.Collections.Specialized;
 using System.Net;
 using EmbedIO.Internal;
-using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
 {

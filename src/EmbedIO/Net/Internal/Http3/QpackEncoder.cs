@@ -65,7 +65,7 @@ namespace EmbedIO.Net.Internal.Http3
         }
         private static void WriteField(MemoryStream output, HpackField field, int maximumEncodedBytes)
         {
-            var sensitive = field.NeverIndexed || Sensitive(field.Name);
+            var sensitive = field.NeverIndexed || HpackEncoder.IsSensitive(field.Name);
             if (!sensitive && Exact.TryGetValue((field.Name, field.Value), out var exact))
             {
                 Ensure(output, IntegerLength(exact, 6), maximumEncodedBytes);
@@ -104,10 +104,6 @@ namespace EmbedIO.Net.Internal.Http3
             return true;
         }
         internal static bool IsStatic(HpackField field) => Exact.ContainsKey((field.Name, field.Value));
-        internal static bool Sensitive(string name) => name.Equals("authorization", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("proxy-authorization", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("cookie", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("set-cookie", StringComparison.OrdinalIgnoreCase);
         private static void Ensure(MemoryStream output, long additional, int limit)
         { if (additional > limit - output.Length) throw Limit(); }
         private static int IntegerLength(long value, int bits)

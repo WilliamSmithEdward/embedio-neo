@@ -1,6 +1,5 @@
 ﻿using System.IO;
 using System.IO.Compression;
-using System.Text;
 using EmbedIO.Diagnostics;
 using EmbedIO.Internal;
 

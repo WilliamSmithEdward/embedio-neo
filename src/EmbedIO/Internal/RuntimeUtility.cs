@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace EmbedIO.Internal
+﻿namespace EmbedIO.Internal
 {
     internal enum Endianness { Big, Little }
 

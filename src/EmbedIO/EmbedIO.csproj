@@ -50,6 +50,7 @@
 
   <ItemGroup>
     <Compile Include="../ResponseCookieFormatter.cs" Link="Internal/ResponseCookieFormatter.cs" />
+    <Compile Include="../TrimmingAttributes.cs" Link="Internal/TrimmingAttributes.cs" />
   </ItemGroup>
 
 </Project>

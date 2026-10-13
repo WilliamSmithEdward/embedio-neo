@@ -1,11 +1,10 @@
 ﻿using System;
+using EmbedIO.Internal;
 
 namespace EmbedIO.Utilities
 {
     partial class Validate
     {
-        private static readonly bool[] ValidRfc2616TokenChars = GetValidRfc2616TokenChars();
-
         /// <summary>
         /// <para>Ensures that a <see langword="string"/> argument is valid as a token as defined by
         /// <see href="https://tools.ietf.org/html/rfc2616#section-2.2">RFC2616, Section 2.2</see>.</para>
@@ -47,22 +46,13 @@ namespace EmbedIO.Utilities
             if (value == null || value.Length == 0)
                 return false;
 
-            for (var i = 0; i < value.Length; i++)
+            foreach (var c in value)
             {
-                var c = value[i];
-                if (c < '\x21' || c > '\x7E' || !ValidRfc2616TokenChars[c])
+                if (!HttpTokenSyntax.IsTokenCharacter(c))
                     return false;
             }
 
             return true;
-        }
-
-        private static bool[] GetValidRfc2616TokenChars()
-        {
-            var result = new bool[128];
-            foreach (var c in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'*+-.^_`|~")
-                result[c] = true;
-            return result;
         }
     }
 }

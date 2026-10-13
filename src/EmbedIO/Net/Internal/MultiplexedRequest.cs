@@ -5,8 +5,6 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
-using EmbedIO.Net.Internal.Http2;
-using EmbedIO.Utilities;
 using EmbedIO.Internal;
 
 namespace EmbedIO.Net.Internal
@@ -24,8 +22,6 @@ namespace EmbedIO.Net.Internal
         private RawRequestBodyStream? _limitedInput;
         private Stream? _rawApplicationInput;
         private int _bodyLimitRetired;
-        internal MultiplexedRequest(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
-            : this(exchange, local, remote, secure, null) { }
         internal MultiplexedRequest(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure,
             System.Security.Cryptography.X509Certificates.X509Certificate2? clientCertificate)
         {

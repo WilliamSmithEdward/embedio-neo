@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Net;
 using System.Text.RegularExpressions;
 using EmbedIO.Utilities;
-using EmbedIO.Internal;
 
 namespace EmbedIO.Routing
 {
