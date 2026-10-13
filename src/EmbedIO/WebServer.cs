@@ -203,13 +203,18 @@ namespace EmbedIO
         /// <inheritdoc />
         protected override void OnFatalException() => Listener?.Dispose();
 
-        private static IHttpListener CreateHttp3Listener(X509Certificate2? certificate, bool combined = false, bool native = false,
-            EmbedIO.Internal.RequestPolicyResolver? bodyPolicy = null)
+        private static IHttpListener CreateHttp3Listener(X509Certificate2? certificate, Net.ServerCertificateSource? certificateSource,
+            bool combined = false, bool native = false, EmbedIO.Internal.RequestPolicyResolver? bodyPolicy = null)
         {
 #if NET10_0_OR_GREATER
             if ((OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
                 && System.Net.Quic.QuicListener.IsSupported)
+            {
+                if (certificateSource != null)
+                    return combined ? new CombinedHttpListener(certificateSource, native, bodyPolicy) : new Net.Internal.Http3.Http3Listener(certificateSource, native, bodyPolicy);
+
                 return combined ? new CombinedHttpListener(certificate, native, bodyPolicy) : new Net.Internal.Http3.Http3Listener(certificate, native, bodyPolicy);
+            }
 #endif
             throw new PlatformNotSupportedException("HTTP/3 requires the .NET 10 asset and native QUIC support.");
         }
@@ -222,13 +227,18 @@ namespace EmbedIO
                 throw new NotSupportedException(
                     "MaximumConnections, RequestHeadersTimeout and KeepAliveTimeout apply to TCP listeners. Use EmbedIO or EmbedIOCombined mode.");
 
+            // A source replaces the fixed certificate settings, whose getter would otherwise load or register one.
+            X509Certificate2? CertificateOrNull() => Options.CertificateSource != null ? null : Options.Certificate;
+
             IHttpListener DoCreate() => Options.Mode switch
             {
-                HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(Options.Certificate, false, nativeHttp3, bodyPolicy),
-                HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(Options.Certificate, true, nativeHttp3, bodyPolicy),
+                HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(CertificateOrNull(), Options.CertificateSource, false, nativeHttp3, bodyPolicy),
+                HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(CertificateOrNull(), Options.CertificateSource, true, nativeHttp3, bodyPolicy),
                 _ when (int)Options.Mode == 1 => throw new NotSupportedException(
                     "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."),
-                _ => new Net.HttpListener(Options.Certificate, bodyPolicy)
+                _ => Options.CertificateSource != null
+                    ? new Net.HttpListener(Options.CertificateSource, bodyPolicy)
+                    : new Net.HttpListener(Options.Certificate, bodyPolicy)
             };
 
             var listener = DoCreate();

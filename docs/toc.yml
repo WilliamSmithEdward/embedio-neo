@@ -48,6 +48,8 @@
       href: guides/request-trailers.md
     - name: HTTPS
       href: guides/https.md
+    - name: Rotating the server certificate (unreleased)
+      href: guides/certificate-rotation.md
     - name: Request limits, admission and deadlines
       href: guides/request-limits.md
     - name: Request-body byte limits
