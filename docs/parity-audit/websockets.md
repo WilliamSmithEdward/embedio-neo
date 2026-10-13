@@ -5,9 +5,15 @@ messages on both listeners. Unicode text and binary bytes 0, 1, 127, 128 and 255
 round-trip with the correct message type. Each output is checked against the
 sent bytes in addition to comparing implementations.
 
-The Unix profile compares the four managed message cases. It does not claim a
+The Linux (`unix`) profile compares the four managed message cases. It does not claim a
 full old native WebSocket comparison, because the upstream native DTO workload
 already terminates its listener; see [Lifecycle](lifecycle.md).
+
+The macOS profile skips these four cases for every build. On macOS the original
+EmbedIO's managed WebSocket can leave the echo unanswered, and its process aborted
+when the harness's receive deadline fired (run 38449281895). Skipping the cases on
+both sides keeps the case lists aligned. EmbedIO.Tests covers Neo's WebSocket
+behavior on macOS; see the [audit method](README.md).
 
 The client first receives an application-owned `ready` greeting. This deliberately
 avoids upstream's separately confirmed early-message-loss behavior; it does not
