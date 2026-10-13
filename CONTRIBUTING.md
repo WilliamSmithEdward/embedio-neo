@@ -129,8 +129,16 @@ dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes --include 
 ```
 
 Ordinary fixes should format only changed files; repository-wide formatting belongs
-to an explicit cleanup task. All testing and analyzer packages remain development-only.
-Library targets are unchanged.
+to an explicit cleanup task. CI also checks the projects outside `EmbedIO.sln`, the MAUI
+apps included, in folder mode, which loads no project and needs no restore or workload:
+
+```sh
+dotnet format whitespace test --folder --verify-no-changes
+dotnet format whitespace tools --folder --verify-no-changes
+```
+
+All testing and analyzer packages remain development-only. Library targets are
+unchanged.
 
 Builds treat compiler and analyzer warnings as errors. CI also verifies formatting
 and runs `python scripts/check_analyzer_suppressions.py`, which rejects diagnostic

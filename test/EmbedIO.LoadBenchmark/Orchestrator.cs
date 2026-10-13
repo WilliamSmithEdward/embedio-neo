@@ -1,14 +1,13 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
-using System.Net;
 using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using EmbedIO.PlatformTests;
 
 internal sealed record EngineTarget(string Name, string Engine, string Directory);
 
@@ -192,7 +191,7 @@ internal static class Orchestrator
         int port;
         try
         {
-            port = FreePort();
+            port = LoopbackPorts.Free();
         }
         catch (InvalidOperationException exception)
         {
@@ -308,7 +307,7 @@ internal static class Orchestrator
             // Bounded diagnostic for transport failures: machine-wide TCP states by side.
             var census = new JsonObject();
             foreach (var group in TcpConnections()
-                .GroupBy(connection => (connection.LocalPort is >= ServerPortFirst and < ServerPortLast ? "server-" : "other-") + connection.State))
+                .GroupBy(connection => (connection.LocalPort is >= LoopbackPorts.First and < LoopbackPorts.Last ? "server-" : "other-") + connection.State))
             {
                 census[group.Key] = group.Count();
             }
@@ -414,7 +413,7 @@ internal static class Orchestrator
     // ephemeral ports; server-side entries do not limit new client connections.
     internal static int TimeWaitCount(bool clientSide = true)
         => TcpConnections().Count(connection => connection.State == TcpState.TimeWait
-            && (!clientSide || connection.LocalPort is < ServerPortFirst or >= ServerPortLast));
+            && (!clientSide || connection.LocalPort is < LoopbackPorts.First or >= LoopbackPorts.Last));
 
     // Every non-listening TCP connection by local port and state. On macOS .NET's
     // GetActiveTcpConnections omits TIME_WAIT, so the TIME_WAIT gate and the socket
@@ -439,9 +438,6 @@ internal static class Orchestrator
         return result;
     }
 
-    private const int ServerPortFirst = 20000;
-    private const int ServerPortLast = 30000;
-
     // Server-side TCP connections still known to the OS after the client has exited,
     // by state. TIME_WAIT is kernel bookkeeping; any other state is a socket the server
     // has not closed. QUIC connections are not visible here.
@@ -454,34 +450,6 @@ internal static class Orchestrator
         }
 
         return states;
-    }
-
-    // TCP and UDP must both be free because HTTP/3 binds UDP on the same number. Ports
-    // come from below the OS dynamic range so client sockets in TIME_WAIT never collide.
-    internal static int FreePort()
-    {
-        for (var attempt = 0; attempt < 200; attempt++)
-        {
-            var port = Random.Shared.Next(ServerPortFirst, ServerPortLast);
-            try
-            {
-                using var tcp = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                tcp.Bind(new IPEndPoint(IPAddress.Loopback, port));
-                using var udp = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                udp.Bind(new IPEndPoint(IPAddress.Loopback, port));
-                using var udp6 = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp);
-                udp6.Bind(new IPEndPoint(IPAddress.IPv6Loopback, port));
-                using var tcp6 = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp);
-                tcp6.Bind(new IPEndPoint(IPAddress.IPv6Loopback, port));
-                return port;
-            }
-            catch (SocketException)
-            {
-                // Try another ephemeral port.
-            }
-        }
-
-        throw new InvalidOperationException("No free TCP/UDP port pair.");
     }
 
     internal static X509Certificate2 CreateCertificate()
