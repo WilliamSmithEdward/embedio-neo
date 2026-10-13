@@ -185,3 +185,23 @@ Raw scan output is retained under ignored
 under `TestResults/audit/scan-v2-packages-clamav`. Package and CodeView receipts are under
 `TestResults/audit/v2-local-package-inspection`. Independent comparison hashes
 are retained under `TestResults/audit/v2-di-yara-proposal`.
+
+## Hosted v2 artifact follow-up
+
+Malware run 38421579803 at PR #182's a7aa1365 head reports the same rule on
+both 2.0.0 DI assemblies, with zero YARA tool errors. The separately downloaded
+scanned package has SHA-256
+`6cf76e8de8a89602a318b66865cc08f232f6de9551f84c85065c03c5bd2241e4`.
+The net10.0 assembly hash is
+`0aea1b9556daee42b95cfb332087df9df336f71ce5d981fe440b811008ec8994`;
+the netstandard2.0 hash is
+`9086fc6306ce434e591cc15049ac847758f28a7b49b43a48a66b1b0266e4145e`.
+Independent RSDS metadata inspection finds the compiler-generated
+EmbedIO.DependencyInjection.pdb path in each, at offsets 27436 and 29716.
+These are different artifacts from the earlier local overlay. The original
+failed policy report is preserved, including stale 1.0.3 acceptance paths and
+the two binding source/review matches. The exact narrow acceptance and matching
+alert-dismissal exceptions remain pending owner approval; no scanner success
+is claimed. Downloaded assets, raw YARA result and metadata receipt are under
+ignored TestResults/audit/pr182-packages-38421579803 and
+TestResults/audit/pr182-yara-38421579803.

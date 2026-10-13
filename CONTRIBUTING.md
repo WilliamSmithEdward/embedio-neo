@@ -44,7 +44,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 5943
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 6000
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -58,9 +58,14 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 5943 executed/reported test cases to catch accidental discovery loss; update
+least 6000 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
-suite budget is eight minutes on all three platforms. William approved the Unix
+suite budget is eight minutes on Windows/Linux and twelve minutes for macOS CI
+coverage. William approved the macOS increase on 2026-10-13 after CI
+38421579986 stopped at eight minutes with 5,408 of 5,943 cases reported (zero
+reported case failures), leaving incomplete validation. The new discovery floor
+is 6,000. The original failure remains retained; all cases must finish and pass.
+William approved the earlier Unix
 allowance on 2026-10-10 and requested loosening the Windows allowance on
 2026-10-11 after a coverage run reported all 4,976 cases with zero failures but
 its host ended at the five-minute boundary. A longer budget does not classify

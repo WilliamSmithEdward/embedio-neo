@@ -513,3 +513,33 @@ or failed alert writes retire without a new grace period. Older runtimes without
 that API retain their existing TLS close behavior. Orderly closure is not
 guaranteed when a peer races expiry or faults. See the
 [idle closure guide](../project/http1-idle-closure.md) for details and limitations.
+
+## Explicit extended-CONNECT acceptance
+
+In the v2 development engine, an HTTP/2 or HTTP/3 extended-CONNECT handler must
+call `IHttpTunnelContext.AcceptTunnelAsync` before committing a successful
+response. Application dispatch still occurs: inspect the requested protocol and
+authorize it before acceptance. Ordinary 2xx output without a handoff becomes an
+empty 501 response before headers or payload are sent. Explicit application
+errors retain their status and body. Plain CONNECT and HTTP/1 are unchanged;
+WebSockets use the existing WebSocket acceptance API.
+
+This approved change also affects deliberate custom extension implementations
+that previously wrote a 2xx response and used Request/Response streams directly.
+Migrate those handlers to the returned HttpTunnel stream:
+
+```csharp
+if (context is not IHttpTunnelContext capability)
+    throw new HttpException(System.Net.HttpStatusCode.NotImplemented);
+// Inspect the offered protocol and authorize this request before accepting.
+var tunnel = await capability.AcceptTunnelAsync("example-tunnel", false, context.CancellationToken);
+await tunnel.Stream.CopyToAsync(tunnel.Stream, context.CancellationToken);
+await tunnel.CompleteOutputAsync(context.CancellationToken);
+```
+
+The example implements an application-specific byte echo protocol, not a proxy.
+Keep the handler alive while its accepted stream operations are running. Use
+HttpTunnel completion and closure instead of independently disposing the request
+or response streams. Capsule framing remains explicitly opt-in. See
+[capsule and tunnel carriers](../guides/capsule-tunnels.md) for ownership,
+deadlines and independent send/receive completion.

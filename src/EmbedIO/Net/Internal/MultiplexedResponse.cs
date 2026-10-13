@@ -29,6 +29,8 @@ namespace EmbedIO.Net.Internal
         // Body bytes handed to the exchange, for telemetry.
         internal long SentBodyBytes => Volatile.Read(ref _sentBody);
         private bool _tunnel;
+        private bool _extendedConnectAccepted;
+        private bool _extendedConnectRejected;
         private bool _capsuleCarrier;
         private bool _contentTypeConfigured;
         private HashSet<string>? _trailerNames;
@@ -100,8 +102,31 @@ namespace EmbedIO.Net.Internal
                 Headers[HttpCapsuleProtocol.HeaderName] = "?1";
             }
             _tunnel = true;
+            _extendedConnectAccepted = true;
             _capsuleCarrier = capsules;
         }
+        internal void BeginWebSocket()
+        {
+            EnsureHeaders();
+            _extendedConnectAccepted = true;
+        }
+
+        // Called under the output gate, before either final-header commitment path.
+        // Application dispatch and explicit error responses remain authoritative.
+        private void RejectUnacceptedExtendedConnect()
+        {
+            if (_headersSent || _extendedConnectAccepted || _exchange.Request.Method != "CONNECT"
+                || _exchange.Request.Protocol == null || _status < 200 || _status >= 300) return;
+            _extendedConnectRejected = true;
+            _status = 501;
+            StatusDescription = HttpListenerResponseHelper.GetStatusDescription(_status);
+            Headers[HttpHeaderNames.ContentLength] = "0";
+            Headers.Remove("Trailer");
+            Headers.Remove(HttpCapsuleProtocol.HeaderName);
+            _trailerNames = null;
+            _chunked = false;
+        }
+
         private HpackField[] BuildHeaders(bool closing)
         {
             if (_trailerNames != null && (SuppressBody || _status == 205 || _tunnel))
@@ -276,7 +301,8 @@ namespace EmbedIO.Net.Internal
         private async Task EnsureSentAsync(bool closing, CancellationToken token)
         {
             if (_headersSent) return;
-            await _exchange.SendHeadersAsync(BuildHeaders(closing), (closing && _trailerNames == null) || SuppressBody, token).ConfigureAwait(false);
+            RejectUnacceptedExtendedConnect();
+            await _exchange.SendHeadersAsync(BuildHeaders(closing), _extendedConnectRejected || (closing && _trailerNames == null) || SuppressBody, token).ConfigureAwait(false);
             _headersSent = true;
         }
         private async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken token)
@@ -288,6 +314,12 @@ namespace EmbedIO.Net.Internal
             {
                 if (_closed) throw new ObjectDisposedException(nameof(MultiplexedResponse));
                 if (count == 0) return;
+                RejectUnacceptedExtendedConnect();
+                if (_extendedConnectRejected)
+                {
+                    await EnsureSentAsync(true, token).ConfigureAwait(false);
+                    return;
+                }
                 if (!_headersSent && !SuppressBody && _status >= 200 && _exchange is IMultiplexedHeaderCoalescing coalescing)
                 {
                     try { await coalescing.SendHeadersAndWriteAsync(BuildHeaders(false), buffer, offset, count, token).ConfigureAwait(false); }

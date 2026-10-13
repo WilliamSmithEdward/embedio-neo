@@ -513,3 +513,59 @@ comparisons remain unresolved; final exact-source platform, package, security
 and CI gates remain required. Scanner reviews are not automatic acceptance of
 new findings or a waiver of matching-alert dismissal requirements. No release
 or version tag has been published by this audit.
+
+## Approved extended-CONNECT guard, changed-source validation
+
+The owner approved mandatory explicit extended-CONNECT acceptance on 2026-10-13.
+The shared H2/H3 response now rejects an unaccepted successful final response
+with empty 501 before headers, including coalesced first writes, explicit flush,
+empty close/dispose and status edits. Later ordinary writes are discarded.
+AcceptTunnelAsync records acceptance before its legitimate flush; actual
+WebSocket acceptance records its separate handoff before flushing. The protocol
+token alone does not grant acceptance. Application dispatch, explicit errors,
+plain CONNECT and H1 remain unchanged. Migration and release notes explicitly
+cover direct Request/Response custom extension implementations.
+
+On the retained unchanged core, all 28 new H2 cleartext/TLS guard cases and all
+14 H3 guard cases failed on actual 200/201/204 success. On the candidate, all
+38 H2 cases and 19 public System.Net.Quic H3 cases passed, including application
+400/401/403/404/501 bodies and healthy siblings on the same connection. The
+broader selected tunnel/WebSocket suite passed 519 cases with zero skips. Both
+library targets and strict solution builds reported zero warnings/errors;
+runner restoration and owned-lock cleanup were verified. This does not yet
+prove the final combined suite or all hosted/platform gates. The discovery floor
+is raised to 6,000 for the 57 new cases.
+
+PR #182 now includes the prior audit commit 5d2a6e80 and content-identical main
+reconciliation a7aa1365. Their security/malware failures are retained: the former
+re-emits the previously dismissed immutable-ZIP-provider false positive, reviewed
+in .github/security/zip-provider-codeql-review.md; the latter reports two new
+binding review/test paths, v2 DI binary paths and stale v1 DI paths. The new
+narrow malware acceptance/alert-dismissal exceptions remain pending. Neither
+failure is canceled or considered a green result.
+
+## macOS coverage budget decision
+
+CI 38421579986 on a7aa1365 passed Windows/Linux, package/allocation checks and
+platform smoke jobs, but macOS coverage stopped at the whole-run limit after
+5,408 of 5,943 cases (5,388 passed, 20 skipped, zero reported case failures).
+Its TRX case durations sum to 462.073 seconds; the remaining fixtures did not
+complete. This is incomplete acceptance. William approved raising only macOS
+CI coverage to twelve minutes on 2026-10-13. Windows/Linux remain at eight
+minutes, with the unchanged 15-minute job bound, per-case deadlines, coverage,
+iterations, discovery minimum and failure propagation. No retry or skip was
+added. A complete changed-source macOS pass remains required.
+
+The local F2 combined validation reported all 6,000 cases in 5m09s, with 5,978
+passed, 21 expected skips and one existing HTTP/1 burst-test socket connection
+failure (10055, NoBufferSpaceAvailable). All four unchanged burst/reset cases
+then passed in isolation. The original failure and isolated result are retained;
+they do not establish a repaired resource defect. A second complete run on the
+same production/test source is in progress.
+
+The unchanged second local full run finished successfully in 5m10s: all 6,000
+cases reported, 5,979 passed and 21 expected skips. Strict build, analyzer/parser
+and suppression guards, formatting, exact runner restoration and owned nonce
+release passed. Current compiler-input hashes match the tested source. The
+first run's 10055 failure remains recorded; no socket-resource repair is claimed.
+Fresh exact-head hosted validation is still required after integration.

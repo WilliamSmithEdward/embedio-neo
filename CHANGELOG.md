@@ -4,6 +4,12 @@
 
 ## [2.0.0] - Unreleased
 
+- Require explicit AcceptTunnelAsync before successful HTTP/2 or HTTP/3 extended
+  CONNECT output. An ordinary catch-all 2xx becomes an empty 501; explicit errors,
+  application dispatch, plain CONNECT and actual WebSocket acceptance remain.
+  Direct-stream custom handlers must migrate to HttpTunnel. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#explicit-extended-connect-acceptance).
+
 This major HTTP-engine upgrade requires rebuilding consumers. Follow the
 [Neo v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md) for the approved
 API and behavior changes: the Microsoft listener backend is retired, `RawUrl`

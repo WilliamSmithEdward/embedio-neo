@@ -16,6 +16,12 @@ ordinary authority-form CONNECT. For HTTP/2/3, select the requested extended
 CONNECT protocol, or null for ordinary CONNECT. WebSockets continue to use their
 existing acceptance API and module.
 
+HTTP/2 and HTTP/3 extended CONNECT require an explicit handoff before successful
+final headers. Ordinary 2xx output without AcceptTunnelAsync becomes an empty
+501 response. Explicit errors and application dispatch are preserved. Direct
+Request/Response custom extension implementations must migrate to HttpTunnel;
+see [the v2 migration steps](../compatibility/neo-v1-to-v2.md#explicit-extended-connect-acceptance).
+
 ## Endpoint example
 
 This complete .NET 10 program defines a local test extension named

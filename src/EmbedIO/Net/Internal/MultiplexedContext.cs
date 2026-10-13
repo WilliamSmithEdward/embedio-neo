@@ -250,6 +250,7 @@ namespace EmbedIO.Net.Internal
             // RFC 8441 / RFC 9220 replace the key/accept exchange with :protocol. Headers
             // and cookies still flow through the ordinary response serializer.
             Response.Headers.Remove(HttpHeaderNames.SecWebSocketAccept);
+            ((MultiplexedResponse)Response).BeginWebSocket();
             var transport = new Http2DuplexStream(_exchange.InputStream, Response.OutputStream);
             try
             {
