@@ -59,23 +59,7 @@ namespace EmbedIO.Net.Internal
                 while (true)
                 {
                     if (!Key(out var start, out var length)) return false;
-                    var kind = Kind.Boolean; long value = 1;
-                    if (Take('='))
-                    {
-                        if (Take('('))
-                        {
-                            kind = Kind.Other;
-                            while (true)
-                            {
-                                Space();
-                                if (Take(')')) break;
-                                if (!Bare(out _, out _) || !Parameters()) return false;
-                                if (Current != ' ' && Current != ')') return false;
-                            }
-                        }
-                        else if (!Bare(out kind, out value)) return false;
-                    }
-                    if (!Parameters()) return false;
+                    if (!MemberValue(out var kind, out var value) || !Parameters()) return false;
                     // Dictionary duplicate keys replace the whole prior member,
                     // including replacement with an ignored type/range.
                     if (length == 1 && _text[start] == 'u') urgency = kind == Kind.Integer && value >= 0 && value <= 7 ? (int)value : 3;
@@ -85,6 +69,26 @@ namespace EmbedIO.Net.Internal
                     if (!Take(',')) return false;
                     Space(true);
                     if (_position == _text.Length) return false;
+                }
+            }
+            // A member without "=" is Boolean true. "=(" opens an inner list,
+            // validated and skipped as an ignored type; otherwise one bare item.
+            private bool MemberValue(out Kind kind, out long value)
+            {
+                kind = Kind.Boolean; value = 1;
+                if (!Take('=')) return true;
+                if (!Take('(')) return Bare(out kind, out value);
+                kind = Kind.Other;
+                return InnerList();
+            }
+            private bool InnerList()
+            {
+                while (true)
+                {
+                    Space();
+                    if (Take(')')) return true;
+                    if (!Bare(out _, out _) || !Parameters()) return false;
+                    if (Current != ' ' && Current != ')') return false;
                 }
             }
             private bool Parameters()

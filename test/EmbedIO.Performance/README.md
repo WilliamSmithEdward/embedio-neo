@@ -148,6 +148,19 @@ sockets and application work are excluded.
 Use the same runner binary against baseline and candidate core assemblies. These
 figures are parser microbenchmarks, not end-to-end server throughput.
 
+## Parser timing
+
+`--parser-timing` measures the parsers restructured in the complexity pass:
+JSON input normalization on a plain and on a legacy-syntax document, byte-range
+selection (two ranges, and one open-ended range through the public helper), a
+Priority dictionary, a 64-chunk chunked body, a 2 KB DEFLATE stream through the
+framing validator, and an HTTP/3 control stream carrying SETTINGS and eight
+PRIORITY_UPDATE frames. Each row reports ns/op and B/op over 100,000 operations
+after warmup, and every operation validates its result; the output names the
+core assembly and its SHA-256. Use the same runner against baseline and
+candidate cores (copy the output and replace only `EmbedIO.dll`), alternate the
+process order, and set `DOTNET_TieredCompilation=0` for stable-JIT comparisons.
+Timings exclude I/O and application work and do not establish server throughput.
 
 ## Separate-process engine comparison
 
