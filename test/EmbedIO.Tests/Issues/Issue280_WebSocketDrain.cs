@@ -429,6 +429,7 @@ namespace EmbedIO.Tests.Issues
             Assert.That(closed.Status, Is.EqualTo(WebSocketCloseStatus.EndpointUnavailable));
             await AnswerCloseAsync(socket, stop.Token);
             await drain.WaitAsync(TimeSpan.FromSeconds(15));
+            await hub.Disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.That(hub.DisconnectedCount, Is.EqualTo(1));
         }
 
