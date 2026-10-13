@@ -7,7 +7,6 @@ using System.Net.Http;
 using System.Text;
 using EmbedIO.Net;
 using EmbedIO.Utilities;
-using EmbedIO.Internal;
 
 namespace EmbedIO.Testing.Internal
 {

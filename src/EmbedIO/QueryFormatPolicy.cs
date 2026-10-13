@@ -34,11 +34,11 @@ namespace EmbedIO
                 var parameters = new List<KeyValuePair<string, string>>();
                 var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 if (index != 0) { structured.Append(", "); accept.Append(", "); }
-                Quote(structured, AsciiLower(parsed.MediaType));
+                Quote(structured, Internal.StringOperations.ToLowerAscii(parsed.MediaType));
                 accept.Append(parsed.ToString());
                 foreach (var parameter in parsed.Parameters)
                 {
-                    var key = AsciiLower(parameter.Name);
+                    var key = Internal.StringOperations.ToLowerAscii(parameter.Name);
                     if (!ValidKey(key) || !names.Add(key) || parameter.Value is null)
                         throw new ArgumentException("Invalid or repeated QUERY media parameter.", nameof(supportedMediaTypes));
                     var value = Unquote(parameter.Value);
@@ -135,18 +135,6 @@ namespace EmbedIO
         private static bool ValidRange(string type, string subtype)
             => (type == "*" && subtype == "*")
                 || (type.IndexOf("*", StringComparison.Ordinal) < 0 && (subtype == "*" || subtype.IndexOf("*", StringComparison.Ordinal) < 0));
-        private static string AsciiLower(string value)
-        {
-            char[]? result = null;
-            for (var index = 0; index < value.Length; index++)
-            {
-                var character = value[index];
-                if (character is < 'A' or > 'Z') continue;
-                result ??= value.ToCharArray();
-                result[index] = (char)(character + 32);
-            }
-            return result is null ? value : new string(result);
-        }
         private static bool ValidKey(string key)
         {
             if (key.Length == 0 || !(key[0] is >= 'a' and <= 'z' or '*')) return false;

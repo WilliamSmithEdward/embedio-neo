@@ -1,6 +1,7 @@
 ﻿#if NETSTANDARD2_0
 // The .NET Standard 2.0 reference assemblies lack the trimming annotations. These internal
-// copies let shared source carry them; only the .NET 10 asset is analyzed for trimming.
+// copies, compiled into core and EmbedIO.DependencyInjection, let shared source carry them;
+// only the .NET 10 asset is analyzed for trimming.
 namespace System.Diagnostics.CodeAnalysis
 {
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor | AttributeTargets.Class, Inherited = false)]

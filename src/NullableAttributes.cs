@@ -1,5 +1,4 @@
 ﻿#if NETSTANDARD2_0
-using System;
 
 namespace System.Diagnostics.CodeAnalysis
 {

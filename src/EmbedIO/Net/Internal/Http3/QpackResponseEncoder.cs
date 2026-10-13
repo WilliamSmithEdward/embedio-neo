@@ -90,7 +90,7 @@ namespace EmbedIO.Net.Internal.Http3
             var table = _table ?? throw new InvalidOperationException("Missing QPACK table.");
             var capacity = Math.Min(_maximumCapacity, _peerCapacity);
             var size = (long)field.Name.Length + field.Value.Length + 32;
-            if (field.NeverIndexed || QpackEncoder.Sensitive(field.Name) || size > capacity) return false;
+            if (field.NeverIndexed || HpackEncoder.IsSensitive(field.Name) || size > capacity) return false;
             if (size <= capacity - table.StoredBytes) return true;
             if (table.Find(field.Name, field.Value) >= 0) return false;
             // Under table pressure, require a recent repeat before paying for

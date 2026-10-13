@@ -60,7 +60,7 @@ namespace EmbedIO.Forwarding.Internal
                         return null;
 
                     var name = pair.Substring(0, equals);
-                    if (!IsToken(name))
+                    if (!EmbedIO.Utilities.Validate.IsRfc2616Token(name))
                         return null;
 
                     var value = Unquote(pair.Substring(equals + 1));
@@ -190,7 +190,8 @@ namespace EmbedIO.Forwarding.Internal
             if (port != null && !IsPort(port))
                 return null;
 
-            return LowerAscii(port == null ? hostPart : hostPart + ":" + port);
+            // Host names compare case-insensitively; only ASCII letters occur in a valid authority.
+            return EmbedIO.Internal.StringOperations.ToLowerAscii(port == null ? hostPart : hostPart + ":" + port);
         }
 
         // RFC 7239 node: an IPv4 address, a bracketed IPv6 address, "unknown" or an obfuscated
@@ -256,19 +257,6 @@ namespace EmbedIO.Forwarding.Internal
             return true;
         }
 
-        // Host names compare case-insensitively; only ASCII letters occur in a valid authority.
-        private static string LowerAscii(string value)
-        {
-            var chars = value.ToCharArray();
-            for (var i = 0; i < chars.Length; i++)
-            {
-                if (chars[i] is >= 'A' and <= 'Z')
-                    chars[i] = (char)(chars[i] + ('a' - 'A'));
-            }
-
-            return new string(chars);
-        }
-
         private static bool IsPort(string value)
             => value.Length > 0 && value.Length <= 5
             && int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
@@ -287,20 +275,6 @@ namespace EmbedIO.Forwarding.Internal
             return true;
         }
 
-        private static bool IsToken(string value)
-        {
-            if (value.Length == 0)
-                return false;
-
-            foreach (var c in value)
-            {
-                if (c <= ' ' || c >= 127 || EmbedIO.Internal.StringOperations.IndexOfOrdinal("()<>@,;:\\\"/[]?={}", c) >= 0)
-                    return false;
-            }
-
-            return true;
-        }
-
         // A token, or a quoted-string with its escapes resolved; null if it is neither.
         private static string? Unquote(string value)
         {
@@ -308,7 +282,7 @@ namespace EmbedIO.Forwarding.Internal
                 return null;
 
             if (value[0] != '"')
-                return IsToken(value) ? value : null;
+                return EmbedIO.Utilities.Validate.IsRfc2616Token(value) ? value : null;
 
             if (value.Length < 2 || value[value.Length - 1] != '"')
                 return null;

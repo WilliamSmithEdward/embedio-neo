@@ -108,11 +108,7 @@ namespace EmbedIO.Net.Internal.WebTransport
         public int BufferedDatagramCount { get { lock (_gate) return _bufferedDatagrams.Count; } }
         public int PendingCapsuleCount { get { lock (_gate) return _outgoingCapsules.Count; } }
         public long PeerMaxData { get { lock (_gate) return _peerMaxData; } }
-        public long PeerMaxStreamsBidirectional { get { lock (_gate) return _peerMaxStreamsBidirectional; } }
-        public long PeerMaxStreamsUnidirectional { get { lock (_gate) return _peerMaxStreamsUnidirectional; } }
         public long LocalMaxData { get { lock (_gate) return _localMaxData; } }
-        public long LocalMaxStreamsBidirectional { get { lock (_gate) return _localMaxStreamsBidirectional; } }
-        public long LocalMaxStreamsUnidirectional { get { lock (_gate) return _localMaxStreamsUnidirectional; } }
 
         // Section 3.2: the server's session exists once it sends a 2xx response.
         // Streams and datagrams that arrived first are delivered now, in order.

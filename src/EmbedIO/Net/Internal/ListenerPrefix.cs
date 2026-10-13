@@ -18,7 +18,6 @@ namespace EmbedIO.Net.Internal
             Port = canonical.Port;
             Path = canonical.PathAndQuery + canonical.Fragment;
         }
-        public HttpListener? Listener { get; set; }
         public string Host { get; }
         public int Port { get; }
         public bool Secure { get; }

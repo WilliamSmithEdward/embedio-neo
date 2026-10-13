@@ -8,7 +8,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Utilities;
-using EmbedIO.WebSockets.Internal;
 using EmbedIO.Internal;
 using EmbedIO.Diagnostics;
 

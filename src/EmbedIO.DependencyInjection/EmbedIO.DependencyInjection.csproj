@@ -18,5 +18,6 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <None Include="../../LICENSE" Link="LICENSE" Pack="true" PackagePath="" />
+    <Compile Include="../TrimmingAttributes.cs" Link="Internal/TrimmingAttributes.cs" />
   </ItemGroup>
 </Project>

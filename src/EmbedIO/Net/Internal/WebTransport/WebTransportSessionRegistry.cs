@@ -178,11 +178,6 @@ namespace EmbedIO.Net.Internal.WebTransport
             }
         }
 
-        internal bool TryGetSession(long sessionId, out WebTransportSession? session)
-        {
-            lock (_gate) return _sessions.TryGetValue(sessionId, out session);
-        }
-
         // A stream whose header named sessionId. Returns false when the stream was
         // reset; buffered streams return true and are delivered later.
         internal bool RouteIncomingStream(long sessionId, WebTransportStreamHandle stream)

@@ -1,8 +1,6 @@
-﻿using System;
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using EmbedIO.Internal;
-using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
 {

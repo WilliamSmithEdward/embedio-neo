@@ -37,9 +37,6 @@ namespace EmbedIO.Net.Internal.Http3
         private long? _length;
         private long _sent;
         private int _disposed;
-        internal Http3QuicExchange(QuicStream stream, Http3RequestStream reader, Http2RequestHeaders request,
-            IHttp3ExchangeOwner owner, CancellationToken token)
-            : this(new SystemQuicTransportStream(stream), reader, request, owner, token) { }
         internal Http3QuicExchange(Http3TransportStream stream, Http3RequestStream reader, Http2RequestHeaders request,
             IHttp3ExchangeOwner owner, CancellationToken token)
         {
@@ -72,7 +69,6 @@ namespace EmbedIO.Net.Internal.Http3
         }
         internal bool CanSendDatagrams => Volatile.Read(ref _headers) && Volatile.Read(ref _tunnel)
             && !Volatile.Read(ref _ended) && !Volatile.Read(ref _outputFailed) && Volatile.Read(ref _disposed) == 0;
-        internal HttpPriority Priority => PriorityState?.Value ?? new HttpPriority(3, false);
         public long Id => _stream.Value.Id;
         public Http2RequestHeaders Request { get; }
         public Stream InputStream => Body;

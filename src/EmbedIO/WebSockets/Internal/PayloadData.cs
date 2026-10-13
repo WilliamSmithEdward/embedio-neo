@@ -2,7 +2,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
-using EmbedIO.Internal;
 
 namespace EmbedIO.WebSockets.Internal
 {

@@ -49,7 +49,6 @@ namespace EmbedIO.Net.Internal.Http3
         public override bool CanWrite => false;
         public override long Length => throw new NotSupportedException();
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-        internal bool Ended => _ended;
         internal HpackField[] Trailers { get; private set; } = Array.Empty<HpackField>();
         public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer, offset, count, CancellationToken.None).GetAwaiter().GetResult();
         public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)

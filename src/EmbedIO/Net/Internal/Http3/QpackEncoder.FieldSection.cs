@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using EmbedIO.Net.Internal.Http2;
 
 namespace EmbedIO.Net.Internal.Http3
@@ -64,7 +63,7 @@ namespace EmbedIO.Net.Internal.Http3
             return new FieldSection(wire, owned);
         }
         private static bool UseDynamic(HpackField field, long index) => index >= 0 && !field.NeverIndexed
-            && !Sensitive(field.Name) && !Exact.ContainsKey((field.Name, field.Value));
+            && !HpackEncoder.IsSensitive(field.Name) && !Exact.ContainsKey((field.Name, field.Value));
         private static void ValidateOctets(string value)
         {
             foreach (var octet in value)

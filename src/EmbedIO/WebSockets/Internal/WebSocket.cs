@@ -9,7 +9,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Net.Internal;
-using EmbedIO.Internal;
 using EmbedIO.Diagnostics;
 
 namespace EmbedIO.WebSockets.Internal

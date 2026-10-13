@@ -52,11 +52,9 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal const long LastApplicationErrorCode = 0x52e5ac983162;
 
         // RFC 9114 section 8.1 codes this mapping relies on.
-        internal const long H3FrameError = 0x106;
         internal const long H3ExcessiveLoad = 0x107;
         internal const long H3IdError = 0x108;
         internal const long H3SettingsError = 0x109;
-        internal const long H3RequestRejected = 0x10b;
         internal const long H3MessageError = 0x10e;
         internal const long H3DatagramError = 0x33;
 

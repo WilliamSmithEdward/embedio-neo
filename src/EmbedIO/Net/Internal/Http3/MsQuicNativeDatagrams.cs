@@ -194,7 +194,6 @@ namespace EmbedIO.Net.Internal.Http3
         // Completes with whether the peer advertised max_datagram_frame_size,
         // or false if the connection ends before the handshake completes.
         internal Task<bool> SendNegotiated => _negotiated.Task;
-        internal bool SendEnabled { get { lock (_sync) return _sendEnabled; } }
         // The last limit MsQuic indicated. A server processes the peer's transport
         // parameters before the connection has an owner, so MsQuic may indicate
         // nothing until a path MTU change; meanwhile the protocol ceiling 65535

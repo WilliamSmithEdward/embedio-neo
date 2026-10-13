@@ -339,6 +339,16 @@ namespace EmbedIO.WebApi
 
         private static T AwaitResult<T>(Task<T> task) => task.ConfigureAwait(false).GetAwaiter().GetResult();
 
+        // The constructed request data interfaces of one generic definition that a parameter's
+        // attributes implement, in attribute and interface order.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        private static List<(Attribute Attr, Type Intf)> RequestDataInterfaces(ParameterInfo parameter, Type definition)
+            => parameter.GetCustomAttributes<Attribute>()
+                .SelectMany(attr => attr.GetType().GetInterfaces()
+                    .Where(x => x.IsConstructedGenericType && x.GetGenericTypeDefinition() == definition)
+                    .Select(x => (attr, x)))
+                .ToList();
+
         private static T? AwaitAndCastResult<T>(string parameterName, Task<object> task)
         {
             var result = task.ConfigureAwait(false).GetAwaiter().GetResult();
@@ -416,16 +426,7 @@ namespace EmbedIO.WebApi
                 var failedToUseRequestDataAttributes = false;
 
                 // First, check for generic request data interfaces in attributes
-                var requestDataInterfaces = parameter.GetCustomAttributes<Attribute>()
-                        .Aggregate(new List<(Attribute Attr, Type Intf)>(), (list, attr) =>
-                        {
-                            list.AddRange(attr.GetType().GetInterfaces()
-                                .Where(x => x.IsConstructedGenericType
-                                         && x.GetGenericTypeDefinition() == typeof(IRequestDataAttribute<,>))
-                                .Select(x => (attr, x)));
-
-                            return list;
-                        });
+                var requestDataInterfaces = RequestDataInterfaces(parameter, typeof(IRequestDataAttribute<,>));
 
                 // If there are any...
                 if (requestDataInterfaces.Count > 0)
@@ -460,16 +461,7 @@ namespace EmbedIO.WebApi
                 }
 
                 // Check for non-generic request data interfaces in attributes
-                requestDataInterfaces = parameter.GetCustomAttributes<Attribute>()
-                        .Aggregate(new List<(Attribute Attr, Type Intf)>(), (list, attr) =>
-                        {
-                            list.AddRange(attr.GetType().GetInterfaces()
-                                .Where(x => x.IsConstructedGenericType
-                                         && x.GetGenericTypeDefinition() == typeof(IRequestDataAttribute<>))
-                                .Select(x => (attr, x)));
-
-                            return list;
-                        });
+                requestDataInterfaces = RequestDataInterfaces(parameter, typeof(IRequestDataAttribute<>));
 
                 // If there are any...
                 if (requestDataInterfaces.Count > 0)
