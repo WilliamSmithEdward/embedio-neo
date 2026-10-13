@@ -577,6 +577,21 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public void BufferedStreamsBeyondTheLimitAreAllResetWhenEstablishmentFails()
+        {
+            // Streams buffered before the 2xx are counted only on establishment. The one that exceeds
+            // the limit ends the session, and every stream after it must be reset rather than leaked.
+            var aborts = new List<(long Id, long Code)>();
+            var recorder = new Recorder();
+            var session = Session(4, true, Settings(true, 100, 1, 1), Settings(true, 100, 1, 1), recorder);
+            foreach (var id in new long[] { 8, 12, 16 })
+                Assert.That(Call(session, "AttachIncomingStream", Handle(id, true, aborts)), Is.True);
+            AssertError("WebTransportException", FlowControlError, () => Call(session, "Establish"));
+            Assert.That(aborts.Select(a => a.Code).Distinct(), Is.EqualTo(new[] { SessionGone }));
+            Assert.That(aborts.Select(a => a.Id).OrderBy(id => id), Is.EqualTo(new long[] { 8, 12, 16 }));
+        }
+
+        [Test]
         public void OutgoingStreamsRespectThePeerLimitAndQueueOneBlockedCapsulePerLimit()
         {
             var session = Session(4, true, Settings(true, 100, 1, 1), Settings(true, 100, 3, 0));

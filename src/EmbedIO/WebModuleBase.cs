@@ -121,13 +121,16 @@ namespace EmbedIO
             }
             catch (Exception exception) when (exception is IHttpException && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
             {
+                // Handle rethrows when this module has no handler; otherwise the module answered.
                 await HttpExceptionHandler.Handle(LogSource, context, exception, _onHttpException)
                     .ConfigureAwait(false);
+                context.SetHandled();
             }
             catch (Exception exception) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
             {
                 await ExceptionHandler.Handle(LogSource, context, exception, _onUnhandledException, _onHttpException)
                     .ConfigureAwait(false);
+                context.SetHandled();
             }
             finally
             {

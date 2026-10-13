@@ -168,6 +168,12 @@ namespace EmbedIO.Net.Internal
                 throw new ProtocolViolationException("The response body exceeds its declared Content-Length.");
 
             using var head = PrepareHead(false);
+
+            // Framing is final only once the head is prepared: HTTP/1.0 drops chunking but keeps a
+            // declared Content-Length. Nothing has been submitted yet, so excess bytes never leave.
+            if (_bodyLimit.HasValue && count > _bodyLimit.Value - _committedBody)
+                throw new ProtocolViolationException("The response body exceeds its declared Content-Length.");
+
             var chunked = _response.SendChunked && !_response.SuppressesBody;
             if (head != null)
             {

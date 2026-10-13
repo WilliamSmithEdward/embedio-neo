@@ -234,14 +234,19 @@ namespace EmbedIO.Sessions
             if (context is null) throw new System.NullReferenceException();
             var id = context.Request.Cookies.FirstOrDefault(IsSessionCookie)?.Value.Trim();
 
-            SessionImpl? session;
+            SessionImpl? session = null;
             lock (_sessions)
             {
-                if (!string.IsNullOrEmpty(id) && _sessions.TryGetValue(id ?? string.Empty, out session))
+                if (!string.IsNullOrEmpty(id) && _sessions.TryGetValue(id ?? string.Empty, out var existing))
                 {
-                    session.BeginUse();
+                    // An expired session the purger has not reached yet must not be revived.
+                    if (existing.TryBeginUse())
+                        session = existing;
+                    else
+                        _sessions.TryRemove(existing.Id, out _);
                 }
-                else
+
+                if (session == null)
                 {
                     id = UniqueIdGenerator.GetNext();
                     session = new SessionImpl(id, SessionDuration);
@@ -260,8 +265,9 @@ namespace EmbedIO.Sessions
             if (context is null) throw new System.NullReferenceException();
             lock (_sessions)
             {
-                if (_sessions.TryGetValue(id, out var session))
-                    session.EndUse(() => _sessions.TryRemove(id, out _));
+                // Deleting ends the session for every holder of its cookie, even while it has data.
+                if (_sessions.TryRemove(id, out var session))
+                    session.Clear();
             }
 
             context.Request.Cookies.Add(BuildSessionCookie(string.Empty));
@@ -331,7 +337,7 @@ namespace EmbedIO.Sessions
                 lock (_sessions)
                 {
                     if (!_sessions.TryGetValue(id, out var session))
-                        return;
+                        continue;
 
                     session.UnregisterIfNeeded(() => _sessions.TryRemove(id, out _));
                 }

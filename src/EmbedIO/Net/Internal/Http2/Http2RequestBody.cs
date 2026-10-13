@@ -80,32 +80,40 @@ namespace EmbedIO.Net.Internal.Http2
         internal void Append(byte[] bytes, int offset, int count, bool endStream)
         {
             Validate(bytes, offset, count);
+            bool released;
             lock (_sync)
             {
-                ThrowIfUnavailable();
-                if (_complete) throw new Http2ProtocolException(5, "DATA after body completion.", _streamId);
-                if (count > long.MaxValue - _received || (_length.HasValue && count > _length.Value - _received))
-                    throw new Http2ProtocolException(1, "DATA exceeds Content-Length.", _streamId);
-                if (endStream && _length.HasValue && _received + count != _length.Value)
-                    throw new Http2ProtocolException(1, "DATA does not match Content-Length.", _streamId);
-                if (count > 65535 - _buffered) throw new Http2ProtocolException(11, "Unread request body exceeds receive capacity.", _streamId);
-                _received += count;
-                _buffered += count;
-                while (count > 0)
+                // Once the application disposed the body, or the server failed it, late DATA
+                // concerns this stream alone: drop it and return its credit instead of throwing
+                // into the dispatcher, which would tear down every stream on the connection.
+                released = _disposed || _failure != null;
+                if (!released)
                 {
-                    if (_tail == null || _tail.Written == 4096)
+                    if (_complete) throw new Http2ProtocolException(5, "DATA after body completion.", _streamId);
+                    if (count > long.MaxValue - _received || (_length.HasValue && count > _length.Value - _received))
+                        throw new Http2ProtocolException(1, "DATA exceeds Content-Length.", _streamId);
+                    if (endStream && _length.HasValue && _received + count != _length.Value)
+                        throw new Http2ProtocolException(1, "DATA does not match Content-Length.", _streamId);
+                    if (count > 65535 - _buffered) throw new Http2ProtocolException(11, "Unread request body exceeds receive capacity.", _streamId);
+                    _received += count;
+                    _buffered += count;
+                    while (count > 0)
                     {
-                        _tail = new Chunk();
-                        _chunks.Enqueue(_tail);
+                        if (_tail == null || _tail.Written == 4096)
+                        {
+                            _tail = new Chunk();
+                            _chunks.Enqueue(_tail);
+                        }
+                        var copied = Math.Min(count, 4096 - _tail.Written);
+                        Buffer.BlockCopy(bytes, offset, _tail.Bytes, _tail.Written, copied);
+                        _tail.Written += copied; offset += copied; count -= copied;
                     }
-                    var copied = Math.Min(count, 4096 - _tail.Written);
-                    Buffer.BlockCopy(bytes, offset, _tail.Bytes, _tail.Written, copied);
-                    _tail.Written += copied; offset += copied; count -= copied;
+                    _complete = endStream;
+                    if (_complete && _buffered == 0) _trailersAvailable = true;
+                    Pulse();
                 }
-                _complete = endStream;
-                if (_complete && _buffered == 0) _trailersAvailable = true;
-                Pulse();
             }
+            if (released && count != 0) _consumed(count);
         }
 
         internal void Fail(Exception error)

@@ -104,7 +104,8 @@ namespace EmbedIO.WebApi
 
         private static void EnsurePresent(NameValueCollection data, string fieldName, bool badRequestIfMissing, string kind)
         {
-            if (badRequestIfMissing && !data.ContainsKey(fieldName))
+            // Presence follows the collection's own key comparison, which binding uses to read the value.
+            if (badRequestIfMissing && data.GetValues(fieldName) == null && !data.ContainsKey(fieldName))
                 throw HttpException.BadRequest($"Missing {kind} field {fieldName}.");
         }
     }

@@ -215,7 +215,7 @@ namespace EmbedIO.Tests
                 _ = await Client.SendAsync(requestHead);
 
                 var request = new HttpRequestMessage(HttpMethod.Get, WebServerUrl + StaticFolder.WithDataFiles.BigDataFile);
-                request.Headers.Range = new RangeHeaderValue(0, StaticFolder.WithDataFiles.BigDataSize + 10);
+                request.Headers.Range = new RangeHeaderValue(StaticFolder.WithDataFiles.BigDataSize, StaticFolder.WithDataFiles.BigDataSize + 10);
 
                 using var response = await Client.SendAsync(request);
                 Assert.AreEqual(HttpStatusCode.RequestedRangeNotSatisfiable, response.StatusCode);

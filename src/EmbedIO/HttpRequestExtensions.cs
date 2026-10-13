@@ -99,8 +99,8 @@ namespace EmbedIO
         /// <c>If-None-Match</c> header is present in <paramref name="this"/>, regardless of the method's
         /// return value. This parameter is passed uninitialized.</param>
         /// <returns><see langword="true"/> if an <c>If-None-Match</c> header is present in
-        /// <paramref name="this"/> and one of the entity tags listed in it is equal to <paramref name="entityTag"/>;
-        /// <see langword="false"/> otherwise.</returns>
+        /// <paramref name="this"/> and one of the entity tags listed in it is equal to <paramref name="entityTag"/>,
+        /// or the header is <c>*</c>; <see langword="false"/> otherwise.</returns>
         /// <remarks>
         /// <para><see href="https://tools.ietf.org/html/rfc7232#section-3.2">RFC7232, Section 3.2</see>
         /// states that a weak comparison function (as defined in
@@ -122,7 +122,29 @@ namespace EmbedIO
             }
 
             headerExists = true;
-            return values.Select(t => t.Trim()).Contains(entityTag);
+
+            // The field is a list; a comma inside a quoted entity tag is data, not a separator.
+            foreach (var value in values)
+            {
+                var start = 0;
+                var quoted = false;
+                for (var i = 0; i <= value.Length; i++)
+                {
+                    if (i < value.Length)
+                    {
+                        if (value[i] == '"') quoted = !quoted;
+                        if (quoted || value[i] != ',') continue;
+                    }
+
+                    var member = value.Substring(start, i - start).Trim();
+                    if (member == "*" || member == entityTag)
+                        return true;
+
+                    start = i + 1;
+                }
+            }
+
+            return false;
         }
 
         // Check whether the If-Modified-Since request header exists
@@ -157,8 +179,10 @@ namespace EmbedIO
             }
 
             headerExists = true;
+
+            // HTTP dates carry whole seconds; a sub-second modification time must not defeat an echo of Last-Modified.
             return HttpDate.TryParse(value, out var dateTime)
-                && dateTime.UtcDateTime >= lastModifiedUtc;
+                && WholeSeconds(dateTime) >= WholeSeconds(lastModifiedUtc);
         }
 
         // Checks the Range request header to tell whether to send
@@ -197,10 +221,11 @@ namespace EmbedIO
         /// specifies an entity tag equal to <paramref name="entityTag"/>, or a UTC date and time
         /// equal to <paramref name="lastModifiedUtc"/>;</description></item>
         /// <item><description>>the <c>Range</c> header specifies exactly one range;</description></item>
-        /// <item><description>>the specified range is entirely contained in the range from 0 to <paramref name="contentLength"/> - 1.</description></item>
+        /// <item><description>>the specified range starts within the range from 0 to <paramref name="contentLength"/> - 1.
+        /// An upper bound at or past the end is reduced to <paramref name="contentLength"/> - 1.</description></item>
         /// </list>
-        /// <para>If the last condition is not satisfied, i.e. the specified range start and/or upper bound
-        /// are out of the range from 0 to <paramref name="contentLength"/> - 1, this method does not return;
+        /// <para>If the last condition is not satisfied, i.e. the specified range starts at or past
+        /// <paramref name="contentLength"/>, this method does not return;
         /// it throws a <see cref="HttpRangeNotSatisfiableException"/> instead.</para>
         /// <para>If any of the other conditions are not satisfied, this method returns <see langword="false"/>.</para>
         /// </returns>
@@ -250,7 +275,7 @@ namespace EmbedIO
                 if (!HttpDate.TryParse(ifRange, out var rangeDate))
                     return false;
 
-                if (rangeDate.UtcDateTime != lastModifiedUtc)
+                if (WholeSeconds(rangeDate) != WholeSeconds(lastModifiedUtc))
                     return false;
             }
 
@@ -280,13 +305,17 @@ namespace EmbedIO
             }
             else
             {
+                // RFC 9110, Section 14.1.2: a last position at or past the end selects the remainder.
                 start = firstRange.From.Value;
-                upperBound = firstRange.To ?? contentLength - 1;
+                upperBound = Math.Min(firstRange.To ?? contentLength - 1, contentLength - 1);
             }
-            if (start >= contentLength || upperBound < start || upperBound >= contentLength)
+            if (start >= contentLength || upperBound < start)
                 throw HttpException.RangeNotSatisfiable(contentLength);
 
             return true;
         }
+
+        // Whole seconds of a resource's own UTC time; validators are not converted between time zones here.
+        private static long WholeSeconds(DateTime value) => value.Ticks / TimeSpan.TicksPerSecond;
     }
 }

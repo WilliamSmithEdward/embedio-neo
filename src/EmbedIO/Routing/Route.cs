@@ -234,7 +234,10 @@ namespace EmbedIO.Routing
                                 if (position == 0)
                                     sb?.Append('/');
 
-                                sb?.Append(@"\\{");
+                                // Keep the literal text before the pair, then match one literal bracket
+                                // and resume parsing after the second bracket of the pair.
+                                sb?.Append(Regex.Escape(segment.Substring(position, openPosition - position))).Append(@"\{");
+                                nextPosition++;
                             }
                             else if (afterParameter && openPosition == position)
                             {

@@ -543,3 +543,30 @@ HttpTunnel completion and closure instead of independently disposing the request
 or response streams. Capsule framing remains explicitly opt-in. See
 [capsule and tunnel carriers](../guides/capsule-tunnels.md) for ownership,
 deadlines and independent send/receive completion.
+
+## Request and response corrections
+
+These approved v2 corrections change observable behavior that an application or
+its tests may have relied on:
+
+- A `+` in a route parameter is now a literal `+`. `/users/a+b` binds `a+b`
+  instead of `a b`; a space must be sent as `%20`, as URL paths require. Query
+  strings and form bodies still decode `+` as a space.
+- `[QueryField(true)]` and `[FormField(true)]` find a field whose name differs only
+  in case, the same way binding reads its value. `?Id=5` no longer returns 400 for
+  a required `id`.
+- A byte range whose last position is at or past the end of a file selects the
+  remainder and returns 206. A range that starts at or past the end still returns 416.
+- `CorsModule` with a restricted origin list sends `Vary: Origin` on every response
+  it processes, so shared caches keep each origin's answer separate.
+- The Basic challenge is `Basic realm="...", charset="UTF-8"`. Clients that matched
+  the previous comma-less text exactly must accept the standard form.
+- `ISession.Delete` and `Regenerate` end the session even when it holds data, and
+  an expired session is not resumed before the purge runs.
+- A module whose own exception handler answers a request ends dispatch; later
+  modules no longer run for that request.
+- `If-None-Match: *` and entity-tag lists match, and `If-Modified-Since` and date
+  `If-Range` values compare whole seconds.
+- Complete WebSocket messages report `EndOfMessage` as true.
+- Directory listings requested without a trailing slash link to entries inside the
+  directory instead of its parent.

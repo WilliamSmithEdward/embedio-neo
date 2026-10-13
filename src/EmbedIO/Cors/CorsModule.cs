@@ -85,6 +85,10 @@ namespace EmbedIO.Cors
 
             var currentOrigin = context.Request.Headers[HttpHeaderNames.Origin];
 
+            // A restricted origin list makes the response depend on Origin; caches must key on it.
+            if (_origins != All)
+                context.Response.Headers.Add(HttpHeaderNames.Vary, HttpHeaderNames.Origin);
+
             if (string.IsNullOrWhiteSpace(currentOrigin) && context.Request.IsLocal)
                 return Task.CompletedTask;
 

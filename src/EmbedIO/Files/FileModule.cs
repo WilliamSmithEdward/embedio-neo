@@ -605,13 +605,16 @@ namespace EmbedIO.Files
             // Directories always have info.Length == 0; therefore,
             // unless the directory listing is cached, we must generate it now
             // (and cache it while we're there, if applicable).
-            var content = cacheItem.GetContent(compressionMethod);
+            // A listing's relative links depend on whether the URL ends in '/', but /dir and /dir/
+            // map to the same directory; only the slash form is cached.
+            var cacheListing = !info.IsDirectory || context.Request.Url.AbsolutePath.EndsWith("/", StringComparison.Ordinal);
+            var content = cacheListing ? cacheItem.GetContent(compressionMethod) : null;
             if (info.IsDirectory && content == null)
             {
                 long uncompressedLength;
                 (content, uncompressedLength) = await GenerateDirectoryListingAsync(context, info, compressionMethod)
                     .ConfigureAwait(false);
-                if (ContentCaching && uncompressedLength <= cachingThreshold)
+                if (cacheListing && ContentCaching && uncompressedLength <= cachingThreshold)
                     _ = cacheItem.SetContent(compressionMethod, content);
             }
 
@@ -860,16 +863,21 @@ namespace EmbedIO.Files
             CompressionMethod compressionMethod)
         {
             using var memoryStream = new MemoryStream();
-            using var stream = new CompressionStream(memoryStream, compressionMethod);
+            long uncompressedLength;
+            using (var stream = new CompressionStream(memoryStream, compressionMethod))
+            {
+                await (DirectoryLister ?? throw new InvalidOperationException("No directory lister is configured.")).ListDirectoryAsync(
+                    info,
+                    context.Request.Url.AbsolutePath,
+                    Provider.GetDirectoryEntries(info.Path, context),
+                    stream,
+                    context.CancellationToken).ConfigureAwait(false);
 
-            await (DirectoryLister ?? throw new InvalidOperationException("No directory lister is configured.")).ListDirectoryAsync(
-                info,
-                context.Request.Url.AbsolutePath,
-                Provider.GetDirectoryEntries(info.Path, context),
-                stream,
-                context.CancellationToken).ConfigureAwait(false);
+                uncompressedLength = stream.UncompressedLength;
+            }
 
-            return (memoryStream.ToArray(), stream.UncompressedLength);
+            // The compressor flushes its final block on disposal; a lister need not close the stream.
+            return (memoryStream.ToArray(), uncompressedLength);
         }
     }
 }

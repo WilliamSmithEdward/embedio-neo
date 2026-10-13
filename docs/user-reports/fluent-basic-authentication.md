@@ -52,7 +52,7 @@ curl -i -u demo:local-demo-password http://127.0.0.1:9696/api
 curl -i http://127.0.0.1:9696/public
 ```
 
-Expect 401 and `WWW-Authenticate: Basic realm="Local demo" charset=UTF-8` for the
+Expect 401 and `WWW-Authenticate: Basic realm="Local demo", charset="UTF-8"` for the
 first request, 200 with `Authenticated` for the second, and 200 with `Public` for
 the third. `/api` is a base path: `/api/child` is also protected. The public route
 is outside that scope. Press Ctrl+C for graceful shutdown.

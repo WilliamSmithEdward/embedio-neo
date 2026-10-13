@@ -27,7 +27,8 @@ namespace EmbedIO.Authentication
         {
             Realm = string.IsNullOrEmpty(realm) ? BaseRoute : realm ?? BaseRoute;
 
-            _wwwAuthenticateHeaderValue = $"Basic realm=\"{Realm}\" charset=UTF-8";
+            // RFC 7617, Section 2.1: auth-params are comma-separated.
+            _wwwAuthenticateHeaderValue = $"Basic realm=\"{Realm}\", charset=\"UTF-8\"";
         }
 
         /// <inheritdoc />

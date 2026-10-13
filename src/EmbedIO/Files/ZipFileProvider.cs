@@ -99,7 +99,8 @@ namespace EmbedIO.Files
                 if (entry == null) return null;
                 fullName = entry.FullName;
                 name = entry.Name;
-                lastWriteTime = entry.LastWriteTime.DateTime;
+                // Resource validators compare in UTC; the entry's local clock time would skew them.
+                lastWriteTime = entry.LastWriteTime.UtcDateTime;
                 length = entry.Length;
             }
 
