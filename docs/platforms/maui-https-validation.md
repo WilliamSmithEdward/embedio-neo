@@ -59,8 +59,8 @@ smokes run as separate required jobs.
 
 ## Reproduce CI
 
-The SDK is pinned to 10.0.402, the workload set to 10.0.401 (a workload set
-belongs to a feature band; none was published for 10.0.402 by 13 October 2026)
+The SDK follows `global.json`, the workload set is pinned to 10.0.401 (a
+workload set belongs to a feature band, and an SDK patch keeps its band's set)
 and MAUI Controls to 10.0.110;
 every target has its own committed dependency lock. Runners are Windows 2025,
 Ubuntu 24.04 and macOS 26. Apple uses Xcode 26.6 and the iOS 26.5 simulator;
