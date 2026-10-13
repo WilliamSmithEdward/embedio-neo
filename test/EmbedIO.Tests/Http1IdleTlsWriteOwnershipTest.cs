@@ -23,6 +23,14 @@ namespace EmbedIO.Tests
         {
             var core = typeof(WebServer).Assembly;
             TestContext.Out.WriteLine($"Loaded core: {core.GetCustomAttribute<TargetFrameworkAttribute>()?.FrameworkName}; SHA256={Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(core.Location)))}");
+            var ownerType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpSessionLifetime", true)
+                ?? throw new AssertionException("Missing lifetime owner.");
+            var retireMethod = ownerType.GetMethod("TryRetire", Hidden)
+                ?? throw new AssertionException("Missing retirement claim.");
+            var finishMethod = ownerType.GetMethod("FinishRetirementAfterWriteAsync", Hidden)
+                ?? throw new AssertionException("Missing pending-write retirement.");
+            var completionProperty = ownerType.GetProperty("Completion", Hidden)
+                ?? throw new AssertionException("Missing completion property.");
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(8));
             using var certificate = HttpsSmoke.CreateCertificate();
             using var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -36,35 +44,35 @@ namespace EmbedIO.Tests
             using var clientTls = new SslStream(client.GetStream(), false, (_, remote, _, _) =>
                 remote != null && remote.GetCertHashString() == certificate.GetCertHashString());
             var serverAuthentication = serverTls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
-                { ServerCertificate = certificate }, deadline.Token);
+            { ServerCertificate = certificate }, deadline.Token);
             var clientAuthentication = clientTls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
-                { TargetHost = "localhost" }, deadline.Token);
+            { TargetHost = "localhost" }, deadline.Token);
             await Task.WhenAll(serverAuthentication, clientAuthentication);
             await serverTls.WriteAsync(new byte[] { 42 }, deadline.Token);
             var response = new byte[1];
             await clientTls.ReadExactlyAsync(response, deadline.Token);
             Assert.That(response[0], Is.EqualTo(42));
 
-            blocked.BlockWrites = true;
-            var writing = serverTls.ShutdownAsync();
-            Assert.That(writing.IsCompleted, Is.False, "The actual public TLS shutdown must be suspended in its transport write.");
-            var ownerType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.TcpSessionLifetime", true)
-                ?? throw new AssertionException("Missing lifetime owner.");
+
             var owner = Activator.CreateInstance(ownerType, Hidden, null,
                 new object[] { new object(), socket, serverTls, (Action)(() => { }) }, null)
                 ?? throw new AssertionException("Missing owner.");
-            Assert.That(ownerType.GetMethod("TryRetire", Hidden)?.CreateDelegate<Func<bool, bool>>(owner)(false), Is.True);
-            var completion = ownerType.GetProperty("Completion", Hidden)?.GetValue(owner) as Task
+            Assert.That(retireMethod.CreateDelegate<Func<bool, bool>>(owner)(false), Is.True);
+            var completion = completionProperty.GetValue(owner) as Task
                 ?? throw new AssertionException("Missing completion.");
             var detached = 0;
-            var finish = ownerType.GetMethod("FinishRetirementAfterWriteAsync", Hidden)
-                ?.CreateDelegate<Func<Task, IDisposable?, Action, Task>>(owner)(writing, null, () =>
+            var finishOperation = finishMethod.CreateDelegate<Func<Task, IDisposable?, Action, Task>>(owner);
+            blocked.BlockWrites = true;
+            var writing = serverTls.ShutdownAsync();
+            Task? finish = null;
+            try
+            {
+                Assert.That(writing.IsCompleted, Is.False, "The actual public TLS shutdown must be suspended in its transport write.");
+                finish = finishOperation(writing, null, () =>
                 {
                     Assert.That(writing.IsCompleted, Is.True, "Actual TLS completion must precede listener detach.");
                     detached++;
-                }) ?? throw new AssertionException("Missing pending-write retirement.");
-            try
-            {
+                });
                 await finish.WaitAsync(deadline.Token);
                 await completion.WaitAsync(deadline.Token);
                 Assert.Multiple(() =>
@@ -79,6 +87,7 @@ namespace EmbedIO.Tests
             finally
             {
                 blocked.Interrupt();
+                finish ??= finishOperation(writing, null, () => detached++);
                 await finish.WaitAsync(deadline.Token);
                 try { await writing.WaitAsync(deadline.Token); }
                 catch (Exception error) when (error is IOException or OperationCanceledException or ObjectDisposedException)
