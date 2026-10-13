@@ -7,7 +7,13 @@
   handler like Kestrel's connection loop, and HTTP/2 exchanges hand off on their own
   work item, removing two thread-pool hops and the accept-queue bookkeeping per request.
   `IHttpListener.GetContextAsync` is unchanged and still serves standalone listeners and
-  HTTP/3; admission, drain and stop semantics are unchanged.
+  HTTP/3; admission, drain and stop semantics are unchanged, and a handler may still run
+  on after completing its response without holding the connection's next request.
+- Fix: a request whose dispatch fails before the handler starts (an exception while the
+  server prepares the context) now closes its HTTP/1.1 connection, or resets its HTTP/2
+  stream, after logging the failure. Previously that request was never answered and its
+  connection stayed open until the client gave up. The server also observes and logs a
+  fault a handler leaves uncaught after its response, instead of leaving it unobserved.
 
 ## [2.0.0] - Unreleased
 
