@@ -31,12 +31,14 @@ namespace EmbedIO.Tests
                     await release.Task.WaitAsync(context.CancellationToken);
                     await context.SendStringAsync("drained response", "text/plain", WebServer.Utf8NoBomEncoding);
                 }));
+            LogDrainStartup("before-run", server, prefix, entered.Task);
             var running = server.RunAsync(stop.Token);
             using var client = Client(certificate);
             var response = client.GetStringAsync(prefix, stop.Token);
+            Exception? primary = null;
             try
             {
-                await entered.Task.WaitAsync(stop.Token);
+                await WaitForDrainEntryAsync(server, prefix, entered.Task, running, response, stop.Token);
                 var drain = server.DrainAsync(TimeSpan.FromSeconds(10));
                 var other = concurrent ? server.DrainAsync(TimeSpan.FromMilliseconds(1)) : Task.CompletedTask;
                 if (concurrent) await Task.Delay(50, stop.Token);
@@ -52,7 +54,13 @@ namespace EmbedIO.Tests
                 replacement.Listener.Start();
                 Assert.That(replacement.Listener.IsListening, Is.True);
             }
-            finally { release.TrySetResult(); stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+            catch (Exception error) { primary = error; throw; }
+            finally
+            {
+                release.TrySetResult();
+                stop.Cancel();
+                await FinishDrainOwnersAsync(server, prefix, entered.Task, running, response, primary, expectedResponseFailure: false);
+            }
         }
 
         [TestCase("deadline")]
@@ -75,12 +83,14 @@ namespace EmbedIO.Tests
                     try { await Task.Delay(Timeout.Infinite, context.CancellationToken); }
                     finally { canceled.TrySetResult(); }
                 }));
+            LogDrainStartup("before-run", server, prefix, entered.Task);
             var running = server.RunAsync(stop.Token);
             using var client = Client(certificate);
             var response = client.GetStringAsync(prefix, stop.Token);
+            Exception? primary = null;
             try
             {
-                await entered.Task.WaitAsync(stop.Token);
+                await WaitForDrainEntryAsync(server, prefix, entered.Task, running, response, stop.Token);
                 var drain = server.DrainAsync(reason == "deadline" ? TimeSpan.FromMilliseconds(100) : TimeSpan.FromSeconds(20), cancelDrain.Token);
                 if (reason == "drain-cancel") cancelDrain.Cancel();
                 if (reason == "run-cancel") stop.Cancel();
@@ -94,7 +104,12 @@ namespace EmbedIO.Tests
                 await Assert.ThatAsync(async () => await response, Throws.InstanceOf<HttpRequestException>().Or.InstanceOf<OperationCanceledException>());
                 Assert.That(server.Listener.IsListening, Is.False);
             }
-            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+            catch (Exception error) { primary = error; throw; }
+            finally
+            {
+                stop.Cancel();
+                await FinishDrainOwnersAsync(server, prefix, entered.Task, running, response, primary, expectedResponseFailure: true);
+            }
         }
 
         [Test]
