@@ -149,7 +149,9 @@ await running;
 Draining stops new connections, sends GOAWAY on existing connections and lets
 accepted responses finish. Later requests are rejected with H3_REQUEST_REJECTED.
 The deadline closes connections that have not finished, including long-lived
-WebSockets; it is not an unlimited wait for application callbacks. Cooperative
+WebSockets; it is not an unlimited wait for application callbacks. To close
+WebSockets with 1001 Going Away when the drain starts instead, see
+[WebSockets during a graceful drain](graceful-drain-websockets.md). Cooperative
 clients can close after consuming GOAWAY and their responses. Calls made together
 share the first drain deadline. A cancellation token supplied to `DrainAsync`
 aborts remaining connections and completes that call with cancellation after
