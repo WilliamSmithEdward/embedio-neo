@@ -137,7 +137,7 @@ namespace EmbedIO.Net.Internal.WebTransport
                 {
                     // The buffer no longer tracks the streams after this one; reset them so a
                     // failed establishment cannot leave them open until the connection closes.
-                    for (var j = i + 1; j < streams.Count; j++) streams[j].Abort(WebTransportProtocol.SessionGone);
+                    AbortAll(streams.GetRange(i + 1, streams.Count - i - 1), WebTransportProtocol.SessionGone);
                     throw;
                 }
             }
