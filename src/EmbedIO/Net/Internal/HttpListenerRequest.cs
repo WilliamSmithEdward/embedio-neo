@@ -14,7 +14,7 @@ namespace EmbedIO.Net.Internal
 {
     // Application view of one parsed HTTP/1 head. Framing facts belong to the
     // head owner; body access borrows the existing session's request transport.
-    internal sealed class HttpListenerRequest : IHttpRequestTrailers, IRequestPolicyTarget
+    internal sealed class HttpListenerRequest : IHttpRequestTrailers, IRequestPolicyTarget, IClientCertificateCarrier
     {
         private readonly HttpConnection _connection;
         private readonly HttpListenerContext _context;
@@ -48,6 +48,7 @@ namespace EmbedIO.Net.Internal
         public IPEndPoint LocalEndPoint => _connection.LocalEndPoint;
         public IPEndPoint RemoteEndPoint => _connection.RemoteEndPoint;
         public bool IsSecureConnection => _connection.IsSecure;
+        public System.Security.Cryptography.X509Certificates.X509Certificate2? ClientCertificate => _connection.ClientCertificate;
         public bool IsLocal => LocalEndPoint.Address.Equals(RemoteEndPoint.Address);
         public bool IsAuthenticated => false;
         public string? ContentType => Headers[HttpHeaderNames.ContentType];

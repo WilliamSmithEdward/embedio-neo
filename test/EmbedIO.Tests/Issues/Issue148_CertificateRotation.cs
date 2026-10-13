@@ -580,7 +580,7 @@ namespace EmbedIO.Tests.Issues
             var bind = bindingType.GetMethod("Bind", BindingFlags.Static | BindingFlags.NonPublic)
                 ?? throw new AssertionException("Missing Bind.");
             var endpoint = new IPEndPoint(IPAddress.Loopback, new Uri(Resources.GetServerAddress()).Port);
-            var binding = (IAsyncDisposable)(bind.Invoke(null, new object[] { endpoint, source, true })
+            var binding = (IAsyncDisposable)(bind.Invoke(null, new object?[] { endpoint, source, null, true })
                 ?? throw new AssertionException("Missing binding."));
             try
             {

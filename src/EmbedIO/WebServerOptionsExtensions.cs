@@ -141,6 +141,23 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Sets the TLS settings of HTTPS listeners: client certificates, TLS protocol versions and certificate
+        /// selection by server name.
+        /// </summary>
+        /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
+        /// <param name="value">The TLS policy, which is locked with the options.</param>
+        /// <returns><paramref name="this"/> with its <see cref="WebServerOptions.TlsPolicy">TlsPolicy</see> property
+        /// set to <paramref name="value"/>.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
+        public static WebServerOptions WithTlsPolicy(this WebServerOptions @this, Net.ServerTlsPolicy? value)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.TlsPolicy = value;
+            return @this;
+        }
+
+        /// <summary>
         /// Sets the thumbprint of the X.509 certificate to use for SSL connections.
         /// </summary>
         /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
