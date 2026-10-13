@@ -173,32 +173,32 @@ namespace EmbedIO.Forwarding
             if (!IsTrusted(physical.ClientAddress))
                 return physical;
 
-            ForwardedRequest Unchanged(ForwardedOutcome outcome)
-                => new(outcome, physical.ClientAddress, physical.Scheme, null, 0, false, physical.PhysicalRemoteEndPoint, physical.PhysicalIsSecure);
-
-            var forwarded = Header(context, ForwardedHeaderSources.Forwarded, "Forwarded");
-            var forHeader = Header(context, ForwardedHeaderSources.XForwardedFor, "X-Forwarded-For");
-            var protoHeader = Header(context, ForwardedHeaderSources.XForwardedProto, "X-Forwarded-Proto");
-            var hostHeader = Header(context, ForwardedHeaderSources.XForwardedHost, "X-Forwarded-Host");
-            var hasLegacy = forHeader != null || protoHeader != null || hostHeader != null;
-            if (forwarded == null && !hasLegacy)
-                return Unchanged(ForwardedOutcome.NoHeaders);
+            var headers = ReadHeaders(context);
+            if (headers.IsEmpty)
+                return Unchanged(physical, ForwardedOutcome.NoHeaders);
 
             // Two descriptions of the same chain may disagree, and neither can be preferred safely.
-            if (forwarded != null && hasLegacy)
-                return Unchanged(ForwardedOutcome.Conflict);
+            if (headers.IsConflicting)
+                return Unchanged(physical, ForwardedOutcome.Conflict);
 
-            var length = (forwarded?.Length ?? 0) + (forHeader?.Length ?? 0) + (protoHeader?.Length ?? 0) + (hostHeader?.Length ?? 0);
-            var hops = length > MaxHeaderLength
-                ? null
-                : forwarded != null
-                    ? ForwardedHeaderParser.ParseForwarded(forwarded)
-                    : ForwardedHeaderParser.ParseXForwarded(forHeader, protoHeader, hostHeader);
-            if (hops == null)
-                return Unchanged(ForwardedOutcome.Malformed);
+            var hops = headers.Length > MaxHeaderLength ? null : headers.Parse();
+            return hops == null ? Unchanged(physical, ForwardedOutcome.Malformed) : ApplyHops(physical, hops);
+        }
 
-            // Walk from the nearest proxy outward. Each hop says who sent the request to the proxy
-            // that recorded it, and how; a further hop is trusted only if that sender is a trusted proxy.
+        private static ForwardedRequest Unchanged(ForwardedRequest physical, ForwardedOutcome outcome)
+            => new(outcome, physical.ClientAddress, physical.Scheme, null, 0, false, physical.PhysicalRemoteEndPoint, physical.PhysicalIsSecure);
+
+        private ForwardedHeaders ReadHeaders(IHttpContext context)
+            => new(
+                Header(context, ForwardedHeaderSources.Forwarded, "Forwarded"),
+                Header(context, ForwardedHeaderSources.XForwardedFor, "X-Forwarded-For"),
+                Header(context, ForwardedHeaderSources.XForwardedProto, "X-Forwarded-Proto"),
+                Header(context, ForwardedHeaderSources.XForwardedHost, "X-Forwarded-Host"));
+
+        // Walk from the nearest proxy outward. Each hop says who sent the request to the proxy
+        // that recorded it, and how; a further hop is trusted only if that sender is a trusted proxy.
+        private ForwardedRequest ApplyHops(ForwardedRequest physical, List<ForwardedHop> hops)
+        {
             var client = physical.ClientAddress;
             var scheme = physical.Scheme;
             string? host = null;
@@ -212,16 +212,8 @@ namespace EmbedIO.Forwarding
 
                 if (hop.Host != null)
                 {
-                    if (IsAllowedHost(hop.Host))
-                    {
-                        host = hop.Host;
-                        hostRejected = false;
-                    }
-                    else
-                    {
-                        host = null;
-                        hostRejected = true;
-                    }
+                    hostRejected = !IsAllowedHost(hop.Host);
+                    host = hostRejected ? null : hop.Host;
                 }
 
                 applied++;
@@ -242,6 +234,36 @@ namespace EmbedIO.Forwarding
                 hostRejected,
                 physical.PhysicalRemoteEndPoint,
                 physical.PhysicalIsSecure);
+        }
+
+        // The selected headers' values, each joined from its lines; null when absent or not selected.
+        private readonly struct ForwardedHeaders
+        {
+            private readonly string? _forwarded;
+            private readonly string? _for;
+            private readonly string? _proto;
+            private readonly string? _host;
+
+            internal ForwardedHeaders(string? forwarded, string? forHeader, string? protoHeader, string? hostHeader)
+            {
+                _forwarded = forwarded;
+                _for = forHeader;
+                _proto = protoHeader;
+                _host = hostHeader;
+            }
+
+            internal bool IsEmpty => _forwarded == null && !HasLegacy;
+
+            internal bool IsConflicting => _forwarded != null && HasLegacy;
+
+            internal int Length => (_forwarded?.Length ?? 0) + (_for?.Length ?? 0) + (_proto?.Length ?? 0) + (_host?.Length ?? 0);
+
+            private bool HasLegacy => _for != null || _proto != null || _host != null;
+
+            internal List<ForwardedHop>? Parse()
+                => _forwarded != null
+                    ? ForwardedHeaderParser.ParseForwarded(_forwarded)
+                    : ForwardedHeaderParser.ParseXForwarded(_for, _proto, _host);
         }
     }
 }

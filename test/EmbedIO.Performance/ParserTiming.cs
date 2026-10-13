@@ -1,4 +1,5 @@
-﻿using System.Collections.Specialized;
+﻿using System.Collections;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Linq.Expressions;
@@ -9,12 +10,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using EmbedIO;
+using EmbedIO.Net;
 using EmbedIO.Utilities;
 
 // --parser-timing measures the parsers restructured in the complexity pass: JSON
 // input normalization, byte-range selection, Priority dictionaries, chunked request
-// bodies, DEFLATE framing validation, HTTP/3 control frames, URL-encoded data and
-// request coding chains. Run the same build against a baseline and a candidate
+// bodies, DEFLATE framing validation, HTTP/3 control frames, URL-encoded data,
+// request coding chains, q-value lists, request cookies, Expect members, Forwarded
+// headers and QUERY format policies. Run the same build against a baseline and a candidate
 // EmbedIO.dll (copy the output and replace only the core) and compare ns/op and
 // B/op; every operation validates its result.
 internal static class ParserTiming
@@ -33,6 +36,11 @@ internal static class ParserTiming
         MeasureControl(assembly);
         MeasureUrlEncoded();
         MeasureCodingChain(assembly);
+        MeasureQValues();
+        MeasureRequestCookies(assembly);
+        MeasureExpectations(assembly);
+        MeasureForwarded(assembly);
+        MeasureQueryFormat();
         return true;
     }
 
@@ -220,6 +228,54 @@ internal static class ParserTiming
         using (Stream encoder = coding == "gzip" ? new GZipStream(output, CompressionMode.Compress, true) : new DeflateStream(output, CompressionMode.Compress, true))
             encoder.Write(body, 0, body.Length);
         return output.ToArray();
+    }
+
+    private static void MeasureQValues()
+    {
+        const string accept = "gzip;q=0.8, br;q=1.0, deflate;q=0.5, *;q=0.1";
+        Measure("qvalue-preferred-" + accept.Length, () => new QValueList(true, accept).FindPreferredIndex("br", "gzip", "deflate"), 0);
+    }
+
+    private static void MeasureRequestCookies(Assembly assembly)
+    {
+        var read = StaticDelegate<Func<string, CookieList>>(assembly, "EmbedIO.Net.Internal.RequestCookieFields", "Read");
+        const string cookies = "session=abc123; theme=dark; $Version=1; lang=en-US; $Path=/; token=xyz";
+        Measure("request-cookies-" + cookies.Length, () => read(cookies).Count, 4);
+    }
+
+    private static void MeasureExpectations(Assembly assembly)
+    {
+        var contains = StaticDelegate<Func<string?, bool>>(assembly, "EmbedIO.Net.Internal.HttpExpectations", "ContainsContinue");
+        const string expect = "custom=\"x,y\", 100-continue";
+        Measure("expect-continue-" + expect.Length, () => contains(expect) ? 1 : 0, 1);
+    }
+
+    private static void MeasureForwarded(Assembly assembly)
+    {
+        const string parser = "EmbedIO.Forwarding.Internal.ForwardedHeaderParser";
+        var parse = StaticDelegate<Func<string, object?>>(assembly, parser, "ParseForwarded");
+        var parseLegacy = StaticDelegate<Func<string?, string?, string?, object?>>(assembly, parser, "ParseXForwarded");
+        const string forwarded = "for=203.0.113.9;proto=https;host=example.com, for=\"[2001:db8::7]:4711\";proto=https, for=10.0.0.5";
+        const string forwardedFor = "203.0.113.9, 2001:db8::7, 10.0.0.5";
+        Measure("forwarded-" + forwarded.Length, () => Hops(parse(forwarded)), 3);
+        Measure("x-forwarded-for-" + forwardedFor.Length, () => Hops(parseLegacy(forwardedFor, "https, https, http", null)), 3);
+    }
+
+    private static int Hops(object? hops)
+        => ((ICollection)(hops ?? throw new InvalidOperationException("Rejected forwarding headers."))).Count;
+
+    private static void MeasureQueryFormat()
+    {
+        var policy = new QueryFormatPolicy("application/json;charset=utf-8", "text/*", "application/x-ndjson");
+        const string request = "application/json; charset=\"UTF-8\"";
+        Measure("query-format-" + request.Length, () => policy.IsSupported(request) ? 1 : 0, 1);
+    }
+
+    private static T StaticDelegate<T>(Assembly assembly, string typeName, string methodName) where T : Delegate
+    {
+        var type = assembly.GetType(typeName, true) ?? throw new InvalidOperationException("Missing " + typeName + ".");
+        var method = type.GetMethod(methodName, BindingFlags.Static | BindingFlags.NonPublic) ?? throw new InvalidOperationException("Missing " + methodName + ".");
+        return method.CreateDelegate<T>();
     }
 
     // Only the members the range selectors read are populated.
