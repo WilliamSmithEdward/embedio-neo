@@ -58,8 +58,8 @@ and validation plan; this report does not justify adding one.
 
 ## SDK, language features and behavior
 
-Contributors use the SDK selected by `global.json` (10.0.400 floor, stable later
-feature bands allowed), C# 14 and the existing analyzers. Library compilation
+Contributors use the exact SDK pinned by `global.json` (10.0.401, no
+roll-forward), C# 14 and the existing analyzers. Library compilation
 still checks each target's available references. Ordinary consumers install a
 NuGet package; they do not need Neo's contributor SDK to compile their own older
 application target.
