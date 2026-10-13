@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Refuse shared HTTPS endpoint registration with incompatible TLS policies, rather than silently
+  applying the physical opener's policy to another logical listener. Compatible/default policies and
+  fixed-certificate sharing remain supported. Use separate ports for different requirements;
+  see [migration](docs/compatibility/neo-v1-to-v2.md#shared-https-endpoints-require-compatible-tls-policies).
 - Owner-approved Neo v2 candidate: completed HTTP/1 keep-alive idle exchanges
   attempt orderly send shutdown at the existing deadline instead of inherited
   reset closure. Partial requests/responses retain abort behavior; TLS capability
