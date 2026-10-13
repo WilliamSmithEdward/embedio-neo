@@ -38,8 +38,13 @@ remain outside the solution and shipped packages. See
 [MAUI HTTPS validation](docs/platforms/maui-https-validation.md) for pinned
 toolchains, per-platform dependency locks, artifacts and physical-device steps.
 
-Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
-`latestFeature` allows later feature bands), then run:
+Install .NET SDK 10.0.401, which `global.json` pins exactly (`rollForward`
+`disable`, so a newer SDK on the machine or runner is never picked up
+silently). SDK moves are deliberate: change `global.json`, the workflows'
+`dotnet-version` pins and the MAUI workload versions together, regenerate the
+`packages.lock.json` files in locked mode and re-run validation. Wait out the
+one-week cooldown unless the release fixes a vulnerability that affects the
+project. Then run:
 
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
