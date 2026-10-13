@@ -489,7 +489,7 @@ are not exact process-CPU counters. Unresolved frames, omitted method rows,
 short measurement windows and instrumentation overhead remain explicit limits.
 The original first-fill investigation and failed default comparison remain open.
 
-## Current cache-buffer ownership change and integration status
+## Historical cache-buffer integration checkpoint
 
 The ordinary file-cache fill now adopts its private MemoryStream buffer only
 when its capacity exactly equals its final length. Spare-capacity buffers still
@@ -584,3 +584,109 @@ passes on those actual scan artifacts with the updated policy. This recheck is
 not a fresh current-head scan or a green hosted check. Original failures remain
 retained. No genuine finding, other rule/path, tool error or scan requirement
 is suppressed or waived; fresh exact-head validation remains mandatory.
+
+
+## Current hosted and client evidence (2026-10-13)
+
+PR #182 head 52513d46314a3260a698637862066b108fb213ae has 41 terminal
+checks, all successful or intentionally skipped. CI 38426939280 passed its
+required gates, including the platform jobs, under the existing raw-MsQuic
+rebind quarantine. All three desktop suites report 6,000 cases. Windows has
+5,987 passes/13 skips/zero failures; Linux has 5,985 passes/15 skips/zero failures.
+macOS has 5,979 passes/20 skips/one retained raw-runtime failure:
+DisposedRuntimeListenerRebindsSameEndpoint(False), AddressAlreadyInUse at bind.
+The unchanged quarantine classifier reports 6000/5979/1/1 and matches this
+existing owner-approved exception exactly. This is not a clean macOS test pass
+or a repaired dependency defect. All twenty downloaded desktop TRX files were
+inspected; supplemental selections have zero failures. Security 38426939170,
+Malware 38426939105, Fuzz 38426939133 and HTTP/1 closure
+38426938942 passed. This supersedes the earlier pending hosted/scanner statements
+for that head. New prose changes still require their own exact-head checks.
+Original failed runs remain retained. No merge, release or version tag is claimed.
+
+The CI-built and malware-scanned five 2.0.0 packages have identical complete
+entry contents. The ZIP archives themselves differ in timestamps and hashes;
+they are not reported as identical archives. Their nuspecs identify GitHub's
+PR test-merge commit 83636bcec2fe0a7226049d63b8bfcc8c30461ad0, whose tree
+827a5ce3e733f53fb7dbff4d7b54f55e872d9828 exactly matches the PR head tree.
+Nineteen source asset comparisons passed, including README, license, icon,
+third-party licenses and core build targets. Library target layouts and the CLI
+tool layout were checked separately. Fresh ClamAV has zero findings/errors;
+YARA reports exactly eleven narrowly accepted findings and zero tool errors.
+This is package/source/scan correspondence, not final release-preview acceptance.
+Receipts are under ignored TestResults/audit/pr182-package-verification-52513.json
+and pr182-malware-report-52513.
+
+The 43-request .NET/Python JSON API fixture passed against that head on Linux
+.NET 10.0.12. It verifies GET query binding, POST JsonData binding, default JSON,
+Unicode, exact status/media type/body and reuse. The .NET automatic policy starts
+on HTTP/2 and uses HTTP/3 for ten subsequent requests after valid Alt-Svc.
+Python standard HTTP/1.1, hyper-h2 cleartext/TLS and aioquic HTTP/3 pass separately;
+no HTTPX execution is claimed. Exact source/binary guards, normal shutdown and
+owned cleanup pass. See the [client guidance](../guides/http3.md#client-negotiation-and-json-api-checks).
+
+Normal Chromium discovery was attempted, not completed. Passive bounded NetLogs
+show a valid localhost private-CA path with cert_status=0 and
+is_issued_by_known_root=false; QUIC handshakes fail over both loopback address
+families. The tested browser identifies source revision
+f842f52ef39fd97b449eb27cff414bf05a98ddce. Its exact primary-source proof verifier
+adds a recognized-root requirement after ordinary chain verification. This is
+consistent with the observed failure; there is no evidence of a missing UDP
+listener or an IPv6-only defect. TLS negative controls pass, but all ten discovery
+requests retain HTTP/2. William has no publicly trusted test certificate and
+explicitly requested moving on, so this normal browser gate is deferred with its
+failure retained. No trust bypass or forced QUIC was used. Cleanup, private-key
+removal and final integrity checks pass. Evidence is under
+TestResults/audit/browser-h3-discovery-03, including the exact-source review.
+
+## Current cache measurements and retained timing gaps
+
+Twelve bounded in-process executions compare identical harness source against
+the saved pre-change v2 source and current core. Each validates 128 fresh fills
+and 128 warm reused bodies with exact opened/copied/disposed source counts.
+Three alternating paired rounds of 64 KiB exact-capacity fills save 8,391,192,
+8,390,176 and 8,384,984 aggregate-process allocated bytes. Median allocation
+falls from 51,701,528 to 43,310,656 bytes (16.23%). The 65,535-byte spare-capacity
+fallback has a 0.003% median difference and retains its copy behavior.
+
+The controller exits with failure because one round is 3,624 bytes below its
+exact theoretical payload-only saving floor. The aggregate-process measurement
+includes concurrent runtime allocation. The failed verdict is preserved without
+retry or reclassification; the actual positive reductions and all twelve body,
+ownership, source and binary/dependency checks were independently verified.
+Both builds have zero warnings/errors, and owned cleanup passes. These numbers
+support the scoped allocation improvement, not a latency repair or an overall
+passing controller. Evidence is under
+TestResults/audit/file-buffer-adoption-allocation-01.
+
+A fresh identical-client first-fill application comparison against 899261a3
+passes all four preflight and twelve full samples: three alternating pairs on
+HTTP/1.1 and HTTP/2, 128 unique 64 KiB files per full sample. Every body, count,
+latency distribution and connection ledger passes, with normal exits, exclusive
+file reopen, dependency parity and terminal source/binary guards. Server allocation
+medians fall 44.09% on HTTP/1.1 and 40.45% on HTTP/2 in this network workload;
+these totals have a different scope from the in-process control above.
+
+Timing acceptance remains open. HTTP/2 p99 changes range from -61.60% to
++166.16%, with mixed CPU outcomes. HTTP/1.1 client CPU, server CPU and p99 are
+higher in all three pairs; median server CPU increases 28.06% and median p99
+69.84%. Cold application paths include startup/JIT effects, and OS cache is
+uncontrolled. Neither a source cause nor a repair is established. The retained
+first-fill finding now explicitly includes HTTP/1.1; allocation savings do not
+close it. William subsequently removed diagnosing the external Kestrel failure
+from the current scope and requested moving on. That failed comparison remains
+retained and unavailable for performance claims; no Kestrel repair or passing
+default comparison is claimed. Evidence is under
+TestResults/audit/file-first-application-full-01.
+
+### Package preview checkpoint (13 October 2026)
+
+Manual Publish dry run [38443142209](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38443142209)
+passed on committed `52513d46314a3260a698637862066b108fb213ae`; NuGet publication was
+intentionally skipped. Independent inspection verified five 2.0.0 packages,
+seven reports and all thirteen artifact hashes. Package repository metadata and
+README/license/icon/third-party notices/build targets match that exact Git source;
+release notes match its changelog section. ClamAV scanned 1,414 files with no
+findings or errors; YARA retained only the eleven narrowly accepted findings.
+This checkpoint excludes the subsequent release-prep documentation overlay and
+does not replace final-head package, API, consumer or migration-example validation.

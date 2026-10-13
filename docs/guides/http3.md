@@ -22,6 +22,16 @@ certificate and configure normal client trust. IP-literal URLs worked in the
 Windows fixture but failed TLS setup with the tested Linux .NET 10.0.12/MsQuic
 2.6.2 client; the portable examples and tests use `localhost`.
 
+Normal Chromium HTTP/3 discovery has an additional certificate-root requirement.
+In the isolated Linux Chrome for Testing 156.0.8078.4 check, a locally trusted
+private CA passed ordinary HTTPS validation, but QUIC rejected the handshake.
+The [exact Chromium source revision](https://chromium.googlesource.com/chromium/src/+/f842f52ef39fd97b449eb27cff414bf05a98ddce/net/quic/crypto/proof_verifier_chromium.cc)
+rejects otherwise-valid QUIC chains whose root it does not recognize. Installing
+a private CA is therefore insufficient for this normal browser discovery case.
+Validation with a publicly trusted certificate remains deferred at the owner's
+request; no certificate bypass or forced QUIC was used. This does not describe
+.NET or aioquic trust behavior.
+
 HTTP/3 uses UDP. This mode does not bind a TCP listener or accept HTTP/1/HTTP/2.
 It does not currently advertise Alt-Svc or configure DNS HTTPS records. Clients
 must explicitly select HTTP/3, or discovery must be arranged by the application.
@@ -59,6 +69,19 @@ the original TCP HTTP engine; both inherited listener backends are removed.
 Public HTTP/3 selection still uses System.Net.Quic for its QUIC transport.
 Native-provider integration, Alt-Svc discovery and final resource/performance
 acceptance remain unfinished; TCP replacement does not establish their completion.
+
+## Runtime memory limitation
+
+The tested .NET 10.0.12 `System.Net.Quic` retains a native send-buffer allocation
+for each disposed stream that sent data. Long-running HTTP/3 traffic therefore
+has a known runtime memory-growth risk. HTTP/1.1 and HTTP/2 do not use this path.
+The [upstream fix](https://github.com/dotnet/runtime/pull/135591) merged into
+runtime `main` on 13 October 2026, but no .NET 10 servicing backport or released
+fixed runtime has been verified. An upstream merge does not update an installed
+runtime. Until a fixed runtime is verified, leave optional HTTP/3 disabled where
+it is unnecessary or plan bounded process lifetimes for affected deployments.
+See the [attribution and verification status](../project/http-engine-endurance.md#upstream-fix-merged-13-october-2026)
+and [tracking issue278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278).
 
 ## Server
 
@@ -98,6 +121,32 @@ using var client = new System.Net.Http.HttpClient
 };
 Console.WriteLine(await client.GetStringAsync("https://localhost:8443/hello"));
 ```
+
+## Client negotiation and JSON API checks
+
+A default .NET HttpClient does not opt into higher HTTP versions. Set
+DefaultVersionPolicy to RequestVersionOrHigher to permit negotiation above its
+requested version. HTTPS and working QUIC support are necessary for HTTP/3;
+application-arranged Alt-Svc can enable later requests to use it. Explicit
+RequestVersionExact remains useful when testing one protocol and refusing a
+fallback. These are client settings; Combined mode does not automatically emit
+Alt-Svc. See [.NET's version policy](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpversionpolicy?view=net-10.0).
+
+Python's standard [http.client](https://docs.python.org/3/library/http.client.html)
+uses HTTP/1.1. [HTTPX](https://www.python-httpx.org/http2/) offers optional HTTP/2,
+while [aioquic](https://aioquic.readthedocs.io/en/latest/) supplies HTTP/3 APIs.
+These libraries do not share one automatic negotiation policy.
+
+The current source passed 43 real JSON GET/POST requests in an owned Linux
+.NET 10.0.12 fixture. A WebApiController exercised query binding, JsonData body
+binding and the default JSON serializer, including Unicode and a 4 KiB body.
+The .NET default client used HTTP/1.1; exact HTTP/2 cleartext/TLS and exact
+HTTP/3 passed. With RequestVersionOrHigher and valid application-advertised
+Alt-Svc, the first .NET request used HTTP/2 and the following ten used HTTP/3.
+Python's standard client retained HTTP/1.1; independent hyper-h2 cleartext/TLS
+and aioquic HTTP/3 clients passed. Connection reuse was verified within each
+protocol. HTTPX was documented but not executed. These client results do not
+establish normal browser discovery or every deployment's QUIC capability.
 
 ## Current listener behavior
 

@@ -30,6 +30,11 @@ HTTP/1.1 and HTTP/2 use the replacement engine; opt-in HTTP/3 uses `System.Net.Q
 on the .NET 10 asset. Strict framing, first-flush commitment and lifecycle rules
 are documented in the migration guide.
 
+The tested .NET 10.0.12 HTTP/3 transport has a per-stream native send-buffer
+retention defect in `System.Net.Quic`. The upstream fix merged into runtime
+`main`, but a .NET 10 servicing backport and released-runtime verification remain
+unconfirmed. See [HTTP/3 deployment guidance](docs/guides/http3.md#runtime-memory-limitation).
+
 Release acceptance remains in progress. The retained Windows HTTP/2 drain
 response-loss failure has no established cause or repair despite later passing
 validation. Native application-provider selection, unreliable datagrams and
