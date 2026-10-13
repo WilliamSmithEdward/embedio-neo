@@ -26,7 +26,7 @@ namespace EmbedIO.Net.Internal
 #endif
         }
 
-        private static SslProtocols GetProtocols(ServerTlsPolicy? policy)
+        internal static SslProtocols GetProtocols(ServerTlsPolicy? policy)
             => policy == null || policy.EnabledProtocols == SslProtocols.None
                 ? DefaultProtocols : policy.EnabledProtocols;
 
