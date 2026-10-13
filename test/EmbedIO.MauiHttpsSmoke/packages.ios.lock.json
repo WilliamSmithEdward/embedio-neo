@@ -175,7 +175,15 @@
         "contentHash": "8b911sZEcqcQcJbtUaeaPJSkg+9tIbJ1Wz2s9UY13eqZFAeCgqOQbb/03kdlaV7cRTU/shS1ot52+536mlsp/g=="
       },
       "EmbedIO-Neo": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "System.Threading.RateLimiting": "[10.0.12, )"
+        }
+      },
+      "System.Threading.RateLimiting": {
+        "type": "Transitive",
+        "resolved": "10.0.12",
+        "contentHash": "Y3f2aLAgynO44Q9xYHR35NC1KuSTcZwo49xjHuq0gQWyOWw8fvipIdoc+1e8FS+9neYZuQ1K4iwl5frNJXekgw=="
       }
     },
     "net10.0-ios26.5/iossimulator-arm64": {}
