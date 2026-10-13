@@ -100,8 +100,11 @@ clients use; issue certificates for the host names you serve.
 | Combined hosting (`EmbedIOCombined` mode) | One source serves TCP and QUIC, so both switch together. |
 
 One source can serve several servers. Servers with separate sources rotate
-independently. `HttpListener` also accepts a `ServerCertificateSource` directly,
-for applications that use the listener without `WebServer`.
+independently. Applications using the listener without `WebServer` can call
+`EmbedIO.Net.HttpListener.CreateWithCertificateSource(certificates)`. The factory
+borrows the source and its certificates. The separately available
+`HttpListener(certificates, tlsPolicy)` constructor configures a source together
+with an explicit TLS policy.
 
 The .NET Standard 2.0 asset supports rotation for TCP listeners. HTTP/3
 requires the .NET 10 asset.

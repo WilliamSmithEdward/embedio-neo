@@ -16,6 +16,16 @@ main can still be new to a v1 package consumer.
 
 ## Rebuild and update source references
 
+The new, unreleased one-argument `HttpListener(ServerCertificateSource)`
+constructor is replaced by
+`EmbedIO.Net.HttpListener.CreateWithCertificateSource(source)`. Update code using
+that temporary v2 constructor to the named factory. The source and its
+certificates remain application-owned; the factory rejects a null source.
+`HttpListener(source, tlsPolicy)` and `WebServerOptions.CertificateSource` remain
+available. Published v1 calls such as `new EmbedIO.Net.HttpListener(null)` and
+`new EmbedIO.Net.HttpListener(default)` keep selecting the optional certificate
+constructor, avoiding ambiguity between unrelated reference types.
+
 V2 includes the approved compiler/API cleanup as well as the engine replacement.
 Rebuild dependent assemblies; do not treat the major upgrade as a binary-compatible
 drop-in. Verified v1.0.3-to-current-source changes include:

@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+- Replace the new one-argument certificate-source listener constructor with
+  `HttpListener.CreateWithCertificateSource(source)`, preserving published v1
+  positional null/default certificate calls. The source and its certificates
+  remain borrowed; the two-argument source/TLS-policy constructor is unchanged.
+  See [Neo v1-to-v2 migration](docs/compatibility/neo-v1-to-v2.md#rebuild-and-update-source-references).
 - Add opt-in TLS policy from Neo #148. `ServerTlsPolicy`, configured with `WithTlsPolicy` or passed to
   `HttpListener`, asks clients for a certificate (`ClientCertificateMode.Allow` or `Require`), validates it
   with an application callback or, by default, normal trust, optionally checks revocation, limits the TLS
