@@ -49,6 +49,15 @@ v1.0.3 include:
 | RedirectModule.RedirectUrl is string | It is Uri; existing string constructors remain available. |
 | ITestWebServer.BaseUrl is string | It is Uri; update custom test-server implementations and text comparisons. |
 
+For a listener that uses a rotating certificate source, call
+`EmbedIO.Net.HttpListener.CreateWithCertificateSource(source)`. Replace calls to
+`new HttpListener(source)` with this factory. The source and its certificates
+remain application-owned; a null source throws `ArgumentNullException`.
+The two-argument `HttpListener(source, tlsPolicy)` constructor and
+`WebServerOptions.CertificateSource` remain available. Published v1 calls such as
+`new EmbedIO.Net.HttpListener(null)` and `new EmbedIO.Net.HttpListener(default)`
+keep selecting the optional certificate constructor, avoiding ambiguous overloads.
+
 Review the [API migration notes](migration.md#warning-free-api-cleanup-unreleased-owner-approved)
 for named-argument changes, URI overloads, nullability annotations, error parameter
 names, cache ownership and exception-recovery boundaries. Specify the intended

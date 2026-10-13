@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+- Replace the new one-argument certificate-source listener constructor with
+  `HttpListener.CreateWithCertificateSource(source)`, preserving published v1
+  positional null/default certificate calls. The source and its certificates
+  remain borrowed; the two-argument source/TLS-policy constructor is unchanged.
+  See [Neo v1-to-v2 migration](docs/compatibility/neo-v1-to-v2.md#rebuild-and-update-source-references).
 - Refuse shared HTTPS endpoint registration with incompatible TLS policies, rather than silently
   applying the physical opener's policy to another logical listener. Compatible/default policies and
   fixed-certificate sharing remain supported. Use separate ports for different requirements;

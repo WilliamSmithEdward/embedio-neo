@@ -181,8 +181,55 @@ namespace EmbedIO.Tests.Issues
         [Test]
         public void TheListenerRequiresASource()
             => Assert.That(Assert.Throws<ArgumentNullException>(() =>
-                InvalidInput.Invoke((Func<ServerCertificateSource, Net.HttpListener>)(value => new Net.HttpListener(value)), (object?)null))?.ParamName,
+                InvalidInput.Invoke((Func<ServerCertificateSource, Net.HttpListener>)Net.HttpListener.CreateWithCertificateSource, (object?)null))?.ParamName,
                 Is.EqualTo("certificateSource"));
+
+        [Test]
+        public void PublishedNullAndDefaultCertificateCallsRemainAvailable()
+        {
+            using var positionalNull = new Net.HttpListener(null);
+            using var positionalDefault = new Net.HttpListener(default);
+            using var namedNull = new Net.HttpListener(certificate: null);
+            using var typedNull = new Net.HttpListener((X509Certificate?)null);
+            using var parameterless = new Net.HttpListener();
+            Assert.Multiple(() =>
+            {
+                Assert.That(positionalNull.IsListening, Is.False);
+                Assert.That(positionalDefault.IsListening, Is.False);
+                Assert.That(namedNull.IsListening, Is.False);
+                Assert.That(typedNull.IsListening, Is.False);
+                Assert.That(parameterless.IsListening, Is.False);
+            });
+        }
+
+        [Test]
+        public async Task TheFactoryBorrowsThePublishedSourceAndCertificates()
+        {
+            using var first = Create("factory-first");
+            using var second = Create("factory-second");
+            var source = new ServerCertificateSource(first);
+            using var listener = Net.HttpListener.CreateWithCertificateSource(source);
+            var prefix = HttpsSmoke.GetUrl();
+            var port = new Uri(prefix).Port;
+            listener.AddPrefix(prefix);
+            listener.Start();
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            using (var before = await Connection.OpenAsync(port, stop.Token))
+            {
+                Assert.That(before.Certificate, Is.EqualTo(Hash(first)));
+                source.Publish(second);
+                using var after = await Connection.OpenAsync(port, stop.Token);
+                Assert.That(after.Certificate, Is.EqualTo(Hash(second)));
+                Assert.That(before.Tls.IsAuthenticated, Is.True);
+            }
+
+            listener.Dispose();
+            Assert.That(first.RawData, Is.Not.Empty);
+            Assert.That(second.RawData, Is.Not.Empty);
+            Assert.That(source.Current, Is.SameAs(second));
+            source.Publish(first);
+            Assert.That(source.Current, Is.SameAs(first));
+        }
 
         // Real TLS over TCP --------------------------------------------------------------------------------------
 
