@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+- Add opt-in TLS policy from Neo #148. `ServerTlsPolicy`, configured with `WithTlsPolicy` or passed to
+  `HttpListener`, asks clients for a certificate (`ClientCertificateMode.Allow` or `Require`), validates it
+  with an application callback or, by default, normal trust, optionally checks revocation, limits the TLS
+  protocol versions, and on the .NET 10 asset chooses the server certificate by server name (SNI).
+  `context.Request.GetClientCertificate()` returns the client's certificate over HTTP/1.1, HTTP/2 and
+  HTTP/3. A server refuses settings its listener cannot honor when it is created: SNI on the .NET
+  Standard 2.0 asset, client certificates and SNI on the native HTTP/3 binding, and protocol limits
+  excluding TLS 1.3 for HTTP/3. Without a policy nothing changes. See
+  [TLS policy](docs/guides/tls-policy.md).
 - Use an empty 500 response for unhandled application exceptions by default in Neo v2,
   without exposing their type or message. Explicit HTML and diagnostic-header handlers,
   custom handlers, logging and application-authored HTTP errors remain available. See

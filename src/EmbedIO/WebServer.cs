@@ -241,6 +241,9 @@ namespace EmbedIO
                     : new Net.HttpListener(Options.Certificate, bodyPolicy)
             };
 
+            // Refuse TLS settings the selected listener cannot honor before creating it.
+            var tlsPolicy = Options.TlsPolicy;
+            tlsPolicy?.EnsureSupported(Options.Mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined, nativeHttp3);
             var listener = DoCreate();
             $"Running HTTPListener: {listener.Name}".Info(LogSource);
 
@@ -252,6 +255,7 @@ namespace EmbedIO
             {
                 tcp.DeferContinue = deferContinue;
                 tcp.ConnectionPolicy = connections;
+                tcp.TlsPolicy = tlsPolicy;
                 tcp.Telemetry = Telemetry;
             }
 #if NET10_0_OR_GREATER
@@ -261,11 +265,13 @@ namespace EmbedIO
                 {
                     combined.DeferContinue = deferContinue;
                     combined.ConnectionPolicy = connections;
+                    combined.TlsPolicy = tlsPolicy;
                     combined.Telemetry = Telemetry;
                 }
                 else if (listener is Net.Internal.Http3.Http3Listener quic)
                 {
                     quic.DeferContinue = deferContinue;
+                    quic.TlsPolicy = tlsPolicy;
                     quic.Telemetry = Telemetry;
                 }
             }

@@ -45,6 +45,8 @@ namespace EmbedIO.Net.Internal
                 : throw new ArgumentException("Combined hosting requires a certificate with its private key.", nameof(certificate));
         // Set by a server with body policies before Start; applied to both transports.
         internal bool DeferContinue { get; set; }
+        // TLS settings for both transports. Set before Start.
+        internal ServerTlsPolicy? TlsPolicy { get; set; }
         // TCP connection limits; QUIC connections are not counted.
         internal TcpConnectionPolicy ConnectionPolicy { get; set; } = TcpConnectionPolicy.Default;
         // Records TCP and QUIC connections. Set before Start.
@@ -90,7 +92,7 @@ namespace EmbedIO.Net.Internal
                     throw new InvalidOperationException("Stop the failed listener session before restarting.");
                 }
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_certificates, _prefixes, _ignoreWriteExceptions, _native, DeferContinue, ConnectionPolicy, Telemetry, _bodyPolicy);
+                _session = Session.Start(_certificates, TlsPolicy, _prefixes, _ignoreWriteExceptions, _native, DeferContinue, ConnectionPolicy, Telemetry, _bodyPolicy);
                 _drained = false;
             }
         }
@@ -173,12 +175,14 @@ namespace EmbedIO.Net.Internal
             internal bool IsRunning => Volatile.Read(ref _stopping) == 0;
             internal void SetIgnoreWriteExceptions(bool value)
             { _tcp.IgnoreWriteExceptions = value; _quic.IgnoreWriteExceptions = value; }
-            internal static Session Start(ServerCertificateSource certificates, List<string> prefixes, bool ignoreWriteExceptions, bool native, bool deferContinue, TcpConnectionPolicy connections, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
+            internal static Session Start(ServerCertificateSource certificates, ServerTlsPolicy? policy, List<string> prefixes, bool ignoreWriteExceptions, bool native, bool deferContinue, TcpConnectionPolicy connections, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
             {
                 var tcp = new HttpListener(certificates, bodyPolicy);
                 var quic = new Http3.Http3Listener(certificates, native, bodyPolicy);
                 tcp.DeferContinue = deferContinue;
                 tcp.ConnectionPolicy = connections;
+                tcp.TlsPolicy = policy;
+                quic.TlsPolicy = policy;
                 tcp.Telemetry = telemetry;
                 quic.Telemetry = telemetry;
                 quic.DeferContinue = deferContinue;

@@ -9,6 +9,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Net;
 using EmbedIO.PlatformTests;
 using NUnit.Framework;
 
@@ -16,13 +17,15 @@ namespace EmbedIO.Tests
 {
     public class HttpsMinimumVersionTest
     {
-        [TestCase(SslProtocols.Tls12)]
-        [TestCase(SslProtocols.Tls13)]
-        public async Task AllowedVersionPreservesExactResponsesAndKeepAlive(SslProtocols protocol)
+        [TestCase(SslProtocols.Tls12, false)]
+        [TestCase(SslProtocols.Tls12, true)]
+        [TestCase(SslProtocols.Tls13, false)]
+        [TestCase(SslProtocols.Tls13, true)]
+        public async Task AllowedVersionPreservesExactResponsesAndKeepAlive(SslProtocols protocol, bool explicitDefaultPolicy)
         {
             using var certificate = HttpsSmoke.CreateCertificate();
             var address = new Uri(HttpsSmoke.GetUrl());
-            using var server = CreateServer(address, certificate, null);
+            using var server = CreateServer(address, certificate, null, explicitDefaultPolicy);
             using var stop = new CancellationTokenSource();
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             await RequireServerProtocolAsync(certificate, protocol, deadline.Token);
@@ -38,9 +41,11 @@ namespace EmbedIO.Tests
             }
         }
 
-        [TestCase("Tls")]
-        [TestCase("Tls11")]
-        public async Task LegacyClientDoesNotDispatchAndHealthyTls12StillWorks(string legacyName)
+        [TestCase("Tls", false)]
+        [TestCase("Tls", true)]
+        [TestCase("Tls11", false)]
+        [TestCase("Tls11", true)]
+        public async Task LegacyClientDoesNotDispatchAndHealthyTls12StillWorks(string legacyName, bool explicitDefaultPolicy)
         {
             // This preservation case alone cannot attribute failure to the
             // server: a platform may refuse the client's obsolete offer first.
@@ -49,7 +54,7 @@ namespace EmbedIO.Tests
             using var certificate = HttpsSmoke.CreateCertificate();
             var address = new Uri(HttpsSmoke.GetUrl());
             var handled = 0;
-            using var server = CreateServer(address, certificate, () => Interlocked.Increment(ref handled));
+            using var server = CreateServer(address, certificate, () => Interlocked.Increment(ref handled), explicitDefaultPolicy);
             using var stop = new CancellationTokenSource();
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             var running = server.RunAsync(stop.Token);
@@ -76,9 +81,31 @@ namespace EmbedIO.Tests
             }
         }
 
-        private static WebServer CreateServer(Uri address, X509Certificate2 certificate, Action? onRequest)
+        [Test]
+        public void InvalidProtocolConfigurationPreservesThePreviousPolicy()
+        {
+            var policy = new ServerTlsPolicy { EnabledProtocols = SslProtocols.Tls12 };
+            foreach (var value in new[] { 64, 192, 768, 3264, 4096, -1 })
+            {
+                Assert.Throws<ArgumentOutOfRangeException>(() => policy.EnabledProtocols = (SslProtocols)value);
+                Assert.That(policy.EnabledProtocols, Is.EqualTo(SslProtocols.Tls12));
+            }
+        }
+
+        [Test]
+        public void ValidProtocolSubsetsRemainConfigurable()
+        {
+            var policy = new ServerTlsPolicy();
+            foreach (var protocol in new[] { SslProtocols.None, SslProtocols.Tls12, SslProtocols.Tls13, SslProtocols.Tls12 | SslProtocols.Tls13 })
+            {
+                policy.EnabledProtocols = protocol;
+                Assert.That(policy.EnabledProtocols, Is.EqualTo(protocol));
+            }
+        }
+        private static WebServer CreateServer(Uri address, X509Certificate2 certificate, Action? onRequest, bool explicitDefaultPolicy)
             => new WebServer(options => options.WithUrlPrefix(address.AbsoluteUri)
-                .WithMode(HttpListenerMode.EmbedIO).WithCertificate(certificate))
+                .WithMode(HttpListenerMode.EmbedIO).WithCertificate(certificate)
+                .WithTlsPolicy(explicitDefaultPolicy ? new ServerTlsPolicy() : null))
                 .WithAction("/", HttpVerbs.Get, context =>
                 {
                     onRequest?.Invoke();
