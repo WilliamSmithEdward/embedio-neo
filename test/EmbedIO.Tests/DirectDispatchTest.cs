@@ -5,9 +5,11 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Quic;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -390,6 +392,262 @@ namespace EmbedIO.Tests
             listener.Stop();
             Assert.That(() => register(listener, Context("late")), Throws.TypeOf<HttpListenerException>(), "A stopped listener refuses registration on either path.");
             handled.TrySetResult();
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task PropagatingHandlerFaultIsObservedAndLogged(bool afterSuspension)
+        {
+            var url = PlainUrl();
+            var marker = "propagating-" + Guid.NewGuid().ToString("N");
+            using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new ActionModule(async context =>
+                {
+                    if (context.RequestedPath != "/fatal") { await context.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding); return; }
+                    if (afterSuspension) await Task.Yield();
+                    // Not recoverable by the server's policy, so it leaves the handler
+                    // task faulted; the server must still observe and log it.
+                    throw new OutOfMemoryException(marker);
+                }));
+            var records = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            using var trace = new RecordingTrace(records);
+            var source = Diagnostics.Log.Source;
+            var previousLevel = source.Switch.Level;
+            source.Listeners.Add(trace);
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            try
+            {
+                source.Switch.Level = System.Diagnostics.SourceLevels.All;
+                var running = await StartAsync(server, stop.Token);
+                using var client = SingleConnectionClient();
+                using (var faulted = await client.GetAsync(url + "fatal", stop.Token))
+                    Assert.That((int)faulted.StatusCode, Is.GreaterThanOrEqualTo(200), "The context still closes with a final response.");
+                var deadline = DateTime.UtcNow.AddSeconds(10);
+                while (!records.Any(record => record.Contains(marker, StringComparison.Ordinal)) && DateTime.UtcNow < deadline)
+                    await Task.Delay(20, stop.Token);
+                Assert.That(records.Any(record => record.Contains(marker, StringComparison.Ordinal) && record.Contains("faulted after dispatch", StringComparison.Ordinal)), Is.True,
+                    "The server observes and logs a fault the handler propagated.");
+                using var healthy = SingleConnectionClient();
+                Assert.That(await healthy.GetStringAsync(url + "ok", stop.Token), Is.EqualTo("ok"));
+                stop.Cancel();
+                await running;
+            }
+            finally
+            {
+                source.Listeners.Remove(trace);
+                source.Switch.Level = previousLevel;
+            }
+        }
+
+        [Test]
+        public async Task DispatchFailureBeforeHandlingAnswers500AndClosesTheContext()
+        {
+            using var server = new WebServer(options => options.WithUrlPrefix(PlainUrl()).WithMode(HttpListenerMode.EmbedIO));
+            var dispatch = typeof(WebServer).GetMethod("DispatchAsync", Hidden) ?? throw new AssertionException("Missing dispatch method.");
+            var response = RecordingResponse.Create();
+            var context = FailingContext.Create(response);
+            var records = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            using var trace = new RecordingTrace(records);
+            var source = Diagnostics.Log.Source;
+            var previousLevel = source.Switch.Level;
+            source.Listeners.Add(trace);
+            try
+            {
+                source.Switch.Level = System.Diagnostics.SourceLevels.All;
+                var handling = (Task)(dispatch.Invoke(server, new object[] { context, CancellationToken.None }) ?? throw new AssertionException("Dispatch returned no task."));
+                await handling.WaitAsync(TimeSpan.FromSeconds(10));
+                var recorded = (RecordingResponse)(object)response;
+                Assert.That(recorded.StatusCode, Is.EqualTo(500), "A failure before the handler starts answers like an unhandled failure.");
+                Assert.That(recorded.KeepAlive, Is.False, "The connection closes after that answer.");
+                Assert.That(((FailingContext)(object)context).Closed, Is.EqualTo(1), "The context is closed exactly once.");
+                Assert.That(records.Any(record => record.Contains("Request dispatch failed before handling", StringComparison.Ordinal)), Is.True, "The failure is logged.");
+            }
+            finally
+            {
+                source.Listeners.Remove(trace);
+                source.Switch.Level = previousLevel;
+            }
+        }
+
+        public class RecordingResponse : DispatchProxy
+        {
+            internal int StatusCode { get; private set; }
+            internal bool? KeepAlive { get; private set; }
+            internal static IHttpResponse Create() => Create<IHttpResponse, RecordingResponse>();
+            protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+            {
+                switch (targetMethod?.Name)
+                {
+                    case "set_StatusCode": StatusCode = (int)(args?[0] ?? 0); return null;
+                    case "set_KeepAlive": KeepAlive = (bool)(args?[0] ?? false); return null;
+                }
+                var type = targetMethod?.ReturnType;
+                return type != null && type.IsValueType && type != typeof(void) ? Activator.CreateInstance(type) : null;
+            }
+        }
+
+        // The request is unavailable, as it would be if context preparation failed before any handler ran.
+        public class FailingContext : DispatchProxy
+        {
+            private IHttpResponse? _response;
+            internal int Closed { get; private set; }
+            internal static IHttpContextImpl Create(IHttpResponse response)
+            {
+                var context = Create<IHttpContextImpl, FailingContext>();
+                ((FailingContext)(object)context)._response = response;
+                return context;
+            }
+            protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+            {
+                switch (targetMethod?.Name)
+                {
+                    case "get_Id": return "failing-dispatch";
+                    case "get_Request": throw new InvalidOperationException("The request is unavailable before handling.");
+                    case "get_Response": return _response;
+                    case "Close": Closed++; return null;
+                }
+                var type = targetMethod?.ReturnType;
+                return type != null && type.IsValueType && type != typeof(void) ? Activator.CreateInstance(type) : null;
+            }
+        }
+
+        [Test]
+        public async Task CombinedModeDispatchesTcpRequestsDirectly()
+        {
+            if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) || !QuicListener.IsSupported)
+            {
+                Assert.Ignore("Combined mode requires a QUIC provider on this host.");
+                return;
+            }
+            using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
+            var url = CombinedPrefix();
+            using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIOCombined).WithCertificate(certificate))
+                .WithModule(new ActionModule(context => context.SendStringAsync("combined", "text/plain", WebServer.Utf8NoBomEncoding)));
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var running = await StartAsync(server, stop.Token);
+            var tcp = Field(Field(server.Listener, "_session"), "_tcp");
+            Assert.That(Field(Field(tcp, "_coordinator"), "_dispatcher"), Is.Not.Null, "The combined listener forwards the dispatcher to its TCP transport.");
+            using var client = HttpsSmoke.CreateClient(certificate, new SocketsHttpHandler { UseProxy = false, MaxConnectionsPerServer = 1 });
+            using var response = await client.GetAsync(url + "direct", stop.Token);
+            Assert.That(response.Version, Is.EqualTo(HttpVersion.Version11));
+            Assert.That(await response.Content.ReadAsStringAsync(stop.Token), Is.EqualTo("combined"));
+            Assert.That(((IDictionary)Field(Field(Field(tcp, "_coordinator"), "_epoch"), "_pending")).Count, Is.Zero);
+            stop.Cancel();
+            await running;
+        }
+
+        private static string CombinedPrefix()
+        {
+            for (var attempt = 0; ; attempt++)
+            {
+                using var tcp4 = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                using var udp4 = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+                using var tcp6 = Socket.OSSupportsIPv6 ? new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp) : null;
+                using var udp6 = Socket.OSSupportsIPv6 ? new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp) : null;
+                try
+                {
+                    // Both transports bind the same number on every loopback family the listener uses.
+                    var port = Random.Shared.Next(10000, 30000);
+                    tcp4.ExclusiveAddressUse = true;
+                    tcp4.Bind(new IPEndPoint(IPAddress.Loopback, port));
+                    udp4.ExclusiveAddressUse = true;
+                    udp4.Bind(new IPEndPoint(IPAddress.Loopback, port));
+                    if (tcp6 != null && udp6 != null)
+                    {
+                        tcp6.DualMode = false;
+                        udp6.DualMode = false;
+                        tcp6.ExclusiveAddressUse = true;
+                        udp6.ExclusiveAddressUse = true;
+                        tcp6.Bind(new IPEndPoint(IPAddress.IPv6Loopback, port));
+                        udp6.Bind(new IPEndPoint(IPAddress.IPv6Loopback, port));
+                    }
+                    return $"https://localhost:{port}/";
+                }
+                catch (SocketException error) when (attempt < 31 && error.SocketErrorCode is SocketError.AddressAlreadyInUse or SocketError.AccessDenied)
+                {
+                    // Retry only the port selection.
+                }
+            }
+        }
+
+        // A drain lets the request in progress finish and then closes the connection
+        // before the pipelined successor is parsed, exactly as on the pull path; the
+        // drain admission branch of Register serves only a head that was read before the
+        // drain marked its connection, and HTTP/2 streams on already admitted connections.
+        [Test]
+        public async Task DrainFinishesTheInFlightResponseAndClosesBeforeThePipelinedSuccessor()
+        {
+            var url = new Uri(PlainUrl());
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var server = new WebServer(options => options.WithUrlPrefix(url.ToString()).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new ActionModule(async context =>
+                {
+                    if (context.RequestedPath == "/first")
+                    {
+                        entered.TrySetResult();
+                        await release.Task;
+                    }
+                    var body = Encoding.ASCII.GetBytes(context.RequestedPath);
+                    context.Response.ContentType = "text/plain";
+                    context.Response.ContentLength64 = body.Length;
+                    await context.Response.OutputStream.WriteAsync(body, 0, body.Length, context.CancellationToken);
+                }));
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var stop = new CancellationTokenSource();
+            var running = await StartAsync(server, stop.Token);
+            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            await socket.ConnectAsync(IPAddress.Loopback, url.Port, deadline.Token);
+            using var stream = new NetworkStream(socket, true);
+            // The second request is pipelined, so the connection is never idle: the drain
+            // admits it through the connection's own admission rather than the accept loop.
+            await stream.WriteAsync(Encoding.ASCII.GetBytes("GET /first HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\nGET /second HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"), deadline.Token);
+            await entered.Task.WaitAsync(deadline.Token);
+            var drain = server.DrainAsync(TimeSpan.FromSeconds(20), deadline.Token);
+            await Task.Delay(200, deadline.Token);
+            Assert.That(drain.IsCompleted, Is.False, "The drain waits for the request in progress.");
+            release.TrySetResult();
+            var bodies = await ReadResponsesAsync(stream, 1, deadline.Token);
+            Assert.That(bodies, Is.EqualTo(new[] { "/first" }), "The response in progress completes during the drain.");
+            await drain.WaitAsync(deadline.Token);
+            var tail = new byte[64];
+            Assert.That(await stream.ReadAsync(tail, deadline.Token), Is.Zero, "The drained connection closes instead of serving the pipelined successor.");
+            await running.WaitAsync(deadline.Token);
+        }
+
+        [Test]
+        public async Task PipelinedBurstDoesNotStarveAnotherConnection()
+        {
+            var url = new Uri(PlainUrl());
+            using var server = new WebServer(options => options.WithUrlPrefix(url.ToString()).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new ActionModule(async context =>
+                {
+                    // Completes synchronously, so the pipelined connection could run
+                    // on one worker indefinitely without the actor's periodic yield.
+                    var body = Encoding.ASCII.GetBytes(context.RequestedPath);
+                    context.Response.ContentType = "text/plain";
+                    context.Response.ContentLength64 = body.Length;
+                    await context.Response.OutputStream.WriteAsync(body, 0, body.Length, context.CancellationToken);
+                }));
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            var running = await StartAsync(server, stop.Token);
+            const int burst = 4000;
+            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            await socket.ConnectAsync(IPAddress.Loopback, url.Port, stop.Token);
+            using var stream = new NetworkStream(socket, true);
+            var requests = new StringBuilder();
+            for (var request = 0; request < burst; request++) requests.Append("GET /b HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+            var sending = stream.WriteAsync(Encoding.ASCII.GetBytes(requests.ToString()), stop.Token).AsTask();
+            var reading = ReadResponsesAsync(stream, burst, stop.Token);
+            using var other = new HttpClient(new SocketsHttpHandler { UseProxy = false, MaxConnectionsPerServer = 1 }) { Timeout = TimeSpan.FromSeconds(5) };
+            for (var request = 0; request < 20; request++)
+                Assert.That(await other.GetStringAsync(url + "other", stop.Token), Is.EqualTo("/other"), "Another connection is served while the burst is in progress.");
+            await sending;
+            var bodies = await reading;
+            Assert.That(bodies, Has.Count.EqualTo(burst));
+            Assert.That(bodies, Has.All.EqualTo("/b"));
+            stop.Cancel();
+            await running;
         }
 
         private static async Task<List<string>> ReadResponsesAsync(NetworkStream stream, int count, CancellationToken token)

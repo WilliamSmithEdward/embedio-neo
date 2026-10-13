@@ -38,9 +38,18 @@ application code.
 
 - HTTP/1.1: the handler starts on the connection's own thread, inside the
   actor's admission step, and runs up to its first suspension there. The actor
-  then waits for the response to end, as before. A handler that completes its
-  response inline leaves nothing to wait for, so the actor reads the next
-  request head on the same thread without a queued continuation.
+  then waits for the response to end, as before. After each served request the
+  actor yields once to the thread pool's global queue (`InlineRequestBudget`)
+  before it parses the next head. The first measured revision did not yield:
+  a socket completion resumes the actor on the completing thread, whose local
+  queue is last-in-first-out, so with the handler inline the newest
+  completions were served first and the oldest starved. At 64 connections p50
+  fell sixfold while p99 rose tenfold, and at 256 connections p99 reached
+  50 ms against the base's 9.6 ms. Kestrel dispatches every receive completion
+  to the pool for the same reason.
+- Combined mode (TCP plus QUIC) forwards the dispatcher to its TCP listener,
+  so its HTTP/1.1 and HTTP/2 requests take the same path; QUIC requests keep
+  the pull loop.
 - HTTP/2: `RegisterMultiplexedContext` takes the same `Register`. Each exchange
   already runs on its own work item (`Http2Dispatcher.StartApplication`), so
   the handler never runs on the connection's frame loop and concurrent streams

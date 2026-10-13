@@ -3,12 +3,14 @@
 ## [Unreleased]
 
 - Dispatch each admitted TCP request straight from its connection to the server's
-  handler instead of queueing it for the accept loop. The HTTP/1.1 actor now runs the
-  handler like Kestrel's connection loop, and HTTP/2 exchanges hand off on their own
-  work item, removing two thread-pool hops and the accept-queue bookkeeping per request.
-  `IHttpListener.GetContextAsync` is unchanged and still serves standalone listeners and
-  HTTP/3; admission, drain and stop semantics are unchanged, and a handler may still run
-  on after completing its response without holding the connection's next request.
+  handler instead of queueing it for the accept loop, in plain and combined mode. The
+  HTTP/1.1 actor starts the handler on its own thread and then yields to the thread
+  pool's global queue once per request so that no connection monopolizes a worker,
+  and HTTP/2 exchanges hand off on their own work item, removing the accept-queue
+  bookkeeping and the `Task.Run` hop per request. `IHttpListener.GetContextAsync` is
+  unchanged and still serves standalone listeners and HTTP/3; admission, drain and
+  stop semantics are unchanged, and a handler may still run on after completing its
+  response without holding the connection's next request.
 - Fix: a request whose dispatch fails before the handler starts (an exception while the
   server prepares the context) now closes its HTTP/1.1 connection, or resets its HTTP/2
   stream, after logging the failure. Previously that request was never answered and its

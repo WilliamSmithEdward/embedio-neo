@@ -24,11 +24,19 @@ namespace EmbedIO.Net.Internal
         private TaskCompletionSource<bool>? _responseEndSignal;
 #endif
 
+        // Requests the actor serves between yields to the pool's global FIFO queue.
+        // A socket completion resumes the actor on the completing thread, whose
+        // local queue is LIFO, so with the handler now inline the newest
+        // completions were served first and the oldest starved: p99 rose tenfold
+        // at 64 connections while p50 fell sixfold. Kestrel dispatches every
+        // receive completion to the pool for the same reason.
+        private const int InlineRequestBudget = 1;
+
         // A single actor advances the HTTP/1 request cycle. Applications may
         // complete a response on another thread, but never start another reader.
         private async Task RunHttp1Async(int count, bool prefetched)
         {
-            var inlineCycles = 0;
+            var inlineRequests = 0;
             while (Volatile.Read(ref _protocolEnded) == 0)
             {
                 if (!await ReadAndAdmitHeadAsync(count, prefetched).ConfigureAwait(false)) return;
@@ -43,9 +51,9 @@ namespace EmbedIO.Net.Internal
 
                 prefetched = _pendingInput.Count != 0;
                 count = prefetched ? 0 : await ReadHttp1InputAsync().ConfigureAwait(false);
-                if (++inlineCycles == 64)
+                if (++inlineRequests >= InlineRequestBudget)
                 {
-                    inlineCycles = 0;
+                    inlineRequests = 0;
                     await Task.Yield();
                 }
             }
@@ -121,15 +129,9 @@ namespace EmbedIO.Net.Internal
                     _contextBound = true;
                 }
                 // With a dispatcher installed the handler has run on this thread up to
-                // its first suspension. Only a failure before it took the request ends
-                // the connection here, since nothing else would answer the request.
-                var handling = owner.RegisterContext(_context);
-                if (handling is { IsFaulted: true })
-                {
-                    _ = handling.Exception;
-                    CloseTransport(true);
-                    return false;
-                }
+                // its first suspension; the server owns its task, including failures,
+                // and every outcome ends the response that the actor waits for next.
+                _ = owner.RegisterContext(_context);
                 return true;
             }
         }
