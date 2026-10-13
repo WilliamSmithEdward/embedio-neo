@@ -11,7 +11,9 @@
   New streams over the limit are refused with `REFUSED_STREAM`, which clients retry,
   and a client refused more than 128 times within one second receives
   `GOAWAY ENHANCE_YOUR_CALM`. A handler that keeps working after its response now
-  holds its stream slot until it returns.
+  holds its stream slot until it returns. HTTP/3 now allows 128 outstanding
+  request handlers per connection instead of 256, matching HTTP/2 and the QUIC
+  stream limit; a request over it is refused with `H3_REQUEST_REJECTED`.
 - Correct defects found by a review sweep. `ISession.Delete` and `Regenerate` now end
   a session that holds data, so an old cookie cannot resume it, and an expired session
   is no longer revived before the purge runs. A module whose own exception handler
