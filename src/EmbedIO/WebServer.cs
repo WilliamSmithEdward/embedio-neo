@@ -271,11 +271,12 @@ namespace EmbedIO
 
         private Task DispatchAsync(IHttpContextImpl context, CancellationToken cancellationToken)
         {
+            Task handling;
             try
             {
                 context.CancellationToken = cancellationToken;
                 context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
-                return DoHandleContextAsync(context);
+                handling = DoHandleContextAsync(context);
             }
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
@@ -283,6 +284,23 @@ namespace EmbedIO
                 // response. The faulted task lets the owning connection close.
                 error.Log(LogSource, $"[{context.Id}] Request dispatch failed before handling.");
                 return Task.FromException(error);
+            }
+            // The connection waits for the response, not for the handler, which may
+            // outlive it. This server therefore owns the handler's task: a fault the
+            // handler did not catch is observed and logged here instead of going
+            // unobserved. A handler that completed inline needs no continuation.
+            if (!handling.IsCompleted)
+                _ = handling.ContinueWith(static (task, state) => ((WebServer)(state ?? throw new InvalidOperationException("Missing dispatch owner."))).ObserveHandlingFault(task),
+                    this, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            return handling;
+        }
+
+        private void ObserveHandlingFault(Task handling)
+        {
+            try { handling.Exception?.Log(LogSource, "A request handler faulted after dispatch."); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                // A failing trace listener cannot turn an observed fault into another.
             }
         }
 

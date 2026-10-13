@@ -183,8 +183,11 @@ namespace EmbedIO.Net.Internal
                 // synchronization: listener shutdown closes its connections.
                 await context.SendContinueAsync(listener.DeferContinue || RequestBodyPolicy.KnownRefusal(context.Request) != null).ConfigureAwait(false);
                 // This exchange runs on its own work item, so a directly dispatched
-                // handler runs here without blocking the connection's frame loop.
+                // handler runs here without blocking the connection's frame loop. A
+                // failure before the handler took the request aborts the stream; the
+                // handler may otherwise keep running after the response completes.
                 var handling = listener.RegisterMultiplexedContext(context, this);
+                if (handling is { IsFaulted: true }) handling.GetAwaiter().GetResult();
                 registered = true;
                 var closed = false;
                 lock (_connectionSync) closed = _protocolSocket == null || _protocolEnded != 0;
@@ -195,9 +198,8 @@ namespace EmbedIO.Net.Internal
                 }
                 var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 using var registration = exchange.CancellationToken.Register(state => ((TaskCompletionSource<bool>)(state ?? throw new InvalidOperationException("Missing cancellation signal."))).TrySetResult(true), canceled);
-                var completed = await Task.WhenAny(handling ?? context.Completion, canceled.Task).ConfigureAwait(false);
+                var completed = await Task.WhenAny(context.Completion, canceled.Task).ConfigureAwait(false);
                 if (completed == canceled.Task) exchange.CancellationToken.ThrowIfCancellationRequested();
-                if (handling != null) await handling.ConfigureAwait(false);
                 await context.Completion.ConfigureAwait(false);
             }
             finally

@@ -23,10 +23,11 @@ namespace EmbedIO.Tests
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
 
-        private static readonly Action<Net.HttpListener, IHttpContextImpl> Register =
+        // Without a dispatcher every registration is queued for GetContextAsync and returns null.
+        private static readonly Func<Net.HttpListener, IHttpContextImpl, Task?> Register =
             (typeof(Net.HttpListener).GetMethod("RegisterContext", PrivateInstance)
                 ?? throw new AssertionException("Missing RegisterContext."))
-            .CreateDelegate<Action<Net.HttpListener, IHttpContextImpl>>();
+            .CreateDelegate<Func<Net.HttpListener, IHttpContextImpl, Task?>>();
 
         [TestCase(false)]
         [TestCase(true)]

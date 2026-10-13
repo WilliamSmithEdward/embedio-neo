@@ -27,9 +27,10 @@ internal static class ListenerAdmission
             ?? throw new InvalidOperationException("Missing HttpListenerContext.");
         var id = contextType.GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Missing context identifier field.");
+        // Without a dispatcher every registration is queued for GetContextAsync and returns null.
         var register = (typeof(EmbedIO.Net.HttpListener).GetMethod("RegisterContext", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Missing RegisterContext."))
-            .CreateDelegate<Action<EmbedIO.Net.HttpListener, IHttpContextImpl>>();
+            .CreateDelegate<Func<EmbedIO.Net.HttpListener, IHttpContextImpl, Task?>>();
         Console.WriteLine(FormattableString.Invariant($"processors={Environment.ProcessorCount} seconds={seconds} rounds={rounds} depth={depth}"));
         foreach (var producers in new[] { 1, 4, 8, 16 })
         {

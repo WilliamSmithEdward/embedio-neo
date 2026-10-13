@@ -132,6 +132,84 @@ namespace EmbedIO.Tests
         }
 
         [Test]
+        public async Task HandlerOutlivingItsResponseDoesNotHoldTheNextKeepAliveRequest()
+        {
+            var url = PlainUrl();
+            var lingering = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new ActionModule(async context =>
+                {
+                    await context.SendStringAsync(context.RequestedPath, "text/plain", WebServer.Utf8NoBomEncoding);
+                    if (context.RequestedPath != "/linger") return;
+                    // The response is complete; the handler keeps running, as the
+                    // contract allows, and must not block this connection's next request.
+                    lingering.TrySetResult();
+                    await release.Task;
+                }));
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var running = await StartAsync(server, stop.Token);
+            try
+            {
+                using var client = SingleConnectionClient();
+                Assert.That(await client.GetStringAsync(url + "linger", stop.Token), Is.EqualTo("/linger"));
+                await lingering.Task.WaitAsync(stop.Token);
+                Assert.That(await client.GetStringAsync(url + "next", stop.Token), Is.EqualTo("/next"), "The next keep-alive request is served while the previous handler still runs.");
+                var drain = server.DrainAsync(TimeSpan.FromSeconds(10), stop.Token);
+                await drain.WaitAsync(stop.Token);
+                Assert.That(release.Task.IsCompleted, Is.False, "The drain completed without waiting for a handler whose response has ended.");
+            }
+            finally { release.TrySetResult(); }
+            await running.WaitAsync(stop.Token);
+        }
+
+        [Test]
+        public async Task HandlerFailingAfterItsResponseIsLoggedAndTheConnectionStaysHealthy()
+        {
+            var url = PlainUrl();
+            var marker = "late-failure-" + Guid.NewGuid().ToString("N");
+            using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
+                .WithModule(new ActionModule(async context =>
+                {
+                    await context.SendStringAsync(context.RequestedPath, "text/plain", WebServer.Utf8NoBomEncoding);
+                    if (context.RequestedPath != "/late") return;
+                    await Task.Yield();
+                    throw new InvalidOperationException(marker);
+                }));
+            var records = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            using var trace = new RecordingTrace(records);
+            var source = Diagnostics.Log.Source;
+            var previousLevel = source.Switch.Level;
+            source.Listeners.Add(trace);
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            try
+            {
+                source.Switch.Level = System.Diagnostics.SourceLevels.All;
+                var running = await StartAsync(server, stop.Token);
+                using var client = SingleConnectionClient();
+                Assert.That(await client.GetStringAsync(url + "late", stop.Token), Is.EqualTo("/late"));
+                Assert.That(await client.GetStringAsync(url + "after", stop.Token), Is.EqualTo("/after"), "The connection serves the next request after a post-response failure.");
+                var deadline = DateTime.UtcNow.AddSeconds(10);
+                while (!records.Any(record => record.Contains(marker, StringComparison.Ordinal)) && DateTime.UtcNow < deadline)
+                    await Task.Delay(20, stop.Token);
+                Assert.That(records.Any(record => record.Contains(marker, StringComparison.Ordinal)), Is.True, "The failure that followed the completed response is logged.");
+                stop.Cancel();
+                await running;
+            }
+            finally
+            {
+                source.Listeners.Remove(trace);
+                source.Switch.Level = previousLevel;
+            }
+        }
+
+        private sealed class RecordingTrace(System.Collections.Concurrent.ConcurrentQueue<string> records) : System.Diagnostics.TraceListener
+        {
+            public override void Write(string? message) => records.Enqueue(message ?? string.Empty);
+            public override void WriteLine(string? message) => records.Enqueue(message ?? string.Empty);
+        }
+
+        [Test]
         public async Task HandlerWaitingForCancellationEndsWithTheServer()
         {
             var url = PlainUrl();
