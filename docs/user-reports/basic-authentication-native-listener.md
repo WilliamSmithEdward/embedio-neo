@@ -62,25 +62,29 @@ in-memory account dictionary into a password storage or identity management syst
 
 ## Historical v1 reproduction and regression coverage
 
-A .NET Framework host loading current .NET Standard 2.0 core reproduced the exact
+A .NET Framework host loading the then-current v1 .NET Standard 2.0 core
+reproduced the exact
 500 and `WWW-Authenticate` restricted-header exception on the original valid,
-empty-body POST. The corrected request returns 200 with JSON `true` and retains
+empty-body POST. The corrected request returned 200 with JSON `true` and retained
 the Basic challenge. This is a runtime-specific reproduction, not merely an
 in-process mock or a modern desktop pass.
 
-Shared real-HTTP coverage checks managed/native .NET 10 listeners and a test-only
+The recorded v1 real-HTTP coverage checked managed/native .NET 10 listeners and a
+test-only
 Windows .NET Framework host compiled for net472, using the retained Standard core.
-Each single/layered-module run sends ten requests: valid POST, missing credentials,
+Each single/layered-module run sent ten requests: valid POST, missing credentials,
 wrong password, malformed Base64, malformed/other scheme, missing account,
 mixed-case Basic scheme, UTF-8 credentials with a colon-containing password, and
-a healthy valid request after denials. Checks require exact status/body/challenge,
+a healthy valid request after denials. Checks required exact status/body/challenge,
 one challenge value, protected-handler isolation, local sessions and compressed
-response decoding. Shutdown is bounded and observed.
+response decoding. Shutdown was bounded and observed.
 
-The legacy fixture is outside the ordinary solution and all shipped packages. Its
-reference-assembly package is pinned and locked for development only. Windows CI
-runs its real native listener and uploads `legacy-authentication.json` with the
-desktop test artifact. A net472 compilation does not claim execution on the original
+The legacy fixture was outside the ordinary solution and all shipped packages. Its
+reference-assembly package was pinned and locked for development only. At the
+recorded validation, Windows CI ran its real native listener and uploaded
+`legacy-authentication.json` with the desktop test artifact. Those native-backend
+fixtures are not current v2 listener coverage. A net472 compilation does not claim
+execution on the original
 .NET Framework 4.7.2 runtime; the installed host version is recorded separately.
 
 Direct application writes to other restricted native headers and arbitrary wrapper

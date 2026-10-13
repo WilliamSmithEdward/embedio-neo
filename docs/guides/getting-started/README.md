@@ -11,7 +11,7 @@ installs the published v1 package. To try the v2 engine, follow the
 ```sh
 dotnet new console --framework net10.0 --name HelloEmbedIO
 cd HelloEmbedIO
-dotnet add package EmbedIO-Neo
+dotnet add package EmbedIO-Neo --version 1.0.3
 ```
 
 The package is called `EmbedIO-Neo`; the C# namespace is `EmbedIO`.
