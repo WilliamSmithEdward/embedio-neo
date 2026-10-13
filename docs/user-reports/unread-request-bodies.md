@@ -1,4 +1,4 @@
-﻿# Returning a response without reading the request body
+# Returning a response without reading the request body
 
 The unreleased [modern engine increment](../project/http-engine.md) supersedes
 this report's managed chunked-input and synchronous-read limitations, and tightens
@@ -71,7 +71,15 @@ Expect HTTP 200 and JSON strings `"response2"`, `"response1"`, `"response1"`, `"
 
 ## Chunked uploads and framing limits
 
-This fixed-length report must not be confused with chunked request support. The managed listener currently recognizes request bodies through a positive Content-Length and does not decode chunked request input. For chunked uploads, use `HttpListenerMode.Microsoft` or send a known Content-Length. The native listener's chunked-body reading and ignored-body response cases are covered separately. This guide does not claim managed chunked input has been implemented.
+The earlier v1 investigation covered a managed listener that recognized a body
+through positive Content-Length and did not decode chunked input. Its historical
+Microsoft-backend comparison is not a v2 deployment option. The replacement
+engine now decodes chunked uploads and rejects ambiguous framing; read input to
+completion when the application needs it rather than treating an unknown length
+as an empty body. See the [v1-to-v2 request-framing guide](../compatibility/neo-v1-to-v2.md#request-framing-and-client-behavior)
+and [request-body limits](../guides/request-body-limits.md). The investigation
+results below remain evidence for their earlier source and do not establish final
+v2 conformance or resource acceptance.
 
 When reading data is necessary, use the declared body framing and the appropriate helper; do not assume every POST has data or every GET is bodyless. A successful response does not prove the application consumed or validated the upload. Do not read the underlying connection directly, and do not dispose a request stream to force protocol behavior.
 
