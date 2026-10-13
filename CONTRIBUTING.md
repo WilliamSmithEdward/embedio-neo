@@ -58,7 +58,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 5688 executed/reported test cases to catch accidental discovery loss; update
+least 5690 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
 suite budget is eight minutes on all three platforms. William approved the Unix
 allowance on 2026-10-10 and requested loosening the Windows allowance on
