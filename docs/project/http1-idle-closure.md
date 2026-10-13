@@ -185,3 +185,19 @@ in finally, including on assertion failure.
 retains source hashes, loaded identities, actual case outcomes and unsuccessful
 qualification. Full desktop/MAUI/security gates and older-runtime TLS fallback
 validation remain pending. These modern-host runs are not older-runtime proof.
+### Framework and hosted controls
+
+The `net472` legacy smoke executable passed all 545 assertions on installed
+.NET Framework 4.8 (release 533509), loading the actual .NET Standard 2.0 core
+from source `db89aaa1`. Plain and TLS idle connections reached EOF after the
+existing fifteen-second deadline, and fresh connections remained healthy.
+This runtime exposes the public TLS shutdown method. It therefore does not
+establish acceptance on a runtime lacking that method; the unsupported-capability
+fallback remains unchanged.
+
+Dedicated HTTP/1 run 38330403988 passed all 33 focused cases on Windows, Linux
+and macOS for PR head `d9a36d0f`. Both current modern and .NET Standard public
+probes observed idle EOF on each platform. The ordinary Windows full suite on
+that head still had a genuine initial QUIC handshake failure, retained in its
+run evidence. These controls do not replace full combined-source validation or
+establish that the PR is ready to merge.

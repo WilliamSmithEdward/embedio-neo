@@ -582,5 +582,127 @@
     "Older runtimes without public TLS shutdown retain existing TLS behavior; runtime proof remains pending.",
     "Encrypted TLS12 alert descriptions were not decoded; packet-level FIN/ACK ordering is not established.",
     "No added idle timeout, cleanup grace period, public API, runtime dependency or performance claim."
-  ]
+  ],
+  "framework48Control": {
+    "sourceCommit": "db89aaa14145397d7fb8c26ec4587293d8ce6fda",
+    "receipt": {
+      "passed": true,
+      "assertions": 545,
+      "fixtureTarget": "net472",
+      "loadedTarget": ".NETStandard,Version=v2.0",
+      "clr": "4.0.30319.42000",
+      "frameworkRelease": 533509,
+      "engine": "C:\\Users\\William\\.codex\\worktrees\\issue-282-teardown-cost\\embedio-neo\\test\\EmbedIO.LegacyHttpEngineSmoke\\bin\\Release\\net472\\EmbedIO.dll",
+      "engineSha256": "1A7944B92F0DF8635B24F61A716230D81B4FD6F4153B577F598A760C943FABD6",
+      "informational": "1.0.3+db89aaa14145397d7fb8c26ec4587293d8ce6fda"
+    },
+    "receiptSha256": "305d544323978ae7462856c9f9218a7276bf06900608ed7b4d100a0b9fc3d651",
+    "publicShutdownAvailable": true,
+    "plainIdle": "EOF",
+    "tlsIdle": "EOF",
+    "freshConnectionHealth": "Passed",
+    "actualToolExit": 0,
+    "limitation": "Installed Framework 4.8 exposes public TLS shutdown. This does not validate a runtime lacking that API; its fallback remains unchanged."
+  },
+  "hostedHttp1Controls": {
+    "run": 38330403988,
+    "pullRequestHead": "d9a36d0f666e94ecb4695f2c6bad25692de24e69",
+    "conclusion": "success",
+    "platforms": [
+      {
+        "platform": "http1-closure-macos-15",
+        "counters": {
+          "total": "33",
+          "executed": "33",
+          "passed": "33",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "trxSha256": "5f3fe790a0a467e194d956bf602ff568fcfdeef27c83ad5be33783d5a7fdd525",
+        "actualCheckout": "5ce7e6209b1a6015072a4849fcaf8f4cb07bddc7",
+        "modernPublicProbe": [
+          "False: peer EOF after 00:00:15.1474179",
+          "True: peer EOF after 00:00:15.0935717"
+        ],
+        "standardPublicProbe": [
+          "False: peer EOF after 00:00:15.0184284",
+          "True: peer EOF after 00:00:15.0162996"
+        ]
+      },
+      {
+        "platform": "http1-closure-ubuntu-24.04",
+        "counters": {
+          "total": "33",
+          "executed": "33",
+          "passed": "33",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "trxSha256": "f2f56df653c44524b7c7c25bd29eaa681237c477dfc47a9755862b7c8bbf3a7f",
+        "actualCheckout": "5ce7e6209b1a6015072a4849fcaf8f4cb07bddc7",
+        "modernPublicProbe": [
+          "False: peer EOF after 00:00:14.9930738",
+          "True: peer EOF after 00:00:14.9998859"
+        ],
+        "standardPublicProbe": [
+          "False: peer EOF after 00:00:14.9958214",
+          "True: peer EOF after 00:00:15.0011765"
+        ]
+      },
+      {
+        "platform": "http1-closure-windows-2025",
+        "counters": {
+          "total": "33",
+          "executed": "33",
+          "passed": "33",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "trxSha256": "371f806926e49e3896fef5ae5f831c0bd14beae939fcf4c58af80750242fa011",
+        "actualCheckout": "5ce7e6209b1a6015072a4849fcaf8f4cb07bddc7",
+        "modernPublicProbe": [
+          "False: peer EOF after 00:00:14.9913620",
+          "True: peer EOF after 00:00:15.0123110"
+        ],
+        "standardPublicProbe": [
+          "False: peer EOF after 00:00:15.0022956",
+          "True: peer EOF after 00:00:15.0052794"
+        ]
+      }
+    ],
+    "limitation": "Dedicated controls do not supersede the genuine failed Windows full-suite check on that head, or validate later combined source."
+  }
 }
