@@ -1,10 +1,18 @@
 # Listener retirement: explicit test-case accounting
 
-Owner-authorized Neo v2 removal of the Microsoft and inherited Mono implementations. This is an incremental ledger; it is not full retirement acceptance.
+Owner-authorized Neo v2 removal of the Microsoft and inherited Mono implementations.
+This ledger records the earlier Microsoft-backend retirement increment and its
+source-specific test counts. The current engine branch has subsequently removed
+the Mono-derived implementation too; the retained evidence below is not a count
+of today's complete suite or final program/platform acceptance. See the
+[v1-to-v2 guide](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
 
 The SDK C# parser inspected each method attribute. The 291 Microsoft rows below each have an identical EmbedIO row in the same method. Only the obsolete attributes were removed; managed arguments, assertions, deadlines and iteration counts remain unchanged. The single unsupported-drain case is replaced by early rejection of retired numeric mode 1. Three additional cases guard the persisted identifiers 0, 2 and 3.
 
-Adapter-only fixtures and standalone consumers are accounted below. The independent Mono replacement and platform acceptance remain incomplete.
+Adapter-only fixtures and standalone consumers are accounted below. At the
+recorded increment, independent Mono replacement and platform acceptance were
+still incomplete; subsequent source retirement does not supply missing platform
+or whole-program acceptance evidence.
 
 | Fixture | Retired Microsoft rows with exact managed peers |
 | --- | ---: |
