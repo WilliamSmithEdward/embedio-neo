@@ -46,7 +46,7 @@ Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 5688
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 5690
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
