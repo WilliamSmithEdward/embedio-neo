@@ -8,6 +8,48 @@ remaining upstream-reporting, native dependency and retirement questions. The
 candidate is unreleased. This document does not claim integration on main or
 completion of the HTTP engine.
 
+## Initial bind failure versus drain or rebind
+
+PR #365 source `a1ad06be` failed the macOS regression run
+`38319118404`, job `115042718415`, in
+`GracefulListenerDrainCanAbortUnfinishedResponses("listener-stop")`.
+The actual exception was `AddressAlreadyInUse` (48) from the initial
+`QuicListener.ListenAsync` through `SystemBinding.Create` and `Session.Start`.
+The fixture waited for handler entry until its existing 30-second token expired,
+then its cleanup re-awaited the failed startup task. It never reached the drain
+or listener-stop trigger. The selected port and occupied family were not captured;
+this is not evidence of a drain/rebind failure or a confirmed natural cause.
+
+The test prefix helper probes and releases only an IPv4 loopback UDP port.
+The actual `localhost` resolver also includes IPv6 loopback when `UseIpv6` and
+the OS permit it. A successful probe in one UDP namespace does not establish
+availability in the other. Test-only inverse IPv4/IPv6 controls demonstrate that
+gap with one family deliberately occupied while the other family's probe succeeds.
+Actual `localhost` QUIC startup then fails with the original bind exception.
+These controlled Linux results do not reproduce or attribute the natural macOS
+failure; the provider's literal-family binding strategy and a failing macOS
+endpoint trace remain separate evidence requirements.
+
+The drain fixtures observe the actual startup, client and handler-entry tasks,
+so an initial failure is reported before waiting for impossible handler entry.
+Read-only diagnostics record the prefix, actual resolved endpoints, address-family
+configuration, task states and shared retry/recent-release history. They neither
+mutate that history nor retry startup. Cleanup uses one shared five-second budget,
+reports unfinished owners as unfinished, and preserves all independent failures;
+an aggregate retains the original primary exception as its first inner exception.
+Critical errors are not treated as recoverable diagnostic or expected client faults.
+The existing drain assertions, deadlines and raw-rebind quarantine are unchanged.
+
+On Linux/.NET 10.0.12 with actual stock MsQuic 2.6.2, source
+`ecfbbd4498309ab296a5c924c29010657288a459`, based on accepted engine `0773460e`,
+passed all eleven focused cases: four namespace/startup controls and seven existing
+drain cases, zero failures or skips, in 2.197 seconds. Both controlled initial
+conflicts had unrecorded endpoints and zero retry counts before and after startup;
+all nine server cases ended with both actual task owners terminal. Frozen source,
+package, module and loaded-provider hashes were retained. Both assets, solution
+build and parser/suppression/scoped-format gates passed. This is source-qualified
+Linux evidence, not Windows/macOS/full-suite or final-head acceptance.
+
 ## Two native lifetime behaviors
 
 A completed managed `QuicListener.DisposeAsync` does not, in the tested versions,

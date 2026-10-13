@@ -23,7 +23,7 @@ namespace EmbedIO.Net.Internal.Http3
     internal sealed class Http3Listener : IHttpListener, IGracefulHttpListener
     {
         private readonly object _sync = new();
-        private readonly X509Certificate2 _certificate;
+        private readonly ServerCertificateSource _certificates;
         private readonly bool _native;
         private readonly RequestPolicyResolver? _bodyPolicy;
         private readonly List<string> _prefixes = new();
@@ -33,13 +33,17 @@ namespace EmbedIO.Net.Internal.Http3
         internal Http3Listener(X509Certificate2? certificate) : this(certificate, false) { }
         internal Http3Listener(X509Certificate2? certificate, bool native) : this(certificate, native, null) { }
         internal Http3Listener(X509Certificate2? certificate, bool native, RequestPolicyResolver? bodyPolicy)
+            : this(FixedSource(certificate), native, bodyPolicy) { }
+        internal Http3Listener(ServerCertificateSource certificates, bool native, RequestPolicyResolver? bodyPolicy)
         {
-            if (certificate == null || !certificate.HasPrivateKey)
-                throw new ArgumentException("HTTP/3 requires a certificate with its private key.", nameof(certificate));
-            _certificate = certificate;
+            _certificates = certificates ?? throw new ArgumentNullException(nameof(certificates));
             _native = native;
             _bodyPolicy = bodyPolicy;
         }
+        private static ServerCertificateSource FixedSource(X509Certificate2? certificate)
+            => certificate != null && certificate.HasPrivateKey
+                ? ServerCertificateSource.Fixed(certificate)
+                : throw new ArgumentException("HTTP/3 requires a certificate with its private key.", nameof(certificate));
         public bool IgnoreWriteExceptions { get; set; } = true;
         // Set by a server with body policies: 100 Continue waits for the first body read.
         internal bool DeferContinue { get; set; }
@@ -70,7 +74,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_session != null) return;
                 if (_stopping) throw new InvalidOperationException("The previous HTTP/3 listener is still stopping.");
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificate, _native, DeferContinue, Telemetry, _bodyPolicy);
+                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificates, _native, DeferContinue, Telemetry, _bodyPolicy);
             }
         }
         public void Stop()
@@ -163,7 +167,7 @@ namespace EmbedIO.Net.Internal.Http3
             private RequestPolicyResolver? _bodyPolicy;
             private EmbedIO.Internal.ServerTelemetry? _telemetry;
             private Session() { }
-            internal static Session Start(ListenerPrefix[] prefixes, X509Certificate2 certificate, bool native, bool deferContinue, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
+            internal static Session Start(ListenerPrefix[] prefixes, ServerCertificateSource certificates, bool native, bool deferContinue, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
             {
                 var session = new Session { _deferContinue = deferContinue, _telemetry = telemetry, _bodyPolicy = bodyPolicy };
                 try
@@ -182,7 +186,7 @@ namespace EmbedIO.Net.Internal.Http3
                     foreach (var binding in endpoints)
                     {
                         var listener = QuicEndpointReleases.Shared.Bind(binding.Key,
-                            () => Http3ListenerBinding.Bind(binding.Key, certificate, native));
+                            () => Http3ListenerBinding.Bind(binding.Key, certificates, native));
                         session._listeners.Add(listener, (binding.Value.ToArray(), binding.Key));
                     }
                     // Publish accept loops only after all bindings succeeded.
