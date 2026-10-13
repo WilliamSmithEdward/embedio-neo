@@ -192,7 +192,9 @@ namespace EmbedIO.Tests
         private static async Task<IDisposable> EnterGate(object gate, CancellationToken token)
         {
             var method = gate.GetType().GetMethod("EnterAsync", InternalInstance) ?? throw new MissingMethodException("EnterAsync");
-            var task = (Task)(method.Invoke(gate, new object[] { token }) ?? throw new InvalidOperationException());
+            // Entry returns a ValueTask so an uncontended writer allocates nothing.
+            var entry = method.Invoke(gate, new object[] { token }) ?? throw new InvalidOperationException();
+            var task = (Task)(entry.GetType().GetMethod("AsTask")?.Invoke(entry, null) ?? throw new MissingMethodException("AsTask"));
             await task.WaitAsync(TimeSpan.FromSeconds(5));
             return (IDisposable)(task.GetType().GetProperty("Result")?.GetValue(task) ?? throw new MissingMemberException("Result"));
         }

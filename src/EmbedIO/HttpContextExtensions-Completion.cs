@@ -34,6 +34,8 @@ namespace EmbedIO
 
         internal static async Task CompleteRequestAsync(IHttpContext context)
         {
+            // Reading Items creates the dictionary; a context that never used it has no callbacks.
+            if (context is ILazyItems { HasItems: false }) return;
             if (!context.Items.TryGetValue(CompletionKey, out var value)
                 || value is not Stack<Func<Task>> callbacks)
                 return;
@@ -52,5 +54,11 @@ namespace EmbedIO
                 }
             }
         }
+    }
+
+    // Implemented by contexts that create their Items dictionary on first use.
+    internal interface ILazyItems
+    {
+        bool HasItems { get; }
     }
 }
