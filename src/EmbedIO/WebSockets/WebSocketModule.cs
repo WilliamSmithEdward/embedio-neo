@@ -36,14 +36,20 @@ namespace EmbedIO.WebSockets
     /// contains one or more <c>SecWebSocketProtocol</c> headers that specify
     /// the list of accepted subprotocols (if any).
     /// </remarks>
-    public abstract class WebSocketModule : WebModuleBase, IDisposable
+    public abstract class WebSocketModule : WebModuleBase, IDisposable, IDrainAwareModule
     {
+        private const string DrainCloseReason = "Server is draining";
+
         private const int ReceiveBufferSize = 2048;
 
         private readonly bool _enableConnectionWatchdog;
         private readonly List<string> _protocols = new List<string>();
         private readonly ConcurrentDictionary<string, IWebSocketContext> _contexts = new ConcurrentDictionary<string, IWebSocketContext>();
         private bool _isDisposing;
+        private bool _closeOnDrain;
+        private int _draining;
+        // Contexts already sent the drain close; each is closed once.
+        private readonly ConcurrentDictionary<string, byte> _drainClosed = new ConcurrentDictionary<string, byte>();
         private int _maxMessageSize;
         private Internal.WebSocketDeliveryBudget? _deliveryBudget;
         private WebSocketReceiveLimits? _receiveLimits;
@@ -103,6 +109,32 @@ namespace EmbedIO.WebSockets
             {
                 EnsureConfigurationNotLocked();
                 _maxMessageSize = Math.Max(value, 0);
+            }
+        }
+
+        /// <summary>
+        /// <para>Gets or sets whether a graceful drain closes this module's WebSockets. The default is
+        /// <see langword="false"/>: drain waits for them until its deadline, then cuts their connections.</para>
+        /// <para>When <see langword="true"/>, <see cref="WebServer.DrainAsync"/> sends each open WebSocket a close
+        /// with status 1001 (<see cref="CloseStatusCode.Away"/>) as the drain starts, and closes the same way any
+        /// WebSocket the module accepts after that. The drain can then finish once clients complete the closing
+        /// handshake, still bounded by its deadline.</para>
+        /// </summary>
+        /// <remarks>
+        /// <para>Applies to WebSockets over HTTP/1.1, HTTP/2 and HTTP/3. Messages already being sent are sent
+        /// before the close. <see cref="OnClientDisconnectedAsync"/> runs once per connection, as for any close.</para>
+        /// <para>Set this before the module starts. Stopping the server through <c>RunAsync</c> cancellation or
+        /// disposal is not a drain and is not affected.</para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">This property is being set, and the module's
+        /// configuration is locked.</exception>
+        public bool CloseOnDrain
+        {
+            get => _closeOnDrain;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _closeOnDrain = value;
             }
         }
 
@@ -242,6 +274,10 @@ namespace EmbedIO.WebSockets
 
             PurgeDisconnectedContexts();
             _ = _contexts.TryAdd(webSocketContext.Id, webSocketContext);
+
+            // Accepted while a drain was starting: the drain's close may have missed this one.
+            if (_closeOnDrain && Volatile.Read(ref _draining) != 0)
+                CloseForDrain(webSocketContext);
             var request = EmbedIO.Internal.RequestTelemetry.Of(context);
             var session = request?.Owner?.WebSocketStarted(request);
 
@@ -268,6 +304,39 @@ namespace EmbedIO.WebSockets
                 ((Internal.WebSocket)webSocketContext.WebSocket).AbandonPendingMessageConsumer();
                 // once the loop is completed or connection aborted, remove the WebSocket
                 RemoveWebSocket(webSocketContext);
+            }
+        }
+
+        void IDrainAwareModule.OnDrainStarted()
+        {
+            if (Interlocked.Exchange(ref _draining, 1) != 0 || !_closeOnDrain)
+                return;
+
+            foreach (var context in _contexts.Values)
+                CloseForDrain(context);
+        }
+
+        private void CloseForDrain(IWebSocketContext context)
+        {
+            if (!_drainClosed.TryAdd(context.Id, 0))
+                return;
+
+            _ = CloseForDrainAsync(context);
+        }
+
+        private async Task CloseForDrainAsync(IWebSocketContext context)
+        {
+            try
+            {
+                if (context.WebSocket is Internal.WebSocket managed)
+                    await managed.CloseAfterPendingSendAsync(CloseStatusCode.Away, DrainCloseReason).ConfigureAwait(false);
+                else if (context.WebSocket.State == WebSocketState.Open)
+                    await context.WebSocket.CloseAsync(CloseStatusCode.Away, DrainCloseReason, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                // The connection may already be closing or gone; the drain deadline still bounds it.
+                $"{BaseRoute} - Could not send the drain close: {ex.Message}".Debug(nameof(WebSocketModule));
             }
         }
 
@@ -554,6 +623,7 @@ namespace EmbedIO.WebSockets
         {
             if (!_contexts.TryRemove(context.Id, out _))
                 return;
+            _ = _drainClosed.TryRemove(context.Id, out _);
             context.WebSocket?.Dispose();
 
             // OnClientDisconnectedAsync is better called in its own task,
