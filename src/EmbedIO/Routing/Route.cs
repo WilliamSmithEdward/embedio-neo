@@ -105,181 +105,184 @@ namespace EmbedIO.Routing
              */
             var initialRegexOptions = ignoreCase ? "(?sin-mx)" : "(?sn-imx)";
 
-            // If setResult is null we don't need the StringBuilder.
-            var sb = setResult == null ? null : new StringBuilder("^");
-
-            var parameterNames = new List<string>();
+            // If setResult is null we only validate; no pattern text is built.
+            var pattern = new RoutePattern(isBaseRoute, setResult != null);
             if (route.Length == 1)
             {
                 // If the route consists of a single slash, only a single slash will match.
-                sb?.Append(isBaseRoute ? "/" : "/$");
+                pattern.AppendRoot();
             }
             else
             {
-                // First of all divide the route in segments.
-                // Segments are separated by slashes.
-                // The route is not necessarily normalized, so there could be runs of consecutive slashes.
-                var segmentCount = 0;
-                var optionalSegmentCount = 0;
+                // Divide the route in segments, separated by slashes. The route is not
+                // necessarily normalized, so there could be runs of consecutive slashes.
                 foreach (var segment in GetSegments(route))
                 {
-                    segmentCount++;
-
-                    // Parse the segment, looking alternately for a '{', that opens a parameter specification,
-                    // then for a '}', that closes it.
-                    // Characters outside parameter specifications are Regex-escaped and added to the pattern.
-                    // A parameter specification consists of a parameter name, optionally followed by '?'
-                    // to indicate that an empty parameter will match.
-                    // The default is to NOT match empty parameters, consistently with ASP.NET and EmbedIO version 2.
-                    // More syntax rules:
-                    // - There cannot be two parameters without literal text in between.
-                    // - If a segment consists ONLY of an OPTIONAL parameter, then the slash preceding it is optional too.
-                    var inParameterSpec = false;
-                    var afterParameter = false;
-                    for (var position = 0; ;)
-                    {
-                        if (inParameterSpec)
-                        {
-                            // Look for end of spec, bail out if not found.
-                            var closePosition = segment.IndexOf('}', position);
-                            if (closePosition < 0)
-                                return new FormatException("Route syntax error: unclosed parameter specification.");
-
-                            // Parameter spec cannot be empty.
-                            if (closePosition == position)
-                                return new FormatException("Route syntax error: empty parameter specification.");
-
-                            // Check the last character:
-                            // {name} means empty parameter does not match
-                            // {name?} means empty parameter matches
-                            // If '?'is found, the parameter name ends before it
-                            var nameEndPosition = closePosition;
-                            var allowEmpty = false;
-                            if (segment[closePosition - 1] == '?')
-                            {
-                                allowEmpty = true;
-                                nameEndPosition--;
-                            }
-
-                            // Bail out if only '?' is found inside the spec.
-                            if (nameEndPosition == position)
-                                return new FormatException("Route syntax error: missing parameter name.");
-
-                            // Extract the parameter name.
-                            var parameterName = segment.Substring(position, nameEndPosition - position);
-
-                            // Ensure that the parameter name contains only valid characters.
-                            if (!IsValidParameterName(parameterName))
-                                return new FormatException("Route syntax error: parameter name contains one or more invalid characters.");
-
-                            // Ensure that the parameter name is not a duplicate.
-                            if (parameterNames.Contains(parameterName))
-                                return new FormatException("Route syntax error: duplicate parameter name.");
-
-                            // The spec is valid, so add the parameter to the list.
-                            parameterNames.Add(parameterName);
-
-                            // Append a capturing group with the same name to the pattern.
-                            // Parameters must be made of non-slash characters ("[^/]")
-                            // and must match non-greedily ("*?" if optional, "+?" if non optional).
-                            // Position will be 1 at the start, not 0, because we've skipped the opening '{'.
-                            if (allowEmpty && position == 1 && closePosition == segment.Length - 1)
-                            {
-                                if (isBaseRoute)
-                                    return new FormatException("No segment of a base route can be optional.");
-
-                                // If the segment consists only of an optional parameter,
-                                // then the slash preceding the segment is optional as well.
-                                // In this case the parameter must match only is not empty,
-                                // because it's (slash + parameter) that is optional.
-                                sb?.Append("(/(?<").Append(parameterName).Append(">[^/]+?))?");
-                                optionalSegmentCount++;
-                            }
-                            else
-                            {
-                                // If at the start of a segment, don't forget the slash!
-                                // Position will be 1 at the start, not 0, because we've skipped the opening '{'.
-                                if (position == 1)
-                                    sb?.Append('/');
-
-                                sb?.Append("(?<").Append(parameterName).Append(">[^/]").Append(allowEmpty ? '*' : '+').Append("?)");
-                            }
-
-                            // Go on with parsing.
-                            position = closePosition + 1;
-                            inParameterSpec = false;
-                            afterParameter = true;
-                        }
-                        else
-                        {
-                            // Look for start of parameter spec.
-                            var openPosition = segment.IndexOf('{', position);
-                            if (openPosition < 0)
-                            {
-                                // If at the start of a segment, don't forget the slash.
-                                if (position == 0)
-                                    sb?.Append('/');
-
-                                // No more parameter specs: escape the remainder of the string
-                                // and add it to the pattern.
-                                sb?.Append(Regex.Escape(segment.Substring(position)));
-                                break;
-                            }
-
-                            var nextPosition = openPosition + 1;
-                            if (nextPosition < segment.Length && segment[nextPosition] == '{')
-                            {
-                                // If another identical char follows, treat the two as a single literal char.
-                                // If at the start of a segment, don't forget the slash!
-                                if (position == 0)
-                                    sb?.Append('/');
-
-                                // Keep the literal text before the pair, then match one literal bracket
-                                // and resume parsing after the second bracket of the pair.
-                                sb?.Append(Regex.Escape(segment.Substring(position, openPosition - position))).Append(@"\{");
-                                nextPosition++;
-                            }
-                            else if (afterParameter && openPosition == position)
-                            {
-                                // If a parameter immediately follows another parameter,
-                                // with no literal text in between, it's a syntax error.
-                                return new FormatException("Route syntax error: parameters must be separated by literal text.");
-                            }
-                            else
-                            {
-                                // If at the start of a segment, don't forget the slash,
-                                // but only if there actually is some literal text.
-                                // Otherwise let the parameter spec parsing code deal with the slash,
-                                // because we don't know whether this is an optional segment yet.
-                                if (position == 0 && openPosition > 0)
-                                    sb?.Append('/');
-
-                                // Escape the part of the pattern outside the parameter spec
-                                // and add it to the pattern.
-                                sb?.Append(Regex.Escape(segment.Substring(position, openPosition - position)));
-                                inParameterSpec = true;
-                            }
-
-                            // Go on parsing.
-                            position = nextPosition;
-                            afterParameter = false;
-                        }
-                    }
+                    var error = pattern.AppendSegment(segment);
+                    if (error != null)
+                        return error;
                 }
 
-                // Close the pattern
-                sb?.Append(isBaseRoute ? "(/|$)" : "$");
-
-                // If all segments are optional segments, "/" must match too.
-                if (optionalSegmentCount == segmentCount)
-                    sb?.Insert(0, "(/$)|(").Append(')');
+                pattern.Close();
             }
 
             // Pass the results to the callback if needed.
-            setResult?.Invoke(isBaseRoute, parameterNames, initialRegexOptions + sb);
+            setResult?.Invoke(isBaseRoute, pattern.ParameterNames, initialRegexOptions + pattern.Text);
 
             // Everything's fine, thus no exception.
             return null;
+        }
+
+        // The Regex pattern and parameter names of a route under construction.
+        // When only validating, no pattern text is built and Text stays null.
+        private sealed class RoutePattern
+        {
+            private readonly StringBuilder? _text;
+            private readonly bool _isBaseRoute;
+            private int _segmentCount;
+            private int _optionalSegmentCount;
+
+            internal RoutePattern(bool isBaseRoute, bool buildText)
+            {
+                _isBaseRoute = isBaseRoute;
+                _text = buildText ? new StringBuilder("^") : null;
+            }
+
+            internal List<string> ParameterNames { get; } = new();
+
+            internal string? Text => _text?.ToString();
+
+            internal void AppendRoot() => _text?.Append(_isBaseRoute ? "/" : "/$");
+
+            // Parse the segment, looking alternately for a '{', that opens a parameter specification,
+            // then for a '}', that closes it.
+            // Characters outside parameter specifications are Regex-escaped and added to the pattern.
+            // A parameter specification consists of a parameter name, optionally followed by '?'
+            // to indicate that an empty parameter will match.
+            // The default is to NOT match empty parameters, consistently with ASP.NET and EmbedIO version 2.
+            // More syntax rules:
+            // - There cannot be two parameters without literal text in between.
+            // - If a segment consists ONLY of an OPTIONAL parameter, then the slash preceding it is optional too.
+            internal FormatException? AppendSegment(string segment)
+            {
+                _segmentCount++;
+                var position = 0;
+                var afterParameter = false;
+                while (true)
+                {
+                    var openPosition = segment.IndexOf('{', position);
+                    if (openPosition < 0)
+                    {
+                        // No more parameter specs: escape the remainder of the segment.
+                        AppendLiteral(segment, position, segment.Length, position == 0);
+                        return null;
+                    }
+
+                    if (openPosition + 1 < segment.Length && segment[openPosition + 1] == '{')
+                    {
+                        // A doubled bracket is a single literal bracket. Keep the literal text
+                        // before the pair and resume parsing after its second bracket.
+                        AppendLiteral(segment, position, openPosition, position == 0);
+                        _text?.Append(@"\{");
+                        position = openPosition + 2;
+                        afterParameter = false;
+                        continue;
+                    }
+
+                    // A parameter immediately following another parameter,
+                    // with no literal text in between, is a syntax error.
+                    if (afterParameter && openPosition == position)
+                        return new FormatException("Route syntax error: parameters must be separated by literal text.");
+
+                    // The segment's slash goes with its literal text only if there is some.
+                    // Otherwise the parameter spec decides, because an optional segment owns its slash.
+                    AppendLiteral(segment, position, openPosition, position == 0 && openPosition > 0);
+                    var error = AppendParameter(segment, openPosition + 1, out position);
+                    if (error != null)
+                        return error;
+
+                    afterParameter = true;
+                }
+            }
+
+            // Appends segment[start..end) Regex-escaped, preceded by the segment's slash when leading.
+            private void AppendLiteral(string segment, int start, int end, bool leadingSlash)
+            {
+                if (leadingSlash)
+                    _text?.Append('/');
+
+                _text?.Append(Regex.Escape(segment.Substring(start, end - start)));
+            }
+
+            // Parses the "{name}" or "{name?}" specification whose name starts at start, just after
+            // the opening bracket, and appends its capturing group. On success, next is the position
+            // after the closing bracket.
+            private FormatException? AppendParameter(string segment, int start, out int next)
+            {
+                next = start;
+
+                // Look for end of spec, bail out if not found.
+                var closePosition = segment.IndexOf('}', start);
+                if (closePosition < 0)
+                    return new FormatException("Route syntax error: unclosed parameter specification.");
+
+                // Parameter spec cannot be empty.
+                if (closePosition == start)
+                    return new FormatException("Route syntax error: empty parameter specification.");
+
+                // {name} means empty parameter does not match; {name?} means empty parameter matches.
+                // If '?' is found, the parameter name ends before it.
+                var allowEmpty = segment[closePosition - 1] == '?';
+                var nameEndPosition = allowEmpty ? closePosition - 1 : closePosition;
+
+                // Bail out if only '?' is found inside the spec.
+                if (nameEndPosition == start)
+                    return new FormatException("Route syntax error: missing parameter name.");
+
+                var parameterName = segment.Substring(start, nameEndPosition - start);
+                if (!IsValidParameterName(parameterName))
+                    return new FormatException("Route syntax error: parameter name contains one or more invalid characters.");
+
+                if (ParameterNames.Contains(parameterName))
+                    return new FormatException("Route syntax error: duplicate parameter name.");
+
+                ParameterNames.Add(parameterName);
+
+                // Parameters are made of non-slash characters ("[^/]") and match non-greedily
+                // ("*?" if optional, "+?" if non optional). The spec starts the segment when
+                // start is 1, just after the opening bracket.
+                if (allowEmpty && start == 1 && closePosition == segment.Length - 1)
+                {
+                    if (_isBaseRoute)
+                        return new FormatException("No segment of a base route can be optional.");
+
+                    // If the segment consists only of an optional parameter, then the slash
+                    // preceding the segment is optional as well. The parameter must then match
+                    // only when not empty, because it's (slash + parameter) that is optional.
+                    _text?.Append("(/(?<").Append(parameterName).Append(">[^/]+?))?");
+                    _optionalSegmentCount++;
+                }
+                else
+                {
+                    // If at the start of a segment, don't forget the slash!
+                    if (start == 1)
+                        _text?.Append('/');
+
+                    _text?.Append("(?<").Append(parameterName).Append(">[^/]").Append(allowEmpty ? '*' : '+').Append("?)");
+                }
+
+                next = closePosition + 1;
+                return null;
+            }
+
+            internal void Close()
+            {
+                _text?.Append(_isBaseRoute ? "(/|$)" : "$");
+
+                // If all segments are optional segments, "/" must match too.
+                if (_optionalSegmentCount == _segmentCount)
+                    _text?.Insert(0, "(/$)|(").Append(')');
+            }
         }
 
         // Enumerate the segments of a route, ignoring consecutive slashes.
