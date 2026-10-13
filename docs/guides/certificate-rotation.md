@@ -119,11 +119,10 @@ certificate and the failure is logged once; publish a usable certificate to
 recover. Configurations of replaced certificates are released when the server
 stops.
 
-## Not covered yet
+## Other TLS settings
 
-Rotation is the first part of
-[feature #148](https://github.com/WilliamSmithEdward/embedio-neo/issues/148).
-Client certificates, certificate validation callbacks, selecting a certificate
-by server name (SNI) and other TLS policy settings are not configurable yet.
-TLS protocol versions remain the operating system's choice, as described in
-the [HTTPS guide](https.md).
+Client certificates, protocol versions and choosing the certificate by server
+name (SNI) are configured with a [TLS policy](tls-policy.md), which works with a
+`ServerCertificateSource`: a published certificate keeps the policy's
+requirements, and the policy's SNI selector falls back to the source's current
+certificate.

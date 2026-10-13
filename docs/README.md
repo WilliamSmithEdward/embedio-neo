@@ -33,6 +33,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [HTTP/3 listener](guides/http3.md): unreleased QUIC mode, certificates, usage and current limits.
 - [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
 - [Rotating the server certificate](guides/certificate-rotation.md): unreleased `ServerCertificateSource`, replacing certificates while TCP and QUIC listeners run.
+- [TLS policy](guides/tls-policy.md): unreleased client certificates, protocol versions and SNI certificate selection, with per-listener support.
 - [Command-line server](guides/cli.md): options, static serving, plugins, and CLI provenance.
 - [Multiple static folders](guides/multiple-static-folders.md): mount order and explicit fallback.
 - [Asynchronous outbound requests](guides/async-outbound-requests.md): controller return types,

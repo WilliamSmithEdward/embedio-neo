@@ -19,6 +19,20 @@ namespace EmbedIO.Net
         /// <exception cref="ArgumentNullException"><paramref name="certificateSource"/> is <see langword="null"/>.</exception>
         public HttpListener(ServerCertificateSource certificateSource)
             : this(null, certificateSource ?? throw new ArgumentNullException(nameof(certificateSource)), null) { }
+        /// <summary>Initializes a listener whose TLS handshakes use the current certificate of <paramref name="certificateSource"/>
+        /// and the settings of <paramref name="tlsPolicy"/>.</summary>
+        /// <param name="certificateSource">The borrowed source of the server certificate, which the application may update while the listener runs.</param>
+        /// <param name="tlsPolicy">The TLS settings, or <see langword="null"/> for the defaults. The policy is locked.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="certificateSource"/> is <see langword="null"/>.</exception>
+        /// <exception cref="PlatformNotSupportedException"><paramref name="tlsPolicy"/> selects certificates by server name,
+        /// which requires the .NET 10 asset.</exception>
+        public HttpListener(ServerCertificateSource certificateSource, ServerTlsPolicy? tlsPolicy)
+            : this(certificateSource)
+        {
+            tlsPolicy?.EnsureSupported(false, false);
+            tlsPolicy?.Lock();
+            TlsPolicy = tlsPolicy;
+        }
         internal HttpListener(X509Certificate? certificate, EmbedIO.Internal.RequestPolicyResolver? bodyPolicy) : this(certificate, null, bodyPolicy) { }
         internal HttpListener(ServerCertificateSource? certificateSource, EmbedIO.Internal.RequestPolicyResolver? bodyPolicy) : this(null, certificateSource, bodyPolicy) { }
         private HttpListener(X509Certificate? certificate, ServerCertificateSource? certificateSource, EmbedIO.Internal.RequestPolicyResolver? bodyPolicy)
@@ -47,6 +61,8 @@ namespace EmbedIO.Net
         // Read for every new connection, so a published replacement applies to the next handshake.
         internal X509Certificate? Certificate => _certificateSource?.Current ?? _certificate;
         internal EmbedIO.Internal.RequestPolicyResolver? BodyPolicy { get; }
+        // TLS settings of the endpoints this listener opens. Set before Start.
+        internal ServerTlsPolicy? TlsPolicy { get; set; }
         /// <inheritdoc />
         public void Start() => _coordinator.Start();
         /// <inheritdoc />

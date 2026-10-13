@@ -27,6 +27,8 @@ namespace EmbedIO
 
         private Net.ServerCertificateSource? _certificateSource;
 
+        private Net.ServerTlsPolicy? _tlsPolicy;
+
         private string? _certificateThumbprint;
 
         private bool _autoLoadCertificate;
@@ -100,6 +102,24 @@ namespace EmbedIO
             {
                 EnsureConfigurationNotLocked();
                 _certificateSource = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the TLS settings of HTTPS listeners: client certificates, TLS protocol versions and
+        /// certificate selection by server name. The default, <see langword="null"/>, keeps the defaults of
+        /// <see cref="Net.ServerTlsPolicy"/>. The policy is locked with these options.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">This property is being set,
+        /// and this instance's configuration is locked.</exception>
+        /// <seealso cref="Net.ServerTlsPolicy"/>
+        public Net.ServerTlsPolicy? TlsPolicy
+        {
+            get => _tlsPolicy;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _tlsPolicy = value;
             }
         }
 
@@ -206,6 +226,7 @@ namespace EmbedIO
                     "Configure either CertificateSource or Certificate, CertificateThumbprint, AutoLoadCertificate and AutoRegisterCertificate, not both.");
             }
 
+            _tlsPolicy?.Lock();
             base.OnBeforeLockConfiguration();
         }
 

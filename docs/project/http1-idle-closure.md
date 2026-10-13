@@ -183,8 +183,9 @@ in finally, including on assertion failure.
 
 [Compact source-qualified evidence](evidence/http1-idle-closure-281.json)
 retains source hashes, loaded identities, actual case outcomes and unsuccessful
-qualification. Full desktop/MAUI/security gates and older-runtime TLS fallback
-validation remain pending. These modern-host runs are not older-runtime proof.
+qualification. Those focused modern-host runs alone do not establish full platform acceptance
+or older-runtime proof. Subsequent source-qualified controls are recorded below;
+current acceptance is tracked in issue #281 and its implementation PR #372.
 ### Framework and hosted controls
 
 The `net472` legacy smoke executable passed all 545 assertions on installed
@@ -201,3 +202,18 @@ probes observed idle EOF on each platform. The ordinary Windows full suite on
 that head still had a genuine initial QUIC handshake failure, retained in its
 run evidence. These controls do not replace full combined-source validation or
 establish that the PR is ready to merge.
+
+### TLS-policy base reconciliation
+
+The initially final head `6a747f82` passed all 38 checks on accepted base
+`e2566f35`, with all 33 idle-closure controls passing per desktop platform.
+Its macOS full report retained one raw MsQuic rebind failure accepted by the
+existing narrow runtime-only policy; this is not a zero-failure test report.
+Before integration, the base advanced to `cdab7ec5` with TLS-policy changes.
+That source replaces stream construction and handshake configuration, so the
+earlier full and Framework receipts remain qualified to their recorded source.
+They are not acceptance proof for the new combination. Reconciliation retains
+the base's TLS policy unchanged and requires fresh exact-source checks with all
+5,650 reported cases (5,638 on the base plus twelve idle-retirement regressions).
+The HTTP/1 expiry, partial-input and pending-write behavior remains the scoped
+change described above. The current outcome is tracked in issue #281 / PR #372.

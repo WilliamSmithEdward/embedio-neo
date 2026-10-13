@@ -25,26 +25,19 @@ namespace EmbedIO.Net.Internal
         }
 
         internal static async Task<Selection> ReadAsync(Stream transport, byte[] input,
-            bool buffered, bool initial, bool secure, X509Certificate? certificate)
+            bool buffered, bool initial, bool secure, HttpListener? listener)
         {
             if (transport is SslStream tls && !tls.IsAuthenticated)
             {
-                var serverCertificate = certificate ?? throw new InvalidOperationException("The HTTPS listener has no certificate.");
+                var serverCertificate = listener?.Certificate ?? throw new InvalidOperationException("The HTTPS listener has no certificate.");
+                await ServerTls.AuthenticateAsync(tls, serverCertificate, listener.TlsPolicy).ConfigureAwait(false);
 #if NET10_0_OR_GREATER
-                await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
-                {
-                    ServerCertificate = serverCertificate,
-                    EnabledSslProtocols = SslProtocols.None,
-                    ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http2, SslApplicationProtocol.Http11 },
-                }).ConfigureAwait(false);
                 if (tls.NegotiatedApplicationProtocol == SslApplicationProtocol.Http2)
                 {
                     if (tls.SslProtocol != SslProtocols.Tls12 && tls.SslProtocol != SslProtocols.Tls13)
                         throw new AuthenticationException("HTTP/2 requires TLS 1.2 or later.");
                     return new Selection(true, 0, false);
                 }
-#else
-                await tls.AuthenticateAsServerAsync(serverCertificate, false, SslProtocols.None, false).ConfigureAwait(false);
 #endif
             }
 

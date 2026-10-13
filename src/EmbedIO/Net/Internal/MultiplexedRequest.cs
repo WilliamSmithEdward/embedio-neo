@@ -11,7 +11,7 @@ using EmbedIO.Internal;
 
 namespace EmbedIO.Net.Internal
 {
-    internal sealed class MultiplexedRequest : IHttpRequestTrailers, IRequestPolicyTarget
+    internal sealed class MultiplexedRequest : IHttpRequestTrailers, IRequestPolicyTarget, IClientCertificateCarrier
     {
         private readonly IMultiplexedExchange _exchange;
         private CookieList? _cookies;
@@ -25,9 +25,13 @@ namespace EmbedIO.Net.Internal
         private Stream? _rawApplicationInput;
         private int _bodyLimitRetired;
         internal MultiplexedRequest(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
+            : this(exchange, local, remote, secure, null) { }
+        internal MultiplexedRequest(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure,
+            System.Security.Cryptography.X509Certificates.X509Certificate2? clientCertificate)
         {
             _exchange = exchange;
             LocalEndPoint = local; RemoteEndPoint = remote; IsSecureConnection = secure;
+            ClientCertificate = clientCertificate;
             var request = exchange.Request;
             HttpMethod = request.Method;
             HttpVerb = HttpListenerRequest.IsKnownHttpMethod(HttpMethod, out var verb) ? verb : HttpVerbs.Any;
@@ -205,6 +209,7 @@ namespace EmbedIO.Net.Internal
         public IPEndPoint RemoteEndPoint { get; }
         public bool IsLocal => LocalEndPoint.Address.Equals(RemoteEndPoint.Address);
         public bool IsSecureConnection { get; }
+        public System.Security.Cryptography.X509Certificates.X509Certificate2? ClientCertificate { get; }
         public string UserAgent => Headers[HttpHeaderNames.UserAgent] ?? string.Empty;
         public bool IsWebSocketRequest => _exchange.Request.Protocol == "websocket";
         public IPEndPoint LocalEndPoint { get; }

@@ -80,7 +80,7 @@ namespace EmbedIO.Net.Internal
             Stream = new NetworkStream(sock, false);
             if (IsSecure)
             {
-                Stream = new SslStream(Stream, false);
+                Stream = ServerTls.CreateStream(Stream, epl.Listener.TlsPolicy);
             }
 
             _lifetime = new TcpSessionLifetime(_connectionSync, sock, Stream, () => CloseTransport(false, true));
@@ -104,6 +104,9 @@ namespace EmbedIO.Net.Internal
 
         public bool IsSecure { get; }
 
+        // The client's certificate from the TLS handshake, when the listener's policy asked for one.
+        internal System.Security.Cryptography.X509Certificates.X509Certificate2? ClientCertificate { get; private set; }
+
         public ListenerPrefix? Prefix { get; set; }
 
         public void Dispose()
@@ -124,9 +127,11 @@ namespace EmbedIO.Net.Internal
                     if (Reuses == 1) _sTimeout = _keepAliveTimeout;
                     if (Reuses != 0) _lifetime.ArmDeadline(_sTimeout);
                 }
+                var handshake = Stream is SslStream { IsAuthenticated: false };
                 var selection = await TcpProtocolInput.ReadAsync(Stream, buffer, bufferedInput,
-                    Reuses == 0, IsSecure,
-                    Stream is SslStream { IsAuthenticated: false } ? _epl.Listener.Certificate : null).ConfigureAwait(false);
+                    Reuses == 0, IsSecure, handshake ? _epl.Listener : null).ConfigureAwait(false);
+                if (handshake && Stream is SslStream authenticated)
+                    ClientCertificate = ServerTls.CopyRemoteCertificate(authenticated.RemoteCertificate);
                 if (selection.IsHttp2)
                 {
                     if (selection.Count == 0) await RunHttp2Async(Stream).ConfigureAwait(false);
