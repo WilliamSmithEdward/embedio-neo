@@ -217,3 +217,32 @@ the base's TLS policy unchanged and requires fresh exact-source checks with all
 5,650 reported cases (5,638 on the base plus twelve idle-retirement regressions).
 The HTTP/1 expiry, partial-input and pending-write behavior remains the scoped
 change described above. The current outcome is tracked in issue #281 / PR #372.
+
+### Handshake diagnostics and current combined validation
+
+The later integration base `61ff7d4a` adds opt-in WebSocket drain controls;
+its delta does not modify the three idle-retirement production files. The
+combined suite retains all 5,659 base cases, twelve idle-retirement regressions
+and seven diagnostic controls, for a minimum of 5,678 reported cases.
+
+Windows CI on earlier `ade927eb` reported all 5,650 cases but failed an initial
+HTTP/3 handshake in `CombinedDrainCanAbortAllProtocols("deadline")`, before
+request admission or draining. All 33 idle controls passed on every desktop
+platform, and the actual Framework smoke passed 545 assertions. That genuine
+failure remains unwaived and its cause is not established by the idle fix.
+
+Test-only diagnostic commit `56732b45` adds bounded public EventListener capture
+to the existing shared-port and combined-drain scenarios. It preserves their
+request counts, assertions and deadlines, reserves error records through info
+floods, reports dropped/truncated data and attempts both cancellations plus the
+bounded join while retaining critical aggregate faults. Failure snapshots may
+record the current file SHA/version at a publicly mapped MsQuic path; they do
+not establish native-memory identity or capture TLS keys or request payloads.
+
+The recorded handoff built both targets without warnings and passed all seven
+capture controls plus all thirteen original scenarios on its `ade927eb` basis.
+The historical handshake failure was not reproduced in those scoped runs, and
+failure-only native file capture was not triggered. These results validate the
+diagnostic preparation, not a handshake repair or the later combined source.
+Current acceptance remains tracked in issue #281 and PR #372, with fresh
+exact-head platform checks required before integration.

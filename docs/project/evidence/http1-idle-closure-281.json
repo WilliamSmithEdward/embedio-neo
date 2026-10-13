@@ -704,5 +704,34 @@
       }
     ],
     "limitation": "Dedicated controls do not supersede the genuine failed Windows full-suite check on that head, or validate later combined source."
+  },
+  "diagnosticHandoff": {
+    "receipt": {
+      "Commit": "56732b45fdfb6ff33a1a49f30bb8063ae08f3aa3",
+      "Parent": "ade927eb0ef91f4d93976e5a01727a2dc74c3fc8",
+      "SourceFilesRehashed": 1295,
+      "LiveEngineBase": "61ff7d4a7263505794ada8b470f70a8032d515a9",
+      "CurrentEngineReconciled": false,
+      "CompileSession": 36281,
+      "CompileExit": 0,
+      "ControlsSession": 98643,
+      "ControlsPassed": 7,
+      "OriginalScenarioSession": 59060,
+      "OriginalScenariosPassed": 13,
+      "Skipped": 0,
+      "NewDiscoveryCases": 7,
+      "ExpectedReconciledFloor": 5678,
+      "PublicPush": false,
+      "HistoricalHandshakeReproduced": false,
+      "CauseFixed": false,
+      "FullSuiteRun": false,
+      "NativeModuleHash": "Unavailable: failure-only snapshot was not triggered"
+    },
+    "receiptSha256": "75e24bac84a79f6428bbcaeed7c913ec63f56a1fe75d147b37b8b0902fa0ecdf",
+    "controlsReceiptSha256": "8c55746b44ae70ce2b18bf2cf55a28ea2bbb1126f63510ef684d26e00ef740c9",
+    "wireReceiptSha256": "c22403a354eeba42100ab766c3f7b0305d181360e2875d5dfbbba2496fbf7950",
+    "combinedBase": "61ff7d4a7263505794ada8b470f70a8032d515a9",
+    "combinedReportedMinimum": 5678,
+    "limitation": "Handoff compiled/tested on recorded ade basis. New combined source requires fresh exact-head CI. Failure-only mapped file identity was not triggered; no handshake cause or repair is established."
   }
 }
