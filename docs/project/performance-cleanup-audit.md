@@ -569,3 +569,18 @@ and suppression guards, formatting, exact runner restoration and owned nonce
 release passed. Current compiler-input hashes match the tested source. The
 first run's 10055 failure remains recorded; no socket-resource repair is claimed.
 Fresh exact-head hosted validation is still required after integration.
+
+## Narrow malware acceptance decisions
+
+William approved the two binding fixture/review ASP paths and the four DI
+binary/review God Mode paths on 2026-10-13, waiving only their unavailable
+matching-alert dismissals. He separately approved that same narrow unavailable
+alert exception for the existing Http2RequestHeadersTest.cs ASP finding.
+The DI binary paths change only from 1.0.3 to 2.0.0; the two binding paths are
+new separate acceptances. The approved acceptance set matches all eleven
+findings in downloaded malware run 38421579803 exactly, with no extra/stale
+pair. Its ClamAV result has zero infected files. The unchanged report script
+passes on those actual scan artifacts with the updated policy. This recheck is
+not a fresh current-head scan or a green hosted check. Original failures remain
+retained. No genuine finding, other rule/path, tool error or scan requirement
+is suppressed or waived; fresh exact-head validation remains mandatory.

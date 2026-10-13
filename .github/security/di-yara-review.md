@@ -205,3 +205,12 @@ alert-dismissal exceptions remain pending owner approval; no scanner success
 is claimed. Downloaded assets, raw YARA result and metadata receipt are under
 ignored TestResults/audit/pr182-packages-38421579803 and
 TestResults/audit/pr182-yara-38421579803.
+
+## Owner acceptance decision
+
+On 2026-10-13 William explicitly approved the exact God Mode rule on both
+2.0.0 DI assembly paths and on this review document and malware-accepted.toml,
+waiving only their unavailable matching-alert dismissal. Earlier pending
+statements are historical; this decision supersedes them for these four paths.
+Full scans, other findings, tool errors, stale entries and every green-check
+requirement remain enforced. No matching GitHub alert dismissal is claimed.

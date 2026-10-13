@@ -54,3 +54,12 @@ must name this exact document path separately. Its absent matching GitHub alert
 also requires an explicit owner exception; the fixture's exception cannot be
 implicitly extended to another file. Printed proof is retained in
 `TestResults/audit/scan-policy-boundary-printed-02`.
+
+## Owner acceptance decision
+
+On 2026-10-13 William explicitly approved this exact ASP rule on
+RequestBindingCleanupTest.cs and this review document separately, waiving only
+the unavailable matching-alert dismissal for these two paths. Earlier pending
+statements are historical. Changed behavior, targets, inputs, bytes or scanner
+pins require review; full scans and all other exact-head gates remain enforced.
+No matching GitHub alert dismissal is claimed.

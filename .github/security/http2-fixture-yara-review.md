@@ -42,3 +42,12 @@ retains classic CONNECT rejection assertions. Reflection targets and executable
 behavior are unchanged. The pinned full bundle still reports only the same
 accepted rule for this path. Updated canonical LF source SHA-256: `6bb46831092048897cc05ab71a0a5fe92fc6b8b51a827ea6657902aec0fb0703`.
 The absent matching GitHub alert remains a pre-merge limitation.
+
+## Owner decision on the unavailable alert
+
+On 2026-10-13 William explicitly approved waiving only the unavailable matching
+GitHub-alert dismissal for this existing ASP-rule finding on
+Http2RequestHeadersTest.cs. The earlier pre-merge limitation is historical and
+superseded for this one exact path. Its existing narrow scanner acceptance,
+written review, complete scans, all other findings and every green-check
+requirement remain enforced. No matching alert dismissal is claimed.
