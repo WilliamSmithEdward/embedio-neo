@@ -201,7 +201,7 @@ namespace EmbedIO.Tests
             // As documented, names before the failing one stay added.
             Assert.Throws<ArgumentException>(() => module.Add(new List<string> { "other" }));
             Assert.Throws<ArgumentException>(() => module.Add(new List<string> { "bad name" }));
-            Assert.Throws<ArgumentNullException>(() => module.Add(null!));
+            Assert.Throws<ArgumentNullException>(() => InvalidInput.Invoke((Action<IEnumerable<string>>)module.Add, new object?[] { null }));
         }
 
         [Test]
