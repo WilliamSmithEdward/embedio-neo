@@ -86,7 +86,19 @@ namespace EmbedIO
         // diagnostics, are kept.
         internal static void PrepareReplacement(this IHttpResponse @this, int statusCode)
         {
-            @this.SetEmptyResponse(statusCode);
+            if (HttpStatusDescription.TryGet(statusCode, out _))
+            {
+                @this.SetEmptyResponse(statusCode);
+            }
+            else
+            {
+                // An HttpException may carry any valid status the standard table lacks (418, 499...).
+                // The response supplies its own reason phrase; failing here would leave a 200.
+                @this.StatusCode = statusCode;
+                @this.ContentType = MimeType.Default;
+                @this.ContentEncoding = null;
+            }
+
             foreach (var name in ReplacedRepresentationHeaders)
                 @this.Headers.Remove(name);
             @this.SendChunked = false;

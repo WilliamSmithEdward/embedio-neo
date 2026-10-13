@@ -99,8 +99,8 @@ namespace EmbedIO
         /// <c>If-None-Match</c> header is present in <paramref name="this"/>, regardless of the method's
         /// return value. This parameter is passed uninitialized.</param>
         /// <returns><see langword="true"/> if an <c>If-None-Match</c> header is present in
-        /// <paramref name="this"/> and one of the entity tags listed in it is equal to <paramref name="entityTag"/>;
-        /// <see langword="false"/> otherwise.</returns>
+        /// <paramref name="this"/> and one of the entity tags listed in it is equal to <paramref name="entityTag"/>,
+        /// or the header is <c>*</c>; <see langword="false"/> otherwise.</returns>
         /// <remarks>
         /// <para><see href="https://tools.ietf.org/html/rfc7232#section-3.2">RFC7232, Section 3.2</see>
         /// states that a weak comparison function (as defined in
@@ -122,7 +122,29 @@ namespace EmbedIO
             }
 
             headerExists = true;
-            return values.Select(t => t.Trim()).Contains(entityTag);
+
+            // The field is a list; a comma inside a quoted entity tag is data, not a separator.
+            foreach (var value in values)
+            {
+                var start = 0;
+                var quoted = false;
+                for (var i = 0; i <= value.Length; i++)
+                {
+                    if (i < value.Length)
+                    {
+                        if (value[i] == '"') quoted = !quoted;
+                        if (quoted || value[i] != ',') continue;
+                    }
+
+                    var member = value.Substring(start, i - start).Trim();
+                    if (member == "*" || member == entityTag)
+                        return true;
+
+                    start = i + 1;
+                }
+            }
+
+            return false;
         }
 
         // Check whether the If-Modified-Since request header exists
@@ -157,8 +179,10 @@ namespace EmbedIO
             }
 
             headerExists = true;
+
+            // HTTP dates carry whole seconds; a sub-second modification time must not defeat an echo of Last-Modified.
             return HttpDate.TryParse(value, out var dateTime)
-                && dateTime.UtcDateTime >= lastModifiedUtc;
+                && WholeSeconds(dateTime) >= WholeSeconds(lastModifiedUtc);
         }
 
         // Checks the Range request header to tell whether to send
@@ -250,7 +274,7 @@ namespace EmbedIO
                 if (!HttpDate.TryParse(ifRange, out var rangeDate))
                     return false;
 
-                if (rangeDate.UtcDateTime != lastModifiedUtc)
+                if (WholeSeconds(rangeDate) != WholeSeconds(lastModifiedUtc))
                     return false;
             }
 
@@ -288,5 +312,8 @@ namespace EmbedIO
 
             return true;
         }
+
+        // Whole seconds of a resource's own UTC time; validators are not converted between time zones here.
+        private static long WholeSeconds(DateTime value) => value.Ticks / TimeSpan.TicksPerSecond;
     }
 }

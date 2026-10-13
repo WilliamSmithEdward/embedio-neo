@@ -72,5 +72,49 @@ namespace EmbedIO.Tests
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
         }
+
+        // HTTP/1.0 cannot chunk, so a declared length governs even when the handler asked for chunking.
+        // The first write must not put bytes past that length on a connection kept alive.
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task AFirstWritePastTheDeclaredLengthNeverReachesTheClient(bool asynchronous)
+        {
+            var url = HttpsSmoke.GetUrl().Replace("https://", "http://", StringComparison.Ordinal);
+            var payload = Encoding.ASCII.GetBytes("0123456789");
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var server = new WebServer(HttpListenerMode.EmbedIO, url).WithAction("/", HttpVerbs.Any, async context =>
+            {
+                context.Response.ContentLength64 = 5;
+                context.Response.SendChunked = true;
+                if (asynchronous) await context.Response.OutputStream.WriteAsync(payload, stop.Token);
+                else context.Response.OutputStream.Write(payload, 0, payload.Length);
+            });
+            var running = server.RunAsync(stop.Token);
+            try
+            {
+                using var client = new TcpClient();
+                var uri = new Uri(url);
+                await client.ConnectAsync(uri.Host, uri.Port, stop.Token);
+                var stream = client.GetStream();
+                await stream.WriteAsync(Encoding.ASCII.GetBytes($"GET / HTTP/1.0\r\nHost: {uri.Authority}\r\nConnection: keep-alive\r\n\r\n"), stop.Token);
+                var received = new MemoryStream();
+                var buffer = new byte[1024];
+                try
+                {
+                    using var idle = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
+                    idle.CancelAfter(TimeSpan.FromSeconds(3));
+                    int read;
+                    while ((read = await stream.ReadAsync(buffer, idle.Token)) > 0)
+                        received.Write(buffer, 0, read);
+                }
+                catch (Exception error) when (error is IOException or OperationCanceledException) { }
+
+                var text = Encoding.ASCII.GetString(received.ToArray());
+                var bodyStart = text.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                var body = bodyStart < 0 ? string.Empty : text[(bodyStart + 4)..];
+                Assert.That(body.Length, Is.LessThanOrEqualTo(5), text);
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+        }
     }
 }

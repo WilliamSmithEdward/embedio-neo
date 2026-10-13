@@ -163,7 +163,8 @@ namespace EmbedIO
                 if (httpHandler == null)
                     throw;
 
-                await httpHandler(context, httpException1).ConfigureAwait(false);
+                // The same path as any HTTP exception, so its status and headers (a redirect's Location) are applied.
+                await HttpExceptionHandler.Handle(logSource, context, httpException, httpHandler).ConfigureAwait(false);
             }
             catch (Exception exception2) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception2))
             {

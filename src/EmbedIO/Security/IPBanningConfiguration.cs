@@ -140,12 +140,21 @@ namespace EmbedIO.Security
                             IsExplicit = isExplicit,
                         },
                     (k, v) =>
-                        new BanInfo
+                    {
+                        var now = DateTime.Now;
+                        var expiresAt = banUntil?.Ticks ?? now.AddMinutes(_banTime).Ticks;
+
+                        // A criterion's automatic ban never shortens or downgrades a ban already in force.
+                        if (!isExplicit && v.ExpiresAt >= expiresAt)
+                            return v;
+
+                        return new BanInfo
                         {
                             IPAddress = k,
-                            ExpiresAt = banUntil?.Ticks ?? DateTime.Now.AddMinutes(_banTime).Ticks,
-                            IsExplicit = isExplicit,
-                        });
+                            ExpiresAt = expiresAt,
+                            IsExplicit = isExplicit || (v.IsExplicit && v.ExpiresAt > now.Ticks),
+                        };
+                    });
 
                 return true;
             }

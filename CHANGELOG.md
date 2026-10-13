@@ -4,6 +4,17 @@
 
 ## [2.0.0] - Unreleased
 
+- Correct defects found by a review sweep. `ISession.Delete` and `Regenerate` now end
+  a session that holds data, so an old cookie cannot resume it, and an expired session
+  is no longer revived before the purge runs. A module whose own exception handler
+  answers a request ends dispatch instead of falling through to later modules or a 404.
+  An `HttpException` with a status missing from the standard table (such as 499) keeps
+  that status instead of becoming 200. `If-None-Match` lists and `*` match, and date
+  validators compare whole seconds, so echoing `Last-Modified` revalidates and resumes.
+  Complete WebSocket messages report `EndOfMessage`, quality-value names compare
+  case-insensitively, ZIP entries report UTC times, and `{{` in a route matches a
+  literal `{` as documented.
+
 - Require explicit AcceptTunnelAsync before successful HTTP/2 or HTTP/3 extended
   CONNECT output. An ordinary catch-all 2xx becomes an empty 501; explicit errors,
   application dispatch, plain CONNECT and actual WebSocket acceptance remain.

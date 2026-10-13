@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace EmbedIO.Utilities
 {
@@ -140,14 +141,14 @@ namespace EmbedIO.Utilities
 
         private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(string? headerValues)
         {
-            var result = new Dictionary<string, (int Weight, int Ordinal)>();
+            var result = new Dictionary<string, (int Weight, int Ordinal)>(StringComparer.OrdinalIgnoreCase);
             ParseCore(headerValues, result);
             return result;
         }
 
         private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(IEnumerable<string?>? headerValues)
         {
-            var result = new Dictionary<string, (int Weight, int Ordinal)>();
+            var result = new Dictionary<string, (int Weight, int Ordinal)>(StringComparer.OrdinalIgnoreCase);
 
             if (headerValues == null) return result;
 

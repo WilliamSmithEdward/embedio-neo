@@ -130,7 +130,17 @@ namespace EmbedIO.Net.Internal.WebTransport
                 _bufferedDatagrams.Clear();
                 _bufferedDatagramBytes = 0;
             }
-            foreach (var stream in streams) AttachIncomingStream(stream);
+            for (var i = 0; i < streams.Count; i++)
+            {
+                try { AttachIncomingStream(streams[i]); }
+                catch
+                {
+                    // The buffer no longer tracks the streams after this one; reset them so a
+                    // failed establishment cannot leave them open until the connection closes.
+                    for (var j = i + 1; j < streams.Count; j++) streams[j].Abort(WebTransportProtocol.SessionGone);
+                    throw;
+                }
+            }
             foreach (var datagram in datagrams) _datagramHandler(this, datagram, 0, datagram.Length);
         }
 

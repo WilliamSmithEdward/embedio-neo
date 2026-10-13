@@ -114,12 +114,18 @@ namespace EmbedIO.Sessions
                 }
             }
 
-            internal void BeginUse()
+            // Fails for an idle session whose duration has elapsed, the same rule the purger applies.
+            internal bool TryBeginUse()
             {
                 lock (_data)
                 {
+                    var now = DateTime.UtcNow;
+                    if (_usageCount < 1 && now > LastActivity + Duration)
+                        return false;
+
                     _usageCount++;
-                    LastActivity = DateTime.UtcNow;
+                    LastActivity = now;
+                    return true;
                 }
             }
 
