@@ -25,6 +25,8 @@ namespace EmbedIO
 
         private X509Certificate2? _certificate;
 
+        private Net.ServerCertificateSource? _certificateSource;
+
         private string? _certificateThumbprint;
 
         private bool _autoLoadCertificate;
@@ -78,6 +80,26 @@ namespace EmbedIO
             {
                 EnsureConfigurationNotLocked();
                 _certificate = value;
+            }
+        }
+
+        /// <summary>
+        /// <para>Gets or sets a source of the server certificate that the application can update while the server runs,
+        /// for example to install a renewed certificate. Each new TLS handshake, over TCP or QUIC, uses the source's
+        /// current certificate.</para>
+        /// <para>Configure either this property or <see cref="Certificate"/>, <see cref="CertificateThumbprint"/>,
+        /// <see cref="AutoLoadCertificate"/> and <see cref="AutoRegisterCertificate"/>, not both.</para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">This property is being set,
+        /// and this instance's configuration is locked.</exception>
+        /// <seealso cref="Net.ServerCertificateSource"/>
+        public Net.ServerCertificateSource? CertificateSource
+        {
+            get => _certificateSource;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _certificateSource = value;
             }
         }
 
@@ -171,6 +193,20 @@ namespace EmbedIO
                 EnsureConfigurationNotLocked();
                 _storeLocation = value;
             }
+        }
+
+        /// <inheritdoc />
+        protected override void OnBeforeLockConfiguration()
+        {
+            // Checked on the fields: the Certificate getter loads or registers certificates.
+            if (_certificateSource != null
+                && (_certificate != null || _certificateThumbprint != null || _autoLoadCertificate || _autoRegisterCertificate))
+            {
+                throw new InvalidOperationException(
+                    "Configure either CertificateSource or Certificate, CertificateThumbprint, AutoLoadCertificate and AutoRegisterCertificate, not both.");
+            }
+
+            base.OnBeforeLockConfiguration();
         }
 
         private int? _maximumConnections;
