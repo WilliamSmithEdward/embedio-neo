@@ -47,6 +47,8 @@ namespace EmbedIO.Net.Internal.Http3
         public bool IgnoreWriteExceptions { get; set; } = true;
         // Set by a server with body policies: 100 Continue waits for the first body read.
         internal bool DeferContinue { get; set; }
+        // TLS settings for QUIC handshakes. Set before Start.
+        internal ServerTlsPolicy? TlsPolicy { get; set; }
         // Records QUIC connections. Set before Start.
         internal EmbedIO.Internal.ServerTelemetry? Telemetry { get; set; }
         public bool IsListening { get { lock (_sync) return _session?.IsRunning ?? false; } }
@@ -74,7 +76,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_session != null) return;
                 if (_stopping) throw new InvalidOperationException("The previous HTTP/3 listener is still stopping.");
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificates, _native, DeferContinue, Telemetry, _bodyPolicy);
+                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificates, TlsPolicy, _native, DeferContinue, Telemetry, _bodyPolicy);
             }
         }
         public void Stop()
@@ -167,7 +169,7 @@ namespace EmbedIO.Net.Internal.Http3
             private RequestPolicyResolver? _bodyPolicy;
             private EmbedIO.Internal.ServerTelemetry? _telemetry;
             private Session() { }
-            internal static Session Start(ListenerPrefix[] prefixes, ServerCertificateSource certificates, bool native, bool deferContinue, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
+            internal static Session Start(ListenerPrefix[] prefixes, ServerCertificateSource certificates, ServerTlsPolicy? policy, bool native, bool deferContinue, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
             {
                 var session = new Session { _deferContinue = deferContinue, _telemetry = telemetry, _bodyPolicy = bodyPolicy };
                 try
@@ -186,7 +188,7 @@ namespace EmbedIO.Net.Internal.Http3
                     foreach (var binding in endpoints)
                     {
                         var listener = QuicEndpointReleases.Shared.Bind(binding.Key,
-                            () => Http3ListenerBinding.Bind(binding.Key, certificates, native));
+                            () => Http3ListenerBinding.Bind(binding.Key, certificates, policy, native));
                         session._listeners.Add(listener, (binding.Value.ToArray(), binding.Key));
                     }
                     // Publish accept loops only after all bindings succeeded.
@@ -286,7 +288,8 @@ namespace EmbedIO.Net.Internal.Http3
                     }
                     // Only handshaken connections the session admitted are counted.
                     if (prefixes.Length != 0) counted = _telemetry?.ConnectionStarted("quic", prefixes[0].Port);
-                    await connection.RunAsync((exchange, local, remote) => DispatchAsync(exchange, local, remote, prefixes),
+                    var clientCertificate = connection.ClientCertificate;
+                    await connection.RunAsync((exchange, local, remote) => DispatchAsync(exchange, local, remote, prefixes, clientCertificate),
                         _stop.Token, _drain.Token).ConfigureAwait(false);
                 }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
@@ -315,9 +318,10 @@ namespace EmbedIO.Net.Internal.Http3
                     && (prefix.Host is "*" or "+" || string.Equals(prefix.Host, uri.Host, StringComparison.OrdinalIgnoreCase))
                     && (path.StartsWith(prefix.Path, StringComparison.Ordinal) || slash.StartsWith(prefix.Path, StringComparison.Ordinal)));
             }
-            private async Task DispatchAsync(Http3QuicExchange exchange, IPEndPoint local, IPEndPoint remote, ListenerPrefix[] prefixes)
+            private async Task DispatchAsync(Http3QuicExchange exchange, IPEndPoint local, IPEndPoint remote, ListenerPrefix[] prefixes,
+                X509Certificate2? clientCertificate)
             {
-                var context = new MultiplexedContext(exchange, local, remote, true);
+                var context = new MultiplexedContext(exchange, local, remote, true, clientCertificate);
                 try
                 {
                     if (!Matches(context.Request.Url, local, prefixes)) { context.Response.StatusCode = 404; return; }

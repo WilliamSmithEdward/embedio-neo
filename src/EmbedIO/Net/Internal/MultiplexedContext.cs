@@ -34,9 +34,12 @@ namespace EmbedIO.Net.Internal
         private bool _closed;
         private int _webSocketAccepted;
         internal MultiplexedContext(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
+            : this(exchange, local, remote, secure, null) { }
+        internal MultiplexedContext(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure,
+            System.Security.Cryptography.X509Certificates.X509Certificate2? clientCertificate)
         {
             _exchange = exchange; _cancellation = exchange.CancellationToken;
-            Request = new MultiplexedRequest(exchange, local, remote, secure);
+            Request = new MultiplexedRequest(exchange, local, remote, secure, clientCertificate);
             Response = new MultiplexedResponse(exchange);
         }
         public string Id { get; } = NextId();

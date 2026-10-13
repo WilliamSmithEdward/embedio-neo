@@ -39,9 +39,9 @@ namespace EmbedIO
 
         /// <summary>
         /// <para>Gets the default handler used by <see cref="WebServerBase{TOptions}"/>.</para>
-        /// <para>This is the same as <see cref="HtmlResponse"/>.</para>
+        /// <para>This is the same as <see cref="EmptyResponse"/>; diagnostic details are not sent to the client.</para>
         /// </summary>
-        public static ExceptionHandlerCallback Default { get; } = HtmlResponse;
+        public static ExceptionHandlerCallback Default { get; } = EmptyResponse;
 
         /// <summary>
         /// Sends an empty <c>500 Internal Server Error</c> response.

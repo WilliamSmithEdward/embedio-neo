@@ -32,7 +32,7 @@ namespace EmbedIO.Tests.Issues
                 context.Response.ContentType = "text/plain";
                 context.Response.Headers["X-Prepared"] = "yes";
                 throw new InvalidOperationException("before headers");
-            });
+            }, module => module.OnUnhandledException = ExceptionHandler.HtmlResponse);
             using var client = Host.CreateClient(protocol);
             using var response = await client.GetAsync(host.Url);
             Assert.That(response.Version.Major, Is.EqualTo(protocol));
@@ -62,7 +62,8 @@ namespace EmbedIO.Tests.Issues
         [TestCase(2)]
         public async Task SerializationFailureHappensBeforeCommitment(int protocol)
         {
-            await using var host = await Host.StartAsync(context => context.SendDataAsync(new ThrowingPayload()));
+            await using var host = await Host.StartAsync(context => context.SendDataAsync(new ThrowingPayload()),
+                module => module.OnUnhandledException = ExceptionHandler.HtmlResponse);
             using var client = Host.CreateClient(protocol);
             using var response = await client.GetAsync(host.Url);
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
@@ -82,7 +83,7 @@ namespace EmbedIO.Tests.Issues
                 var bytes = Encoding.ASCII.GetBytes(Partial);
                 await deferred.WriteAsync(bytes, 0, bytes.Length);
                 throw new InvalidOperationException("after buffering");
-            });
+            }, module => module.OnUnhandledException = ExceptionHandler.HtmlResponse);
             // Automatic decompression verifies that the replacement body matches
             // its Content-Encoding; a stale gzip label over HTML would fail here.
             using var client = Host.CreateClient(1, decompress: compressed);

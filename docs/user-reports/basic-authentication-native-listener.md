@@ -1,5 +1,10 @@
 # Basic authentication on the Microsoft listener
 
+This document preserves the v1 Microsoft-backend investigation. Neo v2 removes
+that backend and its runtime adapters; the native correction below is historical,
+not a v2 configuration option. The current usage example selects the retained
+engine. See the [listener migration guide](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
+
 [Upstream #524](https://github.com/unosquare/embedio/issues/524) reported a valid
 Basic-authenticated POST returning 500 when using the Microsoft listener.
 gabriele-ricci-kyklos supplied the server, controller, request and restricted-header
@@ -28,15 +33,15 @@ rejection by the first module retains that module's challenge and stops dispatch
 This correction does not change native listener authentication schemes or introduce
 a new authentication provider.
 
-## Using the fix
+## Basic authentication on the v2 engine
 
-Keep your existing server/controller configuration. The original pattern remains:
+Keep your authentication modules and routes, and select the retained engine:
 
 ```csharp
 // Configuration fragment: retain your app-owned lifetime and RunAsync cancellation.
 new WebServer(options => options
     .WithUrlPrefix("http://localhost:9696/")
-    .WithMode(HttpListenerMode.Microsoft))
+    .WithMode(HttpListenerMode.EmbedIO))
     .WithLocalSessionManager()
     .WithModule(new BasicAuthenticationModule("/").WithAccount("user", "password"))
     .WithWebApi("/api", api => api.WithController<TestController>())
@@ -44,41 +49,42 @@ new WebServer(options => options
 
 This is a partial configuration, with `EmbedIO`, `EmbedIO.Authentication` and
 `EmbedIO.WebApi` imports; use your actual controller, route and app-owned lifetime.
-The correction is on main after its PR merges and is **not included in an existing
-NuGet release by this change**. No package upgrade version is promised here.
-Before an authorized release containing the fix, the reporter's managed-listener
-configuration remains an existing alternative: use `HttpListenerMode.EmbedIO` if
-its endpoint/certificate behavior is suitable for your application. Changing
-listener mode is an application decision, particularly for Windows HTTP.sys URL
-reservations and certificate configuration; see
-[HTTPS guidance](../platforms/maui-https-validation.md).
+Neo v2 is not yet published. This configuration does not use HTTP.sys URL
+reservations or its certificate binding; supply the replacement engine's HTTPS
+certificate as described in [HTTPS guidance](../guides/https.md). Applications
+remaining on v1 should read the native-backend evidence below as applying to its
+recorded runtime and source, not as validation of the v2 engine.
 
 Basic authentication transmits credentials encoded, not encrypted. Use trusted
 HTTPS for credentials outside a controlled local demonstration and an appropriate
 application-owned account/provider policy. This fix does not turn the simple
 in-memory account dictionary into a password storage or identity management system.
 
-## Reproduction and regression coverage
+## Historical v1 reproduction and regression coverage
 
-A .NET Framework host loading current .NET Standard 2.0 core reproduced the exact
+A .NET Framework host loading the then-current v1 .NET Standard 2.0 core
+reproduced the exact
 500 and `WWW-Authenticate` restricted-header exception on the original valid,
-empty-body POST. The corrected request returns 200 with JSON `true` and retains
+empty-body POST. The corrected request returned 200 with JSON `true` and retained
 the Basic challenge. This is a runtime-specific reproduction, not merely an
 in-process mock or a modern desktop pass.
 
-Shared real-HTTP coverage checks managed/native .NET 10 listeners and a test-only
+The recorded v1 real-HTTP coverage checked managed/native .NET 10 listeners and a
+test-only
 Windows .NET Framework host compiled for net472, using the retained Standard core.
-Each single/layered-module run sends ten requests: valid POST, missing credentials,
+Each single/layered-module run sent ten requests: valid POST, missing credentials,
 wrong password, malformed Base64, malformed/other scheme, missing account,
 mixed-case Basic scheme, UTF-8 credentials with a colon-containing password, and
-a healthy valid request after denials. Checks require exact status/body/challenge,
+a healthy valid request after denials. Checks required exact status/body/challenge,
 one challenge value, protected-handler isolation, local sessions and compressed
-response decoding. Shutdown is bounded and observed.
+response decoding. Shutdown was bounded and observed.
 
-The legacy fixture is outside the ordinary solution and all shipped packages. Its
-reference-assembly package is pinned and locked for development only. Windows CI
-runs its real native listener and uploads `legacy-authentication.json` with the
-desktop test artifact. A net472 compilation does not claim execution on the original
+The legacy fixture was outside the ordinary solution and all shipped packages. Its
+reference-assembly package was pinned and locked for development only. At the
+recorded validation, Windows CI ran its real native listener and uploaded
+`legacy-authentication.json` with the desktop test artifact. Those native-backend
+fixtures are not current v2 listener coverage. A net472 compilation does not claim
+execution on the original
 .NET Framework 4.7.2 runtime; the installed host version is recorded separately.
 
 Direct application writes to other restricted native headers and arbitrary wrapper

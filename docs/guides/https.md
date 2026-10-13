@@ -23,7 +23,9 @@ production private key inside an APK or source repository.
 
 To install a renewed certificate without restarting the server, configure a
 `ServerCertificateSource` instead; see
-[rotating the server certificate](certificate-rotation.md).
+[rotating the server certificate](certificate-rotation.md). To require client
+certificates, limit protocol versions or choose the certificate by server name,
+see [TLS policy](tls-policy.md).
 
 The client must trust the issuer and connect using a DNS name or IP address
 present in the certificate's Subject Alternative Name. A self-signed certificate
@@ -31,7 +33,7 @@ needs explicit client trust. Do not use an accept-all validation callback in a
 production client. HTTPS encrypts traffic; configure application authentication
 and authorization separately before exposing privileged routes.
 
-TLS protocol selection is delegated to the runtime/OS using `SslProtocols.None`.
+By default, TLS protocol selection is delegated to the runtime/OS using `SslProtocols.None`.
 It does not mean plaintext or enable every protocol. Actual availability depends
 on the OS security provider and its policy. The listener performs authentication
 asynchronously, within the existing 90-second first-request timeout; clients that
@@ -69,10 +71,11 @@ prefix only after testing network access and client trust on the target device.
 ## Windows certificate helpers
 
 `AutoLoadCertificate` and `AutoRegisterCertificate` remain Windows-only helpers
-for certificate stores and `netsh` HTTP.sys bindings. The Microsoft listener uses
-OS configuration; supplying a certificate does not configure HTTP.sys by itself.
-Portable managed-listener hosting uses `WithCertificate` and leaves those helpers
-disabled. Existing default listener selection and HTTP configuration are unchanged.
+for certificate stores and `netsh` HTTP.sys bindings. Neo v2 has removed the
+Microsoft listener backend; an HTTP.sys binding does not configure the replacement
+engine's HTTPS transport. Use `WithCertificate` for portable hosting and leave
+those helpers disabled unless your application deliberately needs their Windows
+configuration side effects. See the [listener migration guide](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
 
 Report deployment problems with the OS/API level, .NET/MAUI runtime, listener
 mode, key-import flags and the complete exception. Omit passwords and private keys.

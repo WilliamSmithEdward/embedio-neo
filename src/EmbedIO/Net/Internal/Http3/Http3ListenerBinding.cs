@@ -20,21 +20,23 @@ namespace EmbedIO.Net.Internal.Http3
     {
         internal abstract ValueTask<Http3AcceptedConnection> AcceptAsync(CancellationToken token);
         public abstract ValueTask DisposeAsync();
-        internal static Http3ListenerBinding Bind(IPEndPoint endpoint, ServerCertificateSource certificates, bool native)
-            => native ? NativeBinding.Create(endpoint, certificates) : SystemBinding.Create(endpoint, certificates);
+        // The native binding supports none of the policy's settings but EnabledProtocols, which QUIC fixes at TLS 1.3;
+        // ServerTlsPolicy.EnsureSupported refuses the others before a session starts.
+        internal static Http3ListenerBinding Bind(IPEndPoint endpoint, ServerCertificateSource certificates, ServerTlsPolicy? policy, bool native)
+            => native ? NativeBinding.Create(endpoint, certificates) : SystemBinding.Create(endpoint, certificates, policy);
 
         private sealed class SystemBinding : Http3ListenerBinding
         {
             private readonly QuicListener _listener;
             private SystemBinding(QuicListener listener) { _listener = listener; }
-            internal static SystemBinding Create(IPEndPoint endpoint, ServerCertificateSource certificates)
+            internal static SystemBinding Create(IPEndPoint endpoint, ServerCertificateSource certificates, ServerTlsPolicy? policy)
             {
                 var options = new QuicListenerOptions
                 {
                     ListenEndPoint = endpoint,
                     ListenBacklog = 512,
                     ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
-                    ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(new QuicServerConnectionOptions
+                    ConnectionOptionsCallback = (_, hello, _) => ValueTask.FromResult(new QuicServerConnectionOptions
                     {
                         DefaultCloseErrorCode = 0x100,
                         DefaultStreamErrorCode = 0x10c,
@@ -42,12 +44,30 @@ namespace EmbedIO.Net.Internal.Http3
                         MaxInboundUnidirectionalStreams = 16,
                         IdleTimeout = TimeSpan.FromSeconds(60),
                         HandshakeTimeout = TimeSpan.FromSeconds(10),
-                        ServerAuthenticationOptions = new SslServerAuthenticationOptions
-                        // Read per connection, so a published certificate applies to the next handshake.
-                        { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = certificates.Current },
+                        ServerAuthenticationOptions = CreateAuthentication(certificates, policy, hello.ServerName),
                     }),
                 };
                 return new SystemBinding(QuicListener.ListenAsync(options).AsTask().GetAwaiter().GetResult());
+            }
+            // Read per connection, so a published certificate applies to the next handshake.
+            private static SslServerAuthenticationOptions CreateAuthentication(ServerCertificateSource certificates, ServerTlsPolicy? policy, string? serverName)
+            {
+                var current = certificates.Current;
+                var options = new SslServerAuthenticationOptions
+                {
+                    ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
+                    ServerCertificate = policy == null ? current : policy.SelectServerCertificate(serverName, current),
+                };
+                if (policy != null && policy.RequestsClientCertificate)
+                {
+                    options.ClientCertificateRequired = true;
+                    options.RemoteCertificateValidationCallback = policy.ValidateClientCertificate;
+                    options.CertificateRevocationCheckMode = policy.CheckCertificateRevocation
+                        ? X509RevocationMode.Online
+                        : X509RevocationMode.NoCheck;
+                }
+
+                return options;
             }
             internal override async ValueTask<Http3AcceptedConnection> AcceptAsync(CancellationToken token)
                 => new SystemPeer(await _listener.AcceptConnectionAsync(token).ConfigureAwait(false));
@@ -204,7 +224,12 @@ namespace EmbedIO.Net.Internal.Http3
         {
             private readonly QuicConnection _connection;
             private bool _transferred;
-            internal SystemPeer(QuicConnection connection) { _connection = connection; }
+            internal SystemPeer(QuicConnection connection)
+            {
+                _connection = connection;
+                ClientCertificate = ServerTls.CopyRemoteCertificate(connection.RemoteCertificate);
+            }
+            internal override X509Certificate2? ClientCertificate { get; }
             internal override bool HandshakePending => false;
             internal override ValueTask WaitReadyAsync(CancellationToken token) => ValueTask.CompletedTask;
             internal override Task RunAsync(Func<Http3QuicExchange, IPEndPoint, IPEndPoint, Task> dispatch, CancellationToken abort, CancellationToken drain)
@@ -260,6 +285,8 @@ namespace EmbedIO.Net.Internal.Http3
     internal abstract class Http3AcceptedConnection : IAsyncDisposable
     {
         internal abstract bool HandshakePending { get; }
+        // The client's certificate from the handshake, when the listener's policy asked for one.
+        internal virtual X509Certificate2? ClientCertificate => null;
         internal abstract ValueTask WaitReadyAsync(CancellationToken token);
         internal abstract Task RunAsync(Func<Http3QuicExchange, IPEndPoint, IPEndPoint, Task> dispatch, CancellationToken abort, CancellationToken drain);
         internal abstract ValueTask RejectAsync(CancellationToken token);

@@ -542,7 +542,10 @@ Discarded DATA is still credited back (`Http2Dispatcher`), so there is no stall.
   bursts (20,000, 20,000, 50,000 and 5,000 frames all accepted). Handlers did not
   run for reset streams, and memory and handles settled. CONTINUATION floods are
   bounded with ENHANCE_YOUR_CALM. Whether to add limits is a policy decision.
-- **O4**: the inherited default 500 page reports the exception type and message.
+- **O4**: the campaign found that the inherited default 500 page reports the exception type and message.
+  The owner-approved Neo v2 change selects an empty 500 instead; explicit diagnostic
+  handlers remain available. See the [migration notes](../compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500).
+  This does not change the historical campaign evidence or imply a new campaign passed.
 - **O5**: permitted but less specific statuses: 400 rather than 414 or 431 for
   oversized targets and headers, HTTP/1.2 rejected rather than served as 1.1,
   `OPTIONS *` 404, single-line `Content-Length: 3, 3` rejected while repeated equal

@@ -38,6 +38,34 @@ tests for custom converters, unsupported payloads, numeric precision and exact
 response bytes against the final v2 package. The
 [JSON compatibility guide](../user-reports/json-migration-compatibility.md)
 records the audited behavior and its limits.
+
+## Unhandled exceptions return an empty 500
+
+Neo v2 uses `ExceptionHandler.EmptyResponse` as the default unhandled-exception
+handler. Before response headers are committed, an otherwise unhandled application
+exception produces an empty `500 Internal Server Error` response. The handler does
+not add exception type or message headers. Neo v1's default HTML page included the exception type and
+message even when `ExceptionHandler.IncludeStackTraces` was false.
+
+Exceptions still reach server logging. Custom exception handlers and explicit
+application-authored `HttpException` responses retain their behavior. An exception
+after response commitment still terminates that response; it cannot replace its
+status or body with a 500.
+
+To retain the detailed HTML page explicitly, configure the server or module:
+
+```csharp
+server.HandleUnhandledException(ExceptionHandler.HtmlResponse);
+```
+
+`ExceptionHandler.IncludeStackTraces` and `ContactInformation` still configure that
+HTML handler. `ExceptionHandler.EmptyResponseWithHeaders` remains an explicit
+alternative that exposes the exception type and message in diagnostic headers.
+Use these detailed handlers only where exposing application diagnostics is intended.
+For structured API errors, the [opt-in problem-details handler](../guides/problem-details.md)
+remains available. This default change is unreleased; update clients that parse the
+old default HTML page before adopting v2.
+
 ## Direct HTTP/1 response flushing
 
 Calling `Response.OutputStream.Flush()` or `FlushAsync()` on an open HTTP/1
