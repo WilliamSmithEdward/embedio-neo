@@ -14,6 +14,17 @@
   holds its stream slot until it returns. HTTP/3 now allows 128 outstanding
   request handlers per connection instead of 256, matching HTTP/2 and the QUIC
   stream limit; a request over it is refused with `H3_REQUEST_REJECTED`.
+- `WebApiModule.RegisterController(Type, Func<WebApiController>)` and
+  `WithController(Type, Func<WebApiController>)` accept a lambda factory. A lambda converted to
+  `Func<WebApiController>` is compiled with that return type, so every lambda was rejected with
+  "Factory method has an incorrect return type", as in upstream EmbedIO 3.5.2. An unrelated declared
+  return type is still rejected; a factory that creates a different controller now fails with an
+  `InvalidOperationException` naming both types. `RegisterController<TController>(Func<TController>)`
+  is unchanged.
+- `TestWebServer.RunAsync` (EmbedIO.Testing) now returns its task to the caller instead of
+  blocking it until the server stops, and a started test server no longer pins a thread-pool
+  thread. Awaiting `RunAsync` directly previously deadlocked. The blocking wait was inherited
+  unchanged from upstream EmbedIO 3.5.2.
 - Correct defects found by a review sweep. `ISession.Delete` and `Regenerate` now end
   a session that holds data, so an old cookie cannot resume it, and an expired session
   is no longer revived before the purge runs. A module whose own exception handler

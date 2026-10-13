@@ -97,6 +97,19 @@ def target_api_differences(modern, standard):
     return observed
 
 
+def profile_contract(profiles, name):
+    """A profile may derive from another and skip cases by prefix, so a platform skip cannot
+    drift from the profile it narrows. Reviewed differences on skipped cases are dropped too."""
+    profile = profiles[name]
+    if "derivesFrom" not in profile:
+        return profile
+    base = profile_contract(profiles, profile["derivesFrom"])
+    skipped = tuple(profile["skipCasePrefixes"])
+    return {**base,
+            "caseNames": [case for case in base["caseNames"] if not case.startswith(skipped)],
+            "differences": [entry for entry in base["differences"] if not entry["path"].lstrip("/").startswith(skipped)]}
+
+
 def compare(reports, contract):
     upstream = reports["Upstream"]
     errors = []
@@ -144,6 +157,15 @@ def compare(reports, contract):
                                 for variant, report in reports.items()}}
 
 
+def mutate_neo_standard(sample):
+    # Profiles that skip WebSocket cases (macOS) prove the NeoStandard check on an HTTP case instead.
+    cases = sample["NeoStandard"]["cases"]
+    if "websocket/EmbedIO/True/False" in cases:
+        cases["websocket/EmbedIO/True/False"].update(payload="AA==")
+    else:
+        cases["http/EmbedIO/dto"].update(status=500)
+
+
 def verify_guards(reports, contract):
     """Prove the comparator rejects regressions rather than just accepting its inputs."""
     mutations = (
@@ -152,7 +174,7 @@ def verify_guards(reports, contract):
         lambda sample: sample["Neo"]["cases"]["utility/valid/3"].update(value=1),
         lambda sample: sample["Neo"]["cases"].pop("utility/valid/0"),
         lambda sample: sample["Neo"]["api"].pop("EmbedIO.WebServer"),
-        lambda sample: sample["NeoStandard"]["cases"]["websocket/EmbedIO/True/False"].update(payload="AA=="),
+        mutate_neo_standard,
     )
     for mutation in mutations:
         sample = copy.deepcopy(reports)
@@ -217,7 +239,7 @@ def main():
         raise RuntimeError("Inconsistent comparison profiles")
     if reports["Upstream"]["assemblySha256"] != contract["baseline"]["assemblySha256"]:
         raise RuntimeError("Upstream assembly bytes do not match the pinned baseline")
-    contract = {**contract, **contract["profiles"][profile]}
+    contract = {**contract, **profile_contract(contract["profiles"], profile)}
     summary = compare(reports, contract)
     summary["profile"] = profile
     summary["comparatorNegativeChecks"] = verify_guards(reports, contract)
