@@ -122,7 +122,7 @@ Raw evidence is under ignored `TestResults/issue-283` in the issue worktree.
 
 Issue #283 has a dedicated `HTTP3 host controls` workflow: Ubuntu 24.04 is the
 qualified quiet reference; Windows 2025 retains ambient and contention repeats. It builds the checked-out core and identical comparison harness,
-uses SDK 10.0.401 and the existing pinned Linux MsQuic 2.6.2 prerequisite, and records
+uses the SDK pinned by `global.json` and the existing pinned Linux MsQuic 2.6.2 prerequisite, and records
 the actual source revision and loaded core/runtime/native binary hashes.
 
 Each engine receives two alternating rounds of 15-second rate phases. The quiet

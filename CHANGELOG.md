@@ -19,6 +19,15 @@
 
 ## [2.0.0] - Unreleased
 
+- Build and test with .NET SDK 10.0.402 and runtime 10.0.13, the 13 October 2026
+  security release. Package dependency minimums move from 10.0.12 to 10.0.13:
+  `System.Threading.RateLimiting` on both core targets, `System.Text.Json` on the
+  core .NET Standard 2.0 asset, and `Microsoft.Extensions.DependencyInjection` and
+  `Microsoft.Extensions.Hosting.Abstractions` in the DI package. An application
+  that references one of these packages directly at an earlier version must move
+  it to 10.0.13 or later; NuGet otherwise reports a package downgrade (NU1605).
+  On Windows, run HTTP/3 on runtime 10.0.13 or later because of CVE-2026-105016;
+  see [HTTP/3 requirements](docs/guides/http3.md#requirements).
 - `WebApiModule.RegisterController(Type, Func<WebApiController>)` and
   `WithController(Type, Func<WebApiController>)` accept a lambda factory. A lambda converted to
   `Func<WebApiController>` is compiled with that return type, so every lambda was rejected with
@@ -65,8 +74,9 @@ are documented in the migration guide.
 
 The tested .NET 10.0.12 HTTP/3 transport has a per-stream native send-buffer
 retention defect in `System.Net.Quic`. The upstream fix merged into runtime
-`main`, but a .NET 10 servicing backport and released-runtime verification remain
-unconfirmed. See [HTTP/3 deployment guidance](docs/guides/http3.md#runtime-memory-limitation).
+`main` on 13 October 2026. Runtime 10.0.13 does not contain it, and a .NET 10
+servicing backport and released-runtime verification remain unconfirmed. See
+[HTTP/3 deployment guidance](docs/guides/http3.md#runtime-memory-limitation).
 
 Release acceptance remains in progress. The retained Windows HTTP/2 drain
 response-loss failure has no established cause or repair despite later passing
@@ -149,7 +159,7 @@ not automatic. Performance results apply only to their recorded source and host.
   chain), holds each permit until the request completes, and answers rejections with 429 and
   `Retry-After` when the limiter knows the wait. `RejectionStatusCode` and `OnRejected` customize
   rejections; `ClientKey` keys by connection address, IPv6 by /64, without trusting forwarded
-  headers. EmbedIO-Neo now depends on the `System.Threading.RateLimiting` package (10.0.12) on
+  headers. EmbedIO-Neo now depends on the `System.Threading.RateLimiting` package (10.0.13) on
   both targets. See [Rate limiting](docs/guides/rate-limiting.md).
 - Require TLS 1.2 or later for Neo v2 HTTPS, retaining TLS 1.3 where supported.
   TLS 1.0 and TLS 1.1 clients must update their TLS stack or intermediary backend
