@@ -4,6 +4,14 @@
 
 ## [2.0.0] - Unreleased
 
+- Security: HTTP/2 counts a request handler that is still running against the
+  128-stream concurrency limit even after its stream is reset or has finished.
+  Before this, a client could reset streams to start an unbounded number of
+  concurrent handlers on one connection (the CVE-2023-44487 "Rapid Reset" pattern).
+  New streams over the limit are refused with `REFUSED_STREAM`, which clients retry,
+  and a client refused more than 128 times within one second receives
+  `GOAWAY ENHANCE_YOUR_CALM`. A handler that keeps working after its response now
+  holds its stream slot until it returns.
 - Correct defects found by a review sweep. `ISession.Delete` and `Regenerate` now end
   a session that holds data, so an old cookie cannot resume it, and an expired session
   is no longer revived before the purge runs. A module whose own exception handler

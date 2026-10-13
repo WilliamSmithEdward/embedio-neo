@@ -39,6 +39,7 @@ namespace EmbedIO.Net.Internal.Http2
             _abortTunnel = AbortTunnelAsync;
             _connection.OutputFailed = Abort;
             _connection.UseTransportCancellation(_stop.Token);
+            _connection.Streams.RunningApplications = () => Volatile.Read(ref _runningApplications);
         }
 
         internal async Task RunAsync(Func<Http2Exchange, Task> application, CancellationToken token)
