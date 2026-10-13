@@ -121,9 +121,14 @@ when its compressed size is unknown, HEAD omits Content-Length. Conditional
 requests use the ETag for the negotiated variant.
 
 The .NET Standard 2.0 asset continues to negotiate gzip/deflate/identity only.
-It rejects a request that accepts only Brotli with HTTP 406. Explicit Brotli
+A request that accepts Brotli and refuses identity (`br, identity;q=0`) gets
+HTTP 406; `Accept-Encoding: br` alone gets the uncompressed response, since
+identity stays acceptable unless refused. Explicit Brotli
 cache/conversion operations on that asset throw NotSupportedException instead
 of returning bytes under an incorrect coding name. No production package or
 native runtime dependency is added. Shared-dictionary Brotli is separate work.
+
+To send `.br` and `.gz` files compressed ahead of time, on either asset, see
+[precompressed static files](../precompressed-files.md).
 Next: [Use a controller](controllers.md), or see
 [multiple static folders](../multiple-static-folders.md) for more than one directory.
