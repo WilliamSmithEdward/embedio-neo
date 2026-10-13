@@ -252,7 +252,18 @@ namespace EmbedIO.Tests
             using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
             var endpoint = (IPEndPoint)(socket.LocalEndPoint ?? throw new AssertionException("Missing UDP endpoint."));
-            return $"https://127.0.0.1:{endpoint.Port}/";
+            // The stock Linux QUIC client fails IP-literal requests before either
+            // certificate callback runs. Use the certificate's DNS identity;
+            // hostname validation and the exact generated-leaf pin stay enabled.
+            // Probe both families that the localhost listener will actually bind.
+            if (EmbedIO.Net.EndPointManager.UseIpv6 && Socket.OSSupportsIPv6)
+            {
+                using var ipv6 = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp);
+                ipv6.DualMode = false;
+                ipv6.Bind(new IPEndPoint(IPAddress.IPv6Loopback, endpoint.Port));
+            }
+
+            return $"https://localhost:{endpoint.Port}/";
         }
 
         private sealed class ErrorTrace : TraceListener
