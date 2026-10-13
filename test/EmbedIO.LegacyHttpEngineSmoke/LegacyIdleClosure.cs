@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Net;
 using System.Net.Security;
@@ -16,8 +16,8 @@ public static partial class Program
 {
     private static async Task VerifyLegacyIdleClosureAsync(bool secure)
     {
-        Check(typeof(SslStream).GetMethod("ShutdownAsync", Type.EmptyTypes) == null,
-            "This .NET Framework control must exercise the absent-public-TLS-shutdown fallback.");
+        var shutdownMethod = typeof(SslStream).GetMethod("ShutdownAsync", Type.EmptyTypes);
+        var publicShutdownAvailable = shutdownMethod != null && shutdownMethod.ReturnType == typeof(Task);
         using var certificate = secure ? CreateLegacyIdleCertificate() : null;
         var portProbe = new TcpListener(IPAddress.Loopback, 0);
         portProbe.Start();
@@ -51,7 +51,8 @@ public static partial class Program
         var next = new byte[1];
         while (header.Length < 8192)
         {
-            Check(await stream.ReadAsync(next, 0, 1, deadline.Token).ConfigureAwait(false) == 1, "Complete legacy idle response head.");
+            if (await stream.ReadAsync(next, 0, 1, deadline.Token).ConfigureAwait(false) != 1)
+                throw new EndOfStreamException("Legacy idle response ended before its head.");
             header.WriteByte(next[0]);
             if (Encoding.ASCII.GetString(header.ToArray()).EndsWith("\r\n\r\n", StringComparison.Ordinal)) break;
         }
@@ -59,7 +60,8 @@ public static partial class Program
         Check(head.StartsWith("HTTP/1.1 204 ", StringComparison.Ordinal), "Legacy idle status.");
         Check(head.Contains("timeout=15"), "Legacy default idle timeout unchanged.");
         var fallback = connection.GetType().GetField("ShutdownTls", BindingFlags.Static | BindingFlags.NonPublic);
-        Check(fallback != null && fallback.GetValue(null) == null, "Legacy asset detects absence of public TLS shutdown.");
+        Check(fallback != null && (fallback.GetValue(null) != null) == publicShutdownAvailable,
+            "Legacy asset capability matches the actual public runtime API.");
         var eof = false;
         string observation;
         try
@@ -70,14 +72,41 @@ public static partial class Program
         }
         catch (IOException error)
         {
-            if (!secure) throw;
+            if (!secure || publicShutdownAvailable) throw;
             observation = error.GetType().Name + ": " + error.Message;
             Check(true, "Legacy TLS may retain its inherited terminal reset.");
         }
-        if (!secure) Check(eof, "Legacy plain idle closure is orderly.");
+        if (!secure || publicShutdownAvailable) Check(eof, "Supported legacy idle closure is orderly.");
         Console.WriteLine("Legacy idle " + (secure ? "TLS fallback" : "plain") + ": " + observation
-            + "; publicShutdownAvailable=false; framework=" + Environment.Version);
-        Check(listener.IsListening, "Legacy listener remains healthy after idle expiry.");
+            + "; publicShutdownAvailable=" + publicShutdownAvailable + "; framework=" + Environment.Version);
+        Check(listener.IsListening, "Legacy listener remains active after idle expiry.");
+        using var fresh = new TcpClient();
+        using var freshCancellation = deadline.Token.Register(() => fresh.Dispose());
+        await fresh.ConnectAsync(IPAddress.Loopback, port).ConfigureAwait(false);
+        using var freshWire = fresh.GetStream();
+        using var freshTls = secure ? new SslStream(freshWire, true, (_, remote, _, errors) => remote != null
+            && (errors & ~SslPolicyErrors.RemoteCertificateChainErrors) == SslPolicyErrors.None
+            && remote.GetCertHashString() == certificate?.GetCertHashString()) : null;
+        if (freshTls != null)
+            await freshTls.AuthenticateAsClientAsync("localhost", new X509CertificateCollection(), SslProtocols.Tls12, false).ConfigureAwait(false);
+        Stream freshStream = freshTls ?? (Stream)freshWire;
+        var healthyAccept = listener.GetContextAsync(deadline.Token);
+        await freshStream.WriteAsync(request, 0, request.Length, deadline.Token).ConfigureAwait(false);
+        var healthy = await healthyAccept.ConfigureAwait(false);
+        healthy.Response.StatusCode = 204;
+        healthy.Response.ContentLength64 = 0;
+        healthy.Response.KeepAlive = false;
+        healthy.Close();
+        using var healthyHeader = new MemoryStream();
+        while (healthyHeader.Length < 8192)
+        {
+            if (await freshStream.ReadAsync(next, 0, 1, deadline.Token).ConfigureAwait(false) != 1)
+                throw new EndOfStreamException("Legacy fresh peer ended before its head.");
+            healthyHeader.WriteByte(next[0]);
+            if (Encoding.ASCII.GetString(healthyHeader.ToArray()).EndsWith("\r\n\r\n", StringComparison.Ordinal)) break;
+        }
+        Check(Encoding.ASCII.GetString(healthyHeader.ToArray()).StartsWith("HTTP/1.1 204 ", StringComparison.Ordinal),
+            "Legacy fresh peer receives a healthy response after idle expiry.");
     }
 
     private static X509Certificate2 CreateLegacyIdleCertificate()
