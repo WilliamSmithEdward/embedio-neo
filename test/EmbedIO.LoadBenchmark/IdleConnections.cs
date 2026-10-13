@@ -192,10 +192,14 @@ internal static class IdleConnections
         sample["derived"] = derived;
     }
 
+    // A sample without an error always carries its derived figures; their absence is a harness defect, not a result.
+    private static JsonNode Derived(JsonObject sample)
+        => sample["derived"] ?? throw new InvalidOperationException("A successful idle sample has no derived figures.");
+
     private static string Describe(JsonObject sample)
     {
         if (sample["error"] is { } error) return $"{sample["engine"]} r{sample["round"]}: FAILED {error.ToString().Split('\n')[0]}";
-        var derived = sample["derived"]!;
+        var derived = Derived(sample);
         return string.Format(CultureInfo.InvariantCulture, "{0} r{1}: {2} idle {3} connections: {4:F0} B heap, {5:F0} B working set, {6:F0} B private, {7:F2} handles per connection; threads {8} -> {9}",
             sample["engine"], sample["round"], sample["protocol"], sample["openedConnections"],
             derived["managedHeapBytesPerIdleConnection"]?.GetValue<double>(), derived["workingSetBytesPerIdleConnection"]?.GetValue<double>(),
@@ -215,9 +219,10 @@ internal static class IdleConnections
                 text.AppendLine(CultureInfo.InvariantCulture, $"| {sample["engine"]} | {sample["round"]} | {sample["protocol"]} | failed | | | | | | | | | |");
                 continue;
             }
-            var derived = sample["derived"]!;
+            var derived = Derived(sample);
+            var tls = sample["tls"]?.GetValue<bool>() ?? throw new InvalidOperationException("A sample without its TLS flag cannot be summarized.");
             text.AppendLine(CultureInfo.InvariantCulture,
-                $"| {sample["engine"]} | {sample["round"]} | {sample["protocol"]}{(sample["tls"]!.GetValue<bool>() ? " TLS" : "")} | {sample["openedConnections"]} | {Round(derived["managedHeapBytesPerIdleConnection"])} | {Round(derived["workingSetBytesPerIdleConnection"])} | {Round(derived["privateBytesPerIdleConnection"])} | {derived["handlesPerIdleConnection"]?.GetValue<double>().ToString("F2", CultureInfo.InvariantCulture)} | {sample["before"]?["threads"]} -> {sample["idle"]?["threads"]} -> {sample["after"]?["threads"]} | {sample["before"]?["threadPoolThreads"]} -> {sample["idle"]?["threadPoolThreads"]} | {Round(derived["managedHeapBytesRetainedAfterClose"])} | {Round(derived["workingSetBytesRetainedAfterClose"])} | {Sockets(sample["serverSocketsIdle"])} / {Sockets(sample["serverSocketsAfterClose"])} |");
+                $"| {sample["engine"]} | {sample["round"]} | {sample["protocol"]}{(tls ? " TLS" : "")} | {sample["openedConnections"]} | {Round(derived["managedHeapBytesPerIdleConnection"])} | {Round(derived["workingSetBytesPerIdleConnection"])} | {Round(derived["privateBytesPerIdleConnection"])} | {derived["handlesPerIdleConnection"]?.GetValue<double>().ToString("F2", CultureInfo.InvariantCulture)} | {sample["before"]?["threads"]} -> {sample["idle"]?["threads"]} -> {sample["after"]?["threads"]} | {sample["before"]?["threadPoolThreads"]} -> {sample["idle"]?["threadPoolThreads"]} | {Round(derived["managedHeapBytesRetainedAfterClose"])} | {Round(derived["workingSetBytesRetainedAfterClose"])} | {Sockets(sample["serverSocketsIdle"])} / {Sockets(sample["serverSocketsAfterClose"])} |");
         }
         return text.ToString();
 
