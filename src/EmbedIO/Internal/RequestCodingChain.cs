@@ -17,13 +17,27 @@ namespace EmbedIO.Internal
             while (end > start && value[end - 1] is ' ' or '\t') end--;
             return start == 0 && end == value.Length ? value : value.Substring(start, end - start);
         }
+
+        // Opens the decoders for a comma-separated Content-Encoding value. Returns false
+        // for a coding that is unknown, disabled or beyond the layer budget; a value that
+        // names only identity yields the source itself.
         internal static bool TryOpen(Stream source, string value, bool enabled, out Stream? decoded)
         {
             decoded = null;
             var methods = new CompressionMethod[MaximumLayers];
-            var count = 0;
+            if (!TryReadCodings(value, enabled, methods, out var count)) return false;
+            decoded = count == 0 ? source : OpenLayers(source, methods, count);
+            return true;
+        }
+
+        // Reads the codings in wire order. Empty elements and identity add no layer; any
+        // other coding needs decoding to be enabled and a free layer. The loop ends at the
+        // last element, since end stays below value.Length after every comma.
+        private static bool TryReadCodings(string value, bool enabled, CompressionMethod[] methods, out int count)
+        {
+            count = 0;
             var start = 0;
-            while (start <= value.Length)
+            while (true)
             {
                 var end = value.IndexOf(",", start, StringComparison.Ordinal);
                 if (end < 0) end = value.Length;
@@ -31,47 +45,58 @@ namespace EmbedIO.Internal
                 var tokenEnd = end;
                 while (tokenStart < tokenEnd && value[tokenStart] is ' ' or '\t') tokenStart++;
                 while (tokenEnd > tokenStart && value[tokenEnd - 1] is ' ' or '\t') tokenEnd--;
-                if (tokenStart != tokenEnd)
+                if (tokenStart != tokenEnd && !TokenIs(value, tokenStart, tokenEnd - tokenStart, CompressionMethodNames.None))
                 {
-                    var length = tokenEnd - tokenStart;
-                    bool Is(string name) => length == name.Length && string.Compare(value, tokenStart, name, 0, length, StringComparison.OrdinalIgnoreCase) == 0;
-                    if (!Is(CompressionMethodNames.None))
-                    {
-                        if (!enabled || count == MaximumLayers) return false;
-                        if (Is(CompressionMethodNames.Gzip)) methods[count++] = CompressionMethod.Gzip;
-                        else if (Is(CompressionMethodNames.Deflate)) methods[count++] = CompressionMethod.Deflate;
-#if NET10_0_OR_GREATER
-                        else if (Is(CompressionMethodNames.Brotli)) methods[count++] = CompressionMethod.Brotli;
-#endif
-                        else return false;
-                    }
+                    if (!enabled || count == MaximumLayers) return false;
+                    if (!TryGetMethod(value, tokenStart, tokenEnd - tokenStart, out var method)) return false;
+                    methods[count++] = method;
                 }
-                if (end == value.Length) break;
+                if (end == value.Length) return true;
                 start = end + 1;
             }
-            if (count == 0) { decoded = source; return true; }
+        }
+
+        private static bool TryGetMethod(string value, int start, int length, out CompressionMethod method)
+        {
+            if (TokenIs(value, start, length, CompressionMethodNames.Gzip)) { method = CompressionMethod.Gzip; return true; }
+            if (TokenIs(value, start, length, CompressionMethodNames.Deflate)) { method = CompressionMethod.Deflate; return true; }
+#if NET10_0_OR_GREATER
+            if (TokenIs(value, start, length, CompressionMethodNames.Brotli)) { method = CompressionMethod.Brotli; return true; }
+#endif
+            method = default;
+            return false;
+        }
+
+        private static bool TokenIs(string value, int start, int length, string name)
+            => length == name.Length && string.Compare(value, start, name, 0, length, StringComparison.OrdinalIgnoreCase) == 0;
+
+        // Wraps the source from the last listed coding inward, so reads undo the codings
+        // in reverse wire order. A layer that fails to open disposes what was opened so far.
+        private static Stream OpenLayers(Stream source, CompressionMethod[] methods, int count)
+        {
             var layers = new Stream[count];
             var current = source;
             try
             {
                 for (var index = count - 1; index >= 0; index--)
                 {
-                    current = methods[index] switch
-                    {
-                        CompressionMethod.Gzip => new GZipStream(current, CompressionMode.Decompress),
-                        CompressionMethod.Deflate => new DeflateRequestStream(current, false),
-#if NET10_0_OR_GREATER
-                        CompressionMethod.Brotli => new BrotliRequestStream(current),
-#endif
-                        _ => throw new InvalidOperationException("Unexpected request coding.")
-                    };
+                    current = OpenLayer(methods[index], current);
                     layers[count - 1 - index] = current;
                 }
-                decoded = new CodingChainRequestStream(layers);
-                return true;
+                return new CodingChainRequestStream(layers);
             }
             catch { current.Dispose(); throw; }
         }
+
+        private static Stream OpenLayer(CompressionMethod method, Stream inner) => method switch
+        {
+            CompressionMethod.Gzip => new GZipStream(inner, CompressionMode.Decompress),
+            CompressionMethod.Deflate => new DeflateRequestStream(inner, false),
+#if NET10_0_OR_GREATER
+            CompressionMethod.Brotli => new BrotliRequestStream(inner),
+#endif
+            _ => throw new InvalidOperationException("Unexpected request coding.")
+        };
     }
 
     internal sealed class CodingChainRequestStream(Stream[] layers) : Stream

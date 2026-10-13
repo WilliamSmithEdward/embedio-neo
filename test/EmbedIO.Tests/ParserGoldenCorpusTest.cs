@@ -12,6 +12,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Net;
+using EmbedIO.Utilities;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests
@@ -49,6 +50,12 @@ namespace EmbedIO.Tests
 
         [Test]
         public void Http3ControlFrames() => Run("http3_control", 2, GenerateControlCase, EvaluateControl, true, 500);
+
+        [Test]
+        public void UrlEncodedData() => Run("url_encoded", 3, GenerateUrlEncodedCase, EvaluateUrlEncoded, true, 800);
+
+        [Test]
+        public void RequestCodingChains() => Run("request_coding", 3, GenerateCodingCase, EvaluateCoding, false, 300);
 
         // Inputs come from the generator in record mode and, when regenerate is set, are
         // also regenerated in verify mode and compared with the file to catch generator drift.
@@ -653,6 +660,146 @@ namespace EmbedIO.Tests
             catch (TargetInvocationException error) when (error.InnerException != null)
             {
                 return "events:" + string.Join(";", events) + "|" + Describe(error.InnerException);
+            }
+        }
+
+        // URL-encoded data: a query or form body, whether flags group under the null
+        // key and whether the result is mutable.
+        private static string[] GenerateUrlEncodedCase(Rng rng)
+        {
+            var text = new StringBuilder();
+            if (rng.Chance(30)) text.Append(rng.Pick("?", "?", "?", "??", "?&"));
+            var pairs = rng.Next(6);
+            for (var p = 0; p < pairs; p++)
+            {
+                if (p > 0) text.Append(rng.Pick("&", "&", "&", "&", "&&", "&&&", ";"));
+                text.Append(UrlEncodedPair(rng));
+            }
+
+            if (rng.Chance(15)) text.Append(rng.Pick("&", "&&", "=", "&="));
+            return new[] { text.ToString(), rng.Chance(50) ? "1" : "0", rng.Chance(75) ? "1" : "0" };
+        }
+
+        private static string UrlEncodedPair(Rng rng)
+        {
+            var key = rng.Pick("a", "a", "a", "key", "key", "na%6De", "item[0]", "item[1]", "item[]", "[x]", "a[b][c]", "k%5B0%5D", "caf%C3%A9", "%E2%82%AC",
+                "%zz", "%2", "%", "+plus+", "sp ace", "k=v", "é", "€", "", "A", "KEY", "x.y", "n-m", "a%26b");
+            var value = rng.Pick("1", "2", "hello+world", "Z%C3%BCrich", "%2B%26%3D", "a=b", "", "x y", "%", "%4", "%C3", "%80", "%41%42", "true", "é", "\u0001",
+                "v\u0000w", "long" + new string('v', 40), "a&", "=", "?", "%u0041", "%E2%82", "%F0%9F%98%80");
+            return rng.Next(10) switch
+            {
+                0 => key,
+                1 => key + "=",
+                2 => "=" + value,
+                3 => key + "==" + value,
+                4 => key + "=" + value + "=" + value,
+                _ => key + "=" + value,
+            };
+        }
+
+        private static string EvaluateUrlEncoded(string[] inputs)
+        {
+            var data = UrlEncodedDataParser.Parse(inputs[0], inputs[1] == "1", inputs[2] == "1");
+            var text = new StringBuilder("count:").Append(Invariant(data.Count));
+            foreach (var key in data.AllKeys)
+            {
+                var values = data.GetValues(key);
+                text.Append('|').Append(key ?? NullMarker).Append('=').Append(values == null ? NullMarker : string.Join(",", values.Select(v => "[" + v + "]")));
+            }
+
+            bool mutable;
+            try
+            {
+                data.Set("probe", "x");
+                mutable = true;
+            }
+            catch (NotSupportedException)
+            {
+                mutable = false;
+            }
+
+            return text.Append("|mutable:").Append(mutable ? "1" : "0").ToString();
+        }
+
+        // Request content codings: the Content-Encoding value, whether decoding is enabled
+        // and a short body encoded with the known codings in the order listed.
+        private static string[] GenerateCodingCase(Rng rng)
+        {
+            var codings = new List<string>();
+            var count = rng.Pick(0, 1, 1, 1, 2, 2, 2, 3, 3, 4, 8, 9);
+            for (var c = 0; c < count; c++) codings.Add(rng.Pick("gzip", "gzip", "deflate", "deflate", "br", "identity"));
+            if (rng.Chance(15)) codings.Insert(rng.Next(codings.Count + 1), rng.Pick("compress", "x-gzip", "gzip;q=1", "zstd", "gz ip", "GZIP2", "deflate\u0000", "identity2"));
+            var text = new StringBuilder();
+            for (var c = 0; c < codings.Count; c++)
+            {
+                if (c > 0) text.Append(rng.Pick(", ", ",", " , ", ",,", ",\t", " ,"));
+                else if (rng.Chance(20)) text.Append(rng.Pick(" ", "\t", ","));
+                text.Append(rng.Chance(20) ? codings[c].ToUpperInvariant() : codings[c]);
+                if (rng.Chance(10)) text.Append(rng.Pick(" ", "\t", "  "));
+            }
+
+            if (rng.Chance(10)) text.Append(rng.Pick(",", " ,", ", ", ",,"));
+            var payload = Random(rng, rng.Pick(0, 1, 5, 16, 24));
+            return new[] { text.ToString(), rng.Chance(75) ? "1" : "0", Hex(EncodeCodings(payload, codings)) };
+        }
+
+        private static byte[] EncodeCodings(byte[] body, List<string> codings)
+        {
+            foreach (var coding in codings)
+            {
+                if (coding is not ("gzip" or "deflate" or "br")) continue;
+                using var output = new MemoryStream();
+                using (Stream encoder = coding == "gzip" ? new GZipStream(output, CompressionMode.Compress, true)
+                    : coding == "deflate" ? new DeflateStream(output, CompressionMode.Compress, true)
+                    : new BrotliStream(output, CompressionMode.Compress, true))
+                {
+                    encoder.Write(body, 0, body.Length);
+                }
+
+                body = output.ToArray();
+            }
+
+            return body;
+        }
+
+        private static string EvaluateCoding(string[] inputs)
+        {
+            var type = Internal("EmbedIO.Internal.RequestCodingChain");
+            var method = type.GetMethod("TryOpen", Hidden) ?? throw new AssertionException("Missing TryOpen.");
+            using var source = new MemoryStream(FromHex(inputs[2]), false);
+            var arguments = new object?[] { source, inputs[0], inputs[1] == "1", null };
+            bool opened;
+            try
+            {
+                opened = (bool)(method.Invoke(null, arguments) ?? throw new AssertionException("Missing open result."));
+            }
+            catch (TargetInvocationException error) when (error.InnerException != null)
+            {
+                return Describe(error.InnerException);
+            }
+
+            if (!opened) return "false:" + (arguments[3] == null ? NullMarker : "stream");
+            if (ReferenceEquals(arguments[3], source)) return "source";
+            using var decoded = (Stream)(arguments[3] ?? throw new AssertionException("Missing decoded stream."));
+            using var body = new MemoryStream();
+            var buffer = new byte[7];
+            try
+            {
+                int read;
+                while ((read = decoded.Read(buffer, 0, buffer.Length)) != 0) body.Write(buffer, 0, read);
+                return "ok:" + Hex(body.ToArray());
+            }
+            catch (HttpException error)
+            {
+                return Describe(error) + "|read:" + Hex(body.ToArray());
+            }
+            catch (IOException error)
+            {
+                return Describe(error) + "|read:" + Hex(body.ToArray());
+            }
+            catch (InvalidDataException error)
+            {
+                return Describe(error) + "|read:" + Hex(body.ToArray());
             }
         }
 
