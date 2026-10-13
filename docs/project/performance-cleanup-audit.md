@@ -690,4 +690,3 @@ release notes match its changelog section. ClamAV scanned 1,414 files with no
 findings or errors; YARA retained only the eleven narrowly accepted findings.
 This checkpoint excludes the subsequent release-prep documentation overlay and
 does not replace final-head package, API, consumer or migration-example validation.
-
