@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,6 +17,10 @@ namespace EmbedIO
     public partial class WebServer : WebServerBase<WebServerOptions>
     {
         private int _disposeStarted;
+
+        private readonly CancellationTokenSource _drainStarted = new CancellationTokenSource();
+
+        private int _drainSignaled;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer"/> class,
@@ -103,11 +108,13 @@ namespace EmbedIO
         public WebServer(WebServerOptions options)
             : base(options)
         {
+            DrainStarted = _drainStarted.Token;
             Listener = CreateHttpListener();
         }
         internal WebServer(WebServerOptions options, bool nativeHttp3)
             : base(options)
         {
+            DrainStarted = _drainStarted.Token;
             if (nativeHttp3 && options.Mode is not HttpListenerMode.EmbedIOHttp3 and not HttpListenerMode.EmbedIOCombined)
                 throw new ArgumentException("Native HTTP/3 requires an HTTP/3 hosting mode.", nameof(options));
             Listener = CreateHttpListener(nativeHttp3);
@@ -122,6 +129,7 @@ namespace EmbedIO
         public WebServer(Action<WebServerOptions> configure)
             : base(configure)
         {
+            DrainStarted = _drainStarted.Token;
             Listener = CreateHttpListener();
         }
 
@@ -129,6 +137,20 @@ namespace EmbedIO
         /// Gets the underlying HTTP listener.
         /// </summary>
         public IHttpListener Listener { get; }
+
+        /// <summary>
+        /// <para>Gets a token that is canceled when <see cref="DrainAsync"/> is first called, before the listener stops
+        /// accepting new work.</para>
+        /// <para>Applications can register on it to end long-lived work themselves, such as event streams or
+        /// WebSockets they manage outside a <see cref="WebSockets.WebSocketModule"/> configured with
+        /// <see cref="WebSockets.WebSocketModule.CloseOnDrain"/>, so the drain need not wait for its deadline.</para>
+        /// </summary>
+        /// <remarks>
+        /// <para>Callbacks registered on the token run synchronously in the call to <see cref="DrainAsync"/>; keep them
+        /// short. An exception thrown by a callback is logged and does not stop the drain.</para>
+        /// <para>The token is not canceled by <c>RunAsync</c> cancellation or disposal, which remain immediate stops.</para>
+        /// </remarks>
+        public CancellationToken DrainStarted { get; }
 
         /// <summary>Stops accepting new work and lets accepted responses finish within a deadline.</summary>
         /// <param name="timeout">The maximum drain interval before remaining connections are aborted.</param>
@@ -145,7 +167,47 @@ namespace EmbedIO
             cancellationToken.ThrowIfCancellationRequested();
             if (Listener is not IGracefulHttpListener graceful)
                 throw new NotSupportedException("The selected listener does not support graceful drain.");
+            SignalDrainStarted();
             return graceful.DrainAsync(timeout, cancellationToken);
+        }
+
+        // Once per server: drain-aware modules first, so they can close long-lived connections while their
+        // transports are alive, then the application's callbacks.
+        private void SignalDrainStarted()
+        {
+            if (Interlocked.Exchange(ref _drainSignaled, 1) != 0)
+                return;
+
+            NotifyDrainStarted(Modules);
+            try
+            {
+                _drainStarted.Cancel();
+            }
+            catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                ex.Log(LogSource, "A DrainStarted callback threw; the drain continues.");
+            }
+        }
+
+        private void NotifyDrainStarted(IEnumerable<IWebModule> modules)
+        {
+            foreach (var module in modules)
+            {
+                if (module is EmbedIO.Internal.IDrainAwareModule aware)
+                {
+                    try
+                    {
+                        aware.OnDrainStarted();
+                    }
+                    catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+                    {
+                        ex.Log(LogSource, "A module failed to prepare for the drain; the drain continues.");
+                    }
+                }
+
+                if (module is IWebModuleContainer container)
+                    NotifyDrainStarted(container.Modules);
+            }
         }
 
         /// <inheritdoc />
@@ -162,6 +224,8 @@ namespace EmbedIO
                 {
                     ex.Log(LogSource, "Exception thrown while disposing HTTP listener.");
                 }
+
+                _drainStarted.Dispose();
 
                 "Listener closed.".Info(LogSource);
             }
