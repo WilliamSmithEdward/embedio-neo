@@ -296,6 +296,19 @@ is still open at this recheck; no fixed runtime has been verified. The original
 native adapter bypasses this particular `QuicStream` ownership path, but that
 does not by itself prove bounded memory for the complete native HTTP/3 engine.
 
+### Upstream fix merged (13 October 2026)
+
+[Runtime PR135591](https://github.com/dotnet/runtime/pull/135591) merged into
+`main` as `cba3c1d6e77baeb1dc6f8b25f2775ac4b606cce4`, closing
+[runtime issue135583](https://github.com/dotnet/runtime/issues/135583).
+It changes `MsQuicBuffers` to a sealed class so the stream and safe handle share
+the same buffer owner, preserving disposal when the native stream handle is
+released. No .NET 10 servicing backport or released runtime containing the fix
+has been verified. Our .NET 10.0.12 measurements remain affected-runtime evidence.
+Issue #278 therefore retains released-runtime verification and final endurance
+acceptance; the upstream merge alone does not complete either requirement.
+No further Kestrel diagnosis is part of this release-preparation work.
+
 ### Original native binding comparison
 
 The same standalone workload can now select `--provider native`. It sends no

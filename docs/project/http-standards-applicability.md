@@ -31,6 +31,7 @@ the 48-RFC inventory, retest the engine or certify complete conformance.
 | Historical topic | Current accepted disposition | Evidence and remaining scope |
 | --- | --- | --- |
 | F1: 1xx accepted as final status | [Shared final-status validation](../../src/EmbedIO/Net/Internal/HttpResponseFieldSections.cs) restricts assignments to 200–599. Both TCP and multiplexed response adapters invoke it. The former 1xx-final defect is historical. | The approved correction and consumer migration are in [Neo v1 to v2](../compatibility/neo-v1-to-v2.md). Current response-section state and wire tests are present; this refresh is not another test run. |
+| F2: ordinary 2xx implicitly accepts an extension | Draft PR #182 at 52513d46314a3260a698637862066b108fb213ae implements the owner-approved explicit acceptance guard shared by H2/H3. Unaccepted extended-CONNECT success becomes empty 501 before headers/body; explicit errors, application dispatch, plain CONNECT and actual WebSocket/tunnel handoffs remain. This source is not merged on main or released. | All 38 H2 and 19 public-provider H3 guard/rejection cases pass in each actual Windows/Linux/macOS TRX from CI 38426939280 (171 passes, zero skips/failures). The unrelated raw macOS runtime rebind failure remains quarantined under its existing approved policy. Direct-stream handlers must migrate as described in [explicit acceptance](../compatibility/neo-v1-to-v2.md#explicit-extended-connect-acceptance). Exact runnable-example verification remains a separate gate. |
 | F3: no public informational API | [IHttpResponseSections](../../src/EmbedIO/IHttpResponseSections.cs) provides awaited informational sections, excluding 101 and invalid final/protocol/commitment states. Third-party `IHttpResponse` implementations need no new members. | `Http1InformationalSectionsTest`, `Http2InformationalSectionsTest`, `ResponseSectionStateTest` and `ResponseSectionLifetimeTest` cover the accepted surface. The old reflection-only probe does not define its current scope. See [response field sections](../guides/response-field-sections.md). |
 | F4: response trailers unavailable | The same public capability supplies `DeclareTrailers` and `SetTrailers`; built-in H1/H2/H3 output paths validate and copy separate trailer metadata. | `Http1ResponseTrailersTest`, `Http2ResponseTrailersTest` and `Http3ResponseTrailersTest` are accepted tests. The historical “no caller/no test/no API” finding is superseded. Independent peer, resource and final platform/package acceptance remain separate gates. |
 | F4: request trailer access | Accepted [IHttpRequestTrailers](../../src/EmbedIO/IHttpRequestTrailers.cs) adds optional access to immutable, separate snapshots after complete valid input, without accessor I/O. Failed or abandoned input remains unavailable; existing request implementers need no new members. | [PR345](https://github.com/WilliamSmithEdward/embedio-neo/pull/345) is merged. [HttpRequestTrailerVisibilityTest](../../test/EmbedIO.Tests/HttpRequestTrailerVisibilityTest.cs) covers H1/H2/H3, pending input, disposal, late FIN and completed snapshots; all 12 new cases passed on each hosted OS. See [request trailers](../guides/request-trailers.md). This accessor does not complete extension, browser or provider acceptance. |
@@ -136,8 +137,12 @@ Accepted [PR374](https://github.com/WilliamSmithEdward/embedio-neo/pull/374), at
 
 The default System.Net.Quic provider's diagnosed per-stream send-buffer retention
 remains tracked in [issue278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278).
-The upstream [candidate correction](https://github.com/dotnet/runtime/pull/135591)
-is open and unmerged at this refresh; it is not a verified released runtime.
+The upstream [correction](https://github.com/dotnet/runtime/pull/135591)
+merged into runtime `main` on 13 October 2026 as `cba3c1d6e77baeb1dc6f8b25f2775ac4b606cce4`,
+and [runtime issue135583](https://github.com/dotnet/runtime/issues/135583) is closed.
+No .NET 10 servicing backport or released runtime containing this fix has been
+verified. The tested .NET 10.0.12 remains affected; upstream merge does not replace
+the released-runtime recheck or final HTTP/3 endurance acceptance.
 The native candidate's scoped ownership controls do not establish final HTTP/3
 endurance or bounded total native memory.
 Keep those topics, the remaining normative ledger, supported assets/platforms,
