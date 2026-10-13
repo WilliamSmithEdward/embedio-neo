@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Use an empty 500 response for unhandled application exceptions by default in Neo v2,
+  without exposing their type or message. Explicit HTML and diagnostic-header handlers,
+  custom handlers, logging and application-authored HTTP errors remain available. See
+  [Neo v1-to-v2 migration](docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500).
 - Add opt-in server certificate rotation from Neo #148. `ServerCertificateSource`, configured with
   `WithCertificateSource` or passed to `HttpListener`, holds the server certificate; `Publish` replaces
   it while the server runs. New TLS handshakes over TCP (HTTP/1.1 and HTTP/2) and QUIC (HTTP/3, both
