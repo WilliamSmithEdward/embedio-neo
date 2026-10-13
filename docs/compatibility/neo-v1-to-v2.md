@@ -500,3 +500,21 @@ and native-provider deployment documentation, confirm extension/platform support
 conformance, fuzzing, interoperability, sustained-load and exact-head CI gates.
 Update README HTTP badges when the corresponding engine support is integrated
 and verified. Program #181 remains open; this guide does not authorize a release.
+
+## HTTP/1 idle closure
+
+William approved the scoped default change in [issue #281](https://github.com/WilliamSmithEdward/embedio-neo/issues/281)
+on 2026-10-12. This candidate is unreleased. A complete, fully consumed HTTP/1
+exchange waiting for its successor attempts orderly send shutdown when the
+existing timeout expires and no successor input has been admitted. Clients can
+receive EOF where v1 commonly produced a reset exception. Handle either terminal
+outcome as the end of that connection; do not depend on an idle reset exception
+or blindly retry requests whose delivery is uncertain.
+
+The fifteen-second default and configured deadlines do not change. Partial
+headers, unread bodies, unfinished responses and peer failures retain abort
+behavior. TLS uses public runtime shutdown support where available; interrupted
+or failed alert writes retire without a new grace period. Older runtimes without
+that API retain their existing TLS close behavior. Orderly closure is not
+guaranteed when a peer races expiry or faults. The [design record](../project/http1-idle-closure.md)
+distinguishes source/runtime observations, ownership checks and remaining limits.

@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+- Owner-approved Neo v2 candidate: completed HTTP/1 keep-alive idle exchanges
+  attempt orderly send shutdown at the existing deadline instead of inherited
+  reset closure. Partial requests/responses retain abort behavior; TLS capability
+  and interruption fallbacks are documented in the v1-to-v2 migration guide.
+  This is unreleased and changes no public APIs or timeout values.
+
 - Add opt-in WebSocket closing during graceful drain from Neo #280. With `WebSocketModule.CloseOnDrain`,
   `WebServer.DrainAsync` closes the module's WebSockets with 1001 Going Away as it starts, including ones
   accepted afterwards, after any message already being sent, so the drain ends once clients close instead
