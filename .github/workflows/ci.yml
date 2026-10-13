@@ -28,7 +28,7 @@ on:
         type: boolean
         default: false
       runtime-close-probe:
-        description: Run the independent .NET 10.0.12 close diagnostic on all three desktop platforms
+        description: Run the independent .NET 10.0.13 close diagnostic on all three desktop platforms
         type: boolean
         default: false
       quic-retirement-gate:
@@ -310,7 +310,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.401
+          dotnet-version: 10.0.402
       - name: Restore the independent runtime probe
         run: dotnet restore test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj --locked-mode
       - name: Build with the SDK analyzers

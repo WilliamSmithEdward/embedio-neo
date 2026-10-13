@@ -81,7 +81,7 @@ paths. The accepted entry documents the affected code and the review boundary.
 Actions use full commit SHAs, runners named OS releases, scanner images digests,
 Python tools hash-locked files, and NuGet packages committed `packages.lock.json`
 files. global.json pins the exact SDK with roll-forward disabled, matching the
-workflows' SDK and MAUI workload pins.
+workflows' SDK pins; the MAUI workload set is pinned for the same feature band.
 YARA Forge rules and the YARA-X engine use releases and SHA-256 digests. ClamAV's
 signatures change too often to pin, so freshclam fetches and verifies them.
 

@@ -14,7 +14,7 @@ The integration was requested in [feature #32](https://github.com/WilliamSmithEd
 ## Availability and prerequisites
 
 The adapter builds for .NET Standard 2.0 and .NET 10, matching the core library.
-It references Microsoft DI and Hosting.Abstractions 10.0.12. Those dependencies,
+It references Microsoft DI and Hosting.Abstractions 10.0.13. Those dependencies,
 including the async-interface compatibility packages needed by .NET Standard,
 belong to the optional adapter. Installing only the core adds none of them.
 

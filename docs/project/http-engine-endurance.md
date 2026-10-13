@@ -304,7 +304,10 @@ does not by itself prove bounded memory for the complete native HTTP/3 engine.
 It changes `MsQuicBuffers` to a sealed class so the stream and safe handle share
 the same buffer owner, preserving disposal when the native stream handle is
 released. No .NET 10 servicing backport or released runtime containing the fix
-has been verified. Our .NET 10.0.12 measurements remain affected-runtime evidence.
+has been verified. Runtime 10.0.13, released on 13 October 2026, does not contain
+it: comparing `cba3c1d6` with the `v10.0.13` tag shows the two histories diverged,
+and a search that day found no `release/10.0` backport pull request. Our .NET
+10.0.12 measurements remain affected-runtime evidence.
 Issue #278 therefore retains released-runtime verification and final endurance
 acceptance; the upstream merge alone does not complete either requirement.
 No further Kestrel diagnosis is part of this release-preparation work.
