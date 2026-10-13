@@ -1,5 +1,6 @@
 ﻿#if NET10_0_OR_GREATER
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Quic;
@@ -8,6 +9,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal.Http3
 {
@@ -18,14 +20,14 @@ namespace EmbedIO.Net.Internal.Http3
     {
         internal abstract ValueTask<Http3AcceptedConnection> AcceptAsync(CancellationToken token);
         public abstract ValueTask DisposeAsync();
-        internal static Http3ListenerBinding Bind(IPEndPoint endpoint, X509Certificate2 certificate, bool native)
-            => native ? NativeBinding.Create(endpoint, certificate) : SystemBinding.Create(endpoint, certificate);
+        internal static Http3ListenerBinding Bind(IPEndPoint endpoint, ServerCertificateSource certificates, bool native)
+            => native ? NativeBinding.Create(endpoint, certificates) : SystemBinding.Create(endpoint, certificates);
 
         private sealed class SystemBinding : Http3ListenerBinding
         {
             private readonly QuicListener _listener;
             private SystemBinding(QuicListener listener) { _listener = listener; }
-            internal static SystemBinding Create(IPEndPoint endpoint, X509Certificate2 certificate)
+            internal static SystemBinding Create(IPEndPoint endpoint, ServerCertificateSource certificates)
             {
                 var options = new QuicListenerOptions
                 {
@@ -41,7 +43,8 @@ namespace EmbedIO.Net.Internal.Http3
                         IdleTimeout = TimeSpan.FromSeconds(60),
                         HandshakeTimeout = TimeSpan.FromSeconds(10),
                         ServerAuthenticationOptions = new SslServerAuthenticationOptions
-                        { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = certificate },
+                        // Read per connection, so a published certificate applies to the next handshake.
+                        { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = certificates.Current },
                     }),
                 };
                 return new SystemBinding(QuicListener.ListenAsync(options).AsTask().GetAwaiter().GetResult());
@@ -54,11 +57,24 @@ namespace EmbedIO.Net.Internal.Http3
         {
             private readonly MsQuicApi _api;
             private readonly MsQuicRegistration _registration;
-            private readonly MsQuicConfiguration _configuration;
+            private static readonly byte[] Alpn = { (byte)'h', (byte)'3' };
             private readonly MsQuicNativeListener _listener;
-            private NativeBinding(MsQuicApi api, MsQuicRegistration registration, MsQuicConfiguration configuration, MsQuicNativeListener listener)
-            { _api = api; _registration = registration; _configuration = configuration; _listener = listener; }
-            internal static NativeBinding Create(IPEndPoint endpoint, X509Certificate2 certificate)
+            private readonly ServerCertificateSource _certificates;
+            private readonly object _configurationSync = new();
+            // Configurations of replaced certificates. Connections configured with them may still be open, so
+            // they are released with the binding, like the current one.
+            private readonly List<MsQuicConfiguration> _retiredConfigurations = new();
+            private MsQuicConfiguration _configuration;
+            private long _configurationVersion;
+            private byte[] _configurationThumbprint;
+            private long _failedVersion;
+            private NativeBinding(MsQuicApi api, MsQuicRegistration registration, MsQuicConfiguration configuration, MsQuicNativeListener listener,
+                ServerCertificateSource certificates, long version, byte[] thumbprint)
+            {
+                _api = api; _registration = registration; _configuration = configuration; _listener = listener;
+                _certificates = certificates; _configurationVersion = version; _configurationThumbprint = thumbprint;
+            }
+            internal static NativeBinding Create(IPEndPoint endpoint, ServerCertificateSource certificates)
             {
                 MsQuicApi? api = null;
                 MsQuicRegistration? registration = null;
@@ -68,13 +84,14 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     api = MsQuicApi.Open();
                     registration = api.CreateRegistration();
-                    var alpn = new byte[] { (byte)'h', (byte)'3' };
-                    configuration = registration.CreateHttp3ListenerConfiguration(alpn);
+                    var version = certificates.Version;
+                    var certificate = certificates.Current;
+                    configuration = registration.CreateHttp3ListenerConfiguration(Alpn);
                     configuration.LoadServerCertificate(certificate);
                     listener = registration.CreateListener();
                     listener.EnableHttp3Acceptance();
-                    listener.StartHttp3(endpoint, alpn);
-                    return new NativeBinding(api, registration, configuration, listener);
+                    listener.StartHttp3(endpoint, Alpn);
+                    return new NativeBinding(api, registration, configuration, listener, certificates, version, Thumbprint(certificate));
                 }
                 catch
                 {
@@ -96,7 +113,7 @@ namespace EmbedIO.Net.Internal.Http3
                     {
                         connection.EnableStreamAcceptance();
                         var datagrams = connection.EnableDatagrams();
-                        connection.Configure(_configuration);
+                        connection.Configure(CurrentConfiguration());
                         return new NativePeer(connection, _listener, datagrams);
                     }
                     catch (Exception error) when (error is IOException or ObjectDisposedException)
@@ -115,6 +132,49 @@ namespace EmbedIO.Net.Internal.Http3
                     }
                 }
             }
+            // MsQuic loads a configuration's credentials once, so a published certificate gets a new
+            // configuration. Republishing the same certificate, such as reloading an unchanged file, reuses
+            // the current one, so retained configurations grow only with actual replacements. If a new
+            // certificate cannot be loaded, handshakes keep the previous one and the failure is logged once
+            // per publication.
+            private MsQuicConfiguration CurrentConfiguration()
+            {
+                var version = _certificates.Version;
+                lock (_configurationSync)
+                {
+                    if (version == _configurationVersion || version == _failedVersion)
+                        return _configuration;
+
+                    var certificate = _certificates.Current;
+                    var thumbprint = Thumbprint(certificate);
+                    if (thumbprint.AsSpan().SequenceEqual(_configurationThumbprint))
+                    {
+                        _configurationVersion = version;
+                        return _configuration;
+                    }
+
+                    MsQuicConfiguration? next = null;
+                    try
+                    {
+                        next = _registration.CreateHttp3ListenerConfiguration(Alpn);
+                        next.LoadServerCertificate(certificate);
+                    }
+                    catch (Exception error) when (error is not OutOfMemoryException)
+                    {
+                        next?.Dispose();
+                        _failedVersion = version;
+                        $"HTTP/3 could not load the published server certificate; new connections keep the previous certificate: {error.Message}".Error();
+                        return _configuration;
+                    }
+
+                    _retiredConfigurations.Add(_configuration);
+                    _configuration = next;
+                    _configurationVersion = version;
+                    _configurationThumbprint = thumbprint;
+                    return next;
+                }
+            }
+            private static byte[] Thumbprint(X509Certificate2 certificate) => certificate.GetCertHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
             public override async ValueTask DisposeAsync()
             {
                 try { await _listener.StopAsync().ConfigureAwait(false); }
@@ -123,7 +183,18 @@ namespace EmbedIO.Net.Internal.Http3
                     try { _listener.Dispose(); }
                     finally
                     {
-                        try { _configuration.Dispose(); }
+                        try
+                        {
+                            lock (_configurationSync)
+                            {
+                                try { _configuration.Dispose(); }
+                                finally
+                                {
+                                    foreach (var retired in _retiredConfigurations)
+                                        retired.Dispose();
+                                }
+                            }
+                        }
                         finally { try { _registration.Dispose(); } finally { _api.Dispose(); } }
                     }
                 }
