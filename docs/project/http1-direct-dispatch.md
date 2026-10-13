@@ -1,4 +1,4 @@
-# Direct request dispatch from TCP connections
+# Direct request dispatch from connections
 
 The managed TCP engine hands each admitted HTTP/1.1 and HTTP/2 request straight
 from its connection to the server's handler. This record explains the path it
@@ -47,9 +47,15 @@ application code.
   fell sixfold while p99 rose tenfold, and at 256 connections p99 reached
   50 ms against the base's 9.6 ms. Kestrel dispatches every receive completion
   to the pool for the same reason.
-- Combined mode (TCP plus QUIC) forwards the dispatcher to its TCP listener,
-  so its HTTP/1.1 and HTTP/2 requests take the same path; QUIC requests keep
-  the pull loop.
+- HTTP/3: the listener's session starts the handler on the request stream's
+  own task, which already left the connection's accept loop, instead of
+  writing the context to its 256-slot channel. Before this change a QUIC
+  request passed through that channel, the combined listener's second
+  channel and the server's `Task.Run`: three thread-pool hops between the
+  stream and the handler. The exchange waits for the response as before,
+  and a handler that blocks before its first suspension holds its own
+  stream only.
+- Combined mode (TCP plus QUIC) forwards the dispatcher to both transports.
 - HTTP/2: `RegisterMultiplexedContext` takes the same `Register`. Each exchange
   already runs on its own work item (`Http2Dispatcher.StartApplication`), so
   the handler never runs on the connection's frame loop and concurrent streams
@@ -57,10 +63,11 @@ application code.
 - `WebServer.DispatchAsync` prepares the context (server token, route) for both
   the direct path and the remaining pull loop, and owns the handler's task: a
   fault the handler leaves uncaught is observed and logged, and a failure
-  before the handler starts becomes a faulted task that closes the HTTP/1.1
-  connection or resets the HTTP/2 stream.
-- `WebServer.ProcessRequestsAsync` keeps its pull loop for listeners without a
-  dispatcher, today HTTP/3.
+  before the handler starts is answered with an empty 500 that closes the
+  connection, or, if that close fails too, by aborting the response, so
+  that the connection never waits for a response that cannot end.
+- `WebServer.ProcessRequestsAsync` keeps its pull loop for requests admitted
+  before the dispatcher was installed.
 
 `IHttpListener.GetContextAsync` is public and unchanged. Standalone
 `HttpListener` users and the listener tests drive the queue through it; the
@@ -223,6 +230,10 @@ HTTP/1.1 plain working-set figures differ by up to 4 KB between orientations
 for both engines. Thread counts are identical. All server sockets were in
 `Established` while idle and none remained after the client closed.
 
+### HTTP/3
+
+Pending.
+
 ## Limits
 
 - Measurements apply to the recorded source revisions and this host; they are
@@ -231,5 +242,3 @@ for both engines. Thread counts are identical. All server sockets were in
   thread. A handler that blocks synchronously occupies a thread-pool worker
   either way; the harness's blocking-handler case checks that other connections
   keep being served, not that blocking is free.
-- HTTP/3 still uses the pull loop; moving it to the dispatcher is a follow-up
-  once the HTTP/3 listener files are free of concurrent changes.
