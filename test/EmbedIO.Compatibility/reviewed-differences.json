@@ -3251,6 +3251,13 @@
           "reason": "Owner-approved warning cleanup renames the route-path argument to requestPath, including ArgumentException.ParamName. Exception types and validation remain unchanged. docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved."
         }
       ]
+    },
+    "macos": {
+      "derivesFrom": "unix",
+      "skipCasePrefixes": [
+        "websocket/"
+      ],
+      "reason": "The original EmbedIO 3.5.2 managed WebSocket on macOS can leave the echo unanswered: in run 38449281895 (artifact compatibility-results-macos-15/parity-audit/Upstream-run.log) the harness's 10 s receive deadline fired with SocketException 89 and the upstream process aborted. macOS skips the four WebSocket message cases for every build so the case lists stay aligned; Windows and Linux keep them. EmbedIO.Tests covers Neo's WebSocket behavior on macOS."
     }
   },
   "upstreamOutcomeAlternatives": {},
