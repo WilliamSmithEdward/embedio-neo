@@ -21,6 +21,10 @@ Keep the certificate alive until the server stops and is disposed. Protect the
 PFX/password using platform-appropriate secure storage; do not ship a shared
 production private key inside an APK or source repository.
 
+To install a renewed certificate without restarting the server, configure a
+`ServerCertificateSource` instead; see
+[rotating the server certificate](certificate-rotation.md).
+
 The client must trust the issuer and connect using a DNS name or IP address
 present in the certificate's Subject Alternative Name. A self-signed certificate
 needs explicit client trust. Do not use an accept-all validation callback in a
