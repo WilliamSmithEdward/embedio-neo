@@ -51,3 +51,10 @@ before cancellation, no run/cancellation error and Stopped state afterward.
 Comparator mutations verify rejection of unknown errors, changed payloads,
 premature Neo completion and a missing Neo successor. The raw original artifact
 and reviewed comparison are retained separately under TestResults/http-engine.
+
+## TestWebServer readiness
+
+Upstream EmbedIO 3.5.2's `TestWebServer.ProcessRequestsAsync` blocked on the stop token's wait
+handle, so `RunAsync` never returned its task to a direct caller and `Start` held a pool thread
+for the server's lifetime. Neo awaits cancellation instead; a stop through `Dispose` or a fatal
+error still ends `RunAsync` normally. This is a deliberate correction of inherited behavior.
