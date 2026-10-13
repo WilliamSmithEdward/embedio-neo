@@ -1,18 +1,14 @@
 # Migrating from EmbedIO-Neo v1 to v2
 
-This guide tracks the owner-designated **Neo v2** release scope for the modern
-HTTP engine program [#181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181)
-and umbrella [PR #182](https://github.com/WilliamSmithEdward/embedio-neo/pull/182).
-It is a living development guide. Neo v2 has not been published; no release date,
-final package version, or completion of the default-listener transition is implied.
+This guide explains the API and behavior changes to consider when upgrading from
+EmbedIO-Neo v1 to v2. Neo v2 is unreleased; these changes are not available in
+the published v1 package.
 
 The comparison baseline is the published source tag
 [v1.0.3](https://github.com/WilliamSmithEdward/embedio-neo/tree/v1.0.3).
 If you use an earlier v1 patch, also review the
 [general migration notes](migration.md): they include historical upstream-to-Neo
-and earlier v1 changes that are not new in v2. Compare against the released tag,
-not the unreleased main branch: source compatibility changes already present on
-main can still be new to a v1 package consumer.
+and earlier v1 changes that are not new in v2.
 
 ## Minimum HTTPS TLS version
 
@@ -36,15 +32,15 @@ OS certificate, cipher and trust policy still apply; the minimum does not make a
 weak cipher or untrusted certificate acceptable.
 
 The IETF deprecated TLS 1.0 and TLS 1.1 in [RFC 8996](https://www.rfc-editor.org/rfc/rfc8996.html).
-William approved this compatibility change for v2. Provider and retained-runtime
-validation remain required before release; source configuration is not evidence
-that every deployment can negotiate either allowed version.
+Check that your target runtime and security provider can negotiate the intended
+version; source configuration alone does not establish support for either allowed
+version in every deployment.
 
 ## Rebuild and update source references
 
-V2 includes the approved compiler/API cleanup as well as the engine replacement.
-Rebuild dependent assemblies; do not treat the major upgrade as a binary-compatible
-drop-in. Verified v1.0.3-to-current-source changes include:
+V2 replaces the HTTP engine and changes some APIs. Rebuild dependent assemblies;
+do not treat the major upgrade as a binary-compatible drop-in. Changes from
+v1.0.3 include:
 
 | Neo v1.0.3 API | V2 source migration |
 | --- | --- |
@@ -53,7 +49,7 @@ drop-in. Verified v1.0.3-to-current-source changes include:
 | RedirectModule.RedirectUrl is string | It is Uri; existing string constructors remain available. |
 | ITestWebServer.BaseUrl is string | It is Uri; update custom test-server implementations and text comparisons. |
 
-Review the [approved API-cleanup notes](migration.md#warning-free-api-cleanup-unreleased-owner-approved)
+Review the [API migration notes](migration.md#warning-free-api-cleanup-unreleased-owner-approved)
 for named-argument changes, URI overloads, nullability annotations, error parameter
 names, cache ownership and exception-recovery boundaries. Specify the intended
 argument type when passing null to overloaded string/Uri entry points.
@@ -63,14 +59,15 @@ upgrading to v2 does not introduce them again. Still run serialization contract
 tests for custom converters, unsupported payloads, numeric precision and exact
 response bytes against the final v2 package. The
 [JSON compatibility guide](../user-reports/json-migration-compatibility.md)
-records the audited behavior and its limits.
+describes the behavior and its limits.
 
 ## Unhandled exceptions return an empty 500
 
 Neo v2 uses `ExceptionHandler.EmptyResponse` as the default unhandled-exception
 handler. Before response headers are committed, an otherwise unhandled application
 exception produces an empty `500 Internal Server Error` response. The handler does
-not add exception type or message headers. Neo v1's default HTML page included the exception type and
+not add exception type or message headers. Neo v1's default HTML page included the
+exception type and
 message even when `ExceptionHandler.IncludeStackTraces` was false.
 
 Exceptions still reach server logging. Custom exception handlers and explicit
@@ -89,8 +86,8 @@ HTML handler. `ExceptionHandler.EmptyResponseWithHeaders` remains an explicit
 alternative that exposes the exception type and message in diagnostic headers.
 Use these detailed handlers only where exposing application diagnostics is intended.
 For structured API errors, the [opt-in problem-details handler](../guides/problem-details.md)
-remains available. This default change is unreleased; update clients that parse the
-old default HTML page before adopting v2.
+remains available. Update clients that parse the old default HTML page before
+adopting v2.
 
 ## Direct HTTP/1 response flushing
 
@@ -109,18 +106,16 @@ no body bytes. Empty writes keep their existing behavior.
 
 Automatic server cleanup completes direct HTTP/1 output without calling the
 application flush path. Buffered serializers and other output wrappers retain
-their flushing behavior, including empty responses and final framing. This
-approved change is unreleased; test custom streaming code against the final v2
-package before upgrading.
+their flushing behavior, including empty responses and final framing. Test custom
+streaming code against the v2 package before upgrading.
 
 ## Explicit JSON metadata method names
 
-The unreleased Native AOT APIs use distinct names: `Json.SerializeWithMetadata`,
+The Native AOT APIs use distinct names: `Json.SerializeWithMetadata`,
 `Json.DeserializeWithMetadata`, `GetRequestDataWithMetadataAsync` and
-`SendDataWithMetadataAsync`. William approved renaming only these new APIs after
-their original overload names made existing null-options calls ambiguous and
-changed serializer callback selection for null data. Update code using the earlier
-v2 branch metadata overloads to these names. No published v1 metadata API is renamed.
+`SendDataWithMetadataAsync`. Use these names for explicit JSON metadata; they keep
+null-options calls unambiguous and preserve serializer callback selection for null
+data. No published v1 metadata API is renamed.
 
 Existing `Json.Deserialize<T>(json, null)`, options-based serialization and
 `SendDataAsync(serializer, null)` retain their signatures and behavior. Explicit
@@ -129,12 +124,8 @@ and Native AOT applications. See [the Native AOT guide](../guides/trimming-and-n
 
 ## Listener selection and deployment
 
-William approved removal of both the Microsoft backend and the inherited Mono
-implementation on 2026-10-10. The engine branch now contains the original TCP
-listener, protocol input, request actor, response output, endpoint/transport
-lifetime and request/response/context view replacements. Complete program
-acceptance is still required before shipping. This approval supersedes the earlier plan to retain Microsoft mode and
-only deprecate Mono.
+V2 replaces the inherited Mono listener with the new HTTP engine and removes the
+Microsoft `System.Net.HttpListener` backend.
 
 Remove `WithMicrosoftHttpListener()` and `HttpListenerMode.Microsoft` from source
 configuration. Applications that persisted its numeric value, 1, must migrate
@@ -147,38 +138,32 @@ HTTP.sys URL reservations and kernel certificate bindings are specific to the
 removed backend; use the replacement engine's HTTPS certificate configuration and
 validate deployment guidance for your application model.
 
-The replacement engine is the listener family on the engine branch; both old
-implementations are removed. HTTP/3 public selection still uses System.Net.Quic
-for its QUIC transport, with the independently authored HTTP/3 protocol engine.
-That transport API is distinct from the removed System.Net.HttpListener backend.
-The native MsQuic application provider is integrated as an internal candidate;
-its default activation and remaining extensions/performance acceptance are still
-unfinished. These source changes are not shipping acceptance. Keeping the
-EmbedIO mode name does not retain the old parser's permissive behavior.
+HTTP/3 uses `System.Net.Quic` for transport. This is distinct from the removed
+`System.Net.HttpListener` backend. The native MsQuic application provider is not
+available for public selection; do not depend on it as the default transport.
+Keeping the EmbedIO mode name does not retain the old parser's permissive behavior.
 
-The current engine branch has these modes:
+Choose the mode appropriate for your deployment:
 
-| Mode | Current development behavior | Migration action |
+| Mode | Behavior | Migration action |
 | --- | --- | --- |
-| EmbedIO | Original HTTP/1 and HTTP/2 engine over TCP; full program acceptance remains pending. | Exercise existing routes and clients against the new engine. |
-| Microsoft (v1 only) | Removed on the v2 engine branch. | Remove the mode selection and migrate backend-specific deployment configuration. |
+| EmbedIO | HTTP/1 and HTTP/2 over TCP. | Exercise existing routes and clients against the new engine. |
+| Microsoft (v1 only) | Removed in v2. | Remove the mode selection and migrate backend-specific deployment configuration. |
 | EmbedIOHttp3 | Opt-in HTTP/3 over UDP, without a TCP listener. | Use the .NET 10 asset, supported native QUIC, HTTPS and a certificate with its private key. |
 | EmbedIOCombined | HTTP/1 and HTTP/2 over TCP alongside HTTP/3 over UDP on the same HTTPS prefixes. | Permit both transports; startup requires both bindings and has no silent TCP-only fallback. |
 
 Library targets remain .NET Standard 2.0 and .NET 10. HTTP/3 and combined mode
 require the .NET 10 asset and runtime/native QUIC support; the legacy asset cannot
 provide them. Library namespaces and package identities remain preserved.
-Python is used by development/testing tools, not by the shipped HTTP engine.
-HTTP/2 over TLS requires the ALPN-capable .NET 10 asset; legacy cleartext HTTP/2
-coverage does not establish TLS negotiation support on .NET Standard.
+HTTP/2 over TLS requires the ALPN-capable .NET 10 asset. Cleartext HTTP/2 support
+on .NET Standard does not provide TLS negotiation support.
 
 Follow the [HTTP/3 deployment guide](../guides/http3.md) for certificate lifetime,
 key provisioning, hostname validation, native libraries and platform limits.
-HTTP/3 availability does not imply automatic Alt-Svc discovery. Native MsQuic
-transport, unreliable datagram and WebTransport work is still being integrated;
-unit coverage or a successful native probe does not establish application-level
-availability. Consult the [engine program](../project/http-engine.md) before
-selecting those capabilities.
+HTTP/3 availability does not imply automatic Alt-Svc discovery or an available
+WebTransport server. Native MsQuic transport, unreliable datagrams and WebTransport
+are not yet available as supported public deployment options. Consult the
+[capability status](../project/http-engine.md) before selecting those features.
 
 ## Request framing and client behavior
 
@@ -211,8 +196,7 @@ use the old request count or Keep-Alive max value as a signal.
 
 ## Response statuses, output and shutdown
 
-Neo v2 restricts final-response StatusCode assignments to 200-599. The correction
-is implemented on the engine development branch and remains unreleased.
+Neo v2 restricts final-response StatusCode assignments to 200-599.
 Manual assignments of 100-199 or 600-999 will throw before changing the response.
 Valid unregistered codes such as 471 remain supported. Map internal error codes
 to a valid HTTP status and carry the internal identifier in the payload.
@@ -228,17 +212,16 @@ Bodyless statuses and HEAD cannot emit representation bytes. Configure metadata
 before committing output; a 304 representation length must describe the selected
 representation rather than a body sent with that response.
 
-The HTTP/1 response-model replacement also suppresses attempted content writes
+HTTP/1 also suppresses attempted content writes
 for 205 Reset Content and commits Content-Length: 0 without chunk framing. The
 previous HTTP/1 model emitted those bytes, unlike HTTP/2 and HTTP/3. Applications
 which used 205 with a payload should use a body-capable status such as 200 instead.
-This candidate remains under validation on the development branch; no release
-is implied. See [RFC 9110 section 15.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.6).
+See [RFC 9110 section 15.3.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.6).
 
 For HTTP/1 responses, declare Content-Length only when it matches the encoded
 bytes actually sent, including any transformation, or use automatic/chunked
-framing. The owner-approved output correction rejects a write exceeding that
-length with ProtocolViolationException before submitting those bytes. Closing
+framing. A write exceeding that length throws ProtocolViolationException before
+submitting those bytes. Closing
 with an incomplete declared body closes the connection; it no longer rewrites an
 explicit positive length to zero or permits another response on that connection.
 HEAD and bodyless representation metadata retain their separate semantics.
@@ -247,7 +230,7 @@ A failed transport submission, including cancellation during output, prevents
 later body/footer bytes and connection reuse. IgnoreWriteExceptions continues to
 suppress managed transport-write exceptions; it cannot restore failed framing.
 Cancellation before obtaining the writer gate leaves otherwise healthy output
-usable. These changes belong to the unreleased v2 output replacement.
+usable.
 
 Exception handlers now run only while the response is replaceable, that is,
 before its final headers reach the wire, and they start from a response whose
@@ -258,8 +241,7 @@ closes an HTTP/1 body without its final chunk or short of its declared length,
 and resets an HTTP/2 or HTTP/3 stream, so the client sees an incomplete response
 instead of a truncated body framed as complete. Applications that need an error
 page for a failing body should produce the body before the first write; see
-[deferred responses](../user-reports/deferred-responses.md). This correction is
-on the engine development branch and is unreleased.
+[deferred responses](../user-reports/deferred-responses.md).
 
 Synchronous Dispose of managed HTTP/2 and HTTP/3 response output now starts
 closure without blocking a worker on network completion. Await application writes
@@ -268,22 +250,19 @@ closure. Use awaited tunnel completion/disposal when you need to observe errors.
 Do not start detached writes and assume synchronous Dispose waits for them.
 See [multiplexed disposal](migration.md#multiplexed-response-stream-disposal-unreleased).
 
-The HTTP/3 cancellation correction preserves response output after an application
-cancels its own pending body or tunnel read. Input remains unusable after that
+HTTP/3 preserves response output after an application cancels its own pending body
+or tunnel read. Input remains unusable after that
 in-flight cancellation because a frame may have been partly consumed; catch the
 cancellation, answer or complete output, and finish the request. Peer reset,
-connection failure and output cancellation still end the request. This correction
-is integrated through [PR #254](https://github.com/WilliamSmithEdward/embedio-neo/pull/254)
-on the engine development branch and remains unreleased. A token canceled before
-a read begins does not abandon input.
+connection failure and output cancellation still end the request. A token canceled
+before a read begins does not abandon input.
 
-The HTTP/1 context replacement claims request completion callbacks once, even
-when infrastructure or a plug-in closes the same context repeatedly or
+HTTP/1 invokes request completion callbacks once, even when infrastructure or a
+plug-in closes the same context repeatedly or
 concurrently. Their existing last-registered-first order remains. Do not use
 repeated context Close calls as an application notification mechanism; use an
 explicit application callback for that purpose. Registration after completion
-has begun remains invalid. This context increment is under validation and is
-unreleased.
+has begun remains invalid.
 
 The token that modules receive in `OnStart`, that a session manager receives in
 `Start` and that `IHttpContext.CancellationToken` exposes is now a server-owned
@@ -295,8 +274,7 @@ token is never canceled by the server. Work that must outlive the server needs
 its own token. `Listener.Stop()` on a running server now ends `RunAsync`
 normally rather than faulting it with `HttpListenerException` 995, repeated
 disposal is a no-op, and `RunAsync` on a stopped server reports that it cannot
-be restarted. See [server lifetime](../user-reports/server-lifetime.md). This
-correction is on the engine development branch and is unreleased.
+be restarted. See [server lifetime](../user-reports/server-lifetime.md).
 
 `WebServerOptions.UrlPrefixes`, `Modules.WithSafeNames` and `Modules.Named` now
 return read-only wrappers instead of the backing `List` and `Dictionary`. Their
@@ -305,8 +283,7 @@ before. Code that cast these views to `List<T>` or `Dictionary<TKey, TValue>` ge
 `InvalidCastException`, and casting to `IList<T>` or `IDictionary<TKey, TValue>`
 yields a read-only collection whose mutators throw `NotSupportedException`. Use
 `AddUrlPrefix` and `WithModule` before startup instead. See
-[configuration locking](../user-reports/configuration-locking.md). This
-correction is on the engine development branch and is unreleased.
+[configuration locking](../user-reports/configuration-locking.md).
 
 Use DrainAsync for bounded graceful shutdown instead of assuming Stop waits for
 active responses. Stop/disposal and forced drain cancellation terminate remaining
@@ -335,8 +312,8 @@ appropriate MaxMessageSize explicitly; the managed engine now enforces it,
 including HTTP/2 extended CONNECT. Oversized messages close with 1009 and invalid
 text with 1007. After the close frame write completes, acknowledgement waits up to
 the existing one-second timeout; this is not an overall transport-write deadline.
-Messages accepted before
-a peer close are delivered before disconnection. Outgoing frame sizes can differ
+Messages accepted before a peer close are delivered before disconnection. Outgoing
+frame sizes can differ
 from v1; clients must process WebSocket messages independently of frame boundaries.
 See [WebSocket migration details](migration.md#managed-websocket-framing-unreleased).
 
@@ -344,8 +321,8 @@ Keep asynchronous handler lifetime and application readiness explicit. Do not
 broadcast merely because a client handshake completed if your application needs
 module registration first; use a readiness message as described in the
 [overlap and close guide](../user-reports/websocket-overlap-and-close.md).
-No finite default message limit or receive backpressure policy should be inferred
-from the performance work; those decisions need their own documented contract.
+ReceiveLimits is disabled by default. Configure it explicitly when your
+application needs bounded outstanding delivery.
 
 ## Optional v2 capabilities
 
@@ -364,7 +341,6 @@ interfaces do not require every implementation to advertise optional features.
 See the [capsule/tunnel guide](../guides/capsule-tunnels.md) and
 [response field-section guide](../guides/response-field-sections.md).
 
-
 ## Cookie attribute parsing corrections
 
 The original v2 cookie parser distinguishes CommentURL from Comment. Applications
@@ -373,18 +349,17 @@ text in Cookie.Comment. An Expires date without a weekday comma no longer consum
 the following Path attribute; that path and the actual expiry are retained.
 Check application assertions or workarounds that depended on either parsing bug.
 Cookie replacement identity, lookup ranking and mutation visibility are retained.
-This helper replacement adds no public API or runtime dependency.
+
 ## Concurrent stream-property access
 
 The v2 TCP coordinator publishes one body stream and one response-output stream
 per request even when first property access races. This prevents duplicate transport
 owners; it does not authorize concurrent payload reads or writes without the
-stream's documented synchronization. Existing WebSocket cleanup can still acquire
-its harmless HTTP output flush view after the upgraded transport has closed.
+stream's documented synchronization.
 
 ## Validate an application upgrade
 
-1. Rebuild the application and custom adapters against the selected v2 candidate.
+1. Rebuild the application and custom adapters against the selected v2 package.
    Verify the selected target asset, listener mode, certificate and network access.
 2. Exercise normal routes, authentication, sessions, static files, compression,
    HEAD/ranges, chunked uploads, cancellations and malformed-input handling with
@@ -393,19 +368,19 @@ its harmless HTTP output flush view after the upgraded transport has closed.
    test tunnel half-close and shutdown if those capabilities are used.
 4. Run representative throughput and sustained-load tests on an otherwise idle
    host. Verify payload bytes, latency, errors and resource release after drain.
-   Report the exact engine revision and environment; branch benchmarks are not
-   performance guarantees for every application.
-5. Recheck this guide and release notes once the default switch, native transport,
-   datagrams/WebTransport and final platform acceptance are complete. Roll out only
-   after the actual v2 package and its support policy are published.
+   Use results from your deployment; benchmarks do not guarantee performance for
+   every application.
+5. Check the final release notes and supported capabilities before rollout.
+   Wait for the published v2 package and its support policy.
 
 ## Additive HTTP datagram API
 
-The native HTTP/3 candidate adds `HttpTunnel.Datagrams`, `HttpDatagramChannel`,
+The HTTP datagram APIs include `HttpTunnel.Datagrams`, `HttpDatagramChannel`,
 `HttpDatagram` and `HttpDatagramSendStatus`. Existing context interfaces and tunnel
 constructors are unchanged. The surface exists on both current library targets;
-unsupported backends return null. Public provider selection and native activation
-are still under development, so this is not a released availability claim.
+unsupported backends return null. These APIs require a supporting native HTTP/3
+provider, which is not yet available for public selection. Do not assume that
+selecting HTTP/3 enables datagrams.
 
 Applications must explicitly accept and authorize the extension, dispose received
 packets after using their memory, and handle unreliable submission results. No
@@ -466,11 +441,11 @@ returns an immutable ordered list kept separate from initial headers. Empty succ
 means no trailers, while false means unavailable, incomplete, abandoned or failed
 input. Declaration does not authorize a field, and trailer metadata never changes
 routing or authentication. See [Request trailers](../guides/request-trailers.md)
-for the completion and ownership contract. This addition is unreleased.
+for the completion and ownership contract.
 
 ## Malformed HTTP/1 request rejection
 
-The HTTP/1 candidate stages transport shutdown after rejecting a malformed or
+HTTP/1 stages transport shutdown after rejecting a malformed or
 oversized request head with HTTP 400, 414 or 431. It attempts the complete error
 response, completes output, and discards remaining raw input without parsing or
 application dispatch. The existing connection owner and admission slot remain
@@ -484,28 +459,23 @@ deadline, or concurrent stop can prevent a complete error response. Applications
 must not depend on receiving an error reply after those failures. Valid request
 handling and normal response closure are unchanged.
 
-TLS output shutdown uses public runtime APIs when available. Installed .NET
-Framework 4.8 and .NET 10 were checked with delayed TLS readers. A netstandard
+TLS output shutdown uses public runtime APIs when available. A .NET Standard
 host lacking public TLS shutdown can only flush and half-close TCP in this path;
-it cannot promise TLS close_notify. That unavailable-capability fallback has not
-been exercised on an actual runtime lacking the API. Accepted tunnels retain
-their existing stricter public TLS-shutdown capability requirement. This correction
-is unreleased and does not establish the cause of an isolated hosted test failure.
+it cannot promise TLS close_notify. Check whether your target runtime exposes
+that API. Accepted tunnels require public TLS-shutdown support.
 
-## Release preparation still required
+<a id="release-preparation-still-required"></a>
 
-Before v2 ships, reconcile every approved behavior change into this guide,
-verify code examples against the final package, reconcile the listener-removal
-and native-provider deployment documentation, confirm extension/platform support and complete
-conformance, fuzzing, interoperability, sustained-load and exact-head CI gates.
-Update README HTTP badges when the corresponding engine support is integrated
-and verified. Program #181 remains open; this guide does not authorize a release.
+## Before deployment
+
+Neo v2 has not been released. Confirm the final package, release notes and platform
+support before deployment. Features described as unavailable above must not be
+assumed available merely because their API types exist.
 
 ## HTTP/1 idle closure
 
-William approved the scoped default change in [issue #281](https://github.com/WilliamSmithEdward/embedio-neo/issues/281)
-on 2026-10-12. This candidate is unreleased. A complete, fully consumed HTTP/1
-exchange waiting for its successor attempts orderly send shutdown when the
+A complete, fully consumed HTTP/1 exchange waiting for its successor attempts
+orderly send shutdown when the
 existing timeout expires and no successor input has been admitted. Clients can
 receive EOF where v1 commonly produced a reset exception. Handle either terminal
 outcome as the end of that connection; do not depend on an idle reset exception
@@ -516,5 +486,5 @@ headers, unread bodies, unfinished responses and peer failures retain abort
 behavior. TLS uses public runtime shutdown support where available; interrupted
 or failed alert writes retire without a new grace period. Older runtimes without
 that API retain their existing TLS close behavior. Orderly closure is not
-guaranteed when a peer races expiry or faults. The [design record](../project/http1-idle-closure.md)
-distinguishes source/runtime observations, ownership checks and remaining limits.
+guaranteed when a peer races expiry or faults. See the
+[idle closure guide](../project/http1-idle-closure.md) for details and limitations.
