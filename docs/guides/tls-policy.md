@@ -16,6 +16,29 @@ the configured certificate is used. It combines with a fixed `Certificate` or a
 
 This is unreleased and available only from source.
 
+## Sharing a TCP listening endpoint
+
+TLS authentication happens before the HTTP request path selects a logical server.
+HTTPS listeners sharing an address and port must therefore have compatible TLS
+policies. Registration refuses an incompatible policy before publishing that
+listener's routes, regardless of which listener starts first. Earlier listeners
+keep their own registrations.
+
+Use separate ports when the client-certificate requirement, revocation setting,
+protocol configuration or certificate-selection policy differs. To share an
+endpoint, use the same locked policy, or policies with the same settings and the
+same validator and selector delegate instances. Separately constructed callbacks
+are not treated as equivalent, even when their code looks identical. A null policy
+and a fresh default policy remain compatible. An explicit protocol mask is also
+compatible when it matches the default versions supported by the executing
+runtime. Comparison uses the same normalization as authentication and never
+invokes callbacks.
+
+This check preserves existing fixed-certificate sharing. It does not establish
+that independently mutable `ServerCertificateSource` instances have equivalent
+ownership or rotation behavior. Prefer a deliberately shared source when sharing
+certificate rotation; this change does not resolve independent-source selection.
+
 ## A complete program: requiring client certificates
 
 ```csharp

@@ -69,6 +69,9 @@ namespace EmbedIO.Net.Internal
                                 if (!ReferenceEquals(endpoint.Listener, owner)
                                     && (!endpoint.Listener.ConnectionPolicy.IsDefault || !owner.ConnectionPolicy.IsDefault))
                                     throw new HttpListenerException(400, "A listener with connection limits cannot share a listening endpoint with another listener.");
+                                if (prefix.Secure && !ReferenceEquals(endpoint.Listener, owner)
+                                    && !ServerTlsPolicy.CanShareEndpoint(endpoint.Listener.TlsPolicy, owner.TlsPolicy))
+                                    throw new HttpListenerException(400, "Listeners with incompatible TLS policies cannot share a listening endpoint.");
                                 if (endpoint.AddPrefix(prefix, owner)) changed.Add(endpoint);
                                 selected.Add(endpoint);
                                 activate.Add(endpoint);

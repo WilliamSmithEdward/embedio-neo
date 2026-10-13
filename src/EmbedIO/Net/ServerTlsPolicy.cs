@@ -132,6 +132,16 @@ namespace EmbedIO.Net
             }
         }
 
+        // Compare locked handshake settings, never invoke application callbacks. TLS is
+        // negotiated before the request path can select a logical prefix owner.
+        internal static bool CanShareEndpoint(ServerTlsPolicy? first, ServerTlsPolicy? second)
+            => (first?._clientCertificateMode ?? ClientCertificateMode.None)
+                == (second?._clientCertificateMode ?? ClientCertificateMode.None)
+                && ReferenceEquals(first?._clientCertificateValidator, second?._clientCertificateValidator)
+                && (first?._checkCertificateRevocation ?? false) == (second?._checkCertificateRevocation ?? false)
+                && Internal.ServerTls.GetProtocols(first) == Internal.ServerTls.GetProtocols(second)
+                && ReferenceEquals(first?._serverCertificateSelector, second?._serverCertificateSelector);
+
         internal bool RequestsClientCertificate => _clientCertificateMode != ClientCertificateMode.None;
 
         internal void Lock() => LockConfiguration();

@@ -473,6 +473,22 @@ host lacking public TLS shutdown can only flush and half-close TCP in this path;
 it cannot promise TLS close_notify. Check whether your target runtime exposes
 that API. Accepted tunnels require public TLS-shutdown support.
 
+## Shared HTTPS endpoints require compatible TLS policies
+
+Neo v2 refuses registration when two logical listeners would share one TCP
+address and port with incompatible `ServerTlsPolicy` settings. Previously the
+physical endpoint opener's policy controlled both listeners' handshakes, which
+could allow an anonymous request into a listener configured to require a client
+certificate. Compatible defaults and fixed-certificate sharing remain supported.
+
+Move listeners with different requirements to separate ports, or configure the
+same policy (or equivalent settings with the same callback delegate instances)
+on every listener sharing an endpoint. Protocols are compared after applying the
+same runtime normalization as the TLS handshake: `None` and an explicit mask
+matching the supported default versions are compatible. Rejection rolls back
+only the rejected registration; existing listeners remain available. See
+[TLS policy](../guides/tls-policy.md#sharing-a-tcp-listening-endpoint).
+
 <a id="release-preparation-still-required"></a>
 
 ## Before deployment
