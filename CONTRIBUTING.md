@@ -38,15 +38,27 @@ remain outside the solution and shipped packages. See
 [MAUI HTTPS validation](docs/platforms/maui-https-validation.md) for pinned
 toolchains, per-platform dependency locks, artifacts and physical-device steps.
 
-Install .NET SDK 10.0.402, which `global.json` pins exactly (`rollForward`
+Install the .NET SDK version that `global.json` pins exactly (`rollForward`
 `disable`, so a newer SDK on the machine or runner is never picked up
-silently). SDK moves are deliberate: change `global.json`, the workflows'
-`dotnet-version` pins and the exact runtime pins of the test probes together,
-regenerate the `packages.lock.json` files in locked mode and re-run validation.
-Workload sets belong to an SDK feature band rather than a patch, so the MAUI
-workload `--version` moves in its own validated step; SDK 10.0.402 uses the
-10.0.401 set. Wait out the one-week cooldown unless the release fixes a
-vulnerability that affects the project. Then run:
+silently). The pin is exact because the lock files record the SDK's implicit
+packages, so every machine must restore with the same SDK. The trade-off is a
+local one: you need that SDK installed, from the
+[.NET downloads](https://dotnet.microsoft.com/download/dotnet/10.0) or with the
+`dotnet-install` script and `--version <pin>`, and after the pin moves `dotnet`
+refuses to work in the checkout until you install the new one.
+
+SDK moves are deliberate and automated. Each Monday `update-dotnet-sdk.yml`
+proposes the newest SDK patch in the pinned feature band as a pull request that
+moves `global.json`, the workflows' `dotnet-version` pins, the test probes'
+`RuntimeFrameworkVersion` pins and the lock files together. It waits out a
+one-week cooldown unless Microsoft marks the release as a security release. In
+separate pull requests it moves the MAUI workload `--version` to the newest
+workload set for the pinned SDK patch (the set decides the mobile apps' Mono
+runtime and their Apple and Android packs, which can need a newer Xcode), and
+the conformance runner's SDK image once MCR publishes it. It never changes
+feature band; that is left to a person. `dotnet-sdk-canary.yml` builds and
+tests with the newest SDK each Monday, without the pins, as an early warning;
+it gates nothing. A move by hand follows the same rules. Then run:
 
 ```sh
 dotnet restore EmbedIO.sln --locked-mode

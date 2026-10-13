@@ -22,7 +22,7 @@ The Windows native-listener workaround and its released-.NET-11 recheck are sepa
 
 The control closes TCP immediately after acknowledgement. The second scenario delays TCP closure by 980–1020ms, around the [runtime's one-second server-close wait](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.WebSockets/src/System/Net/WebSockets/ManagedWebSocket.cs). Reports retain client operation stages, peer delays and actual wait durations, complete exception stacks, runtime, architecture and OS. Every recorded error makes the process fail; capturing a null reference does not accept or hide it. Process/resource corruption exceptions propagate.
 
-With SDK 10.0.402 and runtime 10.0.13 installed, run from the repository root:
+With the SDK that `global.json` pins installed (it carries the runtime the probe requires), run from the repository root:
 
 ```sh
 dotnet restore test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj --locked-mode
@@ -30,7 +30,7 @@ dotnet build test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj -c 
 dotnet test/EmbedIO.RuntimeCloseProbe/bin/Release/net10.0/EmbedIO.RuntimeCloseProbe.dll 1024 16 TestResults/runtime-close-probe/result.json
 ```
 
-The arguments select connections per scenario, concurrent independent clients and the report path. Both scenarios run, yielding 2,048 close cycles. Each scenario has a three-minute cancellation budget. The test-only project is not packable and pins runtime 10.0.13 without roll-forward; the issue #184 runs used its earlier 10.0.12 pin. It builds with the solution so SDK analyzers and CodeQL include its source.
+The arguments select connections per scenario, concurrent independent clients and the report path. Both scenarios run, yielding 2,048 close cycles. Each scenario has a three-minute cancellation budget. The test-only project is not packable and pins that SDK's runtime with `RuntimeFrameworkVersion`, without roll-forward, and checks it at startup; the issue #184 runs used runtime 10.0.12. It builds with the solution so SDK analyzers and CodeQL include its source.
 
 To request hosted Windows, Linux and macOS execution with two logical processors:
 
