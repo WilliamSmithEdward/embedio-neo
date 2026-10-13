@@ -32,6 +32,12 @@ internal static class Program
 {
     private static readonly SortedDictionary<string, object?> Cases = new(StringComparer.Ordinal);
 
+    // On macOS the original EmbedIO's managed WebSocket can leave the echo unanswered: in run
+    // 38449281895 the 10 s receive deadline fired (SocketException 89) and the upstream process
+    // aborted. The macOS profile skips the WebSocket message cases for every build so the case
+    // lists stay aligned; EmbedIO.Tests covers Neo's WebSocket behavior on macOS.
+    private static readonly bool MacOS = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX);
+
     private static async Task Main(string[] args)
     {
         CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
@@ -50,7 +56,7 @@ internal static class Program
                 .OfType<System.Runtime.Versioning.TargetFrameworkAttribute>().Single().FrameworkName,
             runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
             os = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
-            profile = windows ? "windows" : "unix",
+            profile = windows ? "windows" : MacOS ? "macos" : "unix",
             cases = Cases,
             api = Api(assembly),
         };
@@ -323,9 +329,12 @@ internal static class Program
             });
             await Request("cors-origin", HttpMethod.Get, "api/dto", configure: r => r.Headers.Add("Origin", "https://client.example"));
             await Request("cors-denied", HttpMethod.Get, "api/dto", configure: r => r.Headers.Add("Origin", "https://other.example"));
-            foreach (var binary in new[] { false, true })
-                foreach (var fragmented in new[] { false, true })
-                    await WebSocket(prefix, label, binary, fragmented);
+            if (!MacOS)
+            {
+                foreach (var binary in new[] { false, true })
+                    foreach (var fragmented in new[] { false, true })
+                        await WebSocket(prefix, label, binary, fragmented);
+            }
             await Request("healthy-after-errors", HttpMethod.Get, "api/number/3");
         }
         catch (Exception ex)
