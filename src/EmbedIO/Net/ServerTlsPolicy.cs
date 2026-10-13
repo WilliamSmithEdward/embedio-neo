@@ -102,7 +102,8 @@ namespace EmbedIO.Net
             set
             {
                 EnsureConfigurationNotLocked();
-                if ((value & ~(SslProtocols.Tls12 | Tls13)) != 0)
+                if (value != SslProtocols.None && value != SslProtocols.Tls12
+                    && value != Tls13 && value != (SslProtocols.Tls12 | Tls13))
                     throw new ArgumentOutOfRangeException(nameof(value), "HTTPS requires TLS 1.2 or later and a known protocol mask.");
                 _enabledProtocols = value;
             }
