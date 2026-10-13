@@ -10,17 +10,15 @@
 
 ![HTTP/1.1: supported](https://img.shields.io/badge/HTTP%2F1.1-supported-brightgreen)
 ![HTTP/2: supported](https://img.shields.io/badge/HTTP%2F2-supported-brightgreen)
-![HTTP/3: opt-in on .NET 10](https://img.shields.io/badge/HTTP%2F3-opt--in%20on%20.NET%2010-blue)
+![HTTP/3: supported](https://img.shields.io/badge/HTTP%2F3-supported-brightgreen)
 
 ![EmbedIO-Neo](https://raw.githubusercontent.com/WilliamSmithEdward/embedio-neo/dcd0e9f3c27d0a618cf4aade10c7fea269db6d57/images/embedio_neo.png)
 
 A small, modular web server for .NET. EmbedIO-Neo lets you add JSON APIs, static
 files and WebSockets to desktop apps, local tools and services.
 
-**Neo v2 is under development and has not been published.** This README and its
-protocol badges describe the v2 engine branch; the NuGet badge shows the separately
-published package. See the [v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md)
-before upgrading.
+See the [v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md) before
+upgrading to Neo v2.
 
 ## Overview
 
@@ -40,11 +38,11 @@ modular request pipeline.
 
 ## Protocols and platforms
 
-| Capability | V2 source support |
+| Capability | Support |
 | --- | --- |
 | HTTP/1.1 | Default TCP listener; HTTP and HTTPS. |
 | HTTP/2 | Cleartext prior knowledge and HTTPS with ALPN. TLS negotiation requires the .NET 10 asset. |
-| HTTP/3 | Opt-in QUIC/UDP listener on .NET 10, with HTTPS and usable native QUIC support. |
+| HTTP/3 | HTTPS over QUIC/UDP. |
 | Combined hosting | HTTP/1.1 and HTTP/2 over TCP alongside HTTP/3 over UDP on the same HTTPS endpoint. |
 | WebSockets | HTTP/1.1 upgrade and negotiated extended CONNECT on modern transports. |
 
@@ -54,23 +52,20 @@ compatibility evidence; it does not provide HTTP/3 or establish support for ever
 older runtime. Mobile and sandboxed applications need their platform-specific
 network permissions and deployment setup.
 
-HTTP/3 requires a certificate with its private key and the appropriate native
-QUIC/TLS prerequisite. Clients must select HTTP/3 explicitly or applications must
-arrange discovery. Native transport/datagram and WebTransport integration remain
-under development; ordinary HTTP/3 support does not imply those capabilities.
-
 See the [HTTP/3 guide](docs/guides/http3.md), [HTTPS guide](docs/guides/https.md)
-and [platform documentation](docs/README.md#platforms) for configuration
-and validation limits.
+and [platform documentation](docs/README.md#platforms) for configuration.
 
 ## Installation
 
 The package ID is **EmbedIO-Neo**; the assembly and C# namespaces remain
 **EmbedIO**.
 
-Until v2 is published, build the `codex/managed-http-engine` branch using the SDK
-selected by `global.json` and reference `src/EmbedIO/EmbedIO.csproj` from your
-application. The published NuGet package is not the unreleased engine.
+```sh
+dotnet add package EmbedIO-Neo
+```
+
+To build from source, use the SDK selected by `global.json` and reference
+`src/EmbedIO/EmbedIO.csproj` from your application.
 
 <a id="webserver-setup"></a>
 
