@@ -14,6 +14,13 @@
   Complete WebSocket messages report `EndOfMessage`, quality-value names compare
   case-insensitively, ZIP entries report UTC times, and `{{` in a route matches a
   literal `{` as documented.
+- Approved behavior corrections: a `+` in a route parameter stays a literal `+`;
+  required query and form fields are found regardless of name case; a byte range
+  ending past the file selects the remainder (206) instead of 416; a restricted
+  `CorsModule` sends `Vary: Origin`; the Basic challenge uses the standard
+  `Basic realm="...", charset="UTF-8"` form; and directory listings requested
+  without a trailing slash link inside the directory. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
 
 - Require explicit AcceptTunnelAsync before successful HTTP/2 or HTTP/3 extended
   CONNECT output. An ordinary catch-all 2xx becomes an empty 501; explicit errors,

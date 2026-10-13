@@ -44,12 +44,13 @@ namespace EmbedIO.Tests
 
         [TestCase("query")]
         [TestCase("form")]
-        public void RequiredFieldRetainsCaseSensitivePresenceWhileOptionalLookupIgnoresCase(string kind)
+        public void RequiredFieldPresenceIgnoresCaseLikeLookup(string kind)
         {
             var data = new NameValueCollection { { "VALUE", "first" }, { "VALUE", "last" } };
             Assert.That(GetString(data, "value", false, kind), Is.EqualTo("last"));
-            var error = Assert.Throws<HttpException>(() => GetString(data, "value", true, kind));
-            Assert.That(error?.Message, Is.EqualTo($"Missing {kind} field value."));
+            Assert.That(GetString(data, "value", true, kind), Is.EqualTo("last"));
+            var error = Assert.Throws<HttpException>(() => GetString(data, "other", true, kind));
+            Assert.That(error?.Message, Is.EqualTo($"Missing {kind} field other."));
         }
 
         [TestCase(null, null)]

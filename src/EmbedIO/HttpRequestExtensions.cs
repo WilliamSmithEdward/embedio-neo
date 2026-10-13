@@ -221,10 +221,11 @@ namespace EmbedIO
         /// specifies an entity tag equal to <paramref name="entityTag"/>, or a UTC date and time
         /// equal to <paramref name="lastModifiedUtc"/>;</description></item>
         /// <item><description>>the <c>Range</c> header specifies exactly one range;</description></item>
-        /// <item><description>>the specified range is entirely contained in the range from 0 to <paramref name="contentLength"/> - 1.</description></item>
+        /// <item><description>>the specified range starts within the range from 0 to <paramref name="contentLength"/> - 1.
+        /// An upper bound at or past the end is reduced to <paramref name="contentLength"/> - 1.</description></item>
         /// </list>
-        /// <para>If the last condition is not satisfied, i.e. the specified range start and/or upper bound
-        /// are out of the range from 0 to <paramref name="contentLength"/> - 1, this method does not return;
+        /// <para>If the last condition is not satisfied, i.e. the specified range starts at or past
+        /// <paramref name="contentLength"/>, this method does not return;
         /// it throws a <see cref="HttpRangeNotSatisfiableException"/> instead.</para>
         /// <para>If any of the other conditions are not satisfied, this method returns <see langword="false"/>.</para>
         /// </returns>
@@ -304,10 +305,11 @@ namespace EmbedIO
             }
             else
             {
+                // RFC 9110, Section 14.1.2: a last position at or past the end selects the remainder.
                 start = firstRange.From.Value;
-                upperBound = firstRange.To ?? contentLength - 1;
+                upperBound = Math.Min(firstRange.To ?? contentLength - 1, contentLength - 1);
             }
-            if (start >= contentLength || upperBound < start || upperBound >= contentLength)
+            if (start >= contentLength || upperBound < start)
                 throw HttpException.RangeNotSatisfiable(contentLength);
 
             return true;

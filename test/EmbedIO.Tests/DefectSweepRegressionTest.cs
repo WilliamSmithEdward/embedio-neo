@@ -8,9 +8,11 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Actions;
+using EmbedIO.Cors;
 using EmbedIO.Files;
 using EmbedIO.Routing;
 using EmbedIO.Security;
@@ -18,6 +20,7 @@ using EmbedIO.Sessions;
 using EmbedIO.Testing;
 using EmbedIO.Tests.TestObjects;
 using EmbedIO.Utilities;
+using EmbedIO.WebApi;
 using EmbedIO.WebSockets;
 using NUnit.Framework;
 
@@ -334,6 +337,86 @@ namespace EmbedIO.Tests
             Assert.That(weight, Is.EqualTo(500));
             Assert.That(list.TryGetWeight("identity", out weight), Is.True);
             Assert.That(weight, Is.Zero);
+        }
+
+        // Approved behavior corrections.
+
+        [TestCase("https://a.example")]
+        [TestCase("https://other.example")]
+        public async Task ARestrictedOriginListVariesOnOrigin(string origin)
+        {
+            using var server = new TestWebServer()
+                .WithModule(new CorsModule("/", "https://a.example,https://b.example"))
+                .WithAction("/", HttpVerbs.Any, context => Text(context, "ok"));
+            server.Start();
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/data");
+            request.Headers.Add("Origin", origin);
+            using var response = await server.Client.SendAsync(request);
+            Assert.That(response.Headers.Vary, Does.Contain("Origin"));
+        }
+
+        public sealed class RequiredFieldController : WebApiController
+        {
+            [Route(HttpVerbs.Get, "/required")]
+            public int Required([QueryField(true)] int id) => id;
+        }
+
+        [TestCase("/api/required?id=5", HttpStatusCode.OK)]
+        [TestCase("/api/required?Id=5", HttpStatusCode.OK)]
+        [TestCase("/api/required?ID=5", HttpStatusCode.OK)]
+        [TestCase("/api/required?other=5", HttpStatusCode.BadRequest)]
+        public async Task ARequiredQueryFieldIsFoundAsBindingFindsIt(string target, HttpStatusCode expected)
+        {
+            using var server = new TestWebServer().WithWebApi("/api", module => module.WithController<RequiredFieldController>());
+            server.Start();
+            using var response = await server.Client.GetAsync(target);
+            Assert.That(response.StatusCode, Is.EqualTo(expected));
+            if (expected == HttpStatusCode.OK)
+                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("5"));
+        }
+
+        [Test]
+        public async Task ARangeEndingPastTheEndSelectsTheRemainder()
+        {
+            var provider = new MockFileProvider();
+            var length = provider.GetRandomDataLength();
+            using var server = new TestWebServer().WithModule(new FileModule("/", provider));
+            server.Start();
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/random.dat");
+            request.Headers.Range = new RangeHeaderValue(length - 10, length + 100_000);
+            using var response = await server.Client.SendAsync(request);
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.PartialContent));
+            var range = response.Content.Headers.ContentRange ?? throw new AssertionException("Missing Content-Range.");
+            Assert.That((range.From, range.To, range.Length), Is.EqualTo(((long?)(length - 10), (long?)(length - 1), (long?)length)));
+            Assert.That(await response.Content.ReadAsByteArrayAsync(), Is.EqualTo(provider.GetRandomData().Skip(length - 10).ToArray()));
+        }
+
+        [TestCase("/users/a+b", "a+b")]
+        [TestCase("/users/a%2Bb", "a+b")]
+        [TestCase("/users/a%20b", "a b")]
+        public void RouteParametersDecodePercentEscapesOnly(string path, string expected)
+        {
+            var match = RouteMatcher.Parse("/users/{name}", false).Match(path) ?? throw new AssertionException("No match.");
+            Assert.That(match["name"], Is.EqualTo(expected));
+        }
+
+        [TestCase("/sub")]
+        [TestCase("/sub/")]
+        public async Task DirectoryListingLinksResolveWithOrWithoutATrailingSlash(string target)
+        {
+            using var server = new TestWebServer().WithModule(new FileModule("/", new MockFileProvider())
+            {
+                DefaultDocument = null,
+                DirectoryLister = DirectoryLister.Html,
+            });
+            server.Start();
+            var body = await server.Client.GetStringAsync(target);
+            var page = new Uri(server.BaseUrl, target);
+            var links = Regex.Matches(body, "href=[\"']([^\"']*)[\"']")
+                .Select(link => new Uri(page, WebUtility.HtmlDecode(link.Groups[1].Value)).AbsolutePath)
+                .ToArray();
+            Assert.That(links, Does.Contain("/sub/index.html"));
+            Assert.That(links, Does.Contain("/"));
         }
     }
 }

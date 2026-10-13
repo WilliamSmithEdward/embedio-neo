@@ -401,12 +401,35 @@
       ],
       "differences": [
         {
+          "path": "/http/EmbedIO/auth-malformed/authentication",
+          "upstream": "Basic realm=\"/protected/\" charset=UTF-8",
+          "neo": "Basic realm=\"/protected/\", charset=\"UTF-8\"",
+          "reason": "Approved correction (William, 2026-10-13): the Basic challenge separates its auth-params with a comma, per RFC 7617. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/auth-malformed/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/auth-malformed/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/auth-missing/authentication",
+          "upstream": "Basic realm=\"/protected/\" charset=UTF-8",
+          "neo": "Basic realm=\"/protected/\", charset=\"UTF-8\"",
+          "reason": "Approved correction (William, 2026-10-13): the Basic challenge separates its auth-params with a comma, per RFC 7617. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/auth-missing/encoding",
@@ -417,12 +440,46 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/auth-missing/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/auth-valid/authentication",
+          "upstream": "Basic realm=\"/protected/\" charset=UTF-8",
+          "neo": "Basic realm=\"/protected/\", charset=\"UTF-8\"",
+          "reason": "Approved correction (William, 2026-10-13): the Basic challenge separates its auth-params with a comma, per RFC 7617. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/auth-valid/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/auth-valid/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/auth-wrong/authentication",
+          "upstream": "Basic realm=\"/protected/\" charset=UTF-8",
+          "neo": "Basic realm=\"/protected/\", charset=\"UTF-8\"",
+          "reason": "Approved correction (William, 2026-10-13): the Basic challenge separates its auth-params with a comma, per RFC 7617. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/auth-wrong/encoding",
@@ -433,12 +490,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/auth-wrong/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/base-route/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/base-route/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/controller-error/contentType",
@@ -459,8 +538,10 @@
           "upstream": [
             "Accept-Encoding"
           ],
-          "neo": [],
-          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
+          "neo": [
+            "Origin"
+          ],
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests. A restricted CorsModule's Vary: Origin is kept on the replacement: approved correction (William, 2026-10-13), docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/controller-head/encoding",
@@ -471,12 +552,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/controller-head/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/controller-not-found/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/controller-not-found/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/cors-denied/encoding",
@@ -487,12 +590,42 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/cors-denied/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/cors-origin/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/cors-origin/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/cors-preflight/vary",
+          "upstream": [],
+          "neo": [
+            "Origin"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/delete/encoding",
@@ -503,12 +636,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/delete/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/dto/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/dto/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/escaped-route/encoding",
@@ -519,12 +674,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/escaped-route/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/exact-extra/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/exact-extra/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/file/encoding",
@@ -535,12 +712,56 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/file/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/file-deflate/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/file-gzip/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/file-head/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/file-head/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/file-invalid-range/encoding",
@@ -551,12 +772,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/file-invalid-range/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/file-missing/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/file-missing/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/file-not-modified/encoding",
@@ -567,12 +810,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/file-not-modified/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/file-range/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/file-range/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/file-suffix/body",
@@ -595,12 +860,34 @@
           "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
         },
         {
+          "path": "/http/EmbedIO/file-suffix/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/healthy-after-errors/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/healthy-after-errors/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/index/encoding",
@@ -611,12 +898,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/index/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/integer/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/integer/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/integer-invalid/encoding",
@@ -633,12 +942,34 @@
           "reason": "Explicitly approved malformed typed-route status correction. Issue #163 / merged PR #165; docs/user-reports/typed-route-validation.md."
         },
         {
+          "path": "/http/EmbedIO/integer-invalid/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/integer-negative/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/integer-negative/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/integer-overflow/encoding",
@@ -653,6 +984,17 @@
           "upstream": 500,
           "neo": 400,
           "reason": "Explicitly approved malformed typed-route status correction. Issue #163 / merged PR #165; docs/user-reports/typed-route-validation.md."
+        },
+        {
+          "path": "/http/EmbedIO/integer-overflow/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/json-cycle/body",
@@ -689,8 +1031,10 @@
           "upstream": [
             "Accept-Encoding"
           ],
-          "neo": [],
-          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
+          "neo": [
+            "Origin"
+          ],
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests. A restricted CorsModule's Vary: Origin is kept on the replacement: approved correction (William, 2026-10-13), docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/json-derived/body",
@@ -716,6 +1060,17 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/json-derived/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/json-fields/body",
           "upstream": {},
           "neo": {
@@ -732,12 +1087,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/json-fields/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/json-nonfinite/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/json-nonfinite/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/json-shared/body",
@@ -774,6 +1151,17 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/json-shared/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/json-timestamp/body/At",
           "upstream": "2026-10-07T12:34:56",
           "neo": "2026-10-07T12:34:56.1234567Z",
@@ -788,12 +1176,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/json-timestamp/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/method-not-allowed/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/method-not-allowed/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/optional-missing/encoding",
@@ -804,12 +1214,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/optional-missing/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/optional-present/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/optional-present/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-form/encoding",
@@ -820,12 +1252,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/post-form/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/post-json/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-json-case/body/Amount",
@@ -854,12 +1308,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/post-json-case/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-controls/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/post-json-controls/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-json-duplicate/encoding",
@@ -870,6 +1346,17 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/post-json-duplicate/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-empty/encoding",
           "upstream": [
             "identity"
@@ -878,12 +1365,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/post-json-empty/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-invalid/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/post-json-invalid/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-json-invalid-number/body",
@@ -916,6 +1425,17 @@
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
         },
         {
+          "path": "/http/EmbedIO/post-json-invalid-number/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-null/contentType",
           "upstream": "text/html; charset=utf-8",
           "neo": "application/json; charset=utf-8",
@@ -936,12 +1456,34 @@
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
         },
         {
+          "path": "/http/EmbedIO/post-json-null/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-number-syntax/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/post-json-number-syntax/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-json-quoted-number/encoding",
@@ -952,12 +1494,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/post-json-quoted-number/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-trailing-comma/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/post-json-trailing-comma/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-json-trailing-garbage/body",
@@ -990,12 +1554,34 @@
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
         },
         {
+          "path": "/http/EmbedIO/post-json-trailing-garbage/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/put/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/put/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/query/encoding",
@@ -1006,12 +1592,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/query/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/query-field/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/query-field/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/query-field-missing/encoding",
@@ -1022,12 +1630,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/query-field-missing/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/session-first/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/session-first/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/session-second/encoding",
@@ -1038,12 +1668,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/session-second/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/unicode-route/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/unicode-route/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/utility/normalize/0/False/parameter",
@@ -1248,12 +1900,35 @@
       ],
       "differences": [
         {
+          "path": "/http/EmbedIO/auth-malformed/authentication",
+          "upstream": "Basic realm=\"/protected/\" charset=UTF-8",
+          "neo": "Basic realm=\"/protected/\", charset=\"UTF-8\"",
+          "reason": "Approved correction (William, 2026-10-13): the Basic challenge separates its auth-params with a comma, per RFC 7617. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/auth-malformed/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/auth-malformed/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/auth-missing/authentication",
+          "upstream": "Basic realm=\"/protected/\" charset=UTF-8",
+          "neo": "Basic realm=\"/protected/\", charset=\"UTF-8\"",
+          "reason": "Approved correction (William, 2026-10-13): the Basic challenge separates its auth-params with a comma, per RFC 7617. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/auth-missing/encoding",
@@ -1264,12 +1939,46 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/auth-missing/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/auth-valid/authentication",
+          "upstream": "Basic realm=\"/protected/\" charset=UTF-8",
+          "neo": "Basic realm=\"/protected/\", charset=\"UTF-8\"",
+          "reason": "Approved correction (William, 2026-10-13): the Basic challenge separates its auth-params with a comma, per RFC 7617. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/auth-valid/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/auth-valid/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/auth-wrong/authentication",
+          "upstream": "Basic realm=\"/protected/\" charset=UTF-8",
+          "neo": "Basic realm=\"/protected/\", charset=\"UTF-8\"",
+          "reason": "Approved correction (William, 2026-10-13): the Basic challenge separates its auth-params with a comma, per RFC 7617. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/auth-wrong/encoding",
@@ -1280,12 +1989,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/auth-wrong/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/base-route/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/base-route/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/controller-error/contentType",
@@ -1306,8 +2037,10 @@
           "upstream": [
             "Accept-Encoding"
           ],
-          "neo": [],
-          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
+          "neo": [
+            "Origin"
+          ],
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests. A restricted CorsModule's Vary: Origin is kept on the replacement: approved correction (William, 2026-10-13), docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/controller-head/encoding",
@@ -1318,12 +2051,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/controller-head/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/controller-not-found/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/controller-not-found/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/cors-denied/encoding",
@@ -1334,12 +2089,42 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/cors-denied/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/cors-origin/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/cors-origin/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/cors-preflight/vary",
+          "upstream": [],
+          "neo": [
+            "Origin"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/delete/encoding",
@@ -1350,12 +2135,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/delete/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/dto/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/dto/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/escaped-route/encoding",
@@ -1366,12 +2173,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/escaped-route/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/exact-extra/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/exact-extra/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/file/encoding",
@@ -1382,12 +2211,56 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/file/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/file-deflate/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
+          "path": "/http/EmbedIO/file-gzip/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/file-head/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/file-head/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/file-invalid-range/encoding",
@@ -1398,12 +2271,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/file-invalid-range/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/file-missing/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/file-missing/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/file-not-modified/encoding",
@@ -1414,12 +2309,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/file-not-modified/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/file-range/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/file-range/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/file-suffix/body",
@@ -1442,12 +2359,34 @@
           "reason": "Owner-requested inherited suffix-range correction, issue #170: select the final N bytes rather than treating the suffix length as an upper offset. docs/user-reports/suffix-range-responses.md."
         },
         {
+          "path": "/http/EmbedIO/file-suffix/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/healthy-after-errors/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/healthy-after-errors/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/index/encoding",
@@ -1458,12 +2397,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/index/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/integer/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/integer/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/integer-invalid/encoding",
@@ -1480,12 +2441,34 @@
           "reason": "Explicitly approved malformed typed-route status correction. Issue #163 / merged PR #165; docs/user-reports/typed-route-validation.md."
         },
         {
+          "path": "/http/EmbedIO/integer-invalid/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/integer-negative/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/integer-negative/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/integer-overflow/encoding",
@@ -1500,6 +2483,17 @@
           "upstream": 500,
           "neo": 400,
           "reason": "Explicitly approved malformed typed-route status correction. Issue #163 / merged PR #165; docs/user-reports/typed-route-validation.md."
+        },
+        {
+          "path": "/http/EmbedIO/integer-overflow/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/json-cycle/body",
@@ -1536,8 +2530,10 @@
           "upstream": [
             "Accept-Encoding"
           ],
-          "neo": [],
-          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
+          "neo": [
+            "Origin"
+          ],
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests. A restricted CorsModule's Vary: Origin is kept on the replacement: approved correction (William, 2026-10-13), docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/json-derived/body",
@@ -1563,6 +2559,17 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/json-derived/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/json-fields/body",
           "upstream": {},
           "neo": {
@@ -1579,12 +2586,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/json-fields/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/json-nonfinite/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/json-nonfinite/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/json-shared/body",
@@ -1621,6 +2650,17 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/json-shared/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/json-timestamp/body/At",
           "upstream": "2026-10-07T12:34:56",
           "neo": "2026-10-07T12:34:56.1234567Z",
@@ -1635,12 +2675,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/json-timestamp/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/method-not-allowed/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/method-not-allowed/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/optional-missing/encoding",
@@ -1651,12 +2713,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/optional-missing/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/optional-present/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/optional-present/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-form/encoding",
@@ -1667,12 +2751,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/post-form/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/post-json/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-json-case/body/Amount",
@@ -1701,12 +2807,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/post-json-case/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-controls/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/post-json-controls/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-json-duplicate/encoding",
@@ -1717,6 +2845,17 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/post-json-duplicate/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-empty/encoding",
           "upstream": [
             "identity"
@@ -1725,12 +2864,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/post-json-empty/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-invalid/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/post-json-invalid/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-json-invalid-number/body",
@@ -1763,6 +2924,17 @@
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
         },
         {
+          "path": "/http/EmbedIO/post-json-invalid-number/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-null/contentType",
           "upstream": "text/html; charset=utf-8",
           "neo": "application/json; charset=utf-8",
@@ -1783,12 +2955,34 @@
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
         },
         {
+          "path": "/http/EmbedIO/post-json-null/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-number-syntax/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/post-json-number-syntax/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-json-quoted-number/encoding",
@@ -1799,12 +2993,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/post-json-quoted-number/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/post-json-trailing-comma/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/post-json-trailing-comma/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/post-json-trailing-garbage/body",
@@ -1837,12 +3053,34 @@
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
         },
         {
+          "path": "/http/EmbedIO/post-json-trailing-garbage/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/put/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/put/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/query/encoding",
@@ -1853,12 +3091,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/query/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/query-field/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/query-field/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/query-field-missing/encoding",
@@ -1869,12 +3129,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/query-field-missing/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/session-first/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/session-first/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/http/EmbedIO/session-second/encoding",
@@ -1885,12 +3167,34 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/session-second/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
+        },
+        {
           "path": "/http/EmbedIO/unicode-route/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/unicode-route/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [
+            "Origin",
+            "Accept-Encoding"
+          ],
+          "reason": "Approved correction (William, 2026-10-13): a restricted CorsModule origin list sends Vary: Origin so shared caches keep each origin's response separate. docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections; PR #380."
         },
         {
           "path": "/utility/normalize/0/False/parameter",

@@ -53,7 +53,7 @@ namespace EmbedIO.PlatformTests
                     var count = 0;
                     foreach (var value in values)
                     {
-                        if (value != "Basic realm=\"" + expectedRealm + "\" charset=UTF-8")
+                        if (value != "Basic realm=\"" + expectedRealm + "\", charset=\"UTF-8\"")
                             throw new InvalidOperationException("Unexpected challenge: " + value);
                         count++;
                     }

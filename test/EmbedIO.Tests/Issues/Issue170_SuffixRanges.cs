@@ -95,7 +95,8 @@ namespace EmbedIO.Tests.Issues
                     (Range: "bytes=7-", Validator: (string?)null, Status: 206, Body: "789"),
                     (Range: "bytes=0-1,7-9", Validator: (string?)null, Status: 200, Body: "0123456789"),
                     (Range: "not-a-range", Validator: (string?)null, Status: 200, Body: "0123456789"),
-                    (Range: "bytes=0-10", Validator: (string?)null, Status: 416, Body: (string?)null),
+                    (Range: "bytes=0-10", Validator: (string?)null, Status: 206, Body: "0123456789"),
+                    (Range: "bytes=10-12", Validator: (string?)null, Status: 416, Body: (string?)null),
                 })
                 {
                     using var request = new HttpRequestMessage(HttpMethod.Get, "file.txt");
