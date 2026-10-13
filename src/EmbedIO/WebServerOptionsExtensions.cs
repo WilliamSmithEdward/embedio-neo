@@ -125,6 +125,22 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Sets a source of the server certificate that the application can update while the server runs.
+        /// </summary>
+        /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
+        /// <param name="value">The certificate source.</param>
+        /// <returns><paramref name="this"/> with its <see cref="WebServerOptions.CertificateSource">CertificateSource</see> property
+        /// set to <paramref name="value"/>.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
+        public static WebServerOptions WithCertificateSource(this WebServerOptions @this, Net.ServerCertificateSource? value)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.CertificateSource = value;
+            return @this;
+        }
+
+        /// <summary>
         /// Sets the thumbprint of the X.509 certificate to use for SSL connections.
         /// </summary>
         /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>

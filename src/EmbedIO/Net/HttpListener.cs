@@ -14,12 +14,22 @@ namespace EmbedIO.Net
         /// <summary>Initializes a listener, optionally using the supplied server certificate.</summary>
         /// <param name="certificate">The borrowed server certificate.</param>
         public HttpListener(X509Certificate? certificate = null) : this(certificate, null) { }
-        internal HttpListener(X509Certificate? certificate, EmbedIO.Internal.RequestPolicyResolver? bodyPolicy)
+        /// <summary>Initializes a listener whose TLS handshakes use the current certificate of <paramref name="certificateSource"/>.</summary>
+        /// <param name="certificateSource">The borrowed source of the server certificate, which the application may update while the listener runs.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="certificateSource"/> is <see langword="null"/>.</exception>
+        public HttpListener(ServerCertificateSource certificateSource)
+            : this(null, certificateSource ?? throw new ArgumentNullException(nameof(certificateSource)), null) { }
+        internal HttpListener(X509Certificate? certificate, EmbedIO.Internal.RequestPolicyResolver? bodyPolicy) : this(certificate, null, bodyPolicy) { }
+        internal HttpListener(ServerCertificateSource? certificateSource, EmbedIO.Internal.RequestPolicyResolver? bodyPolicy) : this(null, certificateSource, bodyPolicy) { }
+        private HttpListener(X509Certificate? certificate, ServerCertificateSource? certificateSource, EmbedIO.Internal.RequestPolicyResolver? bodyPolicy)
         {
             BodyPolicy = bodyPolicy;
-            Certificate = certificate;
+            _certificate = certificate;
+            _certificateSource = certificateSource;
             _coordinator = new TcpListenerCoordinator(this);
         }
+        private readonly X509Certificate? _certificate;
+        private readonly ServerCertificateSource? _certificateSource;
         /// <inheritdoc />
         public bool IgnoreWriteExceptions { get; set; } = true;
         // Set by a server with body policies: 100 Continue waits for the first body read.
@@ -34,7 +44,8 @@ namespace EmbedIO.Net
         public string Name { get; } = "Unosquare HTTP Listener";
         /// <inheritdoc />
         public List<string> Prefixes => _coordinator.PrefixSnapshot();
-        internal X509Certificate? Certificate { get; }
+        // Read for every new connection, so a published replacement applies to the next handshake.
+        internal X509Certificate? Certificate => _certificateSource?.Current ?? _certificate;
         internal EmbedIO.Internal.RequestPolicyResolver? BodyPolicy { get; }
         /// <inheritdoc />
         public void Start() => _coordinator.Start();

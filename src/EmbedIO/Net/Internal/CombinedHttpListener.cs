@@ -18,7 +18,7 @@ namespace EmbedIO.Net.Internal
     internal sealed class CombinedHttpListener : IHttpListener, IGracefulHttpListener
     {
         private readonly object _sync = new();
-        private readonly X509Certificate2 _certificate;
+        private readonly ServerCertificateSource _certificates;
         private readonly bool _native;
         private readonly RequestPolicyResolver? _bodyPolicy;
         private readonly List<string> _prefixes = new();
@@ -31,13 +31,18 @@ namespace EmbedIO.Net.Internal
         internal CombinedHttpListener(X509Certificate2? certificate) : this(certificate, false) { }
         internal CombinedHttpListener(X509Certificate2? certificate, bool native) : this(certificate, native, null) { }
         internal CombinedHttpListener(X509Certificate2? certificate, bool native, RequestPolicyResolver? bodyPolicy)
+            : this(FixedSource(certificate), native, bodyPolicy) { }
+        // One source serves both transports, so a published certificate reaches TCP and QUIC handshakes alike.
+        internal CombinedHttpListener(ServerCertificateSource certificates, bool native, RequestPolicyResolver? bodyPolicy)
         {
-            if (certificate == null || !certificate.HasPrivateKey)
-                throw new ArgumentException("Combined hosting requires a certificate with its private key.", nameof(certificate));
-            _certificate = certificate;
+            _certificates = certificates ?? throw new ArgumentNullException(nameof(certificates));
             _native = native;
             _bodyPolicy = bodyPolicy;
         }
+        private static ServerCertificateSource FixedSource(X509Certificate2? certificate)
+            => certificate != null && certificate.HasPrivateKey
+                ? ServerCertificateSource.Fixed(certificate)
+                : throw new ArgumentException("Combined hosting requires a certificate with its private key.", nameof(certificate));
         // Set by a server with body policies before Start; applied to both transports.
         internal bool DeferContinue { get; set; }
         // TCP connection limits; QUIC connections are not counted.
@@ -85,7 +90,7 @@ namespace EmbedIO.Net.Internal
                     throw new InvalidOperationException("Stop the failed listener session before restarting.");
                 }
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_certificate, _prefixes, _ignoreWriteExceptions, _native, DeferContinue, ConnectionPolicy, Telemetry, _bodyPolicy);
+                _session = Session.Start(_certificates, _prefixes, _ignoreWriteExceptions, _native, DeferContinue, ConnectionPolicy, Telemetry, _bodyPolicy);
                 _drained = false;
             }
         }
@@ -168,10 +173,10 @@ namespace EmbedIO.Net.Internal
             internal bool IsRunning => Volatile.Read(ref _stopping) == 0;
             internal void SetIgnoreWriteExceptions(bool value)
             { _tcp.IgnoreWriteExceptions = value; _quic.IgnoreWriteExceptions = value; }
-            internal static Session Start(X509Certificate2 certificate, List<string> prefixes, bool ignoreWriteExceptions, bool native, bool deferContinue, TcpConnectionPolicy connections, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
+            internal static Session Start(ServerCertificateSource certificates, List<string> prefixes, bool ignoreWriteExceptions, bool native, bool deferContinue, TcpConnectionPolicy connections, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
             {
-                var tcp = new HttpListener(certificate, bodyPolicy);
-                var quic = new Http3.Http3Listener(certificate, native, bodyPolicy);
+                var tcp = new HttpListener(certificates, bodyPolicy);
+                var quic = new Http3.Http3Listener(certificates, native, bodyPolicy);
                 tcp.DeferContinue = deferContinue;
                 tcp.ConnectionPolicy = connections;
                 tcp.Telemetry = telemetry;
