@@ -17,8 +17,8 @@ var parallelism = args.Length > 1 ? int.Parse(args[1], CultureInfo.InvariantCult
 var output = args.Length > 2 ? args[2] : "TestResults/runtime-close-probe/result.json";
 if (iterations is < 1 or > 4096 || parallelism is < 1 or > 32)
     throw new ArgumentOutOfRangeException(nameof(args), "Use 1-4096 connections and 1-32 concurrent independent clients.");
-if (Environment.Version.ToString() != "10.0.12")
-    throw new InvalidOperationException("This reproduction requires the exact .NET 10.0.12 runtime.");
+if (Environment.Version.ToString() != "10.0.13")
+    throw new InvalidOperationException("This reproduction requires the exact .NET 10.0.13 runtime.");
 
 var reports = new List<object>();
 var failures = new ConcurrentBag<object>();
