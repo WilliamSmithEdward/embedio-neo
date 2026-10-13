@@ -171,7 +171,10 @@ namespace EmbedIO.Tests.Issues
             using var response = new MemoryStream();
             await tls.CopyToAsync(response, token).ConfigureAwait(false);
             var text = Encoding.UTF8.GetString(response.ToArray());
-            Assert.That(text, Does.StartWith("HTTP/1.1 200"));
+            // Not an NUnit assertion: NUnit records a failed assertion even when a caller catches it, and a
+            // refused client can see a closed connection, an empty response, after a TLS 1.3 handshake.
+            if (!text.StartsWith("HTTP/1.1 200", StringComparison.Ordinal))
+                throw new IOException("No successful response: " + (text.Length == 0 ? "the connection closed" : text.Split("\r\n")[0]));
             var body = text.Substring(text.IndexOf("\r\n\r\n", StringComparison.Ordinal) + 4);
             if (text.Contains("Transfer-Encoding: chunked", StringComparison.OrdinalIgnoreCase))
                 body = body.Split("\r\n")[1];
@@ -181,16 +184,17 @@ namespace EmbedIO.Tests.Issues
         // The handshake fails, or the server drops the connection right after it, without a response.
         private static async Task AssertRefusedAsync(int port, X509Certificate2? client, CancellationToken token)
         {
+            string? accepted = null;
             try
             {
-                var result = await RequestAsync(port, client, token).ConfigureAwait(false);
-                Assert.Fail("The server accepted the connection: " + result.Body);
+                accepted = (await RequestAsync(port, client, token).ConfigureAwait(false)).Body;
             }
-            catch (Exception error) when (error is AuthenticationException or IOException or SocketException or AssertionException)
+            catch (Exception error) when (error is AuthenticationException or IOException or SocketException)
             {
-                if (error is AssertionException assertion && assertion.Message.StartsWith("The server accepted", StringComparison.Ordinal))
-                    throw;
+                // Refused during or right after the handshake.
             }
+
+            Assert.That(accepted, Is.Null, "The server accepted the connection.");
         }
 
         [Test]
