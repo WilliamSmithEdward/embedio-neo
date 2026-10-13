@@ -62,56 +62,81 @@ namespace EmbedIO.Tests
         [TestCase(false, false)]
         public async Task TcpAndQuicSharePortAndStopIndependently(bool stopQuic, bool http2)
         {
-            using var certificate = Certificate();
-            var prefix = CombinedPrefix();
-            var tcpCount = 0;
-            var quicCount = 0;
-            using var tcp = new WebServer(HttpListenerMode.EmbedIO, certificate, prefix)
-                .WithAction("/", HttpVerbs.Get, async context =>
-                {
-                    Interlocked.Increment(ref tcpCount);
-                    await context.SendStringAsync("tcp", "text/plain", WebServer.Utf8NoBomEncoding);
-                });
-            using var quic = new WebServer(HttpListenerMode.EmbedIOHttp3, certificate, prefix)
-                .WithAction("/", HttpVerbs.Get, async context =>
-                {
-                    Interlocked.Increment(ref quicCount);
-                    await context.SendStringAsync("quic", "text/plain", WebServer.Utf8NoBomEncoding);
-                });
-            using var tcpStop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            using var quicStop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var tcpRunning = tcp.RunAsync(tcpStop.Token);
-            var quicRunning = quic.RunAsync(quicStop.Token);
-            using var tcpClient = Client(certificate);
-            var tcpVersion = http2 ? HttpVersion.Version20 : HttpVersion.Version11;
-            tcpClient.DefaultRequestVersion = tcpVersion;
-            using var quicClient = Client(certificate);
+            using var capture = new SharedPortCapture();
+            Exception? primaryFailure = null;
+            Task? tcpRunning = null;
+            Task? quicRunning = null;
             try
             {
-                await Task.WhenAll(Enumerable.Range(0, 32).Select(async index =>
+                using var certificate = Certificate();
+                var prefix = CombinedPrefix();
+                var tcpCount = 0;
+                var quicCount = 0;
+                using var tcp = new WebServer(HttpListenerMode.EmbedIO, certificate, prefix)
+                    .WithAction("/", HttpVerbs.Get, async context =>
+                    {
+                        Interlocked.Increment(ref tcpCount);
+                        await context.SendStringAsync("tcp", "text/plain", WebServer.Utf8NoBomEncoding);
+                    });
+                using var quic = new WebServer(HttpListenerMode.EmbedIOHttp3, certificate, prefix)
+                    .WithAction("/", HttpVerbs.Get, async context =>
+                    {
+                        Interlocked.Increment(ref quicCount);
+                        await context.SendStringAsync("quic", "text/plain", WebServer.Utf8NoBomEncoding);
+                    });
+                using var tcpStop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                using var quicStop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                capture.Mark("certificate", $"thumbprint={certificate.Thumbprint};hasPrivateKey={certificate.HasPrivateKey}");
+                capture.Mark("before-start", prefix);
+                tcpRunning = tcp.RunAsync(tcpStop.Token);
+                quicRunning = quic.RunAsync(quicStop.Token);
+                capture.Mark("running-tasks-returned", prefix);
+                using var tcpClient = Client(certificate);
+                var tcpVersion = http2 ? HttpVersion.Version20 : HttpVersion.Version11;
+                tcpClient.DefaultRequestVersion = tcpVersion;
+                using var quicClient = Client(certificate);
+                try
                 {
-                    var client = index % 2 == 0 ? tcpClient : quicClient;
-                    using var response = await client.GetAsync(prefix);
-                    Assert.That(response.Version, Is.EqualTo(index % 2 == 0 ? tcpVersion : HttpVersion.Version30));
-                    Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo(index % 2 == 0 ? "tcp" : "quic"));
-                }));
-                Assert.That(tcpCount, Is.EqualTo(16));
-                Assert.That(quicCount, Is.EqualTo(16));
-                (stopQuic ? quicStop : tcpStop).Cancel();
-                await (stopQuic ? quicRunning : tcpRunning).WaitAsync(TimeSpan.FromSeconds(5));
-                using var survivorClient = Client(certificate);
-                survivorClient.DefaultRequestVersion = stopQuic ? tcpVersion : HttpVersion.Version30;
-                using var survivor = await survivorClient.GetAsync(prefix);
-                Assert.That(survivor.Version, Is.EqualTo(stopQuic ? tcpVersion : HttpVersion.Version30));
-                Assert.That(await survivor.Content.ReadAsStringAsync(), Is.EqualTo(stopQuic ? "tcp" : "quic"));
-                Assert.That(tcpCount, Is.EqualTo(stopQuic ? 17 : 16));
-                Assert.That(quicCount, Is.EqualTo(stopQuic ? 16 : 17));
+                    capture.Mark("before-initial-requests", prefix);
+                    await Task.WhenAll(Enumerable.Range(0, 32).Select(async index =>
+                    {
+                        var client = index % 2 == 0 ? tcpClient : quicClient;
+                        capture.Mark("client-request", $"{index}:{(index % 2 == 0 ? "tcp" : "quic")}");
+                        using var response = await client.GetAsync(prefix);
+                        capture.Mark("client-response", $"{index}:{response.Version}:{(int)response.StatusCode}");
+                        Assert.That(response.Version, Is.EqualTo(index % 2 == 0 ? tcpVersion : HttpVersion.Version30));
+                        Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo(index % 2 == 0 ? "tcp" : "quic"));
+                    }));
+                    capture.Mark("initial-requests-settled", $"tcp={tcpCount};quic={quicCount}");
+                    Assert.That(tcpCount, Is.EqualTo(16));
+                    Assert.That(quicCount, Is.EqualTo(16));
+                    capture.Mark("before-selective-cancel", stopQuic ? "quic" : "tcp");
+                    (stopQuic ? quicStop : tcpStop).Cancel();
+                    await (stopQuic ? quicRunning : tcpRunning).WaitAsync(TimeSpan.FromSeconds(5));
+                    using var survivorClient = Client(certificate);
+                    survivorClient.DefaultRequestVersion = stopQuic ? tcpVersion : HttpVersion.Version30;
+                    using var survivor = await survivorClient.GetAsync(prefix);
+                    Assert.That(survivor.Version, Is.EqualTo(stopQuic ? tcpVersion : HttpVersion.Version30));
+                    Assert.That(await survivor.Content.ReadAsStringAsync(), Is.EqualTo(stopQuic ? "tcp" : "quic"));
+                    Assert.That(tcpCount, Is.EqualTo(stopQuic ? 17 : 16));
+                    Assert.That(quicCount, Is.EqualTo(stopQuic ? 16 : 17));
+                }
+                catch (Exception error)
+                {
+                    primaryFailure = error;
+                    throw;
+                }
+                finally
+                {
+                    capture.Mark("finally-cancel", $"tcp={tcpRunning.Status};quic={quicRunning.Status};tcpCount={tcpCount};quicCount={quicCount}");
+                    await CancelAndJoinSharedPortAsync(tcpStop, quicStop, tcpRunning, quicRunning, primaryFailure, capture);
+                    capture.Mark("finally-tasks", $"tcp={tcpRunning.Status};quic={quicRunning.Status};tcpCanceled={tcpStop.IsCancellationRequested};quicCanceled={quicStop.IsCancellationRequested}");
+                }
             }
-            finally
+            catch (Exception failure)
             {
-                tcpStop.Cancel();
-                quicStop.Cancel();
-                await Task.WhenAll(tcpRunning, quicRunning).WaitAsync(TimeSpan.FromSeconds(5));
+                capture.WriteFailure(failure, tcpRunning, quicRunning);
+                throw;
             }
         }
 
