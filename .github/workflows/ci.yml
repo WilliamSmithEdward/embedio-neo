@@ -132,7 +132,7 @@ jobs:
             dotnet run --project test/EmbedIO.NativeModuleLifetime/EmbedIO.NativeModuleLifetime.csproj -c Release --no-build > "TestResults/native-context-process-$attempt.json"
             dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
               --filter "$filter" --report-trx --results-directory "TestResults/native-module-process-$attempt" \
-              --timeout 2m --minimum-expected-tests 6062
+              --timeout 2m --minimum-expected-tests 7
           done
       - name: Run the regression suite with coverage
         shell: bash
@@ -231,7 +231,7 @@ jobs:
       - name: Verify ZIP concurrency with a constrained worker pool
         env:
           DOTNET_PROCESSOR_COUNT: 2
-        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --filter FullyQualifiedName~Issue491_ZipConcurrency --report-trx --results-directory TestResults/zip-constrained --timeout 2m --minimum-expected-tests 6062
+        run: dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --filter FullyQualifiedName~Issue491_ZipConcurrency --report-trx --results-directory TestResults/zip-constrained --timeout 2m --minimum-expected-tests 27
       - name: Stress immediate client resets on macOS
         if: runner.os == 'macOS'
         shell: bash
@@ -241,7 +241,7 @@ jobs:
             dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
               --filter 'FullyQualifiedName~Issue38_MacAcceptReset|FullyQualifiedName~IncompleteAndDisconnectedClientsDoNotStopHealthyRequests' \
               --report-trx --results-directory "TestResults/mac-reset-$iteration" \
-              --timeout 2m --minimum-expected-tests 6062
+              --timeout 2m --minimum-expected-tests 17
           done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -428,7 +428,7 @@ jobs:
             # Four owned gate cases plus the two raw runtime cases must all be discovered.
             dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
               --filter 'TestCategory=QuicLifetimeRetirementGate|FullyQualifiedName~QuicRuntimeRebindTest' \
-              --minimum-expected-tests 6062 --timeout 15m --report-trx --results-directory "$results/repetition-$repetition" \
+              --minimum-expected-tests 6 --timeout 15m --report-trx --results-directory "$results/repetition-$repetition" \
               > "$results/repetition-$repetition.log" 2>&1 || status=$?
             printf '%s\t%s\n' "$repetition" "$status" >> "$results/repetitions.tsv"
             if test "$status" -ne 0; then failed=1; fi
