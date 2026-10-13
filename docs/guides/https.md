@@ -71,10 +71,11 @@ prefix only after testing network access and client trust on the target device.
 ## Windows certificate helpers
 
 `AutoLoadCertificate` and `AutoRegisterCertificate` remain Windows-only helpers
-for certificate stores and `netsh` HTTP.sys bindings. The Microsoft listener uses
-OS configuration; supplying a certificate does not configure HTTP.sys by itself.
-Portable managed-listener hosting uses `WithCertificate` and leaves those helpers
-disabled. Existing default listener selection and HTTP configuration are unchanged.
+for certificate stores and `netsh` HTTP.sys bindings. Neo v2 has removed the
+Microsoft listener backend; an HTTP.sys binding does not configure the replacement
+engine's HTTPS transport. Use `WithCertificate` for portable hosting and leave
+those helpers disabled unless your application deliberately needs their Windows
+configuration side effects. See the [listener migration guide](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
 
 Report deployment problems with the OS/API level, .NET/MAUI runtime, listener
 mode, key-import flags and the complete exception. Omit passwords and private keys.

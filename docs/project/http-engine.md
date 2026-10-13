@@ -1,4 +1,4 @@
-﻿# Modern HTTP engine program
+# Modern HTTP engine program
 
 Release scope: William designated this modern engine program for **EmbedIO-Neo v2**
 on 2026-10-10. Maintain the [Neo v1 to v2 migration guide](../compatibility/neo-v1-to-v2.md)
@@ -156,8 +156,10 @@ points to the replacement. Retirement concerns the old implementation; do not
 mark `HttpListenerMode.EmbedIO` obsolete merely because its implementation changes.
 Microsoft mode, its selection helper and public runtime adapters are removed in
 the first retirement increment. Persisted numeric mode 1 is rejected explicitly.
-The Mono HTTP/1 components are being replaced incrementally; they are not removed
-merely by deleting the Microsoft adapters. See the
+The incremental replacement has now removed the inherited Mono HTTP/1 components
+as well as the Microsoft adapters. Source retirement is distinct from final
+protocol, extension, resource and platform acceptance. Historical increment
+records below retain their original source-specific limitations. See the
 [v1-to-v2 guide](../compatibility/neo-v1-to-v2.md) for migration requirements.
 
 Acceptance requires real listener tests for default constructors, unconfigured
