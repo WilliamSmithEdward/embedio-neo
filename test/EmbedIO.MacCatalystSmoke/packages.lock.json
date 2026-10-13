@@ -181,8 +181,7 @@
         }
       },
       "System.Threading.RateLimiting": {
-        "type": "CentralTransitive",
-        "requested": "[10.0.12, )",
+        "type": "Transitive",
         "resolved": "10.0.12",
         "contentHash": "Y3f2aLAgynO44Q9xYHR35NC1KuSTcZwo49xjHuq0gQWyOWw8fvipIdoc+1e8FS+9neYZuQ1K4iwl5frNJXekgw=="
       }

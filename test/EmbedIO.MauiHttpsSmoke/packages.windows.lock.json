@@ -320,7 +320,15 @@
         "contentHash": "hyJB4UlpAi19Xr9AXzu2NuagKC4lPfHObNMEAA0HmqFz2rX7wKgzeYzO/jM/eBHDhnUGFFEjk5cOoJaxqg5J4A=="
       },
       "EmbedIO-Neo": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "System.Threading.RateLimiting": "[10.0.12, )"
+        }
+      },
+      "System.Threading.RateLimiting": {
+        "type": "Transitive",
+        "resolved": "10.0.12",
+        "contentHash": "Y3f2aLAgynO44Q9xYHR35NC1KuSTcZwo49xjHuq0gQWyOWw8fvipIdoc+1e8FS+9neYZuQ1K4iwl5frNJXekgw=="
       }
     },
     "net10.0-windows10.0.19041/win-x64": {
