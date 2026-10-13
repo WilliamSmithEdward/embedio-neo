@@ -130,6 +130,12 @@ completed (in flight after drain: 0). Drain does not ask the WebSocket module to
 close its connections (for example with 1001 Going Away), so upgraded connections
 are cut at the deadline. Whether drain should close WebSockets is a design decision.
 
+Decided in #280: the default stays as measured here. `WebSocketModule.CloseOnDrain`
+opts a module into closing its WebSockets with 1001 when the drain starts, and
+`WebServer.DrainStarted` lets applications end other long-lived work; see
+[WebSockets during a graceful drain](../guides/graceful-drain-websockets.md). The
+campaign above predates both and has not been rerun with them.
+
 ### 5. Idle keep-alive connections end with a reset
 
 When the managed HTTP/1.1 listener's 15 s keep-alive idle timeout fires, the client

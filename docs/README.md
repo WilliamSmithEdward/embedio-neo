@@ -16,6 +16,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [WebSocket handshake status](guides/websocket-handshake-status.md): exact endpoints, module order, and HTTP/1 versus extended CONNECT.
 - [Outstanding WebSocket deliveries](guides/websocket-receive-limits.md): opt-in connection and module limits covering assembly, queues and unfinished callbacks.
+- [WebSockets during a graceful drain](guides/graceful-drain-websockets.md): unreleased opt-in 1001 close on drain and the `DrainStarted` signal, over HTTP/1.1, HTTP/2 and HTTP/3.
 
 - [Response-time diagnostics](guides/response-timing.md): server handling duration, preserved context age and the difference from client latency.
 - [Request trailers](guides/request-trailers.md): optional completion-aware immutable snapshots separate from initial headers.
