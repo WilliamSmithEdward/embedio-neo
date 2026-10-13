@@ -73,6 +73,18 @@ was changed to obtain parity. Initial failures are retained under ignored
 `TestResults/ci-initial-linux` and `TestResults/ci-initial-macos`. The revised
 macOS profile must pass CI; completion is recorded in the PR results and artifacts.
 
+Current profiles (October 13, 2026): Windows and Linux each compare 142 cases
+(284 upstream-to-Neo comparisons), and macOS compares 138 (276). The `macos`
+profile derives from `unix` in `reviewed-differences.json` and skips the four
+`websocket/` message cases for every build, so the case lists stay aligned
+instead of recording a one-sided mismatch. On macOS the original EmbedIO 3.5.2
+managed WebSocket can leave the echo unanswered. In run 38449281895
+(artifact `compatibility-results-macos-15/parity-audit/Upstream-run.log`) the
+harness's 10-second receive deadline fired with `SocketException` 89, and the
+upstream process aborted. EmbedIO.Tests still covers Neo's WebSocket behavior on
+macOS: 339 WebSocket test results passed in the macOS job of run 38445119448.
+Eleven negative checks run on every profile.
+
 ## Run and interpretation
 
 From the repository root, with the SDK in `global.json` and Python 3:
