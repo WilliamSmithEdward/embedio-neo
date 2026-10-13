@@ -412,7 +412,7 @@ namespace EmbedIO.Tests.Issues
             }
         }
 
-        // Without WithProblemDetails, EmbedIO's HTML pages are unchanged; a module can opt in alone.
+        // A module can opt in without replacing the server's empty unhandled-error policy.
         [Test]
         public async Task DefaultsAreUnchangedAndModulesCanOptIn()
         {
@@ -429,7 +429,8 @@ namespace EmbedIO.Tests.Issues
             using (elsewhere.Response)
             {
                 Assert.That(elsewhere.Status, Is.EqualTo(HttpStatusCode.InternalServerError));
-                Assert.That(elsewhere.MediaType, Is.EqualTo("text/html"));
+                Assert.That(elsewhere.MediaType, Is.EqualTo("application/octet-stream"));
+                Assert.That(elsewhere.Body, Is.Empty);
             }
         }
 

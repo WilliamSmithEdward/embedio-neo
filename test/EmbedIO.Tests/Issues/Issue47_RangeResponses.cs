@@ -144,7 +144,9 @@ namespace EmbedIO.Tests.Issues
         [TestCase(2)]
         public async Task UnknownLengthSourceIsRejectedBeforeCommitment(int protocol)
         {
-            await using var host = await Host.StartAsync(context => context.SendRepresentationAsync(new ForwardOnlyStream(Payload), "application/octet-stream"));
+            // Select a detailed replacement explicitly; Neo v2's default 500 is empty.
+            await using var host = await Host.StartAsync(context => context.SendRepresentationAsync(new ForwardOnlyStream(Payload), "application/octet-stream"),
+                onUnhandledException: ExceptionHandler.HtmlResponse);
             using var client = Host.CreateClient(protocol);
             using var response = await client.SendAsync(Request(client, host.Url, "bytes=0-9"));
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError), "A non-seekable source has no known length; the exception handler still owns the response.");
@@ -294,7 +296,8 @@ namespace EmbedIO.Tests.Issues
             private Host(WebServer server, string url) { _server = server; Url = url; _running = server.RunAsync(_stop.Token); }
             internal string Url { get; }
 
-            internal static Task<Host> StartAsync(Func<IHttpContext, Task> handler, HttpVerbs verbs = HttpVerbs.Get, bool ignoreWriteExceptions = true)
+            internal static Task<Host> StartAsync(Func<IHttpContext, Task> handler, HttpVerbs verbs = HttpVerbs.Get, bool ignoreWriteExceptions = true,
+                ExceptionHandlerCallback? onUnhandledException = null)
             {
                 var url = Resources.GetServerAddress();
                 var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO))
@@ -302,6 +305,7 @@ namespace EmbedIO.Tests.Issues
                         ? context.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding)
                         : handler(context)));
                 server.Listener.IgnoreWriteExceptions = ignoreWriteExceptions;
+                if (onUnhandledException != null) server.HandleUnhandledException(onUnhandledException);
                 return Task.FromResult(new Host(server, url));
             }
 

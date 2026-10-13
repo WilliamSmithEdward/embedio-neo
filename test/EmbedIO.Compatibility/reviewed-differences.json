@@ -441,12 +441,26 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/controller-error/contentType",
+          "upstream": "text/html; charset=utf-8",
+          "neo": "application/octet-stream",
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
+        },
+        {
           "path": "/http/EmbedIO/controller-error/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/controller-error/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [],
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
         },
         {
           "path": "/http/EmbedIO/controller-head/encoding",
@@ -653,8 +667,8 @@
         {
           "path": "/http/EmbedIO/json-cycle/contentType",
           "upstream": "application/json; charset=utf-8",
-          "neo": "text/html; charset=utf-8",
-          "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
+          "neo": "application/octet-stream",
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
         },
         {
           "path": "/http/EmbedIO/json-cycle/encoding",
@@ -669,6 +683,14 @@
           "upstream": 200,
           "neo": 500,
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
+        },
+        {
+          "path": "/http/EmbedIO/json-cycle/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [],
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
         },
         {
           "path": "/http/EmbedIO/json-derived/body",
@@ -1266,12 +1288,26 @@
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
         },
         {
+          "path": "/http/EmbedIO/controller-error/contentType",
+          "upstream": "text/html; charset=utf-8",
+          "neo": "application/octet-stream",
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
+        },
+        {
           "path": "/http/EmbedIO/controller-error/encoding",
           "upstream": [
             "identity"
           ],
           "neo": [],
           "reason": "Existing correction: omit Content-Encoding when no transformation is applied; preserve Vary. docs/user-reports/identity-content-encoding.md; merged PR #96."
+        },
+        {
+          "path": "/http/EmbedIO/controller-error/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [],
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
         },
         {
           "path": "/http/EmbedIO/controller-head/encoding",
@@ -1478,8 +1514,8 @@
         {
           "path": "/http/EmbedIO/json-cycle/contentType",
           "upstream": "application/json; charset=utf-8",
-          "neo": "text/html; charset=utf-8",
-          "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
+          "neo": "application/octet-stream",
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
         },
         {
           "path": "/http/EmbedIO/json-cycle/encoding",
@@ -1494,6 +1530,14 @@
           "upstream": 200,
           "neo": 500,
           "reason": "Characterized SWAN-to-System.Text.Json migration boundary, not upstream equivalence. docs/compatibility/migration.md and docs/user-reports/json-migration-compatibility.md. Exact old/new values are held here; retaining a boundary does not endorse every application impact."
+        },
+        {
+          "path": "/http/EmbedIO/json-cycle/vary",
+          "upstream": [
+            "Accept-Encoding"
+          ],
+          "neo": [],
+          "reason": "Owner-approved Neo v2 empty unhandled-500 default. Unhandled controller and JSON serialization exceptions no longer produce HTML or its compression Vary metadata; status and all other consumer fields remain inventoried. See docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500. Explicit HtmlResponse remains available and is covered by protocol wire tests."
         },
         {
           "path": "/http/EmbedIO/json-derived/body",
