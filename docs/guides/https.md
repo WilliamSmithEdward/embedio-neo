@@ -23,7 +23,9 @@ production private key inside an APK or source repository.
 
 To install a renewed certificate without restarting the server, configure a
 `ServerCertificateSource` instead; see
-[rotating the server certificate](certificate-rotation.md).
+[rotating the server certificate](certificate-rotation.md). To require client
+certificates, limit protocol versions or choose the certificate by server name,
+see [TLS policy](tls-policy.md).
 
 The client must trust the issuer and connect using a DNS name or IP address
 present in the certificate's Subject Alternative Name. A self-signed certificate
@@ -31,7 +33,7 @@ needs explicit client trust. Do not use an accept-all validation callback in a
 production client. HTTPS encrypts traffic; configure application authentication
 and authorization separately before exposing privileged routes.
 
-TLS protocol selection is delegated to the runtime/OS using `SslProtocols.None`.
+By default, TLS protocol selection is delegated to the runtime/OS using `SslProtocols.None`.
 It does not mean plaintext or enable every protocol. Actual availability depends
 on the OS security provider and its policy. The listener performs authentication
 asynchronously, within the existing 90-second first-request timeout; clients that
