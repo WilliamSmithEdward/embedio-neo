@@ -25,7 +25,7 @@ a public member an application can call; an internal method is not an API.
 The dated matrices and findings below describe `01e785d` and the separately
 reviewed `a2dc18c` candidate. They remain reproduction history, not a list of
 defects still present in today's source. This source-only reconciliation uses
-accepted engine `0773460e0321a049274725fe38852dabd57ded58`; it does not recapture
+accepted engine `f1980ba78a95fd76ee3935b261abdca2395004da`; it does not recapture
 the 48-RFC inventory, retest the engine or certify complete conformance.
 
 | Historical topic | Current accepted disposition | Evidence and remaining scope |
@@ -69,7 +69,9 @@ and H1/H2/H3 delivery; the complete accepted head passed all 35 hosted checks.
 Logical delivery accounting is not a total-heap bound. These results are not
 older-CLR or soak coverage, nor measured default-path performance equivalence.
 
-The accepted OpenAPI increments [PR358](https://github.com/WilliamSmithEdward/embedio-neo/pull/358) and [PR360](https://github.com/WilliamSmithEdward/embedio-neo/pull/360) describe generated bindings, authentication requirements and declared routes. They do not implement TLS client authentication, prove complete HTTP conformance or authorize a release. The accepted raw-body and WebSocket combinations preserve these changes. The final WebSocket combination reported 5,458 cases locally (5,438 passed, 20 intentional skips, zero failures), conserved all 5,388 prior accepted test identities and passed every hosted check. PR351's later comparative campaign completed successfully on its fixed, `c154244`-based source, and all 37 exact-head checks passed or intentionally skipped. PR351 is integrated, but its actual merge also includes the independently accepted forwarding addition. The source-qualified report in [PR365](https://github.com/WilliamSmithEdward/embedio-neo/pull/365) preserves that difference; measurements of the fixed campaign source are not measurements of the combined tree. The combined macOS suite reported all 5,517 cases with one initial QUIC bind failure, before the drain trigger. That failure is outside the raw-runtime rebind quarantine, and combined acceptance remains pending.
+The accepted OpenAPI increments [PR358](https://github.com/WilliamSmithEdward/embedio-neo/pull/358) and [PR360](https://github.com/WilliamSmithEdward/embedio-neo/pull/360) describe generated bindings, authentication requirements and declared routes. They do not implement TLS client authentication, prove complete HTTP conformance or authorize a release. The accepted raw-body and WebSocket combinations preserve these changes. The final WebSocket combination reported 5,458 cases locally (5,438 passed, 20 intentional skips, zero failures), conserved all 5,388 prior accepted test identities and passed every hosted check. PR351's later comparative campaign completed successfully on its fixed, `c154244`-based source, and all 37 exact-head checks passed or intentionally skipped. PR351 is integrated, but its actual merge also includes the independently accepted forwarding addition. The source-qualified report in [PR365](https://github.com/WilliamSmithEdward/embedio-neo/pull/365) preserves that difference; measurements of the fixed campaign source are not measurements of the combined tree.
+
+That earlier combined macOS run's initial QUIC bind failure remains retained and unattributed. Accepted [PR368](https://github.com/WilliamSmithEdward/embedio-neo/pull/368) adds namespace controls and owner-terminal observations, not a claimed credential or bind repair. Its exact `3508683e` CI run `38327358187` reported all 5,576 cases on each OS: Windows 5,564 passed/12 skipped, Linux 5,562 passed/14 skipped, and macOS 5,558 passed/18 skipped, with zero failures. The four new ordinary namespace controls and nine owner-terminal diagnostic observations passed on each OS; both raw-runtime rebind cases passed, so that run did not activate their quarantine. These receipts belong to that head and its accepted-base checkout, not to every subsequent runtime change. This refresh adds no benchmark.
 
 Accepted [PR362](https://github.com/WilliamSmithEdward/embedio-neo/pull/362)
 adds opt-in application rate limiting and 429/Retry-After behavior through
@@ -90,8 +92,8 @@ adds opt-in RFC9457 problem details for application errors. Its 22 cases bring
 the accepted discovery floor to 5,539. This response representation does not
 change protocol framing, establish gateway behavior or complete the conformance
 ledger. The owner separately approved an empty-500 unhandled-exception default;
-that change is isolated on this accepted base and is awaiting its own baseline
-and candidate wire validation. It is not yet integrated or released.
+[PR369](https://github.com/WilliamSmithEdward/embedio-neo/pull/369) implements that approved change. Its current `46e6d7b8` head awaits fresh checks and is not accepted or released. Retained baseline and candidate wire/full-suite evidence belongs to its stated source and assets; the previous IP-literal HTTP/3 fixture handshake failures remain preserved separately from the later DNS fixture correction. This overlay does not certify the pending head.
+
 A separate official-source refresh on 2026-10-12 verified all 72 captured
 responses: the 48 RFC metadata records, RFC index and errata, 14 registries and
 eight draft records. The selected inventory and registry content were unchanged.
@@ -106,11 +108,11 @@ actual Standard asset on a .NET10 host and on installed Framework4.8.1. An
 independent pinned Linux comparison reported 16 passing controls: the baseline
 actually negotiated TLS1.0/1.1 and returned exact responses, while the candidate
 rejected them and preserved TLS1.2 recovery and TLS1.2/1.3 positives on both
-assets. PR364 head `120e61c4` passed its macOS run, with TLS1.3 explicitly unavailable
+assets. Historical PR364 head `120e61c4` passed its macOS run, with TLS1.3 explicitly unavailable
 in the public TCP server provider. Accepted source still predates this correction;
 these receipts do not establish final combined discovery, all older runtimes or
 all supported platforms. [PR364](https://github.com/WilliamSmithEdward/embedio-neo/pull/364)
-remains held for current-source validation and integration.
+remains pending current-source reconciliation, validation and integration; earlier candidate receipts are not final accepted-source proof.
 
 Accepted TLS remains platform-mediated; private TLS1.2 negotiated-EMS attestation
 and WebTransport activation are not ordinary listener integration. Resource-owned
@@ -122,8 +124,10 @@ actual Standard asset on .NET10 passed 18 cases with nine explicit H3 asset
 skips. Neither the guide nor its marker policies are accepted here; Windows,
 final platform/discovery checks, native early-data provenance and gateway
 behavior remain separate requirements.
-Shared-owner certificate/SNI/ALPN policy and final retained-platform validation
-still require concrete supported contracts and source-pinned evidence.
+Accepted [PR371](https://github.com/WilliamSmithEdward/embedio-neo/pull/371), at `f1980ba7`, adds opt-in [certificate rotation](../guides/certificate-rotation.md) through `ServerCertificateSource` and 24 new controls. New handshakes capture the current certificate; existing connections retain their captured certificate, and fixed `Certificate` configuration remains supported. This accepted renewal surface is distinct from full shared-owner certificate/SNI/ALPN selection, client-authentication policy and final retained-platform acceptance, which still need concrete contracts and source-pinned evidence.
+
+[PR361](https://github.com/WilliamSmithEdward/embedio-neo/pull/361) was closed as NOT_PLANNED at the owner's request. Its failed controls remain retained and unresolved; closure is not a passing protocol or performance gate. The private native F338 checkpoint establishes managed compilation only, not current native ABI compatibility, real application-peer interoperation or accepted WebTransport activation. Private priority and native evidence must retain their own source/provider identities rather than inherit this overlay's accepted basis.
+
 The default System.Net.Quic provider's diagnosed per-stream send-buffer retention
 remains tracked in [issue278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278).
 The upstream [candidate correction](https://github.com/dotnet/runtime/pull/135591)
