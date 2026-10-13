@@ -14,11 +14,12 @@ namespace EmbedIO.Net
         /// <summary>Initializes a listener, optionally using the supplied server certificate.</summary>
         /// <param name="certificate">The borrowed server certificate.</param>
         public HttpListener(X509Certificate? certificate = null) : this(certificate, null) { }
-        /// <summary>Initializes a listener whose TLS handshakes use the current certificate of <paramref name="certificateSource"/>.</summary>
+        /// <summary>Creates a listener whose TLS handshakes use the current certificate of <paramref name="certificateSource"/>.</summary>
         /// <param name="certificateSource">The borrowed source of the server certificate, which the application may update while the listener runs.</param>
+        /// <returns>A listener that borrows <paramref name="certificateSource"/> and its certificates.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="certificateSource"/> is <see langword="null"/>.</exception>
-        public HttpListener(ServerCertificateSource certificateSource)
-            : this(null, certificateSource ?? throw new ArgumentNullException(nameof(certificateSource)), null) { }
+        public static HttpListener CreateWithCertificateSource(ServerCertificateSource certificateSource)
+            => new HttpListener(null, certificateSource ?? throw new ArgumentNullException(nameof(certificateSource)), null);
         /// <summary>Initializes a listener whose TLS handshakes use the current certificate of <paramref name="certificateSource"/>
         /// and the settings of <paramref name="tlsPolicy"/>.</summary>
         /// <param name="certificateSource">The borrowed source of the server certificate, which the application may update while the listener runs.</param>
@@ -27,7 +28,7 @@ namespace EmbedIO.Net
         /// <exception cref="PlatformNotSupportedException"><paramref name="tlsPolicy"/> selects certificates by server name,
         /// which requires the .NET 10 asset.</exception>
         public HttpListener(ServerCertificateSource certificateSource, ServerTlsPolicy? tlsPolicy)
-            : this(certificateSource)
+            : this(null, certificateSource ?? throw new ArgumentNullException(nameof(certificateSource)), null)
         {
             tlsPolicy?.EnsureSupported(false, false);
             tlsPolicy?.Lock();
