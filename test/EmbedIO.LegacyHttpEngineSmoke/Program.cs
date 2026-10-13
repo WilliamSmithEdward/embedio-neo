@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 using EmbedIO;
 using EmbedIO.Actions;
 
-public static class Program
+public static partial class Program
 {
     private static int _checks;
 
@@ -46,6 +46,8 @@ public static class Program
 
     private static async Task RunAsync()
     {
+        await VerifyLegacyIdleClosureAsync(false).ConfigureAwait(false);
+        await VerifyLegacyIdleClosureAsync(true).ConfigureAwait(false);
         var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
