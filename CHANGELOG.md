@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
+- Owner-approved Neo v2 candidate: completed HTTP/1 keep-alive idle exchanges
+  attempt orderly send shutdown at the existing deadline instead of inherited
+  reset closure. Partial requests/responses retain abort behavior; TLS capability
+  and interruption fallbacks are documented in the v1-to-v2 migration guide.
+  This is unreleased and changes no public APIs or timeout values.
 - Add opt-in RFC 9457 problem details from Neo #143. `WithProblemDetails()`, or
   `ProblemDetailsHandler.ForHttpExceptions()` and `ForUnhandledExceptions()` on a server or module,
   answer errors with `application/problem+json`: HTTP exceptions and Web API binding failures keep

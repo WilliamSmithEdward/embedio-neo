@@ -15,6 +15,8 @@ namespace EmbedIO.Net.Internal
     {
         private bool _responseEnded;
         private bool _responseCanReuse;
+        private bool _idleAwaitingSuccessor;
+        private Task<int>? _idleRead;
 #if NET10_0_OR_GREATER
         private ManualResetValueTaskSourceCore<bool> _responseCompletion;
         private bool _responseWaitRequested;
@@ -36,8 +38,7 @@ namespace EmbedIO.Net.Internal
                 if (!PrepareNextRequest()) { CloseTransport(true); return; }
 
                 prefetched = _pendingInput.Count != 0;
-                count = prefetched ? 0 : await Stream.ReadAsync(
-                    _buffer ?? throw new ObjectDisposedException(nameof(HttpConnection)), 0, BufferSize).ConfigureAwait(false);
+                count = prefetched ? 0 : await ReadHttp1InputAsync().ConfigureAwait(false);
                 if (++inlineCycles == 64)
                 {
                     inlineCycles = 0;
@@ -46,22 +47,45 @@ namespace EmbedIO.Net.Internal
             }
         }
 
+        private Task<int> ReadHttp1InputAsync()
+        {
+            lock (_connectionSync)
+            {
+                if (_protocolEnded != 0) return Task.FromResult(0);
+                var reading = Stream.ReadAsync(_buffer ?? throw new ObjectDisposedException(nameof(HttpConnection)), 0, BufferSize);
+                if (_idleAwaitingSuccessor) _idleRead = reading;
+                return reading;
+            }
+        }
+
         private async Task<bool> ReadAndAdmitHeadAsync(int count, bool prefetched)
         {
             while (true)
             {
-                var input = prefetched ? _pendingInput
-                    : new ArraySegment<byte>(_buffer ?? throw new ObjectDisposedException(nameof(HttpConnection)), 0, count);
+                ArraySegment<byte> input;
+                bool complete;
+                lock (_connectionSync)
+                {
+                    if (_protocolEnded != 0) return false;
+                    input = prefetched ? _pendingInput
+                        : new ArraySegment<byte>(_buffer ?? throw new ObjectDisposedException(nameof(HttpConnection)), 0, count);
+                    if (input.Count != 0) _idleAwaitingSuccessor = false;
+                    _idleRead = null;
+                    complete = input.Count != 0 && ProcessInput(input);
+                    if (complete && _errorMessage == null)
+                    {
+                        _context.HttpListenerRequest.FinishInitialization();
+                        if (_errorMessage == null) StopRequestTimer();
+                    }
+                }
                 if (input.Count == 0) { CloseSocket(); return false; }
-                if (!ProcessInput(input))
+                if (!complete)
                 {
                     prefetched = false;
-                    count = await Stream.ReadAsync(_buffer ?? throw new ObjectDisposedException(nameof(HttpConnection)),
-                        0, BufferSize).ConfigureAwait(false);
+                    count = await ReadHttp1InputAsync().ConfigureAwait(false);
                     continue;
                 }
 
-                if (_errorMessage == null) _context.HttpListenerRequest.FinishInitialization();
                 if (_errorMessage != null)
                 {
                     var reply = _headReader.ErrorStatusCode == 414 ? UriTooLongResponse
@@ -70,7 +94,6 @@ namespace EmbedIO.Net.Internal
                     return false;
                 }
                 var routes = _epl.CaptureRoutes();
-                StopRequestTimer();
                 if (!_epl.BindContext(_context, routes)) { CloseTransport(true); return false; }
 
                 var owner = _context.Listener ?? throw new InvalidOperationException("Missing request owner.");
@@ -180,6 +203,7 @@ namespace EmbedIO.Net.Internal
                 var tail = _iStream?.BufferedRemainder ?? _pendingInput;
                 Unbind();
                 InitWithPendingInput(tail);
+                _idleAwaitingSuccessor = tail.Count == 0;
                 if (Reuses < int.MaxValue) Reuses++;
                 _sTimeout = _keepAliveTimeout;
                 _lifetime.ArmDeadline(_sTimeout);

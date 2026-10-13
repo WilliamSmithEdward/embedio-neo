@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Net.Internal.Http2;
+using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal
 {
@@ -462,9 +463,13 @@ namespace EmbedIO.Net.Internal
             TcpConnectionPolicy? slotOwner;
             EmbedIO.Internal.ServerTelemetry.LifetimeTelemetry? connectionTelemetry;
             string protocolVersion;
+            Socket? idleSocket;
             lock (_connectionSync)
             {
+                idleSocket = deadlineOnly && IsOrderlyIdleCandidate() ? _protocolSocket : null;
                 if (!_lifetime.TryRetire(deadlineOnly)) return;
+                _idleAwaitingSuccessor = false;
+                _idleRead = null;
                 slotOwner = _slotOwner;
                 _slotOwner = null;
                 connectionTelemetry = _connectionTelemetry;
@@ -483,18 +488,52 @@ namespace EmbedIO.Net.Internal
                 _buffer = null;
                 _headReader.Reset();
             }
-            try
+            request.RetireBodyLimit();
+            Task? pendingWrite = null;
+            if (idleSocket != null)
             {
-                request.RetireBodyLimit();
-                FinishRetirement();
+                var staged = false;
+                try { pendingWrite = BeginIdleSendShutdown(idleSocket); staged = true; }
+                catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException)
+                {
+                    shutdown = true;
+                    staged = true;
+                    ReportIdleRetirementError(error);
+                }
+                finally
+                {
+                    if (!staged)
+                    {
+                        try { _lifetime.FinishRetirement(true, input, DetachProtocol); }
+                        finally { ReleaseSlot(); }
+                    }
+                }
             }
-            finally
+            if (pendingWrite != null)
+            {
+                // This coroutine owns the actual write and publishes lifetime
+                // completion only after disposal has interrupted and settled it.
+                _ = FinishPendingWriteAsync(pendingWrite);
+                return;
+            }
+            try { _lifetime.FinishRetirement(shutdown, input, DetachProtocol); }
+            finally { ReleaseSlot(); }
+
+            async Task FinishPendingWriteAsync(Task writing)
+            {
+                try { await _lifetime.FinishRetirementAfterWriteAsync(writing, input, DetachProtocol).ConfigureAwait(false); }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                { ReportIdleRetirementError(error); }
+                finally { ReleaseSlot(); }
+            }
+
+            void ReleaseSlot()
             {
                 slotOwner?.Release();
                 connectionTelemetry?.Stop(protocolVersion);
             }
 
-            void FinishRetirement() => _lifetime.FinishRetirement(shutdown, input, () =>
+            void DetachProtocol()
             {
                 try
                 {
@@ -507,7 +546,42 @@ namespace EmbedIO.Net.Internal
                     try { Unbind(); }
                     finally { RemoveConnection(); }
                 }
-            });
+            }
+        }
+
+        // Called under the same gate that admits successor head bytes and
+        // commits retirement. Ready/decrypted input is conservatively aborted.
+        private bool IsOrderlyIdleCandidate()
+        {
+            if (_http2 || _tunnel || _draining || _forceClosing != 0 || !_idleAwaitingSuccessor
+                || _pendingInput.Count != 0 || _idleRead?.IsCompleted == true || _protocolSocket == null)
+                return false;
+            try { return !_protocolSocket.Poll(0, SelectMode.SelectRead); }
+            catch (Exception error) when (error is SocketException or ObjectDisposedException) { return false; }
+        }
+
+        private Task? BeginIdleSendShutdown(Socket socket)
+        {
+            if (Stream is SslStream ssl)
+            {
+#if NET10_0_OR_GREATER
+                var writing = ssl.ShutdownAsync();
+#else
+                // Unsupported older runtimes retain their existing TLS close.
+                if (ShutdownTls == null) return null;
+                var writing = ShutdownTls(ssl);
+#endif
+                if (!writing.IsCompleted) return writing;
+                writing.GetAwaiter().GetResult();
+            }
+            socket.Shutdown(SocketShutdown.Send);
+            return null;
+        }
+
+        private static void ReportIdleRetirementError(Exception error)
+        {
+            try { error.Log("HTTP/1 idle transport retirement"); }
+            catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError)) { }
         }
 
         private void StopRequestTimer() => _lifetime.StopDeadline();

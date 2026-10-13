@@ -4,9 +4,9 @@
 reviews the timeout reset reported by the historical #276 campaign. This work
 is based on PR #182 head `b3e55b5`. It adds observations and a proposed design;
 it changes no production closure path, timeout, public API or runtime dependency.
-The issue remains open for the client-visible policy decision and its implementation.
+Those historical observations did not change closure behavior. William has since approved the scoped policy; its implementation and remaining validation are described below.
 
-## Current behavior
+## Behavior observed before the approved change
 
 After a reusable response completes and its request input is consumed, the
 HTTP/1 actor resets the context and arms the existing fifteen-second timer.
@@ -74,7 +74,7 @@ complete response receipt from terminal idle-read failure. Earlier fixture-only
 failures (timer-disposal assertion and incompatible whole-suite discovery during
 assembly substitution) are retained under ignored TestResults.
 
-## Proposed policy for discussion
+## Historical proposal before approval
 
 [RFC 9112 sections 9.6 and 9.8](https://www.rfc-editor.org/rfc/rfc9112.html#section-9.6)
 describe staged TCP teardown to avoid losing the final response through a reset,
@@ -93,7 +93,7 @@ Any TLS send-shutdown operation must finish or be aborted within the existing
 cleanup budget. It must not wait indefinitely for a peer's closure alert, add a
 new grace period, or leave a detached socket outside tracked cleanup.
 
-Before implementation, agree whether changing reset to orderly EOF for that idle
+The original decision was whether changing reset to orderly EOF for that idle
 state is desired, including the policy for the .NET Standard asset on runtimes
 without a usable public TLS shutdown method. The current fifteen-second deadline
 and advertised keep-alive timeout remain unchanged. Implementation then needs
@@ -119,3 +119,43 @@ run. Each artifact records runtime identity, assembly hashes, peer observations
 and TRX results. Configuring those jobs is not evidence that they passed.
 Older-runtime/.NET Native application models and packet-level FIN/ACK ordering
 remain outside this investigation's evidence.
+
+## Approved orderly-idle candidate
+
+William approved the scoped policy in issue #281 on 2026-10-12. The candidate
+starts from accepted PR #182 base `6b943c77`; it is unreleased. The preceding
+sections retain historical observations and the design discussion, rather than
+claiming current-source or cross-platform acceptance.
+
+Completed and fully consumed HTTP/1 exchanges waiting for a successor can
+attempt orderly send shutdown when the existing timeout wins admission
+arbitration. Ready/decrypted, buffered or partial successor input conservatively
+retains abort behavior. Head processing and stopping its deadline share the
+retirement gate. A request that loses that arbitration is not dispatched or
+retried invisibly. Socket readiness is checked too; bytes can still arrive after
+that decision, so an orderly wire outcome is not guaranteed for a racing peer.
+
+Plain TCP uses send shutdown before disposal. TLS calls public SslStream shutdown;
+TCP send shutdown follows only actual successful TLS shutdown completion. If the
+TLS write is pending, the socket and stream are disposed immediately, without
+adding a grace period. That write remains lifetime-owned and registered for
+listener drain until its actual terminal state is observed. Expected interrupted
+write errors are diagnosed as fallback aborts; resource-release and unexpected
+operation failures remain observable through lifetime completion. Cancellation
+alone is not completion, and the server does not wait for a peer closure alert.
+
+The .NET Standard asset uses the existing public-method capability detection.
+Older runtimes without that method retain their existing TLS closure behavior.
+There is no private runtime shim or new dependency. The fifteen-second default,
+configured deadlines, public APIs and partial-request/response aborts remain
+unchanged. Clients should handle terminal idle closure and open a new connection
+as needed, rather than depending specifically on a reset exception. See the
+[Neo v1-to-v2 migration guide](../compatibility/neo-v1-to-v2.md#http1-idle-closure).
+
+The first candidate Windows/.NET 10 run passed 29 focused cases, including both
+actual fifteen-second idle cases, four deterministic admission/expiry cases and
+four pending-write ownership cases. Both TLS 1.2 timeout and explicit shutdown
+controls emitted a complete 31-byte alert record; its encrypted description was
+not decoded. This is not packet-level FIN/ACK proof or older-runtime acceptance.
+Additional actual blocked public TLS-write interruption controls, an unchanged
+current-source baseline comparison and full platform gates remain required.

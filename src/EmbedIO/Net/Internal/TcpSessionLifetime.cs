@@ -132,6 +132,33 @@ namespace EmbedIO.Net.Internal
         // Every owned resource is attempted even after a recoverable release fault.
         internal void FinishRetirement(bool shutdown, IDisposable? input, Action detachProtocol)
         {
+            var first = ReleaseResources(shutdown, input, detachProtocol);
+            PublishRetirement(first);
+            first?.Throw();
+        }
+
+        // The socket is disposed immediately, without a TLS grace period. Any
+        // interrupted write remains owned until its actual completion is observed.
+        internal async Task FinishRetirementAfterWriteAsync(Task pendingWrite, IDisposable? input, Action detachProtocol)
+        {
+            var first = ReleaseResources(true, input, static () => { });
+            try { await pendingWrite.ConfigureAwait(false); }
+            catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException or OperationCanceledException)
+            {
+                try { error.Log("Idle TLS shutdown interrupted by transport retirement"); }
+                catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError)) { }
+            }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            { first ??= ExceptionDispatchInfo.Capture(error); }
+            try { detachProtocol(); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            { first ??= ExceptionDispatchInfo.Capture(error); }
+            PublishRetirement(first);
+            first?.Throw();
+        }
+
+        private ExceptionDispatchInfo? ReleaseResources(bool shutdown, IDisposable? input, Action detachProtocol)
+        {
             ExceptionDispatchInfo? first = null;
             try
             {
@@ -150,20 +177,24 @@ namespace EmbedIO.Net.Internal
             try { detachProtocol(); }
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             { first ??= ExceptionDispatchInfo.Capture(error); }
-            lock (_gate)
-            {
-                _failure = first;
-                Volatile.Write(ref _state, 2);
-                if (first == null) _completion?.TrySetResult(true);
-                else _completion?.TrySetException(first.SourceException);
-            }
-            first?.Throw();
+            return first;
 
             void Release(IDisposable? resource)
             {
                 try { resource?.Dispose(); }
                 catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
                 { first ??= ExceptionDispatchInfo.Capture(error); }
+            }
+        }
+
+        private void PublishRetirement(ExceptionDispatchInfo? first)
+        {
+            lock (_gate)
+            {
+                _failure = first;
+                Volatile.Write(ref _state, 2);
+                if (first == null) _completion?.TrySetResult(true);
+                else _completion?.TrySetException(first.SourceException);
             }
         }
     }

@@ -7,6 +7,11 @@ on:
       - '.github/workflows/http1-closure.yml'
       - 'test/EmbedIO.Http1ClosureProbe/**'
       - 'test/EmbedIO.Tests/Http1IdleClosureTest.cs'
+      - 'test/EmbedIO.Tests/Http1OrderlyIdleClosureTest.cs'
+      - 'test/EmbedIO.Tests/Http1IdleTlsWriteOwnershipTest.cs'
+      - 'test/EmbedIO.Tests/TcpSessionLifetimeTest.cs'
+      - 'src/EmbedIO/Net/Internal/HttpConnection*.cs'
+      - 'src/EmbedIO/Net/Internal/TcpSessionLifetime.cs'
       - 'docs/project/http1-idle-closure.md'
   workflow_dispatch:
 
@@ -45,7 +50,7 @@ jobs:
           dotnet build src/EmbedIO/EmbedIO.csproj -c Release --no-restore
           dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore
           dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
-            --filter FullyQualifiedName~Http1IdleClosureTest --minimum-expected-tests 14 \
+            --filter 'FullyQualifiedName~Http1IdleClosureTest|FullyQualifiedName~Http1OrderlyIdleClosureTest|FullyQualifiedName~Http1IdleTlsWriteOwnershipTest|FullyQualifiedName~TcpSessionLifetimeTest' --minimum-expected-tests 31 \
             --report-trx --results-directory "$results/current" --timeout 2m
           probe=test/EmbedIO.Http1ClosureProbe/EmbedIO.Http1ClosureProbe.csproj
           dotnet restore "$probe" --locked-mode
