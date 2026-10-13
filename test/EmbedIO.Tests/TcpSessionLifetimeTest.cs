@@ -218,6 +218,49 @@ namespace EmbedIO.Tests
             Assert.That(stream.Disposals, Is.EqualTo(1));
         }
 
+        [Test]
+        public async Task UnexpectedSendStagingFailureSurvivesSuccessfulResourceRelease()
+        {
+            var failure = new InvalidOperationException("controlled send staging failure");
+            var stream = new ObservedStream(null);
+            var owner = Create(stream);
+            var completion = Completion(owner);
+            Assert.That(Retire(owner, false), Is.True);
+            Method(owner, "RecordRetirementFailure").CreateDelegate<Action<Exception>>(owner)(failure);
+            Finish(owner, null, () => { });
+            Assert.That(await Assert.ThrowsAsync<InvalidOperationException>(async () => await completion), Is.SameAs(failure));
+            Assert.That(Closed(owner), Is.True);
+            Assert.That(stream.Disposals, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task TerminalCriticalWriteFaultIsPublishedWithoutClaimingSuccessfulDrain()
+        {
+            // An exception object exercises propagation without memory pressure.
+            var failure = new OutOfMemoryException("controlled terminal fault object");
+            var stream = new ObservedStream(null);
+            var owner = Create(stream);
+            var socket = owner.GetType().GetField("_socket", Hidden)?.GetValue(owner) as Socket
+                ?? throw new AssertionException("Missing owned socket.");
+            var socketHandle = socket.SafeHandle;
+            var completion = Completion(owner);
+            Assert.That(Retire(owner, false), Is.True);
+            var detached = 0;
+            var writing = Task.FromException(failure);
+            var finishing = Method(owner, "FinishRetirementAfterWriteAsync")
+                .CreateDelegate<Func<Task, IDisposable?, Action, Task>>(owner)(writing, null, () => detached++);
+            Assert.That(await Assert.ThrowsAsync<OutOfMemoryException>(async () => await finishing), Is.SameAs(failure));
+            Assert.That(await Assert.ThrowsAsync<OutOfMemoryException>(async () => await completion), Is.SameAs(failure));
+            Assert.Multiple(() =>
+            {
+                Assert.That(completion.IsFaulted, Is.True);
+                Assert.That(socketHandle.IsClosed, Is.True);
+                Assert.That(Closed(owner), Is.True);
+                Assert.That(stream.Disposals, Is.EqualTo(1));
+                Assert.That(detached, Is.EqualTo(1));
+            });
+        }
+
         private static object Create(Stream stream, Action? expired = null)
             => Activator.CreateInstance(OwnerType, Hidden, null, new object[]
             {

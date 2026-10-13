@@ -500,6 +500,11 @@ namespace EmbedIO.Net.Internal
                     staged = true;
                     ReportIdleRetirementError(error);
                 }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                {
+                    _lifetime.RecordRetirementFailure(error);
+                    throw;
+                }
                 finally
                 {
                     if (!staged)
@@ -521,10 +526,20 @@ namespace EmbedIO.Net.Internal
 
             async Task FinishPendingWriteAsync(Task writing)
             {
-                try { await _lifetime.FinishRetirementAfterWriteAsync(writing, input, DetachProtocol).ConfigureAwait(false); }
-                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-                { ReportIdleRetirementError(error); }
-                finally { ReleaseSlot(); }
+                try
+                {
+                    await _lifetime.FinishRetirementAfterWriteAsync(writing, input, () =>
+                    {
+                        try { DetachProtocol(); }
+                        finally { ReleaseSlot(); }
+                    }).ConfigureAwait(false);
+                }
+                catch (Exception error) when (ObservePublishedRetirementFault(error))
+                {
+                    // Only the exact already-published fault is consumed here.
+                    // Authoritative Completion remains faulted, including for a
+                    // critical error; this worker creates no duplicate fault.
+                }
             }
 
             void ReleaseSlot()
@@ -576,6 +591,14 @@ namespace EmbedIO.Net.Internal
             }
             socket.Shutdown(SocketShutdown.Send);
             return null;
+        }
+
+        private bool ObservePublishedRetirementFault(Exception error)
+        {
+            var completion = _lifetime.Completion;
+            if (!completion.IsFaulted) return false;
+            // Reading Exception observes the getter's faulted task as well.
+            return ReferenceEquals(completion.Exception?.InnerException, error);
         }
 
         private static void ReportIdleRetirementError(Exception error)

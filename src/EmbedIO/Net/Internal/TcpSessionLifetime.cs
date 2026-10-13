@@ -141,20 +141,45 @@ namespace EmbedIO.Net.Internal
         // interrupted write remains owned until its actual completion is observed.
         internal async Task FinishRetirementAfterWriteAsync(Task pendingWrite, IDisposable? input, Action detachProtocol)
         {
-            var first = ReleaseResources(true, input, static () => { });
-            try { await pendingWrite.ConfigureAwait(false); }
-            catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException or OperationCanceledException)
+            ExceptionDispatchInfo? first = null;
+            try
             {
-                try { error.Log("Idle TLS shutdown interrupted by transport retirement"); }
-                catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError)) { }
+                try { first = ReleaseResources(true, input, static () => { }); }
+                catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
+                { Capture(error); }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                { Capture(error); }
+                try { await pendingWrite.ConfigureAwait(false); }
+                catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException or OperationCanceledException)
+                {
+                    try { error.Log("Idle TLS shutdown interrupted by transport retirement"); }
+                    catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError)) { }
+                }
             }
+            catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
+            { Capture(error); }
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-            { first ??= ExceptionDispatchInfo.Capture(error); }
-            try { detachProtocol(); }
-            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-            { first ??= ExceptionDispatchInfo.Capture(error); }
-            PublishRetirement(first);
+            { Capture(error); }
+            finally
+            {
+                try { detachProtocol(); }
+                catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
+                { Capture(error); }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                { Capture(error); }
+                // This is an actual terminal failure, including a critical one,
+                // rather than a successful close or an indefinitely pending drain.
+                PublishRetirement(first);
+            }
             first?.Throw();
+
+            void Capture(Exception error)
+            {
+                // A critical fault must not be hidden behind an earlier
+                // recoverable release failure. Preserve its exact identity.
+                if (first == null || !EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                    first = ExceptionDispatchInfo.Capture(error);
+            }
         }
 
         private ExceptionDispatchInfo? ReleaseResources(bool shutdown, IDisposable? input, Action detachProtocol)
@@ -187,10 +212,16 @@ namespace EmbedIO.Net.Internal
             }
         }
 
+        internal void RecordRetirementFailure(Exception error)
+        {
+            lock (_gate) { _failure ??= ExceptionDispatchInfo.Capture(error); }
+        }
+
         private void PublishRetirement(ExceptionDispatchInfo? first)
         {
             lock (_gate)
             {
+                first = _failure ?? first;
                 _failure = first;
                 Volatile.Write(ref _state, 2);
                 if (first == null) _completion?.TrySetResult(true);
