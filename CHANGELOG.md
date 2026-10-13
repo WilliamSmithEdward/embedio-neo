@@ -7,6 +7,12 @@
   and interruption fallbacks are documented in the v1-to-v2 migration guide.
   This is unreleased and changes no public APIs or timeout values.
 
+- Add opt-in WebSocket closing during graceful drain from Neo #280. With `WebSocketModule.CloseOnDrain`,
+  `WebServer.DrainAsync` closes the module's WebSockets with 1001 Going Away as it starts, including ones
+  accepted afterwards, after any message already being sent, so the drain ends once clients close instead
+  of at its deadline. It works over HTTP/1.1, HTTP/2 and HTTP/3, and in module groups. `WebServer.DrainStarted`
+  is canceled when the drain starts, for ending other long-lived work. By default drain still waits for
+  WebSockets until its deadline. See [WebSockets during a graceful drain](docs/guides/graceful-drain-websockets.md).
 - Add opt-in TLS policy from Neo #148. `ServerTlsPolicy`, configured with `WithTlsPolicy` or passed to
   `HttpListener`, asks clients for a certificate (`ClientCertificateMode.Allow` or `Require`), validates it
   with an application callback or, by default, normal trust, optionally checks revocation, limits the TLS

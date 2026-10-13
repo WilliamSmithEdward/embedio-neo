@@ -767,6 +767,26 @@ namespace EmbedIO.WebSockets.Internal
             }
         }
 
+        // Closes once a message being sent has gone out, so the close does not cut it short; used by drain.
+        // Holding the message gate keeps a new message from starting before the close frame.
+        internal async Task CloseAfterPendingSendAsync(CloseStatusCode code, string reason)
+        {
+            if (!BeginSendOperation())
+                return;
+            var entered = false;
+            try
+            {
+                await _messageSendGate.WaitAsync().ConfigureAwait(false);
+                entered = true;
+                await CloseAsync(code, reason).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (entered) _messageSendGate.Release();
+                EndSendOperation();
+            }
+        }
+
         private bool BeginSendOperation()
         {
             lock (_stateSyncRoot)
