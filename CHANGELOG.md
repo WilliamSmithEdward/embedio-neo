@@ -5,6 +5,19 @@
   without exposing their type or message. Explicit HTML and diagnostic-header handlers,
   custom handlers, logging and application-authored HTTP errors remain available. See
   [Neo v1-to-v2 migration](docs/compatibility/neo-v1-to-v2.md#unhandled-exceptions-return-an-empty-500).
+- Add opt-in precompressed static files from Neo #144. With `FileModule.PrecompressedVariants`, a
+  file module sends `app.js.br` or `app.js.gz`, stored next to `app.js`, to clients that accept
+  that encoding at least as well as the one it would otherwise compress with. A variant keeps the
+  original's content type and MIME compression policy, has its own entity tag and length, is
+  ignored when older than the original, and is never used for `Range` requests. It works on both
+  assets, since sending a `.br` file needs no encoder. Defaults are unchanged. See
+  [Precompressed static files](docs/guides/precompressed-files.md), which also records measured
+  CPU and size for gzip and Brotli levels.
+- Correct content negotiation when a client refuses every coding EmbedIO could produce but not
+  `identity`, for example `Accept-Encoding: br;q=0`, or `br` alone on the .NET Standard 2.0 asset.
+  Such requests for content that prefers compression now get the uncompressed response, as
+  RFC 9110 section 12.5.3 requires, instead of 406 Not Acceptable. Headers that refuse identity,
+  such as `identity;q=0` or `*;q=0`, still get 406.
 - Add opt-in RFC 9457 problem details from Neo #143. `WithProblemDetails()`, or
   `ProblemDetailsHandler.ForHttpExceptions()` and `ForUnhandledExceptions()` on a server or module,
   answer errors with `application/problem+json`: HTTP exceptions and Web API binding failures keep
