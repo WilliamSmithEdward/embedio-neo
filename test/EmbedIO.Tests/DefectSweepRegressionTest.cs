@@ -400,9 +400,10 @@ namespace EmbedIO.Tests
             Assert.That(match["name"], Is.EqualTo(expected));
         }
 
-        [TestCase("/sub")]
-        [TestCase("/sub/")]
-        public async Task DirectoryListingLinksResolveWithOrWithoutATrailingSlash(string target)
+        // Both URL forms map to one cached directory, so request them in turn on one server.
+        [TestCase("/sub", "/sub/")]
+        [TestCase("/sub/", "/sub")]
+        public async Task DirectoryListingLinksResolveWithOrWithoutATrailingSlash(string first, string second)
         {
             using var server = new TestWebServer().WithModule(new FileModule("/", new MockFileProvider())
             {
@@ -410,13 +411,16 @@ namespace EmbedIO.Tests
                 DirectoryLister = DirectoryLister.Html,
             });
             server.Start();
-            var body = await server.Client.GetStringAsync(target);
-            var page = new Uri(server.BaseUrl, target);
-            var links = Regex.Matches(body, "href=[\"']([^\"']*)[\"']")
-                .Select(link => new Uri(page, WebUtility.HtmlDecode(link.Groups[1].Value)).AbsolutePath)
-                .ToArray();
-            Assert.That(links, Does.Contain("/sub/index.html"));
-            Assert.That(links, Does.Contain("/"));
+            foreach (var target in new[] { first, second, first })
+            {
+                var body = await server.Client.GetStringAsync(target);
+                var page = new Uri(server.BaseUrl, target);
+                var links = Regex.Matches(body, "href=[\"']([^\"']*)[\"']")
+                    .Select(link => new Uri(page, WebUtility.HtmlDecode(link.Groups[1].Value)).AbsolutePath)
+                    .ToArray();
+                Assert.That(links, Does.Contain("/sub/index.html"), target);
+                Assert.That(links, Does.Contain("/"), target);
+            }
         }
     }
 }

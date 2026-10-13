@@ -605,13 +605,16 @@ namespace EmbedIO.Files
             // Directories always have info.Length == 0; therefore,
             // unless the directory listing is cached, we must generate it now
             // (and cache it while we're there, if applicable).
-            var content = cacheItem.GetContent(compressionMethod);
+            // A listing's relative links depend on whether the URL ends in '/', but /dir and /dir/
+            // map to the same directory; only the slash form is cached.
+            var cacheListing = !info.IsDirectory || context.Request.Url.AbsolutePath.EndsWith("/", StringComparison.Ordinal);
+            var content = cacheListing ? cacheItem.GetContent(compressionMethod) : null;
             if (info.IsDirectory && content == null)
             {
                 long uncompressedLength;
                 (content, uncompressedLength) = await GenerateDirectoryListingAsync(context, info, compressionMethod)
                     .ConfigureAwait(false);
-                if (ContentCaching && uncompressedLength <= cachingThreshold)
+                if (cacheListing && ContentCaching && uncompressedLength <= cachingThreshold)
                     _ = cacheItem.SetContent(compressionMethod, content);
             }
 
