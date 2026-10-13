@@ -48,7 +48,7 @@ internal static class ListenerAdmission
         return true;
     }
 
-    private static Sample Measure(int producers, int depth, double seconds, Type contextType, FieldInfo id, Action<EmbedIO.Net.HttpListener, IHttpContextImpl> register)
+    private static Sample Measure(int producers, int depth, double seconds, Type contextType, FieldInfo id, Func<EmbedIO.Net.HttpListener, IHttpContextImpl, Task?> register)
     {
         using var listener = new EmbedIO.Net.HttpListener();
         listener.Start(); // No prefixes: exercise admission without opening sockets.
@@ -97,7 +97,7 @@ internal static class ListenerAdmission
                 {
                     if (!available[producer].Wait(50)) continue;
                     if (!pool.TryDequeue(out var context)) throw new InvalidOperationException("A returned context was missing.");
-                    register(listener, context);
+                    _ = register(listener, context);
                 }
             }
             catch (Exception error) when (error is not OutOfMemoryException)
