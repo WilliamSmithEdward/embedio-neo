@@ -246,6 +246,11 @@ namespace EmbedIO
         /// <inheritdoc />
         protected override async Task ProcessRequestsAsync(CancellationToken cancellationToken)
         {
+            // TCP connections hand each admitted request straight to the handler on
+            // their own thread. The loop below only serves listeners without that
+            // path, currently HTTP/3, and ends when the listener stops.
+            if (Listener is IDispatchingHttpListener dispatching)
+                dispatching.SetDispatcher(context => DispatchAsync(context, cancellationToken));
             while (!cancellationToken.IsCancellationRequested && (Listener?.IsListening ?? false))
             {
                 IHttpContextImpl context;
@@ -257,12 +262,27 @@ namespace EmbedIO
                 // An application stopping the listener, directly or through disposal,
                 // ends the run normally; other listener failures still propagate.
                 catch (System.Net.HttpListenerException error) when (error.ErrorCode == 995 && (Volatile.Read(ref _disposeStarted) != 0 || !(Listener?.IsListening ?? false))) { return; }
-                context.CancellationToken = cancellationToken;
-                context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
 
                 // Once accepted, the context must reach the handler's cleanup even
                 // if shutdown wins before dispatch. The context still carries cancellation.
-                _ = Task.Run(() => DoHandleContextAsync(context));
+                _ = Task.Run(() => DispatchAsync(context, cancellationToken));
+            }
+        }
+
+        private Task DispatchAsync(IHttpContextImpl context, CancellationToken cancellationToken)
+        {
+            try
+            {
+                context.CancellationToken = cancellationToken;
+                context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
+                return DoHandleContextAsync(context);
+            }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                // The handler never started, so nothing else will complete this
+                // response. The faulted task lets the owning connection close.
+                error.Log(LogSource, $"[{context.Id}] Request dispatch failed before handling.");
+                return Task.FromException(error);
             }
         }
 

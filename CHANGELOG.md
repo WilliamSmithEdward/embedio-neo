@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Dispatch each admitted TCP request straight from its connection to the server's
+  handler instead of queueing it for the accept loop. The HTTP/1.1 actor now runs the
+  handler like Kestrel's connection loop, and HTTP/2 exchanges hand off on their own
+  work item, removing two thread-pool hops and the accept-queue bookkeeping per request.
+  `IHttpListener.GetContextAsync` is unchanged and still serves standalone listeners and
+  HTTP/3; admission, drain and stop semantics are unchanged.
+
 ## [2.0.0] - Unreleased
 
 - Correct defects found by a review sweep. `ISession.Delete` and `Regenerate` now end

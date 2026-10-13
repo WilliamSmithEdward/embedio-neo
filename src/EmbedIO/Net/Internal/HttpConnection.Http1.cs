@@ -17,6 +17,8 @@ namespace EmbedIO.Net.Internal
         private bool _responseCanReuse;
         private bool _idleAwaitingSuccessor;
         private Task<int>? _idleRead;
+        // The handler of the current request when the server dispatched it on this actor.
+        private Task? _handling;
 #if NET10_0_OR_GREATER
         private ManualResetValueTaskSourceCore<bool> _responseCompletion;
         private bool _responseWaitRequested;
@@ -32,6 +34,14 @@ namespace EmbedIO.Net.Internal
             while (Volatile.Read(ref _protocolEnded) == 0)
             {
                 if (!await ReadAndAdmitHeadAsync(count, prefetched).ConfigureAwait(false)) return;
+                // A directly dispatched handler runs here, on the actor, like an
+                // application delegate in Kestrel's connection loop. Its completion
+                // already ended the response, so the wait below rarely suspends.
+                if (_handling is { } handling)
+                {
+                    _handling = null;
+                    await handling.ConfigureAwait(false);
+                }
                 if (!await WaitForResponseEndAsync().ConfigureAwait(false)) return;
                 if (!await _context.HttpListenerRequest.FlushInputAsync().ConfigureAwait(false))
                 { CloseTransport(true); return; }
@@ -116,7 +126,7 @@ namespace EmbedIO.Net.Internal
                     }
                     _contextBound = true;
                 }
-                owner.RegisterContext(_context);
+                _handling = owner.RegisterContext(_context);
                 return true;
             }
         }
