@@ -159,3 +159,29 @@ controls emitted a complete 31-byte alert record; its encrypted description was
 not decoded. This is not packet-level FIN/ACK proof or older-runtime acceptance.
 Additional actual blocked public TLS-write interruption controls, an unchanged
 current-source baseline comparison and full platform gates remain required.
+### Qualified Windows asset controls
+
+A forced, warning-free rebuild on accepted base `685f6a05` passed all 33 focused
+cases for each core asset on Windows 10.0.26300 / .NET 10.0.12. Actual loaded
+framework attributes and core hashes matched the compiled and staged files;
+the modern runner was restored and hash-verified afterward. The same actual
+public SslStream blocked-write controls passed for IOException and cancellation,
+with terminal write observation preceding listener detach. The controlled
+critical exception-object case retained exact fault identity, physical socket
+closure and a faulted lifetime completion; it creates no real memory pressure.
+
+The accepted production baseline `02283f13` reproduced the three targeted
+idle EOF/TLS-alert assertion failures, with its other eleven controls passing.
+An intermediate run labelled candidate reused that baseline DLL after
+source restoration preserved timestamps. Its real 13 failures are retained
+as invalid candidate qualification, not accepted or labelled a production
+regression. Forced rebuilding, compiled/staged identity guards and actual
+runtime identity checks correct that validation procedure. The earlier failed
+TLS fixture's pending-task terminal state was not observed; its corrected
+fixture resolves prerequisites before starting a write and observes the task
+in finally, including on assertion failure.
+
+[Compact source-qualified evidence](evidence/http1-idle-closure-281.json)
+retains source hashes, loaded identities, actual case outcomes and unsuccessful
+qualification. Full desktop/MAUI/security gates and older-runtime TLS fallback
+validation remain pending. These modern-host runs are not older-runtime proof.

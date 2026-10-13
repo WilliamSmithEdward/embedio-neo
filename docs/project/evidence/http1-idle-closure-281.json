@@ -1,0 +1,586 @@
+{
+  "issue": 281,
+  "status": "focused-validation-complete-platform-acceptance-pending",
+  "sourceCommit": "ce19975834e04fd63c7623ae2ef4df9939390ccf",
+  "coreSourceTree": "97dfdd2a97ab0395dfb292e13e1f1b67c2b23adb",
+  "acceptedValidationBase": "685f6a05843630f38179ce6203a2f06d7a083393",
+  "productionBaseline": "02283f135ceffc5f6f89fbd3bf5e0b363d95b4d6",
+  "approval": "William approved scoped orderly HTTP1 idle closure on 2026-10-12.",
+  "sourceSha256": {
+    "src/EmbedIO/Net/Internal/HttpConnection.cs": "a1b2376ca787a8c4763a53816c438a43cf5b94e5a239ad756708e07bee9f6b51",
+    "src/EmbedIO/Net/Internal/HttpConnection.Http1.cs": "eabc093994ee963b1bbdeb899a673e6417012461eb214bd8e5fdcb2e03c998d7",
+    "src/EmbedIO/Net/Internal/TcpSessionLifetime.cs": "69fd4f24484b1b27ae0e1436e0ec42c52edd2b84ef9bef078953179b28330619",
+    "test/EmbedIO.Tests/Http1IdleClosureTest.cs": "eeab784342429f0d28dc6165397698ea0fb6be2835c562b05b3558a4b68bda3e",
+    "test/EmbedIO.Tests/TcpSessionLifetimeTest.cs": "0f38295bcaf2c8c64d184b88405829deee3b4bdfc0201fec85b5f5bfad816f24",
+    "test/EmbedIO.Tests/Http1OrderlyIdleClosureTest.cs": "21d8da0c5ef98f44622e5917f3f684b48414768acad316c433310e7fc6c1bc13",
+    "test/EmbedIO.Tests/Http1IdleTlsWriteOwnershipTest.cs": "c91f32210652cbb1be486e6e2b84ed3bf8e815bf71c53e2c0cc00eeeb9497ea5"
+  },
+  "compiledModernSha256": "641d8fdbdfab3cc7a3772db2ba118b41d54dd21ef2fcfdd02a94117a9e09b6d6",
+  "compiledStandardSha256": "7bd7544d49772de217177f4da0784c83964d54637800b9369430ee7f0ad88496",
+  "forcedRebuild": true,
+  "warnings": 0,
+  "errors": 0,
+  "terminal": {
+    "TerminalUtc": "2026-10-13T01:01:38.1192618Z",
+    "Nonce": "0cf429aa59624a1490b0c4b06427b308",
+    "Status": "passed",
+    "ActualTerminal": true
+  },
+  "focused": {
+    "modern": {
+      "sha256": "f87437f80b1f158f925ff351aca445edc24e3d5b8902f377b178c9e656910963",
+      "counters": {
+        "total": 33,
+        "executed": 33,
+        "passed": 33,
+        "failed": 0,
+        "error": 0,
+        "timeout": 0,
+        "aborted": 0,
+        "inconclusive": 0,
+        "passedButRunAborted": 0,
+        "notRunnable": 0,
+        "notExecuted": 0,
+        "disconnected": 0,
+        "warning": 0,
+        "completed": 0,
+        "inProgress": 0,
+        "pending": 0
+      },
+      "cases": [
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"idle\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"idle\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"partial-head\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"partial-head\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"unread-body-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"unread-body-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"partial-response-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"partial-response-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"peer-reset\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"peer-reset\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"reuse-race\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"reuse-race\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Tls12RecordObservationDistinguishesTimeoutFromSendShutdown(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Tls12RecordObservationDistinguishesTimeoutFromSendShutdown(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DisposalSettlesActualBlockedPublicTlsShutdown(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DisposalSettlesActualBlockedPublicTlsShutdown(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(False,False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(True,False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(False,True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(True,True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "CleanupFailureDoesNotSkipOtherResourcesOrReportSuccessfulDrain(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "CleanupFailureDoesNotSkipOtherResourcesOrReportSuccessfulDrain(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DeadlineCleanupFaultRemainsObservableWithoutEscapingTheTimer",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DeferredRetirementKeepsActualReleaseAndUnexpectedWriteFailures(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DeferredRetirementKeepsActualReleaseAndUnexpectedWriteFailures(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "EarlyExpiryAttemptDoesNotLoseTheArmedDeadline",
+          "outcome": "Passed"
+        },
+        {
+          "name": "InterruptedSendRemainsOwnedUntilActualCompletion(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "InterruptedSendRemainsOwnedUntilActualCompletion(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RacingRetirementHasOneClaimantAndDrainWaitsForProtocolDetach",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RetirementClaimDoesNotCompleteBeforeTransportDisposalFinishes",
+          "outcome": "Passed"
+        },
+        {
+          "name": "StaleDeadlineCannotRetireStoppedOrRenewedRequest",
+          "outcome": "Passed"
+        },
+        {
+          "name": "TerminalCriticalWriteFaultIsPublishedWithoutClaimingSuccessfulDrain",
+          "outcome": "Passed"
+        },
+        {
+          "name": "UnexpectedSendStagingFailureSurvivesSuccessfulResourceRelease",
+          "outcome": "Passed"
+        }
+      ],
+      "framework": ".NETCoreApp,Version=v10.0",
+      "coreSha256": "641d8fdbdfab3cc7a3772db2ba118b41d54dd21ef2fcfdd02a94117a9e09b6d6",
+      "actualLoadedIdentityChecks": 2
+    },
+    "standard": {
+      "sha256": "593f31fec586ceb330bf0f7dc5d4ea9d2776d8cf6a416b79b87fa1ddcfdae7dd",
+      "counters": {
+        "total": 33,
+        "executed": 33,
+        "passed": 33,
+        "failed": 0,
+        "error": 0,
+        "timeout": 0,
+        "aborted": 0,
+        "inconclusive": 0,
+        "passedButRunAborted": 0,
+        "notRunnable": 0,
+        "notExecuted": 0,
+        "disconnected": 0,
+        "warning": 0,
+        "completed": 0,
+        "inProgress": 0,
+        "pending": 0
+      },
+      "cases": [
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"idle\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"idle\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"partial-head\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"partial-head\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"unread-body-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"unread-body-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"partial-response-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"partial-response-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"peer-reset\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"peer-reset\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"reuse-race\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"reuse-race\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Tls12RecordObservationDistinguishesTimeoutFromSendShutdown(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Tls12RecordObservationDistinguishesTimeoutFromSendShutdown(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DisposalSettlesActualBlockedPublicTlsShutdown(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DisposalSettlesActualBlockedPublicTlsShutdown(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(False,False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(True,False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(False,True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(True,True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "CleanupFailureDoesNotSkipOtherResourcesOrReportSuccessfulDrain(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "CleanupFailureDoesNotSkipOtherResourcesOrReportSuccessfulDrain(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DeadlineCleanupFaultRemainsObservableWithoutEscapingTheTimer",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DeferredRetirementKeepsActualReleaseAndUnexpectedWriteFailures(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DeferredRetirementKeepsActualReleaseAndUnexpectedWriteFailures(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "EarlyExpiryAttemptDoesNotLoseTheArmedDeadline",
+          "outcome": "Passed"
+        },
+        {
+          "name": "InterruptedSendRemainsOwnedUntilActualCompletion(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "InterruptedSendRemainsOwnedUntilActualCompletion(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RacingRetirementHasOneClaimantAndDrainWaitsForProtocolDetach",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RetirementClaimDoesNotCompleteBeforeTransportDisposalFinishes",
+          "outcome": "Passed"
+        },
+        {
+          "name": "StaleDeadlineCannotRetireStoppedOrRenewedRequest",
+          "outcome": "Passed"
+        },
+        {
+          "name": "TerminalCriticalWriteFaultIsPublishedWithoutClaimingSuccessfulDrain",
+          "outcome": "Passed"
+        },
+        {
+          "name": "UnexpectedSendStagingFailureSurvivesSuccessfulResourceRelease",
+          "outcome": "Passed"
+        }
+      ],
+      "framework": ".NETStandard,Version=v2.0",
+      "coreSha256": "7bd7544d49772de217177f4da0784c83964d54637800b9369430ee7f0ad88496",
+      "actualLoadedIdentityChecks": 2
+    }
+  },
+  "baseline": {
+    "sha256": "781a900ae839ffad19785335fd313c1cbecc618a0c98f257aef059e4316cbfa4",
+    "counters": {
+      "total": 14,
+      "executed": 14,
+      "passed": 11,
+      "failed": 3,
+      "error": 0,
+      "timeout": 0,
+      "aborted": 0,
+      "inconclusive": 0,
+      "passedButRunAborted": 0,
+      "notRunnable": 0,
+      "notExecuted": 0,
+      "disconnected": 0,
+      "warning": 0,
+      "completed": 0,
+      "inProgress": 0,
+      "pending": 0
+    },
+    "cases": [
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"idle\")",
+        "outcome": "Failed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"idle\")",
+        "outcome": "Failed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"partial-head\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"partial-head\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"unread-body-abort\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"unread-body-abort\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"partial-response-abort\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"partial-response-abort\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"peer-reset\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"peer-reset\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"reuse-race\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"reuse-race\")",
+        "outcome": "Passed"
+      },
+      {
+        "name": "Tls12RecordObservationDistinguishesTimeoutFromSendShutdown(False)",
+        "outcome": "Failed"
+      },
+      {
+        "name": "Tls12RecordObservationDistinguishesTimeoutFromSendShutdown(True)",
+        "outcome": "Passed"
+      }
+    ]
+  },
+  "unsuccessfulQualification": {
+    "status": "retained-not-candidate-acceptance",
+    "reason": "Incremental build reused baseline DLL after timestamp-preserving source restoration.",
+    "loadedModernSha256": "2ce41fc46def13d6a7da03a9056563f6550107982160acd012eb5b063d92aa13",
+    "report": {
+      "sha256": "1fcfc3413d8f74ff551aae3472895f86696c7e9a6eb6765c68353335693b1d88",
+      "counters": {
+        "total": 31,
+        "executed": 31,
+        "passed": 18,
+        "failed": 13,
+        "error": 0,
+        "timeout": 0,
+        "aborted": 0,
+        "inconclusive": 0,
+        "passedButRunAborted": 0,
+        "notRunnable": 0,
+        "notExecuted": 0,
+        "disconnected": 0,
+        "warning": 0,
+        "completed": 0,
+        "inProgress": 0,
+        "pending": 0
+      },
+      "cases": [
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"idle\")",
+          "outcome": "Failed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"idle\")",
+          "outcome": "Failed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"partial-head\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"partial-head\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"unread-body-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"unread-body-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"partial-response-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"partial-response-abort\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"peer-reset\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"peer-reset\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(False,\"reuse-race\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "ClosureObservationReleasesResourcesAndPreservesListener(True,\"reuse-race\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "Tls12RecordObservationDistinguishesTimeoutFromSendShutdown(False)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "Tls12RecordObservationDistinguishesTimeoutFromSendShutdown(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DisposalSettlesActualBlockedPublicTlsShutdown(False)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "DisposalSettlesActualBlockedPublicTlsShutdown(True)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(False,False)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(True,False)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(False,True)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "AdmissionAndIdleExpiryHaveDeterministicWinners(True,True)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "CleanupFailureDoesNotSkipOtherResourcesOrReportSuccessfulDrain(False)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "CleanupFailureDoesNotSkipOtherResourcesOrReportSuccessfulDrain(True)",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DeadlineCleanupFaultRemainsObservableWithoutEscapingTheTimer",
+          "outcome": "Passed"
+        },
+        {
+          "name": "DeferredRetirementKeepsActualReleaseAndUnexpectedWriteFailures(False)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "DeferredRetirementKeepsActualReleaseAndUnexpectedWriteFailures(True)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "EarlyExpiryAttemptDoesNotLoseTheArmedDeadline",
+          "outcome": "Passed"
+        },
+        {
+          "name": "InterruptedSendRemainsOwnedUntilActualCompletion(False)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "InterruptedSendRemainsOwnedUntilActualCompletion(True)",
+          "outcome": "Failed"
+        },
+        {
+          "name": "RacingRetirementHasOneClaimantAndDrainWaitsForProtocolDetach",
+          "outcome": "Passed"
+        },
+        {
+          "name": "RetirementClaimDoesNotCompleteBeforeTransportDisposalFinishes",
+          "outcome": "Passed"
+        },
+        {
+          "name": "StaleDeadlineCannotRetireStoppedOrRenewedRequest",
+          "outcome": "Passed"
+        }
+      ]
+    },
+    "pendingTlsFixtureTerminalObserved": false,
+    "correction": "Forced rebuild, staged/compiled hash guards, actual runtime identity checks and finally-owned TLS fixture task."
+  },
+  "limits": [
+    "Both assets were hosted on Windows .NET 10; this is not older-runtime or cross-platform acceptance.",
+    "Older runtimes without public TLS shutdown retain existing TLS behavior; runtime proof remains pending.",
+    "Encrypted TLS12 alert descriptions were not decoded; packet-level FIN/ACK ordering is not established.",
+    "No added idle timeout, cleanup grace period, public API, runtime dependency or performance claim."
+  ]
+}
