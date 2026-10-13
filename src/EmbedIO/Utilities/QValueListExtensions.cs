@@ -68,6 +68,15 @@
             var acceptableMethodIndex = @this.FindPreferredIndex(acceptableMethodNames);
             if (acceptableMethodIndex < 0)
             {
+                // The same rule applies when compression is preferred but no listed coding is acceptable:
+                // "Accept-Encoding: br;q=0" refuses Brotli, not the uncompressed representation.
+                if (!@this.TryGetWeight(CompressionMethodNames.None, out weight) || weight > 0)
+                {
+                    compressionMethod = CompressionMethod.None;
+                    compressionMethodName = CompressionMethodNames.None;
+                    return true;
+                }
+
                 compressionMethod = default;
                 compressionMethodName = default;
                 return false;
