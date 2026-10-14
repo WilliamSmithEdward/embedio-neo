@@ -151,7 +151,7 @@ jobs:
             export DOTNET_EnableCrashReportOnly=1
             export DOTNET_DbgMiniDumpName="$RUNNER_TEMP/embedio-crash-reports/crash.%p"
           fi
-          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 6077 --coverlet || status=$?
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build --report-trx --results-directory TestResults --timeout "$EMBEDIO_REGRESSION_TIMEOUT" --minimum-expected-tests 6081 --coverlet || status=$?
           if test "$status" = 0; then exit 0; fi
           # Quarantine: MsQuic can keep a disposed listener's UDP port bound after
           # disposal returns (a deferred close on macOS; accepted connections on every
@@ -159,12 +159,22 @@ jobs:
           # can fail. Pass a failed run only when every failure is that test stopping at
           # bind with AddressAlreadyInUse; docs/project/http-engine.md has the evidence.
           # EmbedIO's own HTTP/3 restart tests are not quarantined.
+          # Windows only (issue #398): the first QUIC handshake of a combined TCP+QUIC
+          # test can fail while .NET loads the server credential. A failed
+          # CombinedDrainCanAbortAllProtocols or TcpAndQuicSharePortAndStopIndependently
+          # case counts only when its output shows that exact error (0x8009030d).
           counts="$(pwsh -NoProfile -File test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1 TestResults | tr -d '\r')"
-          read -r total passed failed defect <<< "$counts"
-          # The owner-approved exception cannot hide discovery loss.
-          test "$total" -ge 6077 || exit "$status"
-          if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$defect"; then
-            echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
+          read -r total passed failed defect credential <<< "$counts"
+          # The owner-approved exceptions cannot hide discovery loss.
+          test "$total" -ge 6081 || exit "$status"
+          if test "$RUNNER_OS" != Windows; then credential=0; fi
+          if test "$status" = 2 && test "$failed" -ge 1 && test "$failed" = "$((defect + credential))"; then
+            if test "$defect" -gt 0; then
+              echo "::warning title=Quarantined MsQuic rebind failure::$defect raw rebind case(s) failed at bind with AddressAlreadyInUse; $passed of $total passed. See docs/project/http-engine.md."
+            fi
+            if test "$credential" -gt 0; then
+              echo "::warning title=Quarantined Windows QUIC credential failure::$credential case(s) failed on the first QUIC handshake with ConfigurationLoadCredential 0x8009030d; $passed of $total passed. See https://github.com/WilliamSmithEdward/embedio-neo/issues/398."
+            fi
             exit 0
           fi
           exit "$status"
