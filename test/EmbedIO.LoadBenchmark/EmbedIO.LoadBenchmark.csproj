@@ -16,5 +16,6 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
     <Compile Include="../Shared/LoopbackPorts.cs" Link="Shared/LoopbackPorts.cs" />
+    <Compile Include="../Shared/CompressibleJson.cs" Link="Shared/CompressibleJson.cs" />
   </ItemGroup>
 </Project>

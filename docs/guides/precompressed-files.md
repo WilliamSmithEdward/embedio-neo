@@ -118,11 +118,11 @@ core C# sources (2.5 MB). The ratio is compressed size over original size.
 | Setting | Docs ratio | Docs ms/MiB | C# ratio | C# ms/MiB |
 | --- | ---: | ---: | ---: | ---: |
 | gzip `Fastest` | 0.512 | 3.4 | 0.268 | 2.0 |
-| gzip `Optimal` (dynamic default) | 0.340 | 12.8 | 0.169 | 8.3 |
+| gzip `Optimal` (module default) | 0.340 | 12.8 | 0.169 | 8.3 |
 | gzip `SmallestSize` | 0.337 | 32.4 | 0.167 | 18.4 |
 | Brotli quality 1 | 0.364 | 3.8 | 0.196 | 2.6 |
 | Brotli quality 4 | 0.316 | 11.9 | 0.159 | 6.4 |
-| Brotli `Optimal` (dynamic default) | 0.316 | 11.5 | 0.159 | 6.3 |
+| Brotli `Optimal` (module default) | 0.316 | 11.5 | 0.159 | 6.3 |
 | Brotli quality 5 | 0.297 | 22.2 | 0.146 | 11.6 |
 | Brotli quality 6 | 0.291 | 25.6 | 0.142 | 13.5 |
 | Brotli quality 9 | 0.282 | 57.5 | 0.135 | 32.2 |
@@ -137,7 +137,11 @@ What this supports:
 - On every request, the module's existing defaults are a reasonable balance: Brotli `Optimal`
   (identical output to quality 4 here) costs about the same as gzip `Optimal` and is 6 to 7%
   smaller. Levels above that cost two to five times the CPU for a few percent. This change does
-  not alter the dynamic levels.
+  not alter the module's levels.
+- Responses written through `OpenResponseStream` and the helpers built on it, such as
+  `SendDataAsync`, use Brotli quality 1 instead, as ASP.NET Core does. On these corpora it takes
+  0.32 and 0.41 times the CPU of quality 4, for output 15% and 23% larger. See
+  [Brotli responses](getting-started/files.md#brotli-responses-in-the-modern-engine-development-branch).
 
 These are two text corpora on one machine. Measure your own files before relying on the numbers:
 images and already compressed formats gain little or nothing, which is why the MIME policy that
