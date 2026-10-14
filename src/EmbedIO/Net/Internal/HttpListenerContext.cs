@@ -224,6 +224,7 @@ namespace EmbedIO.Net.Internal
         {
             ClaimProtocol();
             var socket = await WebSocket.AcceptAsync(this, acceptedProtocol).ConfigureAwait(false);
+            socket.StartKeepAlive(keepAliveInterval);
             return new WebSocketContext(this, WebSocket.SupportedVersion, requestedProtocols, acceptedProtocol, socket, cancellationToken);
         }
         public string? GetMimeType(string extension) => MimeTypeProviders.GetMimeType(extension);
