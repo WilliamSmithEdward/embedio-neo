@@ -27,9 +27,10 @@ internal static class ListenerAdmission
             ?? throw new InvalidOperationException("Missing HttpListenerContext.");
         var id = contextType.GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Missing context identifier field.");
+        // Without a dispatcher every registration is queued for GetContextAsync and returns null.
         var register = (typeof(EmbedIO.Net.HttpListener).GetMethod("RegisterContext", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Missing RegisterContext."))
-            .CreateDelegate<Action<EmbedIO.Net.HttpListener, IHttpContextImpl>>();
+            .CreateDelegate<Func<EmbedIO.Net.HttpListener, IHttpContextImpl, Task?>>();
         Console.WriteLine(FormattableString.Invariant($"processors={Environment.ProcessorCount} seconds={seconds} rounds={rounds} depth={depth}"));
         foreach (var producers in new[] { 1, 4, 8, 16 })
         {
@@ -47,7 +48,7 @@ internal static class ListenerAdmission
         return true;
     }
 
-    private static Sample Measure(int producers, int depth, double seconds, Type contextType, FieldInfo id, Action<EmbedIO.Net.HttpListener, IHttpContextImpl> register)
+    private static Sample Measure(int producers, int depth, double seconds, Type contextType, FieldInfo id, Func<EmbedIO.Net.HttpListener, IHttpContextImpl, Task?> register)
     {
         using var listener = new EmbedIO.Net.HttpListener();
         listener.Start(); // No prefixes: exercise admission without opening sockets.
@@ -96,7 +97,7 @@ internal static class ListenerAdmission
                 {
                     if (!available[producer].Wait(50)) continue;
                     if (!pool.TryDequeue(out var context)) throw new InvalidOperationException("A returned context was missing.");
-                    register(listener, context);
+                    _ = register(listener, context);
                 }
             }
             catch (Exception error) when (error is not OutOfMemoryException)
