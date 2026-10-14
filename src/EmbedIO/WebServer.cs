@@ -246,11 +246,11 @@ namespace EmbedIO
         /// <inheritdoc />
         protected override async Task ProcessRequestsAsync(CancellationToken cancellationToken)
         {
-            // TCP connections hand each admitted request straight to the handler on
-            // their own thread, in plain and combined mode alike. The loop below
-            // serves what still arrives through GetContextAsync: HTTP/3 requests and
-            // any TCP request admitted before the dispatcher was installed. It ends
-            // when the listener stops.
+            // Every transport hands each admitted request straight to the handler
+            // on the thread that admitted it, in plain, HTTP/3 and combined mode
+            // alike. The loop below serves what still arrives through
+            // GetContextAsync: any request admitted before the dispatcher was
+            // installed. It ends when the listener stops.
             if (Listener is IDispatchingHttpListener dispatching)
                 dispatching.SetDispatcher(context => DispatchAsync(context, cancellationToken));
             while (!cancellationToken.IsCancellationRequested && (Listener?.IsListening ?? false))
@@ -305,30 +305,49 @@ namespace EmbedIO
         // is answered like an unhandled handler failure: an empty 500 that closes
         // the connection, unless a response already started. The unhandled-exception
         // callback does not run here, since the context never reached the handlers.
+        // The connection waits for the response to end, not for this task, so the
+        // response has to end on every path: a close that fails aborts the transport.
         private async Task AnswerDispatchFailureAsync(IHttpContextImpl context, Exception error)
         {
-            error.Log(LogSource, $"[{context.Id}] Request dispatch failed before handling.");
+            LogObserved(error, $"[{context.Id}] Request dispatch failed before handling.");
             try
             {
-                if (!EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
+                try
                 {
-                    context.Response.StatusCode = (int)System.Net.HttpStatusCode.InternalServerError;
-                    context.Response.KeepAlive = false;
+                    if (!EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
+                    {
+                        context.Response.StatusCode = (int)System.Net.HttpStatusCode.InternalServerError;
+                        context.Response.KeepAlive = false;
+                    }
+                }
+                finally
+                {
+                    if (context is MultiplexedContext multiplexed) await multiplexed.CloseAsync().ConfigureAwait(false);
+                    else context.Close();
                 }
             }
-            finally
+            catch (Exception closing) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(closing))
             {
-                if (context is MultiplexedContext multiplexed) await multiplexed.CloseAsync().ConfigureAwait(false);
-                else context.Close();
+                LogObserved(closing, $"[{context.Id}] Closing the failed request's context failed; aborting its response.");
+                try { await EmbedIO.Internal.ResponseCommitment.AbortAsync(context, closing).ConfigureAwait(false); }
+                catch (Exception aborting) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(aborting))
+                {
+                    LogObserved(aborting, $"[{context.Id}] Aborting the failed request's response failed.");
+                }
             }
         }
 
         private void ObserveHandlingFault(Task handling)
         {
-            try { handling.Exception?.Log(LogSource, "A request handler faulted after dispatch."); }
-            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            if (handling.Exception is { } fault) LogObserved(fault, "A request handler faulted after dispatch.");
+        }
+
+        // A failing trace listener cannot turn an observed failure into another.
+        private void LogObserved(Exception error, string message)
+        {
+            try { error.Log(LogSource, message); }
+            catch (Exception logging) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(logging))
             {
-                // A failing trace listener cannot turn an observed fault into another.
             }
         }
 

@@ -1,4 +1,4 @@
-# Direct request dispatch from TCP connections
+# Direct request dispatch from connections
 
 The managed TCP engine hands each admitted HTTP/1.1 and HTTP/2 request straight
 from its connection to the server's handler. This record explains the path it
@@ -47,9 +47,15 @@ application code.
   fell sixfold while p99 rose tenfold, and at 256 connections p99 reached
   50 ms against the base's 9.6 ms. Kestrel dispatches every receive completion
   to the pool for the same reason.
-- Combined mode (TCP plus QUIC) forwards the dispatcher to its TCP listener,
-  so its HTTP/1.1 and HTTP/2 requests take the same path; QUIC requests keep
-  the pull loop.
+- HTTP/3: the listener's session starts the handler on the request stream's
+  own task, which already left the connection's accept loop, instead of
+  writing the context to its 256-slot channel. Before this change a QUIC
+  request passed through that channel, the combined listener's second
+  channel and the server's `Task.Run`: three thread-pool hops between the
+  stream and the handler. The exchange waits for the response as before,
+  and a handler that blocks before its first suspension holds its own
+  stream only.
+- Combined mode (TCP plus QUIC) forwards the dispatcher to both transports.
 - HTTP/2: `RegisterMultiplexedContext` takes the same `Register`. Each exchange
   already runs on its own work item (`Http2Dispatcher.StartApplication`), so
   the handler never runs on the connection's frame loop and concurrent streams
@@ -57,10 +63,11 @@ application code.
 - `WebServer.DispatchAsync` prepares the context (server token, route) for both
   the direct path and the remaining pull loop, and owns the handler's task: a
   fault the handler leaves uncaught is observed and logged, and a failure
-  before the handler starts becomes a faulted task that closes the HTTP/1.1
-  connection or resets the HTTP/2 stream.
-- `WebServer.ProcessRequestsAsync` keeps its pull loop for listeners without a
-  dispatcher, today HTTP/3.
+  before the handler starts is answered with an empty 500 that closes the
+  connection, or, if that close fails too, by aborting the response, so
+  that the connection never waits for a response that cannot end.
+- `WebServer.ProcessRequestsAsync` keeps its pull loop for requests admitted
+  before the dispatcher was installed.
 
 `IHttpListener.GetContextAsync` is public and unchanged. Standalone
 `HttpListener` users and the listener tests drive the queue through it; the
@@ -223,6 +230,55 @@ HTTP/1.1 plain working-set figures differ by up to 4 KB between orientations
 for both engines. Thread counts are identical. All server sockets were in
 `Established` while idle and none remained after the client closed.
 
+### HTTP/3
+
+Candidate 8a91e00b (core SHA-256 2fe53709...) against its parent 94a5fe9a, the
+#381 merge (core f6b589cb...), and Kestrel from the shared framework. Runtime
+10.0.13 on SDK 10.0.402. Server CPUs 0-3, client CPUs 4-11. The other settings
+match the HTTP/1.1 runs: both runner-role orientations pooled, 2 rounds x 8 s
+per orientation, 3 s warmup, 2 s idle. These numbers are on a newer runtime
+than the HTTP/1.1 table above and are not comparable with it.
+
+| Scenario | req/s cand / base / Kestrel | p99 ms | p99.9 ms | CPU us/req | work items/req | B/req |
+| --- | --- | --- | --- | --- | --- | --- |
+| h3-small-c8x32 | 283,248 / 252,599 / 355,217 | 3.51 / 8.19 / 6.86 | 15.67 / 16.49 / 16.59 | 20.8 / 25.0 / 18.1 | 7.24 / 8.57 / 5.86 | 12,589 / 13,172 / 2,652 |
+| h3-small-c64x1 | 158,995 / 144,460 / 136,670 | 2.18 / 2.47 / 3.17 | 11.67 / 14.13 / 14.75 | 45.7 / 51.5 / 58.8 | 8.93 / 10.29 / 6.41 | 12,418 / 12,928 / 2,487 |
+| h3-inspect-c8x32 | 233,577 / 223,294 / 355,377 | 3.84 / 6.55 / 5.02 | 15.87 / 17.20 / 16.69 | 26.0 / 28.4 / 19.3 | 7.22 / 8.50 / 5.56 | 17,744 / 18,077 / 4,550 |
+| h3-inspect-c64x1 | 138,716 / 130,305 / 136,128 | 2.30 / 3.12 / 3.07 | 13.11 / 15.16 / 13.62 | 50.3 / 54.0 / 56.2 | 8.76 / 10.16 / 6.62 | 17,414 / 17,883 / 4,383 |
+| h3-churn-c16 | 2,040 / 2,028 / 2,067 | 21.30 / 20.58 / 21.40 | 26.62 / 27.44 / 27.03 | 1,168 / 1,195 / 1,016 | 27.07 / 29.08 / 22.18 | 128,709 / 128,280 / 124,218 |
+| h3-large1m-c4x4 | 1,748 / 1,773 / 1,230 | 13.31 / 12.85 / 28.47 | 22.84 / 18.84 / 43.01 | 2,575 / 2,570 / 4,733 | 17.98 / 19.96 / 265.55 | 14,492 / 15,036 / 1,615,902 |
+| h3-upload1m-c4x4 | 1,618 / 1,519 / 1,605 | 12.49 / 18.43 / 13.06 | 16.18 / 21.20 / 17.92 | 2,510 / 2,543 / 3,247 | 94.85 / 96.32 / 272.29 | 84,785 / 84,943 / 17,058 |
+| h3-stream1m-c4x4 | 1,658 / 1,662 / 1,256 | 12.90 / 11.57 / 25.70 | 25.60 / 24.27 / 47.10 | 3,137 / 3,117 / 4,793 | 72.66 / 74.61 / 326.69 | 44,174 / 44,711 / 10,269 |
+
+The small-request scenarios carry the change. Throughput is 5% to 12% higher,
+p99 is 12% to 57% lower, CPU per request is 7% to 17% lower, and there are 1.3
+to 1.4 fewer work items per request. In the same runner role the candidate
+wins every p99 pairing, and every p99.9 pairing but one.
+
+The two 1 MiB download scenarios leaned the other way in this run, so they
+were measured again: 4 rounds per orientation, candidate against base only.
+That gives 12 samples per build across both runs. The tails are noise. The
+candidate wins 5 or 6 of 12 same-role, same-round pairings on p99 and p99.9,
+and every gap is inside each build's round-to-round range. For stream1m, the
+base's own p99 ranges from 11.1 to 24.4 ms.
+
+One cost is consistent: large1m throughput is about 2% lower (median 1,729
+against 1,766 requests/s, 3 of 12 pairings won). It stays inside the
+per-round range (base 1,649 to 1,950). William accepted it on 2026-10-14 and it
+is recorded as an open item.
+stream1m throughput is even (5 of 12, +0.3%), and the 1 MiB upload improves
+(+6.5%, 3 of 4 pairings).
+
+A variant that yields once to the thread pool's global queue before starting
+the handler was measured and rejected. It is the remedy #381 needed for
+HTTP/1.1, and `YieldAwaitable` queues to the global FIFO queue on runtime
+10.0.13 (`YieldAwaitable.cs` line 139, `ThreadPoolWorkQueue.cs` lines
+1785-1786). The variant did not recover large1m throughput: it won 4 of 12
+pairings. It cut 1 MiB upload throughput by 23%, to 1,241 against 1,615
+requests/s, and doubled p99 to 24.5 against 12.4 ms. It lost all 4 pairings
+on each metric. The handler therefore starts inline on the request stream's
+task.
+
 ## Limits
 
 - Measurements apply to the recorded source revisions and this host; they are
@@ -231,5 +287,3 @@ for both engines. Thread counts are identical. All server sockets were in
   thread. A handler that blocks synchronously occupies a thread-pool worker
   either way; the harness's blocking-handler case checks that other connections
   keep being served, not that blocking is free.
-- HTTP/3 still uses the pull loop; moving it to the dispatcher is a follow-up
-  once the HTTP/3 listener files are free of concurrent changes.

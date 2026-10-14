@@ -19,16 +19,44 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    // The server hands each admitted TCP request straight to its handler on the
-    // connection's own thread. These cases pin the lifecycle semantics that must
+    // The server hands each admitted request straight to its handler on the
+    // thread that admitted it: the TCP connection's own thread, or the HTTP/3
+    // request stream's task. These cases pin the lifecycle semantics that must
     // not change with that path: ordering, failure, cancellation, drain, HTTP/2
-    // concurrency, blocking handlers and the pull API that standalone listeners keep.
+    // and HTTP/3 concurrency, blocking handlers and the pull API that standalone
+    // listeners keep.
     public class DirectDispatchTest
     {
         private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic;
 
         private static object Field(object owner, string name)
             => owner.GetType().GetField(name, Hidden)?.GetValue(owner) ?? throw new AssertionException("Missing field " + name);
+
+        private static bool QuicUnavailable()
+            => !(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+                || !QuicListener.IsSupported || !QuicConnection.IsSupported
+                || typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3Listener") == null;
+
+        private static HttpClient Http3Client(X509Certificate2 certificate)
+        {
+            var client = HttpsSmoke.CreateClient(certificate, new SocketsHttpHandler { UseProxy = false });
+            client.DefaultRequestVersion = HttpVersion.Version30;
+            client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
+            return client;
+        }
+
+        // True when the caller runs inside the HTTP/3 session's dispatch, that is on
+        // the request stream's own task and not on a work item of the pull loop.
+        private static bool DispatchedFromHttp3Session()
+            => new System.Diagnostics.StackTrace().GetFrames()
+                .Any(frame => frame.GetMethod()?.DeclaringType?.FullName?.Contains("Http3Listener", StringComparison.Ordinal) == true);
+
+        private static int QueuedContexts(object session)
+        {
+            var contexts = Field(session, "Contexts");
+            var reader = contexts.GetType().GetProperty("Reader")?.GetValue(contexts) ?? throw new AssertionException("Missing channel reader.");
+            return (int)(reader.GetType().GetProperty("Count")?.GetValue(reader) ?? throw new AssertionException("Missing channel count."));
+        }
 
         private static string PlainUrl()
             => new UriBuilder(HttpsSmoke.GetUrl()) { Host = "127.0.0.1", Scheme = "http" }.Uri.ToString();
@@ -469,6 +497,39 @@ namespace EmbedIO.Tests
             }
         }
 
+        // The connection discards the dispatch task and waits for the response to
+        // end, so a context whose Close fails must still end its response: the
+        // failure is logged and the response aborted, and the task never faults.
+        [Test]
+        public async Task DispatchFailureWhoseCloseThrowsIsLoggedAndTheTaskCompletes()
+        {
+            using var server = new WebServer(options => options.WithUrlPrefix(PlainUrl()).WithMode(HttpListenerMode.EmbedIO));
+            var dispatch = typeof(WebServer).GetMethod("DispatchAsync", Hidden) ?? throw new AssertionException("Missing dispatch method.");
+            var response = RecordingResponse.Create();
+            var context = FailingContext.Create(response, new IOException("The transport is gone."));
+            var records = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            using var trace = new RecordingTrace(records);
+            var source = Diagnostics.Log.Source;
+            var previousLevel = source.Switch.Level;
+            source.Listeners.Add(trace);
+            try
+            {
+                source.Switch.Level = System.Diagnostics.SourceLevels.All;
+                var handling = (Task)(dispatch.Invoke(server, new object[] { context, CancellationToken.None }) ?? throw new AssertionException("Dispatch returned no task."));
+                await handling.WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.That(handling.Status, Is.EqualTo(TaskStatus.RanToCompletion), "The dispatch task does not fault: nothing awaits it.");
+                Assert.That(((RecordingResponse)(object)response).StatusCode, Is.EqualTo(500), "The answer was prepared before the close failed.");
+                Assert.That(((FailingContext)(object)context).Closed, Is.EqualTo(1), "Close was attempted exactly once.");
+                Assert.That(records.Any(record => record.Contains("Request dispatch failed before handling", StringComparison.Ordinal)), Is.True, "The dispatch failure is logged.");
+                Assert.That(records.Any(record => record.Contains("Closing the failed request's context failed", StringComparison.Ordinal)), Is.True, "The close failure is logged before the abort.");
+            }
+            finally
+            {
+                source.Listeners.Remove(trace);
+                source.Switch.Level = previousLevel;
+            }
+        }
+
         public class RecordingResponse : DispatchProxy
         {
             internal int StatusCode { get; private set; }
@@ -490,11 +551,14 @@ namespace EmbedIO.Tests
         public class FailingContext : DispatchProxy
         {
             private IHttpResponse? _response;
+            private Exception? _closeFailure;
             internal int Closed { get; private set; }
-            internal static IHttpContextImpl Create(IHttpResponse response)
+            internal static IHttpContextImpl Create(IHttpResponse response, Exception? closeFailure = null)
             {
                 var context = Create<IHttpContextImpl, FailingContext>();
-                ((FailingContext)(object)context)._response = response;
+                var failing = (FailingContext)(object)context;
+                failing._response = response;
+                failing._closeFailure = closeFailure;
                 return context;
             }
             protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
@@ -504,7 +568,10 @@ namespace EmbedIO.Tests
                     case "get_Id": return "failing-dispatch";
                     case "get_Request": throw new InvalidOperationException("The request is unavailable before handling.");
                     case "get_Response": return _response;
-                    case "Close": Closed++; return null;
+                    case "Close":
+                        Closed++;
+                        if (_closeFailure != null) throw _closeFailure;
+                        return null;
                 }
                 var type = targetMethod?.ReturnType;
                 return type != null && type.IsValueType && type != typeof(void) ? Activator.CreateInstance(type) : null;
@@ -514,7 +581,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task CombinedModeDispatchesTcpRequestsDirectly()
         {
-            if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) || !QuicListener.IsSupported)
+            if (QuicUnavailable())
             {
                 Assert.Ignore("Combined mode requires a QUIC provider on this host.");
                 return;
@@ -532,6 +599,115 @@ namespace EmbedIO.Tests
             Assert.That(response.Version, Is.EqualTo(HttpVersion.Version11));
             Assert.That(await response.Content.ReadAsStringAsync(stop.Token), Is.EqualTo("combined"));
             Assert.That(((IDictionary)Field(Field(Field(tcp, "_coordinator"), "_epoch"), "_pending")).Count, Is.Zero);
+            Assert.That(Field(Field(Field(server.Listener, "_session"), "_quic"), "_dispatcher"), Is.Not.Null, "The combined listener forwards the dispatcher to its QUIC transport.");
+            stop.Cancel();
+            await running;
+        }
+
+        [Test]
+        public async Task Http3RequestsStartTheHandlerOnTheRequestStream()
+        {
+            if (QuicUnavailable())
+            {
+                Assert.Ignore("HTTP/3 requires a QUIC provider on this host.");
+                return;
+            }
+            using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
+            var url = CombinedPrefix();
+            var inline = 0;
+            using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIOHttp3).WithCertificate(certificate))
+                .WithModule(new ActionModule(context =>
+                {
+                    if (DispatchedFromHttp3Session()) Interlocked.Increment(ref inline);
+                    return context.SendStringAsync("quic", "text/plain", WebServer.Utf8NoBomEncoding);
+                }));
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var running = await StartAsync(server, stop.Token);
+            var session = Field(server.Listener, "_session");
+            Assert.That(Field(session, "_dispatcher"), Is.Not.Null, "The HTTP/3 session received the server's dispatcher.");
+            using var client = Http3Client(certificate);
+            for (var request = 0; request < 3; request++)
+            {
+                using var response = await client.GetAsync(url + "direct", stop.Token);
+                Assert.That(response.Version, Is.EqualTo(HttpVersion.Version30));
+                Assert.That(await response.Content.ReadAsStringAsync(stop.Token), Is.EqualTo("quic"));
+            }
+            Assert.That(inline, Is.EqualTo(3), "Every handler started inside the session's dispatch, on the request stream's own task.");
+            Assert.That(QueuedContexts(session), Is.Zero, "No request passed through the session's context channel.");
+            stop.Cancel();
+            await running;
+        }
+
+        [Test]
+        public async Task Http3ThrowingHandlerAnswers500AndTheConnectionKeepsServing()
+        {
+            if (QuicUnavailable())
+            {
+                Assert.Ignore("HTTP/3 requires a QUIC provider on this host.");
+                return;
+            }
+            using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
+            var url = CombinedPrefix();
+            using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIOHttp3).WithCertificate(certificate))
+                .WithModule(new ActionModule(context => context.RequestedPath == "/boom"
+                    ? throw new InvalidOperationException("Handler failure under direct dispatch.")
+                    : context.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding)));
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var running = await StartAsync(server, stop.Token);
+            using var client = Http3Client(certificate);
+            using (var failed = await client.GetAsync(url + "boom", stop.Token))
+            {
+                Assert.That(failed.Version, Is.EqualTo(HttpVersion.Version30));
+                Assert.That(failed.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+            }
+            using var answered = await client.GetAsync(url + "ok", stop.Token);
+            Assert.That(answered.Version, Is.EqualTo(HttpVersion.Version30));
+            Assert.That(await answered.Content.ReadAsStringAsync(stop.Token), Is.EqualTo("ok"));
+            stop.Cancel();
+            await running;
+        }
+
+        [Test]
+        public async Task Http3BlockingHandlerDoesNotStallAnotherStream()
+        {
+            if (QuicUnavailable())
+            {
+                Assert.Ignore("HTTP/3 requires a QUIC provider on this host.");
+                return;
+            }
+            using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
+            var url = CombinedPrefix();
+            using var gate = new ManualResetEventSlim(false);
+            var blocked = 0;
+            using var server = new WebServer(options => options.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIOHttp3).WithCertificate(certificate))
+                .WithModule(new ActionModule(context =>
+                {
+                    if (context.RequestedPath == "/block")
+                    {
+                        // A synchronous block before the first suspension holds the
+                        // request stream's task; the connection's other streams go on.
+                        Interlocked.Increment(ref blocked);
+                        gate.Wait(context.CancellationToken);
+                    }
+                    return context.SendStringAsync(context.RequestedPath, "text/plain", WebServer.Utf8NoBomEncoding);
+                }));
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var running = await StartAsync(server, stop.Token);
+            using var client = Http3Client(certificate);
+            try
+            {
+                var blocking = client.GetStringAsync(url + "block", stop.Token);
+                while (Volatile.Read(ref blocked) == 0) await Task.Delay(10, stop.Token);
+                for (var request = 0; request < 10; request++)
+                    Assert.That(await client.GetStringAsync(url + "fast", stop.Token), Is.EqualTo("/fast"));
+                Assert.That(blocking.IsCompleted, Is.False);
+                gate.Set();
+                Assert.That(await blocking, Is.EqualTo("/block"));
+            }
+            finally
+            {
+                gate.Set();
+            }
             stop.Cancel();
             await running;
         }
