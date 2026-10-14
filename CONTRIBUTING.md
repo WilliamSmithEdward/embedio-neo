@@ -55,15 +55,17 @@ one-week cooldown unless Microsoft marks the release as a security release. In
 separate pull requests it moves the MAUI workload `--version` to the newest
 workload set for the pinned SDK patch (the set decides the mobile apps' Mono
 runtime and their Apple and Android packs, which can need a newer Xcode), and
-the conformance runner's SDK image once MCR publishes it. It never changes
-feature band; that is left to a person. `dotnet-sdk-canary.yml` builds and
-tests with the newest SDK each Monday, without the pins, as an early warning;
-it gates nothing. A move by hand follows the same rules. Then run:
+the conformance runner's SDK image once MCR publishes it. Workload-set pull
+requests open as drafts labelled `needs owner decision` and wait for the owner.
+It never changes feature band; that is left to a person.
+`dotnet-sdk-canary.yml` builds and tests with the newest SDK each Monday,
+without the pins, as an early warning; it gates nothing. A move by hand follows
+the same rules. Then run:
 
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 6072
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 6073
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -77,7 +79,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 6072 executed/reported test cases to catch accidental discovery loss; update
+least 6073 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
 suite budget is eight minutes on Windows/Linux and twelve minutes for macOS CI
 coverage. William approved the macOS increase on 2026-10-13 after CI
@@ -92,6 +94,9 @@ that host exit as resolved; the changed-source CI run must finish successfully.
 Per-case deadlines, assertions, iterations, coverage and the discovery minimum
 remain enforced; this is a whole-run allowance, not a failure exemption. NUnit 5
 async assertions must be awaited.
+The Test job allows 20 minutes on macOS and 15 elsewhere, so the macOS suite
+budget plus setup fits: CI 38479185526 finished all 6,056 macOS cases one
+second before a 15-minute job limit cancelled it (approved 2026-10-13).
 
 CI also runs test-only MAUI Mac Catalyst and Android apps outside the ordinary
 solution and shipped packages. The Android fixture uses the pinned .NET 10 SDK,
@@ -129,8 +134,16 @@ dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes --include 
 ```
 
 Ordinary fixes should format only changed files; repository-wide formatting belongs
-to an explicit cleanup task. All testing and analyzer packages remain development-only.
-Library targets are unchanged.
+to an explicit cleanup task. CI also checks the projects outside `EmbedIO.sln`, the MAUI
+apps included, in folder mode, which loads no project and needs no restore or workload:
+
+```sh
+dotnet format whitespace test --folder --verify-no-changes
+dotnet format whitespace tools --folder --verify-no-changes
+```
+
+All testing and analyzer packages remain development-only. Library targets are
+unchanged.
 
 Builds treat compiler and analyzer warnings as errors. CI also verifies formatting
 and runs `python scripts/check_analyzer_suppressions.py`, which rejects diagnostic
