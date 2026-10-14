@@ -1,0 +1,301 @@
+# query_format: 300 cases, 2 input columns, seed 15823223968054694151
+text/*|a/b;x="q\\"q"|text/*	application/json;a=1;a=2	unsupported|"text/*", "a/b";x="q\\"q", "text/*"|text/*, a/b; x="q\\"q", text/*
+a/b;x="q\\"q"|*/*|application/json	application/json ;	unsupported|"a/b";x="q\\"q", "*/*", "application/json"|a/b; x="q\\"q", */*, application/json
+a/b;X-y_1.z=v|application/json	*/*	unsupported|"a/b";x-y_1.z="v", "application/json"|a/b; X-y_1.z=v, application/json
+a/b;X-y_1.z=v|text/plain;format=flowed|application/json	text/plain;format=FLOWED	unsupported|"a/b";x-y_1.z="v", "text/plain";format="flowed", "application/json"|a/b; X-y_1.z=v, text/plain; format=flowed, application/json
+application/json	text/plain	unsupported|"application/json"|application/json
+text/plain;format=flowed|a/b;x	application/x-ndjson;profile="a  b"	constructor:ArgumentException:supportedMediaTypes
+text/plain;charset=UTF-8;format=flowed	text/plain;charset=utf-8;charset=latin1	unsupported|"text/plain";charset="UTF-8";format="flowed"|text/plain; charset=UTF-8; format=flowed
+a/b;x|text/*	text/plain	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v	application/*	unsupported|"a/b";x-y_1.z="v"|a/b; X-y_1.z=v
+text/plain;format=flowed|Application/JSON	APPLICATION/JSON	supported|"text/plain";format="flowed", "application/json"|text/plain; format=flowed, Application/JSON
+application/x-ndjson;profile="a b"	text/plain	unsupported|"application/x-ndjson";profile="a b"|application/x-ndjson; profile="a b"
+a/b;x="\u00e9"	application/json; charset=utf-8	constructor:ArgumentException:
+text/plain;charset=UTF-8;format=flowed	application/json;charset=	unsupported|"text/plain";charset="UTF-8";format="flowed"|text/plain; charset=UTF-8; format=flowed
+*/json|a/b;x|text/plain;charset=UTF-8;format=flowed	APPLICATION/JSON	constructor:ArgumentException:supportedMediaTypes
+application/json|a/b;x="q\\"q"|Application/JSON	application/json;charset=	unsupported|"application/json", "a/b";x="q\\"q", "application/json"|application/json, a/b; x="q\\"q", Application/JSON
+a/b;X-y_1.z=v	application/json	unsupported|"a/b";x-y_1.z="v"|a/b; X-y_1.z=v
+application/json;*=1|a/b;x	text/plain;format=flowed;charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+*/*	text/plain;format=flowed;charset=utf-8	supported|"*/*"|*/*
+text/*|text/*|a/b;x="\u00e9"		constructor:ArgumentException:
+*/json|application/x-ndjson;profile="a b"|a/b;1x=1	garbage	constructor:ArgumentException:supportedMediaTypes
+a/b;x=1;x=2|a/b;x="\u00e9"	*/*	constructor:ArgumentException:supportedMediaTypes
+application/x-ndjson;profile="a b"|text/plain;charset=UTF-8;format=flowed	application/json; charset=utf-8	unsupported|"application/x-ndjson";profile="a b", "text/plain";charset="UTF-8";format="flowed"|application/x-ndjson; profile="a b", text/plain; charset=UTF-8; format=flowed
+text/plain;format=flowed|a/b;x	application/json;a=1;a=2	constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed|*/json|text	application/json;x="q\\"q"	constructor:ArgumentException:supportedMediaTypes
+application/json;*=1|a/b;x|application/json; charset="utf-8"	garbage	constructor:ArgumentException:supportedMediaTypes
+Application/JSON|text|application/json	application/json;x="q\\"q"	constructor:ArgumentException:supportedMediaTypes
+application/json	application/json;charset=utf-8;format=x	supported|"application/json"|application/json
+application/json; charset="utf-8"	application/x-ndjson;profile="a b"	unsupported|"application/json";charset="utf-8"|application/json; charset="utf-8"
+application/json;charset=utf-8	application/json; charset=utf-8	supported|"application/json";charset="utf-8"|application/json; charset=utf-8
+text/plain;format=flowed	application/json;charset=utf-8;format=x	unsupported|"text/plain";format="flowed"|text/plain; format=flowed
+application/json;charset=utf-8	application/json ;	unsupported|"application/json";charset="utf-8"|application/json; charset=utf-8
+text/plain;format=flowed|*/json|a/b;1x=1	application/json; charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed	application/*	unsupported|"text/plain";format="flowed"|text/plain; format=flowed
+a/b;x	text/plain;charset=utf-8;charset=latin1	constructor:ArgumentException:supportedMediaTypes
+a/b;x=1;x=2	garbage	constructor:ArgumentException:supportedMediaTypes
+a/b;x=1;x=2|Application/JSON	*/*	constructor:ArgumentException:supportedMediaTypes
+a/b;x="\u00e9"	text/plain;charset=utf-8;charset=latin1	constructor:ArgumentException:
+application/json	application/json;a=1;a=2	unsupported|"application/json"|application/json
+Application/JSON		unsupported|"application/json"|Application/JSON
+text/*	text/plain;charset=utf-8;charset=latin1	unsupported|"text/*"|text/*
+a/b;x="\u00e9"|a/b;x=1;x=2|a/b;x="\u00e9"	APPLICATION/JSON	constructor:ArgumentException:
+application/json;Charset=utf-8|a/b;x	application/json;x="q\\"q"	constructor:ArgumentException:supportedMediaTypes
+Application/JSON|a/b;X-y_1.z=v	application/json; charset=utf-8	supported|"application/json", "a/b";x-y_1.z="v"|Application/JSON, a/b; X-y_1.z=v
+*/json|application/json;Charset=utf-8|application/x-ndjson;profile="a b"		constructor:ArgumentException:supportedMediaTypes
+application/json	garbage	unsupported|"application/json"|application/json
+application/json	APPLICATION/JSON	supported|"application/json"|application/json
+a/b;x="q\\"q"|a/b;X-y_1.z=v	<null>	unsupported|"a/b";x="q\\"q", "a/b";x-y_1.z="v"|a/b; x="q\\"q", a/b; X-y_1.z=v
+*/json|*/*|application/json		constructor:ArgumentException:supportedMediaTypes
+a/b;x="\u00e9"	<null>	constructor:ArgumentException:
+application/json;Charset=utf-8	application/json;x="q\\"q"	unsupported|"application/json";charset="utf-8"|application/json; Charset=utf-8
+a/b;1x=1|*/*	application/x-ndjson;profile="a b"	constructor:ArgumentException:supportedMediaTypes
+application/x-ndjson;profile="a b"|a/b;x|a/b;x=1;x=2	APPLICATION/JSON	constructor:ArgumentException:supportedMediaTypes
+	application/x-ndjson;profile="a  b"	constructor:ArgumentException:supportedMediaTypes
+a/b;x="q\\"q"	text/plain;charset=utf-8;charset=latin1	unsupported|"a/b";x="q\\"q"|a/b; x="q\\"q"
+application/json|*/*	garbage	unsupported|"application/json", "*/*"|application/json, */*
+application/json|a/b;x	application/*	constructor:ArgumentException:supportedMediaTypes
+Application/JSON|Application/JSON|application/json	text/plain	unsupported|"application/json", "application/json", "application/json"|Application/JSON, Application/JSON, application/json
+text|application/json; charset="utf-8"	text/plain;format=FLOWED	constructor:ArgumentException:supportedMediaTypes
+*/json|application/json|application/json	garbage	constructor:ArgumentException:supportedMediaTypes
+a/b;x|application/json;*=1|a/b;X-y_1.z=v		constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed|application/json;charset=utf-8|text/plain;charset=UTF-8;format=flowed	application/json ;	unsupported|"text/plain";format="flowed", "application/json";charset="utf-8", "text/plain";charset="UTF-8";format="flowed"|text/plain; format=flowed, application/json; charset=utf-8, text/plain; charset=UTF-8; format=flowed
+text/plain;charset=UTF-8;format=flowed|application/json;*=1	application/json	unsupported|"text/plain";charset="UTF-8";format="flowed", "application/json";*="1"|text/plain; charset=UTF-8; format=flowed, application/json; *=1
+application/json|text	application/json;charset=utf-8;format=x	constructor:ArgumentException:supportedMediaTypes
+application/json|application/json; charset="utf-8"|application/x-ndjson;profile="a b"	APPLICATION/JSON	supported|"application/json", "application/json";charset="utf-8", "application/x-ndjson";profile="a b"|application/json, application/json; charset="utf-8", application/x-ndjson; profile="a b"
+Application/JSON|a/b;x|a/b;x="q\\"q"	text/plain;format=flowed;charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed|application/json;Charset=utf-8	*/*	unsupported|"text/plain";format="flowed", "application/json";charset="utf-8"|text/plain; format=flowed, application/json; Charset=utf-8
+application/json;charset=utf-8|text/*	<null>	unsupported|"application/json";charset="utf-8", "text/*"|application/json; charset=utf-8, text/*
+text/*	application/JSON;charset=UTF-8	unsupported|"text/*"|text/*
+a/b;x="q\\"q"	application/json	unsupported|"a/b";x="q\\"q"|a/b; x="q\\"q"
+text|a/b;x=1;x=2|	application/json;x="\u00e9"	constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed	application/JSON;charset=UTF-8	unsupported|"text/plain";format="flowed"|text/plain; format=flowed
+|a/b;x|application/json	application/json;a=1;a=2	constructor:ArgumentException:supportedMediaTypes
+|a/b;1x=1|a/b;x="q\\"q"	text/plain;format=flowed;charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+*/*|application/json;*=1	application/json;charset=	unsupported|"*/*", "application/json";*="1"|*/*, application/json; *=1
+a/b;X-y_1.z=v	application/JSON;charset=UTF-8	unsupported|"a/b";x-y_1.z="v"|a/b; X-y_1.z=v
+application/json;*=1	application/*	unsupported|"application/json";*="1"|application/json; *=1
+text|application/json;charset=utf-8	text/plain	constructor:ArgumentException:supportedMediaTypes
+a/b;x=1;x=2	application/x-ndjson;profile="a  b"	constructor:ArgumentException:supportedMediaTypes
+text/plain;charset=UTF-8;format=flowed	application/x-ndjson;profile="a b"	unsupported|"text/plain";charset="UTF-8";format="flowed"|text/plain; charset=UTF-8; format=flowed
+*/*|text|application/json	text/plain;charset=utf-8;charset=latin1	constructor:ArgumentException:supportedMediaTypes
+application/json;charset=utf-8	text/plain;format=flowed;charset=utf-8	unsupported|"application/json";charset="utf-8"|application/json; charset=utf-8
+application/json;*=1	application/x-ndjson;profile="a b"	unsupported|"application/json";*="1"|application/json; *=1
+text|	application/json;charset=	constructor:ArgumentException:supportedMediaTypes
+application/x-ndjson;profile="a b"|a/b;x=1;x=2	text/plain;format=flowed;charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+*/json|a/b;x="\u00e9"	application/json	constructor:ArgumentException:supportedMediaTypes
+application/json;Charset=utf-8	garbage	unsupported|"application/json";charset="utf-8"|application/json; Charset=utf-8
+*/json|a/b;X-y_1.z=v|text/plain;charset=UTF-8;format=flowed	application/json;charset=	constructor:ArgumentException:supportedMediaTypes
+a/b;1x=1	application/json;charset	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v	application/json;a=1;a=2	unsupported|"a/b";x-y_1.z="v"|a/b; X-y_1.z=v
+a/b;x=1;x=2|a/b;X-y_1.z=v|	application/json;charset	constructor:ArgumentException:supportedMediaTypes
+application/json;Charset=utf-8	application/json; charset=utf-8	supported|"application/json";charset="utf-8"|application/json; Charset=utf-8
+application/json;*=1|a/b;x="\u00e9"|text/*	application/json;x="q\\"q"	constructor:ArgumentException:
+application/json;*=1|a/b;x	text/plain	constructor:ArgumentException:supportedMediaTypes
+application/json	text/plain;format=flowed;charset=utf-8	unsupported|"application/json"|application/json
+a/b;x=1;x=2	*/*	constructor:ArgumentException:supportedMediaTypes
+text/plain;charset=UTF-8;format=flowed|text|text	application/JSON;charset=UTF-8	constructor:ArgumentException:supportedMediaTypes
+*/*|application/json;charset=utf-8	<null>	unsupported|"*/*", "application/json";charset="utf-8"|*/*, application/json; charset=utf-8
+a/b;X-y_1.z=v|application/json|application/json	application/json;charset=utf-8;format=x	supported|"a/b";x-y_1.z="v", "application/json", "application/json"|a/b; X-y_1.z=v, application/json, application/json
+application/json	*/*	unsupported|"application/json"|application/json
+text/plain;charset=UTF-8;format=flowed|*/*|a/b;x="\u00e9"	text/plain;format=FLOWED	constructor:ArgumentException:
+*/*|application/json;Charset=utf-8|a/b;x="\u00e9"	<null>	constructor:ArgumentException:
+|text/plain;charset=UTF-8;format=flowed|text/*	application/*	constructor:ArgumentException:supportedMediaTypes
+|a/b;x="q\\"q"	text/plain	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v|a/b;x="\u00e9"	application/json;charset	constructor:ArgumentException:
+application/json;*=1|a/b;X-y_1.z=v|application/x-ndjson;profile="a b"	application/json;charset=utf-8;format=x	unsupported|"application/json";*="1", "a/b";x-y_1.z="v", "application/x-ndjson";profile="a b"|application/json; *=1, a/b; X-y_1.z=v, application/x-ndjson; profile="a b"
+Application/JSON		unsupported|"application/json"|Application/JSON
+a/b;x="\u00e9"	text/plain	constructor:ArgumentException:
+text/plain;format=flowed|*/*|a/b;x="q\\"q"	text/plain;format=flowed;charset=utf-8	supported|"text/plain";format="flowed", "*/*", "a/b";x="q\\"q"|text/plain; format=flowed, */*, a/b; x="q\\"q"
+	text/plain;format=FLOWED	constructor:ArgumentException:supportedMediaTypes
+a/b;x=1;x=2|*/json	application/x-ndjson;profile="a  b"	constructor:ArgumentException:supportedMediaTypes
+application/json|text/plain;format=flowed	*/*	unsupported|"application/json", "text/plain";format="flowed"|application/json, text/plain; format=flowed
+*/*	text/plain;format=flowed;charset=utf-8	supported|"*/*"|*/*
+a/b;x="q\\"q"|application/json|application/json	application/json	supported|"a/b";x="q\\"q", "application/json", "application/json"|a/b; x="q\\"q", application/json, application/json
+application/json|a/b;x="q\\"q"|text/*	application/json; charset=utf-8	supported|"application/json", "a/b";x="q\\"q", "text/*"|application/json, a/b; x="q\\"q", text/*
+*/json|text/*|	text/plain	constructor:ArgumentException:supportedMediaTypes
+text|a/b;x=1;x=2|application/json	application/*	constructor:ArgumentException:supportedMediaTypes
+text/plain;charset=UTF-8;format=flowed|Application/JSON|application/json	APPLICATION/JSON	supported|"text/plain";charset="UTF-8";format="flowed", "application/json", "application/json"|text/plain; charset=UTF-8; format=flowed, Application/JSON, application/json
+application/json|	application/json;charset	constructor:ArgumentException:supportedMediaTypes
+text|application/json;*=1|application/json; charset="utf-8"	text/plain	constructor:ArgumentException:supportedMediaTypes
+application/json;Charset=utf-8|application/json;*=1|a/b;1x=1	text/plain;charset="utf-8"	constructor:ArgumentException:supportedMediaTypes
+a/b;x="\u00e9"	text/plain;charset=utf-8;charset=latin1	constructor:ArgumentException:
+text|a/b;x="q\\"q"|a/b;X-y_1.z=v	application/JSON;charset=UTF-8	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v	application/json	unsupported|"a/b";x-y_1.z="v"|a/b; X-y_1.z=v
+text	<null>	constructor:ArgumentException:supportedMediaTypes
+text/*|text/plain;format=flowed	application/json;charset	unsupported|"text/*", "text/plain";format="flowed"|text/*, text/plain; format=flowed
+a/b;x|a/b;x|text/*	*/*	constructor:ArgumentException:supportedMediaTypes
+text/*		unsupported|"text/*"|text/*
+text/plain;charset=UTF-8;format=flowed	text/plain;charset="utf-8"	unsupported|"text/plain";charset="UTF-8";format="flowed"|text/plain; charset=UTF-8; format=flowed
+application/json; charset="utf-8"|application/json;*=1	application/x-ndjson;profile="a  b"	unsupported|"application/json";charset="utf-8", "application/json";*="1"|application/json; charset="utf-8", application/json; *=1
+application/json|a/b;x="q\\"q"	text/plain;charset=utf-8;charset=latin1	unsupported|"application/json", "a/b";x="q\\"q"|application/json, a/b; x="q\\"q"
+Application/JSON|application/x-ndjson;profile="a b"	application/x-ndjson;profile="a b"	supported|"application/json", "application/x-ndjson";profile="a b"|Application/JSON, application/x-ndjson; profile="a b"
+application/json;*=1|application/json; charset="utf-8"	<null>	unsupported|"application/json";*="1", "application/json";charset="utf-8"|application/json; *=1, application/json; charset="utf-8"
+a/b;x="\u00e9"|a/b;x=1;x=2	application/json	constructor:ArgumentException:
+application/json	application/json;x="\u00e9"	supported|"application/json"|application/json
+text|Application/JSON|text/*	application/JSON;charset=UTF-8	constructor:ArgumentException:supportedMediaTypes
+a/b;1x=1	text/plain;format=flowed;charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+text/*|application/json;charset=utf-8		unsupported|"text/*", "application/json";charset="utf-8"|text/*, application/json; charset=utf-8
+a/b;x="\u00e9"	text/plain;charset="utf-8"	constructor:ArgumentException:
+a/b;x|text/plain;charset=UTF-8;format=flowed|application/json;charset=utf-8	application/json;x="q\\"q"	constructor:ArgumentException:supportedMediaTypes
+*/json|text/plain;format=flowed	application/json;a=1;a=2	constructor:ArgumentException:supportedMediaTypes
+a/b;x=1;x=2|*/json|*/json	application/x-ndjson;profile="a  b"	constructor:ArgumentException:supportedMediaTypes
+application/json;charset=utf-8	APPLICATION/JSON	unsupported|"application/json";charset="utf-8"|application/json; charset=utf-8
+text/plain;format=flowed|application/json;charset=utf-8|application/json;*=1	text/plain	unsupported|"text/plain";format="flowed", "application/json";charset="utf-8", "application/json";*="1"|text/plain; format=flowed, application/json; charset=utf-8, application/json; *=1
+a/b;1x=1|text/*|a/b;x	APPLICATION/JSON	constructor:ArgumentException:supportedMediaTypes
+application/json	text/plain;format=FLOWED	unsupported|"application/json"|application/json
+application/json;Charset=utf-8|application/json;Charset=utf-8	*/*	unsupported|"application/json";charset="utf-8", "application/json";charset="utf-8"|application/json; Charset=utf-8, application/json; Charset=utf-8
+application/json;*=1|text/plain;charset=UTF-8;format=flowed	text/plain;charset="utf-8"	unsupported|"application/json";*="1", "text/plain";charset="UTF-8";format="flowed"|application/json; *=1, text/plain; charset=UTF-8; format=flowed
+*/*|a/b;1x=1|application/x-ndjson;profile="a b"		constructor:ArgumentException:supportedMediaTypes
+application/json;charset=utf-8|a/b;x=1;x=2|text/*	garbage	constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed|a/b;1x=1|a/b;x="\u00e9"	application/json;x="\u00e9"	constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed|text/*	<null>	unsupported|"text/plain";format="flowed", "text/*"|text/plain; format=flowed, text/*
+application/x-ndjson;profile="a b"|a/b;x=1;x=2|text	text/plain;charset=utf-8;charset=latin1	constructor:ArgumentException:supportedMediaTypes
+application/json;charset=utf-8	application/json;x="\u00e9"	unsupported|"application/json";charset="utf-8"|application/json; charset=utf-8
+text/plain;charset=UTF-8;format=flowed|application/json|application/json	application/*	unsupported|"text/plain";charset="UTF-8";format="flowed", "application/json", "application/json"|text/plain; charset=UTF-8; format=flowed, application/json, application/json
+text/plain;format=flowed	application/json	unsupported|"text/plain";format="flowed"|text/plain; format=flowed
+a/b;x	text/plain	constructor:ArgumentException:supportedMediaTypes
+a/b;x="q\\"q"|application/json;*=1	application/json	unsupported|"a/b";x="q\\"q", "application/json";*="1"|a/b; x="q\\"q", application/json; *=1
+application/json;charset=utf-8	application/json;charset=utf-8;format=x	supported|"application/json";charset="utf-8"|application/json; charset=utf-8
+a/b;x="\u00e9"|*/json	text/plain	constructor:ArgumentException:
+a/b;1x=1|a/b;x="q\\"q"	application/JSON;charset=UTF-8	constructor:ArgumentException:supportedMediaTypes
+a/b;x="q\\"q"|a/b;x=1;x=2	application/json;charset=utf-8;format=x	constructor:ArgumentException:supportedMediaTypes
+application/json|a/b;x	text/plain;charset=utf-8;charset=latin1	constructor:ArgumentException:supportedMediaTypes
+a/b;1x=1|application/x-ndjson;profile="a b"|a/b;x=1;x=2	text/plain;charset="utf-8"	constructor:ArgumentException:supportedMediaTypes
+text/plain;charset=UTF-8;format=flowed|text/plain;format=flowed|application/json;*=1	<null>	unsupported|"text/plain";charset="UTF-8";format="flowed", "text/plain";format="flowed", "application/json";*="1"|text/plain; charset=UTF-8; format=flowed, text/plain; format=flowed, application/json; *=1
+application/json;Charset=utf-8	application/JSON;charset=UTF-8	supported|"application/json";charset="utf-8"|application/json; Charset=utf-8
+a/b;x="\u00e9"|text/plain;charset=UTF-8;format=flowed|application/json;*=1	application/json;charset=	constructor:ArgumentException:
+a/b;X-y_1.z=v|a/b;x="\u00e9"	garbage	constructor:ArgumentException:
+*/json|application/x-ndjson;profile="a b"	application/json;x="\u00e9"	constructor:ArgumentException:supportedMediaTypes
+application/json;charset=utf-8|*/json|text	text/plain	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v|application/json; charset="utf-8"|Application/JSON	text/plain;charset="utf-8"	unsupported|"a/b";x-y_1.z="v", "application/json";charset="utf-8", "application/json"|a/b; X-y_1.z=v, application/json; charset="utf-8", Application/JSON
+application/x-ndjson;profile="a b"|application/json; charset="utf-8"	text/plain	unsupported|"application/x-ndjson";profile="a b", "application/json";charset="utf-8"|application/x-ndjson; profile="a b", application/json; charset="utf-8"
+text/*|a/b;X-y_1.z=v|text/plain;format=flowed	text/plain;format=FLOWED	supported|"text/*", "a/b";x-y_1.z="v", "text/plain";format="flowed"|text/*, a/b; X-y_1.z=v, text/plain; format=flowed
+application/json;Charset=utf-8|application/json;Charset=utf-8	text/plain	unsupported|"application/json";charset="utf-8", "application/json";charset="utf-8"|application/json; Charset=utf-8, application/json; Charset=utf-8
+a/b;x|application/x-ndjson;profile="a b"	*/*	constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed|text/*|a/b;x="\u00e9"	garbage	constructor:ArgumentException:
+a/b;x=1;x=2||text/plain;format=flowed	<null>	constructor:ArgumentException:supportedMediaTypes
+a/b;x|text/*	application/x-ndjson;profile="a  b"	constructor:ArgumentException:supportedMediaTypes
+*/*||application/json;Charset=utf-8	text/plain;charset=utf-8;charset=latin1	constructor:ArgumentException:supportedMediaTypes
+application/json;charset=utf-8|a/b;x="q\\"q"|application/json;Charset=utf-8	application/*	unsupported|"application/json";charset="utf-8", "a/b";x="q\\"q", "application/json";charset="utf-8"|application/json; charset=utf-8, a/b; x="q\\"q", application/json; Charset=utf-8
+application/json;*=1|application/json	application/x-ndjson;profile="a  b"	unsupported|"application/json";*="1", "application/json"|application/json; *=1, application/json
+application/json|a/b;x="\u00e9"|a/b;1x=1	application/json;charset=	constructor:ArgumentException:
+text/plain;format=flowed|a/b;x|text/plain;format=flowed	text/plain;format=flowed;charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+a/b;x=1;x=2|application/json; charset="utf-8"	garbage	constructor:ArgumentException:supportedMediaTypes
+application/x-ndjson;profile="a b"|application/json	<null>	unsupported|"application/x-ndjson";profile="a b", "application/json"|application/x-ndjson; profile="a b", application/json
+application/json;*=1|*/*|a/b;X-y_1.z=v	application/x-ndjson;profile="a  b"	supported|"application/json";*="1", "*/*", "a/b";x-y_1.z="v"|application/json; *=1, */*, a/b; X-y_1.z=v
+text/plain;format=flowed	application/json ;	unsupported|"text/plain";format="flowed"|text/plain; format=flowed
+application/json|a/b;x=1;x=2|a/b;1x=1	application/json;charset=	constructor:ArgumentException:supportedMediaTypes
+text/plain;charset=UTF-8;format=flowed|Application/JSON	text/plain;format=flowed;charset=utf-8	supported|"text/plain";charset="UTF-8";format="flowed", "application/json"|text/plain; charset=UTF-8; format=flowed, Application/JSON
+a/b;x="q\\"q"|a/b;x|application/json;charset=utf-8	application/json;x="q\\"q"	constructor:ArgumentException:supportedMediaTypes
+text	application/json;a=1;a=2	constructor:ArgumentException:supportedMediaTypes
+application/json	*/*	unsupported|"application/json"|application/json
+application/json;Charset=utf-8|application/json;*=1	text/plain	unsupported|"application/json";charset="utf-8", "application/json";*="1"|application/json; Charset=utf-8, application/json; *=1
+application/json;charset=utf-8	<null>	unsupported|"application/json";charset="utf-8"|application/json; charset=utf-8
+a/b;x="\u00e9"	text/plain;format=FLOWED	constructor:ArgumentException:
+*/*|application/json; charset="utf-8"|application/json;Charset=utf-8	application/json;x="q\\"q"	supported|"*/*", "application/json";charset="utf-8", "application/json";charset="utf-8"|*/*, application/json; charset="utf-8", application/json; Charset=utf-8
+text/plain;format=flowed	application/json;a=1;a=2	unsupported|"text/plain";format="flowed"|text/plain; format=flowed
+application/x-ndjson;profile="a b"	APPLICATION/JSON	unsupported|"application/x-ndjson";profile="a b"|application/x-ndjson; profile="a b"
+text/plain;format=flowed|*/json		constructor:ArgumentException:supportedMediaTypes
+application/json;Charset=utf-8	text/plain;format=flowed;charset=utf-8	unsupported|"application/json";charset="utf-8"|application/json; Charset=utf-8
+text/plain;format=flowed|application/json|a/b;X-y_1.z=v	application/*	unsupported|"text/plain";format="flowed", "application/json", "a/b";x-y_1.z="v"|text/plain; format=flowed, application/json, a/b; X-y_1.z=v
+a/b;x|a/b;x="\u00e9"|text/plain;charset=UTF-8;format=flowed	application/json ;	constructor:ArgumentException:supportedMediaTypes
+text/*	application/x-ndjson;profile="a b"	unsupported|"text/*"|text/*
+a/b;X-y_1.z=v|a/b;1x=1	application/json; charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v||application/x-ndjson;profile="a b"	application/json	constructor:ArgumentException:supportedMediaTypes
+*/json|application/json; charset="utf-8"	text/plain;format=FLOWED	constructor:ArgumentException:supportedMediaTypes
+|application/json; charset="utf-8"|	application/json	constructor:ArgumentException:supportedMediaTypes
+text	garbage	constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed|application/x-ndjson;profile="a b"|*/json	application/json;x="\u00e9"	constructor:ArgumentException:supportedMediaTypes
+a/b;1x=1|*/*	application/x-ndjson;profile="a  b"	constructor:ArgumentException:supportedMediaTypes
+text|application/json|application/json; charset="utf-8"	application/*	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v	application/JSON;charset=UTF-8	unsupported|"a/b";x-y_1.z="v"|a/b; X-y_1.z=v
+text	<null>	constructor:ArgumentException:supportedMediaTypes
+text	APPLICATION/JSON	constructor:ArgumentException:supportedMediaTypes
+a/b;x="\u00e9"|a/b;x|*/*	text/plain;format=FLOWED	constructor:ArgumentException:
+application/json;Charset=utf-8|a/b;1x=1	application/x-ndjson;profile="a  b"	constructor:ArgumentException:supportedMediaTypes
+text/plain;charset=UTF-8;format=flowed|application/json;*=1|a/b;X-y_1.z=v	application/json ;	unsupported|"text/plain";charset="UTF-8";format="flowed", "application/json";*="1", "a/b";x-y_1.z="v"|text/plain; charset=UTF-8; format=flowed, application/json; *=1, a/b; X-y_1.z=v
+application/json;*=1|	application/json;charset=	constructor:ArgumentException:supportedMediaTypes
+a/b;x="q\\"q"|text/*|a/b;x="q\\"q"	application/json	unsupported|"a/b";x="q\\"q", "text/*", "a/b";x="q\\"q"|a/b; x="q\\"q", text/*, a/b; x="q\\"q"
+application/x-ndjson;profile="a b"|text/*	application/json;x="\u00e9"	unsupported|"application/x-ndjson";profile="a b", "text/*"|application/x-ndjson; profile="a b", text/*
+application/x-ndjson;profile="a b"|a/b;x="\u00e9"	application/json;charset=	constructor:ArgumentException:
+text	application/json;a=1;a=2	constructor:ArgumentException:supportedMediaTypes
+application/json|text/plain;charset=UTF-8;format=flowed|application/json	text/plain;charset="utf-8"	unsupported|"application/json", "text/plain";charset="UTF-8";format="flowed", "application/json"|application/json, text/plain; charset=UTF-8; format=flowed, application/json
+text/plain;format=flowed|application/json;*=1|a/b;X-y_1.z=v	application/json;a=1;a=2	unsupported|"text/plain";format="flowed", "application/json";*="1", "a/b";x-y_1.z="v"|text/plain; format=flowed, application/json; *=1, a/b; X-y_1.z=v
+a/b;x="q\\"q"	text/plain;charset="utf-8"	unsupported|"a/b";x="q\\"q"|a/b; x="q\\"q"
+application/json|Application/JSON	application/json	supported|"application/json", "application/json"|application/json, Application/JSON
+text/plain;format=flowed|a/b;x	application/JSON;charset=UTF-8	constructor:ArgumentException:supportedMediaTypes
+application/json;Charset=utf-8|*/json	application/*	constructor:ArgumentException:supportedMediaTypes
+*/*	APPLICATION/JSON	supported|"*/*"|*/*
+application/x-ndjson;profile="a b"	application/json; charset=utf-8	unsupported|"application/x-ndjson";profile="a b"|application/x-ndjson; profile="a b"
+|application/json;*=1|application/json;*=1	application/x-ndjson;profile="a b"	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v		unsupported|"a/b";x-y_1.z="v"|a/b; X-y_1.z=v
+application/json;*=1|text/*|application/x-ndjson;profile="a b"	application/*	unsupported|"application/json";*="1", "text/*", "application/x-ndjson";profile="a b"|application/json; *=1, text/*, application/x-ndjson; profile="a b"
+*/json|a/b;x	APPLICATION/JSON	constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed	APPLICATION/JSON	unsupported|"text/plain";format="flowed"|text/plain; format=flowed
+application/json;charset=utf-8|a/b;x="q\\"q"|a/b;x	*/*	constructor:ArgumentException:supportedMediaTypes
+Application/JSON|application/json;Charset=utf-8	application/x-ndjson;profile="a  b"	unsupported|"application/json", "application/json";charset="utf-8"|Application/JSON, application/json; Charset=utf-8
+application/json; charset="utf-8"|application/json;charset=utf-8|a/b;x="q\\"q"	application/json;a=1;a=2	unsupported|"application/json";charset="utf-8", "application/json";charset="utf-8", "a/b";x="q\\"q"|application/json; charset="utf-8", application/json; charset=utf-8, a/b; x="q\\"q"
+*/json	text/plain;format=FLOWED	constructor:ArgumentException:supportedMediaTypes
+application/json|a/b;x="q\\"q"|application/json; charset="utf-8"	<null>	unsupported|"application/json", "a/b";x="q\\"q", "application/json";charset="utf-8"|application/json, a/b; x="q\\"q", application/json; charset="utf-8"
+a/b;x="\u00e9"	text/plain;format=FLOWED	constructor:ArgumentException:
+application/json;Charset=utf-8	application/JSON;charset=UTF-8	supported|"application/json";charset="utf-8"|application/json; Charset=utf-8
+text/plain;charset=UTF-8;format=flowed	text/plain;format=flowed;charset=utf-8	supported|"text/plain";charset="UTF-8";format="flowed"|text/plain; charset=UTF-8; format=flowed
+a/b;x="q\\"q"|application/json|Application/JSON	<null>	unsupported|"a/b";x="q\\"q", "application/json", "application/json"|a/b; x="q\\"q", application/json, Application/JSON
+text/plain;format=flowed		unsupported|"text/plain";format="flowed"|text/plain; format=flowed
+application/x-ndjson;profile="a b"|text/plain;charset=UTF-8;format=flowed|Application/JSON	application/x-ndjson;profile="a  b"	unsupported|"application/x-ndjson";profile="a b", "text/plain";charset="UTF-8";format="flowed", "application/json"|application/x-ndjson; profile="a b", text/plain; charset=UTF-8; format=flowed, Application/JSON
+a/b;x	text/plain;format=flowed;charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+application/x-ndjson;profile="a b"	text/plain	unsupported|"application/x-ndjson";profile="a b"|application/x-ndjson; profile="a b"
+application/json	text/plain;charset="utf-8"	unsupported|"application/json"|application/json
+Application/JSON	<null>	unsupported|"application/json"|Application/JSON
+Application/JSON|Application/JSON	application/*	unsupported|"application/json", "application/json"|Application/JSON, Application/JSON
+application/json;*=1|a/b;X-y_1.z=v|application/json;Charset=utf-8	application/json;charset=	unsupported|"application/json";*="1", "a/b";x-y_1.z="v", "application/json";charset="utf-8"|application/json; *=1, a/b; X-y_1.z=v, application/json; Charset=utf-8
+application/json;*=1|application/json;*=1	application/json;x="q\\"q"	unsupported|"application/json";*="1", "application/json";*="1"|application/json; *=1, application/json; *=1
+*/*|a/b;1x=1|application/json; charset="utf-8"	application/x-ndjson;profile="a b"	constructor:ArgumentException:supportedMediaTypes
+application/x-ndjson;profile="a b"||application/json	*/*	constructor:ArgumentException:supportedMediaTypes
+*/*|application/json	application/json; charset=utf-8	supported|"*/*", "application/json"|*/*, application/json
+application/json;Charset=utf-8||application/json	APPLICATION/JSON	constructor:ArgumentException:supportedMediaTypes
+a/b;x="q\\"q"|application/json;*=1|*/*	application/JSON;charset=UTF-8	supported|"a/b";x="q\\"q", "application/json";*="1", "*/*"|a/b; x="q\\"q", application/json; *=1, */*
+a/b;x=1;x=2|		constructor:ArgumentException:supportedMediaTypes
+text/plain;format=flowed|application/json|*/json	application/json;charset=	constructor:ArgumentException:supportedMediaTypes
+	application/*	constructor:ArgumentException:supportedMediaTypes
+text/plain;charset=UTF-8;format=flowed|a/b;x="\u00e9"|Application/JSON	text/plain;charset="utf-8"	constructor:ArgumentException:
+a/b;x="q\\"q"|application/x-ndjson;profile="a b"	text/plain;charset=utf-8;charset=latin1	unsupported|"a/b";x="q\\"q", "application/x-ndjson";profile="a b"|a/b; x="q\\"q", application/x-ndjson; profile="a b"
+a/b;x|a/b;x="\u00e9"	application/json;x="q\\"q"	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v|application/json;*=1|text	application/json;charset=	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v|application/json;*=1	application/json;charset=utf-8;format=x	unsupported|"a/b";x-y_1.z="v", "application/json";*="1"|a/b; X-y_1.z=v, application/json; *=1
+application/json; charset="utf-8"	application/x-ndjson;profile="a b"	unsupported|"application/json";charset="utf-8"|application/json; charset="utf-8"
+*/json	application/json; charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+application/json;charset=utf-8|application/json;*=1	text/plain	unsupported|"application/json";charset="utf-8", "application/json";*="1"|application/json; charset=utf-8, application/json; *=1
+text/*|a/b;x="\u00e9"|application/json; charset="utf-8"	text/plain;format=FLOWED	constructor:ArgumentException:
+*/*|application/x-ndjson;profile="a b"	<null>	unsupported|"*/*", "application/x-ndjson";profile="a b"|*/*, application/x-ndjson; profile="a b"
+application/json;charset=utf-8|application/json	application/*	unsupported|"application/json";charset="utf-8", "application/json"|application/json; charset=utf-8, application/json
+application/json	application/json;charset=	unsupported|"application/json"|application/json
+text/plain;format=flowed	text/plain	unsupported|"text/plain";format="flowed"|text/plain; format=flowed
+a/b;X-y_1.z=v	application/json;charset=	unsupported|"a/b";x-y_1.z="v"|a/b; X-y_1.z=v
+a/b;X-y_1.z=v||application/json;charset=utf-8	application/json;a=1;a=2	constructor:ArgumentException:supportedMediaTypes
+Application/JSON|	application/json;charset=utf-8;format=x	constructor:ArgumentException:supportedMediaTypes
+text/*	APPLICATION/JSON	unsupported|"text/*"|text/*
+*/json|a/b;x="\u00e9"		constructor:ArgumentException:supportedMediaTypes
+|application/json; charset="utf-8"|a/b;x	APPLICATION/JSON	constructor:ArgumentException:supportedMediaTypes
+application/json;*=1	application/json ;	unsupported|"application/json";*="1"|application/json; *=1
+application/json	application/JSON;charset=UTF-8	supported|"application/json"|application/json
+	application/json;a=1;a=2	constructor:ArgumentException:supportedMediaTypes
+application/json; charset="utf-8"|a/b;x=1;x=2		constructor:ArgumentException:supportedMediaTypes
+application/json;charset=utf-8|text/*	application/x-ndjson;profile="a  b"	unsupported|"application/json";charset="utf-8", "text/*"|application/json; charset=utf-8, text/*
+a/b;x="q\\"q"|application/json|text	application/json;x="q\\"q"	constructor:ArgumentException:supportedMediaTypes
+a/b;X-y_1.z=v	application/*	unsupported|"a/b";x-y_1.z="v"|a/b; X-y_1.z=v
+a/b;X-y_1.z=v	application/json	unsupported|"a/b";x-y_1.z="v"|a/b; X-y_1.z=v
+*/json|a/b;x="q\\"q"|*/*	application/json ;	constructor:ArgumentException:supportedMediaTypes
+a/b;x|a/b;x=1;x=2|application/json		constructor:ArgumentException:supportedMediaTypes
+a/b;x="q\\"q"	application/json;charset=	unsupported|"a/b";x="q\\"q"|a/b; x="q\\"q"
+application/x-ndjson;profile="a b"|application/json;charset=utf-8	application/json;charset	unsupported|"application/x-ndjson";profile="a b", "application/json";charset="utf-8"|application/x-ndjson; profile="a b", application/json; charset=utf-8
+a/b;1x=1|application/json;Charset=utf-8|*/*	application/json;a=1;a=2	constructor:ArgumentException:supportedMediaTypes
+|application/json;charset=utf-8	application/JSON;charset=UTF-8	constructor:ArgumentException:supportedMediaTypes
+application/x-ndjson;profile="a b"	application/JSON;charset=UTF-8	unsupported|"application/x-ndjson";profile="a b"|application/x-ndjson; profile="a b"
+Application/JSON	application/json; charset=utf-8	supported|"application/json"|Application/JSON
+application/json;Charset=utf-8|*/*	application/json;charset=utf-8;format=x	supported|"application/json";charset="utf-8", "*/*"|application/json; Charset=utf-8, */*
+application/json; charset="utf-8"|application/json|text/*	application/json	supported|"application/json";charset="utf-8", "application/json", "text/*"|application/json; charset="utf-8", application/json, text/*
+application/json;Charset=utf-8|	text/plain;format=flowed;charset=utf-8	constructor:ArgumentException:supportedMediaTypes
+application/json;charset=utf-8|a/b;x="\u00e9"|application/json;Charset=utf-8	text/plain;format=flowed;charset=utf-8	constructor:ArgumentException:
+text/plain;charset=UTF-8;format=flowed|application/x-ndjson;profile="a b"	application/json;charset=utf-8;format=x	unsupported|"text/plain";charset="UTF-8";format="flowed", "application/x-ndjson";profile="a b"|text/plain; charset=UTF-8; format=flowed, application/x-ndjson; profile="a b"

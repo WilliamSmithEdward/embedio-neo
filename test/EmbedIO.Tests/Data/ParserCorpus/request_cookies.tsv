@@ -1,0 +1,501 @@
+# request_cookies: 500 cases, 1 input columns, seed 11028209140695883918
+na me=;  sp=a"b;;=2 ; \u00e9 = b; SID	n:4|na me=;;;;0|sp=a"b;;;;0|\u00e9=b;;;;0|SID=;;;;0
+=80\t; sp = -1;; ="1"; x=y;$Path=1	n:2|sp=-1;;;;0|x=y;1;;;0
+n,m=99999999999	n:0
+	n:0
+$Path=; ="\t;\u00e9=x=y=z ; SID = b; =	n:2|\u00e9=x=y=z;;;;0|SID=b;;;;0
+="; =b	n:0
+$Port = 80,81;$Pathology=/x; a=	n:1|a=;;;;0
+n,m=.example.com\t;n"q=99999999999;;=\u20ac; sp =80\t;a =  1 	n:3|n"q=99999999999;;;;0|sp=80;;;;0|a=1;;;;0
+=ctrl\u0001; n"q==	n:1|n"q==;;;;0
+$Domain=;  =;;$Port="";;$Path=; =1	n:0
+sp ="a,b"	n:1|sp="a,b";;;;0
+=	n:0
+$Pathology = example.com; SID=/x\t;$Path = b ;  sp=";;$=	n:2|SID=/x;b;;;0|sp=";;;;0
+$Domain=2;;=80; ok-name_1=a"b	n:1|ok-name_1=a"b;;;;0
+a\tb=;;n,m=abc def;;="1"; $Foo=\t;$Domain=ctrl\u0001	n:0
+$Version; $Port=abc\t;$Version=1 ; $Domain=/\t;$Foo=80,81; SID	FormatException
+	n:0
+$Port=/;sp =80,81	n:1|sp=80,81;;;;0
+$Domain=abc\t;="quoted";$Pathology=; =.example.com; $Domain="1"	n:0
+ =1; n,m=\u20ac;;=x=y=z;;=; \u00e9=/x; $Port = 80	n:1|\u00e9=/x;;;"80";1
+ok-name_1 = 1; n"q; n,m= ; na me=b; n"q=b	n:3|ok-name_1=1;;;;0|n"q=b;;;;0|na me=b;;;;0
+=\u20ac;;sp  = 2\t;a = 99999999999; $Foo=b; 	n:2|sp=2;;;;0|a=99999999999;;;;0
+ sp = \u20ac; $Port=/x; =b	CookieException
+n"q= ; n,m = 2\t;x=y=;$Foo= ; ="80"	n:2|n"q=;;;;0|x=y=;;;;0
+$Port = ";;$Path=.example.com\t;na me=\u20ac; a\tb=ctrl\u0001	n:1|na me=\u20ac;;;;0
+ok-name_1=-1	n:1|ok-name_1=-1;;;;0
+n,m; =abc def ; =ctrl\u0001	n:0
+=	n:0
+n,m=/x ; a = 99999999999 ;   = x=y=z	n:1|a=99999999999;;;;0
+x=y ;  =	n:1|x=y;;;;0
+$Port= ; =.example.com ; na me = -1; =/x	n:1|na me=-1;;;;0
+ok-name_1=" ; $Path= ; $Port; ok-name_1=1	n:2|ok-name_1=";;;"";1|ok-name_1=1;;;;0
+	n:0
+$Port=a"b;;session=	n:1|session=;;;;0
+$Version=;;x=y= 1 ;="1"	FormatException
+=abc def; a\tb=-1;;a\tb=; a=-1; =2	n:1|a=-1;;;;0
+n"q="80"	n:1|n"q="80";;;;0
+n,m=/;; ; n"q="a,b";;=2	n:1|n"q="a,b";;;;0
+=99999999999; $Port=1	n:0
+ok-name_1=abc; $Path=1\t;na me=a"b; $Domain=ctrl\u0001 ; $Domain="" ; $Port = "80"	n:2|ok-name_1=abc;1;;;0|na me=a"b;;"";""80"";1
+=1; na me=abc def; ok-name_1=; $Port=\t;$Domain	n:2|na me=abc def;;;;0|ok-name_1=;;;"";1
+$Pathology; n"q=abc def;="	n:1|n"q=abc def;;;;0
+SID=; $Port=;$Version = 2; $ = \u20ac\t;$Pathology=abc; n,m=80	n:1|SID=;;;"";1
+$Port\t;a\tb=1	n:0
+SID=abc def ; $Version= 1 ; $Path=80,81 ; ="1"\t;$ = "quoted"	n:1|SID=abc def;80,81;;;0
+x=y=1 ;  sp=1;  ="80"; $Foo=	n:2|x=y=1;;;;0|sp=1;;;;0
+a\tb=b;;=b;  sp ; a\tb=\t;a="a,b"	n:2|sp=;;;;0|a="a,b";;;;0
+session\t;x=y="; $Port=1;session="\t;$Path=2	n:3|session=;;;;0|x=y=";;;"1";1|session=";2;;;0
+$Path=x=y=z; a = "quoted"	n:1|a="quoted";;;;0
+	n:0
+$Version = \u20ac; $Version; a=\u20ac; \u00e9=-1	FormatException
+	n:0
+x=y="a,b";n,m= 1  ; $Version="1"\t;na me=x=y=z=	n:2|x=y="a,b";;;;0|na me=x=y=z=;;;;1
+$Version; =ctrl\u0001; $Port=b\t;$Port="quoted"	FormatException
+ =""; $Port=	n:0
+ok-name_1="a,b";$Version	FormatException
+	n:0
+sp =; SID	n:2|sp=;;;;0|SID=;;;;0
+$Pathology; ="a,b"\t;$Path=""; ; sp	n:1|sp=;;;;0
+x=y=abc def; a="	n:2|x=y=abc def;;;;0|a=";;;;0
+$Path=2 ; $Pathology = /x;;$Port=\u20ac ; =/	n:0
+x=y=/x; $Path;a = /x;$Port;;$Port="a,b"	CookieException
+a\tb= 1 ;\u00e9= 1 ;sp =abc def;=/x	n:2|\u00e9=1;;;;0|sp=abc def;;;;0
+ sp=example.com ; =/; a\tb=b\t; sp	n:1|sp=;;;;0
+	n:0
+=.example.com; n,m=;=1 ; n,m=.example.com;$Port = x=y=z;;$Port=2	n:0
+=/x; a=/ ; $=.example.com;;$=;$Version=x=y=z\t;$Pathology	FormatException
+$Path=abc; na me\t;n,m=80;= 1  ; x=y=	n:2|na me=;;;;0|x=y=;;;;0
+	n:0
+sp =/;  =; = 1 ; SID="a,b"	n:2|sp=/;;;;0|SID="a,b";;;;0
+	n:0
+$Domain="1";a=abc def; $Pathology=	n:1|a=abc def;;;;0
+n,m=80	n:0
+$Path= ; a\tb="quoted";;\u00e9\t; sp=80;$Version=80	n:2|\u00e9=;;;;0|sp=80;;;;0
+ok-name_1=2\t;=1; 	n:1|ok-name_1=2;;;;0
+sp =a"b; =;;=-1; $=ctrl\u0001; $Foo=-1;	n:1|sp=a"b;;;;0
+=1	n:0
+ =2=	n:0
+$Version = 1 ;  ; a=/x;;n"q = /x	n:2|a=/x;;;;1|n"q=/x;;;;1
+; 	n:0
+=2\t;a\tb=b; a\tb\t;=-1	n:0
+SID=-1;x=y=\t;= ; $Pathology=a"b	n:2|SID=-1;;;;0|x=y=;;;;0
+ok-name_1 = 80; n"q=1 ;  sp="a,b";=.example.com;$Foo=/x;$Port=.example.com	n:3|ok-name_1=80;;;;0|n"q=1;;;;0|sp="a,b";;;;0
+a\tb=b	n:0
+	n:0
+ok-name_1=-1;; sp=; $Domain="1"; 	n:2|ok-name_1=-1;;;;0|sp=;;"1";;0
+	n:0
+x=y="80";;a\tb="1"; n"q = "";ok-name_1 = "";  sp=ctrl\u0001	n:4|x=y="80";;;;0|n"q="";;;;0|ok-name_1="";;;;0|sp=ctrl\u0001;;;;0
+$Version=; $Version=80,81;x=y; =""	FormatException
+a=\u20ac	n:1|a=\u20ac;;;;0
+	n:0
+$Pathology=x=y=z;;$Version=80	n:0
+sp  = -1; =99999999999 ; $Version=b;;x=y=; =""; = 1 ; 	FormatException
+x=y=x=y=z; 	n:1|x=y=x=y=z;;;;0
+$Version=-1;a=abc def;a=; $Version="; na me=1;$Path="quoted"	ArgumentOutOfRangeException:length
+$Path=/x\t;ok-name_1=1; ="" ; $Pathology=x=y=z;$Path=; SID="a,b"	n:2|ok-name_1=1;;;;0|SID="a,b";;;;0
+=b	n:0
+a=;;$Version=.example.com; n"q=; na me=-1	FormatException
+x=y = abc def 	n:1|x=y = abc def;;;;0
+$Path="a,b"; $Path=80;;$Version = ; a\tb = a"b\t; sp ; n,m=abc def	FormatException
+SID=99999999999 ; x=y=;;session="80"	n:3|SID=99999999999;;;;0|x=y=;;;;0|session="80";;;;0
+$Path = 1 ; session=b;  =b 	n:1|session=b;;;;0
+n,m=.example.com	n:0
+\u00e9; =.example.com;a="1"\t;=1	n:2|\u00e9=;;;;0|a="1";;;;0
+ ;;$Port = 1	n:0
+=/x\t;$Path=abc; \u00e9=example.com; $Port=x=y=z\t;$Domain=1	CookieException
+a\tb="a,b"\t;$Domain=; n,m\t;$Port = 2;;a\tb=/	n:0
+$Domain=ctrl\u0001 ; a\tb\t;a=;;session=.example.com\t;=x=y=z;$Port=	n:2|a=;;;;0|session=.example.com;;;;0
+=b;;sp =a"b ; $Path; 	n:1|sp=a"b;;;;0
+$Pathology = 80,81; \u00e9=80,81	n:1|\u00e9=80,81;;;;0
+	n:0
+a	n:1|a=;;;;0
+$Version = 	FormatException
+=a"b;x=y=	n:1|x=y=;;;;0
+SID=	n:1|SID=;;;;0
+a = a"b\t;$=;;SID=; =a"b;=	n:2|a=a"b;;;;0|SID=;;;;0
+ =abc def	n:0
+$Port=99999999999; =99999999999	n:0
+$Domain=.example.com;;=abc def	n:0
+$Port=1 ; a= ; session="quoted"	n:2|a=;;;;0|session="quoted";;;;0
+n"q="1" ; a\tb=1; 	n:1|n"q="1";;;;0
+n,m="" ;  sp=;;$Pathology=a"b; a\tb=; $Version="a,b"; n,m = example.com	FormatException
+$Port=99999999999; $Foo=\t;sp ="quoted";;$	n:1|sp="quoted";;;;0
+$Path=/\t;$Port=a"b; a\tb; $Version="quoted"\t;$Version=/	FormatException
+a=	n:1|a=;;;;0
+SID=\t;$Version="	ArgumentOutOfRangeException:length
+a\tb=" ; ="80";;="1"; =.example.com;;$Domain=b\t;=99999999999	n:0
+ =""\t;$Pathology=abc ; x=y=x=y=z;$Pathology=/x;;$Domain	n:1|x=y=x=y=z;/x;;;0
+sp =x=y=z	n:1|sp=x=y=z;;;;0
+ sp=1; sp =;;n,m=abc def;$Version=\t;$Path=""	FormatException
+ok-name_1=/x;n"q=example.com\t;$Port=b;$Port ; $Foo=	CookieException
+$Foo= ; ="1" ; $Port=	n:0
+	n:0
+a=x=y=z;;$Pathology="a,b"\t; sp=; ok-name_1= 1 ;;a=80,81; n,m	n:4|a=x=y=z;"a,b";;;0|sp=;;;;0|ok-name_1=1;;;;0|a=80,81;;;;0
+$Port = 2\t; sp;;n"q=;$Foo=/x; session=80,81	n:3|sp=;;;;0|n"q=;;;;0|session=80,81;;;;0
+	n:0
+SID=""; session = example.com; na me=a"b	n:3|SID="";;;;0|session=example.com;;;;0|na me=a"b;;;;0
+$Pathology="80"\t;$Foo=a"b ; ok-name_1=-1; 	n:1|ok-name_1=-1;;;;0
+$Pathology = /x\t; sp=\u20ac ; ok-name_1=""	n:2|sp=\u20ac;;;;0|ok-name_1="";;;;0
+n"q=a"b;;$Version = 80 ; n"q	n:2|n"q=a"b;;;;0|n"q=;;;;80
+	n:0
+	n:0
+$Version=\u20ac;$=80\t;a\tb=;$Version=x=y=z\t;$Version\t;x=y=	FormatException
+$Path	n:0
+n"q=	n:1|n"q=;;;;0
+$Port; $; $Path="1"	n:0
+SID=\t;=1; $Port=2; $Port=1;a = 99999999999	n:2|SID=;;;;0|a=99999999999;;;;0
+$Port=1	n:0
+=;x=y=	n:1|x=y=;;;;0
+a="quoted"; n"q;$Path=abc def	n:2|a="quoted";;;;0|n"q=;abc def;;;0
+n,m=;;sp =	n:1|sp=;;;;0
+n,m=""; a\tb = \u20ac	n:0
+	n:0
+a=80	n:1|a=80;;;;0
+ sp=example.com ; ok-name_1="";n"q=""	n:3|sp=example.com;;;;0|ok-name_1="";;;;0|n"q="";;;;0
+sp =a"b	n:1|sp=a"b;;;;0
+$Version=;na me=	FormatException
+$Version=	FormatException
+=\t;=;  sp=; n"q=80,81	n:2|sp=;;;;0|n"q=80,81;;;;0
+="quoted"; $Path = abc\t;$=; =99999999999	n:0
+$Pathology=1;;n,m;;n,m=80,81	n:0
+$Pathology=abc def ; $Path\t;a=; sp =-1	n:2|a=;;;;0|sp=-1;;;;0
+\u00e9="; $Port=;  = .example.com;  ="; SID=abc	n:2|\u00e9=";;;"";1|SID=abc;;;;0
+n,m=	n:0
+=;x=y=a"b ; $=; session	n:2|x=y=a"b;;;;0|session=;;;;0
+session;;x=y=\u20ac ; a=;;=.example.com\t;na me=/	n:4|session=;;;;0|x=y=\u20ac;;;;0|a=;;;;0|na me=/;;;;0
+="	n:0
+a=ctrl\u0001\t;x=y=.example.com; $Pathology=;=80,81	n:2|a=ctrl\u0001;;;;0|x=y=.example.com;;;;0
+na me	n:1|na me=;;;;0
+$Port=;;$Pathology= ; =/; =/x	n:0
+$=x=y=z; $Port=b; a=a"b	n:1|a=a"b;;;;0
+x=y="; ok-name_1 = "	n:2|x=y=";;;;0|ok-name_1=";;;;0
+SID=ctrl\u0001;;$Version= 1  ; $Domain=	n:1|SID=ctrl\u0001;;;;0
+=-1; ="a,b"\t;=;$Domain=80	n:0
+= ; na me=b; sp =\u20ac	n:2|na me=b;;;;0|sp=\u20ac;;;;0
+ sp = "" ; $Port = example.com; $Version;$Version	CookieException
+=;$Version = 1\t;$Path="80"; ok-name_1= 1 	n:1|ok-name_1=1;;;;1
+ sp = ""; ="" ; =99999999999	n:1|sp="";;;;0
+$Foo; a = ""; $Path = "";;a=a"b; $Pathology=/x	n:2|a="";"";;;0|a=a"b;/x;;;0
+	n:0
+n"q=\u20ac;;n"q= 1 ;;$Version=b ;  sp=\u20ac\t;ok-name_1=\u20ac	FormatException
+=ctrl\u0001; $Version = 80,81;=; $Path=-1	FormatException
+="quoted"; $Version;ok-name_1=80,81 ; $Path; =	FormatException
+$=abc def; session=b	n:1|session=b;;;;0
+x=y=/;;na me; $Path=1 ; $Version=\u20ac	FormatException
+$Path="80"	n:0
+ sp=/; $Port=1	n:1|sp=/;;;"1";1
+n"q;  sp; session=abc def	n:3|n"q=;;;;0|sp=;;;;0|session=abc def;;;;0
+=99999999999\t;a = "a,b";na me=abc def	n:2|a="a,b";;;;0|na me=abc def;;;;0
+n,m=abc;SID = "; $Port=example.com; SID = abc def;	CookieException
+a\tb=abc\t;ok-name_1=b;;=1; n,m=	n:1|ok-name_1=b;;;;0
+	n:0
+ =example.com; $Pathology="quoted" ; $Pathology = /\t;\u00e9 = a"b;;sp =	n:2|\u00e9=a"b;;;;0|sp=;;;;0
+; SID="a,b" ; =	n:1|SID="a,b";;;;0
+	n:0
+$Port=\t;=; ="1"	n:0
+sp =1; $Port=abc def\t;SID=.example.com\t;=abc	CookieException
+=-1;;$Port= ; $Path=2;  sp=\u20ac; 	n:1|sp=\u20ac;;;;0
+x=y; ok-name_1=b ; na me=""; n,m\t;a=	n:4|x=y;;;;0|ok-name_1=b;;;;0|na me="";;;;0|a=;;;;0
+\u00e9=b; na me=\u20ac; ="a,b" ;  =x=y=z\t;n,m=\t;$Port=example.com	n:2|\u00e9=b;;;;0|na me=\u20ac;;;;0
+$Port=;;$Foo=abc def ; ="quoted"; =.example.com; n,m="80"	n:0
+session=1; ="	n:1|session=1;;;;0
+$Port = ""	n:0
+ = a"b;;$Domain=/; ok-name_1=	n:1|ok-name_1=;;;;0
+sp =;;$Version =  1 ;n,m=abc def	n:1|sp=;;;;0
+$Version; $Pathology="" ; =/\t;$	FormatException
+a="";sp ;;$Domain = ""	n:2|a="";;;;0|sp=;;"";;0
+$Port=abc def;;$Foo= ; SID; $Path=80; =	n:1|SID=;80;;;0
+$Port = example.com ; sp ="80" ; x=y = "quoted"; \u00e9=\t;\u00e9 = "quoted";;$Version = "1"; 	FormatException
+na me	n:1|na me=;;;;0
+sp ;a\tb = 1;a="a,b";;=example.com;;na me= 1 	n:3|sp=;;;;0|a="a,b";;;;0|na me=1;;;;0
+n"q = 80	n:1|n"q=80;;;;0
+ = abc def	n:0
+$Foo=\t;$Port=ctrl\u0001; =abc	n:0
+$Path=example.com;=\t;a\tb ; sp =ctrl\u0001; n,m=x=y=z; a\tb=	n:1|sp=ctrl\u0001;;;;0
+x=y =  1 \t;$Port = ";sp =	n:2|x=y =  1;;;""";1|sp=;;;;0
+="quoted";;na me;ok-name_1=\t;= ; $Port=2; 	n:2|na me=;;;;0|ok-name_1=;;;;0
+n"q=a"b;a\tb=80;;="a,b"\t;$Path="quoted" ; sp \t; 	n:2|n"q=a"b;;;;0|sp=;;;;0
+	n:0
+n"q=/x; $Version = "quoted"; n"q="quoted";  = 1	FormatException
+$Foo\t;na me=b\t;$Path=;na me="1"; a = "	n:2|na me="1";;;;0|a=";;;;0
+$Path = 80,81	n:0
+a=	n:1|a=;;;;0
+$Pathology=1; $=;;$Path=abc;a\tb = 	n:0
+\u00e9 = "a,b"	n:1|\u00e9="a,b";;;;0
+$Path=1\t;a= ; $Path=-1	n:1|a=;-1;;;0
+	n:0
+n,m= ; \u00e9="a,b"\t;SID; na me	n:3|\u00e9="a,b";;;;0|SID=;;;;0|na me=;;;;0
+ =	n:0
+SID=1;;$Pathology = .example.com ; $Foo=a"b;a\tb=\u20ac; n"q	n:2|SID=1;.example.com;;;0|n"q=;;;;0
+$=\u20ac ; a=2 ; $Path= 1 ;;$Path=\u20ac ; n"q=abc; a\tb	n:2|a=2;\u20ac;;;0|n"q=abc;;;;0
+ sp=99999999999\t;a=example.com; $Domain=";;n"q = /; n"q=\u20ac; a\tb=2	n:3|sp=99999999999;;;;0|a=example.com;;";;0|n"q=\u20ac;;;;0
+= 1 \t;=example.com\t;=2	n:0
+session ; SID=;;$Domain= 1 \t;$Foo=abc	n:2|session=;;;;0|SID=;;1;;0
+	n:0
+n,m=/	n:0
+SID=;$Port=-1	CookieException
+$Path\t;$Foo=;n"q;  sp=;;="\t;SID	n:3|n"q=;;;;0|sp=;;;;0|SID=;;;;0
+sp =/x; =abc def; $Port=-1	n:1|sp=/x;;;;0
+=\u20ac;;session=-1; $Version; 	FormatException
+=abc\t;$Domain=2;;x=y=\u20ac\t;=	n:1|x=y=\u20ac;;;;0
+\u00e9; x=y="a,b"	n:2|\u00e9=;;;;0|x=y="a,b";;;;0
+session=example.com\t;sp = ; $Port = "a,b" ; \u00e9=80,81; n"q=99999999999	CookieException
+n"q = "a,b"; =-1;;na me=1	n:2|n"q="a,b";;;;0|na me=1;;;;0
+	n:0
+$Version=-1 ; $Version=\u20ac;;$Foo=b	FormatException
+a\tb=\u20ac;SID=abc def	n:1|SID=abc def;;;;0
+x=y=/x;x=y ; a=x=y=z; $Port;n"q	n:3|x=y;;;;0|a=x=y=z;;;"";1|n"q=;;;;0
+	n:0
+a= 1  ; $Version=abc; a="	FormatException
+	n:0
+$Pathology = -1;n"q="a,b"	n:1|n"q="a,b";;;;0
+SID = "quoted"\t;$Version=.example.com\t;sp =a"b	FormatException
+$Pathology="\t;$Domain=	n:0
+\u00e9\t;="80"	n:1|\u00e9=;;;;0
+ sp=;;$Port="quoted"	CookieException
+n,m=/x\t; sp= 1 \t;$Version;  ="a,b"; =1;;=x=y=z	FormatException
+	n:0
+$Domain=example.com\t;$Foo\t;$Path; $=; \u00e9="quoted"	n:1|\u00e9="quoted";;;;0
+$Path=	n:0
+$Port="80"	n:0
+$Port=.example.com;;$=""	n:0
+	n:0
+$Foo=	n:0
+$Path="	n:0
+=abc;sp =;;\u00e9=	n:2|sp=;;;;0|\u00e9=;;;;0
+x=y=	n:1|x=y=;;;;0
+=80;=1;x=y=example.com ; $Foo = abc	n:1|x=y=example.com;;;;0
+SID=;$Foo=1	n:1|SID=;;;;0
+$Foo;$Version=.example.com;$=	FormatException
+$Path = "a,b"\t;a = x=y=z; a=.example.com; session=;ok-name_1=1	n:3|a=.example.com;;;;0|session=;;;;0|ok-name_1=1;;;;0
+x=y; n,m=;;$Port=abc def;;ok-name_1=1 ; =a"b\t;$Port=/x	n:2|x=y;;;;0|ok-name_1=1;;;;0
+a\tb=80;=""; ok-name_1=\u20ac;;$Pathology=	n:1|ok-name_1=\u20ac;;;;0
+a=x=y=z; sp 	n:2|a=x=y=z;;;;0|sp=;;;;0
+="1"\t;\u00e9=;$Port = abc; =ctrl\u0001	CookieException
+ sp ;  =-1 ; n"q;;$Foo=1; $Version=/x	FormatException
+ sp;;=b;;na me=example.com	n:2|sp=;;;;0|na me=example.com;;;;0
+$Pathology=abc	n:0
+$Path; $Port= ; = 1 \t;$Path = ctrl\u0001	n:0
+	n:0
+	n:0
+session=;  sp = 1\t;$Port	n:2|session=;;;;0|sp=1;;;"";1
+	n:0
+na me="1";;=x=y=z;a="a,b"; $Path="a,b"	n:2|na me="1";;;;0|a="a,b";"a,b";;;0
+$Pathology=a"b;;a=99999999999 ; sp  = "1";$=	n:2|a=99999999999;;;;0|sp="1";;;;0
+	n:0
+; 	n:0
+	n:0
+	n:0
+="quoted"	n:0
+  = ctrl\u0001; =;  = "a,b"; session = \u20ac ; $Foo=b	n:1|session=\u20ac;;;;0
+="1" ; $Pathology=""; a="1"; ok-name_1=ctrl\u0001	n:2|a="1";;;;0|ok-name_1=ctrl\u0001;;;;0
+	n:0
+=/x ; a\tb = 80,81;a\tb = 80,81; $Domain=; =	n:0
+session="quoted"\t; ; sp =\t;a =  1 	n:3|session="quoted";;;;0|sp=;;;;0|a=1;;;;0
+\u00e9=.example.com; SID=1;;$Path="; =80;$Domain=1 ; $Version = 99999999999	OverflowException
+sp =; x=y=x=y=z;;na me=\t;$Path=ctrl\u0001;$Version=	FormatException
+	n:0
+x=y=-1	n:1|x=y=-1;;;;0
+	n:0
+a\tb=99999999999	n:0
+sp  = 80,81; =-1	n:1|sp=80,81;;;;0
+=	n:0
+sp =/\t;$Version = ctrl\u0001 	FormatException
+=80,81\t;a=\u20ac	n:1|a=\u20ac;;;;0
+$="" ; sp =.example.com;SID="1";;a = 	n:3|sp=.example.com;;;;0|SID="1";;;;0|a=;;;;0
+$Domain="quoted"	n:0
+;	n:0
+$Port;;=example.com; $Version=;$Port ; sp =/x	FormatException
+$Path=\t;n"q	n:1|n"q=;;;;0
+$Version="1";;=" ; a = x=y=z\t;\u00e9 = " ; $Pathology= ; =abc def	n:2|a=x=y=z;;;;1|\u00e9=";;;;1
+SID ; a="quoted"; =b;=example.com;;x=y=example.com;a\tb=abc def	n:3|SID=;;;;0|a="quoted";;;;0|x=y=example.com;;;;0
+a=abc def\t;na me=/; na me=; =.example.com 	n:2|a=abc def;;;;0|na me=;;;;0
+n,m=	n:0
+a\tb	n:0
+ok-name_1=-1 ; n,m=-1\t;session=a"b\t;$Pathology= 1 ;	n:2|ok-name_1=-1;;;;0|session=a"b;1;;;0
+$Domain=/x\t;n"q=abc def; $ = ; SID	n:2|n"q=abc def;;;;0|SID=;;;;0
+	n:0
+n,m="80"\t;$Port=;$Pathology = ; session\t;na me=2	n:2|session=;;;;0|na me=2;;;;0
+ sp="; a="quoted"	n:2|sp=";;;;0|a="quoted";;;;0
+$Port=;$Domain=	n:0
+ sp="80";$Domain\t;=99999999999; na me=\u20ac; $Path=\u20ac	n:2|sp="80";;;;0|na me=\u20ac;\u20ac;;;0
+a\tb=;;$=example.com;n"q;x=y=99999999999	n:2|n"q=;;;;0|x=y=99999999999;;;;0
+$Foo=x=y=z;n"q="quoted"; ok-name_1=example.com; sp =abc	n:3|n"q="quoted";;;;0|ok-name_1=example.com;;;;0|sp=abc;;;;0
+a ; $Port=/	CookieException
+ok-name_1=;a=/x	n:2|ok-name_1=;;;;0|a=/x;;;;0
+	n:0
+$Domain=; n,m=;;$Port=;;$ = example.com;;ok-name_1=;sp =	n:2|ok-name_1=;;;;0|sp=;;;;0
+na me=99999999999; n,m=abc def ; $Port = ;n,m=;$Port = b;	n:1|na me=99999999999;;;;0
+$=; $Path=abc;;$Domain=2; sp=x=y=z; $Version=; na me=\u20ac	FormatException
+=\t;$ = ;  sp="a,b"	n:1|sp="a,b";;;;0
+$Foo = a"b;=.example.com;;a=-1	n:1|a=-1;;;;0
+	n:0
+ sp=80	n:1|sp=80;;;;0
+\u00e9=abc; SID=abc def	n:2|\u00e9=abc;;;;0|SID=abc def;;;;0
+;	n:0
+	n:0
+	n:0
+	n:0
+=a"b; =1;;a=x=y=z ; $Version = ctrl\u0001 ; $Foo="80" ; SID = \u20ac	FormatException
+x=y=1 ; $Version=	FormatException
+n"q="1"\t;a="	n:2|n"q="1";;;;0|a=";;;;0
+$Domain=;;a=	n:1|a=;;;;0
+$Port=\t;$ = 99999999999	n:0
+$Foo=x=y=z ; ok-name_1=";;na me = /x;$Foo=abc\t;$Version = \t;=b	FormatException
+=x=y=z ; session=\t;$Path=\u20ac;;sp =ctrl\u0001\t;session	n:3|session=;\u20ac;;;0|sp=ctrl\u0001;;;;0|session=;;;;0
+$Version ; a=b; $ = .example.com;;$Foo=b;=/x; a=	FormatException
+	n:0
+$Path=b ; n"q=;;a=ctrl\u0001;;ok-name_1;;\u00e9 = / ; $Port=	n:4|n"q=;;;;0|a=ctrl\u0001;;;;0|ok-name_1=;;;;0|\u00e9=/;;;"";1
+$Port=abc def	n:0
+$Path	n:0
+	n:0
+=/x ; x=y = 80\t;$Path=1;;$Pathology=-1; a=;;\u00e9=-1	n:3|x=y = 80;-1;;;0|a=;;;;0|\u00e9=-1;;;;0
+x=y= ; $Version="80"\t;n,m; ="quoted"\t; ="1"	n:1|x=y=;;;;0
+ok-name_1=;;n"q=\u20ac\t;=x=y=z ; sp ="a,b";;x=y=;$Foo = "80"	n:4|ok-name_1=;;;;0|n"q=\u20ac;;;;0|sp="a,b";;;;0|x=y=;;;;0
+n,m;; sp = x=y=z;;$Port = example.com	CookieException
+n"q=; $Version=2; $Path=; $Path="1"; 	n:1|n"q=;"1";;;0
+$Port; $Version=/x; =x=y=z	FormatException
+n,m=/x	n:0
+SID=1;;session=.example.com\t;a\tb=1\t;na me=-1	n:3|SID=1;;;;0|session=.example.com;;;;0|na me=-1;;;;0
+  = 1\t;$Port; sp = "80"; $Version=; $Path=	FormatException
+x=y=\u20ac\t;SID	n:2|x=y=\u20ac;;;;0|SID=;;;;0
+=1; =/\t;na me=\u20ac; n,m=; \u00e9 = 2;	n:2|na me=\u20ac;;;;0|\u00e9=2;;;;0
+a="80"; =80,81\t;ok-name_1=1;;=example.com	n:2|a="80";;;;0|ok-name_1=1;;;;0
+$Foo=example.com\t;n,m=example.com;;$=";n"q=example.com	n:1|n"q=example.com;;;;0
+\u00e9=-1; session=.example.com; na me = example.com; $Path=""\t;a = "	n:4|\u00e9=-1;;;;0|session=.example.com;;;;0|na me=example.com;"";;;0|a=";;;;0
+=80,81\t;\u00e9=\u20ac	n:1|\u00e9=\u20ac;;;;0
+$Pathology	n:0
+="	n:0
+$Pathology; $Pathology=80 ; ="";;sp =	n:1|sp=;;;;0
+=\u20ac;;a\tb= 1 	n:0
+$Version ; session=abc;na me\t;a="1";;SID="	FormatException
+$Domain = .example.com\t;sp  ; =; $Port="";;n,m=\t;$Foo=	n:1|sp=;;;;0
+session=""; =1	n:1|session="";;;;0
+x=y=b; n,m=\u20ac	n:1|x=y=b;;;;0
+$Domain;; = 1;$Port;;$Path = 1	n:0
+=ctrl\u0001	n:0
+ sp=	n:1|sp=;;;;0
+a\tb =  1 ;;$Path=a"b\t;$Pathology="; sp =; $Version=-1; \u00e9= 1 	n:1|sp=;;;;0
+\u00e9="a,b"; $=/ ; $Pathology=a"b ; =	n:1|\u00e9="a,b";;;;0
+	n:0
+="80"; SID=1	n:1|SID=1;;;;0
+	n:0
+a\tb=; $Pathology=; $Path=2;  =b\t;sp =99999999999 ; a= 1 	n:2|sp=99999999999;;;;0|a=1;;;;0
+sp = ; session=80 ; =1; ok-name_1=abc;;$Pathology= ; sp =\u20ac;	n:3|sp=\u20ac;;;;0|session=80;;;;0|ok-name_1=abc;;;;0
+$Pathology= ; $Path\t;a= ; session=	n:2|a=;;;;0|session=;;;;0
+$Foo="80"\t;  = \t;SID=1;$Version="1"	n:1|SID=1;;;;0
+$Pathology;$Version="quoted";;$Foo	FormatException
+	n:0
+$Path="1" ; ="quoted"; session;  ="a,b"	n:1|session=;;;;0
+SID=abc def ;  sp;n"q=/	n:3|SID=abc def;;;;0|sp=;;;;0|n"q=/;;;;0
+$Version=	FormatException
+SID=abc def ; $Version=\u20ac	FormatException
+a\tb; ="80" ; =.example.com; ="quoted"\t;a\tb=.example.com	n:0
+ok-name_1=;;na me=;; sp=x=y=z;=""	n:3|ok-name_1=;;;;0|na me=;;;;0|sp=x=y=z;;;;0
+	n:0
+a\tb=;ok-name_1="a,b"; a\tb=x=y=z	n:1|ok-name_1="a,b";;;;0
+ok-name_1=; $Path=;na me=\t;n,m=-1;; 	n:2|ok-name_1=;;;;0|na me=;;;;0
+	n:0
+a\tb = .example.com	n:0
+=abc def	n:0
+= 1 	n:0
+	n:0
+	n:0
+	n:0
+x=y=	n:1|x=y=;;;;0
+	n:0
+="quoted"; =abc def	n:0
+a	n:1|a=;;;;0
+ sp=;;x=y=; x=y = ctrl\u0001;$Version = example.com;;$Domain=b	FormatException
+$Path=1	n:0
+=""	n:0
+	n:0
+="quoted"; $Version=/x	FormatException
+$Foo="a,b"\t;sp =1;;$Path	n:1|sp=1;;;;0
+	n:0
+=.example.com; x=y;;$Domain=abc; n,m=\u20ac	n:1|x=y;;abc;;0
+$Version=example.com;$Version="1"	FormatException
+x=y="a,b"	n:1|x=y="a,b";;;;0
+	n:0
+a\tb=abc def;a=80,81 ; \u00e9=-1	n:2|a=80,81;;;;0|\u00e9=-1;;;;0
+a=\u20ac; $Version=1;;=a"b ; n,m	n:1|a=\u20ac;;;;0
+ sp = ""=	n:1|sp=""=;;;;0
+=a"b\t;a\tb=/	n:0
+SID=;;$Port=\t;$Version=""\t;x=y=1\t;$Path=a"b	FormatException
+a\tb	n:0
+$Domain=abc def	n:0
+	n:0
+=""\t;x=y="1"	n:1|x=y="1";;;;0
+na me; sp \t;session=""	n:3|na me=;;;;0|sp=;;;;0|session="";;;;0
+=x=y=z\t;$Port=a"b ; na me=/x;$Pathology\t;sp =	n:2|na me=/x;;;;0|sp=;;;;0
+a\tb="a,b" ; SID="1";$Port=a"b\t;$Version=99999999999; $Pathology=	CookieException
+sp ="1"\t;=; 	n:1|sp="1";;;;0
+$Path="a,b" ; \u00e9=1\t;$Version=example.com 	FormatException
+="1";;=2; na me	n:1|na me=;;;;0
+=80,81; a\tb=; a\tb=abc def	n:0
+$Path=a"b	n:0
+	n:0
+$Path = 	n:0
+$Foo=1;$Port=; sp =	n:1|sp=;;;;0
+=abc def; $Path;;n"q=\u20ac; $Path="; $Foo="	n:1|n"q=\u20ac;";;;0
+na me=/;  sp;;n"q="80"\t;a=abc def=	n:4|na me=/;;;;0|sp=;;;;0|n"q="80";;;;0|a=abc def=;;;;0
+$Foo=\u20ac;ok-name_1=	n:1|ok-name_1=;;;;0
+	n:0
+na me=; $Domain=abc;;$Version	FormatException
+	n:0
+$Foo=; $Version=-1; n"q=/x; SID= ;  sp=ctrl\u0001;;$Pathology = 99999999999	n:0
+	n:0
+ok-name_1=	n:1|ok-name_1=;;;;0
+ =80,81;;=	n:0
+$=; $Path=/x;;$Version = /	FormatException
+=1 ; $Pathology=abc; =; \u00e9=.example.com;;= 1 ; =2	n:1|\u00e9=.example.com;;;;0
+x=y = 80;;ok-name_1=80,81	n:2|x=y = 80;;;;0|ok-name_1=80,81;;;;0
+SID=abc def ; a=b; $Pathology=abc def;;$Domain=a"b ; x=y=ctrl\u0001	n:3|SID=abc def;;;;0|a=b;abc def;a"b;;0|x=y=ctrl\u0001;;;;0
+$Path; $="";$Version = \u20ac;;$Path="\t;$Port=1 ; $=""	FormatException
+x=y;na me=b\t;$Pathology=-1\t;=abc ; $Path="a,b"	n:2|x=y;;;;0|na me=b;-1;;;0
+$Port=.example.com; $Pathology;;SID=x=y=z\t;n,m=2; \u00e9= 1 	n:2|SID=x=y=z;;;;0|\u00e9=1;;;;0
+=abc def; ="quoted"; a=\u20ac ; session=/x; 	n:2|a=\u20ac;;;;0|session=/x;;;;0
+session=example.com	n:1|session=example.com;;;;0
+ sp=x=y=z; $Version=ctrl\u0001; \u00e9=example.com	FormatException
+$Path=; SID=.example.com ; $Path=b ; $Version=abc	FormatException
+session=b; $Port ; a=ctrl\u0001;=example.com	n:2|session=b;;;"";1|a=ctrl\u0001;;;;0
+	n:0
+a=b ; n"q=99999999999; $Path = \u20ac	n:2|a=b;;;;0|n"q=99999999999;\u20ac;;;0
+session = 99999999999;;$Version=	FormatException
+$Port= ;  sp=ctrl\u0001	n:1|sp=ctrl\u0001;;;;0
+\u00e9 ; $Path=; session="quoted";;$Domain="a,b"; $Foo= ; na me=; 	n:3|\u00e9=;;;;0|session="quoted";;"a,b";;0|na me=;;;;0
+$Port=b; a\tb=\t;  = "1"	n:0
+$Path=-1; \u00e9=abc def	n:1|\u00e9=abc def;;;;0
+$Path="	n:0
+$=; $Version=-1; =	n:0
+	n:0
+na me=abc def\t;$Port = abc	CookieException
+$Domain = x=y=z ; $Port=;;n,m=-1	n:0
+SID=a"b; x=y=a"b ; \u00e9=99999999999	n:3|SID=a"b;;;;0|x=y=a"b;;;;0|\u00e9=99999999999;;;;0
+$Port=80,81;  \t;$Version=ctrl\u0001; n,m=80,81\t;SID=; = 1 	FormatException
+$Path=/x; sp =ctrl\u0001;;$Version = "1"; $Version = .example.com ; $Version="80"	FormatException
+$Port=";$Foo=80\t;a="a,b" ; \u00e9 = 99999999999	n:2|a="a,b";;;;0|\u00e9=99999999999;;;;0
+a=a"b\t;=; a=;  =;;na me=; ok-name_1=.example.com	n:3|a=;;;;0|na me=;;;;0|ok-name_1=.example.com;;;;0
+$Port = /x\t;$Domain;;=""	n:0
+	n:0
+$Version=; \u00e9="1"; $Path=a"b	FormatException
+  = \u20ac;;session=; $Pathology="quoted"\t;\u00e9=""	n:2|session=;"quoted";;;0|\u00e9="";;;;0
+=-1; a\tb=	n:0
+	n:0
+	n:0
+$Version=ctrl\u0001	FormatException
+	n:0
+; 	n:0
+$Path=\t;n,m	n:0
+	n:0
+="a,b";$Version=99999999999; $Path=80	OverflowException
+sp =\t;$=";$Path ; a = 80,81 ;  =	n:2|sp=;;;;0|a=80,81;;;;0
+	n:0
+	n:0
+=99999999999; $Port=80	n:0
+n,m= 1 ;; sp;;$Foo=;;=ctrl\u0001 ; SID= ; session=.example.com	n:3|sp=;;;;0|SID=;;;;0|session=.example.com;;;;0
+$Path = example.com ; a\tb="";n"q;x=y="quoted";;$Path=	n:2|n"q=;;;;0|x=y="quoted";;;;0
+\u00e9=example.com ; session="80"\t;\u00e9 = abc ;   = 1	n:2|\u00e9=abc;;;;0|session="80";;;;0
+=" ; $Version = abc;  sp=80 ;  = "; =1; $Version="1"	FormatException

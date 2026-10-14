@@ -1,0 +1,301 @@
+# x_forwarded: 300 cases, 3 input columns, seed 7289735332691060892
+	<null>	<null>	<null>
+<null>	ws, https, https	203.0.113.9 ,, [2001:db8::1]:443,203.0.113.9	<null>
+[::ffff:203.0.113.9]:4711,,_hidden:_port:0 , 255.255.255.255: 80	 https,https, http	<null>	<null>
+198.51.100.7,unknown:_,,[2001:db8::7]:80		203.0.113.9 ,example.com:8443 , ,	<null>
+1:_obf	<null>	<null>	<null>
+[2001:db8::7:99999 , 2001:db8::7:99999	<null>	<null>	<null>
+<null>	<null>	<null>	n:0
+::ffff:203.0.113.9:0	 https , https ,	[2001:db8::1]:443,	<null>
+10.0.0.5:80 ,,0.0.0.0:65535 , ::ffff:203.0.113.9:abc,[::ffff:203.0.113.9]:_	<null>	,example.com,example.com ,example.com:8443,203.0.113.9,,EXAMPLE.com ,EXAMPLE.com,,EXAMPLE.com, bad host,,EXAMPLE.com , example.com ,[2001:db8::1]:443 ,,,203.0.113.9, bad host, [2001:db8::1]:443 , bad host, EXAMPLE.com,,example.com,203.0.113.9,,example.com:8443,,example.com , bad host,, ,,EXAMPLE.com, ,[2001:db8::1]:443,,203.0.113.9 , 203.0.113.9 , example.com:8443	<null>
+300.1.1.1:4711 ,10.0.0.5:_obf,,UNKNOWN , _:_,,255.255.255.255:80 ,,:_obf,203.0.113.9  ,255.255.255.255:80  ,:65536,,2001:db8::7:_,10.0.0.5:_ ,[fe80::1%eth0],, ::1:65535,[2001:db8::7]:abc ,_bad!: 80 , 203.0.113.09:80,,10.0.0.5:,,unknown:99999, 127.0.0.1,203.0.113.09:65535,::ffff:203.0.113.9:80  , 203.0.113.9,,127.0.0.1: 80, UNKNOWN:99999, 2001:db8::7:0 , _hidden:80 ,10.0.0.5:,127.0.0.1:80  ,[2001:db8::7]:abc ,1: 80,0x7f.0.0.1:65536 , 203.0.113.9:0	ws ,ws , http	example.com:8443 ,example.com ,example.com	<null>
+	<null>	<null>	<null>
+300.1.1.1:99999,,[::1]:4711	<null>	<null>	<null>
+<null>	<null>	<null>	n:0
+	<null>	example.com:8443, EXAMPLE.com, bad host,	<null>
+<null>	<null>	bad host, bad host	<null>
+::ffff:203.0.113.9: 80,,[::1]:80		<null>	<null>
+_bad! , [::1]:_obf , []	HTTPS ,HTTPS	<null>	<null>
+<null>	<null>	[2001:db8::1]:443	n:1|<null>,<null>,[2001:db8::1]:443
+_bad!:abc,_a.b-c_d:	HTTPS,,ws,https 	<null>	<null>
+		<null>	<null>
+_hidden:80	<null>	example.com,,example.com:8443,, [2001:db8::1]:443	<null>
+_bad!:	http ,https  , https 	<null>	<null>
+<null>	https , https,https	example.com:8443,,203.0.113.9	<null>
+	HTTPS ,HTTPS, HTTPS	<null>	<null>
+<null>	https 	<null>	n:1|<null>,https,<null>
+<null>	<null>	<null>	n:0
+[fe80::1%eth0]:	, https ,HTTPS, http	<null>	<null>
+::ffff:203.0.113.9: 80	http,HTTPS, 	<null>	<null>
+unknown:4711	http,, https	<null>	<null>
+1:80 	<null>	<null>	<null>
+203.0.113.9 : 80,203.0.113.9  ,_a.b-c_d:,,[2001:db8::7:0	 ,  https	example.com:8443	<null>
+<null>	<null>	<null>	n:0
+_hidden:80 ,203.0.113:_		<null>	<null>
+203.0.113.09:4711 , [2001:db8::7]:80, 10.0.0.5:65535	https ,http, https	<null>	<null>
+	<null>	<null>	<null>
+UNKNOWN:abc, 203.0.113.9  , ::1:,[2001:db8::7]		<null>	<null>
+0.0.0.0: 80	<null>	<null>	<null>
+203.0.113.9.1:65536 , 203.0.113.9:4711	<null>		<null>
+<null>	<null>	<null>	n:0
+<null>	<null>	example.com:8443	n:1|<null>,<null>,example.com:8443
+unknown:_obf	https	<null>	<null>
+<null>	 https		<null>
+<null>	<null>		<null>
+[::ffff:203.0.113.9]: 80 ,fe80::1%eth0: 80 ,not-an-ip:80 ,,::1	https	EXAMPLE.com, example.com, example.com:8443 , example.com	<null>
+_:80 , []:4711	<null>	,,,,example.com:8443	<null>
+203.0.113.9.1:80 , _hidden:_port , 203.0.113.09:4711 ,[::1]:4711		example.com:8443 , [2001:db8::1]:443	<null>
+<null>	<null>	EXAMPLE.com,,example.com , EXAMPLE.com,example.com:8443,,example.com:8443,,203.0.113.9, ,,bad host,,example.com , [2001:db8::1]:443,,example.com:8443,EXAMPLE.com ,[2001:db8::1]:443 , example.com:8443,,example.com , bad host ,example.com:8443 , example.com:8443 ,EXAMPLE.com,203.0.113.9 ,example.com,,EXAMPLE.com , bad host,, ,bad host , ,203.0.113.9 , , 203.0.113.9,[2001:db8::1]:443, 203.0.113.9,[2001:db8::1]:443,example.com:8443	<null>
+_bad!:80 ,[::1]:80	<null>	<null>	<null>
+[2001:db8:::7]: , [2001:db8::7]: , 10.0.0.5,[::1] ,[2001:db8::7:0,255.255.255.255:_,::1:0 , 0.0.0.0,_a.b-c_d:_obf, 1:99999 ,[2001:db8:::7] , _hidden:_,,not-an-ip:80 , 255.255.255.255, [] ,203.0.113.9.1:65536,203.0.113.09,255.255.255.255, fe80::1%eth0:4711 ,198.51.100.7: , 203.0.113.9:65535,,203.0.113.09:_obf , 203.0.113.9.1:abc,1:_ , : 80,_a.b-c_d:80  ,[2001:db8::7]:80  ,UNKNOWN, 10.0.0.5:4711,,203.0.113.09 , [fe80::1%eth0]:99999,[] ,2001:db8::7:65536	HTTPS ,HTTPS , ws,HTTPS	<null>	<null>
+	<null>	<null>	<null>
+[2001:db8::7]:80	<null>	<null>	n:1|2001:db8::7,<null>,<null>
+_:_obf ,[::ffff:203.0.113.9]:_obf, UNKNOWN:99999	<null>	<null>	<null>
+		<null>	<null>
+<null>	 https,,HTTPS	EXAMPLE.com	<null>
+	 https	[2001:db8::1]:443 ,EXAMPLE.com ,example.com:8443, example.com	<null>
+203.0.113.9 			<null>
+[2001:db8::7] ,not-an-ip , [::ffff:203.0.113.9]	http ,ws	EXAMPLE.com	<null>
+not-an-ip , 203.0.113.9.1:_obf, _bad!:80,,127.0.0.1	<null>	 , [2001:db8::1]:443, 203.0.113.9 ,bad host	<null>
+203.0.113.9:0, 203.0.113	<null>	203.0.113.9,,example.com , 	<null>
+198.51.100.7:,[2001:db8::7]:65535	<null>	EXAMPLE.com,example.com,,example.com	<null>
+203.0.113.9.1:65535		203.0.113.9, [2001:db8::1]:443,,, EXAMPLE.com	<null>
+<null>	https,,http, http,, https	<null>	<null>
+	<null>	203.0.113.9,,bad host ,example.com	<null>
+	HTTPS ,HTTPS,, https	<null>	<null>
+_hidden:4711,[::ffff:203.0.113.9]:_obf, _hidden ,198.51.100.7:abc	http,	<null>	<null>
+<null>	http , ws,https,,http ,  https,https, ws ,http,,http,,ws ,  https,http , HTTPS, HTTPS, http ,  ,http ,  https ,http , HTTPS, https,  ,https,https,,http,,HTTPS , ws,, ,https,HTTPS , https ,https,, https	bad host,example.com:8443	<null>
+1,not-an-ip: 80	<null>	<null>	<null>
+	https,https 	example.com:8443 , [2001:db8::1]:443,203.0.113.9,,example.com:8443	<null>
+[fe80::1%eth0]:99999, [2001:db8::7:_obf,[::1]	<null>	bad host , 203.0.113.9,,bad host,,203.0.113.9	<null>
+10.0.0.5:65536	<null>	example.com:8443	<null>
+203.0.113.9	<null>		<null>
+0.0.0.0:99999	<null>	<null>	<null>
+	<null>	203.0.113.9, EXAMPLE.com ,203.0.113.9, 203.0.113.9	<null>
+_hidden:99999	ws, http	<null>	<null>
+	<null>	<null>	<null>
+	<null>	<null>	<null>
+_bad!:, 10.0.0.5 ,UNKNOWN:65535 ,::ffff:203.0.113.9:65535	<null>	bad host	<null>
+_bad!:80,0x7f.0.0.1 , ::1:99999	<null>	[2001:db8::1]:443 , bad host ,bad host	<null>
+<null>	 https , https , ,,		<null>
+203.0.113.9:_ , unknown:65536, _bad!	<null>	<null>	<null>
+<null>	https, https 	[2001:db8::1]:443,,EXAMPLE.com , EXAMPLE.com	<null>
+<null>	<null>		<null>
+203.0.113.9.1 , _a.b-c_d:99999 , unknown:80,0.0.0.0	HTTPS,http , https 	EXAMPLE.com,,bad host ,  , EXAMPLE.com	<null>
+[::1],0.0.0.0:_	ws, https,,http	<null>	<null>
+<null>	https ,	EXAMPLE.com,,bad host, bad host	<null>
+_bad!:65535	<null>	<null>	<null>
+	<null>	example.com:8443, 203.0.113.9	<null>
+	<null>	<null>	<null>
+	<null>	<null>	<null>
+	<null>	<null>	<null>
+203.0.113.9.1, [::1],,[fe80::1%eth0]:99999	https,,HTTPS, https , 	203.0.113.9, example.com, example.com:8443 , EXAMPLE.com , EXAMPLE.com ,example.com:8443,,bad host , 203.0.113.9 , EXAMPLE.com,EXAMPLE.com ,[2001:db8::1]:443 ,203.0.113.9 , 203.0.113.9 , bad host,example.com:8443 , 203.0.113.9 , 203.0.113.9 , example.com , bad host,203.0.113.9,  , 203.0.113.9 , bad host,203.0.113.9 ,[2001:db8::1]:443 , 203.0.113.9,203.0.113.9 , 203.0.113.9 , bad host, bad host, ,,EXAMPLE.com,bad host	<null>
+<null>	<null>	, bad host	<null>
+<null>	HTTPS		<null>
+<null>		<null>	<null>
+203.0.113.09	 https,https 	<null>	<null>
+255.255.255.255:80 ,[2001:db8::7]:65535,,_	https	<null>	<null>
+_a.b-c_d:0, 10.0.0.5: 80,2001:db8::7:80 , UNKNOWN		<null>	<null>
+UNKNOWN:_,_hidden:80  ,198.51.100.7:80 	https 	<null>	<null>
+203.0.113:0 , _bad!:,,_hidden: 80	<null>	,,203.0.113.9,	<null>
+	<null>	bad host , ,bad host	<null>
+10.0.0.5: , 0.0.0.0 , 127.0.0.1: 80		<null>	<null>
+255.255.255.255:4711,,unknown:, 0x7f.0.0.1:99999 ,0.0.0.0:99999	https  , https , HTTPS	<null>	<null>
+<null>	,,http	example.com	<null>
+<null>	HTTPS	<null>	n:1|<null>,https,<null>
+<null>	http,HTTPS ,https 	<null>	n:3|<null>,http,<null>|<null>,https,<null>|<null>,https,<null>
+[::ffff:203.0.113.9]:80 ,[fe80::1%eth0]:_, 1:99999 ,_hidden:99999	HTTPS	EXAMPLE.com	<null>
+1:,,[::ffff:203.0.113.9]:_obf,203.0.113:_obf	<null>	<null>	<null>
+UNKNOWN: 80	<null>	[2001:db8::1]:443 ,203.0.113.9	<null>
+	<null>	<null>	<null>
+		<null>	<null>
+198.51.100.7:4711, 255.255.255.255	<null>	bad host,,bad host,203.0.113.9	<null>
+<null>	http ,ws,,https ,https 	<null>	<null>
+	HTTPS, ,https, HTTPS	example.com:8443 ,example.com,,example.com , example.com	<null>
+:80  , 198.51.100.7 , 300.1.1.1	,,HTTPS ,  https	bad host ,[2001:db8::1]:443,example.com:8443, example.com:8443	<null>
+	<null>	example.com	<null>
+203.0.113.9.1:80 , _hidden:_port: 80,_bad!:0 , 0.0.0.0	<null>	<null>	<null>
+	<null>	example.com,  ,[2001:db8::1]:443	<null>
+		<null>	<null>
+1:4711	https,,ws	example.com	<null>
+300.1.1.1:65535 ,0.0.0.0 ,198.51.100.7:_obf	<null>	<null>	<null>
+unknown:65535 ,255.255.255.255:65536 ,_hidden: , not-an-ip	<null>		<null>
+	<null>	<null>	<null>
+	https  , https	bad host	<null>
+	<null>	<null>	<null>
+127.0.0.1,_hidden:_port: 80, 203.0.113.9	<null>	<null>	<null>
+198.51.100.7:_ , 1:0,203.0.113.9:65535, 255.255.255.255:80  , not-an-ip:80 , [::1]:0 ,[]:abc ,[2001:db8:::7] ,_hidden:_port: 80,,[::ffff:203.0.113.9]:_ , 203.0.113.9:80, 300.1.1.1:,,203.0.113.9 :abc,203.0.113.9:80,,[2001:db8::7] ,[2001:db8::7]:65536, 203.0.113.9 ,1 , _hidden:_port ,_:99999,0x7f.0.0.1,2001:db8::7: 80,,::1:99999 , 203.0.113.9: 80,,203.0.113.9:0 ,  , ::1:abc,,_hidden:80 , []:4711 ,2001:db8::7,::ffff:203.0.113.9:0,,198.51.100.7:0 , 255.255.255.255: 80	http,HTTPS ,http, https	bad host,example.com ,EXAMPLE.com	<null>
+[2001:db8::7]:,,unknown:_,,[2001:db8::7]:65535 ,_bad!:65535	<null>	<null>	<null>
+[2001:db8::7] , 0.0.0.0:65536 , fe80::1%eth0	https		<null>
+<null>	<null>	[2001:db8::1]:443, EXAMPLE.com	n:2|<null>,<null>,[2001:db8::1]:443|<null>,<null>,example.com
+300.1.1.1: , 198.51.100.7: 80	ws , https , https	<null>	<null>
+1 , 0.0.0.0:abc, 203.0.113.9 :80 	<null>	203.0.113.9 , example.com:8443	<null>
+300.1.1.1	<null>	<null>	<null>
+	 https ,HTTPS ,https, https 	<null>	<null>
+	ws, https,https,,http	EXAMPLE.com , 203.0.113.9	<null>
+<null>	<null>	EXAMPLE.com , example.com:8443 , bad host, 203.0.113.9 ,example.com,203.0.113.9,,[2001:db8::1]:443 ,example.com:8443 , example.com:8443 ,EXAMPLE.com , ,,203.0.113.9, example.com ,,,EXAMPLE.com , ,[2001:db8::1]:443,[2001:db8::1]:443 ,,[2001:db8::1]:443 ,bad host,  ,[2001:db8::1]:443 ,EXAMPLE.com,,[2001:db8::1]:443,example.com ,bad host,example.com:8443 , example.com ,EXAMPLE.com ,example.com,,,[2001:db8::1]:443	<null>
+<null>	<null>	<null>	n:0
+127.0.0.1 ,not-an-ip:65536, [2001:db8:::7]:99999		<null>	<null>
+[::1]: 80 , [fe80::1%eth0]: 80 , unknown:_		<null>	<null>
+_a.b-c_d:65535 , ::ffff:203.0.113.9:4711	https , ws , https,,	[2001:db8::1]:443,,,[2001:db8::1]:443, [2001:db8::1]:443	<null>
+[fe80::1%eth0]:_,203.0.113.9 :4711 , not-an-ip:0	https,,	[2001:db8::1]:443, , bad host	<null>
+<null>	 https, https,https 	EXAMPLE.com, example.com:8443	n:3|<null>,https,<null>|<null>,https,example.com|<null>,https,example.com:8443
+_bad!:4711,,2001:db8::7 ,203.0.113.9 :80 ,,unknown	http	bad host , EXAMPLE.com , bad host	<null>
+_hidden:65535, [2001:db8::7]:0 , 2001:db8::7:abc	<null>	,203.0.113.9,203.0.113.9	<null>
+:65535,10.0.0.5:_ ,255.255.255.255, ::1:_	HTTPS,,https , HTTPS	<null>	<null>
+_a.b-c_d:_		<null>	<null>
+_hidden:_port:65535		<null>	<null>
+<null>	<null>	example.com	n:1|<null>,<null>,example.com
+<null>	HTTPS ,http,, ,http	<null>	<null>
+	http,https  ,  https ,  https	<null>	<null>
+<null>		<null>	<null>
+	 https,,	[2001:db8::1]:443 ,203.0.113.9 ,bad host	<null>
+203.0.113.9: 80, [2001:db8::7],,[::1]:4711, [::ffff:203.0.113.9]: 80		<null>	<null>
+[fe80::1%eth0]:,0.0.0.0:65535,,203.0.113.9.1:65535,[::1]	http	[2001:db8::1]:443 ,bad host , example.com,example.com:8443	<null>
+10.0.0.5:abc	<null>		<null>
+[]:80 ,203.0.113:80 ,,[::ffff:203.0.113.9]:	ws ,  https, 	example.com:8443 , example.com:8443	<null>
+<null>	https , https 		<null>
+10.0.0.5: 80 ,_bad!:65536,203.0.113:abc		<null>	<null>
+203.0.113,,[2001:db8:::7],,unknown: , _hidden:_obf	ws ,https ,,https,,HTTPS	<null>	<null>
+1:	<null>	bad host,,example.com	<null>
+UNKNOWN: 80,,[2001:db8::7:80  , 203.0.113.9:abc	<null>	<null>	<null>
+[2001:db8::7]: 80	<null>		<null>
+<null>	<null>	<null>	n:0
+0x7f.0.0.1:99999 , 203.0.113.9	https , , 	203.0.113.9 , , , 203.0.113.9	<null>
+<null>	<null>		<null>
+<null>	http ,ws	[2001:db8::1]:443	<null>
+<null>	<null>	example.com,example.com:8443	n:2|<null>,<null>,example.com|<null>,<null>,example.com:8443
+0x7f.0.0.1,,:80 	<null>	EXAMPLE.com	<null>
+203.0.113.9.1:65536, [2001:db8::7:65536 , 127.0.0.1:80  ,[2001:db8::7]:65536	ws,http, https 	<null>	<null>
+[]:_obf,,_hidden:0 ,_bad!:_obf, [2001:db8::7	HTTPS, http,  ,	<null>	<null>
+::ffff:203.0.113.9:_,0x7f.0.0.1:abc ,255.255.255.255:80		<null>	<null>
+<null>	<null>	<null>	n:0
+fe80::1%eth0:4711,,::ffff:203.0.113.9:_	<null>	<null>	<null>
+:65535	, https, , HTTPS	203.0.113.9	<null>
+	 https, https, HTTPS	example.com ,example.com:8443,,bad host	<null>
+<null>	HTTPS , http,,https  ,http	<null>	<null>
+_hidden:_port:80 ,unknown:99999	<null>	, 203.0.113.9 ,bad host , example.com:8443	<null>
+[fe80::1%eth0]:_ , 203.0.113.9 :4711 ,fe80::1%eth0: 80, 203.0.113:0	HTTPS	EXAMPLE.com,bad host ,example.com:8443	<null>
+	 https ,ws, http ,https 	<null>	<null>
+_hidden:_port:99999	https,https 	example.com:8443, example.com	<null>
+_a.b-c_d	<null>	<null>	n:1|<null>,<null>,<null>
+:80 ,1 ,0.0.0.0:99999	<null>	<null>	<null>
+not-an-ip	<null>	bad host , EXAMPLE.com,,example.com	<null>
+0x7f.0.0.1:0 , _a.b-c_d:65536	<null>	<null>	<null>
+<null>	https ,, https	203.0.113.9, example.com	<null>
+127.0.0.1:65536, _a.b-c_d:99999 , 203.0.113.9:4711	<null>	<null>	<null>
+_hidden:_,_:_ , 203.0.113.9 :65536	http	EXAMPLE.com,203.0.113.9,,example.com , bad host	<null>
+_hidden:_port:65535,,::ffff:203.0.113.9,[::ffff:203.0.113.9]:4711	 ,https  ,  https , https 	<null>	<null>
+<null>	http	,example.com:8443	<null>
+fe80::1%eth0:0	<null>	<null>	<null>
+10.0.0.5:abc, _a.b-c_d:0 ,10.0.0.5:65535 , 203.0.113:65535	http,,http	<null>	<null>
+	HTTPS ,https 	<null>	<null>
+::ffff:203.0.113.9:4711,,203.0.113.9 : , [::1]:80, fe80::1%eth0:0	https		<null>
+<null>	<null>		<null>
+[::ffff:203.0.113.9]:4711 ,2001:db8::7:_	<null>	<null>	<null>
+2001:db8::7:99999,,::1: 80	<null>	bad host ,203.0.113.9,example.com:8443	<null>
+	https,, https	example.com:8443,EXAMPLE.com , [2001:db8::1]:443,,	<null>
+	 https , HTTPS	<null>	<null>
+not-an-ip:80 	, https , https , https	<null>	<null>
+0x7f.0.0.1:abc , UNKNOWN:	<null>	EXAMPLE.com	<null>
+::ffff:203.0.113.9:80  ,not-an-ip	<null>	<null>	<null>
+[2001:db8::7]:_ ,203.0.113.9 : 80,_bad!:80 ,,[2001:db8::7]: 80	<null>	bad host	<null>
+203.0.113.9 :65536,[::ffff:203.0.113.9] , 10.0.0.5:80 , 10.0.0.5:99999	https  ,  https,  https	 , 203.0.113.9	<null>
+UNKNOWN:65536, 255.255.255.255:abc	http	<null>	<null>
+0.0.0.0:,::1,::1		<null>	<null>
+<null>	<null>	<null>	n:0
+	<null>	example.com	<null>
+	<null>	[2001:db8::1]:443,,example.com:8443 , 203.0.113.9	<null>
+127.0.0.1:,,[fe80::1%eth0]:4711,unknown:99999 , [2001:db8::7]:_	<null>	example.com:8443	<null>
+0x7f.0.0.1:_obf ,203.0.113.9: 80 ,::ffff:203.0.113.9:0 ,203.0.113.9	https	<null>	<null>
+[2001:db8:::7]:99999,[2001:db8::7]:65536		example.com:8443	<null>
+300.1.1.1:80  ,203.0.113.9 :80 ,198.51.100.7:80, 2001:db8::7	 https,,HTTPS , https ,,https 	<null>	<null>
+<null>	ws, http,https  ,,,ws, ws , https ,ws,HTTPS,http ,ws,  https, HTTPS,,ws, https , HTTPS ,https  ,https , https , https  , ws,HTTPS,HTTPS,,,HTTPS,,http, , https, ws, https, http,http, HTTPS	<null>	<null>
+	ws , HTTPS,http ,HTTPS	<null>	<null>
+203.0.113:65535,198.51.100.7:65535	HTTPS	<null>	<null>
+_:99999	https 	<null>	<null>
+_hidden:_port:80 	HTTPS , HTTPS	example.com:8443, bad host	<null>
+<null>	<null>	<null>	n:0
+fe80::1%eth0:99999,,not-an-ip:abc		<null>	<null>
+<null>	<null>	<null>	n:0
+<null>	,,,HTTPS ,https		<null>
+unknown:_,,not-an-ip:65536,,198.51.100.7	<null>	<null>	<null>
+<null>	<null>		<null>
+<null>	<null>	 , example.com:8443,203.0.113.9,EXAMPLE.com	<null>
+[::ffff:203.0.113.9]:65535 , _a.b-c_d:, [::ffff:203.0.113.9]:abc , [2001:db8::7]	<null>	<null>	<null>
+<null>	HTTPS		<null>
+		<null>	<null>
+203.0.113.09:65536	<null>		<null>
+<null>	<null>	example.com , , example.com:8443	<null>
+[::ffff:203.0.113.9]:abc , _,127.0.0.1	<null>	<null>	<null>
+unknown:80,,0.0.0.0:4711	<null>	<null>	<null>
+[2001:db8::7, fe80::1%eth0:0,[]:_obf, 300.1.1.1:abc	 https,,http	<null>	<null>
+[2001:db8:::7],,[2001:db8::7]:_obf,,[fe80::1%eth0]:,::ffff:203.0.113.9,,127.0.0.1:_,,[2001:db8::7]:abc, 198.51.100.7, [2001:db8::7: 80,0x7f.0.0.1:0 ,fe80::1%eth0:65535,0x7f.0.0.1:_ ,unknown, [::ffff:203.0.113.9]:4711,2001:db8::7:abc,_:_obf ,[]:_, _:80 ,10.0.0.5: 80 , :65536 , [fe80::1%eth0]:abc ,203.0.113.9.1:0 ,203.0.113.9 :99999,[2001:db8:::7]:_,_a.b-c_d: 80,,_hidden:_port:0, 198.51.100.7:99999,,10.0.0.5:80 , UNKNOWN:80, 127.0.0.1:0 ,[2001:db8::7],203.0.113.09,[]:80  ,2001:db8::7:0	<null>	<null>	<null>
+<null>	https 	<null>	n:1|<null>,https,<null>
+::ffff:203.0.113.9: , 203.0.113:65536	<null>	EXAMPLE.com ,bad host	<null>
+	<null>	<null>	<null>
+:_,,203.0.113.9 	<null>	<null>	<null>
+<null>	<null>		<null>
+	<null>	example.com:8443 ,203.0.113.9, [2001:db8::1]:443	<null>
+0.0.0.0,,[fe80::1%eth0]:,255.255.255.255:65536	<null>		<null>
+<null>	HTTPS	<null>	n:1|<null>,https,<null>
+UNKNOWN:99999	http	<null>	<null>
+<null>	<null>	<null>	n:0
+<null>	ws	<null>	<null>
+1:80 	HTTPS	example.com , [2001:db8::1]:443, [2001:db8::1]:443,,203.0.113.9	<null>
+203.0.113:4711 , ::1: 80 , 255.255.255.255:,,unknown:	<null>	<null>	<null>
+300.1.1.1 ,not-an-ip		<null>	<null>
+::ffff:203.0.113.9:65536	<null>	example.com:8443, example.com	<null>
+255.255.255.255: 80	HTTPS,https , ws	203.0.113.9, bad host, bad host,[2001:db8::1]:443	<null>
+	http ,https 	[2001:db8::1]:443, bad host,,bad host ,	<null>
+203.0.113.9:65536,:65535,,198.51.100.7	<null>	<null>	<null>
+	<null>	<null>	<null>
+255.255.255.255	<null>		<null>
+_hidden,[::1]:4711	<null>	example.com:8443, 203.0.113.9,,example.com:8443	<null>
+<null>	<null>	<null>	n:0
+<null>	ws ,https ,,https	<null>	<null>
+0x7f.0.0.1:80 ,300.1.1.1:_obf,300.1.1.1:65535 ,unknown:4711		<null>	<null>
+::1:_,,[::1]:80 , 1:0, not-an-ip:80 	<null>	[2001:db8::1]:443,example.com	<null>
+255.255.255.255:4711, 300.1.1.1:80  , 203.0.113.9:99999	<null>		<null>
+_hidden:_port:0	 ,  https,,ws	<null>	<null>
+UNKNOWN:65536	<null>	,,EXAMPLE.com ,, [2001:db8::1]:443	<null>
+203.0.113:65536,[::ffff:203.0.113.9]:80,_bad!,203.0.113.09:4711	<null>	[2001:db8::1]:443	<null>
+[2001:db8:::7]	<null>	<null>	<null>
+300.1.1.1:abc	https	example.com:8443	<null>
+UNKNOWN:0, : 80 ,_hidden:	<null>	<null>	<null>
+_bad!: 80 , 203.0.113.9: 80 , 203.0.113.9:_, 0.0.0.0:99999	ws,https,,ws, ws, https  ,https  ,ws , https,,http, https ,https  ,ws , ws,,HTTPS,,ws,, https ,HTTPS,http ,https ,ws , https, https , https, https, HTTPS,https, https, https  ,https,ws,, https ,https  , http	<null>	<null>
+_hidden:_port:80	<null>	EXAMPLE.com ,[2001:db8::1]:443,,example.com,example.com, [2001:db8::1]:443 ,example.com , EXAMPLE.com , 203.0.113.9 , [2001:db8::1]:443,example.com,,203.0.113.9, EXAMPLE.com,example.com:8443 , bad host , example.com:8443,203.0.113.9,,example.com,example.com:8443,[2001:db8::1]:443,,example.com,,bad host,,example.com ,EXAMPLE.com ,  , 203.0.113.9, example.com:8443,,[2001:db8::1]:443,[2001:db8::1]:443 , [2001:db8::1]:443,bad host ,[2001:db8::1]:443,,,,example.com:8443	<null>
+203.0.113.9,[2001:db8::7:80  ,fe80::1%eth0:	<null>	<null>	<null>
+[::ffff:203.0.113.9]:0, 255.255.255.255:65535,[2001:db8:::7]:65536	<null>	example.com,example.com:8443,EXAMPLE.com	<null>
+<null>	<null>	EXAMPLE.com, EXAMPLE.com	n:2|<null>,<null>,example.com|<null>,<null>,example.com
+203.0.113.9:_obf,::ffff:203.0.113.9:_obf,,not-an-ip:abc,UNKNOWN:_obf	<null>	<null>	<null>
+	https ,ws, 	<null>	<null>
+<null>	http	example.com , , 203.0.113.9	<null>
+[2001:db8:::7]:65536,_:65536 , 203.0.113,,not-an-ip ,_bad! , 127.0.0.1:4711 ,fe80::1%eth0: 80,203.0.113.9.1:80 ,203.0.113.09:99999 , [], 10.0.0.5:80 , 0x7f.0.0.1: 80,127.0.0.1:_ , 203.0.113.9  , _hidden:65536,,[::1]:65535 , UNKNOWN:65536, :abc ,[::ffff:203.0.113.9]:_obf , 2001:db8::7:65535,,_:4711 , 10.0.0.5:_obf,_,,203.0.113.9.1: , 203.0.113.09:4711 ,0.0.0.0 , ::ffff:203.0.113.9:80 ,,[fe80::1%eth0]:65536, 255.255.255.255: 80 ,_bad!, not-an-ip:_obf, UNKNOWN:99999 , [fe80::1%eth0]	<null>	<null>	<null>
+_:_,,203.0.113.9 : 80 ,203.0.113.9:65535,,[]:80 	 https,, https,,https 	<null>	<null>
+203.0.113.9 :	<null>	<null>	<null>
+<null>	ws,  https,HTTPS	203.0.113.9	<null>
+_bad!:80 ,unknown,,198.51.100.7	<null>	<null>	<null>
+	http , HTTPS, HTTPS,https 	<null>	<null>
+<null>		[2001:db8::1]:443,,[2001:db8::1]:443	<null>
+[fe80::1%eth0]:abc,[fe80::1%eth0]:_obf ,127.0.0.1:80 	<null>		<null>
+::ffff:203.0.113.9:_, [::1]:80 ,[::ffff:203.0.113.9]:80 	<null>	example.com,example.com, bad host	<null>
+127.0.0.1:99999,,255.255.255.255:0 , 203.0.113.9:4711	<null>	203.0.113.9	<null>
+	, https		<null>
+<null>	<null>	<null>	n:0
+<null>	<null>	203.0.113.9, [2001:db8::1]:443 ,EXAMPLE.com ,	<null>
+[2001:db8::7], 198.51.100.7: 80 , unknown:_,2001:db8::7	<null>	<null>	<null>
+<null>	https,  https	[2001:db8::1]:443	n:2|<null>,https,<null>|<null>,https,[2001:db8::1]:443
+[::1] ,_hidden:_port:_obf	<null>	<null>	<null>
+203.0.113.9 :abc , _a.b-c_d:65536,0.0.0.0:65535 ,UNKNOWN	https 	<null>	<null>
+[::1],,[::1] ,0.0.0.0:65535	<null>	example.com	<null>
+_hidden:80 , 10.0.0.5:_obf , ::1:	http	example.com, , 	<null>
+::ffff:203.0.113.9:65535 ,[::ffff:203.0.113.9]:65536,,255.255.255.255:99999	<null>		<null>
+	<null>	example.com:8443,example.com,, , example.com	<null>
+<null>		203.0.113.9	<null>
+	http , ,,HTTPS	example.com:8443 ,bad host ,example.com:8443	<null>
+[2001:db8::7:abc,,2001:db8::7	<null>	<null>	<null>
+fe80::1%eth0:abc,,[2001:db8:::7]:_obf,,203.0.113.9:99999 , 0x7f.0.0.1:0	<null>	<null>	<null>
+UNKNOWN: 80,203.0.113:abc	<null>	<null>	<null>
+0x7f.0.0.1:65536 ,[::1]:_obf,::ffff:203.0.113.9:0,,::ffff:203.0.113.9:abc	<null>	<null>	<null>
+fe80::1%eth0:80 ,2001:db8::7: 80 ,[]	<null>	<null>	<null>
