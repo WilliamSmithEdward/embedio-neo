@@ -271,7 +271,7 @@ Guides: [controllers](docs/guides/getting-started/controllers.md),
 - A fresh `new JsonSerializerOptions()` is strict standard behavior, not the
   compatibility behavior.
 
-Guide: [JSON compatibility](docs/user-reports/json-migration-compatibility.md).
+Guides: [JSON compatibility](docs/user-reports/json-migration-compatibility.md) and [over-posting](docs/user-reports/json-migration-compatibility.md#over-posting-and-the-binding-surface).
 
 ## 11. WebSockets
 

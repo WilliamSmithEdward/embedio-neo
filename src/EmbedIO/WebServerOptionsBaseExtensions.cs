@@ -168,7 +168,9 @@ namespace EmbedIO
         }
 
         /// <summary>
-        /// Adds a URL prefix.
+        /// Sets whether compressed request bodies are supported. If you enable them, make sure
+        /// <see cref="WebServerOptionsBase.MaximumDecompressedRequestBodyBytes"/> is finite; see
+        /// <see cref="WebServerOptionsBase.SupportCompressedRequests"/>.
         /// </summary>
         /// <typeparam name="TOptions">The type of the object on which this method is called.</typeparam>
         /// <param name="this">The object on which this method is called.</param>

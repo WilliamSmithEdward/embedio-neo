@@ -171,6 +171,12 @@ using var server = new WebServer(options => options
     .WithMaximumDecompressedRequestBodyBytes(1_048_576));
 ```
 
+Whenever you enable compression, make sure `MaximumDecompressedRequestBodyBytes`
+is finite and no larger than the largest decoded body your handlers accept. A
+request can stack up to eight content codings, but that cap limits the number of
+layers, not what they produce: nested gzip layers expand a small body without
+practical limit.
+
 The request-stream helpers, including JSON/form/body readers, raise HTTP 413
 when decoded content exceeds one MiB. The limit counts bytes, including all
 bytes of UTF-8 characters; an exactly sized body is accepted after checking EOF.
@@ -193,8 +199,10 @@ limits. These APIs are unreleased development work.
 The unreleased modern-engine branch accepts recognized Content-Encoding lists
 when `SupportCompressedRequests` is enabled. For `Content-Encoding: gzip, br`,
 the sender applies gzip first and Brotli second; the helpers undo Brotli and then
-gzip. Up to eight compression layers are supported. Excess depth, unsupported
-names and coding parameters are rejected with the existing HTTP 400 behavior.
+gzip. Up to eight compression layers are supported. That cap limits the depth
+of the chain, not the size it decodes to; the decoded limit above bounds that.
+Excess depth, unsupported names and coding parameters are rejected with the
+existing HTTP 400 behavior.
 
 The .NET 10 asset supports gzip, deflate and Brotli layers; the .NET Standard
 asset supports gzip/deflate chains and explicitly rejects any Brotli layer.

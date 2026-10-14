@@ -87,6 +87,44 @@ Legacy SWAN attributes and serializer-option APIs remain part of the separately
 approved source/binary migration described in [Migration](../compatibility/migration.md).
 They are not restored through reflection or a production SWAN dependency.
 
+## Over-posting and the binding surface
+
+Neo binds more of a type than System.Text.Json does by default, for upstream
+compatibility: public fields bind, and so do public properties with private or
+protected setters. Every such member of a type bound from a request body, through
+`[JsonData]`, `GetRequestDataAsync<T>` or `Json.Deserialize<T>`, can be set by the
+client. A public field such as `public bool IsAdmin;` on an account type becomes
+settable from a request, although System.Text.Json's defaults would ignore it.
+
+Bind requests to dedicated types that hold only what a client may change, and copy
+those values into domain objects yourself. Where a shared type must be bound, mark
+its sensitive members `[JsonIgnore]`, which Neo's binding honors for fields and for
+properties with nonpublic setters:
+
+```csharp
+using System.Text.Json.Serialization;
+
+// Bound from the request body: only what a client may change.
+public sealed class UpdateProfileRequest
+{
+    public string? DisplayName { get; set; }
+    public string? Email { get; set; }
+}
+
+// A shared type that is also bound keeps clients away from its sensitive members.
+public sealed class Account
+{
+    public string? DisplayName { get; set; }
+    public string? Email { get; set; }
+
+    [JsonIgnore]
+    public bool IsAdmin;
+
+    [JsonIgnore]
+    public string? PasswordHash { get; private set; }
+}
+```
+
 ## Explicit application options
 
 `Json.CreateOptions()` retains the compatibility defaults, including when copied
