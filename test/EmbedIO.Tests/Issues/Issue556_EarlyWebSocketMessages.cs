@@ -266,8 +266,11 @@ namespace EmbedIO.Tests.Issues
                 await module.Connected.Task.WaitAsync(timeout.Token);
                 if (shutdown)
                 {
+                    // The client answers the stop's 1001 close, so the stop does not wait out its budget.
+                    var answering = ClientWebSocketClose.AnswerAsync(client, timeout.Token);
                     stop.Cancel();
                     await running.WaitAsync(timeout.Token);
+                    await answering;
                 }
                 else
                 {

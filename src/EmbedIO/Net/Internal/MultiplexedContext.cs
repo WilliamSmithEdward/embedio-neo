@@ -263,6 +263,7 @@ namespace EmbedIO.Net.Internal
                     transport.Dispose();
                     // WebServer still flushes and completes this context after the module returns.
                 });
+                socket.StartKeepAlive(keepAliveInterval);
                 return new WebSocketContext(this, "13", requestedProtocols, acceptedProtocol,
                     socket, cancellationToken);
             }
