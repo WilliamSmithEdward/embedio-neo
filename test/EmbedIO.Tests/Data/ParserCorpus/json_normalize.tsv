@@ -1,0 +1,1001 @@
+# json_normalize: 1000 cases, 2 input columns, seed 1049169468598308319
+Skip	{}	ok:{}
+Disallow	["",1.5.5\t,]\n	ok:["",1.5.5\t,]\n
+Skip	\t{}	ok:\t{}
+Skip	{"k":-1\n,\r\n"key":{"1":/* c */\n{},"1":{},"n" : {"key" {"key"  / x"open,"1" : true\t,"k" : null}\n}\r\n} ,"1":null}	ok:{"k":-1\n,\r\n"key":{"1":/* c */\n{},"1":{},"n" : {"key" {"key"  / x"open,"1" : true\\u0009,"k" : null}\\u000a}\\u000d\\u000a} ,"1":null}
+Disallow	 { "1"{"n"\r\n{"1" : \t{\t"k"\n:"a", k\n.  ,"k":5.},"n"/ xnull\t\n},""1.0e-5},"" 1}	ok: { "1"{"n"\r\n{"1" : \t{\t"k"\n:"a", k\n.  ,"k":5.0},"n"/ xnull\t\n},""1.0e-5},"" 1}
+Disallow	/* c */// c\n"\\n\\t" //	ok:/* c */// c\n"\\n\\t" //
+Skip	\t[]	ok:\t[]
+Allow	{\n"k":true,}	ok:{\n"k":true,}
+Allow	[ ]	ok:[ ]
+Disallow	  "nl\nhere",	ok:  "nl\\u000ahere",
+Disallow	true	ok:true
+Skip	"tab\there"	ok:"tab\\u0009here"
+Allow	\r\n/ x""\t	ok:\r\n/ x""\t
+Disallow	"nl\nhere"	ok:"nl\\u000ahere"
+Disallow	nul\t	ok:nul\t
+Skip	 [  ]	ok: [  ]
+Disallow	 0.5 	ok: 0.5 
+Allow	\n/* c */\n1	ok:\n/* c */\n1
+Allow	[]\n,	ok:[]\n,
+Skip	\t/ xfalse 	ok:\t/ xfalse 
+Skip	/* c */{\r\n"1":/**/"\\u0041"  ,"":/* open  "true"\r\n,k:"nl\nhere"}	ok:/* c */{\r\n"1":/**/"\\u0041"  ,"":/* open  "true"\r\n,k:"nl\nhere"}
+Allow	""	ok:""
+Allow	{\t"n"\n  {},"":"a\\"b",k  :   ""\t}	ok:{\t"n"\n  {},"":"a\\"b",k  :   ""\t}
+Skip	 - 	ok: - 
+Disallow	 	ok: 
+Allow	  nul	ok:  nul
+Allow	-\n	ok:-\n
+Disallow	\r\n"tab\there"	ok:\r\n"tab\\u0009here"
+Allow	"ctl\u0001x"\n	ok:"ctl\\u0001x"\n
+Allow	[[+1,[,]], {k\r\n [\n{},0.5] ,k : nul\n}]	ok:[[1,[,]], {k\r\n [\n{},0.5] ,k : nul\n}]
+Skip	-  	ok:-  
+Disallow	"true"	ok:"true"
+Disallow	+1\n	ok:1\n
+Allow	- 	ok:- 
+Disallow	"open\n	ok:"open\\u000a
+Disallow	{}	ok:{}
+Disallow	\r\n"\\n\\t"//	ok:\r\n"\\n\\t"//
+Allow	"ca	ok:"ca
+Allow	.	ok:.
+Skip	{"1"  /* c */"a","k" : {}}  	ok:{"1"  /* c */"a","k" : {}}  
+Allow	"true"	ok:"true"
+Skip	\t"s"	ok:\t"s"
+Disallow	\r\n"\\n\\t"	ok:\r\n"\\n\\t"
+Skip	True	ok:True
+Allow	false  /* tail */	ok:false  /* tail */
+Skip	t	ok:t
+Disallow	+.5e1  //	ok:0.5e1  //
+Skip	[\r\n/ x  "tab\there"]\t	ok:[\r\n/ x  "tab\\u0009here"]\t
+Skip	{"":\t/* open-\r\n,\n"k" :[],\r\n""  : ["open\r\n \r\n}	ok:{"":\t/* open-\r\n,\n"k" :[],\r\n""  : ["open\r\n \r\n}
+Allow	{"1"[1e,]  \r\n	ok:{"1"[1e,]  \r\n
+Skip	{k : 1e5}	ok:{k : 1e5}
+Allow	/*	ok:/*
+Allow	{"n" : -.5 ,""\r\n :   nul\t	ok:{"n" : -0.5 ,""\r\n :   nul\t
+Disallow	/* open"\u007f"  	ok:/* open"\u007f"  
+Skip	/* a\nb */.5\t	ok:/* a\nb */0.5\t
+Skip	{"k" : -0.0,"k":[null ]  ,\r\n""/* c */\r\n007}\t	ok:{"k" : -0.0,"k":[null ]  ,\r\n""/* c */\r\n007}\t
+Disallow	\n[]\t/* open	ok:\n[]\t/* open
+Disallow	{"k" : [\t],k   : ""}x	ok:{"k" : [\t],k   : ""}x
+Skip	 "true"	ok: "true"
+Skip	  /* a\nb */  {}\n\r\n	ok:  /* a\nb */  {}\n\r\n
+Allow	[]  	ok:[]  
+Skip	{"n" : +,"key":/* a\nb */{}\r\n,\r\n"key" {k\t:false,"1"  null\t}  }	ok:{"n" : +,"key":/* a\nb */{}\r\n,\r\n"key" {k\t:false,"1"  null\t}  }
+Skip	\t{\n"1"\t:[],  "n"  :\t"esc\\	ok:\t{\n"1"\t:[],  "n"  :\t"esc\\
+Allow	\n[[nul, "s",{}\r\n]\n ,[]\r\n,\r\n/ x"\\n\\t"]	ok:\n[[nul, "s",{}\r\n]\n ,[]\r\n,\r\n/ x"\\n\\t"]
+Skip	{k  :[+,   "true",],"n" \n// c\n {"1"\t:"\u007f"\t,  "key"\t : "tab\there","":\r\nnull}\t,""\t:\nfalse}	ok:{k  :[+,   "true",],"n" \n// c\n {"1"\t:"\u007f"\t,  "key"\t : "tab\\u0009here","":\r\nnull}\t,""\t:\nfalse}
+Disallow	"esc\\  	ok:"esc\\  
+Skip	\t"true"	ok:\t"true"
+Skip	[\r\n00,false,{}  	ok:[\r\n0,false,{}  
+Skip	 "caf\u00e9"	ok: "caf\u00e9"
+Disallow	  nul	ok:  nul
+Skip	[{  "n":/**/{\nk:\r\n"ctl\u0001x"},"n" : [\r\n/* a\nb */"\\u0041" ,{},nul  \t,\n"1"  :00} ,false, \t"\u007f" ]	ok:[{  "n":/**/{\nk:\r\n"ctl\\u0001x"},"n" : [\r\n/* a\nb */"\\u0041" ,{},nul  \t,\n"1"  :0} ,false, \t"\u007f" ]
+Allow	-007	ok:-7
+Allow	[ "true"//	ok:[ "true"//
+Disallow	"ctl\u0001x"	ok:"ctl\\u0001x"
+Skip	/**/ "\\u0041"	ok:/**/ "\\u0041"
+Disallow	"esc\\\n	ok:"esc\\\n
+Allow	{}	ok:{}
+Allow	\r\n/* a\nb */ {}\t	ok:\r\n/* a\nb */ {}\t
+Disallow	[\n{""\t{}  , "1" : [],\t"key" : \n{}}, ["esc\\,] ,/* open[1\r\n, true,]]/* tail */	ok:[\n{""\t{}  , "1" : [],\t"key" : \n{}}, ["esc\\,] ,/* open[1\\u000d\\u000a, true,]]/* tail */
+Disallow	false 	ok:false 
+Disallow	 false	ok: false
+Skip	[] 	ok:[] 
+Allow	"\\n\\t"/* open	ok:"\\n\\t"/* open
+Skip	 [{"key":/* open {""\r\n:\n"nl\nhere","1" : 1.e5\t}   }\n]	ok: [{"key":/* open {""\r\n:\n"nl\nhere","1" : 1.e5\t}   }\n]
+Allow	 true/* open	ok: true/* open
+Disallow	/ x/* openfalse  	ok:/ x/* openfalse  
+Allow	True	ok:True
+Disallow	"tab\there"	ok:"tab\\u0009here"
+Skip	  1E+5	ok:  1E+5
+Skip	""	ok:""
+Skip	/* open  / x{}	ok:/* open  / x{}
+Allow	{k : \t[\r\n[] ,"ctl\u0001x", \t/* open\ntrue\t],"n"  [],  "" : /* open/* a\nb */"esc\\\r\n  }  	ok:{k : \t[\r\n[] ,"ctl\\u0001x", \t/* open\ntrue\t],"n"  [],  "" : /* open/* a\nb */"esc\\\r\\u000a  }  
+Disallow	 True	ok: True
+Disallow	/**//* c */-5. 	ok:/**//* c */-5. 
+Skip	 null 	ok: null 
+Disallow	\n"true"  	ok:\n"true"  
+Disallow	[1\t  	ok:[1\t  
+Allow	  / x"s" 	ok:  / x"s" 
+Allow	"s"	ok:"s"
+Disallow	[{}\t,/* open{}\r\n,  True]	ok:[{}\t,/* open{}\r\n,  True]
+Skip	"\\n\\t"	ok:"\\n\\t"
+Skip	  [{}]	ok:  [{}]
+Allow	"a\\"b" 	ok:"a\\"b" 
+Allow	t	ok:t
+Disallow	\r\nTrue	ok:\r\nTrue
+Allow	"caf\u00e9" 	ok:"caf\u00e9" 
+Disallow	\r\nnu	ok:\r\nnu
+Allow	"\u007f"\t	ok:"\u007f"\t
+Disallow	"caf\u00e9"	ok:"caf\u00e9"
+Allow	""x	ok:""x
+Disallow	 "true"	ok: "true"
+Disallow	nul	ok:nul
+Allow	 /* open[null,1e5 ,]\t	ok: /* open[null,1e5 ,]\t
+Skip	[]	ok:[]
+Skip	{\tk\r\n{k : "\u007f", k : ["s", [],,  "1"\r\n:\n/* c */ "ctl\u0001x"},\r\nk\r\n--1,k:"s",}\t	ok:{\tk\r\n{k : "\u007f", k : ["s", [],,  "1"\r\n:\n/* c */ "ctl\\u0001x"},\r\nk\r\n--1,k:"s",}\t
+Skip	1/* tail */	ok:1/* tail */
+Disallow	  true//	ok:  true//
+Skip	/* a\nb */\r\n"nl\nhere"\t	ok:/* a\nb */\r\n"nl\\u000ahere"\t
+Allow	[,\n	ok:[,\n
+Disallow	 -0.0	ok: -0.0
+Allow	 ""  	ok: ""  
+Skip	  [{"key" : 0}\r\n, "a",]	ok:  [{"key" : 0}\r\n, "a",]
+Allow	"s"\n	ok:"s"\n
+Allow	"\\n\\t"// tail	ok:"\\n\\t"// tail
+Allow	/**/true	ok:/**/true
+Disallow	\r\n{"1"// c\n\r\n{},"" :  [  ],}\t	ok:\r\n{"1"// c\n\r\n{},"" :  [  ],}\t
+Skip	"true"	ok:"true"
+Allow	-007	ok:-7
+Disallow	123456789012345678901234567890	ok:123456789012345678901234567890
+Disallow	null  	ok:null  
+Disallow	[x	ok:[x
+Skip	\tfalse	ok:\tfalse
+Allow	  [[ /* c */ 123456789012345678901234567890\n\n ,0x1\t\t]\r\n, 5.,"tab\there"\r\n]  x	ok:  [[ /* c */ 123456789012345678901234567890\n\n ,0x1\t\t]\r\n, 5.0,"tab\\u0009here"\r\n]  x
+Disallow	{"k":["\\u0041",0.5\n],"n" : []}	ok:{"k":["\\u0041",0.5\n],"n" : []}
+Skip	\n"esc\\	ok:\n"esc\\
+Allow	0 	ok:0 
+Allow	1.0e-5\r\n	ok:1.0e-5\r\n
+Allow	1	ok:1
+Allow	"nl\nhere"	ok:"nl\\u000ahere"
+Allow	  "true"\n	ok:  "true"\n
+Skip	// c\n -.5\t\n	ok:// c\n -0.5\t\n
+Skip	[ /* c */  "nl\nhere"]/* tail */	ok:[ /* c */  "nl\\u000ahere"]/* tail */
+Skip	 null	ok: null
+Skip	{"1"{,}}  	ok:{"1"{,}}  
+Allow	 true 	ok: true 
+Skip	/* c */  []	ok:/* c */  []
+Skip	 {}\r\n	ok: {}\r\n
+Disallow	nul\r\n	ok:nul\r\n
+Skip	[1, {"k" : {\t"n"\n : \n// c\n/* c */"a\\"b"\t,},"1"\r\n"s",k:  []}\n,]	ok:[1, {"k" : {\t"n"\n : \n// c\n/* c */"a\\"b"\t,},"1"\r\n"s",k:  []}\n,]
+Skip	"ctl\u0001x"\r\n	ok:"ctl\\u0001x"\r\n
+Skip	{}/* open	ok:{}/* open
+Allow	\r\n{\n"k"\t[]}  	ok:\r\n{\n"k"\t[]}  
+Skip	\t-.5\n	ok:\t-0.5\n
+Disallow	 	ok: 
+Allow	/* open"\u007f"\r\n\n	ok:/* open"\u007f"\r\n\n
+Skip	 "a\\"b"\t,	ok: "a\\"b"\t,
+Allow	\r\n"nl\nhere"\n	ok:\r\n"nl\\u000ahere"\n
+Allow	[+1,  "\\n\\t",  	ok:[1,  "\\n\\t",  
+Disallow	{"k"[/ x/* c */\r\n/* open// c\n// c\n-.5    ],knul}	ok:{"k"[/ x/* c */\r\n/* open// c\n// c\n-.5    ],knul}
+Disallow	T	ok:T
+Skip	/**/0.	ok:/**/0.0
+Disallow	""	ok:""
+Disallow	/* open/ x{}\r\n   	ok:/* open/ x{}\r\n   
+Allow	\t{\r\n	ok:\t{\r\n
+Disallow	/* c */\n[]	ok:/* c */\n[]
+Allow	\r	ok:\r
+Skip	\r\n[{}\r\n,]// tail	ok:\r\n[{}\r\n,]// tail
+Allow	"s"/* tail */	ok:"s"/* tail */
+Allow	{}	ok:{}
+Allow	"\\n\\t"\t	ok:"\\n\\t"\t
+Allow	.	ok:.
+Allow	[]	ok:[]
+Allow	/ x"a\\"b"  	ok:/ x"a\\"b"  
+Disallow	nul	ok:nul
+Allow	{}	ok:{}
+Skip	[\n[\t/**//**/"" ,1\n\r\n]\r\n,[], /* c */{"key"\n:True,""  :  [\t0,  .\t ,false ]\t}]\t/* tail */	ok:[\n[\t/**//**/"" ,1\n\r\n]\r\n,[], /* c */{"key"\n:True,""  :  [\t0,  .\t ,false ]\t}]\t/* tail */
+Skip	[/* open{k:{k   : "\\n\\t",k : 00,"key"  null}\t,k\n : false, "n":{\n"1"\r\n"a\\"b","k"0x1\t,k / x"open}}\r\n, True ,{\t,]\n	ok:[/* open{k:{k   : "\\n\\t",k : 00,"key"  null}\t,k\n : false, "n":{\n"1"\r\n"a\\"b","k"0x1\t,k / x"open}}\r\n, True ,{\t,]\n
+Skip	false	ok:false
+Allow	[,]	ok:[,]
+Skip	+	ok:+
+Allow	 /* a\nb */\nnul	ok: /* a\nb */\nnul
+Disallow	\n[/* c */"a"  \t]	ok:\n[/* c */"a"  \t]
+Disallow	"a"\n	ok:"a"\n
+Allow	\r\n/* open  / x[  []]  	ok:\r\n/* open  / x[  []]  
+Skip	  [{"k":{"n" : // c\n\r\nTrue,"1"  :00,"n" : [true,true ,"true"\r\n,]},// c\n[,]\r\n  ]\t	ok:  [{"k":{"n" : // c\n\r\nTrue,"1"  :0,"n" : [true,true ,"true"\r\n,]},// c\n[,]\r\n  ]\t
+Disallow	true/* tail */	ok:true/* tail */
+Allow	/	ok:/
+Disallow	\t[	ok:\t[
+Allow	{}	ok:{}
+Allow	// c\n\r\n{"1" :1.e5,\n"key" -1}  	ok:// c\n\r\n{"1" :1.0e5,\n"key" -1}  
+Skip	{}	ok:{}
+Skip	\r\n/* c */\n[]	ok:\r\n/* c */\n[]
+Skip	"true"  // tail	ok:"true"  // tail
+Allow	{"key" : {k  ["s",True\r\n,]\r\n,\r\n"n"  null },\t"" :  "nl\nhere"}\n	ok:{"key" : {k  ["s",True\r\n,]\r\n,\r\n"n"  null },\t"" :  "nl\\u000ahere"}\n
+Disallow	false	ok:false
+Skip	"ctl\u0001x"  	ok:"ctl\\u0001x"  
+Allow	[\n	ok:[\n
+Allow	"caf\u00e9"\n	ok:"caf\u00e9"\n
+Disallow	\r\n{\n"key" : / x"s"\n\r\n,"k"[{}, true ]  ,}	ok:\r\n{\n"key" : / x"s"\n\r\n,"k"[{}, true ]  ,}
+Allow	1	ok:1
+Skip	-5.	ok:-5.0
+Disallow	  {""{"key"  007\t,\n"n" : \n"s"},"key" : \t"\\n\\t	ok:  {""{"key"  007\t,\n"n" : \n"s"},"key" : \t"\\n\\t
+Allow	-0.0	ok:-0.0
+Skip	[  "open   ,false,  [[\r\n["\u007f"\r\n, \nfalse, +1, "tab\there" , "caf\u00e9"] , {"1":1e\t}\r\n, \r\n{""1}]\r\n]	ok:[  "open   ,false,  [[\\u000d\\u000a["\u007f"\\u000d\\u000a, \\u000afalse, +1, "tab\there" , "caf\u00e9"] , {"1":1e\\u0009}\\u000d\\u000a, \\u000d\\u000a{""1}]\\u000d\\u000a]
+Skip	007	ok:7
+Disallow	true\r\n	ok:true\r\n
+Allow	"a\\"b"	ok:"a\\"b"
+Allow	-\r\n	ok:-\r\n
+Skip	/* c */{k :["s"\t] ,\tk : -,"k"\n : \r\n[{k\t\tnull,"n"  +  },   {\t""  /* c */\t/* c */  0,"n":true,}}  /* open	ok:/* c */{k :["s"\t] ,\tk : -,"k"\n : \r\n[{k\t\tnull,"n"  +  },   {\t""  /* c */\t/* c */  0,"n":true,}}  /* open
+Allow	1	ok:1
+Disallow	[]\r\n	ok:[]\r\n
+Allow	\r\n0\n	ok:\r\n0\n
+Disallow	  { "k" : /* open// c\n  true\n// tail	ok:  { "k" : /* open// c\n  true\n// tail
+Allow	[]	ok:[]
+Skip	/* open"true"  	ok:/* open"true"  
+Allow	true 	ok:true 
+Disallow	 [\r\n1,]\n	ok: [\r\n1,]\n
+Allow	\n"open 	ok:\n"open 
+Skip	null	ok:null
+Disallow	{"k" : null,}\n	ok:{"k" : null,}\n
+Allow	\tfalse	ok:\tfalse
+Disallow	/* opentrue\n	ok:/* opentrue\n
+Allow	[\r\n{}  , nul,]  	ok:[\r\n{}  , nul,]  
+Disallow	[	ok:[
+Allow	"tab\there"\r\n	ok:"tab\\u0009here"\r\n
+Allow	[[] ,/* a\nb */"caf\u00e9"]\t	ok:[[] ,/* a\nb */"caf\u00e9"]\t
+Disallow	[]\n	ok:[]\n
+Skip	[1.e5  ,[]\t, {k\t:\t[{,} ,{"k"\n /**/"\\u0041"\n,,// c\n\r\n""\n\t]}]	ok:[1.0e5  ,[]\t, {k\t:\t[{,} ,{"k"\n /**/"\\u0041"\n,,// c\n\r\n""\n\t]}]
+Allow	[\t1\t]\t	ok:[\t1\t]\t
+Allow	{  "1"\n/**// x"s"\t,""{,}\r\n	ok:{  "1"\n/**// x"s"\t,""{,}\r\n
+Skip	"caf\u00e9"	ok:"caf\u00e9"
+Skip	nul 	ok:nul 
+Disallow	\t	ok:\t
+Skip	"\u007f"	ok:"\u007f"
+Disallow	 +.5e1/* open	ok: 0.5e1/* open
+Disallow	 "a\\"b"\t	ok: "a\\"b"\t
+Allow	"true"	ok:"true"
+Disallow	[ \t/* tail */	ok:[ \t/* tail */
+Allow	"esc\\	ok:"esc\\
+Allow	[\t]	ok:[\t]
+Skip	 "nl\nhere"	ok: "nl\\u000ahere"
+Allow	["s"  ,/* a\nb */{"1"nul,"1"  : /* a\nb */-0.0  },]	ok:["s"  ,/* a\nb */{"1"nul,"1"  : /* a\nb */-0.0  },]
+Allow	{\r\n"k"/* a\nb */"esc\\, "k":{"" : "tab\there","n" : 1}\n,}	ok:{\r\n"k"/* a\nb */"esc\\, "k":{"" : "tab\there","n" : 1}\\u000a,}
+Disallow	{}\t	ok:{}\t
+Disallow	{"n":"true" ,\t"1"\r\n\n"a\\"b"}\r\n	ok:{"n":"true" ,\t"1"\r\n\n"a\\"b"}\r\n
+Allow	false	ok:false
+Allow	1	ok:1
+Disallow	/* c *// x{}	ok:/* c *// x{}
+Disallow	1e5	ok:1e5
+Disallow	[]	ok:[]
+Disallow	"\\u0041"	ok:"\\u0041"
+Allow	{}\t	ok:{}\t
+Disallow	12	ok:12
+Disallow	 []// tail	ok: []// tail
+Disallow	{}\t// 	ok:{}\t// 
+Allow	"true"// tail	ok:"true"// tail
+Skip	true	ok:true
+Skip	 {"n"/* a\nb */{"k	ok: {"n"/* a\nb */{"k
+Skip	\r\n+	ok:\r\n+
+Disallow	\r\n"ctl\u0001x"	ok:\r\n"ctl\\u0001x"
+Skip	True	ok:True
+Allow	\r\n/ x"\\u0041"/* open	ok:\r\n/ x"\\u0041"/* open
+Allow	{""\t:// c\n["a"],"1" : \t{"1"\n"s"  ,\r\n"k" : \n"s"} ,\r\n"key" : \n"a"}	ok:{""\t:// c\n["a"],"1" : \t{"1"\n"s"  ,\r\n"k" : \n"s"} ,\r\n"key" : \n"a"}
+Skip	  ""	ok:  ""
+Allow	[// c\n  1.0e-5,\r\n0x1 ,{"k":[], k : [{"n"+1,"k":\r\n/ x/* open"true"}\r\n,"true" ,1,\n,\n"n"\t"\u007f"}\n	ok:[// c\n  1.0e-5,\r\n0x1 ,{"k":[], k : [{"n"+1,"k":\r\n/ x/* open"true"}\r\n,"true" ,1,\n,\n"n"\t"\u007f"}\n
+Allow	 "\u007f"\t	ok: "\u007f"\t
+Disallow	[\t"open\n,  [\n{}\n],/* a\nb */"tab\there"]	ok:[\t"open\\u000a,  [\\u000a{}\\u000a],/* a\\u000ab */"tab\there"]
+Allow	  "caf\u00e9"	ok:  "caf\u00e9"
+Skip	\t[]	ok:\t[]
+Skip	\t[]	ok:\t[]
+Disallow	nul	ok:nul
+Allow	// c\n[ {} , --1 ,"nl\nhere"\n]	ok:// c\n[ {} , --1 ,"nl\\u000ahere"\n]
+Allow	123456789012345678901234567890/* open	ok:123456789012345678901234567890/* open
+Skip	"true"	ok:"true"
+Skip	/* open0e0	ok:/* open0e0
+Skip	-0.0\r\n/* open	ok:-0.0\r\n/* open
+Skip	"nl\nhere"//	ok:"nl\\u000ahere"//
+Allow	0.5	ok:0.5
+Skip	 /* open\r\n"\\u0041"	ok: /* open\r\n"\\u0041"
+Allow	"true"	ok:"true"
+Disallow	[]	ok:[]
+Allow	{"" :\t.5,k : 1.0e-5,\r\n"":{  k : /* c */1E+5\r\n,"1":\t"caf\u00e9",}} 	ok:{"" :\t0.5,k : 1.0e-5,\r\n"":{  k : /* c */1E+5\r\n,"1":\t"caf\u00e9",}} 
+Allow	/* c */  / x/* c */0.5\r\n\n	ok:/* c */  / x/* c */0.5\r\n\n
+Skip	"\u007f"	ok:"\u007f"
+Disallow	  .5	ok:  0.5
+Disallow	"open	ok:"open
+Skip	\t[]	ok:\t[]
+Skip	/* c */  -007	ok:/* c */  -7
+Skip	/* c */{	ok:/* c */{
+Skip	false\r\n	ok:false\r\n
+Skip	\r\n{,}	ok:\r\n{,}
+Allow	null	ok:null
+Disallow	"a\\"b"	ok:"a\\"b"
+Skip	--1	ok:--1
+Allow	 {}	ok: {}
+Skip	 [+.5e1,]	ok: [0.5e1,]
+Disallow	null  	ok:null  
+Skip	{}	ok:{}
+Disallow	1\n	ok:1\n
+Disallow	"\u007f"\r\n	ok:"\u007f"\r\n
+Disallow	\r\n{}\r\n	ok:\r\n{}\r\n
+Skip	[/* open-007, null\t]	ok:[/* open-007, null\t]
+Disallow	\t{"1":  {},  "key"\n+,}\r\n	ok:\t{"1":  {},  "key"\n+,}\r\n
+Skip	[]	ok:[]
+Skip	"a\\"b"\t	ok:"a\\"b"\t
+Disallow	\r\n{"" : -,k\r\n{},\t"n"00\n,}	ok:\r\n{"" : -,k\r\n{},\t"n"00\n,}
+Skip	{}	ok:{}
+Disallow	+.5e1	ok:0.5e1
+Allow	{k : /* c */{""\r\n : True  , "1" : "open\n,}\r\n}	ok:{k : /* c */{""\r\n : True  , "1" : "open\\u000a,}\\u000d\\u000a}
+Disallow	// c\n{}	ok:// c\n{}
+Skip	\t// c\n["",True,/* a\nb */\t/ x5.\n  ,]  	ok:\t// c\n["",True,/* a\nb */\t/ x5.\n  ,]  
+Disallow	"true"\r\n	ok:"true"\r\n
+Allow	"true"	ok:"true"
+Allow	true	ok:true
+Disallow	/* a\nb */"true" \n	ok:/* a\nb */"true" \n
+Skip	1  	ok:1  
+Allow	\r\n1/* open	ok:\r\n1/* open
+Allow	"ctl\u0001x"	ok:"ctl\\u0001x"
+Allow	true\t	ok:true\t
+Allow	{"n":[,"k":  1,  k\r\n{  ,}\r\n	ok:{"n":[,"k":  1,  k\r\n{  ,}\r\n
+Skip	"a\\"b"\n	ok:"a\\"b"\n
+Allow	"s"	ok:"s"
+Skip	{"key" \r\n/* a\nb */nul\r\n\r\n,"k"\r\n.\t,"n" \r\n+1,}\r\n	ok:{"key" \r\n/* a\nb */nul\r\n\r\n,"k"\r\n.\t,"n" \r\n+1,}\r\n
+Disallow	007	ok:7
+Skip	nul	ok:nul
+Allow	[/* op	ok:[/* op
+Disallow	[-1  ,1\r\n\t]// tail	ok:[-1  ,1\r\n\t]// tail
+Skip	"\\u0041"	ok:"\\u0041"
+Disallow	\n"\u007f	ok:\n"\u007f
+Allow	/ x/* c */"nl\nhere"\r\n\r\n\r\n	ok:/ x/* c */"nl\\u000ahere"\r\n\r\n\r\n
+Disallow	"a"	ok:"a"
+Skip	\n[]	ok:\n[]
+Allow	\n["caf\u00e9",	ok:\n["caf\u00e9",
+Skip	null 	ok:null 
+Skip	 false	ok: false
+Disallow	\n"\u007f"	ok:\n"\u007f"
+Allow	/* a\nb */007 	ok:/* a\nb */7 
+Disallow	\t"" 	ok:\t"" 
+Disallow	{}	ok:{}
+Skip	1	ok:1
+Disallow	[]	ok:[]
+Disallow	"s"	ok:"s"
+Skip	"\\u0041"	ok:"\\u0041"
+Allow	[ {\t"1" : [[] ,{"k""caf\u00e9"  ,"n" : .5,\t"1":-0.0}],}\t ,{}]	ok:[ {\t"1" : [[] ,{"k""caf\u00e9"  ,"n" : 0.5,\t"1":-0.0}],}\t ,{}]
+Skip	{"1"+1}\t	ok:{"1"+1}\t
+Skip	{"k" :   /* c */{},"1".5,k:"\\n\\t"}	ok:{"k" :   /* c */{},"1".5,k:"\\n\\t"}
+Disallow	// c\n True\n	ok:// c\n True\n
+Allow	\n/* a\nb *//* a\nb *//* c */{"n"\tTrue,}\r\n	ok:\n/* a\nb *//* a\nb *//* c */{"n"\tTrue,}\r\n
+Disallow	True	ok:True
+Skip	"	ok:"
+Disallow	+1	ok:1
+Allow	"true"/* tail */	ok:"true"/* tail */
+Skip	  [,	ok:  [,
+Disallow	1.e	ok:1.0e
+Skip	\t007  	ok:\t7  
+Allow	"\\u0041" 	ok:"\\u0041" 
+Skip	  null	ok:  null
+Allow	{\r\n"n":true,}	ok:{\r\n"n":true,}
+Skip	"true"	ok:"true"
+Allow	[,]	ok:[,]
+Allow	\t{"1":\n	ok:\t{"1":\n
+Disallow	{}	ok:{}
+Skip	[1 ,[["",\n/* open"esc\\\t, 0], [\t1 ,[  / x/**/"\u007f"\r\n, "a\\"b"\n]], True,]	ok:[1 ,[["",\n/* open"esc\\\t, 0], [\t1 ,[  / x/**/"\u007f"\r\n, "a\\"b"\n]], True,]
+Allow	[]	ok:[]
+Disallow	1e5	ok:1e5
+Disallow	// c\n [""  , \n"true"  ]\n	ok:// c\n [""  , \n"true"  ]\n
+Skip	\n{  "k"   : \r\n{\tk :  "s"\t, "key"\n : 1\t,"k" : [  // c\n"true", "a\\"b" ] }}	ok:\n{  "k"   : \r\n{\tk :  "s"\t, "key"\n : 1\t,"k" : [  // c\n"true", "a\\"b" ] }}
+Skip	 {}	ok: {}
+Allow	"ctl\u0001x"	ok:"ctl\\u0001x"
+Allow	"tab\there"\r\n	ok:"tab\\u0009here"\r\n
+Allow	false	ok:false
+Allow	True	ok:True
+Allow	 "true"	ok: "true"
+Allow	\r\n{"key":  True,k:[],\nk false}	ok:\r\n{"key":  True,k:[],\nk false}
+Allow	{}\r\n/	ok:{}\r\n/
+Allow	{"key"\tfalse,""true,k   : {} }\t	ok:{"key"\tfalse,""true,k   : {} }\t
+Disallow	\ttrue	ok:\ttrue
+Skip	\n/* c */\r\n{"n	ok:\n/* c */\r\n{"n
+Allow	"\\n\\t"	ok:"\\n\\t"
+Disallow	/* a\nb */\n1	ok:/* a\nb */\n1
+Allow	\nnul	ok:\nnul
+Allow	.\n	ok:.\n
+Allow	"a\\"b"	ok:"a\\"b"
+Allow	\n123456789012345678901234567890\t	ok:\n123456789012345678901234567890\t
+Skip	{}	ok:{}
+Allow	True/* open	ok:True/* open
+Disallow	"s"	ok:"s"
+Skip	{"k":	ok:{"k":
+Allow	"a"	ok:"a"
+Allow	  []	ok:  []
+Disallow	[\t"ctl\u0001x","s"\r\n\n	ok:[\t"ctl\\u0001x","s"\r\n\n
+Skip	\t1	ok:\t1
+Skip	\r\n/ x{"k"True }	ok:\r\n/ x{"k"True }
+Disallow	false	ok:false
+Disallow	 "true"	ok: "true"
+Disallow	  []	ok:  []
+Disallow	\t[]\t	ok:\t[]\t
+Allow	\r\n["a\\"b"]\n	ok:\r\n["a\\"b"]\n
+Skip	"tab\there"	ok:"tab\\u0009here"
+Skip	[\n	ok:[\n
+Skip	[""]\r\n	ok:[""]\r\n
+Skip	[{k\n/* open{}, "1"1 , "n": ""} ,{"key" : True },false]	ok:[{k\n/* open{}, "1"1 , "n": ""} ,{"key" : True },false]
+Allow	{,	ok:{,
+Allow	 {k:\t{k"s"\t,k:"s" ,"k":{"" : {"n":\r\n"nl\nhere"\n,"key" : /* a\nb */\t// c\n/* openTrue\n\n,\nk  [],}}}	ok: {k:\t{k"s"\t,k:"s" ,"k":{"" : {"n":\r\n"nl\\u000ahere"\n,"key" : /* a\nb */\t// c\n/* openTrue\n\n,\nk  [],}}}
+Skip	true/* open	ok:true/* open
+Skip	007	ok:7
+Allow	"s"\t	ok:"s"\t
+Disallow	// c\n{\t"n""s","key":"s"} 	ok:// c\n{\t"n""s","key":"s"} 
+Skip	{"n":\n/**/// c\n\r\n["\\n\\t" ,"ctl\u0001x"]\t\n}	ok:{"n":\n/**/// c\n\r\n["\\n\\t" ,"ctl\\u0001x"]\t\n}
+Skip	[ +1, []]	ok:[ 1, []]
+Disallow	// c\n"nl\nhere"\n	ok:// c\n"nl\\u000ahere"\n
+Skip	[[], null]	ok:[[], null]
+Skip	{"n"{}\r\n,"1":  "s"  ,}	ok:{"n"{}\r\n,"1":  "s"  ,}
+Disallow	null	ok:null
+Disallow	true	ok:true
+Skip	{}	ok:{}
+Disallow	// c\n-1	ok:// c\n-1
+Disallow	"esc\\\n	ok:"esc\\\n
+Skip	{}	ok:{}
+Skip	0.5	ok:0.5
+Allow	"open	ok:"open
+Allow	{"1"  [0.5]\r\n}	ok:{"1"  [0.5]\r\n}
+Disallow	/**/\n/* a\nb */"s"\n,	ok:/**/\n/* a\nb */"s"\n,
+Disallow	/* a\nb */[1.e5 ,"\\u0041"   ]	ok:/* a\nb */[1.0e5 ,"\\u0041"   ]
+Allow	007	ok:7
+Skip	"\\u0041"	ok:"\\u0041"
+Skip	"true"\n/* open	ok:"true"\n/* open
+Disallow	1	ok:1
+Disallow	True	ok:True
+Allow	+	ok:+
+Allow	\r\n[true  ,{}, {"k" :   {"n":[]\r\n,"":[],k{}}}  ]	ok:\r\n[true  ,{}, {"k" :   {"n":[]\r\n,"":[],k{}}}  ]
+Disallow	5.	ok:5.0
+Disallow	[[\n]  ,[]]	ok:[[\n]  ,[]]
+Skip	{  "":[  --1]\r\n,k:{}  ,"key":[123456789012345678901234567890, /* c */{"n"-.5}\n\t	ok:{  "":[  --1]\r\n,k:{}  ,"key":[123456789012345678901234567890, /* c */{"n"-.5}\n\t
+Disallow	\n"caf\u00e9"	ok:\n"caf\u00e9"
+Skip	null	ok:null
+Allow	[]	ok:[]
+Skip	"tab\there"	ok:"tab\\u0009here"
+Skip	 /* c */[] 	ok: /* c */[] 
+Skip	{"k"\t:// c\n "\u007f"\r\n, "":/* a\nb */"open ,"1"  {}}	ok:{"k"\t:// c\n "\u007f"\r\n, "":/* a\nb */"open ,"1"  {}}
+Skip	.\n	ok:.\n
+Disallow	"ctl\u0001x"	ok:"ctl\\u0001x"
+Allow	  /**/{	ok:  /**/{
+Skip	Tru	ok:Tru
+Allow	{}	ok:{}
+Allow	"s"/* open	ok:"s"/* open
+Allow	[]	ok:[]
+Disallow	  /*	ok:  /*
+Disallow	/**/"s"\t	ok:/**/"s"\t
+Disallow	/* open[\r\nnul, {\n"1":/* a\nb */\t""  \t,"1":-1\t} ,{}  ]	ok:/* open[\r\nnul, {\n"1":/* a\nb */\t""  \t,"1":-1\t} ,{}  ]
+Allow	{"1"-1,"key"{k :  true  ,  k "tab\there" } ,"k"\r\n : 1}  	ok:{"1"-1,"key"{k :  true  ,  k "tab\\u0009here" } ,"k"\r\n : 1}  
+Allow	"a"\t	ok:"a"\t
+Skip	"tab\there"	ok:"tab\\u0009here"
+Allow	{\n	ok:{\n
+Skip	{}	ok:{}
+Skip	  / x-0.0\n	ok:  / x-0.0\n
+Allow	{"k" :   0\t,\n"n":"a","1"\r\n\t--1\n,} 	ok:{"k" :   0\t,\n"n":"a","1"\r\n\t--1\n,} 
+Allow	/**/[\n"true", 0  ,   /**/{   	ok:/**/[\n"true", 0  ,   /**/{   
+Disallow	[+0, / x\nnul,]//	ok:[0, / x\nnul,]//
+Allow	{\t"1" : {"1":\r\n// c\n\t{\n"1"  "open,"" : \tfalse\t,,"k":\n// c\n{"1" : {}  , "1":1.5.5,"n":\n"\\n\\t"  } ,k\r\n  {} }x	ok:{\t"1" : {"1":\r\n// c\n\t{\n"1"  "open,"" : \\u0009false\\u0009,,"k":\\u000a// c\\u000a{"1" : {}  , "1":1.5.5,"n":\\u000a"\\n\\t"  } ,k\\u000d\\u000a  {} }x
+Disallow	/ x{"1" : {"k"  : {"n":\n/ x// c\n\r\n123456789012345678901234567890   ,"1" : true,\r\n"n" // c\n1e}  ,"key"\t:1\r\n,k : // c\n null\n\r\n},k:"true"	ok:/ x{"1" : {"k"  : {"n":\n/ x// c\n\r\n123456789012345678901234567890   ,"1" : true,\r\n"n" // c\n1e}  ,"key"\t:1\r\n,k : // c\n null\n\r\n},k:"true"
+Disallow	\r\n{\t"key":false}//	ok:\r\n{\t"key":false}//
+Allow	  1	ok:  1
+Skip	 {"""a",\t"k":\n{"1" : "ctl\u0001x"}	ok: {"""a",\t"k":\n{"1" : "ctl\\u0001x"}
+Allow	{"key"  :  1,}	ok:{"key"  :  1,}
+Disallow	true	ok:true
+Skip	{"n" :[0e0, \n"open,"true"\n]\n,"1":\r\n{\t"k""a\\"b",\t"key"1 },\r\n"k"[/* open/ x+,\t[]\r\n] } 	ok:{"n" :[0e0, \n"open,"true"\\u000a]\\u000a,"1":\\u000d\\u000a{\\u0009"k""a\\"b",\t"key"1 },\r\n"k"[/* open/ x+,\t[]\r\n] } 
+Skip	/* a\nb */\nTrue	ok:/* a\nb */\nTrue
+Allow	\r\n[]	ok:\r\n[]
+Disallow	{}	ok:{}
+Allow	  [{"k"+0 ,"n" "esc\\,},"true","\\u0041"\r\n]// tail	ok:  [{"k"+0 ,"n" "esc\\,},"true","\\u0041"\\u000d\\u000a]// tail
+Skip	[\r\n]/* open	ok:[\r\n]/* open
+Skip	\tTrue	ok:\tTrue
+Allow	[{}\t	ok:[{}\t
+Disallow	\nnull  	ok:\nnull  
+Disallow	{} 	ok:{} 
+Allow	nul  	ok:nul  
+Allow	f	ok:f
+Skip	[{k/**//* c */  "a\\"b","" :   "a\\"b","1"\r\n/* c */{"key":/* c *//* a\nb */  .5\t,}}]	ok:[{k/**//* c */  "a\\"b","" :   "a\\"b","1"\r\n/* c */{"key":/* c *//* a\nb */  0.5\t,}}]
+Allow	null	ok:null
+Disallow	/* a\nb */ ["",  [/**/"\\n\\t"\n  , "caf\u00e9"\n], /* a\nb */"\\n\\t"]	ok:/* a\nb */ ["",  [/**/"\\n\\t"\n  , "caf\u00e9"\n], /* a\nb */"\\n\\t"]
+Allow	[\r\n+.5e1\r\n]\t	ok:[\r\n0.5e1\r\n]\t
+Allow	/* open 1e\n	ok:/* open 1e\n
+Disallow	\r\n[]\r\n	ok:\r\n[]\r\n
+Disallow	 /**/{}\r\n	ok: /**/{}\r\n
+Skip	  1E+5	ok:  1E+5
+Skip	[/* a\nb */\n{k[  /* open0x1,  /* open+0\n]  ,k : /**/"ctl\u0001x",""true},{k\r\n : "ctl\u0001x"}]	ok:[/* a\nb */\n{k[  /* open0x1,  /* open+0\n]  ,k : /**/"ctl\\u0001x",""true},{k\r\n : "ctl\\u0001x"}]
+Allow	\n"s"\n	ok:\n"s"\n
+Allow	"s"	ok:"s"
+Skip	\r\n"s"\n	ok:\r\n"s"\n
+Skip	-1	ok:-1
+Disallow	\n/* a\nb */--1	ok:\n/* a\nb */--1
+Skip	f	ok:f
+Allow	\t[\r\n{,}\n ,// c\n1\r\n,  [[ ],1,"nl\nhere"]]	ok:\t[\r\n{,}\n ,// c\n1\r\n,  [[ ],1,"nl\\u000ahere"]]
+Allow	.5	ok:0.5
+Disallow	0e0	ok:0e0
+Skip	[{} ,/ x"s"\r\n, 1\n,]	ok:[{} ,/ x"s"\r\n, 1\n,]
+Skip	"a\\"b" 	ok:"a\\"b" 
+Disallow	\ttrue //	ok:\ttrue //
+Skip	["\u007f",[]\t,\n]	ok:["\u007f",[]\t,\n]
+Disallow	{k[True, [/**/"\\n\\t"  ]  ],  "n"   / x  nul\r\n,""\r\n1\r\n,}	ok:{k[True, [/**/"\\n\\t"  ]  ],  "n"   / x  nul\r\n,""\r\n1\r\n,}
+Allow	{"" : \tnul,"key"  : /* a\nb */ True}	ok:{"" : \tnul,"key"  : /* a\nb */ True}
+Allow	""	ok:""
+Allow	/ x1\n	ok:/ x1\n
+Skip	[ ]	ok:[ ]
+Disallow	 1e/* open	ok: 1e/* open
+Skip	 {k: +.5e1}\n	ok: {k: 0.5e1}\n
+Disallow	 []	ok: []
+Skip	"s"	ok:"s"
+Skip	"nl\nhere"	ok:"nl\\u000ahere"
+Disallow	  false	ok:  false
+Skip	["esc\\\r\n,{"1" : false\t,"1" : /* a\nb */"s",\r\n"1"\n : True} ]	ok:["esc\\\r\\u000a,{"1" : false\\u0009,"1" : /* a\\u000ab */"s",\\u000d\\u000a"1"\\u000a : True} ]
+Allow	 /**/// c\n{}\n	ok: /**/// c\n{}\n
+Disallow	 []	ok: []
+Allow	\r\n{}	ok:\r\n{}
+Allow	 "s"\t	ok: "s"\t
+Allow	\r\n{"":true,\n"1":+,  k[[]\r\n]\r\n}	ok:\r\n{"":true,\n"1":+,  k[[]\r\n]\r\n}
+Allow	-.5	ok:-0.5
+Disallow	5.	ok:5.0
+Skip	null	ok:null
+Disallow	\t"esc\\	ok:\t"esc\\
+Allow	[]	ok:[]
+Allow	"tab\there"\n	ok:"tab\\u0009here"\n
+Skip	/* c */\n{}	ok:/* c */\n{}
+Skip	[/**/123456789012345678901234567890  ,\r\nnull]	ok:[/**/123456789012345678901234567890  ,\r\nnull]
+Allow	  "\u007f"	ok:  "\u007f"
+Allow	00	ok:0
+Allow	  1	ok:  1
+Skip	nul,	ok:nul,
+Skip	 // c\n"caf\u00e9" 	ok: // c\n"caf\u00e9" 
+Disallow	{}\t	ok:{}\t
+Skip	  null //	ok:  null //
+Disallow	"\u007f"	ok:"\u007f"
+Disallow	/* a\nb */--1	ok:/* a\nb */--1
+Disallow	\t[\n"a\\"b"\t  ]	ok:\t[\n"a\\"b"\t  ]
+Disallow	{\n""  true,  "1"[[\r\n[],] ,\r\n{"1"\t:{ ,k : true,k\r\n : nul\r\n} ,{""\n{"k"0},"n"  :\nnul,"":"true"}]\n,}	ok:{\n""  true,  "1"[[\r\n[],] ,\r\n{"1"\t:{ ,k : true,k\r\n : nul\r\n} ,{""\n{"k"0},"n"  :\nnul,"":"true"}]\n,}
+Allow	\n1\t	ok:\n1\t
+Disallow	1  	ok:1  
+Skip	/* c */"a"\r\n	ok:/* c */"a"\r\n
+Allow	\n[]\n,	ok:\n[]\n,
+Disallow	\r\n007	ok:\r\n7
+Skip	null	ok:null
+Disallow	5.	ok:5.0
+Disallow	.\n	ok:.\n
+Disallow	\r\n-1/* tail */	ok:\r\n-1/* tail */
+Disallow	"esc\\\r\n	ok:"esc\\\r\\u000a
+Allow	// c\n[True\r\n,]	ok:// c\n[True\r\n,]
+Allow	True\r\n	ok:True\r\n
+Allow	\n/* c */-007	ok:\n/* c */-7
+Allow	\n"esc\\	ok:\n"esc\\
+Disallow	"nl\nhere"	ok:"nl\\u000ahere"
+Disallow	0// tail	ok:0// tail
+Allow	""	ok:""
+Allow	  [] 	ok:  [] 
+Disallow	  1	ok:  1
+Disallow	{}	ok:{}
+Skip	"true"	ok:"true"
+Disallow	[  {"n": [],\tk["a\\"b"\r\n ,{""  :null,"key":// c\n/* c */"ctl\u0001x"  ,"n" : ""\r\n\t]\n,"k":""\r\n,} ,\r\n/* open[true]  ,[]]\t	ok:[  {"n": [],\tk["a\\"b"\r\n ,{""  :null,"key":// c\n/* c */"ctl\\u0001x"  ,"n" : ""\r\n\t]\n,"k":""\r\n,} ,\r\n/* open[true]  ,[]]\t
+Allow	+0\n	ok:0\n
+Skip	"a"	ok:"a"
+Allow	null	ok:null
+Disallow	/* opentrue,	ok:/* opentrue,
+Disallow	[]	ok:[]
+Allow	[]	ok:[]
+Disallow	  /* c */"s"	ok:  /* c */"s"
+Skip	{}	ok:{}
+Allow	+ 	ok:+ 
+Allow	-	ok:-
+Skip	  {""\t"\\n\\t",  "1":[]}	ok:  {""\t"\\n\\t",  "1":[]}
+Disallow	\r\n1  	ok:\r\n1  
+Skip	/* c */"\\n\\t"	ok:/* c */"\\n\\t"
+Skip	null	ok:null
+Allow	{"1" : \t"s","1":{}}//	ok:{"1" : \t"s","1":{}}//
+Skip	{	ok:{
+Skip	{"key"\n : /* a\nb */["tab\there",123456789012345678901234567890,{"k" : \r\n"\\n\\t","k"nul, ],"n":  [[false,  "",]],"key"+.5e1}\t/* open	ok:{"key"\n : /* a\nb */["tab\\u0009here",123456789012345678901234567890,{"k" : \r\n"\\n\\t","k"nul, ],"n":  [[false,  "",]],"key"+.5e1}\t/* open
+Skip	["caf\u00e9",	ok:["caf\u00e9",
+Allow	{"n":1,}\t/* tail *	ok:{"n":1,}\t/* tail *
+Allow	\t[{k:/ xfalse\t\n}  ,  []  \n]	ok:\t[{k:/ xfalse\t\n}  ,  []  \n]
+Allow	""	ok:""
+Disallow	/* open-5.	ok:/* open-5.
+Allow	"\\u0041"	ok:"\\u0041"
+Disallow	"ctl\u0001x"\r\n	ok:"ctl\\u0001x"\r\n
+Disallow	\r	ok:\r
+Skip	"true"	ok:"true"
+Allow	\r\n"caf\u00e9"	ok:\r\n"caf\u00e9"
+Disallow	/ x\t+	ok:/ x\t+
+Disallow	  /* a\nb */  ["a\\"b	ok:  /* a\nb */  ["a\\"b
+Disallow	/* c */ /* open"\\u0041"	ok:/* c */ /* open"\\u0041"
+Allow	/* a\nb */"ctl\u0001x" 	ok:/* a\nb */"ctl\\u0001x" 
+Skip	  [{}]\r\n	ok:  [{}]\r\n
+Disallow	-5.\n	ok:-5.0\n
+Disallow	\r\n+ 	ok:\r\n+ 
+Skip	"op	ok:"op
+Skip	nul/* tail */	ok:nul/* tail */
+Allow	"a"	ok:"a"
+Allow	  {}	ok:  {}
+Disallow	 {k[]\r\n,"1"  :/* c */{"1":-, ""[],"key" : -5.\t  	ok: {k[]\r\n,"1"  :/* c */{"1":-, ""[],"key" : -5.0\t  
+Skip	\t/* a\nb */\t{	ok:\t/* a\nb */\t{
+Disallow	[]	ok:[]
+Disallow	\r\n"a\\"b"	ok:\r\n"a\\"b"
+Skip	1	ok:1
+Allow	""	ok:""
+Disallow	\n/ x  "nl\nhere"  \n 	ok:\n/ x  "nl\\u000ahere"  \n 
+Allow	"open 	ok:"open 
+Allow	/* a\nb */  [\r\nfalse]	ok:/* a\nb */  [\r\nfalse]
+Skip	5. 	ok:5.0 
+Skip	/* open\n/* c */"a\\"b"\r\n	ok:/* open\n/* c */"a\\"b"\r\n
+Skip	\t"esc\\	ok:\t"esc\\
+Skip	/ xtrue  	ok:/ xtrue  
+Skip	\n5.	ok:\n5.0
+Allow	"caf\u00e9"	ok:"caf\u00e9"
+Disallow	\t// c\n[ ]	ok:\t// c\n[ ]
+Disallow	  {"k"[{},[]  ] ,"key""a"  }\n	ok:  {"k"[{},[]  ] ,"key""a"  }\n
+Disallow	{"key":[],\r\n"key":"nl\nhere"}	ok:{"key":[],\r\n"key":"nl\\u000ahere"}
+Disallow	1E+5	ok:1E+5
+Allow	[]	ok:[]
+Allow	\tnull	ok:\tnull
+Skip	{"1" : "tab\there"}	ok:{"1" : "tab\\u0009here"}
+Allow	1\t	ok:1\t
+Allow	True	ok:True
+Allow	"s"  	ok:"s"  
+Allow	false	ok:false
+Skip	/* a\nb */[{}  ,\r\n"\\n\\t"]	ok:/* a\nb */[{}  ,\r\n"\\n\\t"]
+Allow	[[,\n]\n ,{} ,1E+5\t]\t	ok:[[,\n]\n ,{} ,1E+5\t]\t
+Disallow	[]	ok:[]
+Skip	"a\\"b"	ok:"a\\"b"
+Disallow	1	ok:1
+Skip	\t"s"	ok:\t"s"
+Disallow	[\n{},/* open{""   : / x"a\\"b"\r\n,"key" : [],} ,false]	ok:[\n{},/* open{""   : / x"a\\"b"\r\n,"key" : [],} ,false]
+Allow	/* c */nul	ok:/* c */nul
+Disallow	[null ,\t{k :"true" ,"":1.5.5}]\n	ok:[null ,\t{k :"true" ,"":1.5.5}]\n
+Allow	{,}  	ok:{,}  
+Allow	"s"	ok:"s"
+Skip	 [	ok: [
+Skip	1	ok:1
+Disallow	"ctl\u0001x"  	ok:"ctl\\u0001x"  
+Skip	[1\t\n]  	ok:[1\t\n]  
+Disallow	nu	ok:nu
+Allow	/* open123456789012345678901234567890	ok:/* open123456789012345678901234567890
+Disallow	\r\n/* open\n1	ok:\r\n/* open\n1
+Allow	\n[+.5e1   ,  {} ,/* c */{}   ] 	ok:\n[0.5e1   ,  {} ,/* c */{}   ] 
+Disallow	\r\n"open/* tail */	ok:\r\n"open/* tail */
+Disallow	 "\\n\\t"	ok: "\\n\\t"
+Skip	[/* c */  0e0 ,{\nk  {,,"key" : "true" ,	ok:[/* c */  0e0 ,{\nk  {,,"key" : "true" ,
+Disallow	\t{\r\n"1": [],"k":[,]\r\n}	ok:\t{\r\n"1": [],"k":[,]\r\n}
+Skip	  {}  x	ok:  {}  x
+Allow	{"1"   : 1}	ok:{"1"   : 1}
+Skip	"tru	ok:"tru
+Disallow	{\r\n"n":{k\t/* c *//* a\nb */false\r	ok:{\r\n"n":{k\t/* c *//* a\nb */false\r
+Skip	[[,],nul, "s" ,]	ok:[[,],nul, "s" ,]
+Skip	nul	ok:nul
+Skip	  ""	ok:  ""
+Skip	 {"n"123456789012345678901234567890\r\n,"1"{}\r\n}	ok: {"n"123456789012345678901234567890\r\n,"1"{}\r\n}
+Disallow	"a\\"b"	ok:"a\\"b"
+Disallow	true	ok:true
+Allow	/* a\nb */{  "1" : \nnull} 	ok:/* a\nb */{  "1" : \nnull} 
+Skip	[]	ok:[]
+Disallow	\n[[  /**/ 123456789012345678901234567890,{}  ],1  , []\t]	ok:\n[[  /**/ 123456789012345678901234567890,{}  ],1  , []\t]
+Disallow	1.	ok:1.0
+Skip	.5	ok:0.5
+Skip	\t{}	ok:\t{}
+Skip	[/* c *// x\n/**/ 1\t, \r\n[\n],[\t+  ,null]]\n	ok:[/* c *// x\n/**/ 1\t, \r\n[\n],[\t+  ,null]]\n
+Skip	{""\n:[ 1 ,\t{} ,/* open/* open true\n\r\n],ktrue}	ok:{""\n:[ 1 ,\t{} ,/* open/* open true\n\r\n],ktrue}
+Disallow	{}\n	ok:{}\n
+Disallow	[true\n ]	ok:[true\n ]
+Disallow	/**/-007	ok:/**/-007
+Allow	{}\t	ok:{}\t
+Allow	 /* a\nb */"ctl\u0001x"	ok: /* a\nb */"ctl\\u0001x"
+Allow	\t"\\n\\t"	ok:\t"\\n\\t"
+Skip	["true"\r\n, True]	ok:["true"\r\n, True]
+Disallow	1\n	ok:1\n
+Skip	f	ok:f
+Allow	0.5\n	ok:0.5\n
+Disallow	nul\n	ok:nul\n
+Skip	"open	ok:"open
+Allow	 /* open{k\n : \n1,"1" :   "s"}	ok: /* open{k\n : \n1,"1" :   "s"}
+Skip	[{}\t, // c\n  [-0.0 ] x	ok:[{}\t, // c\n  [-0.0 ] x
+Skip	null	ok:null
+Allow	\r\nnull	ok:\r\nnull
+Skip	/ x--1\n 	ok:/ x--1\n 
+Allow	\n{"1" : \r\n[],  k"a\\"b","key"\t  // c\n[\n"\u007f",\t[]\n\n]\r\n}	ok:\n{"1" : \r\n[],  k"a\\"b","key"\t  // c\n[\n"\u007f",\t[]\n\n]\r\n}
+Allow	/* c */true 	ok:/* c */true 
+Allow	"\\n\\t"	ok:"\\n\\t"
+Skip	1	ok:1
+Skip	  /**/"\\u0041"	ok:  /**/"\\u0041"
+Disallow	 "tab\there"	ok: "tab\\u0009here"
+Disallow	{"key"/* open 0.5\r\n\n}\r\n	ok:{"key"/* open 0.5\r\n\n}\r\n
+Allow	  "a"	ok:  "a"
+Disallow	"true"	ok:"true"
+Skip	{k  [[0x1,"\\n\\t",[/ x"\\n\\t" ,\tTrue\t],]} 	ok:{k  [[0x1,"\\n\\t",[/ x"\\n\\t" ,\tTrue\t],]} 
+Disallow	\n[false ,1 ,[\ttrue,1\n, \r\n1\r\n]	ok:\n[false ,1 ,[\ttrue,1\n, \r\n1\r\n]
+Allow	True	ok:True
+Skip	  null	ok:  null
+Skip	-	ok:-
+Disallow	true\t	ok:true\t
+Disallow	/* open"nl\nhere" 	ok:/* open"nl\\u000ahere" 
+Skip	{} 	ok:{} 
+Disallow	  1	ok:  1
+Disallow	-5.//	ok:-5.0//
+Allow	 [+1 ,+.5e1,\r\n[,]]// tail	ok: [1 ,0.5e1,\r\n[,]]// tail
+Disallow	\ttrue	ok:\ttrue
+Disallow	[null] 	ok:[null] 
+Allow	"nl\nhere"	ok:"nl\\u000ahere"
+Allow	"a\\"b"	ok:"a\\"b"
+Allow	\n"	ok:\n"
+Allow	1	ok:1
+Allow	\nfalse 	ok:\nfalse 
+Skip	  {\r\n"key" : /* a\nb */  -0.0	ok:  {\r\n"key" : /* a\nb */  -0.0
+Disallow	"\\u0041"  	ok:"\\u0041"  
+Disallow	\t/* a\nb */[]\n	ok:\t/* a\nb */[]\n
+Skip	-.5	ok:-0.5
+Skip	\r\n/ x  5.	ok:\r\n/ x  5.
+Disallow	{"k" : [/* open-007,false,],\n"1"/**/"s"\t,"1"  :/* open\t{"n"null\t,  "" : // c\n/**/"a"}\n\n}	ok:{"k" : [/* open-007,false,],\n"1"/**/"s"\t,"1"  :/* open\t{"n"null\t,  "" : // c\n/**/"a"}\n\n}
+Skip	"tab\there"	ok:"tab\\u0009here"
+Allow	007	ok:7
+Disallow	[]	ok:[]
+Skip	"ctl\u0001x"	ok:"ctl\\u0001x"
+Disallow	"true"	ok:"true"
+Disallow	\n	ok:\n
+Skip	 "ctl\u0001x"\r\n	ok: "ctl\\u0001x"\r\n
+Disallow	\r\n/* a\nb */"a" \n	ok:\r\n/* a\nb */"a" \n
+Disallow	007  //	ok:7  //
+Allow	/ x{}	ok:/ x{}
+Disallow	 "s"	ok: "s"
+Allow	  {}\t	ok:  {}\t
+Disallow	{}	ok:{}
+Disallow	\r\n"a\\"b"	ok:\r\n"a\\"b"
+Allow	""	ok:""
+Disallow	1e	ok:1e
+Skip	  ""	ok:  ""
+Disallow	false	ok:false
+Skip	"tab\there"	ok:"tab\\u0009here"
+Allow	1\n	ok:1\n
+Allow	{"	ok:{"
+Disallow	{} ,	ok:{} ,
+Disallow	"ctl\u0001x"	ok:"ctl\\u0001x"
+Disallow	\n/**/\r\n"\\n\\t"//	ok:\n/**/\r\n"\\n\\t"//
+Allow	/* open{k/ x[],"n":true}	ok:/* open{k/ x[],"n":true}
+Skip	-0.0 	ok:-0.0 
+Disallow	nul	ok:nul
+Skip	\r\n1\t	ok:\r\n1\t
+Disallow	tru	ok:tru
+Disallow	[,]	ok:[,]
+Skip	[\n/ x"\\u0041"]	ok:[\n/ x"\\u0041"]
+Disallow	\n{"n" :"caf\u00e9","" : {}}	ok:\n{"n" :"caf\u00e9","" : {}}
+Allow	{"1":1e5,"n":nul,"n"\t:[]  ,}// tail	ok:{"1":1e5,"n":nul,"n"\t:[]  ,}// tail
+Skip	  "a\\"b"\t	ok:  "a\\"b"\t
+Skip	/* opennul  	ok:/* opennul  
+Allow	\r\n["\\n\\t"  , [ {},"esc\\\t ,["caf\u00e9", 00 ]\r\n]	ok:\r\n["\\n\\t"  , [ {},"esc\\\t ,["caf\u00e9", 00 ]\\u000d\\u000a]
+Disallow	\n/ x[\r\n{"key" : -.5},{,}\r\n]\n	ok:\n/ x[\r\n{"key" : -0.5},{,}\r\n]\n
+Disallow	0e0 	ok:0e0 
+Disallow	nul  	ok:nul  
+Allow	  [\r\n{} ]\r\n	ok:  [\r\n{} ]\r\n
+Skip	// c\n"true"    	ok:// c\n"true"    
+Allow	0x1	ok:0x1
+Allow	"s" 	ok:"s" 
+Skip	"true"	ok:"true"
+Allow	 -5.x	ok: -5.0x
+Disallow	-007	ok:-7
+Skip	nul  	ok:nul  
+Disallow	\t"true"	ok:\t"true"
+Allow	\n"esc\\	ok:\n"esc\\
+Allow	"" 	ok:"" 
+Skip	"s"	ok:"s"
+Disallow	\r\n[1.0e-5\r\n]	ok:\r\n[1.0e-5\r\n]
+Allow	\r\n"open  	ok:\r\n"open  
+Disallow	{}	ok:{}
+Allow	"s"	ok:"s"
+Allow	\r\n[nul]	ok:\r\n[nul]
+Skip	{"n":["esc\\,  "true"\t, / x/* a\nb */+  \r\n,],"k" : {"1"\r\n:{}},""\r\n:\r\n1,}	ok:{"n":["esc\\,  "true"\\u0009, / x/* a\\u000ab */+  \\u000d\\u000a,],"k" : {"1"\\u000d\\u000a:{}},""\\u000d\\u000a:\\u000d\\u000a1,}
+Allow	{"key":\n{"n"\n : \n""},\nk\n : /* a\nb */\t.,"n":"a\\"b"  ,}	ok:{"key":\n{"n"\n : \n""},\nk\n : /* a\nb */\t.,"n":"a\\"b"  ,}
+Skip	["\\n\\t",true\t	ok:["\\n\\t",true\t
+Allow	\t/* c */[ 00, "true" ,0.5]	ok:\t/* c */[ 0, "true" ,0.5]
+Skip	/* c */[  [],[], /* c *//* c */"open,]	ok:/* c */[  [],[], /* c *//* c */"open,]
+Allow	True  	ok:True  
+Skip	\n{} 	ok:\n{} 
+Allow	null/* 	ok:null/* 
+Disallow	true	ok:true
+Disallow	  "s"	ok:  "s"
+Allow	\r\n"esc\\\r\n	ok:\r\n"esc\\\r\\u000a
+Skip	.	ok:.
+Allow	0e0	ok:0e0
+Allow	  true  	ok:  true  
+Disallow	"ctl\u0001x"	ok:"ctl\\u0001x"
+Allow	/* a\nb */"open\n	ok:/* a\nb */"open\\u000a
+Disallow	007	ok:7
+Allow	.5\r\n	ok:0.5\r\n
+Skip	0e0	ok:0e0
+Disallow	 "a\\"b"	ok: "a\\"b"
+Skip	/* c */.\t	ok:/* c */.\t
+Allow	{  "1" : /**/{"key":\tnull,  "key":/ x	ok:{  "1" : /**/{"key":\tnull,  "key":/ x
+Skip	/* a\nb */1.5.5	ok:/* a\nb */1.5.5
+Skip	[{"n":{,},k0x1}]	ok:[{"n":{,},k0x1}]
+Skip	"open	ok:"open
+Skip	/* openTrue	ok:/* openTrue
+Skip	/* open\ttrue	ok:/* open\ttrue
+Disallow	+0\n	ok:0\n
+Allow	\n007	ok:\n7
+Allow	[[[["\\n\\t" ,"true"],  1e5  ],\n{},] ,\t{"k" :  "\\n\\t"\n,"n":{k:/* openTrue,\r\n"n":"esc\\  }\n,}\r\n	ok:[[[["\\n\\t" ,"true"],  1e5  ],\n{},] ,\t{"k" :  "\\n\\t"\n,"n":{k:/* openTrue,\r\n"n":"esc\\  }\n,}\r\n
+Disallow	\r\n["s", 1e\n, /**/{""\n0x1\r\n,\r\n"n"  : {"n":/* open"\u007f"  }}]	ok:\r\n["s", 1e\n, /**/{""\n0x1\r\n,\r\n"n"  : {"n":/* open"\u007f"  }}]
+Disallow	/**/\r\n/* a\nb */\n/* c *//* a\nb */0e0\r\n  	ok:/**/\r\n/* a\nb */\n/* c *//* a\nb */0e0\r\n  
+Disallow	1	ok:1
+Disallow	true	ok:true
+Disallow	1x	ok:1x
+Allow	/* a\nb */["open,"\\u0041"]//	ok:/* a\nb */["open,"\\u0041"]//
+Skip	[nul,true  ,"tab\there"	ok:[nul,true  ,"tab\\u0009here"
+Disallow	/**/\t1.e5	ok:/**/\t1.e5
+Skip	-,	ok:-,
+Allow	1e	ok:1e
+Allow	[/* a\nb */+\n]	ok:[/* a\nb */+\n]
+Disallow	-1	ok:-1
+Disallow	true 	ok:true 
+Disallow	\t/* c */""	ok:\t/* c */""
+Skip	[ /* a\nb */\nnull ,false,]	ok:[ /* a\nb */\nnull ,false,]
+Allow	00	ok:0
+Allow	true	ok:true
+Allow	{\t"1" :   "s"\t}\n	ok:{\t"1" :   "s"\t}\n
+Skip	"\u007f" 	ok:"\u007f" 
+Allow	{  "" {"n":\t// c\n  [0 ,"\\n\\t", \r\nnul]},"key" : ""}	ok:{  "" {"n":\t// c\n  [0 ,"\\n\\t", \r\nnul]},"key" : ""}
+Disallow	/* a\nb */"ctl\u0001x"\r\n	ok:/* a\nb */"ctl\\u0001x"\r\n
+Disallow	[{"n"\n "s","key"\t[],\tk:{\r\n"key" : \t"true","1":007,k\r\n"a"\n}}  ]// tail	ok:[{"n"\n "s","key"\t[],\tk:{\r\n"key" : \t"true","1":7,k\r\n"a"\n}}  ]// tail
+Disallow	-	ok:-
+Allow	--1	ok:--1
+Skip	[1  ]	ok:[1  ]
+Allow	0e0  	ok:0e0  
+Disallow	\r\n"esc\\	ok:\r\n"esc\\
+Allow	0	ok:0
+Skip	false	ok:false
+Disallow	"\\u0041"	ok:"\\u0041"
+Disallow	{}	ok:{}
+Skip	\t/**/\r\n[nul\r\n ,{k /* c *//**/  0e0  \t ,  k:\r\n"\\n\\t"},false ]	ok:\t/**/\r\n[nul\r\n ,{k /* c *//**/  0e0  \t ,  k:\r\n"\\n\\t"},false ]
+Skip	\n/ x\t{"n":[\r\n{}],\r\n"k"\r\n : [true\t, true\r\n, \r\n{"key" \t/**/false }\t]} 	ok:\n/ x\t{"n":[\r\n{}],\r\n"k"\r\n : [true\t, true\r\n, \r\n{"key" \t/**/false }\t]} 
+Allow	\n.  	ok:\n.  
+Disallow	1\r\n	ok:1\r\n
+Allow	  {k:"a"  ,"" : false,"key"[],}	ok:  {k:"a"  ,"" : false,"key"[],}
+Skip	  // c\n[+,\r\n]	ok:  // c\n[+,\r\n]
+Allow	{k : 123456789012345678901234567890,"1" : {}\t,"key"\r\n\t"s",} 	ok:{k : 123456789012345678901234567890,"1" : {}\t,"key"\r\n\t"s",} 
+Disallow	/* open0x1// tail	ok:/* open0x1// tail
+Allow	1	ok:1
+Skip	  [/**//* c */1, 1e5]	ok:  [/**//* c */1, 1e5]
+Allow	1	ok:1
+Disallow	True	ok:True
+Skip	/ x-007	ok:/ x-007
+Disallow	1E+5  	ok:1E+5  
+Disallow	  {"1"\n : \r\n123456789012345678901234567890\t,"k":null\r\n,}	ok:  {"1"\n : \r\n123456789012345678901234567890\t,"k":null\r\n,}
+Disallow	{}	ok:{}
+Disallow	null\n	ok:null\n
+Disallow	\r\n"caf\u00e9"	ok:\r\n"caf\u00e9"
+Skip	[]	ok:[]
+Disallow	[\t/* c */\r\n{"":\t/* c */  "ctl\u0001x"\t,"n":/* c */"a" \t,"" : \n// c\n0x1}	ok:[\t/* c */\r\n{"":\t/* c */  "ctl\\u0001x"\t,"n":/* c */"a" \t,"" : \n// c\n0x1}
+Skip	 -007	ok: -7
+Allow	1 	ok:1 
+Disallow	[]	ok:[]
+Disallow	1	ok:1
+Allow	{}\n	ok:{}\n
+Disallow	 ""	ok: ""
+Skip	"true	ok:"true
+Skip	 "a"	ok: "a"
+Skip	 nu	ok: nu
+Allow	/**/\n"open	ok:/**/\n"open
+Allow	/* open[]\r\n	ok:/* open[]\r\n
+Skip	"true"	ok:"true"
+Disallow	\n{"n	ok:\n{"n
+Allow	{k  : /**/1,"n"1.0e-5\n}\r\n	ok:{k  : /**/1,"n"1.0e-5\n}\r\n
+Skip	{}/* open	ok:{}/* open
+Allow	{}x	ok:{}x
+Allow	["\\u0041"]x	ok:["\\u0041"]x
+Skip	True	ok:True
+Skip	[  "",] 	ok:[  "",] 
+Allow	{}	ok:{}
+Skip	{"1":\r\n/* c */"open  ,k  "\u007f"}	ok:{"1":\r\n/* c */"open  ,k  "\u007f"}
+Disallow	[{} \t],	ok:[{} \t],
+Skip	 [  {} ,{k : \t"\\n\\t",}]\n	ok: [  {} ,{k : \t"\\n\\t",}]\n
+Allow	-007	ok:-7
+Allow	/* a\nb */[]\n	ok:/* a\nb */[]\n
+Allow	"true"	ok:"true"
+Skip	{"n"/* open{}\n}	ok:{"n"/* open{}\n}
+Disallow	 [// c\n"\\n\\t" ,\n{ "key"\r\n:{  "key" : {},k : .}\r\n,k:[/* a\nb */\r\n/* c */false\r\n],k : /* open [ /**/\r\n0x1 ,/* open"\\n\\t"\r\n]\t}\r\n]	ok: [// c\n"\\n\\t" ,\n{ "key"\r\n:{  "key" : {},k : .}\r\n,k:[/* a\nb */\r\n/* c */false\r\n],k : /* open [ /**/\r\n0x1 ,/* open"\\n\\t"\r\n]\t}\r\n]
+Allow	 True	ok: True
+Disallow	  null	ok:  null
+Disallow	\r\n"\\u0041"\n	ok:\r\n"\\u0041"\n
+Disallow	/**/"true"	ok:/**/"true"
+Skip	/**/\tTrue	ok:/**/\tTrue
+Skip	/ x-1	ok:/ x-1
+Disallow	\n{"" :  {},"":\n"esc\\,"1"  "\\n\\t"\r\n}	ok:\n{"" :  {},"":\n"esc\\,"1"  "\\n\\t"\\u000d\\u000a}
+Skip	\n{}	ok:\n{}
+Skip	/* open/**/"true"  \t	ok:/* open/**/"true"  \t
+Allow	[/**/	ok:[/**/
+Skip	[]	ok:[]
+Disallow	[[\n007, {}\n,], "true"\t, --1]	ok:[[\n7, {}\n,], "true"\t, --1]
+Disallow	\n/* a\nb */0.5	ok:\n/* a\nb */0.5
+Skip	\r\n/**/{k\t: false,"":/**/123456789012345678901234567890,}	ok:\r\n/**/{k\t: false,"":/**/123456789012345678901234567890,}
+Disallow	+\n	ok:+\n
+Skip	\r\nnull	ok:\r\nnull
+Allow	[\t{\t"k"\t"s"\n ,/**//* c */1,]	ok:[\t{\t"k"\t"s"\n ,/**//* c */1,]
+Skip	true  	ok:true  
+Disallow	"\\u0041"// tail	ok:"\\u0041"// tail
+Disallow	\t[True ,"true" , 1.e5\r\n,\t	ok:\t[True ,"true" , 1.0e5\r\n,\t
+Disallow	{} 	ok:{} 
+Allow	+1	ok:1
+Allow	\t{\n"k":[True,   "s"\n]}\n	ok:\t{\n"k":[True,   "s"\n]}\n
+Allow	/* opennull	ok:/* opennull
+Disallow	/* c */{}	ok:/* c */{}
+Allow	\tnul	ok:\tnul
+Allow	[/ x0 ,/**/"\u007f"]	ok:[/ x0 ,/**/"\u007f"]
+Allow	\t/* a\nb */"\\u0041"	ok:\t/* a\nb */"\\u0041"
+Disallow	 {"n" : /* open/* c *// x --1 \t} 	ok: {"n" : /* open/* c *// x --1 \t} 
+Allow	{"k"\n5.,"k" : "ctl\u0001x","":{}	ok:{"k"\n5.,"k" : "ctl\\u0001x","":{}
+Allow	\n"e	ok:\n"e
+Skip	{}	ok:{}
+Allow	{\n"key":// c\n.  }	ok:{\n"key":// c\n.  }
+Disallow	\n"t	ok:\n"t
+Allow	\r\n/**//* c */[\r\n{}\n]\t\t//	ok:\r\n/**//* c */[\r\n{}\n]\t\t//
+Skip	[.5, {} ,\r\n"tab\there"\n]	ok:[0.5, {} ,\r\n"tab\\u0009here"\n]
+Disallow	[]\r\n	ok:[]\r\n
+Skip	"true"	ok:"true"
+Disallow	123456789012345678901234567890	ok:123456789012345678901234567890
+Disallow	{}	ok:{}
+Disallow	/* a\nb */  {"key":\r\n[  "\\u0041", "open, \r\n{}],"key" : // c\n nul}\n	ok:/* a\nb */  {"key":\r\n[  "\\u0041", "open, \\u000d\\u000a{}],"key" : // c\\u000a nul}\\u000a
+Disallow	{,}	ok:{,}
+Skip	\r\ntrue	ok:\r\ntrue
+Disallow	\r\n{""\n/**/{}  , "k"\t{}}	ok:\r\n{""\n/**/{}  , "k"\t{}}
+Disallow	  {"k"\r\n{}\t}	ok:  {"k"\r\n{}\t}
+Disallow	 0.5	ok: 0.5
+Disallow	"\\u0041"	ok:"\\u0041"
+Skip	-1	ok:-1
+Allow	  True	ok:  True
+Skip	"s"\r\n	ok:"s"\r\n
+Skip	"ctl\u0001x"//	ok:"ctl\\u0001x"//
+Disallow	[{"k"\r\n : /**/\r\n{}  ,\r\n"n" {},  "n"[True\r\n ,// c\n\t-0.0\n ,/ x-.5\t,\t]}   ,{},\t5.,]	ok:[{"k"\r\n : /**/\r\n{}  ,\r\n"n" {},  "n"[True\r\n ,// c\n\t-0.0\n ,/ x-.5\t,\t]}   ,{},\t5.0,]
+Allow	{}\n/* tail */	ok:{}\n/* tail */
+Skip	["tab\there"]	ok:["tab\\u0009here"]
+Allow	\tnul\r\n	ok:\tnul\r\n
+Allow	/* c */"\u007f"	ok:/* c */"\u007f"
+Disallow	[{  "":1,\tk : -.5\r\n,"key"\r\n"a\\"b",\n, [\t0,]\t]x	ok:[{  "":1,\tk : -0.5\r\n,"key"\r\n"a\\"b",\n, [\t0,]\t]x
+Allow	0	ok:0
+Disallow	"s" 	ok:"s" 
+Skip	1\t	ok:1\t
+Skip	{}\n	ok:{}\n
+Allow	-1\n	ok:-1\n
+Skip	  +0	ok:  0
+Skip	  [[1  , \t"caf\u00e9" ],{"n":"",  "1" :"tab\there"}  , \t[[1.5.5]\n ,{"n"   : "true" ,"k":-}]]	ok:  [[1  , \t"caf\u00e9" ],{"n":"",  "1" :"tab\\u0009here"}  , \t[[1.5.5]\n ,{"n"   : "true" ,"k":-}]]
+Skip	[1.e5 , {"k"\r\n\n1E+5, \n+]	ok:[1.0e5 , {"k"\r\n\n1E+5, \n+]
+Allow	{}	ok:{}
+Disallow	"a\\"b"	ok:"a\\"b"
+Allow	1.5.5	ok:1.5.5
+Allow	\t[	ok:\t[
+Disallow	"s	ok:"s
+Disallow	[null]	ok:[null]
+Skip	  nul	ok:  nul
+Allow	[\t]	ok:[\t]
+Skip	"\\n\\t" 	ok:"\\n\\t" 
+Skip	// c\n{}	ok:// c\n{}
+Allow	"true"\t	ok:"true"\t
+Disallow	  [\n{  k:{k : "nl\nhere"\r\n},k:\n[1.e5,]},// c\n[\n]  ]	ok:  [\n{  k:{k : "nl\\u000ahere"\r\n},k:\n[1.0e5,]},// c\n[\n]  ]
+Skip	"s"	ok:"s"
+Allow	/ xfalse\t	ok:/ xfalse\t
+Disallow	Tr	ok:Tr
+Disallow	"esc\\	ok:"esc\\
+Disallow	[[] ,{}   ,\t"true" ]	ok:[[] ,{}   ,\t"true" ]
+Skip	1\r\n	ok:1\r\n
+Allow	// c\nTrue	ok:// c\nTrue
+Disallow	 "s"	ok: "s"
+Skip	fal	ok:fal
+Disallow	"s"	ok:"s"
+Skip	{}	ok:{}
+Disallow	{}\n	ok:{}\n
+Disallow	/* open\t/* c */{"n" : [],"1" :{k:""},"k"\r\n"\\n\\t"\t}/* tail */	ok:/* open\t/* c */{"n" : [],"1" :{k:""},"k"\r\n"\\n\\t"\t}/* tail */
+Allow	[]	ok:[]
+Allow	/**/  1	ok:/**/  1
+Allow	[nul  ,"caf\u00e9"\t, -.5  ]	ok:[nul  ,"caf\u00e9"\t, -0.5  ]
+Disallow	"s"\n	ok:"s"\n
+Disallow	[ -5., null ]	ok:[ -5.0, null ]
+Disallow	[]	ok:[]
+Skip	1\t	ok:1\t
+Disallow	  "ctl\u0001x"	ok:  "ctl\\u0001x"
+Disallow	\r\n[  ]\n	ok:\r\n[  ]\n
+Allow	  {\r	ok:  {\r
+Allow	  {\nk"a\\"b","key"\r\n"nl\nhere","n" : /* c *// x/* open// c\n /* c */0x1\n\n}	ok:  {\nk"a\\"b","key"\r\n"nl\\u000ahere","n" : /* c *// x/* open// c\n /* c */0x1\n\n}
+Disallow	  1.e5\t	ok:  1.0e5\t
+Disallow	\n	ok:\n
+Skip	n	ok:n
+Allow	\t[]	ok:\t[]
+Disallow	1.e5	ok:1.0e5
+Allow	"\\u0041"	ok:"\\u0041"
+Skip	-007	ok:-7
+Skip	\t"true"	ok:\t"true"
+Allow	 null/* tail */	ok: null/* tail */
+Skip	"tab	ok:"tab
+Skip	/* c */"caf\u00e9"	ok:/* c */"caf\u00e9"
+Skip	{  "key":{\r\n"" : "", "" :\r\n"esc\\}\r\n,\r\n"key":  [{\r\n"key" : 0x1,""\r\n\r\n"s"}   ,"tab\there"],k\n : ["tab\there" ,{}\t],}	ok:{  "key":{\r\n"" : "", "" :\r\n"esc\\}\\u000d\\u000a,\\u000d\\u000a"key":  [{\\u000d\\u000a"key" : 0x1,""\\u000d\\u000a\\u000d\\u000a"s"}   ,"tab\there"],k\\u000a : ["tab\there" ,{}\\u0009],}
+Skip	/**/[nul]  	ok:/**/[nul]  
+Disallow	[  "s	ok:[  "s
+Allow	.5	ok:0.5
+Disallow	true\r\n	ok:true\r\n
+Skip	-	ok:-
+Disallow	\r\n{k:[]\n,\r\n"" : \n{},"k" : True,}\t	ok:\r\n{k:[]\n,\r\n"" : \n{},"k" : True,}\t
+Disallow	 "tab\there"	ok: "tab\\u0009here"
+Skip	"\\n\\t"//	ok:"\\n\\t"//
+Disallow	\r\n+.5e1	ok:\r\n0.5e1

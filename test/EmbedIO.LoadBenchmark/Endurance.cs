@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using EmbedIO.PlatformTests;
 
 // Endurance orchestrator. One server process lives for the whole plan, so retained
 // state accumulates exactly as in a long-running application. Each step runs a
@@ -46,9 +47,9 @@ internal static class Endurance
             thumbprint = certificate.Thumbprint;
         }
 
-        var plainPort = Orchestrator.FreePort();
+        var plainPort = LoopbackPorts.Free();
         int tlsPort;
-        while ((tlsPort = Orchestrator.FreePort()) == plainPort)
+        while ((tlsPort = LoopbackPorts.Free()) == plainPort)
         {
             // Two distinct ports.
         }

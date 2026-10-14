@@ -237,6 +237,21 @@ class WorkloadTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             sdk.choose_workloads("10.0.401", "10.0.402", RELEASES, feed.fetch, feed.get, NOW)
 
+    def test_apple_platform_moves_are_named_for_the_owner(self):
+        old = {"Microsoft.NET.Sdk.iOS": "26.0.9752/10.0.100", "Microsoft.NET.Sdk.macOS": "26.0.9752/10.0.100",
+               "Microsoft.NET.Sdk.Android": "36.1.2/10.0.100", sdk.MONO_TOOLCHAIN: "10.0.112/10.0.100"}
+        new = {"Microsoft.NET.Sdk.iOS": "27.0.10722/10.0.100", "Microsoft.NET.Sdk.macOS": "26.0.9800/10.0.100",
+               "Microsoft.NET.Sdk.Android": "37.0.1/10.0.100", sdk.MONO_TOOLCHAIN: "10.0.113/10.0.100"}
+        self.assertEqual(sdk.apple_platform_moves(old, new), [("Microsoft.NET.Sdk.iOS", "26.0", "27.0")])
+        body = sdk.workloads_body("10.0.401", {"set": "10.0.402", "published": "2026-10-13", "security": True,
+                                                "runtime": "10.0.13", "old_runtime": "10.0.12",
+                                                "manifests": new, "old_manifests": old})
+        self.assertIn("**Needs owner decision.**", body)
+        self.assertIn("Microsoft.NET.Sdk.iOS 26.0 -> 27.0.", body)
+        self.assertNotIn("Apple SDK packs change", sdk.workloads_body("10.0.401", {
+            "set": "10.0.401.1", "published": "2026-10-01", "security": False, "runtime": "10.0.12",
+            "old_runtime": "10.0.12", "manifests": old, "old_manifests": old}))
+
     def test_pins_must_name_one_set(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -380,6 +395,26 @@ class ProposalTests(unittest.TestCase):
         heads = [c.args[2]["head"] for c in api.call_args_list if c.args[0] == "repos/owner/repo/pulls"]
         self.assertEqual(heads, ["update-dotnet-sdk/10.0.402", "update-dotnet-workloads/10.0.401.1"])
         self.assertEqual(review.call_count, 2)
+
+    def test_a_workload_set_opens_as_a_draft_labelled_for_the_owner(self):
+        self.write_workloads({".github/workflows/android.yml":
+                              self.BASE[".github/workflows/android.yml"].replace("10.0.401", "10.0.401.1")})
+        api = self.api(pulls=[])
+        sdk.propose(self.root, self.out, "owner/repo", "1" * 40, "main", api, Mock())
+        created = {c.args[2]["head"]: c.args[2] for c in api.call_args_list if c.args[0] == "repos/owner/repo/pulls"}
+        labels = [c.args[2]["labels"] for c in api.call_args_list if c.args[0].endswith("/labels")]
+        self.assertIs(created["update-dotnet-workloads/10.0.401.1"]["draft"], True)
+        self.assertIs(created["update-dotnet-sdk/10.0.402"]["draft"], False)
+        self.assertEqual(labels, [list(sdk.LABELS), [*sdk.LABELS, "needs owner decision"]])
+
+    def test_an_sdk_move_keeps_the_ordinary_review(self):
+        api, review = self.api(pulls=[]), Mock()
+        sdk.propose(self.root, self.out, "owner/repo", "1" * 40, "main", api, review)
+        created = [c.args[2] for c in api.call_args_list if c.args[0] == "repos/owner/repo/pulls"]
+        labels = [c.args[2]["labels"] for c in api.call_args_list if c.args[0].endswith("/labels")]
+        self.assertEqual([(pull["head"], pull["draft"]) for pull in created], [("update-dotnet-sdk/10.0.402", False)])
+        self.assertEqual(labels, [list(sdk.LABELS)])
+        self.assertEqual(review.call_count, 1)
 
     def test_propose_leaves_existing_pull_requests_alone(self):
         open_api = self.api(pulls=[{"state": "open", "html_url": "https://github.com/owner/repo/pull/3"}])

@@ -10,9 +10,11 @@ namespace EmbedIO.Tests
     public class ListenerAcceptGenerationTest
     {
         private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic;
+        // No dispatcher is installed on these listeners, so every registration takes the
+        // queue path that GetContextAsync serves; the returned handler task is always null.
         private static void Register(Net.HttpListener listener, IHttpContextImpl context)
-            => (typeof(Net.HttpListener).GetMethod("RegisterContext", Hidden) ?? throw new AssertionException("Missing context registration."))
-                .CreateDelegate<Action<IHttpContextImpl>>(listener)(context);
+            => _ = (typeof(Net.HttpListener).GetMethod("RegisterContext", Hidden) ?? throw new AssertionException("Missing context registration."))
+                .CreateDelegate<Func<IHttpContextImpl, Task?>>(listener)(context);
         private static void Withdraw(Net.HttpListener listener, IHttpContextImpl context)
             => (typeof(Net.HttpListener).GetMethod("UnregisterContext", Hidden) ?? throw new AssertionException("Missing context withdrawal."))
                 .CreateDelegate<Action<IHttpContextImpl>>(listener)(context);
