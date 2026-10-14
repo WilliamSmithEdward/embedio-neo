@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- The controller binding generator no longer emits code a consumer cannot build. A binding for
+  a controller or route marked `[Obsolete]` warned (CS0612, CS0618) in the generated file, which
+  fails a build that treats warnings as errors; the generated file now suppresses those two
+  warnings, since calling the deprecated member is the binding's job. A binding context whose
+  name matches its controller's emitted a member named after its own type (CS0542) and is now
+  reported as a duplicate binding instead. A `partial record` or `partial struct` context was
+  ignored in silence although the emitter writes its declaration back correctly, so it now
+  generates like a class.
 - Behavior change: `IHttpRequest.CheckIfNoneMatch` compares entity tags weakly, the comparison
   `If-None-Match` requires (RFC 9110, Section 13.1.2) and the one `EvaluatePreconditions`
   already applied. A client that sends `If-None-Match: W/"abc"` for a resource tagged `"abc"`
