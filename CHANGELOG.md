@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+- WebSocket closes end in time, and stopping the server closes WebSockets cleanly. A close
+  on a protocol error or a rejected message, and `Dispose`, now give up after one second
+  when the close frame cannot be written, for example because the client stopped reading,
+  and release the connection. They could wait without limit before, holding a thread. A
+  WebSocket finalized without being disposed releases its connection without a closing
+  handshake. `RunAsync` cancellation and `WebServer.Dispose` send each open WebSocket a
+  1001 close, then wait at most one second for those closes and any close already under
+  way before the listener stops; clients previously saw the connection end without a
+  close (1006).
+- `WebSocketModule.KeepAliveInterval` takes effect. The server pings each client at that
+  interval (30 seconds by default) and closes a connection whose client has not answered
+  the previous ping when the next one is due. `TimeSpan.Zero` turns it off. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#websocket-closes-sends-and-keep-alive).
+- `IWebSocket.CloseAsync` throws `ArgumentException` for a status a server cannot send
+  (RFC 6455 section 7.4), a comment with `NoStatus`, or a comment longer than 123 UTF-8
+  bytes, as `System.Net.WebSockets` does; these calls were ignored or sent as given.
+  `IWebSocket.SendAsync` throws `WebSocketException` when the WebSocket closes before the
+  whole message is sent, where it returned as if the message had been sent. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#websocket-closes-sends-and-keep-alive).
 - Security: a file provider decodes a served path one segment at a time, so an encoded
   separator can no longer reach a resource whose modules never ran. Modules are selected
   from the undecoded path, because the route is built from `Url.AbsolutePath` and a `%2F`

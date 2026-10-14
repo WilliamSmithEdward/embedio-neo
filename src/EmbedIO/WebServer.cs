@@ -16,11 +16,18 @@ namespace EmbedIO
     /// </summary>
     public partial class WebServer : WebServerBase<WebServerOptions>
     {
+        // How long a stop without a drain waits for the closes drain-aware modules start.
+        private static readonly TimeSpan StopCloseBudget = TimeSpan.FromSeconds(1);
+
         private int _disposeStarted;
 
         private readonly CancellationTokenSource _drainStarted = new CancellationTokenSource();
 
         private int _drainSignaled;
+
+        private int _stopCloseStarted;
+
+        private readonly TaskCompletionSource<bool> _stopClosesEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer"/> class,
@@ -148,7 +155,8 @@ namespace EmbedIO
         /// <remarks>
         /// <para>Callbacks registered on the token run synchronously in the call to <see cref="DrainAsync"/>; keep them
         /// short. An exception thrown by a callback is logged and does not stop the drain.</para>
-        /// <para>The token is not canceled by <c>RunAsync</c> cancellation or disposal, which remain immediate stops.</para>
+        /// <para>The token is not canceled by <c>RunAsync</c> cancellation or disposal. Those stop without a drain:
+        /// open WebSockets get a 1001 close first, and the server waits at most one second for those closes.</para>
         /// </remarks>
         public CancellationToken DrainStarted { get; }
 
@@ -156,7 +164,8 @@ namespace EmbedIO
         /// <param name="timeout">The maximum drain interval before remaining connections are aborted.</param>
         /// <param name="cancellationToken">Cancellation aborts remaining connections immediately.</param>
         /// <returns>A task completing when listener transport cleanup finishes.</returns>
-        /// <remarks>Supported by HTTP/3, exclusively owned managed TCP endpoints, and their combined listener. RunAsync cancellation and disposal remain immediate.
+        /// <remarks>Supported by HTTP/3, exclusively owned managed TCP endpoints, and their combined listener. RunAsync cancellation and disposal
+        /// stop without a drain, waiting at most one second for the 1001 closes they send open WebSockets.
         /// Concurrent calls share the first drain deadline. Await this operation outside request callbacks.</remarks>
         /// <exception cref="ArgumentOutOfRangeException">The timeout is nonpositive or exceeds the timer range.</exception>
         /// <exception cref="NotSupportedException">The selected listener does not support graceful drain.</exception>
@@ -178,7 +187,7 @@ namespace EmbedIO
             if (Interlocked.Exchange(ref _drainSignaled, 1) != 0)
                 return;
 
-            NotifyDrainStarted(Modules);
+            VisitDrainAwareModules(Modules, aware => aware.OnDrainStarted(), "A module failed to prepare for the drain; the drain continues.");
             try
             {
                 _drainStarted.Cancel();
@@ -189,7 +198,39 @@ namespace EmbedIO
             }
         }
 
-        private void NotifyDrainStarted(IEnumerable<IWebModule> modules)
+        // RunAsync cancellation and disposal stop without a drain, but drain-aware modules first
+        // close their long-lived connections, such as WebSockets with 1001, while the transports
+        // are alive. Once per server, and for at most StopCloseBudget. A second caller, such as
+        // disposal right after RunAsync returned while its cancellation callback is still closing,
+        // waits for those closes, within the same budget, so the listener does not cut them.
+        private void CloseModulesBeforeStop()
+        {
+            if (Interlocked.Exchange(ref _stopCloseStarted, 1) != 0)
+            {
+                _ = _stopClosesEnded.Task.Wait(StopCloseBudget);
+                return;
+            }
+
+            try
+            {
+                var closing = new List<Task>();
+                VisitDrainAwareModules(Modules, aware => closing.Add(aware.CloseForStopAsync()), "A module failed to start closing its connections; the stop continues.");
+                if (closing.Count > 0)
+                    _ = Task.WhenAll(closing).Wait(StopCloseBudget);
+            }
+            catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                ex.Log(LogSource, "A module failed to close its connections before the stop; the stop continues.");
+            }
+            finally
+            {
+                _stopClosesEnded.TrySetResult(true);
+            }
+        }
+
+        // Visits every drain-aware module, including those in module groups. A module that throws is
+        // logged with the failure message, and the others are still visited.
+        private void VisitDrainAwareModules(IEnumerable<IWebModule> modules, Action<EmbedIO.Internal.IDrainAwareModule> visit, string failure)
         {
             foreach (var module in modules)
             {
@@ -197,16 +238,16 @@ namespace EmbedIO
                 {
                     try
                     {
-                        aware.OnDrainStarted();
+                        visit(aware);
                     }
                     catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
                     {
-                        ex.Log(LogSource, "A module failed to prepare for the drain; the drain continues.");
+                        ex.Log(LogSource, failure);
                     }
                 }
 
                 if (module is IWebModuleContainer container)
-                    NotifyDrainStarted(container.Modules);
+                    VisitDrainAwareModules(container.Modules, visit, failure);
             }
         }
 
@@ -216,6 +257,7 @@ namespace EmbedIO
             if (disposing)
             {
                 Interlocked.Exchange(ref _disposeStarted, 1);
+                CloseModulesBeforeStop();
                 try
                 {
                     Listener.Dispose();
@@ -239,8 +281,12 @@ namespace EmbedIO
             Listener.Start();
             "Started HTTP Listener".Info(LogSource);
 
-            // close port when the cancellation token is cancelled
-            _ = cancellationToken.Register(() => Listener?.Stop());
+            // Close the port when the token is canceled, once drain-aware modules have closed what they can.
+            _ = cancellationToken.Register(() =>
+            {
+                CloseModulesBeforeStop();
+                Listener?.Stop();
+            });
         }
 
         /// <inheritdoc />

@@ -235,9 +235,14 @@ namespace EmbedIO.Tests.Issues
                 phase = "send next";
                 await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("next")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
                 phase = "cancel server";
+                // The stop sends the open socket a 1001 close and waits up to a second for the answer;
+                // this client answers, as clients do, so the stop does not wait out that budget.
+                var answering = ClientWebSocketClose.AnswerAsync(client, fixture.Timeout.Token);
                 fixture.Stop.Cancel();
                 phase = "wait server completion";
                 await fixture.Running.WaitAsync(fixture.Timeout.Token);
+                phase = "wait close answer";
+                await answering;
                 phase = "wait callback completion";
                 await fixture.Module.CallbackFinished.Task.WaitAsync(fixture.Timeout.Token);
                 Assert.That(fixture.Module.Messages.ToArray(), Does.Not.Contain("next"));
