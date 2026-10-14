@@ -52,6 +52,13 @@ conversions still return 400 in request binding. See the maintained
 verified behavior and deliberate exceptions; arbitrary SWAN tolerance and silent
 conversion failures are not reproduced.
 
+Binding is wider than System.Text.Json's defaults: public fields and properties
+with private or protected setters bind too, so every such member of a type bound
+from a request can be set by the client, a public `bool IsAdmin` field included.
+In the compatibility tests SWAN did not bind a public field. Bind requests to
+dedicated request types, or mark sensitive members `[JsonIgnore]`; see
+[over-posting](../user-reports/json-migration-compatibility.md#over-posting-and-the-binding-surface).
+
 Use `Json.CreateOptions()` to retain these defaults when customizing:
 
 ```csharp

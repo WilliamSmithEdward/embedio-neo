@@ -45,7 +45,10 @@ Kestrel's `KestrelServerLimits` in ASP.NET Core 10.0.13. Before v2 they were all
 
 **No default bounds how long a body takes to arrive.** The body defaults bound its
 size: 30,000,000 bytes as transferred and, with `SupportCompressedRequests`, a decoded
-limit that follows it. The header defaults bound the head: 32 KiB, 100 field lines,
+limit that follows it. Setting `MaximumDecompressedRequestBodyBytes` explicitly to
+null opts out of that decoded limit: the transferred bytes keep their own limit, but
+decoded output becomes unbounded, the shape of a decompression bomb. The header
+defaults bound the head: 32 KiB, 100 field lines,
 and 30 seconds for it to arrive on a TCP connection. `RequestBodyReadTimeout`,
 `RequestTimeout` and `MaximumConcurrentRequests` are null. So a client that sends a
 head and then stalls, or sends its body a byte at a time, keeps a handler that is

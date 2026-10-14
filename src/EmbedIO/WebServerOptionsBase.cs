@@ -23,6 +23,10 @@ namespace EmbedIO
         /// <para>Gets or sets a value indicating whether compressed request bodies are supported.</para>
         /// <para>The default value is <see langword="false"/>, because of the security risk
         /// posed by <see href="https://en.wikipedia.org/wiki/Zip_bomb">decompression bombs</see>.</para>
+        /// <para>If you enable it, make sure <see cref="MaximumDecompressedRequestBodyBytes"/> is finite
+        /// and no larger than the largest decoded body your application accepts. A request can stack up
+        /// to eight content codings, but that cap limits the number of layers, not what they produce, and
+        /// nested gzip layers expand a small body without practical limit.</para>
         /// </summary>
         /// <exception cref="InvalidOperationException">This property is being set and this instance's
         /// configuration is locked.</exception>
