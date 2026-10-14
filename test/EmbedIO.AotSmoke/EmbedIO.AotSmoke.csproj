@@ -17,6 +17,7 @@
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
     <ProjectReference Include="../../src/EmbedIO.DependencyInjection/EmbedIO.DependencyInjection.csproj" />
     <Compile Include="../Shared/HttpsSmoke.cs" Link="Shared/HttpsSmoke.cs" />
+    <Compile Include="../Shared/LoopbackPorts.cs" Link="Shared/LoopbackPorts.cs" />
     <!-- A package consumer gets the generator from the package's analyzers folder. -->
     <ProjectReference Include="../../src/EmbedIO.Generators/EmbedIO.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
