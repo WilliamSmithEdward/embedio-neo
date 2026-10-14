@@ -23,13 +23,15 @@ namespace EmbedIO.Tests
         private static readonly byte[] Script = Encoding.ASCII.GetBytes(string.Concat(Enumerable.Range(0, 400).Select(i => $"console.log('line {i % 37}');\n")));
         private static readonly DateTime Original = new(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
 
-        private DirectoryInfo _root = null!;
+        private DirectoryInfo? _root;
+
+        private DirectoryInfo Root => _root ?? throw new InvalidOperationException("The fixture root was not created.");
 
         [SetUp]
         public void CreateRoot() => _root = Directory.CreateTempSubdirectory("embedio-resource-pins-");
 
         [TearDown]
-        public void DeleteRoot() => _root.Delete(true);
+        public void DeleteRoot() => _root?.Delete(true);
 
         // A client that refuses identity and names nothing the module can produce gets 406,
         // whether the resource is a file (with or without precompressed variants) or a listing.
@@ -40,7 +42,7 @@ namespace EmbedIO.Tests
         {
             Write("app.js", Script, Original);
             Write("app.js.br", Brotli(Script), Original.AddMinutes(1));
-            Directory.CreateDirectory(Path.Combine(_root.FullName, "docs"));
+            Directory.CreateDirectory(Path.Combine(Root.FullName, "docs"));
             Write(Path.Combine("docs", "readme.txt"), Script, Original);
             var module = Module(variants);
             module.DirectoryLister = DirectoryLister.Html;
@@ -55,7 +57,7 @@ namespace EmbedIO.Tests
         public async Task AVariantPathThatIsADirectoryIsIgnored()
         {
             Write("app.js", Script, Original);
-            Directory.CreateDirectory(Path.Combine(_root.FullName, "app.js.br"));
+            Directory.CreateDirectory(Path.Combine(Root.FullName, "app.js.br"));
             await TestWebServer.UseAsync(server => server.WithModule(Module(PrecompressedVariants.All)), async client =>
             {
                 using var response = await Send(client, HttpMethod.Get, "/app.js", ("Accept-Encoding", "br"));
@@ -131,7 +133,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task ADirectoryWithoutAListerUsesOnDirectoryNotListable()
         {
-            Directory.CreateDirectory(Path.Combine(_root.FullName, "docs"));
+            Directory.CreateDirectory(Path.Combine(Root.FullName, "docs"));
             var refusing = Module(PrecompressedVariants.None);
             refusing.DefaultDocument = null;
             Assert.That(refusing.DirectoryLister, Is.Null);
@@ -208,7 +210,7 @@ namespace EmbedIO.Tests
         public async Task TheDefaultExtensionMapsPlainNamesButNotTheRootPath()
         {
             Write("page.html", Script, Original);
-            Directory.CreateDirectory(Path.Combine(_root.FullName, "sub"));
+            Directory.CreateDirectory(Path.Combine(Root.FullName, "sub"));
             Write("sub.html", Script, Original);
             var module = Module(PrecompressedVariants.None);
             module.DefaultDocument = null;
@@ -226,11 +228,11 @@ namespace EmbedIO.Tests
         }
 
         private FileModule Module(PrecompressedVariants variants)
-            => new("/", new FileSystemProvider(_root.FullName, false)) { PrecompressedVariants = variants };
+            => new("/", new FileSystemProvider(Root.FullName, false)) { PrecompressedVariants = variants };
 
         private byte[] Write(string name, byte[] content, DateTime modifiedUtc)
         {
-            var path = Path.Combine(_root.FullName, name);
+            var path = Path.Combine(Root.FullName, name);
             File.WriteAllBytes(path, content);
             File.SetLastWriteTimeUtc(path, modifiedUtc);
             return content;
