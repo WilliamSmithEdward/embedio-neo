@@ -141,7 +141,9 @@ namespace EmbedIO.Generators
                 return false;
 
             var propertyName = controller.Name;
-            if (!usedNames.Add(propertyName) || !_context.GetMembers(propertyName).IsEmpty)
+            // A member cannot carry its enclosing type's name (CS0542), and GetMembers does not
+            // report the type itself, so the context's own name is compared here as well.
+            if (!usedNames.Add(propertyName) || propertyName == _context.Name || !_context.GetMembers(propertyName).IsEmpty)
             {
                 Report(DiagnosticDescriptors.DuplicateBinding, location, propertyName, _context.ToDisplayString());
                 return false;

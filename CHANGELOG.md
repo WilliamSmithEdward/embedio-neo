@@ -11,6 +11,19 @@
   snapshot of them, sees new file names. A `CultureInfo` query or form field was
   rejected with EMBEDIO009 although the reflection-based binding converts it, so it joins the
   intrinsic converters, with the converter-parity test covering it.
+- The controller binding generator no longer emits code a consumer cannot build. A binding for
+  a controller or route marked `[Obsolete]` warned (CS0612, CS0618) in the generated file, which
+  fails a build that treats warnings as errors; the generated file now suppresses those two
+  warnings, since calling the deprecated member is the binding's job. A binding context whose
+  name matches its controller's emitted a member named after its own type (CS0542) and is now
+  reported as a duplicate binding instead. A `partial record` or `partial struct` context was
+  ignored in silence although the emitter writes its declaration back correctly, so it now
+  generates like a class.
+- Behavior change: `IHttpRequest.CheckIfNoneMatch` compares entity tags weakly, the comparison
+  `If-None-Match` requires (RFC 9110, Section 13.1.2) and the one `EvaluatePreconditions`
+  already applied. A client that sends `If-None-Match: W/"abc"` for a resource tagged `"abc"`
+  now receives 304 instead of the whole representation; `If-Match` stays strong. A condition
+  the method cannot parse still matches nothing rather than rejecting the request.
 - The Basic authentication challenge escapes its realm. A realm containing a quote or a
   backslash produced a malformed `WWW-Authenticate` header, because the realm is a
   quoted-string (RFC 9110, Section 5.6.4; RFC 7617, Section 2.1). The `Realm` property

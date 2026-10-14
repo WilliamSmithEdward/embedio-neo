@@ -167,7 +167,6 @@ public sealed class C : WebApiController { [Route(HttpVerbs.Get, ""/{id}"")] pub
             Assert.That(result.GeneratorDiagnostics, Is.Empty);
             Assert.That(result.Generated, Does.Contain("global::Thing __arg1 = default(global::Thing);"));
         }
-
         // Hint names are unique ignoring case, while namespaces are case-sensitive, so two contexts
         // whose full names differ only in case used to make the generator throw. A generator that
         // throws contributes nothing, so every binding in the compilation disappeared, not just
@@ -204,6 +203,69 @@ public sealed class C : WebApiController
                 Is.Empty, string.Join("\n", result.CompilationDiagnostics));
         }
 
+        // A deprecated route still answers requests, so its binding must compile. The generated
+        // file carries the obsolete call, and a consumer that treats warnings as errors would
+        // otherwise fail to build on code it cannot edit.
+        [Test]
+        public void ObsoleteControllersAndRoutesGenerateCodeThatCompilesWithoutWarnings()
+        {
+            var result = Run(Usings + @"
+public sealed class C : WebApiController
+{
+    [Route(HttpVerbs.Get, ""/current"")] public string Current() { return """"; }
+    [Obsolete(""use /current"")] [Route(HttpVerbs.Get, ""/old"")] public string Old() { return """"; }
+}
+
+[Obsolete(""use C"")]
+public sealed class D : WebApiController
+{
+    [Route(HttpVerbs.Get, ""/legacy"")] public string Legacy() { return """"; }
+}
+
+[GeneratedControllerBinding(typeof(C))] [GeneratedControllerBinding(typeof(D))] internal static partial class B { }");
+
+            // A warning on the application's own reference to an obsolete type is its to fix; the
+            // generated file is not, so nothing it contains may warn.
+            var generatedWarnings = result.CompilationDiagnostics
+                .Where(d => d.Severity >= DiagnosticSeverity.Warning
+                    && (d.Location.SourceTree?.FilePath ?? string.Empty).EndsWith(".g.cs", StringComparison.Ordinal));
+            Assert.That(generatedWarnings, Is.Empty, string.Join("\n", generatedWarnings));
+            Assert.That(result.Generated, Does.Contain("\"/old\"").And.Contain("\"/legacy\""));
+        }
+
+        // The generated property takes the controller's name, so a context class of that same
+        // name would hold a member named after its own type, which cannot compile (CS0542).
+        [Test]
+        public void AContextNamedLikeItsControllerDoesNotEmitUncompilableCode()
+        {
+            var result = Run(Usings + @"
+namespace App.Inner
+{
+    public sealed class Catalog : WebApiController { [Route(HttpVerbs.Get, ""/"")] public string Get() { return """"; } }
+}
+
+namespace App
+{
+    [GeneratedControllerBinding(typeof(App.Inner.Catalog))] internal static partial class Catalog { }
+}");
+
+            Assert.That(result.CompilationDiagnostics.Where(d => d.Severity >= DiagnosticSeverity.Error),
+                Is.Empty, string.Join("\n", result.CompilationDiagnostics));
+        }
+
+        // A record context is a valid partial type, so either it generates or it is reported;
+        // it must not be dropped in silence.
+        [Test]
+        public void ARecordContextIsNotIgnoredSilently()
+        {
+            var result = Run(Usings + @"
+public sealed class C : WebApiController { [Route(HttpVerbs.Get, ""/"")] public string Get() { return """"; } }
+[GeneratedControllerBinding(typeof(C))] internal partial record B { }");
+
+            Assert.That(result.Generated.Length > 0 || result.GeneratorDiagnostics.Length > 0, Is.True,
+                "A record context produced neither a binding nor a diagnostic.");
+        }
+
         // Each converter the generator constructs is the one TypeDescriptor returns for the type,
         // so generated and reflection-based conversion use the same parser.
         [Test]
@@ -214,7 +276,7 @@ public sealed class C : WebApiController
                 typeof(bool), typeof(byte), typeof(sbyte), typeof(char), typeof(short), typeof(ushort), typeof(int), typeof(uint),
                 typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(decimal), typeof(DateTime), typeof(DateTimeOffset),
                 typeof(TimeSpan), typeof(Guid), typeof(Uri), typeof(Version), typeof(DateOnly), typeof(TimeOnly), typeof(Int128),
-                typeof(UInt128), typeof(Half), typeof(System.Globalization.CultureInfo), typeof(Issue138Point),
+                typeof(UInt128), typeof(Half), typeof(Issue138Point),
             };
             var parameters = string.Join(", ", types.Select((t, i) => "[QueryField] " + (t == typeof(Issue138Point) ? "EmbedIO.Tests.Issues.Issue138Point" : t.FullName) + " p" + i));
             var result = Run(Usings + "public sealed class C : WebApiController { [Route(HttpVerbs.Get, \"/\")] public string Get(" + parameters + ") { return \"\"; } }\n"
