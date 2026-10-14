@@ -106,6 +106,11 @@ namespace EmbedIO.Net.Internal
             StatusDescription = HttpListenerResponseHelper.GetStatusDescription(_status);
             _chunks = false;
             HeadersSent = true;
+            // The connection now carries the upgraded protocol, not further HTTP/1
+            // messages (RFC 9110, Section 7.8). PrepareFraming never runs for this head,
+            // so without this the request cycle would treat the connection as reusable
+            // and read the upgraded protocol's bytes as a request head.
+            _persistent = false;
         }
         private void RequireMutableHead()
         {
