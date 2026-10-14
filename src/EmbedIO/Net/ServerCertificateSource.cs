@@ -21,6 +21,7 @@ namespace EmbedIO.Net
         private const string ServerAuthenticationOid = "1.3.6.1.5.5.7.3.1";
 
         private readonly object _publishSync = new object();
+        private readonly bool _fixed;
         private X509Certificate2 _current;
         private long _version;
 
@@ -32,14 +33,15 @@ namespace EmbedIO.Net
         /// <exception cref="ArgumentException"><paramref name="certificate"/> is not usable as a server certificate;
         /// see <see cref="Publish"/>.</exception>
         public ServerCertificateSource(X509Certificate2 certificate)
-            : this(Validated(certificate), 1)
+            : this(Validated(certificate), 1, false)
         {
         }
 
-        private ServerCertificateSource(X509Certificate2? certificate, long version)
+        private ServerCertificateSource(X509Certificate2? certificate, long version, bool isFixed)
         {
             _current = certificate ?? throw new ArgumentNullException(nameof(certificate));
             _version = version;
+            _fixed = isFixed;
         }
 
         /// <summary>
@@ -49,6 +51,10 @@ namespace EmbedIO.Net
 
         // Increments on every publication; lets a listener notice a replacement without comparing certificates.
         internal long Version => Interlocked.Read(ref _version);
+
+        // True for the source a listener creates around a fixed certificate. The application never
+        // publishes to it, so endpoint sharing compares its certificate by value rather than by identity.
+        internal bool IsFixed => _fixed;
 
         /// <summary>
         /// <para>Replaces the certificate that new handshakes use.</para>
@@ -70,7 +76,7 @@ namespace EmbedIO.Net
         }
 
         // A fixed certificate configured the existing way keeps its existing behavior: no new checks.
-        internal static ServerCertificateSource Fixed(X509Certificate2 certificate) => new ServerCertificateSource(certificate, 1);
+        internal static ServerCertificateSource Fixed(X509Certificate2 certificate) => new ServerCertificateSource(certificate, 1, true);
 
         private static X509Certificate2 Validated(X509Certificate2 certificate)
         {

@@ -93,8 +93,8 @@ namespace EmbedIO.Net.Internal
                 // The endpoint presents its opener's certificate to every connection, whichever
                 // owner the request path selects later, so every owner must present the same one.
                 if (prefix.Secure && !endpoint.Listener.SharesCertificateWith(_owner))
-                    throw new HttpListenerException(400, endpoint.Listener.UsesCertificateSource != _owner.UsesCertificateSource
-                        ? "Listeners with different server certificates cannot share a listening endpoint: one presents a fixed certificate and the other a certificate source that may rotate, so let both borrow the same source."
+                    throw new HttpListenerException(400, endpoint.Listener.CanRotateCertificate || _owner.CanRotateCertificate
+                        ? "Listeners with different server certificates cannot share a listening endpoint: one of them borrows a certificate source the application can rotate, so let every owner borrow that same source."
                         : "Listeners with different server certificates cannot share a listening endpoint.");
                 return endpoint;
             }

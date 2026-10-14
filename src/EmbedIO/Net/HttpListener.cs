@@ -63,22 +63,26 @@ namespace EmbedIO.Net
         internal X509Certificate? Certificate => _certificateSource?.Current ?? _certificate;
         // Whether a secure prefix can ever be served: a certificate or a source was supplied.
         internal bool HasServerCertificate => _certificateSource != null || _certificate != null;
-        internal bool UsesCertificateSource => _certificateSource != null;
-        // Whether two listeners present the same server certificate: the same fixed certificate
-        // (compared by hash, so a certificate loaded twice from the same bytes matches) or the
-        // same certificate source instance. A fixed certificate and a source never match, because
-        // the source may rotate away from that certificate while the endpoint is shared.
+        // Whether the application can replace this listener's certificate while it runs.
+        internal bool CanRotateCertificate => _certificateSource != null && !_certificateSource.IsFixed;
+        // Whether two listeners present the same server certificate. A source the application can
+        // rotate matches only itself, because it may rotate away from the other listener's
+        // certificate while the endpoint is shared. Otherwise the certificates the two listeners
+        // present now are compared by hash, so a certificate loaded twice from the same bytes,
+        // or the one a combined listener wraps in its internal fixed source, still matches.
         internal bool SharesCertificateWith(HttpListener other)
         {
-            if (_certificateSource != null || other._certificateSource != null)
-                return ReferenceEquals(_certificateSource, other._certificateSource);
-            if (ReferenceEquals(_certificate, other._certificate)) return true;
-            if (_certificate == null || other._certificate == null) return false;
-            var mine = _certificate.GetCertHash();
-            var theirs = other._certificate.GetCertHash();
-            if (mine.Length != theirs.Length) return false;
-            for (var index = 0; index < mine.Length; index++)
-                if (mine[index] != theirs[index]) return false;
+            if (_certificateSource != null && ReferenceEquals(_certificateSource, other._certificateSource)) return true;
+            if (CanRotateCertificate || other.CanRotateCertificate) return false;
+            var mine = Certificate;
+            var theirs = other.Certificate;
+            if (ReferenceEquals(mine, theirs)) return mine != null;
+            if (mine == null || theirs == null) return false;
+            var first = mine.GetCertHash();
+            var second = theirs.GetCertHash();
+            if (first.Length != second.Length) return false;
+            for (var index = 0; index < first.Length; index++)
+                if (first[index] != second[index]) return false;
             return true;
         }
         internal EmbedIO.Internal.RequestPolicyResolver? BodyPolicy { get; }

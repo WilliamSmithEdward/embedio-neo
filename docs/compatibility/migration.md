@@ -1270,10 +1270,11 @@ rewritten into a different final status.
 Two managed-listener behaviors changed for https prefixes in EmbedIO mode.
 
 A listener now shares an address and port with another HTTPS listener only when
-both present the same server certificate: the same fixed certificate, compared by
-hash so that the same bytes loaded twice match, or the same
-`ServerCertificateSource` instance. A second owner with a different certificate,
-or a fixed certificate beside a source, is refused at `Start` with an
+both present the same server certificate: the same `ServerCertificateSource`
+instance, or certificates that compare equal by hash (the same bytes loaded twice,
+or the certificate a combined listener wraps internally). A second owner with a
+different certificate, or a fixed certificate beside a source the application can
+rotate, is refused at `Start` with an
 `HttpListenerException` whose message contains "different server certificates",
 before any of its routes are published; the owner that opened the endpoint keeps
 serving. Previously the endpoint presented the opener's certificate and TLS policy

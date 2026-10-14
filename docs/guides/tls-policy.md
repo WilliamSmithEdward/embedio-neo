@@ -37,14 +37,15 @@ invokes callbacks.
 Registration also compares the server certificate itself, because the endpoint
 presents one certificate to every connection, whichever logical owner the request
 path selects afterwards. Listeners share an HTTPS endpoint only when they present
-the same certificate: the same fixed certificate, compared by hash so that a
-certificate loaded twice from the same bytes still matches, or the same
-`ServerCertificateSource` instance. A fixed certificate and a source are never
-treated as equal, even while the source holds that certificate, because the source
-may rotate away from it while the endpoint is shared. A second owner with a
-different certificate is refused before its routes are published, with "different
-server certificates" in the `HttpListenerException`, and the first owner keeps
-serving. Owners that need rotation borrow one shared source.
+the same certificate: the same `ServerCertificateSource` instance, or certificates
+that compare equal by hash, so that a certificate loaded twice from the same bytes,
+or the one a combined listener wraps internally, still matches. A source the
+application can rotate matches only itself, even while it holds the other owner's
+certificate, because it may rotate away from it while the endpoint is shared. A
+second owner with a different certificate is refused before its routes are
+published, with "different server certificates" in the `HttpListenerException`,
+and the first owner keeps serving. Owners that need rotation borrow one shared
+source.
 
 An https prefix on a listener that has neither a certificate nor a source fails at
 `Start` with an `InvalidOperationException`, and `WebServer.RunAsync` faults with

@@ -25,9 +25,10 @@
   scenarios, roles alternated), requests per second rose 1.23x, 3.08x and 3.62x for the
   1 KiB, 64 KiB and 1 MiB documents, and server CPU per request fell to 0.82x, 0.32x and 0.28x.
 - Refuse to share an HTTPS endpoint between listeners that present different server
-  certificates. Owners share an endpoint only with the same fixed certificate (compared
-  by hash) or the same `ServerCertificateSource` instance; a second owner with another
-  certificate, or a fixed certificate beside a source, is refused before its routes are
+  certificates. Owners share an endpoint only with the same `ServerCertificateSource`
+  instance or with certificates that compare equal by hash (a combined listener's internal
+  source counts as its fixed certificate); a second owner with another certificate, or a
+  fixed certificate beside a source the application can rotate, is refused before its routes are
   published, with "different server certificates" in the `HttpListenerException`, and
   the first owner keeps serving. Before, the endpoint presented its opener's certificate
   and TLS policy to every owner, even after the opener left. The TLS-policy

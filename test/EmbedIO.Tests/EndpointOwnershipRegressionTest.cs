@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Reflection;
+using EmbedIO.PlatformTests;
 using EmbedIO.Tests.TestObjects;
 using NUnit.Framework;
 
@@ -19,7 +20,10 @@ namespace EmbedIO.Tests
             var url = Resources.GetServerAddress();
             if (secure)
                 url = url.Replace("http://", "https://", StringComparison.Ordinal);
-            using var retiring = new Net.HttpListener();
+            // A secure prefix needs a certificate to start, and every owner of a shared
+            // endpoint must present the same one; the ownership rules under test are unchanged.
+            using var certificate = secure ? HttpsSmoke.CreateCertificate() : null;
+            using var retiring = new Net.HttpListener(certificate);
             retiring.AddPrefix(url);
             retiring.AddPrefix(url.Replace("localhost", "LOCALHOST", StringComparison.Ordinal));
             retiring.Start();
@@ -29,7 +33,7 @@ namespace EmbedIO.Tests
             var endpoints = TcpRegistrationInventory.Owned(retiring);
             Assert.That(endpoints, Is.Not.Empty);
             retiring.Stop();
-            using var replacement = new Net.HttpListener();
+            using var replacement = new Net.HttpListener(certificate);
             replacement.AddPrefix(url);
             replacement.Start();
             var registry = typeof(Net.HttpListener).Assembly.GetType("EmbedIO.Net.Internal.TcpEndpointRegistry")
@@ -46,7 +50,7 @@ namespace EmbedIO.Tests
             }
             retiring.Stop();
 
-            using var additional = new Net.HttpListener();
+            using var additional = new Net.HttpListener(certificate);
             additional.AddPrefix(url + "another/");
             Assert.DoesNotThrow(additional.Start,
                 "A stale endpoint must not remove the replacement from the shared endpoint map.");
