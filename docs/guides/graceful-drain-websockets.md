@@ -16,7 +16,7 @@ Two opt-in settings let the drain end sooner:
 
 Without them nothing changes. `RunAsync` cancellation and disposal are not drains:
 they send each open WebSocket a 1001 close without a reason, wait at most one second
-for those closes, and then stop the server.
+for those closes and for any close already under way, and then stop the server.
 
 This is unreleased and available only from source.
 

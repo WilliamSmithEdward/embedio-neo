@@ -359,9 +359,9 @@ send while a socket may be closing, or keep idle connections open:
   answers them while a `ReceiveAsync` is pending. Set the interval to
   `TimeSpan.Zero` to keep connections whose clients do not answer open, as before.
 - `RunAsync` cancellation and `WebServer.Dispose` send each open WebSocket a 1001
-  (Going Away) close without a reason, and wait at most one second for the closes
-  before they stop the listener. Clients used to see the connection end without a
-  close (1006).
+  (Going Away) close without a reason, and wait at most one second for those closes,
+  and for any close already under way, before they stop the listener. Clients used to
+  see the connection end without a close (1006).
 
 ## Optional v2 capabilities
 

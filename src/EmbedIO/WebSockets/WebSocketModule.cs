@@ -323,11 +323,13 @@ namespace EmbedIO.WebSockets
         }
 
         // RunAsync cancellation or disposal: every open WebSocket gets a 1001 close while its
-        // transport is alive, and the task completes when the client has answered it and the
-        // socket is released; the server bounds the wait. A socket already closing, for example
-        // because its request handler saw the canceled token first and disposed it, is waited for
-        // only until its close frame is out. The close carries no reason, so it matches the one
-        // WebSocket disposal sends.
+        // transport is alive, and the task completes when every listed socket is released: its
+        // client answered the close, its own close timeout expired, or its transport failed. The
+        // server bounds the wait, once for all sockets. A socket already closing is waited for
+        // the same way, for example because its request handler saw the canceled token first and
+        // disposed it. A written close frame is not enough: when the stop then ends an HTTP/2
+        // connection, the client aborts the stream and drops a close frame it has received but
+        // not read. The close carries no reason, so it matches the one WebSocket disposal sends.
         Task IDrainAwareModule.CloseForStopAsync()
         {
             var closing = new List<Task>();
@@ -336,14 +338,8 @@ namespace EmbedIO.WebSockets
                 if (context.WebSocket is Internal.WebSocket managed)
                 {
                     if (managed.State == WebSocketState.Open)
-                    {
                         _ = CloseGoingAwayAsync(context, string.Empty);
-                        closing.Add(managed.Released);
-                    }
-                    else
-                    {
-                        closing.Add(managed.CloseFrameDone);
-                    }
+                    closing.Add(managed.Released);
                 }
                 else if (context.WebSocket?.State == WebSocketState.Open)
                 {
@@ -660,7 +656,7 @@ namespace EmbedIO.WebSockets
 
         private void RemoveWebSocket(IWebSocketContext context)
         {
-            // Disposed while still listed: a server stop that runs meanwhile waits for its close frame.
+            // Disposed while still listed: a server stop that runs meanwhile waits for its release.
             if (!_contexts.ContainsKey(context.Id))
                 return;
             context.WebSocket?.Dispose();

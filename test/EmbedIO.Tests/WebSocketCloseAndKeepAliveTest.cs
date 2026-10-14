@@ -214,6 +214,88 @@ namespace EmbedIO.Tests
             await stopping.WaitAsync(limit.Token);
         }
 
+        // The server closed before the stop, and the stop still waits for the client's answer: once
+        // the HTTP/2 connection ends, the client aborts the stream and loses a close frame it has
+        // received but not read. The client reads late, so the frame waits while the server stops.
+        [Test]
+        public async Task StoppingWaitsForTheAnswerToACloseAlreadySentOverHttp2()
+        {
+            var hub = new Hub(Timeout.InfiniteTimeSpan);
+            using var host = new Host(hub);
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var handler = new SocketsHttpHandler { UseProxy = false };
+            using var invoker = new HttpMessageInvoker(handler, false);
+            using var socket = await ConnectHttp2Async(host, invoker, limit.Token);
+            var context = await hub.Connected.Task.WaitAsync(limit.Token);
+
+            var closing = context.WebSocket.CloseAsync(CloseStatusCode.Normal, "done", CancellationToken.None);
+            var stopping = Task.Run(host.Stop.Cancel);
+            await Task.Delay(150, limit.Token);
+            var result = await socket.ReceiveAsync(new ArraySegment<byte>(new byte[64]), limit.Token);
+            Assert.That(result.MessageType, Is.EqualTo(WebSocketMessageType.Close));
+            Assert.That(result.CloseStatus, Is.EqualTo(WebSocketCloseStatus.NormalClosure));
+            Assert.That(result.CloseStatusDescription, Is.EqualTo("done"));
+            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "ok", limit.Token);
+            await stopping.WaitAsync(limit.Token);
+            await closing.WaitAsync(limit.Token);
+        }
+
+        // Each client stops reading while the server sends it a large message, and the server then
+        // starts closing it, so the close frame waits behind the stalled send and the socket cannot
+        // be released before its connection ends. The module is still connecting, so no request
+        // handler disposes these sockets either. The stop waits one budget for all of them, not one
+        // per socket, and then ends their connections.
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task SocketsThatCannotBeReleasedDelayTheStopByOneBudgetInTotal(bool dispose)
+        {
+            const int sockets = 4;
+            var connecting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var hub = new Hub(Timeout.InfiniteTimeSpan, connecting.Task);
+            using var host = new Host(hub);
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var clients = new RawClient?[sockets];
+            try
+            {
+                for (var i = 0; i < sockets; i++)
+                    clients[i] = await RawClient.ConnectAsync(host.Port, limit.Token);
+                while (hub.Contexts.Count < sockets)
+                    await Task.Delay(10, limit.Token);
+
+                var message = new byte[64 * 1024 * 1024];
+                var sends = hub.Contexts.Select(context => context.WebSocket.SendAsync(message, false, CancellationToken.None)).ToArray();
+                await Task.Delay(200, limit.Token);
+                Assert.That(sends.Any(send => send.IsCompleted), Is.False, "Each send stalls, because its client does not read.");
+                var closes = hub.Contexts.Select(context => context.WebSocket.CloseAsync(CloseStatusCode.Normal, "done", CancellationToken.None)).ToArray();
+
+                var clock = Stopwatch.StartNew();
+                if (dispose)
+                {
+                    await Task.Run(host.Server.Dispose).WaitAsync(limit.Token);
+                }
+                else
+                {
+                    await Task.Run(host.Stop.Cancel).WaitAsync(limit.Token);
+                    await host.Running.WaitAsync(limit.Token);
+                }
+
+                clock.Stop();
+                Assert.That(clock.Elapsed, Is.LessThan(TimeSpan.FromSeconds(3)), "One budget bounds the stop, however many sockets wait.");
+
+                // Their connections ended, so the stalled sends and the closes end too, failed or not.
+                await Task.WhenAll(sends.Concat(closes).Select(pending => pending.ContinueWith(
+                    static ended => _ = ended.Exception,
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default))).WaitAsync(limit.Token);
+            }
+            finally
+            {
+                connecting.TrySetResult();
+                foreach (var client in clients) client?.Dispose();
+            }
+        }
+
         [Test]
         public async Task KeepAlivePingsTheClientAtItsInterval()
         {
@@ -548,10 +630,13 @@ namespace EmbedIO.Tests
 
             internal TaskCompletionSource<IWebSocketContext> Connected { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+            internal ConcurrentQueue<IWebSocketContext> Contexts { get; } = new();
+
             internal TaskCompletionSource Disconnected { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
             protected override async Task OnClientConnectedAsync(IWebSocketContext context)
             {
+                Contexts.Enqueue(context);
                 Connected.TrySetResult(context);
                 await _connecting.ConfigureAwait(false);
             }

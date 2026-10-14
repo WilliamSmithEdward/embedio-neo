@@ -8,8 +8,9 @@
   and release the connection. They could wait without limit before, holding a thread. A
   WebSocket finalized without being disposed releases its connection without a closing
   handshake. `RunAsync` cancellation and `WebServer.Dispose` send each open WebSocket a
-  1001 close and wait at most one second for those closes before the listener stops;
-  clients previously saw the connection end without a close (1006).
+  1001 close, then wait at most one second for those closes and any close already under
+  way before the listener stops; clients previously saw the connection end without a
+  close (1006).
 - `WebSocketModule.KeepAliveInterval` takes effect. The server pings each client at that
   interval (30 seconds by default) and closes a connection whose client has not answered
   the previous ping when the next one is due. `TimeSpan.Zero` turns it off. See

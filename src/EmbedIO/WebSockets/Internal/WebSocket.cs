@@ -54,8 +54,6 @@ namespace EmbedIO.WebSockets.Internal
         private TaskCompletionSource<bool>? _closedSignal;
         // Completed when the connection is released; closes that must end in time wait for it.
         private readonly TaskCompletionSource<bool> _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        // Completed once the close frame is out, its write failed, or the socket was released without one.
-        private readonly TaskCompletionSource<bool> _closeFrameDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private Timer? _keepAlive;
         // 1 while a keep-alive ping waits for an answer. Only pong frames clear it.
         private int _keepAlivePending;
@@ -165,9 +163,6 @@ namespace EmbedIO.WebSockets.Internal
 
         // Completes once the transport has been released, however the socket closed.
         internal Task Released => _released.Task;
-
-        // Completes once the close frame has been written, or the socket released without one.
-        internal Task CloseFrameDone => _closeFrameDone.Task;
 
         internal Task WaitForCloseAsync(CancellationToken cancellationToken)
         {
@@ -532,14 +527,7 @@ namespace EmbedIO.WebSockets.Internal
 
             if (frameAsBytes != null)
             {
-                try
-                {
-                    sent = await WriteFrameBytesAsync(frameAsBytes, cancellationToken, allowClosing: true).ConfigureAwait(false);
-                }
-                finally
-                {
-                    _closeFrameDone.TrySetResult(true);
-                }
+                sent = await WriteFrameBytesAsync(frameAsBytes, cancellationToken, allowClosing: true).ConfigureAwait(false);
             }
 
             var exitReceiving = _exitReceiving;
@@ -843,7 +831,6 @@ namespace EmbedIO.WebSockets.Internal
                 }
                 if (drain) _ = Task.Run(Message);
                 else if (!pending) CompleteClose();
-                _closeFrameDone.TrySetResult(true);
                 _released.TrySetResult(true);
             }
         }
