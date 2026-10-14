@@ -198,19 +198,21 @@ namespace EmbedIO.Tests
         // A handler that gives up on a slow HTTP/3 upload by canceling its own read still
         // answers, and cleanup leaves the abandoned body to the transport. Under the default
         // body limit cleanup used to drain it, which could only fail, and logged the request as
-        // a failed stream.
-        [Test]
-        public async Task HandlerCanceledHttp3ReadLeavesTheBodyToTheTransport()
+        // a failed stream. With a read deadline the canceled read also stays unsettled in the
+        // deadline's wrapper, which cleanup must leave alone too.
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task HandlerCanceledHttp3ReadLeavesTheBodyToTheTransport(bool readDeadline)
         {
             RequireQuic();
             if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
-            await HandlerCanceledHttp3ReadCore();
+            await HandlerCanceledHttp3ReadCore(readDeadline);
         }
 
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task HandlerCanceledHttp3ReadCore()
+        private static async Task HandlerCanceledHttp3ReadCore(bool readDeadline)
         {
             using var trace = new RequestOutcomeTrace();
             using var certificate = Certificate();
@@ -238,7 +240,7 @@ namespace EmbedIO.Tests
                     context.Response.StatusCode = 408;
                     await context.SendStringAsync("timeout after " + total, "text/plain", WebServer.Utf8NoBomEncoding);
                 }
-            });
+            }, options => { if (readDeadline) options.WithRequestBodyReadTimeout(TimeSpan.FromSeconds(60)); });
             await using var peer = await H3Peer.ConnectAsync(host, certificate);
             await using var request = await peer.OpenRequestAsync("POST", "/upload", false);
             await request.WriteAsync(new byte[] { 0, 3, 1, 2, 3 }, host.Token);

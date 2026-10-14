@@ -28,7 +28,7 @@ namespace EmbedIO.Tests.Issues
             Assert.That(options.MaximumDecompressedRequestBodyBytes, Is.EqualTo(30_000_000L), "The decoded limit follows the body limit.");
             Assert.That(options.MaximumRequestHeaderBytes, Is.EqualTo(32 * 1024));
             Assert.That(options.MaximumRequestHeaderCount, Is.EqualTo(100));
-            Assert.That(options.RequestBodyReadTimeout, Is.EqualTo(TimeSpan.FromSeconds(60)));
+            Assert.That(options.RequestBodyReadTimeout, Is.Null, "Body read deadlines stay opt-in.");
             Assert.That(options.RequestTimeout, Is.Null, "Request deadlines stay opt-in.");
             Assert.That(options.MaximumConcurrentRequests, Is.Null, "Concurrency limits stay opt-in.");
             Assert.That(options.RequestHeadersTimeout, Is.Null, "Null applies the built-in first-head deadline.");
@@ -36,12 +36,12 @@ namespace EmbedIO.Tests.Issues
             options.MaximumRequestBodyBytes = null;
             options.MaximumRequestHeaderBytes = null;
             options.MaximumRequestHeaderCount = null;
-            options.RequestBodyReadTimeout = null;
+            options.RequestBodyReadTimeout = TimeSpan.FromSeconds(15);
             Assert.That(options.MaximumRequestBodyBytes, Is.Null);
             Assert.That(options.MaximumDecompressedRequestBodyBytes, Is.Null, "Without a body limit an unset decoded limit is unlimited too.");
             Assert.That(options.MaximumRequestHeaderBytes, Is.Null);
             Assert.That(options.MaximumRequestHeaderCount, Is.Null);
-            Assert.That(options.RequestBodyReadTimeout, Is.Null);
+            Assert.That(options.RequestBodyReadTimeout, Is.EqualTo(TimeSpan.FromSeconds(15)), "An explicit read deadline replaces the null default.");
         }
 
         [Test]
@@ -148,12 +148,13 @@ namespace EmbedIO.Tests.Issues
 
         // The server drains an unread HTTP/1 body to reuse the connection. It reads the framing
         // input directly, so a handler that disposed its view of the body, which a read deadline
-        // wraps, still leaves the connection reusable.
+        // wraps, still leaves the connection reusable. The deadline is set explicitly, as on an
+        // upload route that lifts the body limit; with neither, the handler reads the physical body.
         [Test]
         public async Task DisposedBodyViewKeepsTheHttp1ConnectionReusable()
         {
             var ports = new System.Collections.Concurrent.ConcurrentQueue<int>();
-            await using var host = Host.Start(o => o.WithMaximumRequestBodyBytes(null), async context =>
+            await using var host = Host.Start(o => o.WithMaximumRequestBodyBytes(null).WithRequestBodyReadTimeout(TimeSpan.FromSeconds(60)), async context =>
             {
                 ports.Enqueue(context.Request.RemoteEndPoint.Port);
                 using (var reader = new StreamReader(context.Request.InputStream)) _ = await reader.ReadLineAsync();
@@ -191,7 +192,7 @@ namespace EmbedIO.Tests.Issues
         }
 
         // A handler that neither reads the body nor ends its response had both held while request
-        // cleanup drained the body, bounded only by the 60-second wait for each read, so a client
+        // cleanup drained the body, each read bounded only by a read deadline if one was set, so a client
         // trickling the body held the response, the request and the connection. Cleanup now leaves
         // an unopened body to the connection: the response goes out at once, and the discard after
         // it ends at the keep-alive deadline, which a trickle cannot extend.
@@ -248,20 +249,20 @@ namespace EmbedIO.Tests.Issues
 
         // ---------------------------------------------------------------- body read deadline
 
-        // Read from the request the handler sees: the deadline reaches every request that
-        // carries a body, and a bodyless request does not pay for either body policy.
-        [TestCase(1, "default", 60d)]
-        [TestCase(2, "default", 60d)]
-        [TestCase(3, "default", 60d)]
+        // Read from the request the handler sees: by default no read deadline applies, an explicit
+        // one reaches every request that carries a body, and a bodyless request pays for neither
+        // body policy.
+        [TestCase(1, "default", null)]
+        [TestCase(2, "default", null)]
+        [TestCase(3, "default", null)]
         [TestCase(1, "5", 5d)]
-        [TestCase(1, "null", null)]
-        [TestCase(2, "null", null)]
+        [TestCase(2, "5", 5d)]
+        [TestCase(3, "5", 5d)]
         public async Task BodyReadDeadlineReachesRequestsThatCarryABody(int protocol, string configured, double? expected)
         {
             await using var host = await MultiHost.StartAsync(protocol, o =>
             {
-                if (configured == "null") o.RequestBodyReadTimeout = null;
-                else if (configured != "default") o.RequestBodyReadTimeout = TimeSpan.FromSeconds(double.Parse(configured, CultureInfo.InvariantCulture));
+                if (configured != "default") o.RequestBodyReadTimeout = TimeSpan.FromSeconds(double.Parse(configured, CultureInfo.InvariantCulture));
             }, async context =>
             {
                 var request = context.Request;

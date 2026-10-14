@@ -6,33 +6,37 @@
   `KestrelServerLimits` in ASP.NET Core 10.0.13. A request body may carry 30,000,000
   bytes (`MaximumRequestBodyBytes`, as Kestrel's `MaxRequestBodySize`), header fields may
   total 32 KiB (`MaximumRequestHeaderBytes`, as `MaxRequestHeadersTotalSize`) in at most
-  100 lines (`MaximumRequestHeaderCount`, as `MaxRequestHeaderCount`), and a new
-  connection must deliver its first request head within 30 seconds instead of 90
-  (`RequestHeadersTimeout`, as Kestrel's). One read of a request body may wait 60 seconds
-  for data (`RequestBodyReadTimeout`; Kestrel enforces a minimum data rate instead), and a
-  WebSocket message may be 4 MiB (`WebSocketModule.MaxMessageSize`, previously
-  unlimited). With `SupportCompressedRequests`, the decoded body limit follows the
-  request's body limit, including a route's, until `MaximumDecompressedRequestBodyBytes`
-  is set. Every default is replaced as before, and null still removes a limit (zero for
-  `MaxMessageSize`). `MaximumConcurrentRequests` and `RequestTimeout` stay off. Because a
+  100 lines (`MaximumRequestHeaderCount`, as `MaxRequestHeaderCount`), a new connection
+  must deliver its first request head within 30 seconds instead of 90
+  (`RequestHeadersTimeout`, as Kestrel's), and a WebSocket message may be 4 MiB
+  (`WebSocketModule.MaxMessageSize`, previously unlimited). With
+  `SupportCompressedRequests`, the decoded body limit follows the request's body limit,
+  including a route's, until `MaximumDecompressedRequestBodyBytes` is set. Every default
+  is replaced as before, and null still removes a limit (zero for `MaxMessageSize`).
+  `RequestBodyReadTimeout`, `MaximumConcurrentRequests` and `RequestTimeout` stay off, so
+  no default bounds how long a body the application is reading takes to arrive; set one
+  of them to bound it. A minimum data rate like Kestrel's is tracked in #424. Because a
   body limit now applies by default, `100 Continue` is sent on a handler's first read of
   the body rather than before dispatch, so on HTTP/1.1 a handler that ignores an
   `Expect: 100-continue` body answers with `Connection: close`; and on HTTP/1.1 the
   request stream is closed once disposed, as on HTTP/2 and HTTP/3. A body the handler
   never opens no longer holds back the response: request cleanup used to read it first,
   under the body limit and read deadline, and turn an uncommitted response into 408 or
-  413 when the body stalled or ran over. Now the handler's response goes out first. HTTP/1.1
-  then discards the body under the keep-alive deadline, the body limit and the read
-  deadline, and closes the connection when one of them ends the discard; HTTP/2 and
+  413 when the body stalled or ran over. Now the handler's response goes out first.
+  HTTP/1.1 then discards the body under the keep-alive deadline, the body limit and any
+  read deadline, and closes the connection when one of them ends the discard; HTTP/2 and
   HTTP/3 end the stream with `RST_STREAM` `NO_ERROR` or `STOP_SENDING` `H3_NO_ERROR`. See
   [migration](docs/compatibility/neo-v1-to-v2.md#finite-request-limit-defaults).
-- Correct two request-body defects that the new defaults would have exposed widely. On
-  HTTP/1.1, a handler that disposed the request stream while a body read deadline was
-  set made the server close the connection after a response that had promised to keep it
-  open, so a client that reused it saw a reset; the server now discards the rest of the
-  body and keeps the connection. The counted view of a body under a body limit reported `CanRead` as
-  true after its transport stopped reading, as an HTTP/3 body does once a read is
-  canceled; it now reports the transport's state.
+- Correct three request-body defects. On HTTP/1.1, a handler that disposed the request
+  stream while a body read deadline was set made the server close the connection after a
+  response that had promised to keep it open, so a client that reused it saw a reset; the
+  server now discards the rest of the body and keeps the connection. The counted view of
+  a body under a body limit reported `CanRead` as true after its transport stopped
+  reading, as an HTTP/3 body does once a read is canceled; it now reports the transport's
+  state. With a read deadline set, a body read that failed after the deadline, a
+  cancellation or the end of its request had already answered the call went unobserved
+  and could surface later through `TaskScheduler.UnobservedTaskException`; it is now
+  observed.
 - Two more controller binding generator corrections. Two binding contexts whose full names
   differed only in case, such as `One.Bindings` and `ONE.Bindings`, gave the generator two
   hint names that Roslyn considers equal; it threw, and a generator that throws contributes

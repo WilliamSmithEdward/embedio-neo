@@ -129,7 +129,7 @@ namespace EmbedIO
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>
         /// <param name="this">The options instance.</param>
-        /// <param name="value">The read deadline, or null for none. The default is 60 seconds.</param>
+        /// <param name="value">The read deadline, or null for none, which is the default.</param>
         /// <returns>The options instance.</returns>
         /// <exception cref="NullReferenceException">The options instance is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The deadline is not positive or is too large.</exception>

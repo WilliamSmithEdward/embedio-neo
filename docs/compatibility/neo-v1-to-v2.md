@@ -439,13 +439,26 @@ Request limits that v1 left off now have finite defaults, modelled on Kestrel's
 | `MaximumRequestHeaderBytes` | unlimited | 32 KiB | `MaxRequestHeadersTotalSize`, the same |
 | `MaximumRequestHeaderCount` | unlimited | 100 field lines | `MaxRequestHeaderCount`, the same |
 | `RequestHeadersTimeout` | 90 seconds | 30 seconds | `RequestHeadersTimeout`, the same |
-| `RequestBodyReadTimeout` | none | 60 seconds per read | none; a minimum data rate of 240 bytes per second instead |
+| `RequestBodyReadTimeout` | none | none | none; a minimum data rate of 240 bytes per second instead |
 | `MaximumDecompressedRequestBodyBytes` | unlimited | the request's body limit, until set | request decompression applies the body size limit |
 | `WebSocketModule.MaxMessageSize` | 0, unlimited | 4 MiB | none |
 
 Each default is replaced as before, and null removes a limit; for `MaxMessageSize`
-zero does. `MaximumConcurrentRequests` and `RequestTimeout` stay off; set them for a
-server that faces untrusted clients. Check these cases:
+zero does. `RequestBodyReadTimeout`, `MaximumConcurrentRequests` and `RequestTimeout`
+stay off; set them for a server that faces untrusted clients.
+
+**No default bounds how long a body takes to arrive.** Every body and header default
+above bounds size or count, and the 30-second `RequestHeadersTimeout` covers only the
+request head. `RequestBodyReadTimeout`, `RequestTimeout` and `MaximumConcurrentRequests`
+are null, so a client that stalls or trickles a body keeps the handler reading it, and
+its connection, until the client disconnects or the server stops. The keep-alive
+deadline bounds only the discard of a body the handler never read on HTTP/1.1, not a
+body the application is reading. To bound that, set `RequestBodyReadTimeout`,
+server-wide or per route, or `RequestTimeout`. A minimum data rate like Kestrel's is
+tracked in [#424](https://github.com/WilliamSmithEdward/embedio-neo/issues/424).
+Earlier versions behaved the same way; this is not a change.
+
+Check these cases:
 
 - **Uploads over 30,000,000 bytes** are refused with 413. Raise the limit for the
   route that takes them, for example
@@ -453,8 +466,6 @@ server that faces untrusted clients. Check these cases:
   server-wide with `WithMaximumRequestBodyBytes`.
 - **WebSocket messages over 4 MiB** close the connection with 1009. Set
   `MaxMessageSize` in the module's constructor.
-- **Very slow uploads**, where a read waits more than 60 seconds for the next bytes,
-  fail with 408. Raise `RequestBodyReadTimeout` server-wide or per route.
 - **Requests with more than 100 header field lines**, typically behind proxies that
   add fields, are refused with 431 Request Header Fields Too Large. Every received
   line counts, including repeated names. Raise the count with
@@ -477,11 +488,11 @@ server that faces untrusted clients. Check these cases:
   limit configured, request cleanup used to read such a body before the response and
   answer 408 or 413 instead of the handler's response when the body stalled or ran
   over. Now the handler's response goes out first. HTTP/1.1 then discards the body under
-  the keep-alive deadline, the body limit and the read deadline, and closes the
+  the keep-alive deadline, the body limit and any read deadline, and closes the
   connection when one of them ends the discard. HTTP/2 resets the stream with
   `NO_ERROR`, and HTTP/3 sends `STOP_SENDING` with `H3_NO_ERROR`. A body the handler
   opened is still read to its end during cleanup, and each of those reads waits at most
-  the read deadline.
+  the read deadline, when one is set.
 
 See [request limits](../guides/request-limits.md#defaults) for the full list.
 
@@ -513,10 +524,10 @@ existing policy path; actual-byte enforcement depends on their own stream
 integration. See [request-body byte limits](../guides/request-body-limits.md)
 for configuration, route inheritance and stream ownership.
 
-## Request body read deadlines
+## Optional request body read deadlines
 
-`RequestBodyReadTimeout` defaults to 60 seconds per read; null removes it. A
-stalled body read reports HTTP 408; caller cancellation retains the caller's
+`RequestBodyReadTimeout` is disabled by default. When enabled, a stalled body
+read reports HTTP 408; caller cancellation retains the caller's
 cancellation token. A timed-out request cannot resume reading, and a canceled read
 cannot be replaced until its underlying source has finished. Applications should
 finish handling that request rather than retrying its input operation.
@@ -524,14 +535,14 @@ finish handling that request rather than retrying its input operation.
 A read canceled with the handler's own token returns at once, even when the
 transport has not processed the cancellation yet. Until it has, another read
 throws `InvalidOperationException`, and an HTTP/3 body can still report `CanRead`
-as true. With the deadline set to null, the handler reads the transport directly
-and observes its cancellation as v1 did.
+as true. Without a deadline, the handler reads the transport directly and
+observes its cancellation as v1 did.
 
 The deadline reader uses private pooled storage, in chunks of at most 64 KiB,
 and copies data into application memory only after a successful read. If a source
 ignores cancellation, that storage remains owned until its actual read settles;
-request retirement does not return still-active storage to the pool. The deadline
-therefore adds a copy to body reads; requests without a body are not timed.
+request retirement does not return still-active storage to the pool. Enabling the
+deadline therefore adds a copy to body reads; requests without a body are not timed.
 Transport retirement remains responsible for ending the underlying I/O.
 
 ## Additive request trailer snapshots

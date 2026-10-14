@@ -11,13 +11,13 @@ server-wide values under a base route.
 | `MaximumRequestHeaderBytes` | 32 KiB (32,768 bytes) | HTTP 431 |
 | `MaximumRequestHeaderCount` | 100 field lines | HTTP 431 |
 | `MaximumRequestBodyBytes` | 30,000,000 bytes (about 28.6 MiB) | HTTP 413 |
-| `RequestBodyReadTimeout` | 60 seconds per read | HTTP 408 |
+| `RequestBodyReadTimeout` | null (no deadline) | HTTP 408 |
 | `MaximumConcurrentRequests` with `RequestQueueLimit` | null (unlimited), queue 0 | HTTP 503 |
 | `RequestTimeout` | null (no deadline) | HTTP 503 |
 
 ## Defaults
 
-The header, body and body-read limits are on by default, with values modelled on
+The header and body limits are on by default, with values modelled on
 Kestrel's `KestrelServerLimits` in ASP.NET Core 10.0.13. Before v2 they were all off.
 
 | EmbedIO option | Default | Kestrel equivalent |
@@ -26,13 +26,12 @@ Kestrel's `KestrelServerLimits` in ASP.NET Core 10.0.13. Before v2 they were all
 | `MaximumRequestHeaderBytes` | 32 KiB | `MaxRequestHeadersTotalSize`, 32 KiB |
 | `MaximumRequestHeaderCount` | 100 | `MaxRequestHeaderCount`, 100 |
 | `RequestHeadersTimeout` (TCP connections) | 30 seconds | `RequestHeadersTimeout`, 30 seconds |
-| `RequestBodyReadTimeout` | 60 seconds per read | none: Kestrel enforces `MinRequestBodyDataRate`, 240 bytes per second after a 5-second grace period |
+| `RequestBodyReadTimeout` | null (no deadline) | none: Kestrel enforces `MinRequestBodyDataRate`, 240 bytes per second after a 5-second grace period; EmbedIO has no data rate yet, [#424](https://github.com/WilliamSmithEdward/embedio-neo/issues/424) |
 | `WebSocketModule.MaxMessageSize` | 4 MiB | none: ASP.NET Core's `WebSocketOptions` has no message size limit |
 
 - Each default can be replaced in the same way as before, server-wide or, for the body
-  limit and the body read deadline, by a [route policy](#per-route-policies). Null
-  removes a limit, as it always did: `WithMaximumRequestBodyBytes(null)`,
-  `WithRequestHeaderLimits(null, null)`, `WithRequestBodyReadTimeout(null)`. For
+  limit, by a [route policy](#per-route-policies). Null removes a limit, as it always
+  did: `WithMaximumRequestBodyBytes(null)`, `WithRequestHeaderLimits(null, null)`. For
   `MaxMessageSize`, zero disables the check, as before.
 - The 32 KiB header default equals the fixed ceiling of each protocol parser, which
   applies first, so it refuses nothing the server accepted before; lowering it takes
@@ -43,6 +42,21 @@ Kestrel's `KestrelServerLimits` in ASP.NET Core 10.0.13. Before v2 they were all
   what the handlers do, and a request deadline would cut off long downloads, streamed
   responses and server-sent events. Set them for a server that faces untrusted clients,
   and lift the deadline per route where requests legitimately run long.
+
+**No default bounds how long a body takes to arrive.** The body defaults bound its
+size: 30,000,000 bytes as transferred and, with `SupportCompressedRequests`, a decoded
+limit that follows it. The header defaults bound the head: 32 KiB, 100 field lines,
+and 30 seconds for it to arrive on a TCP connection. `RequestBodyReadTimeout`,
+`RequestTimeout` and `MaximumConcurrentRequests` are null. So a client that sends a
+head and then stalls, or sends its body a byte at a time, keeps a handler that is
+reading that body, and its connection, until the client disconnects or the server
+stops. The keep-alive deadline does not cover this: on HTTP/1.1 it bounds only the
+discard of a body the handler never read (see [request body bytes](#request-body-bytes)).
+To bound a body the application reads, set `RequestBodyReadTimeout`, server-wide or
+for a route, or `RequestTimeout`. A minimum data rate like Kestrel's
+`MinRequestBodyDataRate`, which also stops a client that trickles its body, is tracked
+in [#424](https://github.com/WilliamSmithEdward/embedio-neo/issues/424). No earlier
+version bounded this by default either; these defaults leave it unchanged.
 
 They live on `WebServerOptionsBase`, next to the existing
 `MaximumDecompressedRequestBodyBytes`, and are enforced in the server's shared
@@ -137,10 +151,11 @@ connection continue.
 **Unread bodies.** When the handler returns, the server reads the rest of a body the
 handler opened, so an excess byte the handler never read still fails the request with
 413 while the response is not committed; each read of that drain waits at most the read
-deadline. A body the handler never opened does not hold back the response. On HTTP/1.1
-the connection discards it after the response, under the keep-alive deadline, the byte
-limit and the read deadline, and closes instead of carrying another request when any of
-them ends the discard. On HTTP/2 and HTTP/3 the transport ends it after the response:
+deadline, when one is set. A body the handler never opened does not hold back the
+response. On HTTP/1.1 the connection discards it after the response, under the
+keep-alive deadline, the byte limit and any read deadline, and closes instead of
+carrying another request when one of them ends the discard. On HTTP/2 and HTTP/3 the
+transport ends it after the response:
 HTTP/2 resets the stream with `NO_ERROR` and HTTP/3 sends `STOP_SENDING` with
 `H3_NO_ERROR` (RFC 9113 section 8.1, RFC 9114 section 4.1).
 
@@ -177,8 +192,8 @@ when the server closes with unread data; HTTP/2 and HTTP/3 clients receive the 4
 
 `RequestBodyReadTimeout` bounds how long one read of the request body may wait for
 data. It applies to each read separately, so a slow but steady upload is not cut off;
-a client that stops sending is. The default is 60 seconds, and null removes it. Only
-requests that carry a body are timed.
+a client that stops sending is. It is off by default; set it server-wide or for a route.
+Only requests that carry a body are timed.
 
 - A read that misses the deadline throws a 408 `HttpException`, and so does every
   later read of the same body. A handler that lets it propagate answers 408.
@@ -189,6 +204,12 @@ requests that carry a body are timed.
 - It complements `RequestTimeout`: the read deadline catches a stalled upload even when
   the handler does not observe the context token, and the request deadline bounds the
   whole request.
+- It does not stop a client that sends a byte just before each deadline. A minimum data
+  rate would; see [#424](https://github.com/WilliamSmithEdward/embedio-neo/issues/424).
+- Each timed read lands in a private buffer and is then copied, so a read the deadline
+  abandons never writes into the caller's buffer later. In the load benchmark this cost
+  about 9% more server CPU per 1 MiB HTTP/1.1 upload, and HTTP/2 and HTTP/3 uploads
+  allocated 85 to 100 KB more per MiB, which is why the deadline is off by default.
 
 ## Connection limits
 
@@ -344,8 +365,8 @@ and is skipped on hosts without QUIC support.
 | Body limit set to null, declared length 30,000,001 | dispatched | n/a | n/a |
 | Default header count | 100 field lines served, 101 refused with 431 | 101 refused with 431, 90 served | same |
 | Header count replaced or removed | 120 allows 120 and refuses 121; null allows 150 | n/a | n/a |
-| Default body read deadline | 60 s on a request with a body | same | same |
-| Body read deadline set to 5 s or null | 5 s, or none | none for null | n/a |
+| Default body read deadline | none | same | same |
+| Body read deadline set to 5 s | 5 s on a request with a body | same | same |
 | Body the handler never opened | n/a | response sent, body left to the transport | same, for a GET without `content-length` |
 | Trickled body the handler never opened | response at once, connection closed at the keep-alive deadline | n/a | n/a |
 | Handler disposes its body view under the read deadline | connection reused | n/a | n/a |

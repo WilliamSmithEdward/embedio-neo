@@ -129,7 +129,7 @@ namespace EmbedIO.Tests.Issues
             Assert.That(options.MaximumConnections, Is.Null);
             Assert.That(options.RequestHeadersTimeout, Is.Null);
             Assert.That(options.KeepAliveTimeout, Is.Null);
-            Assert.That(options.RequestBodyReadTimeout, Is.EqualTo(TimeSpan.FromSeconds(60)));
+            Assert.That(options.RequestBodyReadTimeout, Is.Null);
             Assert.That(() => options.MaximumConnections = 0, Throws.InstanceOf<ArgumentOutOfRangeException>());
             Assert.That(() => options.RequestHeadersTimeout = TimeSpan.Zero, Throws.InstanceOf<ArgumentOutOfRangeException>());
             Assert.That(() => options.KeepAliveTimeout = TimeSpan.FromDays(30), Throws.InstanceOf<ArgumentOutOfRangeException>());

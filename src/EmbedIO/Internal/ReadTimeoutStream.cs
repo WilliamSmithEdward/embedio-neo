@@ -100,7 +100,14 @@ namespace EmbedIO.Internal
                 if (!transferred)
                 {
                     if (buffer == null) Volatile.Write(ref _readPending, 0);
-                    else if (read == null || read.IsCompleted) ReleaseStorage(buffer);
+                    else if (read == null || read.IsCompleted)
+                    {
+                        // A read can fault after a deadline, cancellation or retirement already won,
+                        // so nothing awaited it. Observe its exception here, or it surfaces later as
+                        // an unobserved task exception. The storage is free either way.
+                        _ = read?.Exception;
+                        ReleaseStorage(buffer);
+                    }
                     else
                     {
                         // A source may ignore cancellation. Keep its private storage until its

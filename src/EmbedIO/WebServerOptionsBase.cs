@@ -14,7 +14,6 @@ namespace EmbedIO
         internal const long DefaultMaximumRequestBodyBytes = 30_000_000;
         internal const int DefaultMaximumRequestHeaderBytes = 32 * 1024;
         internal const int DefaultMaximumRequestHeaderCount = 100;
-        internal static readonly TimeSpan DefaultRequestBodyReadTimeout = TimeSpan.FromSeconds(60);
 
         private bool _supportCompressedRequests;
         private bool _decompressedLimitSet;
@@ -71,7 +70,7 @@ namespace EmbedIO
         private TimeSpan? _requestTimeout;
         private int? _maximumRequestHeaderBytes = DefaultMaximumRequestHeaderBytes;
         private int? _maximumRequestHeaderCount = DefaultMaximumRequestHeaderCount;
-        private TimeSpan? _requestBodyReadTimeout = DefaultRequestBodyReadTimeout;
+        private TimeSpan? _requestBodyReadTimeout;
         private bool _enableTelemetry;
         private string? _telemetryServerName;
 
@@ -181,7 +180,7 @@ namespace EmbedIO
 
         /// <summary>
         /// Gets or sets how long one read of a request body may wait for data. The default is
-        /// 60 seconds. Null removes the read deadline.
+        /// null: no read deadline.
         /// </summary>
         /// <remarks>
         /// <para>The deadline applies to each read of <see cref="IHttpRequest.InputStream"/>
