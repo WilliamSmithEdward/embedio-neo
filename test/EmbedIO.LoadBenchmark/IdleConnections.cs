@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using EmbedIO.PlatformTests;
 
 // Per-connection memory of idle keep-alive connections: each engine serves one
 // request per connection, then holds the connections idle while the server
@@ -95,7 +96,7 @@ internal static class IdleConnections
             ["serverCpus"] = serverCpus,
             ["startedUtc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
         };
-        var port = Orchestrator.FreePort();
+        var port = LoopbackPorts.Free();
         var arguments = new List<string> { "server", "--engine", target.Engine, "--protocol", protocol.ToString(), "--port", port.ToString(CultureInfo.InvariantCulture) };
         if (tls) arguments.AddRange(["--tls", "--certificate", certificatePath, "--certificate-password", password]);
         var timeout = TimeSpan.FromSeconds(hold + settle + 120);
