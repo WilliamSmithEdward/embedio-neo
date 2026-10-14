@@ -343,8 +343,11 @@ namespace EmbedIO
             var headerPolicyRejected = false;
             try
             {
-                $"[{context.Id}] {context.Request.SafeGetRemoteEndpointStr()}: {context.Request.HttpMethod} {context.Request.Url.PathAndQuery} - {context.Request.UserAgent}"
-                    .Debug(LogSource);
+                if (Log.IsEnabled(TraceEventType.Verbose))
+                {
+                    $"[{context.Id}] {context.Request.SafeGetRemoteEndpointStr()}: {context.Request.HttpMethod} {context.Request.Url.PathAndQuery} - {context.Request.UserAgent}"
+                        .Debug(LogSource);
+                }
 
                 if (SessionManager != null)
                     context.Session = new SessionProxy(context, SessionManager);
@@ -520,13 +523,16 @@ namespace EmbedIO
                         }
                     }
 
-                    var handlingMilliseconds = (long)((Stopwatch.GetTimestamp() - requestStarted) * MillisecondsPerTimestamp);
-                    var statusCode = context.Response.StatusCode;
-                    var statusDescription = context.Response.StatusDescription;
-                    var sendChunked = context.Response.SendChunked;
-                    var contentLength = context.Response.ContentLength64;
-                    $"[{context.Id}] {context.Request.HttpMethod} {context.Request.Url.AbsolutePath}: \"{statusCode} {statusDescription}\" sent in {handlingMilliseconds}ms ({(sendChunked ? "chunked" : contentLength.ToString(CultureInfo.InvariantCulture) + " bytes")})"
-                        .Info(LogSource);
+                    if (Log.IsEnabled(TraceEventType.Information))
+                    {
+                        var handlingMilliseconds = (long)((Stopwatch.GetTimestamp() - requestStarted) * MillisecondsPerTimestamp);
+                        var statusCode = context.Response.StatusCode;
+                        var statusDescription = context.Response.StatusDescription;
+                        var sendChunked = context.Response.SendChunked;
+                        var contentLength = context.Response.ContentLength64;
+                        $"[{context.Id}] {context.Request.HttpMethod} {context.Request.Url.AbsolutePath}: \"{statusCode} {statusDescription}\" sent in {handlingMilliseconds}ms ({(sendChunked ? "chunked" : contentLength.ToString(CultureInfo.InvariantCulture) + " bytes")})"
+                            .Info(LogSource);
+                    }
                 }
             }
             catch (Exception exception) when (EmbedIO.Internal.ServerTelemetry.ObserveCleanup(telemetry, exception))
