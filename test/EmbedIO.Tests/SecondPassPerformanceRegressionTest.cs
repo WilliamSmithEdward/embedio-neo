@@ -19,7 +19,9 @@ namespace EmbedIO.Tests
     public class SecondPassPerformanceRegressionTest
     {
         private static readonly Assembly Core = typeof(WebServer).Assembly;
-        private static readonly Regex Quality = new Regex(@";[ \t]*q=(?:(?:1(?:\.(?:0{1,3}))?)|(?:(0)(?:\.(\d{1,3}))?))[ \t]*(?:;|,|$)",
+        // The weight's name is case-insensitive (RFC 9110, Section 12.4.2), so the reference
+        // accepts "Q=" as the parser now does; the rest of the expression is unchanged.
+        private static readonly Regex Quality = new Regex(@";[ \t]*[qQ]=(?:(?:1(?:\.(?:0{1,3}))?)|(?:(0)(?:\.(\d{1,3}))?))[ \t]*(?:;|,|$)",
             RegexOptions.CultureInvariant | RegexOptions.Singleline);
 
         [Test]

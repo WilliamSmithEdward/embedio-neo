@@ -5,28 +5,22 @@ using System.Threading.Tasks;
 namespace EmbedIO.Internal
 {
     // Retirement keeps the semaphore alive until every admitted writer,
-    // including queued writers, exits.
+    // including queued writers, exits. One state word counts admitted writers
+    // and records retirement, so entering and leaving take no lock, and an
+    // uncontended asynchronous entry completes without allocating.
     internal sealed class AsyncWriteGate : IDisposable
     {
-        private readonly object _sync = new();
+        private const int Retired = int.MinValue;
         private readonly SemaphoreSlim _semaphore = new(1, 1);
-        private readonly Action _release;
-        private int _writers;
-        private bool _disposed;
-
-        internal AsyncWriteGate() => _release = Release;
+        private int _state;
 
         internal Scope Enter()
         {
-            lock (_sync)
-            {
-                if (_disposed) throw new ObjectDisposedException(nameof(AsyncWriteGate));
-                _writers++;
-            }
+            if (!TryAddReference()) throw new ObjectDisposedException(nameof(AsyncWriteGate));
             try
             {
                 _semaphore.Wait();
-                return new Scope(_release);
+                return new Scope(this);
             }
             catch
             {
@@ -35,17 +29,29 @@ namespace EmbedIO.Internal
             }
         }
 
-        internal async Task<Scope> EnterAsync(CancellationToken token)
+        internal ValueTask<Scope> EnterAsync(CancellationToken token)
         {
-            lock (_sync)
+            // Retirement is reported through the returned task, as an asynchronous entry always has.
+            if (!TryAddReference())
+                return new ValueTask<Scope>(Task.FromException<Scope>(new ObjectDisposedException(nameof(AsyncWriteGate))));
+            try
             {
-                if (_disposed) throw new ObjectDisposedException(nameof(AsyncWriteGate));
-                _writers++;
+                if (!token.IsCancellationRequested && _semaphore.Wait(0)) return new ValueTask<Scope>(new Scope(this));
             }
+            catch
+            {
+                ReleaseReference();
+                throw;
+            }
+            return WaitAsync(token);
+        }
+
+        private async ValueTask<Scope> WaitAsync(CancellationToken token)
+        {
             try
             {
                 await _semaphore.WaitAsync(token).ConfigureAwait(false);
-                return new Scope(_release);
+                return new Scope(this);
             }
             catch
             {
@@ -56,11 +62,16 @@ namespace EmbedIO.Internal
 
         public void Dispose()
         {
-            lock (_sync)
+            var state = Volatile.Read(ref _state);
+            while (state >= 0)
             {
-                if (_disposed) return;
-                _disposed = true;
-                if (_writers == 0) _semaphore.Dispose();
+                var observed = Interlocked.CompareExchange(ref _state, state | Retired, state);
+                if (observed == state)
+                {
+                    if (state == 0) _semaphore.Dispose();
+                    return;
+                }
+                state = observed;
             }
         }
 
@@ -70,19 +81,29 @@ namespace EmbedIO.Internal
             ReleaseReference();
         }
 
+        private bool TryAddReference()
+        {
+            var state = Volatile.Read(ref _state);
+            while (state >= 0)
+            {
+                var observed = Interlocked.CompareExchange(ref _state, state + 1, state);
+                if (observed == state) return true;
+                state = observed;
+            }
+            return false;
+        }
+
+        // The last writer to leave a retired gate disposes the semaphore.
         private void ReleaseReference()
         {
-            lock (_sync)
-            {
-                if (--_writers == 0 && _disposed) _semaphore.Dispose();
-            }
+            if (Interlocked.Decrement(ref _state) == Retired) _semaphore.Dispose();
         }
 
         internal readonly struct Scope : IDisposable
         {
-            private readonly Action _release;
-            internal Scope(Action release) => _release = release;
-            public void Dispose() => _release();
+            private readonly AsyncWriteGate _gate;
+            internal Scope(AsyncWriteGate gate) => _gate = gate;
+            public void Dispose() => _gate.Release();
         }
     }
 }

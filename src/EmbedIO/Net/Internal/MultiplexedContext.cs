@@ -17,7 +17,7 @@ using EmbedIO.WebSockets.Internal;
 
 namespace EmbedIO.Net.Internal
 {
-    internal sealed class MultiplexedContext : IHttpContextImpl, IHttpTunnelContext, IDisposable, EmbedIO.Internal.ITelemetryContext
+    internal sealed class MultiplexedContext : IHttpContextImpl, IHttpTunnelContext, IDisposable, EmbedIO.Internal.ITelemetryContext, ILazyItems
     {
         private readonly object _sync = new();
         private readonly long _started = Stopwatch.GetTimestamp();
@@ -47,7 +47,7 @@ namespace EmbedIO.Net.Internal
             Request = new MultiplexedRequest(exchange, local, remote, secure, clientCertificate);
             Response = new MultiplexedResponse(exchange);
         }
-        public string Id { get; } = NextId();
+        public string Id { get; } = UniqueIdGenerator.GetNext();
         public CancellationToken CancellationToken
         {
             get => _cancellation;
@@ -87,24 +87,13 @@ namespace EmbedIO.Net.Internal
                 return Interlocked.CompareExchange(ref _items, created, null) ?? created;
             }
         }
+        bool ILazyItems.HasItems => Volatile.Read(ref _items) != null;
         public bool IsHandled { get; private set; }
         public MimeTypeProviderStack MimeTypeProviders { get; } = new();
         internal Task Completion => _completion.Task;
         private static readonly HpackField[] ContinueFields = { new(":status", "100") };
         private static readonly double MillisecondsPerTimestamp = 1000.0 / Stopwatch.Frequency;
 
-        // Same value format as UniqueIdGenerator.GetNext, the first 22 base64 characters
-        // of a new GUID, without its intermediate byte array and 24-character string.
-        private static string NextId()
-        {
-#if NET
-            Span<byte> bytes = stackalloc byte[16];
-            Span<char> chars = stackalloc char[24];
-            if (Guid.NewGuid().TryWriteBytes(bytes) && Convert.TryToBase64Chars(bytes, chars, out var written) && written == 24)
-                return new string(chars.Slice(0, 22));
-#endif
-            return UniqueIdGenerator.GetNext();
-        }
         internal Task SendContinueAsync(bool defer = false)
         {
             if (Request.HttpMethod == "CONNECT" || !Request.HasEntityBody || Request.ContentLength64 == 0
@@ -274,6 +263,7 @@ namespace EmbedIO.Net.Internal
                     transport.Dispose();
                     // WebServer still flushes and completes this context after the module returns.
                 });
+                socket.StartKeepAlive(keepAliveInterval);
                 return new WebSocketContext(this, "13", requestedProtocols, acceptedProtocol,
                     socket, cancellationToken);
             }
