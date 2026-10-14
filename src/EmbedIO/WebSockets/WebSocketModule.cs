@@ -41,6 +41,9 @@ namespace EmbedIO.WebSockets
 
         private const int ReceiveBufferSize = 2048;
 
+        // A finite default bounds what one client can make the server buffer per message.
+        private const int DefaultMaxMessageSize = 4 * 1024 * 1024;
+
         private readonly bool _enableConnectionWatchdog;
         private readonly List<string> _protocols = new List<string>();
         private readonly ConcurrentDictionary<string, IWebSocketContext> _contexts = new ConcurrentDictionary<string, IWebSocketContext>();
@@ -87,7 +90,7 @@ namespace EmbedIO.WebSockets
             : base(requestPath)
         {
             _enableConnectionWatchdog = enableConnectionWatchdog;
-            _maxMessageSize = 0;
+            _maxMessageSize = DefaultMaxMessageSize;
             _keepAliveInterval = TimeSpan.FromSeconds(30);
             _encoding = Encoding.UTF8;
         }
@@ -98,8 +101,8 @@ namespace EmbedIO.WebSockets
         /// <summary>
         /// <para>Gets or sets the maximum size of a received message.
         /// If a message exceeding the maximum size is received from a client,
-        /// the connection is closed automatically.</para>
-        /// <para>The default value is 0, which disables message size checking.</para>
+        /// the connection is closed automatically with status 1009 (message too big).</para>
+        /// <para>The default value is 4 MiB (4,194,304 bytes). Zero disables message size checking.</para>
         /// </summary>
         protected int MaxMessageSize
         {

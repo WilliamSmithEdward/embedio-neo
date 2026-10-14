@@ -154,7 +154,7 @@ namespace EmbedIO.Tests
         public void OptionPreservesDefaultAndEnforcesValidationAndLocking()
         {
             var options = new TestWebServerOptions();
-            Assert.That(options.MaximumDecompressedRequestBodyBytes, Is.Null);
+            Assert.That(options.MaximumDecompressedRequestBodyBytes, Is.EqualTo(30_000_000L), "Until set, the decoded limit follows the body limit.");
             Assert.Throws<ArgumentOutOfRangeException>(() => options.MaximumDecompressedRequestBodyBytes = -1);
             options.MaximumDecompressedRequestBodyBytes = long.MaxValue;
             Assert.That(options.MaximumDecompressedRequestBodyBytes, Is.EqualTo(long.MaxValue));

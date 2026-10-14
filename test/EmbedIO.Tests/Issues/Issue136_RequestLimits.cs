@@ -364,10 +364,10 @@ namespace EmbedIO.Tests.Issues
         // ------------------------------------------------------------ configuration
 
         [Test]
-        public void DefaultsPreserveExistingBehavior()
+        public void DefaultsBoundBodiesButNotConcurrencyOrDeadlines()
         {
             var options = new WebServerOptions();
-            Assert.That(options.MaximumRequestBodyBytes, Is.Null);
+            Assert.That(options.MaximumRequestBodyBytes, Is.EqualTo(30_000_000L));
             Assert.That(options.MaximumConcurrentRequests, Is.Null);
             Assert.That(options.RequestQueueLimit, Is.Zero);
             Assert.That(options.RequestTimeout, Is.Null);

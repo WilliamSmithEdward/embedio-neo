@@ -1,6 +1,5 @@
 ﻿using System;
 using EmbedIO.Configuration;
-using EmbedIO.Internal;
 
 namespace EmbedIO
 {
@@ -9,8 +8,16 @@ namespace EmbedIO
     /// </summary>
     public abstract class WebServerOptionsBase : ConfiguredObject
     {
+        // Finite defaults, modelled on Kestrel's KestrelServerLimits in ASP.NET Core 10.0.13:
+        // MaxRequestBodySize, MaxRequestHeadersTotalSize and MaxRequestHeaderCount. Kestrel has
+        // no per-read body deadline; it enforces a minimum data rate instead.
+        internal const long DefaultMaximumRequestBodyBytes = 30_000_000;
+        internal const int DefaultMaximumRequestHeaderBytes = 32 * 1024;
+        internal const int DefaultMaximumRequestHeaderCount = 100;
+
         private bool _supportCompressedRequests;
-        internal RequestDecompressionPolicy? DecompressionPolicy { get; private set; }
+        private bool _decompressedLimitSet;
+        private long? _maximumDecompressedRequestBodyBytes;
 
         /// <summary>
         /// <para>Gets or sets a value indicating whether compressed request bodies are supported.</para>
@@ -31,29 +38,38 @@ namespace EmbedIO
 
         /// <summary>
         /// Gets or sets the maximum decoded bytes read from a compressed request body.
-        /// The default is null, preserving existing unlimited decompression behavior.
-        /// Zero permits only an empty decoded body. Excess content raises HTTP 413.
+        /// Until it is set, the limit is the request's body limit: <see cref="MaximumRequestBodyBytes"/>,
+        /// or the limit of the route policy that applies to the request, and this property
+        /// returns <see cref="MaximumRequestBodyBytes"/>. Setting a value, including null,
+        /// replaces that default. Null removes the limit. Zero permits only an empty decoded
+        /// body. Excess content raises HTTP 413.
         /// </summary>
         /// <remarks>This applies to request-stream helpers when compressed requests are enabled.</remarks>
         /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
         /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
         public long? MaximumDecompressedRequestBodyBytes
         {
-            get => DecompressionPolicy?.MaximumBytes;
+            get => _decompressedLimitSet ? _maximumDecompressedRequestBodyBytes : _maximumRequestBodyBytes;
             set
             {
                 EnsureConfigurationNotLocked();
                 if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
-                DecompressionPolicy = value.HasValue ? new RequestDecompressionPolicy(value.Value) : null;
+                _maximumDecompressedRequestBodyBytes = value;
+                _decompressedLimitSet = true;
             }
         }
 
-        private long? _maximumRequestBodyBytes;
+        // The decoded limit of a request whose effective body limit is bodyLimit, null
+        // when the body limit is lifted: the configured value, or else that body limit.
+        internal long? DecompressedLimitFor(long? bodyLimit)
+            => _decompressedLimitSet ? _maximumDecompressedRequestBodyBytes : bodyLimit;
+
+        private long? _maximumRequestBodyBytes = DefaultMaximumRequestBodyBytes;
         private int? _maximumConcurrentRequests;
         private int _requestQueueLimit;
         private TimeSpan? _requestTimeout;
-        private int? _maximumRequestHeaderBytes;
-        private int? _maximumRequestHeaderCount;
+        private int? _maximumRequestHeaderBytes = DefaultMaximumRequestHeaderBytes;
+        private int? _maximumRequestHeaderCount = DefaultMaximumRequestHeaderCount;
         private TimeSpan? _requestBodyReadTimeout;
         private bool _enableTelemetry;
         private string? _telemetryServerName;
@@ -164,7 +180,7 @@ namespace EmbedIO
 
         /// <summary>
         /// Gets or sets how long one read of a request body may wait for data. The default is
-        /// null, preserving existing behavior without a read deadline.
+        /// null: no read deadline.
         /// </summary>
         /// <remarks>
         /// <para>The deadline applies to each read of <see cref="IHttpRequest.InputStream"/>
@@ -172,7 +188,7 @@ namespace EmbedIO
         /// A read that misses it throws an <see cref="HttpException"/> with status 408, and every
         /// later read of the same body does too. On HTTP/1.x the connection is not reused.</para>
         /// <para>The deadline applies to every protocol and listener mode. <c>CONNECT</c> tunnels
-        /// are not request bodies and are not timed.</para>
+        /// are not request bodies and are not timed. A route policy can replace or lift it.</para>
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException">The value is not positive or exceeds the
         /// largest supported timer interval.</exception>
@@ -192,7 +208,7 @@ namespace EmbedIO
         /// <summary>
         /// Gets or sets the maximum number of request body bytes a handler may read, counted
         /// as transferred, before any content decoding.
-        /// The default is null, preserving existing unlimited behavior.
+        /// The default is 30,000,000 bytes, about 28.6 MiB. Null removes the limit.
         /// </summary>
         /// <remarks>
         /// <para>A request that declares a larger Content-Length is rejected with HTTP 413 before
@@ -200,7 +216,9 @@ namespace EmbedIO
         /// with HTTP 413 when a read crosses the limit. On HTTP/1.x the connection is not reused
         /// after either rejection, because the unread remainder of the body cannot be trusted.</para>
         /// <para>Zero permits only requests without body content. When compressed requests are
-        /// enabled, <see cref="MaximumDecompressedRequestBodyBytes"/> separately limits decoded bytes.</para>
+        /// enabled, <see cref="MaximumDecompressedRequestBodyBytes"/> separately limits decoded
+        /// bytes; until it is set, it follows this limit. A route policy can replace or lift the
+        /// limit for requests under its base route.</para>
         /// <para>While a limit is set, a request carrying <c>Expect: 100-continue</c> receives its
         /// interim <c>100 Continue</c> response only when the handler first reads the body, so a
         /// refused body is never invited.</para>
@@ -220,13 +238,15 @@ namespace EmbedIO
 
         /// <summary>
         /// Gets or sets the maximum number of requests the server handles at the same time.
-        /// The default is null, preserving existing unlimited dispatch.
+        /// The default is null: dispatch is unlimited.
         /// </summary>
         /// <remarks>
-        /// A request arriving while every slot is busy waits in a bounded queue of
+        /// <para>A request arriving while every slot is busy waits in a bounded queue of
         /// <see cref="RequestQueueLimit"/> entries. When the queue is also full, the request is
         /// rejected with HTTP 503 before any module runs. The limit applies to all listener modes
-        /// and protocol versions and counts each HTTP/2 or HTTP/3 stream as one request.
+        /// and protocol versions and counts each HTTP/2 or HTTP/3 stream as one request.</para>
+        /// <para>No default fits every application, so set this for a server exposed to untrusted
+        /// clients: the right number depends on what the handlers do.</para>
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException">The value is less than one.</exception>
         /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
@@ -262,7 +282,7 @@ namespace EmbedIO
 
         /// <summary>
         /// Gets or sets how long a request may be handled before the server cancels its context
-        /// token. The default is null, preserving existing behavior without a deadline.
+        /// token. The default is null: requests have no deadline.
         /// </summary>
         /// <remarks>
         /// <para>The deadline starts when the server begins handling the request, including any time
@@ -271,6 +291,9 @@ namespace EmbedIO
         /// A handler that ignores the token runs to completion.</para>
         /// <para>When a handler stops because of the deadline before its response is committed,
         /// the server answers HTTP 503. After commitment the response is ended visibly instead.</para>
+        /// <para>Long downloads, streamed responses and server-sent events make any single default
+        /// wrong for some routes, so set this for a server exposed to untrusted clients and lift
+        /// it per route where a request legitimately runs long.</para>
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException">The value is not positive or exceeds the
         /// largest supported timer interval.</exception>
@@ -288,8 +311,8 @@ namespace EmbedIO
         }
 
         /// <summary>
-        /// Gets or sets the maximum total size of a request's header fields. The default is null,
-        /// preserving existing behavior.
+        /// Gets or sets the maximum total size of a request's header fields. The default is
+        /// 32 KiB (32,768 bytes). Null removes this limit and leaves the parsers' own ceiling.
         /// </summary>
         /// <remarks>
         /// <para>The size is the sum of each received header field's name and value lengths. The
@@ -313,7 +336,7 @@ namespace EmbedIO
 
         /// <summary>
         /// Gets or sets the maximum number of header fields a request may carry. The default is
-        /// null, preserving existing behavior.
+        /// 100. Null removes the limit.
         /// </summary>
         /// <remarks>
         /// Every received field line counts, including repeated names and each HTTP/2 or HTTP/3

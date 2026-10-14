@@ -1,8 +1,11 @@
 ﻿using System;
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Quic;
 using System.Net.Sockets;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -40,8 +43,10 @@ namespace EmbedIO.Tests
                         await context.Response.OutputStream.FlushAsync(context.CancellationToken);
                         await resume.Task.WaitAsync(context.CancellationToken);
                     }
-                    // The handler deliberately does not read the entity: cleanup
-                    // must enforce both the raw policy and body-read deadline.
+                    // The handler deliberately does not read the entity. Cleanup leaves an
+                    // unopened body alone: HTTP/1 discards it after the response under the
+                    // connection's drain deadline, the raw policy and the body-read deadline;
+                    // HTTP/2 and HTTP/3 let the transport end the stream after the response.
                     context.SetHandled();
                 }, options => options.WithMaximumRequestBodyBytes(2).WithRequestBodyReadTimeout(TimeSpan.FromMilliseconds(200)),
                 server => server.OnHttpException = async (context, error) =>
@@ -60,10 +65,16 @@ namespace EmbedIO.Tests
                         $"POST /upload HTTP/1.1\r\nHost: localhost:{host.Port}\r\nContent-Length: 1\r\n\r\n"), host.Token);
                     if (!committed)
                     {
+                        // The handler's response goes out first. The connection then discards
+                        // the unopened body under its drain deadline, and the 200 ms read
+                        // deadline closes it when the declared byte never arrives. Cleanup used
+                        // to drain the body ahead of the response and answer 408 instead.
                         var response = await new RawHttp1Reader(wire).ReadResponseAsync(host.Token);
-                        Assert.That(response.Status, Is.EqualTo(408));
-                        Assert.That(Encoding.UTF8.GetString(response.Body), Does.Contain("within the configured time"));
-                        Assert.That(response.Headers["connection"], Is.EqualTo("close"));
+                        Assert.That(response.Status, Is.EqualTo(200));
+                        Assert.That(response.Body, Is.Empty);
+                        var end = new byte[1];
+                        try { Assert.That(await wire.ReadAsync(end, host.Token), Is.Zero, "The connection closes after the response."); }
+                        catch (IOException) { }
                     }
                     else
                     {
@@ -99,7 +110,7 @@ namespace EmbedIO.Tests
                         (":method", "POST"), (":scheme", "http"), (":authority", "localhost:" + host.Port),
                         (":path", "/upload"), ("content-length", "1")));
                     var head = await peer.UntilAsync(frame => frame.Id == 1 && frame.Type == Http2Headers);
-                    Assert.That(RawBodyHpackStatus(head.Payload), Is.EqualTo(committed ? 200 : 408));
+                    Assert.That(RawBodyHpackStatus(head.Payload), Is.EqualTo(200));
                     if (committed)
                     {
                         var data = await peer.UntilAsync(frame => frame.Id == 1 && frame.Type == Http2Data);
@@ -111,16 +122,26 @@ namespace EmbedIO.Tests
                     }
                     else
                     {
+                        // The handler's empty response ends the stream, then RST_STREAM
+                        // NO_ERROR asks the client to stop sending (RFC 9113 section 8.1).
+                        var ended = (head.Flags & EndStream) != 0;
                         using var body = new MemoryStream();
                         while (true)
                         {
                             var frame = await peer.ReceiveAsync();
                             Assert.That(frame.Type, Is.Not.EqualTo(Http2GoAway));
                             if (frame.Id != 1) continue;
-                            if (frame.Type == Http2Data) body.Write(frame.Payload);
-                            if (frame.Type == Http2Reset || (frame.Flags & EndStream) != 0) break;
+                            if (frame.Type == Http2Data)
+                            {
+                                body.Write(frame.Payload);
+                                ended |= (frame.Flags & EndStream) != 0;
+                            }
+                            if (frame.Type != Http2Reset) continue;
+                            Assert.That(ended, Is.True, "The response ends before the reset.");
+                            Assert.That(frame.Payload, Is.EqualTo(new byte[4]), "RST_STREAM NO_ERROR.");
+                            break;
                         }
-                        Assert.That(Encoding.UTF8.GetString(body.ToArray()), Does.Contain("within the configured time"));
+                        Assert.That(body.Length, Is.Zero);
                     }
                     await peer.AssertHealthyAsync(3);
                 }
@@ -130,7 +151,7 @@ namespace EmbedIO.Tests
                     await using var request = await peer.OpenRequestAsync("POST", "/upload", false);
                     var head = await H3Peer.ReadFrameAsync(request, host.Token);
                     Assert.That(head.Type, Is.EqualTo(1));
-                    Assert.That(RawBodyQpackStatus(head.Payload), Is.EqualTo(committed ? 200 : 408));
+                    Assert.That(RawBodyQpackStatus(head.Payload), Is.EqualTo(200));
                     if (committed)
                     {
                         var data = await H3Peer.ReadFrameAsync(request, host.Token);
@@ -148,6 +169,9 @@ namespace EmbedIO.Tests
                     }
                     else
                     {
+                        // The handler's empty response ends with FIN, then STOP_SENDING with
+                        // H3_NO_ERROR asks the client to stop sending (RFC 9114 section 4.1).
+                        var writesClosed = request.WritesClosed;
                         using var body = new MemoryStream();
                         while (true)
                         {
@@ -156,15 +180,129 @@ namespace EmbedIO.Tests
                             Assert.That(frame.Type, Is.Zero);
                             body.Write(frame.Payload);
                         }
-                        Assert.That(Encoding.UTF8.GetString(body.ToArray()), Does.Contain("within the configured time"));
+                        Assert.That(body.Length, Is.Zero);
+                        var stopped = await Assert.CatchAsync<QuicException>(async () => await writesClosed.WaitAsync(host.Token));
+                        if (!QuicConnection.IsSupported)
+                            throw new AssertionException("The required QUIC transport became unavailable.");
+                        Assert.That(stopped?.ApplicationErrorCode, Is.EqualTo(0x100L), "STOP_SENDING with H3_NO_ERROR.");
                     }
                     await peer.AssertHealthyAsync(host.Token);
                 }
-                Assert.That(Volatile.Read(ref formatted), Is.EqualTo(committed ? 0 : 1),
-                    "Only an uncommitted cleanup408 invokes error formatting, exactly once.");
+                Assert.That(Volatile.Read(ref formatted), Is.Zero,
+                    "An unopened body never replaces the handler's response, so nothing is formatted as an error.");
                 Assert.That(host.Server.State, Is.EqualTo(WebServerState.Listening));
             }
             finally { resume.TrySetResult(true); }
+        }
+
+        // A handler that gives up on a slow HTTP/3 upload by canceling its own read still
+        // answers, and cleanup leaves the abandoned body to the transport. Under the default
+        // body limit cleanup used to drain it, which could only fail, and logged the request as
+        // a failed stream. With a read deadline the canceled read also stays unsettled in the
+        // deadline's wrapper, which cleanup must leave alone too.
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task HandlerCanceledHttp3ReadLeavesTheBodyToTheTransport(bool readDeadline)
+        {
+            RequireQuic();
+            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            await HandlerCanceledHttp3ReadCore(readDeadline);
+        }
+
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static async Task HandlerCanceledHttp3ReadCore(bool readDeadline)
+        {
+            using var trace = new RequestOutcomeTrace();
+            using var certificate = Certificate();
+            await using var host = await Host.StartAsync(HttpListenerMode.EmbedIOHttp3, certificate, async context =>
+            {
+                if (await Healthy(context)) return;
+                trace.RequestId = context.Id;
+                var buffer = new byte[64];
+                var total = 0;
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
+                try
+                {
+                    while (total < 3)
+                    {
+                        var prefix = await context.Request.InputStream.ReadAsync(buffer, context.CancellationToken);
+                        if (prefix == 0) throw new EndOfStreamException("The handler expects three body bytes first.");
+                        total += prefix;
+                    }
+                    deadline.CancelAfter(TimeSpan.FromMilliseconds(300));
+                    int count;
+                    while ((count = await context.Request.InputStream.ReadAsync(buffer, deadline.Token)) != 0) total += count;
+                }
+                catch (OperationCanceledException) when (deadline.IsCancellationRequested && !context.CancellationToken.IsCancellationRequested)
+                {
+                    context.Response.StatusCode = 408;
+                    await context.SendStringAsync("timeout after " + total, "text/plain", WebServer.Utf8NoBomEncoding);
+                }
+            }, options => { if (readDeadline) options.WithRequestBodyReadTimeout(TimeSpan.FromSeconds(60)); });
+            await using var peer = await H3Peer.ConnectAsync(host, certificate);
+            await using var request = await peer.OpenRequestAsync("POST", "/upload", false);
+            await request.WriteAsync(new byte[] { 0, 3, 1, 2, 3 }, host.Token);
+            Assert.That((await H3Peer.ReadFrameAsync(request, host.Token)).Type, Is.EqualTo(1L), "Final response HEADERS.");
+            using var body = new MemoryStream();
+            while (true)
+            {
+                var frame = await H3Peer.ReadFrameAsync(request, host.Token, allowEnd: true);
+                if (frame.Type < 0) break;
+                if (frame.Type == 0) body.Write(frame.Payload);
+            }
+            Assert.That(Encoding.ASCII.GetString(body.ToArray()), Is.EqualTo("timeout after 3"));
+            Assert.That(await trace.Outcome.Task.WaitAsync(Settle), Is.EqualTo("completed"),
+                "Cleanup must not fail on a body the transport stopped reading.");
+            Assert.That(trace.Errors, Is.Empty, "The request logs no error.");
+            await peer.AssertHealthyAsync(host.Token);
+        }
+
+        // Records every error one request logs, and how it ended: its completion log line, or the
+        // stream failure that replaces it when cleanup throws.
+        private sealed class RequestOutcomeTrace : System.Diagnostics.TraceListener
+        {
+            private readonly System.Diagnostics.SourceLevels _previous;
+            private string? _requestId;
+            internal readonly TaskCompletionSource<string> Outcome = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal readonly ConcurrentQueue<string> Errors = new();
+            internal RequestOutcomeTrace()
+            {
+                _previous = Diagnostics.Log.Source.Switch.Level;
+                Diagnostics.Log.Source.Listeners.Add(this);
+                Diagnostics.Log.Source.Switch.Level = System.Diagnostics.SourceLevels.All;
+            }
+            internal string? RequestId
+            {
+                get => Volatile.Read(ref _requestId);
+                set => Volatile.Write(ref _requestId, value);
+            }
+            public override void Write(string? message) { }
+            public override void WriteLine(string? message) { }
+            public override void TraceEvent(System.Diagnostics.TraceEventCache? eventCache, string source,
+                System.Diagnostics.TraceEventType eventType, int id, string? message)
+                => Record(eventType, message);
+            public override void TraceEvent(System.Diagnostics.TraceEventCache? eventCache, string source,
+                System.Diagnostics.TraceEventType eventType, int id, string? format, params object?[]? args)
+                => Record(eventType, format == null || args == null ? format : string.Format(CultureInfo.InvariantCulture, format, args));
+            private void Record(System.Diagnostics.TraceEventType type, string? message)
+            {
+                var id = RequestId;
+                if (id == null || message == null || !message.Contains("[" + id + "]", StringComparison.Ordinal)) return;
+                if (type <= System.Diagnostics.TraceEventType.Error) Errors.Enqueue(message);
+                if (message.Contains("Multiplexed request stream failed", StringComparison.Ordinal)) Outcome.TrySetResult("stream failed");
+                else if (message.Contains(" sent in ", StringComparison.Ordinal)) Outcome.TrySetResult("completed");
+            }
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing)
+                {
+                    Diagnostics.Log.Source.Listeners.Remove(this);
+                    Diagnostics.Log.Source.Switch.Level = _previous;
+                }
+                base.Dispose(disposing);
+            }
         }
     }
 }

@@ -87,7 +87,12 @@ namespace EmbedIO.Tests
                     finished.SetResult();
                 }
                 catch (Exception error) { entered.TrySetException(error); finished.SetException(error); throw; }
-            });
+            },
+            // Reading after disposal reaches the physical HTTP/1 body, which the handler gets
+            // only without a body limit or read deadline. With either default, the request
+            // stream is a view that throws ObjectDisposedException once disposed, as HTTP/2 and
+            // HTTP/3 bodies do; ReadingADisposedHttp1BodyThrowsUnderTheDefaults pins that.
+            options => { if (abandon) options.WithMaximumRequestBodyBytes(null).WithRequestBodyReadTimeout(null); });
             using var tcp = new TcpClient { NoDelay = true };
             await tcp.ConnectAsync(IPAddress.Loopback, host.Port, host.Token);
             await tcp.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"POST / HTTP/1.1\r\nHost: localhost:{host.Port}\r\nContent-Length: {length}\r\n\r\n"), host.Token);
@@ -182,7 +187,11 @@ namespace EmbedIO.Tests
                     finished.SetResult();
                 }
                 catch (Exception error) { finished.SetException(error); throw; }
-            });
+            },
+            // After a reset, the disposed object is the physical HTTP/2 body only without a body
+            // limit or read deadline. With either default, context close retires the view in
+            // front of it first, and the failed read names that view instead.
+            options => { if (reset) options.WithMaximumRequestBodyBytes(null).WithRequestBodyReadTimeout(null); });
             await using var peer = await H2Peer.ConnectAsync(host);
             await peer.SendAsync(Http2Headers, EndHeaders, 1, peer.Request("POST", "/"));
             var capability = await entered.Task.WaitAsync(Settle);

@@ -14,8 +14,8 @@ namespace EmbedIO.Tests
         public void RawAndDecodedOptionsHaveIndependentNullPreservingSnapshots()
         {
             var options = new WebServerOptions();
-            Assert.That(options.MaximumRequestBodyBytes, Is.Null);
-            Assert.That(options.MaximumDecompressedRequestBodyBytes, Is.Null);
+            Assert.That(options.MaximumRequestBodyBytes, Is.EqualTo(30_000_000L));
+            Assert.That(options.MaximumDecompressedRequestBodyBytes, Is.EqualTo(30_000_000L), "Until set, the decoded limit follows the body limit.");
             Assert.That(options.WithMaximumRequestBodyBytes(0), Is.SameAs(options));
             options.MaximumDecompressedRequestBodyBytes = 7;
             Assert.That(options.MaximumRequestBodyBytes, Is.Zero);
@@ -35,6 +35,28 @@ namespace EmbedIO.Tests
             Assert.That(() => options.MaximumRequestBodyBytes = -1,
                 Throws.TypeOf<ArgumentOutOfRangeException>().With.Property("ParamName").EqualTo("value"));
             Assert.That(options.MaximumRequestBodyBytes, Is.EqualTo(3));
+        }
+
+        // An HTTP/3 body stops reading on its own once a canceled read abandons its input; the
+        // view must say so, as the read-deadline and counting wrappers already do.
+        [Test]
+        public void ViewReportsASourceThatStoppedReading()
+        {
+            using var source = new SwitchableSource();
+            using var view = Limited(source, 10);
+            Assert.That(view.CanRead, Is.True);
+            source.Readable = false;
+            Assert.That(view.CanRead, Is.False);
+            source.Readable = true;
+            Assert.That(view.CanRead, Is.True);
+            view.Dispose();
+            Assert.That(view.CanRead, Is.False, "Disposal still ends the view.");
+        }
+
+        private sealed class SwitchableSource : MemoryStream
+        {
+            internal bool Readable { get; set; } = true;
+            public override bool CanRead => Readable && base.CanRead;
         }
 
         private sealed class PendingSource : MemoryStream

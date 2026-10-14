@@ -12,7 +12,8 @@ namespace EmbedIO
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>
         /// <param name="this">The options instance.</param>
-        /// <param name="value">The maximum decoded bytes, or null for existing unlimited behavior.</param>
+        /// <param name="value">The maximum decoded bytes, or null for no limit. Until this is set,
+        /// the decoded limit follows the request's body limit.</param>
         /// <returns>The options instance.</returns>
         /// <exception cref="NullReferenceException">The options instance is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The limit is negative.</exception>
@@ -30,7 +31,8 @@ namespace EmbedIO
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>
         /// <param name="this">The options instance.</param>
-        /// <param name="value">The maximum raw entity bytes, or null for existing unlimited behavior.</param>
+        /// <param name="value">The maximum raw entity bytes, or null for no limit. The default is
+        /// 30,000,000.</param>
         /// <returns>The options instance.</returns>
         /// <exception cref="NullReferenceException">The options instance is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The limit is negative.</exception>
@@ -48,7 +50,7 @@ namespace EmbedIO
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>
         /// <param name="this">The options instance.</param>
-        /// <param name="maximum">The maximum concurrent requests, or null for existing unlimited dispatch.</param>
+        /// <param name="maximum">The maximum concurrent requests, or null for unlimited dispatch, the default.</param>
         /// <param name="queueLimit">How many requests may wait for a slot before HTTP 503 is returned.</param>
         /// <returns>The options instance.</returns>
         /// <exception cref="NullReferenceException">The options instance is null.</exception>
@@ -69,7 +71,7 @@ namespace EmbedIO
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>
         /// <param name="this">The options instance.</param>
-        /// <param name="value">The deadline, or null for existing behavior without a deadline.</param>
+        /// <param name="value">The deadline, or null for no deadline, the default.</param>
         /// <returns>The options instance.</returns>
         /// <exception cref="NullReferenceException">The options instance is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The deadline is not positive or is too large.</exception>
@@ -127,7 +129,7 @@ namespace EmbedIO
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>
         /// <param name="this">The options instance.</param>
-        /// <param name="value">The read deadline, or null for existing behavior without one.</param>
+        /// <param name="value">The read deadline, or null for none, which is the default.</param>
         /// <returns>The options instance.</returns>
         /// <exception cref="NullReferenceException">The options instance is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The deadline is not positive or is too large.</exception>
@@ -145,9 +147,14 @@ namespace EmbedIO
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>
         /// <param name="this">The options instance.</param>
-        /// <param name="maximumBytes">The maximum summed name and value lengths, or null for no limit.</param>
-        /// <param name="maximumCount">The maximum number of field lines, or null for no limit.</param>
+        /// <param name="maximumBytes">The maximum summed name and value lengths, or null for no limit.
+        /// The default is 32 KiB.</param>
+        /// <param name="maximumCount">The maximum number of field lines, or null for no limit. The
+        /// default is 100; leaving this argument out passes null and removes that limit.</param>
         /// <returns>The options instance.</returns>
+        /// <remarks>Both arguments replace the current values, defaults included:
+        /// <c>WithRequestHeaderLimits(8192)</c> lowers the byte limit and removes the 100-field
+        /// limit, while <c>WithRequestHeaderLimits(8192, 100)</c> keeps it.</remarks>
         /// <exception cref="NullReferenceException">The options instance is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">A limit is less than one.</exception>
         /// <exception cref="InvalidOperationException">The configuration is locked.</exception>

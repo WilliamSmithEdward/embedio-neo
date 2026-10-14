@@ -370,8 +370,21 @@ namespace EmbedIO.Tests
             await peer.GetStream().WriteAsync(Encoding.ASCII.GetBytes(
                 $"POST / HTTP/1.1\r\nHost: localhost:{host.Port}\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n"), host.Token);
             var reply = await new RawHttp1Reader(peer.GetStream()).ReadResponseAsync(host.Token);
-            Assert.That(reply.Status, Is.EqualTo(413));
-            Assert.That(reply.Headers["connection"], Is.EqualTo("close"));
+            if (dispose)
+            {
+                // Disposing opened the body, so cleanup validates the rest before the response.
+                Assert.That(reply.Status, Is.EqualTo(413));
+                Assert.That(reply.Headers["connection"], Is.EqualTo("close"));
+            }
+            else
+            {
+                // An unopened body does not hold back the handler's response. The connection
+                // discards it afterwards, finds the excess byte and closes instead of reusing.
+                Assert.That(reply.Status, Is.EqualTo(200));
+                var end = new byte[1];
+                try { Assert.That(await peer.GetStream().ReadAsync(end, host.Token), Is.Zero, "The over-limit body closes the connection."); }
+                catch (IOException) { }
+            }
             Assert.That(host.Server.State, Is.EqualTo(WebServerState.Listening));
         }
 

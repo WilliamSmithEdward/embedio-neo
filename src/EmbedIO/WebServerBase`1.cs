@@ -319,7 +319,9 @@ namespace EmbedIO
             // Measure this handling operation without changing the public Age clock.
             var requestStarted = Stopwatch.GetTimestamp();
             context.SupportCompressedRequests = Options.SupportCompressedRequests;
-            RequestDecompressionPolicy.Associate(context, Options.DecompressionPolicy);
+            // The owned listeners captured the decoded-body limit with the request's policy.
+            if (!(context.Request is Net.Internal.HttpListenerRequest or Net.Internal.MultiplexedRequest))
+                RequestDecompressionPolicy.Associate(context, DecodedBodyLimit(context));
             context.MimeTypeProviders.Push(this);
             // Without telemetry the request runs in a single state machine, as before.
             return _telemetry is { } telemetry
@@ -478,7 +480,7 @@ namespace EmbedIO
                         try
                         {
                             if (!rawBodyFailureHandled && !bodyReadFailureHandled && !headerPolicyRejected && context.Request is Net.Internal.HttpListenerRequest http1)
-                                await http1.CompleteBodyInputAsync(context.CancellationToken).ConfigureAwait(false);
+                                await http1.CompleteOpenedBodyInputAsync(context.CancellationToken).ConfigureAwait(false);
                             else if (!rawBodyFailureHandled && !bodyReadFailureHandled && !headerPolicyRejected && context.Request is Net.Internal.MultiplexedRequest multiplexedRequest)
                                 await multiplexedRequest.CompleteBodyInputAsync(context.CancellationToken).ConfigureAwait(false);
                         }
@@ -680,13 +682,10 @@ namespace EmbedIO
         // Only the independent body-read deadline is applied at this stage.
         private static void ApplyBodyReadTimeout(IHttpContext context, TimeSpan? readTimeout)
         {
-            if (readTimeout is not TimeSpan timeout || context.Request.HttpMethod == "CONNECT") return;
-            void StopReuse()
-            {
-                if (context is Net.Internal.HttpListenerContext && !ResponseCommitment.IsCommitted(context))
-                    context.Response.KeepAlive = false;
-            }
-            if (context.Request is IRequestPolicyTarget target) target.TimeBodyReads(timeout, StopReuse);
+            var request = context.Request;
+            // A bodyless request has nothing to time; CONNECT carries tunnel data, not a body.
+            if (readTimeout is not TimeSpan timeout || !request.HasEntityBody || request.HttpMethod == "CONNECT") return;
+            if (request is IRequestPolicyTarget target) target.TimeBodyReads(timeout, StopReuseOnBodyFailure(context));
         }
 
         // Applies MaximumRequestBodyBytes and RequestBodyReadTimeout. A declared length over
@@ -699,26 +698,46 @@ namespace EmbedIO
         {
             var limit = RequestLimitPolicy.Resolve(routeLimits?.MaximumRequestBodyBytes, Options.MaximumRequestBodyBytes);
             var readTimeout = RequestLimitPolicy.Resolve(routeLimits?.RequestBodyReadTimeout, Options.RequestBodyReadTimeout);
-            if (limit == null && readTimeout == null) return;
             var request = context.Request;
-            // CONNECT carries tunnel data, not a request body.
-            if (request.HttpMethod == "CONNECT") return;
-            var http1 = context is Net.Internal.HttpListenerContext;
-            void StopReuse()
-            {
-                if (http1 && !EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
-                    context.Response.KeepAlive = false;
-            }
+            // Nothing to limit or time, or no body to apply it to. CONNECT carries tunnel
+            // data, not a request body.
+            if ((limit == null && readTimeout == null) || !request.HasEntityBody || request.HttpMethod == "CONNECT") return;
 
-            if (limit is long maximum && request.HasEntityBody && request.ContentLength64 > maximum)
+            if (limit is long maximum && request.ContentLength64 > maximum)
             {
-                StopReuse();
+                StopHttp1Reuse(context);
                 throw new HttpException(413, EmbedIO.Internal.LimitedRequestStream.TransferredLimitMessage);
             }
 
             if (!(request is EmbedIO.Internal.IRequestPolicyTarget target)) return;
-            if (limit is long bytes) target.LimitBody(bytes, StopReuse);
-            if (readTimeout is TimeSpan timeout) target.TimeBodyReads(timeout, StopReuse);
+            var onFailure = StopReuseOnBodyFailure(context);
+            if (limit is long bytes) target.LimitBody(bytes, onFailure);
+            if (readTimeout is TimeSpan timeout) target.TimeBodyReads(timeout, onFailure);
+        }
+
+        // After a body limit or read deadline failure, HTTP/1 stops connection reuse unless the
+        // response is already committed. HTTP/2 and HTTP/3 reset the stream instead.
+        private static void StopHttp1Reuse(IHttpContext context)
+        {
+            if (context is Net.Internal.HttpListenerContext && !ResponseCommitment.IsCommitted(context))
+                context.Response.KeepAlive = false;
+        }
+
+        // The same, as the callback a failing body stream runs. HTTP/2 and HTTP/3 need none,
+        // so they get no delegate.
+        private static Action? StopReuseOnBodyFailure(IHttpContext context)
+            => context is Net.Internal.HttpListenerContext ? StopHttp1ReuseCallback(context) : null;
+
+        private static Action StopHttp1ReuseCallback(IHttpContext context) => () => StopHttp1Reuse(context);
+
+        // The decoded-body limit for a context the owned listeners did not admit: the one the
+        // request's route policy and the server set, as the listeners capture it. Without
+        // compressed-request support nothing is decoded, so no limit is registered.
+        private long? DecodedBodyLimit(IHttpContext context)
+        {
+            if (!Options.SupportCompressedRequests) return null;
+            var route = Options.FindRouteRequestLimits(context.RequestedPath);
+            return Options.DecompressedLimitFor(RequestLimitPolicy.Resolve(route?.MaximumRequestBodyBytes, Options.MaximumRequestBodyBytes));
         }
 
         /// <inheritdoc />

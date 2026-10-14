@@ -43,6 +43,13 @@ namespace EmbedIO.Internal
 
         internal bool IsTimeoutFailure(Exception failure) => ReferenceEquals(Volatile.Read(ref _timeoutFailure), failure);
 
+        // True while a read is in flight, including one the deadline abandoned that the
+        // source has not completed yet: the source must not be read by anyone else.
+        internal bool HasUnsettledRead => Volatile.Read(ref _readPending) != 0;
+
+        // True once a read missed the deadline; every later read reports that failure.
+        internal bool HasExpired => Volatile.Read(ref _timeoutFailure) != null;
+
         // The request owner retires this borrowed view; it still owns disposal of the transport.
         internal void Retire()
         {
@@ -93,7 +100,14 @@ namespace EmbedIO.Internal
                 if (!transferred)
                 {
                     if (buffer == null) Volatile.Write(ref _readPending, 0);
-                    else if (read == null || read.IsCompleted) ReleaseStorage(buffer);
+                    else if (read == null || read.IsCompleted)
+                    {
+                        // A read can fault after a deadline, cancellation or retirement already won,
+                        // so nothing awaited it. Observe its exception here, or it surfaces later as
+                        // an unobserved task exception. The storage is free either way.
+                        _ = read?.Exception;
+                        ReleaseStorage(buffer);
+                    }
                     else
                     {
                         // A source may ignore cancellation. Keep its private storage until its

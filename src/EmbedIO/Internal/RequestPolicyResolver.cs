@@ -15,10 +15,14 @@ namespace EmbedIO.Internal
                 ? new RequestBodyPolicy(bytes, options.MaximumRequestHeaderBytes, options.MaximumRequestHeaderCount) : null;
             BodyReadTimeout = RequestLimitPolicy.Resolve(route?.RequestBodyReadTimeout, options.RequestBodyReadTimeout);
             RequestTimeout = RequestLimitPolicy.Resolve(route?.RequestTimeout, options.RequestTimeout);
+            MaximumDecodedBytes = options.DecompressedLimitFor(maximum);
         }
         internal RequestBodyPolicy? BodyPolicy { get; }
         internal TimeSpan? BodyReadTimeout { get; }
         internal TimeSpan? RequestTimeout { get; }
+        // Limits what the compressed-request helpers decode. It follows the effective body
+        // limit, as ASP.NET Core's request decompression does, unless configured separately.
+        internal long? MaximumDecodedBytes { get; }
         internal static RequestPolicySnapshot? CapturedBy(IHttpRequest request)
             => request switch
             {
@@ -47,6 +51,7 @@ namespace EmbedIO.Internal
         }
         internal static RequestPolicyResolver? Create(WebServerOptionsBase options)
             => options.MaximumRequestBodyBytes == null && options.RouteRequestLimits.Count == 0
+                && options.MaximumDecompressedRequestBodyBytes == null
                 ? null : new RequestPolicyResolver(options);
 
         private RequestPolicySnapshot Resolve(string path)
@@ -63,7 +68,8 @@ namespace EmbedIO.Internal
         {
             // WebServer later establishes RequestedPath using this exact
             // normalization. Admission precedes that public Route assignment.
-            var effective = Resolve(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
+            // Without route policies every request shares the server-wide values.
+            var effective = _routes.Length == 0 ? _default : Resolve(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
             if (context.Request is HttpListenerRequest http1) http1.CaptureRequestPolicy(effective);
             else if (context.Request is MultiplexedRequest multiplexed) multiplexed.CaptureRequestPolicy(effective);
             else throw new NotSupportedException("Request policy admission requires an owned request backend.");

@@ -37,7 +37,9 @@ namespace EmbedIO.Tests.Issues
         [TestCase(2)]
         public async Task RoutePolicyLowersTheBodyLimitWhereTheServerHasNone(int protocol)
         {
-            await using var host = Host.Start(o => o.WithRouteRequestLimits("/api", p => p.MaximumRequestBodyBytes = 10), Host.EchoLength, HttpVerbs.Any);
+            // A server has no body limit only when it lifts the default.
+            await using var host = Host.Start(o => o.WithMaximumRequestBodyBytes(null)
+                .WithRouteRequestLimits("/api", p => p.MaximumRequestBodyBytes = 10), Host.EchoLength, HttpVerbs.Any);
             using var client = Host.CreateClient(protocol);
             using (var refused = await PostAsync(client, host.Url + "api/items", 100))
                 Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));

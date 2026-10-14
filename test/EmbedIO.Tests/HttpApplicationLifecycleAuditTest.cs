@@ -771,7 +771,14 @@ namespace EmbedIO.Tests
         private static async Task Http3BodyTimeoutCore(string pendingInput = "")
         {
             using var certificate = Certificate();
-            await using var host = await Host.StartAsync(HttpListenerMode.EmbedIOHttp3, certificate, BodyTimeoutHandler);
+            // The handler checks what QUIC reports right after its own cancel. A read deadline
+            // returns that cancel at once: its link to the caller's token was registered after
+            // QUIC's, token callbacks run last-registered first, and QUIC completes a canceled
+            // read asynchronously, so the handler sees the cancel before the input is abandoned.
+            // RequestReadTimeoutOwnershipTest pins that early return. These cases therefore read
+            // without a deadline, through the default body limit's counted view.
+            await using var host = await Host.StartAsync(HttpListenerMode.EmbedIOHttp3, certificate, BodyTimeoutHandler,
+                options => options.WithRequestBodyReadTimeout(null));
             await using var peer = await H3Peer.ConnectAsync(host, certificate);
             await using var request = await peer.OpenRequestAsync("POST", "/upload", false);
             await request.WriteAsync(new byte[] { 0, 3, 1, 2, 3 }, host.Token);
