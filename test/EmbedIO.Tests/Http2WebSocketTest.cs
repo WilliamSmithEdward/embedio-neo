@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Actions;
 using EmbedIO.PlatformTests;
+using EmbedIO.Tests.TestObjects;
 using EmbedIO.WebSockets;
 using NUnit.Framework;
 
@@ -84,6 +85,8 @@ namespace EmbedIO.Tests
                 Assert.That(close.CloseStatus, Is.EqualTo(WebSocketCloseStatus.MessageTooBig));
                 Assert.That(await client.GetStringAsync(url + "after", stop.Token), Is.EqualTo("healthy"));
                 Assert.That(module.Calls, Is.EqualTo(1));
+                // Answer the 1009 close, as clients do; the server's stop waits for an unanswered close.
+                await ClientWebSocketClose.AnswerReceivedAsync(socket, stop.Token);
             }
             finally
             {

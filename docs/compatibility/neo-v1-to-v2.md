@@ -333,6 +333,36 @@ module registration first; use a readiness message as described in the
 ReceiveLimits is disabled by default. Configure it explicitly when your
 application needs bounded outstanding delivery.
 
+## WebSocket closes, sends and keep-alive
+
+These v2 changes affect applications that close WebSockets with explicit statuses,
+send while a socket may be closing, or keep idle connections open:
+
+- `IWebSocket.CloseAsync(code, comment)` throws `ArgumentException`, as
+  `System.Net.WebSockets` does, for a status a server cannot send: below 1000,
+  1006, 1010, 1015 to 2999, and 5000 and above (RFC 6455, section 7.4). It also
+  throws for a comment with `CloseStatusCode.NoStatus` and for a comment longer
+  than 123 UTF-8 bytes, and it checks its arguments even after the socket closed.
+  These calls used to be ignored or sent as given. To end a connection without a
+  close frame, which `Abnormal` (1006) and `TlsHandshakeFailure` (1015) used to
+  do, call `CloseAsync(CloseStatusCode.Undefined)`.
+- `IWebSocket.SendAsync` throws `WebSocketException` when the WebSocket closes
+  before the whole message is sent: when the client's close arrives between two
+  frames of a long message, or when the socket closes while the message waits for
+  another send. It used to return as if the message had been sent.
+  `WebSocketModule.SendAsync` and `BroadcastAsync` log the failure, as they already
+  did for a socket that was closed when the send started.
+- `WebSocketModule.KeepAliveInterval` now takes effect. The server pings each
+  client at that interval, 30 seconds by default, and closes a connection whose
+  client has not answered the previous ping when the next one is due. Any pong
+  counts as an answer. Browsers answer pings automatically; `ClientWebSocket`
+  answers them while a `ReceiveAsync` is pending. Set the interval to
+  `TimeSpan.Zero` to keep connections whose clients do not answer open, as before.
+- `RunAsync` cancellation and `WebServer.Dispose` send each open WebSocket a 1001
+  (Going Away) close without a reason, and wait at most one second for those closes,
+  and for any close already under way, before they stop the listener. Clients used to
+  see the connection end without a close (1006).
+
 ## Optional v2 capabilities
 
 The new APIs are optional capabilities, not requirements for existing handlers:
@@ -489,6 +519,26 @@ matching the supported default versions are compatible. Rejection rolls back
 only the rejected registration; existing listeners remain available. See
 [TLS policy](../guides/tls-policy.md#sharing-a-tcp-listening-endpoint).
 
+## Encoded separators in served paths
+
+Neo v2 decodes a served path one segment at a time. `FileSystemProvider` and
+`ZipFileProvider` previously decoded the whole path at once, so a percent-encoded
+separator became a real separator after the module pipeline had already selected its
+modules from the undecoded path. A request for `/admin%2Fsecret.txt` mapped to
+`admin/secret.txt` although the modules mounted on `/admin` never matched it. RFC 3986,
+Section 2.2 is explicit that a reserved character in its encoded form is not equivalent
+to the character itself, so an encoded separator stays inside its own segment.
+
+A segment that decodes to something which is not a single usable segment now names no
+resource, and the request becomes an ordinary mapping failure: a decoded `/` or `\`, a
+`.` or `..` segment, and control characters are all refused. Escapes that stay inside
+their segment are unaffected, so `/two%20words.txt` and `/sub/hello%20world.txt` resolve
+exactly as before, and containment inside the served root is unchanged.
+
+An application that relied on a percent-encoded separator to select a nested resource
+must send the real separator instead. On Unix, a file whose name contains a backslash is
+no longer reachable through `%5C`; rename it if it has to be served.
+
 <a id="release-preparation-still-required"></a>
 
 ## Before deployment
@@ -570,6 +620,14 @@ its tests may have relied on:
 - Complete WebSocket messages report `EndOfMessage` as true.
 - Directory listings requested without a trailing slash link to entries inside the
   directory instead of its parent.
+- On HTTP/1, a request field sent on several lines reads as one value that combines
+  the lines in order, separated by `, ` (RFC 9110, Section 5.3); Cookie lines join
+  with `; ` and all of their cookies appear in `Request.Cookies`. Only the last line
+  was kept before. HTTP/2 and HTTP/3 already combined repeated fields.
+- A quality value's weight name is case-insensitive (RFC 9110, Section 12.4.2):
+  a client that sends `Q=` now has its weight honored, so `Accept-Encoding: gzip;Q=0`
+  refuses gzip. An uppercase `Q` used to be ignored, and the coding was accepted at
+  full weight.
 - Statuses 103, 208, 226, 308, 421, 426, 428, 429, 431, 451, 506, 508, 510 and 511
   have the reason phrase `HttpStatusDescription` returns, such as `Too Many Requests`
   for 429. It appears in the HTTP/1 status line, as the default `StatusDescription`,
@@ -593,3 +651,13 @@ quality 4, about the size of the previous gzip responses. Tests or caches that e
 `Content-Encoding: gzip` for these clients, or a gzip entity tag from `FileModule`,
 see `br` instead. See
 [Brotli responses](../guides/getting-started/files.md#brotli-responses-in-the-modern-engine-development-branch).
+- An HTTP/1 client that declares a request body, receives its response and then stops
+  sending loses its connection once the keep-alive timeout elapses. The server discards
+  a body no handler read before reusing the connection, and that discard is now bounded
+  by `KeepAliveTimeout`; it previously waited with no deadline at all. A client that
+  finishes sending its body is unaffected.
+- An HTTP/1 connection that answered `101 Switching Protocols` is never reused for
+  another HTTP/1 message (RFC 9110, Section 7.8). This matters only to a handler that
+  accepts an upgrade through `IHttpContextImpl.AcceptWebSocketAsync` and returns while
+  the socket is still open: the connection is now closed instead of being recycled, and
+  such a handler must await its socket. `WebSocketModule` already does.

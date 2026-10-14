@@ -14,7 +14,6 @@ namespace EmbedIO.Net.Internal
         {
             var encoding = WebServer.DefaultEncoding;
             var preamble = encoding.GetPreamble();
-            var keys = response.Headers.AllKeys;
             var rawCookies = response.Headers.GetValues(HttpHeaderNames.SetCookie);
             string? cookies = null;
             if (response.ExistingCookies != null && response.ExistingCookies.Count > 0)
@@ -32,7 +31,7 @@ namespace EmbedIO.Net.Internal
             // perform one encoding operation. Large fields use the exact-size path.
             Span<char> text = stackalloc char[2048];
             var characters = new HeaderWriter(text);
-            WriteHeaderFields(response, ref characters, version, status, keys, cookies, rawCookies);
+            WriteHeaderFields(response, ref characters, version, status, cookies, rawCookies);
             if (!characters.Overflow)
             {
                 var content = text.Slice(0, characters.Position);
@@ -46,13 +45,13 @@ namespace EmbedIO.Net.Internal
 #endif
             {
                 var writer = new HeaderWriter(encoding, null, preamble.Length);
-                WriteHeaderFields(response, ref writer, version, status, keys, cookies, rawCookies);
+                WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
                 stream = new MemoryStream(GetHeaderBufferCapacity(response, writer.Position, preamble.Length, bodyCount));
                 stream.SetLength(writer.Position);
                 var buffer = stream.GetBuffer();
                 Buffer.BlockCopy(preamble, 0, buffer, 0, preamble.Length);
                 writer = new HeaderWriter(encoding, buffer, preamble.Length);
-                WriteHeaderFields(response, ref writer, version, status, keys, cookies, rawCookies);
+                WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
             }
 
             stream.Position = preamble.Length;
@@ -75,7 +74,7 @@ namespace EmbedIO.Net.Internal
             return checked(headerSize + chunkSize + prefix);
         }
         private static void WriteHeaderFields(HttpListenerResponse response, ref HeaderWriter writer, string version, string status,
-            string[] keys, string? cookies, string[]? rawCookies)
+            string? cookies, string[]? rawCookies)
         {
             writer.Append("HTTP/");
             writer.Append(version);
@@ -84,12 +83,16 @@ namespace EmbedIO.Net.Internal
             writer.Append(" ");
             writer.Append(response.StatusDescription);
             writer.Append("\r\n");
-            foreach (var key in keys)
+            // Positional access keeps insertion order and the comma-joined value of each
+            // field, without the AllKeys array or a second lookup per name.
+            var headers = response.Headers;
+            for (var index = 0; index < headers.Count; index++)
             {
+                var key = headers.GetKey(index);
                 if (string.Equals(key, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase)) continue;
                 writer.Append(key);
                 writer.Append(": ");
-                writer.Append(response.Headers[key]);
+                writer.Append(headers.Get(index));
                 writer.Append("\r\n");
             }
             writer.Append(cookies);

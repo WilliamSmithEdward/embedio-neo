@@ -216,7 +216,7 @@ namespace EmbedIO.Net.Internal
                 // handler runs here without blocking the connection's frame loop. The
                 // server owns the handler's task, including failures, and the handler
                 // may keep running after the response completes.
-                _ = listener.RegisterMultiplexedContext(context, this);
+                exchange.Handler = listener.RegisterMultiplexedContext(context, this);
                 registered = true;
                 var closed = false;
                 lock (_connectionSync) closed = _protocolSocket == null || _protocolEnded != 0;

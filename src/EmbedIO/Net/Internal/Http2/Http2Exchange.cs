@@ -45,6 +45,9 @@ namespace EmbedIO.Net.Internal.Http2
         public bool Ended => _ended;
         public bool FinalHeadersSent => _headersSent;
         public bool CloseConnectionAfterResponse { get; set; }
+        // The directly dispatched handler. It may outlive the response and the stream,
+        // and it keeps the stream's slot under the concurrency limit until it returns.
+        internal Task? Handler { get; set; }
 
         internal async Task RespondAsync(byte[] bytes, CancellationToken token)
         {

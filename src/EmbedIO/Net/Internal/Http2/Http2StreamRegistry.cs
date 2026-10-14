@@ -32,13 +32,32 @@ namespace EmbedIO.Net.Internal.Http2
     // must still decode their HPACK blocks and account for discarded DATA bytes.
     internal sealed class Http2StreamRegistry
     {
+        // A stream leaves _active as soon as it is reset or both directions end,
+        // but its application can keep running. Admission counts those
+        // applications too (RFC 9113 5.1.2), so resetting streams cannot grow
+        // concurrent handler work past the advertised limit (CVE-2023-44487).
+        // A client that keeps opening streams the server must refuse, more than
+        // one full limit's worth within this window, gets GOAWAY
+        // ENHANCE_YOUR_CALM (RFC 9113 5.4.1, 7). A client that waits for
+        // refused streams to be retried stays well below it.
+        private static readonly long RefusalWindow = System.Diagnostics.Stopwatch.Frequency;
+        private const uint RefusedStream = 7, EnhanceYourCalm = 11;
+
         private readonly object _sync = new();
         private readonly Dictionary<int, Http2StreamState> _active = new();
         private readonly Dictionary<int, HttpPriority> _priorities = new();
         private readonly int _maximum;
         private int _highest;
         private bool _stopped;
+        private long _refusalWindowStart;
+        private int _refusals;
         internal bool ExtendedConnectEnabled { get; set; }
+
+        // Applications still running, including those of streams already
+        // removed from _active. Supplied by the dispatcher that starts them.
+        internal Func<int>? RunningApplications { get; set; }
+
+        internal Func<long> Timestamp { get; set; } = System.Diagnostics.Stopwatch.GetTimestamp;
         internal Http2StreamRegistry(int maximum = 128)
         {
             if (maximum < 1) throw new ArgumentOutOfRangeException(nameof(maximum));
@@ -86,7 +105,8 @@ namespace EmbedIO.Net.Internal.Http2
                             foreach (var id in _priorities.Keys) if (id <= _highest) closed.Add(id);
                             foreach (var id in closed) _priorities.Remove(id);
                         }
-                        if (_active.Count + _priorities.Count >= _maximum) throw new Http2ProtocolException(7, "Concurrent stream limit exceeded.", block.StreamId);
+                        if (Math.Max(_active.Count, RunningApplications?.Invoke() ?? 0) + _priorities.Count >= _maximum)
+                            throw Refuse(block.StreamId);
                         if (block.StreamError != 0) throw new Http2ProtocolException(block.StreamError, "Invalid stream headers.", block.StreamId);
                         stream = new Http2StreamState(block.StreamId, block.EndStream, Http2RequestHeaders.Parse(block, ExtendedConnectEnabled));
                         if (prioritized) stream.SetPriority(priority);
@@ -180,6 +200,20 @@ namespace EmbedIO.Net.Internal.Http2
                 _active.Clear();
                 _priorities.Clear();
             }
+        }
+
+        // Called under _sync for each stream refused at the concurrency limit.
+        private Http2ProtocolException Refuse(int streamId)
+        {
+            var now = Timestamp();
+            if (_refusals == 0 || now - _refusalWindowStart > RefusalWindow)
+            {
+                _refusalWindowStart = now;
+                _refusals = 0;
+            }
+            return ++_refusals > _maximum
+                ? new Http2ProtocolException(EnhanceYourCalm, "Too many streams refused at the concurrency limit.")
+                : new Http2ProtocolException(RefusedStream, "Concurrent stream limit exceeded.", streamId);
         }
 
         private void Retire(Http2StreamState stream)
