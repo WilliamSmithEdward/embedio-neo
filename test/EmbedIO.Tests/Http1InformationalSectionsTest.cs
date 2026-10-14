@@ -82,8 +82,8 @@ namespace EmbedIO.Tests
                 using var bytes = new MemoryStream();
                 await wire.CopyToAsync(bytes, stop.Token);
                 var text = Encoding.ASCII.GetString(bytes.ToArray());
-                var first = text.IndexOf("HTTP/1.1 103 ", StringComparison.Ordinal);
-                var second = text.IndexOf("HTTP/1.1 103 ", first + 1, StringComparison.Ordinal);
+                var first = text.IndexOf("HTTP/1.1 103 Early Hints\r\n", StringComparison.Ordinal);
+                var second = text.IndexOf("HTTP/1.1 103 Early Hints\r\n", first + 1, StringComparison.Ordinal);
                 var final = text.IndexOf("HTTP/1.1 201 ", StringComparison.Ordinal);
                 Assert.That(first, Is.Zero);
                 Assert.That(second, Is.GreaterThan(first));

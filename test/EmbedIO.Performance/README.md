@@ -141,7 +141,8 @@ work and do not establish server throughput.
 ## Managed engine parser
 
 `--engine-parser` measures context construction, header parsing and handoff for
-buffered batches of 1, 16 and 64 requests. It validates the resulting request path,
+buffered batches of 1, 16 and 64 requests. `--browser-headers` adds the `Accept` and
+`Accept-Language` fields a browser sends. It validates the resulting request path,
 header value and complete consumption. Reflection observes the old MemoryStream/cursor or the new pending byte segment;
 their boxing and field-access costs differ and are included. URI finalization,
 sockets and application work are excluded.
