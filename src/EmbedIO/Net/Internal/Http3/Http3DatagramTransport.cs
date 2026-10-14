@@ -21,19 +21,14 @@ namespace EmbedIO.Net.Internal.Http3
         public void Dispose() => Interlocked.Exchange(ref _owner, null)?.Dispose();
     }
 
-    internal abstract class Http3DatagramTransport
-    {
-        internal abstract int MaximumSendLength { get; }
-        internal abstract Http3DatagramSendStatus TrySend(ReadOnlyMemory<byte> payload);
-        internal abstract ValueTask<Http3DatagramPacket?> ReceiveAsync(CancellationToken token);
-    }
-
-    internal sealed class MsQuicHttp3DatagramTransport : Http3DatagramTransport
+    // HTTP/3 application datagrams over the native MsQuic connection: native send
+    // states map to HTTP/3 ones and received packets keep their native storage.
+    internal sealed class Http3DatagramTransport
     {
         private readonly MsQuicNativeDatagrams _datagrams;
-        internal MsQuicHttp3DatagramTransport(MsQuicNativeDatagrams datagrams) => _datagrams = datagrams;
-        internal override int MaximumSendLength => _datagrams.MaxSendLength;
-        internal override Http3DatagramSendStatus TrySend(ReadOnlyMemory<byte> payload)
+        internal Http3DatagramTransport(MsQuicNativeDatagrams datagrams) => _datagrams = datagrams;
+        internal int MaximumSendLength => _datagrams.MaxSendLength;
+        internal Http3DatagramSendStatus TrySend(ReadOnlyMemory<byte> payload)
             => _datagrams.TrySend(payload, out _) switch
             {
                 MsQuicDatagramSendStatus.Queued => Http3DatagramSendStatus.Queued,
@@ -42,7 +37,7 @@ namespace EmbedIO.Net.Internal.Http3
                 MsQuicDatagramSendStatus.QueueFull => Http3DatagramSendStatus.QueueFull,
                 _ => Http3DatagramSendStatus.Closed,
             };
-        internal override async ValueTask<Http3DatagramPacket?> ReceiveAsync(CancellationToken token)
+        internal async ValueTask<Http3DatagramPacket?> ReceiveAsync(CancellationToken token)
         {
             var packet = await _datagrams.ReceiveAsync(token).ConfigureAwait(false);
             return packet == null ? null : new Http3DatagramPacket(packet.Payload, packet);

@@ -20,6 +20,7 @@ namespace EmbedIO.Net.Internal
         private readonly List<string> _prefixes = new();
         private readonly ConcurrentDictionary<HttpConnection, object> _sessions = new();
         private ListenerAcceptEpoch _epoch = new();
+        private Func<IHttpContextImpl, Task>? _dispatcher;
         private int _stage = Ready;
         private Task? _drain;
         private HashSet<HttpConnection>? _drainSessions;
@@ -91,18 +92,28 @@ namespace EmbedIO.Net.Internal
             }
             return epoch.AcceptAsync(cancellationToken);
         }
-        internal void Register(IHttpContextImpl context, HttpConnection? multiplexed)
+        internal void SetDispatcher(Func<IHttpContextImpl, Task> dispatcher)
+            => Volatile.Write(ref _dispatcher, dispatcher ?? throw new ArgumentNullException(nameof(dispatcher)));
+
+        // Admits one request. With a dispatcher installed the handler's task is
+        // returned and the request never enters the accept queue; otherwise it
+        // is queued and null is returned. Admission and drain checks are the
+        // same either way. The handler runs after the publication borrow and
+        // the listener gate are released, so SealAdmission and Stop never wait
+        // for application code.
+        internal Task? Register(IHttpContextImpl context, HttpConnection? multiplexed)
         {
+            var dispatcher = Volatile.Read(ref _dispatcher);
             var epoch = Volatile.Read(ref _epoch);
             if (epoch.BorrowPublication())
             {
                 try
                 {
                     if (multiplexed != null) _sessions[multiplexed] = multiplexed;
-                    epoch.Publish(context);
+                    if (dispatcher == null) { epoch.Publish(context); return null; }
                 }
                 finally { epoch.ReturnPublication(); }
-                return;
+                return dispatcher(context);
             }
             lock (_gate)
             {
@@ -111,8 +122,9 @@ namespace EmbedIO.Net.Internal
                 if (_stage == Draining && (connection == null || _drainAdmissions?.Contains(connection) != true))
                     throw new System.Net.HttpListenerException(995, "The listener is draining.");
                 if (multiplexed != null) _sessions[multiplexed] = multiplexed;
-                _epoch.Publish(context);
+                if (dispatcher == null) { _epoch.Publish(context); return null; }
             }
+            return dispatcher(context);
         }
         internal void Unregister(IHttpContextImpl context)
         {

@@ -19,7 +19,7 @@ namespace EmbedIO.Net.Internal.Http3
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("macos")]
-    internal sealed class Http3Listener : IHttpListener, IGracefulHttpListener
+    internal sealed class Http3Listener : IHttpListener, IGracefulHttpListener, IDispatchingHttpListener
     {
         private readonly object _sync = new();
         private readonly ServerCertificateSource _certificates;
@@ -29,6 +29,7 @@ namespace EmbedIO.Net.Internal.Http3
         private Session? _session;
         private bool _disposed;
         private bool _stopping;
+        private Func<IHttpContextImpl, Task>? _dispatcher;
         internal Http3Listener(X509Certificate2? certificate) : this(certificate, false) { }
         internal Http3Listener(X509Certificate2? certificate, bool native) : this(certificate, native, null) { }
         internal Http3Listener(X509Certificate2? certificate, bool native, RequestPolicyResolver? bodyPolicy)
@@ -75,7 +76,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_session != null) return;
                 if (_stopping) throw new InvalidOperationException("The previous HTTP/3 listener is still stopping.");
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
-                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificates, TlsPolicy, _native, DeferContinue, Telemetry, _bodyPolicy);
+                _session = Session.Start(_prefixes.Select(value => new ListenerPrefix(value)).ToArray(), _certificates, TlsPolicy, _native, DeferContinue, Telemetry, _bodyPolicy, _dispatcher);
             }
         }
         public void Stop()
@@ -123,6 +124,17 @@ namespace EmbedIO.Net.Internal.Http3
             }
             Stop();
         }
+        // The server installs its dispatcher once, before it serves. A session
+        // started later begins with it, and a running one switches at once; a
+        // request admitted before the install stays queued for GetContextAsync.
+        void IDispatchingHttpListener.SetDispatcher(Func<IHttpContextImpl, Task> dispatcher)
+        {
+            lock (_sync)
+            {
+                _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+                _session?.SetDispatcher(dispatcher);
+            }
+        }
         public async Task<IHttpContextImpl> GetContextAsync(CancellationToken cancellationToken)
         {
             Session session;
@@ -167,10 +179,12 @@ namespace EmbedIO.Net.Internal.Http3
             private bool _deferContinue;
             private RequestPolicyResolver? _bodyPolicy;
             private EmbedIO.Internal.ServerTelemetry? _telemetry;
+            private Func<IHttpContextImpl, Task>? _dispatcher;
             private Session() { }
-            internal static Session Start(ListenerPrefix[] prefixes, ServerCertificateSource certificates, ServerTlsPolicy? policy, bool native, bool deferContinue, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
+            internal void SetDispatcher(Func<IHttpContextImpl, Task> dispatcher) => Volatile.Write(ref _dispatcher, dispatcher);
+            internal static Session Start(ListenerPrefix[] prefixes, ServerCertificateSource certificates, ServerTlsPolicy? policy, bool native, bool deferContinue, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy, Func<IHttpContextImpl, Task>? dispatcher)
             {
-                var session = new Session { _deferContinue = deferContinue, _telemetry = telemetry, _bodyPolicy = bodyPolicy };
+                var session = new Session { _deferContinue = deferContinue, _telemetry = telemetry, _bodyPolicy = bodyPolicy, _dispatcher = dispatcher };
                 try
                 {
                     var endpoints = new Dictionary<IPEndPoint, List<ListenerPrefix>>();
@@ -337,7 +351,13 @@ namespace EmbedIO.Net.Internal.Http3
                     }
                     _bodyPolicy?.Apply(context);
                     await context.SendContinueAsync(_deferContinue || RequestBodyPolicy.KnownRefusal(context.Request) != null).ConfigureAwait(false);
-                    await Contexts.Writer.WriteAsync(context, exchange.CancellationToken).ConfigureAwait(false);
+                    // With the server's dispatcher installed the handler starts here, on
+                    // the request stream's own task; its task belongs to the server,
+                    // which observes a fault it leaves uncaught, and is null on the pull
+                    // path, where the context queues for GetContextAsync instead. The
+                    // exchange waits for the response, not for the handler.
+                    var handling = Volatile.Read(ref _dispatcher)?.Invoke(context);
+                    if (handling == null) await Contexts.Writer.WriteAsync(context, exchange.CancellationToken).ConfigureAwait(false);
                     await context.Completion.WaitAsync(exchange.CancellationToken).ConfigureAwait(false);
                 }
                 finally
