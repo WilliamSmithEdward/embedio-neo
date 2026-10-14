@@ -11,7 +11,11 @@ The relevant runtime report is
 Its associated [runtime fix](https://github.com/dotnet/runtime/pull/131869)
 guards empty peer addresses after macOS IPv6 accepts. A merged runtime change
 alone does not establish that a particular installed .NET servicing release
-contains it. Our observed crashes occurred with .NET 10.0.12.
+contains it. Our observed crashes occurred with .NET 10.0.12. The .NET 10
+backport, [dotnet/runtime #133567](https://github.com/dotnet/runtime/pull/133567),
+is an ancestor of the `v10.0.13` tag, so runtime 10.0.13 contains the fix.
+EmbedIO keeps the worker described below: applications can still run on
+earlier runtimes, and removing it would need macOS evidence on 10.0.13.
 
 ## Mitigation and tradeoff
 

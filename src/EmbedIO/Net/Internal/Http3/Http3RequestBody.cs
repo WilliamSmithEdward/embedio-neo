@@ -8,17 +8,13 @@ using EmbedIO.Net.Internal.Http2;
 namespace EmbedIO.Net.Internal.Http3
 {
     // The connection-side owner of one request stream's field coding and errors.
-    internal interface IHttp3RequestOwner
+    internal interface IHttp3ExchangeOwner
     {
         // Decodes a later field section (trailers) within the request lifetime.
         Task<HpackField[]> DecodeAsync(byte[] wire, CancellationToken token);
+        byte[] Encode(HpackField[] fields);
         // Applies the stream or connection error scope of a request failure.
         void Failed(Exception error);
-    }
-
-    internal interface IHttp3ExchangeOwner : IHttp3RequestOwner
-    {
-        byte[] Encode(HpackField[] fields);
     }
 
     // Pull directly from the request's QUIC stream. No independent body queue
@@ -27,7 +23,7 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly Http3RequestStream _reader;
         private readonly long _streamId;
-        private readonly IHttp3RequestOwner _owner;
+        private readonly IHttp3ExchangeOwner _owner;
         private bool _data;
         private volatile bool _ended;
         private volatile bool _failed;
@@ -42,7 +38,7 @@ namespace EmbedIO.Net.Internal.Http3
         private volatile bool _disposed;
         private volatile bool _inputAbandoned;
         private int _reading;
-        internal Http3RequestBody(long streamId, Http3RequestStream reader, IHttp3RequestOwner owner)
+        internal Http3RequestBody(long streamId, Http3RequestStream reader, IHttp3ExchangeOwner owner)
         { _streamId = streamId; _reader = reader; _owner = owner; }
         public override bool CanRead => !_disposed && !_inputAbandoned;
         public override bool CanSeek => false;

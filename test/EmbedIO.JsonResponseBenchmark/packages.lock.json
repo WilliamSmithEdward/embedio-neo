@@ -5,7 +5,7 @@
       "EmbedIO-Neo": {
         "type": "Project",
         "dependencies": {
-          "System.Threading.RateLimiting": "[10.0.12, )"
+          "System.Threading.RateLimiting": "[10.0.13, )"
         }
       },
       "EmbedIO-Neo.Testing": {
@@ -16,9 +16,9 @@
       },
       "System.Threading.RateLimiting": {
         "type": "CentralTransitive",
-        "requested": "[10.0.12, )",
-        "resolved": "10.0.12",
-        "contentHash": "Y3f2aLAgynO44Q9xYHR35NC1KuSTcZwo49xjHuq0gQWyOWw8fvipIdoc+1e8FS+9neYZuQ1K4iwl5frNJXekgw=="
+        "requested": "[10.0.13, )",
+        "resolved": "10.0.13",
+        "contentHash": "3+orva+l3D+EdXYQOJm9zKWgwSxf4/EieVZ0D+uQRjMOUaJMoNIkc/Wu7abCAK5VnAeStZoLcibFYQrmYdsJ0g=="
       }
     }
   }

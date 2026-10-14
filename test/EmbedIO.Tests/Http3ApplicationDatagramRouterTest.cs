@@ -126,7 +126,7 @@ namespace EmbedIO.Tests
         }
         private static IDisposable ApplicationRouter(object native, int packets = 128, int bytes = 262144)
         {
-            var transport = ConstructApplicationType("MsQuicHttp3DatagramTransport", native);
+            var transport = ConstructApplicationType("Http3DatagramTransport", native);
             return (IDisposable)ConstructApplicationType("Http3DatagramRouter", transport, packets, bytes);
         }
         private static object ApplicationPacket(byte[] bytes, IDisposable owner)
