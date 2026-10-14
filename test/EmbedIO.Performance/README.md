@@ -163,6 +163,21 @@ candidate cores (copy the output and replace only `EmbedIO.dll`), alternate the
 process order, and set `DOTNET_TieredCompilation=0` for stable-JIT comparisons.
 Timings exclude I/O and application work and do not establish server throughput.
 
+## Response compression timing
+
+`--compression-timing [--rounds N]` compresses a deterministic JSON document
+(`test/Shared/CompressibleJson.cs`) of 1 KiB, 64 KiB and 1 MiB with each encoder a
+response could use: gzip at zlib's default level (EmbedIO's dynamic gzip), gzip
+`Fastest` (ASP.NET Core's default), and Brotli qualities 1 (`Fastest`) to 5, where
+quality 4 is what `BrotliStream` uses when given no level. Each operation creates the
+encoder, writes the document in one call and disposes it, as a compressed response
+does. Encoders run interleaved in rotating order for at least 400 ms per round, and
+the table gives the median of the rounds (five by default): compressed bytes, ratio,
+wall and process CPU time per operation, and managed bytes allocated per operation.
+Every encoder's output is decoded once and compared with the document. The native
+encoder state is not counted, and the timings exclude I/O; the load benchmark's
+`-json` scenarios measure the same choice end to end.
+
 ## Separate-process engine comparison
 
 Build this runner once, copy its output to a baseline directory, and replace only
