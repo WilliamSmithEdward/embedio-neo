@@ -682,3 +682,124 @@ intermediate revision that merged a 64 KiB prefix for bodies beyond the bound
 cost about 0.8 us more per 1 MiB first write without saving a write; the
 committed revision keeps a 16 KiB prefix. Those timings exclude kernel and TLS
 work and are not throughput evidence.
+
+## Request-path allocation (October 2026)
+
+The candidate (`codex/perf-hunt`, measured at `2793a92f`) against its exact base
+`f4812522` (`codex/managed-http-engine`, with TCP direct dispatch). What the candidate
+changes:
+
+- `AsyncWriteGate` counts writers and retirement in one state word. An uncontended
+  asynchronous entry completes synchronously without a task, a delegate or a lock object
+  per response. Retirement and queued-writer semantics are unchanged.
+- The per-request start and completion log messages are built only when a trace listener
+  or a `Log.MessageWritten` observer will receive them.
+- Request completion no longer creates an unused `Items` dictionary.
+- HTTP/1 responses reuse the per-second `Date` value and the cached charset
+  `Content-Type` that HTTP/2 and HTTP/3 already used, now shared in
+  `HttpResponseFieldSections`.
+- Context IDs are built without intermediate arrays or strings, by one implementation
+  for every context type.
+- HTTP/1 header encoding walks the fields by position instead of allocating `AllKeys`.
+
+`scripts/prepare_load_benchmark.py` built both cores into identical copies of one
+harness build, swapping only `EmbedIO.dll`. Runner SHA-256 `28fcbb74...`; candidate
+core `52292fe4...`; base core `a14e01cb...`. Windows 10.0.26300, .NET SDK 10.0.402 and
+runtime 10.0.13, AMD Ryzen 7 9800X3D (16 logical processors), server logical CPUs 0-3
+and client 4-11, server GC. The benchmark lock and both heavy-work slots were held for
+every measurement. Each core was measured in both harness roles (see the A/A control
+below), 4 s warmup and 8 s measurement per sample, fresh processes per sample, and each
+sample is classified by the SHA-256 of the `EmbedIO.dll` its server loaded. Of 85
+samples, 4 failed and 11 are excluded. The failures are client `NoBufferSpaceAvailable`
+errors on the new-connection-per-request scenario and hit both cores: at about 23,000
+new connections per second the client runs out of ephemeral ports after a few samples.
+The exclusions had machine background CPU above max(1.5 x median, median + 4 s) for
+their scenario. Means of the valid samples, base -> candidate (ratio); the counts are
+valid samples base/candidate/Kestrel, and Kestrel ran only in the candidate runner's
+sessions. Raw data: `TestResults/perf-hunt/score-1013` in the branch worktree.
+
+| Scenario (valid samples base/candidate/Kestrel) | Requests/s | Server CPU us/req | Server B/req | p50 ms | p99 ms | p99.9 ms | Requests/s vs Kestrel |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 13 B, 64 conn (1/2/1) | 205,020 -> 213,579 (1.042) | 19.1 -> 18.3 (0.959) | 6,246 -> 5,169 (0.828) | 0.294 -> 0.281 (0.957) | 0.627 -> 0.589 (0.939) | 1.15 -> 1.44 (1.250) | 0.85x |
+| 13 B, 256 conn (2/2/0) | 200,256 -> 211,701 (1.057) | 19.5 -> 18.5 (0.951) | 6,340 -> 5,166 (0.815) | 1.197 -> 1.152 (0.963) | 2.240 -> 1.984 (0.886) | 3.53 -> 2.97 (0.841) | n/a |
+| 13 B, 64 conn, closed after 100 (1/2/1) | 196,702 -> 202,348 (1.029) | 19.7 -> 19.3 (0.976) | 6,342 -> 5,338 (0.842) | 0.294 -> 0.289 (0.984) | 0.819 -> 0.781 (0.953) | 4.30 -> 2.61 (0.607) | 0.85x |
+| 13 B chunked, 64 conn (2/2/1) | 130,654 -> 130,217 (0.997) | 29.9 -> 29.6 (0.991) | 6,540 -> 5,371 (0.821) | 0.461 -> 0.458 (0.993) | 0.845 -> 0.947 (1.121) | 3.12 -> 2.64 (0.844) | 0.54x |
+| 1 MiB response, 16 conn (2/2/1) | 14,562 -> 14,463 (0.993) | 269.9 -> 272.1 (1.008) | 6,509 -> 5,315 (0.817) | 1.062 -> 1.069 (1.006) | 1.613 -> 1.594 (0.988) | 12.39 -> 15.77 (1.273) | 1.02x |
+| 1 MiB upload, 16 conn (1/2/0) | 13,555 -> 13,810 (1.019) | 291.7 -> 285.2 (0.978) | 7,193 -> 6,129 (0.852) | 1.139 -> 1.120 (0.983) | 2.099 -> 1.933 (0.921) | 16.18 -> 16.79 (1.038) | n/a |
+| 1 MiB upload, closed after 100 (2/2/1) | 13,735 -> 14,098 (1.026) | 286.4 -> 279.2 (0.975) | 7,264 -> 6,203 (0.854) | 1.114 -> 1.075 (0.966) | 2.445 -> 2.841 (1.162) | 14.64 -> 14.64 (1.000) | 1.96x |
+| new connection per request, 64 (4/4/1) | 21,863 -> 22,443 (1.027) | 98.4 -> 97.1 (0.987) | 17,037 -> 15,925 (0.935) | 2.598 -> 2.547 (0.980) | 3.942 -> 3.597 (0.912) | 8.23 -> 4.81 (0.585) | 1.09x |
+| TLS 13 B, 64 conn (2/1/1) | 190,419 -> 196,673 (1.033) | 20.5 -> 20.0 (0.977) | 6,343 -> 5,218 (0.823) | 0.312 -> 0.304 (0.974) | 0.672 -> 0.614 (0.914) | 2.37 -> 1.32 (0.557) | 0.86x |
+| TLS new connection per request, 32 (2/2/1) | 3,674 -> 3,544 (0.964) | 512.1 -> 518.4 (1.012) | 19,504 -> 18,444 (0.946) | 0.389 -> 0.315 (0.811) | 3.430 -> 3.737 (1.090) | 7.04 -> 7.22 (1.025) | 0.96x |
+| HTTP/2 13 B, 8 conn x 32 streams (4/4/1) | 408,456 -> 431,743 (1.057) | 9.3 -> 8.8 (0.948) | 9,768 -> 9,228 (0.945) | 0.520 -> 0.497 (0.957) | 1.817 -> 1.709 (0.940) | 6.36 -> 6.50 (1.022) | 0.35x |
+| HTTP/2 TLS 13 B, 8 x 32 (2/4/1) | 443,474 -> 467,485 (1.054) | 8.7 -> 8.2 (0.938) | 9,772 -> 9,224 (0.944) | 0.490 -> 0.462 (0.944) | 1.632 -> 1.546 (0.947) | 6.71 -> 6.89 (1.027) | 0.51x |
+| HTTP/3 13 B, 8 x 32 (3/2/1) | 277,626 -> 284,243 (1.024) | 22.6 -> 21.5 (0.952) | 12,905 -> 12,243 (0.949) | 0.655 -> 0.643 (0.982) | 5.393 -> 6.784 (1.258) | 16.52 -> 16.79 (1.017) | 0.80x |
+
+Allocation fell in every scenario, by the same ratio in both harness roles: 15-18% per
+request on HTTP/1 keep-alive connections, 15% on 1 MiB bodies, 6.5% with a new connection
+per request, about 5.5% on HTTP/2 and 5% on HTTP/3. Requests per second rose 3-6% on small
+HTTP/1 responses and about 5.5% on HTTP/2, and stayed level on chunked and 1 MiB
+responses. CPU per request fell 2-6% on small responses and moved by at most 1.2% on the
+other rows. p99 fell on most rows. It rose on 13 B chunked responses, from 0.845 to 0.947
+ms: the candidate was higher in both role pairs (by 0.08 and 0.13 ms), while p99.9 fell
+from 3.12 to 2.64 ms and throughput was level. The cause is not established: of the
+changes, only the write gate alters how a response's writes are sequenced, and the
+others remove work. The lower requests per second
+with TLS and a new connection per request comes from one candidate-role sample (the other
+role measured 0.998). The p99 differences on the 1 MiB upload rows are smaller than the
+spread between samples of the same core, which ran from 1.8 to 3.2 ms with the connection
+closed after 100 requests.
+
+The HTTP/3 row was measured before HTTP/3 requests moved to direct dispatch, so it does
+not describe the code after that change. Its candidate samples all ran in the harness's
+candidate role, because every base-role HTTP/3 sample exceeded the background rule.
+
+### Measured lessons
+
+**Alternate harness roles.** In an A/A control on runtime 10.0.12, with byte-identical
+cores in both roles, the engine in the harness's candidate role measured 0.73 ms higher
+p99 (4.369 against 3.635 ms) and 22% more requests over 5 ms on
+`h1-plain-upload1m-c16-close100`, in all three rounds. `h1-plain-chunk13-c64` showed no
+such bias. A repeat with the runner directories swapped was inconclusive: two of its
+three baseline-role samples failed with client connect timeouts. The mechanism is
+unknown, so every A/B since measures each core in both roles.
+
+**`Task.Run` from a pool thread queues locally.** Before direct dispatch, the accept loop
+started each handler with `Task.Run` from a thread-pool thread. The runtime puts that task
+on the thread's own local queue, which its owner takes newest first, unless the task has
+`TaskCreationOptions.PreferFairness` (`ThreadPoolTaskScheduler.QueueTask` in .NET
+10.0.13). Starting handlers with `Task.Factory.StartNew(..., DenyChildAttach |
+PreferFairness, TaskScheduler.Default)` put them on the global FIFO queue instead. On
+`h1-plain-chunk13-c64` (runtime 10.0.12, four role-alternated pairs), p99 fell from 1.94
+to 1.02 ms and p99.9 from 5.07 to 2.35 ms, lower in all four pairs, at 127,337 against
+128,467 requests/s, 30.1 us of CPU per request in both, unchanged p50 and about 200 B more
+allocation per request for the extra task. The `Task.Run` samples also recorded more
+unattributed machine CPU (10.9 against 6.0 s per window). The change was not applied:
+direct dispatch starts TCP handlers on the connection's own thread, and once HTTP/3 also
+dispatches directly, the accept loop only serves requests admitted before the dispatcher
+is installed. HTTP/2 starts each stream with `ThreadPool.QueueUserWorkItem(WaitCallback,
+state)`, which always uses the global queue.
+
+**Accept-queue contention, before direct dispatch.** `ConcurrentDictionary.IsEmpty` and
+`Count` take every bucket lock. The accept queue called them on each accept pulse, and a
+profile of `h1-plain-small-c64` showed connections waiting to publish a request while the
+accept loop held all the locks (`AcquireAllLocks` under `ListenerAcceptEpoch.AcceptAsync`).
+An interlocked pending count removed that convoy. On runtime 10.0.12, restoring the old
+accept queue in the candidate raised blocking lock contentions on `h1-plain-chunk13-c64`
+from 13.0 to 35.6 per second over four role-alternated pairs, while the write gate change
+made no difference (10.7 against 11.0). The whole candidate measured about 108 -> 11
+contentions per second at 256 connections and 216 -> 128 on HTTP/2. The count was not
+kept: with direct dispatch, TCP requests no longer enter the accept queue.
+
+**Sampled allocation by type is biased.** In-process `GCAllocationTick` events attribute
+allocation by sampling about every 100 KB. `TimeKeeper` and `HttpListenerContext` are each
+allocated once per HTTP/1 request in both cores, yet their sampled amounts differed 2.5
+and 1.08 times between runs. Trust exact totals and types that disappear: the write gate's
+`Task<Scope>` and the unused `Items` dictionary no longer appear in samples.
+
+Two experiments were withdrawn. Replacing the per-request `Task.Run` with a thread pool
+work item repeats the rejected request-dispatch scheduling experiment above and could not
+be separated from the other changes. Starting the HTTP/1 socket read outside
+`_connectionSync` left `ReadAndAdmitHeadAsync` the top spin site in a fresh sample while
+adding a second gate acquisition per pending read.
+
+Not measured here: idle memory per connection, startup time and the HTTP/3 handshake.

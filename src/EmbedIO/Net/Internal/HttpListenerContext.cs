@@ -17,7 +17,7 @@ namespace EmbedIO.Net.Internal
 {
     // Independently authored request context. One cold transition claims
     // completion and detaches callbacks; transport and callback work is outside it.
-    internal sealed class HttpListenerContext : IHttpContextImpl, IHttpTunnelContext, ITelemetryContext
+    internal sealed class HttpListenerContext : IHttpContextImpl, IHttpTunnelContext, ITelemetryContext, ILazyItems
     {
         private readonly object _lifetime = new();
         private readonly TimeKeeper _age = new();
@@ -76,6 +76,7 @@ namespace EmbedIO.Net.Internal
                 return Interlocked.CompareExchange(ref _items, created, null) ?? created;
             }
         }
+        bool ILazyItems.HasItems => Volatile.Read(ref _items) != null;
         public void SetHandled() => IsHandled = true;
         public void OnClose(Action<IHttpContext> callback)
         {

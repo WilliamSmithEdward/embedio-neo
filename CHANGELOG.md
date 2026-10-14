@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+- Correct defects found by a second review sweep. On HTTP/1, a request field sent on
+  several lines combines them in order (RFC 9110, Section 5.3) instead of keeping only
+  the last, as HTTP/2 and HTTP/3 already did; Cookie lines join with `; `. A quality
+  value's weight name matches case-insensitively (RFC 9110, Section 12.4.2), so
+  `gzip;Q=0` refuses gzip as `gzip;q=0` does. The OpenAPI builder describes strings
+  under EmbedIO's default JSON options, documents operations with `[FromServices]`
+  parameters, declares parameters of a module's base route, lists a form field bound
+  twice as required once, keeps component keys within OpenAPI's allowed characters,
+  and reports instead of throwing or misdescribing what it cannot describe: options the
+  schema exporter refuses (such as `ReferenceHandler.Preserve`) and polymorphic result
+  types, which are written without their discriminator. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
+- Security: a request handler that is still running counts against the connection's
+  128-request limit even after its stream is reset or its response has finished, on
+  HTTP/2 and HTTP/3. Before this, a client could reset streams to start an unbounded
+  number of concurrent handlers on one connection (the CVE-2023-44487 "Rapid Reset"
+  pattern). On HTTP/2 a new stream over the limit is refused with `REFUSED_STREAM`,
+  which clients retry, and a client refused more than 128 times within one second
+  receives `GOAWAY ENHANCE_YOUR_CALM`. HTTP/3 now allows 128 outstanding request
+  handlers per connection instead of 256, matching HTTP/2 and the QUIC stream limit;
+  a request over it is refused with `H3_REQUEST_REJECTED`. Graceful shutdown still
+  waits only for responses, not for handlers that outlive them.
+- Allocate less per request. An uncontended asynchronous response write no longer
+  allocates a task, a release delegate and a lock object. The per-request start and
+  completion log messages are built only when a trace listener or a
+  `Log.MessageWritten` observer will receive them. Request completion no longer creates
+  an unused `Items` dictionary. HTTP/1 responses reuse the cached `Date` and charset
+  `Content-Type` values that HTTP/2 and HTTP/3 already used, context IDs are built
+  without intermediate arrays, and HTTP/1 header encoding no longer allocates
+  `AllKeys`. Behavior is unchanged; see the
+  [load comparison](docs/project/http-engine-load-comparison.md#request-path-allocation-october-2026).
 - Behavior change: on the .NET 10 asset, a client that accepts Brotli at the same weight as
   gzip or deflate now gets Brotli, as with ASP.NET Core's response compression. Browsers send
   `Accept-Encoding: gzip, deflate, br` and got gzip: a tie went to the coding the client listed

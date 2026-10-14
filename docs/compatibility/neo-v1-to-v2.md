@@ -570,6 +570,14 @@ its tests may have relied on:
 - Complete WebSocket messages report `EndOfMessage` as true.
 - Directory listings requested without a trailing slash link to entries inside the
   directory instead of its parent.
+- On HTTP/1, a request field sent on several lines reads as one value that combines
+  the lines in order, separated by `, ` (RFC 9110, Section 5.3); Cookie lines join
+  with `; ` and all of their cookies appear in `Request.Cookies`. Only the last line
+  was kept before. HTTP/2 and HTTP/3 already combined repeated fields.
+- A quality value's weight name is case-insensitive (RFC 9110, Section 12.4.2):
+  a client that sends `Q=` now has its weight honored, so `Accept-Encoding: gzip;Q=0`
+  refuses gzip. An uppercase `Q` used to be ignored, and the coding was accepted at
+  full weight.
 - Statuses 103, 208, 226, 308, 421, 426, 428, 429, 431, 451, 506, 508, 510 and 511
   have the reason phrase `HttpStatusDescription` returns, such as `Too Many Requests`
   for 429. It appears in the HTTP/1 status line, as the default `StatusDescription`,

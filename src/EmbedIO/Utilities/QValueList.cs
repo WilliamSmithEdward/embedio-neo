@@ -207,7 +207,8 @@ namespace EmbedIO.Utilities
         {
             weight = 1000;
             position = SkipBlanks(text, position, end);
-            if (position + 2 >= end || text[position] != 'q' || text[position + 1] != '=')
+            // RFC 9110, Section 12.4.2: the weight's name "q" is case-insensitive.
+            if (position + 2 >= end || text[position] is not ('q' or 'Q') || text[position + 1] != '=')
                 return false;
 
             position += 2;

@@ -78,9 +78,12 @@ namespace EmbedIO.Net.Internal
                     Fields.Add(name, value);
                     return null;
                 }
-                if (name.Equals("Connection", StringComparison.OrdinalIgnoreCase) || name.Equals("Upgrade", StringComparison.OrdinalIgnoreCase)
-                    || name.Equals(HttpHeaderNames.SecWebSocketProtocol, StringComparison.OrdinalIgnoreCase))
-                    value = preceding + ", " + value;
+
+                // RFC 9110, Section 5.3: repeated field lines combine in order; keeping only the last would
+                // change the field. Cookie lines join with "; ", as HTTP/2 joins cookie fields (RFC 9113, 8.2.3).
+                // The out value stays this line's own, so header budgets count each line once.
+                Fields.Set(name, preceding + (name.Equals(HttpHeaderNames.Cookie, StringComparison.OrdinalIgnoreCase) ? "; " : ", ") + value);
+                return null;
             }
             Fields.Set(name, value);
             return null;
