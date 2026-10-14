@@ -416,198 +416,225 @@ namespace EmbedIO.WebApi
             var contextInLambda = Expression.Parameter(typeof(IHttpContext), "context");
             var routeInLambda = Expression.Parameter(typeof(RouteMatch), "route");
 
-            // Local variables
-            var locals = new List<ParameterExpression>();
-
             // Local variable for controller
             var controllerType = method.ReflectedType ?? throw new InvalidOperationException("The handler has no reflected controller type.");
             var controller = Expression.Variable(controllerType, "controller");
-            locals.Add(controller);
 
-            // Label for return statement
-            var returnTarget = Expression.Label(typeof(Task));
+            // Build the handler method call, then wrap its result in a Task that serializes it when needed.
+            var handlerArguments = BindHandlerArguments(method, controllerType, matcher, controller, routeInLambda);
+            var callMethod = WrapHandlerResult(Expression.Call(controller, method, handlerArguments), method.ReturnType, contextInLambda);
 
-            // Contents of lambda body
-            var bodyContents = new List<Expression>();
+            return contextFactory != null
+                ? CompileActivatedHandler(controllerType, controller, callMethod, contextInLambda, routeInLambda, contextFactory, release)
+                : CompileOwnedHandler(controllerType, controller, factoryExpression, callMethod, contextInLambda, routeInLambda);
+        }
 
-            // Build lambda arguments
-            var parameters = method.GetParameters();
-            var parameterCount = parameters.Length;
+        // One argument expression per handler parameter: request data provided by an attribute,
+        // the converted route parameter with the same name, or the parameter's default.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static List<Expression> BindHandlerArguments(MethodInfo method, Type controllerType, RouteMatcher matcher, ParameterExpression controller, ParameterExpression routeInLambda)
+        {
             var handlerArguments = new List<Expression>();
-            for (var i = 0; i < parameterCount; i++)
+            foreach (var parameter in method.GetParameters())
+                handlerArguments.Add(BindHandlerArgument(parameter, method, controllerType, matcher, controller, routeInLambda));
+
+            return handlerArguments;
+        }
+
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static Expression BindHandlerArgument(ParameterInfo parameter, MethodInfo method, Type controllerType, RouteMatcher matcher, ParameterExpression controller, ParameterExpression routeInLambda)
+        {
+            // First, check for generic request data interfaces in attributes, then for non-generic ones.
+            var requestData = TypedRequestData(parameter, controllerType, controller, out var typedAttributes);
+            var untypedAttributes = false;
+            if (requestData == null)
+                requestData = UntypedRequestData(parameter, controllerType, controller, out untypedAttributes);
+            if (requestData != null)
+                return requestData;
+
+            // There are request data attributes, but none is suitable for the type of the parameter:
+            // the user expects data to be injected but provided no way of injecting the right data type.
+            if (typedAttributes || untypedAttributes)
+                throw new InvalidOperationException($"No request data attribute for parameter {parameter.Name} of method {controllerType.Name}.{method.Name} can provide the expected data type.");
+
+            // Check whether the name of the handler parameter matches the name of a route parameter.
+            var parameterType = parameter.ParameterType;
+            var index = IndexOfRouteParameter(matcher, parameter.Name ?? throw new InvalidOperationException("The handler parameter has no name."));
+            if (index >= 0)
             {
-                var parameter = parameters[i];
-                var parameterType = parameter.ParameterType;
-                var failedToUseRequestDataAttributes = false;
+                // Convert the parameter to the handler's parameter type.
+                var convertFromRoute = FromString.ConvertExpressionTo(
+                    parameterType,
+                    Expression.Property(routeInLambda, "Item", Expression.Constant(index)));
 
-                // First, check for generic request data interfaces in attributes
-                var requestDataInterfaces = RequestDataInterfaces(parameter, typeof(IRequestDataAttribute<,>));
-
-                // If there are any...
-                if (requestDataInterfaces.Count > 0)
-                {
-                    // Take the first that applies to both controller and parameter type
-                    var (attr, intf) = requestDataInterfaces.FirstOrDefault(
-                        x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType)
-                          && parameterType.IsAssignableFrom(x.Intf.GenericTypeArguments[1]));
-
-                    if (attr != null)
-                    {
-                        // Use the request data interface to get a value for the parameter.
-                        Expression useRequestDataInterface = Expression.Call(
-                            Expression.Constant(attr),
-                            intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
-                            controller,
-                            Expression.Constant(parameter.Name));
-
-                        // We should await the call to GetRequestDataAsync.
-                        // For lack of a better way, call AwaitResult with an appropriate type argument.
-                        useRequestDataInterface = Expression.Call(
-                            AwaitResultMethod.MakeGenericMethod(intf.GenericTypeArguments[1]),
-                            useRequestDataInterface);
-
-                        handlerArguments.Add(useRequestDataInterface);
-                        continue;
-                    }
-
-                    // If there is no interface to use, the user expects data to be injected
-                    // but provided no way of injecting the right data type.
-                    failedToUseRequestDataAttributes = true;
-                }
-
-                // Check for non-generic request data interfaces in attributes
-                requestDataInterfaces = RequestDataInterfaces(parameter, typeof(IRequestDataAttribute<>));
-
-                // If there are any...
-                if (requestDataInterfaces.Count > 0)
-                {
-                    // Take the first that applies to the controller
-                    var (attr, intf) = requestDataInterfaces.FirstOrDefault(
-                        x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType));
-
-                    if (attr != null)
-                    {
-                        // Use the request data interface to get a value for the parameter.
-                        Expression useRequestDataInterface = Expression.Call(
-                            Expression.Constant(attr),
-                            intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
-                            controller,
-                            Expression.Constant(parameterType),
-                            Expression.Constant(parameter.Name));
-
-                        // We should await the call to GetRequestDataAsync,
-                        // then cast the result to the parameter type.
-                        // For lack of a better way to do the former,
-                        // and to save one function call,
-                        // just call AwaitAndCastResult with an appropriate type argument.
-                        useRequestDataInterface = Expression.Call(
-                            AwaitAndCastResultMethod.MakeGenericMethod(parameterType),
-                            Expression.Constant(parameter.Name),
-                            useRequestDataInterface);
-
-                        handlerArguments.Add(useRequestDataInterface);
-                        continue;
-                    }
-
-                    // If there is no interface to use, the user expects data to be injected
-                    // but provided no way of injecting the right data type.
-                    failedToUseRequestDataAttributes = true;
-                }
-
-                // There are request data attributes, but none is suitable
-                // for the type of the parameter.
-                if (failedToUseRequestDataAttributes)
-                    throw new InvalidOperationException($"No request data attribute for parameter {parameter.Name} of method {controllerType.Name}.{method.Name} can provide the expected data type.");
-
-                // Check whether the name of the handler parameter matches the name of a route parameter.
-                var index = IndexOfRouteParameter(matcher, parameter.Name ?? throw new InvalidOperationException("The handler parameter has no name."));
-                if (index >= 0)
-                {
-                    // Convert the parameter to the handler's parameter type.
-                    var convertFromRoute = FromString.ConvertExpressionTo(
-                        parameterType,
-                        Expression.Property(routeInLambda, "Item", Expression.Constant(index)));
-
-                    handlerArguments.Add(convertFromRoute ?? throw SelfCheck.Failure($"{nameof(convertFromRoute)} is null."));
-                    continue;
-                }
-
-                // No route parameter has the same name as a handler parameter.
-                // Pass the default for the parameter type.
-                handlerArguments.Add(parameter.HasDefaultValue
-                    ? (Expression)Expression.Constant(parameter.DefaultValue)
-                    : Expression.Default(parameterType));
+                return convertFromRoute ?? throw SelfCheck.Failure($"{nameof(convertFromRoute)} is null.");
             }
 
-            // Create the controller and initialize its properties
-            bodyContents.Add(Expression.Assign(controller, factoryExpression));
-            bodyContents.Add(Expression.Call(controller, HttpContextSetter, contextInLambda));
-            bodyContents.Add(Expression.Call(controller, RouteSetter, routeInLambda));
+            // No route parameter has the same name as a handler parameter.
+            // Pass the default for the parameter type.
+            return parameter.HasDefaultValue
+                ? (Expression)Expression.Constant(parameter.DefaultValue)
+                : Expression.Default(parameterType);
+        }
 
-            // Build the handler method call
-            Expression callMethod = Expression.Call(controller, method, handlerArguments);
-            var methodReturnType = method.ReturnType;
+        // Request data from the first IRequestDataAttribute<TController, TData> attribute that applies
+        // to both the controller and the parameter type; null when none applies. declared reports
+        // whether the parameter carries any attribute of that kind.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static Expression? TypedRequestData(ParameterInfo parameter, Type controllerType, ParameterExpression controller, out bool declared)
+        {
+            var requestDataInterfaces = RequestDataInterfaces(parameter, typeof(IRequestDataAttribute<,>));
+            declared = requestDataInterfaces.Count > 0;
+            if (!declared)
+                return null;
+
+            // Take the first that applies to both controller and parameter type
+            var parameterType = parameter.ParameterType;
+            var (attr, intf) = requestDataInterfaces.FirstOrDefault(
+                x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType)
+                  && parameterType.IsAssignableFrom(x.Intf.GenericTypeArguments[1]));
+            if (attr == null)
+                return null;
+
+            // Use the request data interface to get a value for the parameter.
+            Expression useRequestDataInterface = Expression.Call(
+                Expression.Constant(attr),
+                intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
+                controller,
+                Expression.Constant(parameter.Name));
+
+            // We should await the call to GetRequestDataAsync.
+            // For lack of a better way, call AwaitResult with an appropriate type argument.
+            return Expression.Call(
+                AwaitResultMethod.MakeGenericMethod(intf.GenericTypeArguments[1]),
+                useRequestDataInterface);
+        }
+
+        // Request data from the first IRequestDataAttribute<TController> attribute that applies to the
+        // controller, cast to the parameter type; null when none applies. declared reports whether
+        // the parameter carries any attribute of that kind.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static Expression? UntypedRequestData(ParameterInfo parameter, Type controllerType, ParameterExpression controller, out bool declared)
+        {
+            var requestDataInterfaces = RequestDataInterfaces(parameter, typeof(IRequestDataAttribute<>));
+            declared = requestDataInterfaces.Count > 0;
+            if (!declared)
+                return null;
+
+            // Take the first that applies to the controller
+            var (attr, intf) = requestDataInterfaces.FirstOrDefault(
+                x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType));
+            if (attr == null)
+                return null;
+
+            // Use the request data interface to get a value for the parameter.
+            var parameterType = parameter.ParameterType;
+            Expression useRequestDataInterface = Expression.Call(
+                Expression.Constant(attr),
+                intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
+                controller,
+                Expression.Constant(parameterType),
+                Expression.Constant(parameter.Name));
+
+            // We should await the call to GetRequestDataAsync,
+            // then cast the result to the parameter type.
+            // For lack of a better way to do the former,
+            // and to save one function call,
+            // just call AwaitAndCastResult with an appropriate type argument.
+            return Expression.Call(
+                AwaitAndCastResultMethod.MakeGenericMethod(parameterType),
+                Expression.Constant(parameter.Name),
+                useRequestDataInterface);
+        }
+
+        // Wraps the handler call in a Task: a Task passes through, void completes immediately,
+        // and a Task<TResult> or a synchronous result is serialized.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
+        private Expression WrapHandlerResult(Expression callMethod, Type methodReturnType, ParameterExpression contextInLambda)
+        {
             if (methodReturnType == typeof(Task))
             {
                 // Nothing to do
+                return callMethod;
             }
-            else if (methodReturnType == typeof(void))
+
+            if (methodReturnType == typeof(void))
             {
                 // Convert void to Task by evaluating Task.CompletedTask
-                callMethod = Expression.Block(typeof(Task), callMethod, Expression.Constant(Task.CompletedTask));
+                return Expression.Block(typeof(Task), callMethod, Expression.Constant(Task.CompletedTask));
             }
-            else if (IsGenericTaskType(methodReturnType, out var resultType))
+
+            if (IsGenericTaskType(methodReturnType, out var resultType))
             {
                 // Return a Task that serializes the result of a Task<TResult>
-                callMethod = Expression.Call(
+                return Expression.Call(
                     Expression.Constant(this),
                     SerializeResultAsyncMethod.MakeGenericMethod(resultType),
                     contextInLambda,
                     callMethod);
             }
-            else
-            {
-                // Return a Task that serializes a result obtained synchronously
-                callMethod = Expression.Call(
-                    Serializer.Target == null ? null : Expression.Constant(Serializer.Target),
-                    Serializer.Method,
-                    contextInLambda,
-                    Expression.Convert(callMethod, typeof(object)));
-            }
 
-            if (contextFactory != null)
-            {
-                // Compile binding/invocation once, with activation and awaited release
-                // outside the expression tree. The legacy path below is unchanged.
-                var instance = Expression.Parameter(typeof(WebApiController), "instance");
-                var invoke = Expression.Lambda<Func<WebApiController, IHttpContext, RouteMatch, Task>>(
-                    Expression.Block(locals,
-                        Expression.Assign(controller, Expression.Convert(instance, controllerType)),
-                        Expression.Call(controller, PreProcessRequestMethod),
-                        callMethod),
-                    instance, contextInLambda, routeInLambda).Compile();
+            // Return a Task that serializes a result obtained synchronously
+            return Expression.Call(
+                Serializer.Target == null ? null : Expression.Constant(Serializer.Target),
+                Serializer.Method,
+                contextInLambda,
+                Expression.Convert(callMethod, typeof(object)));
+        }
 
-                return async (context, route) =>
+        // Compiles binding and invocation once, with activation and the awaited release
+        // outside the expression tree.
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static RouteHandlerCallback CompileActivatedHandler(
+            Type controllerType, ParameterExpression controller, Expression callMethod,
+            ParameterExpression contextInLambda, ParameterExpression routeInLambda,
+            Func<IHttpContext, WebApiController?> contextFactory,
+            Func<IHttpContext, WebApiController, Task>? release)
+        {
+            var instance = Expression.Parameter(typeof(WebApiController), "instance");
+            var invoke = Expression.Lambda<Func<WebApiController, IHttpContext, RouteMatch, Task>>(
+                Expression.Block(new[] { controller },
+                    Expression.Assign(controller, Expression.Convert(instance, controllerType)),
+                    Expression.Call(controller, PreProcessRequestMethod),
+                    callMethod),
+                instance, contextInLambda, routeInLambda).Compile();
+
+            return async (context, route) =>
+            {
+                var created = contextFactory(context);
+                if (created == null)
+                    throw new InvalidOperationException($"The factory for {controllerType.FullName} returned null.");
+
+                try
                 {
-                    var created = contextFactory(context);
-                    if (created == null)
-                        throw new InvalidOperationException($"The factory for {controllerType.FullName} returned null.");
+                    if (!controllerType.IsInstanceOfType(created))
+                        throw new InvalidOperationException($"The factory for {controllerType.FullName} returned {created.GetType().FullName}.");
 
-                    try
-                    {
-                        if (!controllerType.IsInstanceOfType(created))
-                            throw new InvalidOperationException($"The factory for {controllerType.FullName} returned {created.GetType().FullName}.");
+                    created.HttpContext = context;
+                    created.Route = route;
+                    await invoke(created, context, route).ConfigureAwait(false);
+                }
+                finally
+                {
+                    await (release ?? throw new InvalidOperationException("No controller release callback is configured."))(context, created).ConfigureAwait(false);
+                }
+            };
+        }
 
-                        created.HttpContext = context;
-                        created.Route = route;
-                        await invoke(created, context, route).ConfigureAwait(false);
-                    }
-                    finally
-                    {
-                        await (release ?? throw new InvalidOperationException("No controller release callback is configured."))(context, created).ConfigureAwait(false);
-                    }
-                };
-            }
+        // The legacy path: the compiled handler creates the controller from the factory expression,
+        // initializes its properties, calls the method and disposes a disposable controller.
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static RouteHandlerCallback CompileOwnedHandler(
+            Type controllerType, ParameterExpression controller, Expression factoryExpression, Expression callMethod,
+            ParameterExpression contextInLambda, ParameterExpression routeInLambda)
+        {
+            // Label for return statement
+            var returnTarget = Expression.Label(typeof(Task));
 
             // Operations to perform on the controller.
             // Pseudocode:
@@ -635,14 +662,15 @@ namespace EmbedIO.WebApi
                     Expression.Call(Expression.TypeAs(controller, typeof(IDisposable)), DisposeMethod));
             }
 
-            bodyContents.Add(workWithController);
-
-            // At the end of the lambda body is the target of return statements.
-            bodyContents.Add(Expression.Label(returnTarget, Expression.Constant(Task.FromResult(false))));
-
-            // Build and compile the lambda.
+            // Create the controller and initialize its properties, work with it, and end the body
+            // at the target of return statements. Then build and compile the lambda.
             return Expression.Lambda<RouteHandlerCallback>(
-                Expression.Block(locals, bodyContents),
+                Expression.Block(new[] { controller },
+                    Expression.Assign(controller, factoryExpression),
+                    Expression.Call(controller, HttpContextSetter, contextInLambda),
+                    Expression.Call(controller, RouteSetter, routeInLambda),
+                    workWithController,
+                    Expression.Label(returnTarget, Expression.Constant(Task.FromResult(false)))),
                 contextInLambda,
                 routeInLambda)
                 .Compile();
