@@ -92,6 +92,9 @@ that host exit as resolved; the changed-source CI run must finish successfully.
 Per-case deadlines, assertions, iterations, coverage and the discovery minimum
 remain enforced; this is a whole-run allowance, not a failure exemption. NUnit 5
 async assertions must be awaited.
+The Test job allows 20 minutes on macOS and 15 elsewhere, so the macOS suite
+budget plus setup fits: CI 38479185526 finished all 6,056 macOS cases one
+second before a 15-minute job limit cancelled it (approved 2026-10-13).
 
 CI also runs test-only MAUI Mac Catalyst and Android apps outside the ordinary
 solution and shipped packages. The Android fixture uses the pinned .NET 10 SDK,
