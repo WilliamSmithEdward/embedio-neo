@@ -114,9 +114,12 @@ namespace EmbedIO.Net.Internal.Http3
         internal static Task RunWithDrainAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch,
             CancellationToken abortToken, CancellationToken drainToken, TimeSpan drainTimeout)
             => RunWithDrainCoreAsync(connection, dispatch, abortToken, drainToken, drainTimeout, false);
-        // The listener's dispatch only builds a context and queues it; it never
-        // blocks before returning its task, so it may run on the stream worker
-        // instead of paying a second thread-pool hop per request.
+        // The listener's dispatch builds the context and either queues it or
+        // starts the server's handler on the request stream's own task, which
+        // already left the accept loop. It runs there instead of paying a second
+        // thread-pool hop per request, so a handler that blocks before its first
+        // suspension holds its own stream only, as it holds its own connection
+        // over HTTP/1.1; other streams and the accept loop keep going.
         internal static Task RunForListenerAsync(QuicConnection connection, Func<Http3QuicExchange, Task> dispatch,
             CancellationToken abortToken, CancellationToken drainToken, TimeSpan drainTimeout)
             => RunWithDrainCoreAsync(connection, dispatch, abortToken, drainToken, drainTimeout, true);
