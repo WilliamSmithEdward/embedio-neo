@@ -281,7 +281,8 @@ namespace EmbedIO.Net.Internal
             if (error != null) { _connection.SetError(error); return; }
             _headerFieldCount++;
             _headerFieldBytes += name.Length + value.Length;
-            if (name.Equals("Cookie", StringComparison.OrdinalIgnoreCase)) _cookies = ParseCookies(value);
+            // The field combines repeated lines; parse it whole, as HTTP/2 parses its joined cookie field.
+            if (name.Equals("Cookie", StringComparison.OrdinalIgnoreCase)) _cookies = ParseCookies(_head.Fields[name] ?? value);
             else if (name.Equals("Referer", StringComparison.OrdinalIgnoreCase))
             {
                 try { UrlReferrer = new Uri(value); }

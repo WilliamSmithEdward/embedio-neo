@@ -299,6 +299,8 @@ namespace EmbedIO.OpenApi
         {
             private const string JsonMediaType = "application/json";
             private const string FormMediaType = "application/x-www-form-urlencoded";
+            // EmbedIO.DependencyInjection references this assembly, so its attribute is known by name.
+            private const string FromServicesAttributeName = "EmbedIO.DependencyInjection.FromServicesAttribute";
 
             private readonly JsonSerializerOptions _options;
             private readonly Dictionary<Type, string> _schemaNames = new();
@@ -342,7 +344,15 @@ namespace EmbedIO.OpenApi
                 if (method == null)
                     return;
 
-                var (path, routeParameters) = PathTemplate(basePath, route.Route);
+                // A module's base route can hold parameters too; each must be declared (OpenAPI path templating).
+                var (path, routeParameters) = PathTemplate(basePath + route.Route);
+                var repeated = routeParameters.GroupBy(p => p.Name, StringComparer.Ordinal).FirstOrDefault(g => g.Count() > 1);
+                if (repeated != null)
+                {
+                    Problems.Add($"{where}: route parameter '{repeated.Key}' appears more than once in the path.");
+                    return;
+                }
+
                 if (IsTaken(path, method, where))
                     return;
 
@@ -366,7 +376,7 @@ namespace EmbedIO.OpenApi
                     return;
                 }
 
-                var (path, routeParameters) = PathTemplate(string.Empty, matcher.Route);
+                var (path, routeParameters) = PathTemplate(matcher.Route);
                 if (IsTaken(path, method, where))
                     return;
 
@@ -477,8 +487,8 @@ namespace EmbedIO.OpenApi
                 var template = TemplateKey(path);
                 if (_pathTemplates.TryGetValue(template, out var canonical) && canonical != path)
                 {
-                    var (_, originalNames) = PathTemplate(string.Empty, path);
-                    var (_, canonicalNames) = PathTemplate(string.Empty, canonical);
+                    var (_, originalNames) = PathTemplate(path);
+                    var (_, canonicalNames) = PathTemplate(canonical);
                     if (described["parameters"] is JsonArray parameters)
                         foreach (var parameter in parameters.OfType<JsonObject>())
                             if (parameter["in"]?.GetValue<string>() == "path")
@@ -741,8 +751,16 @@ namespace EmbedIO.OpenApi
                         case WebApiParameterSource.Form:
                             formProperties ??= new JsonObject();
                             formRequired ??= new List<string>();
-                            formProperties[parameter.FieldName] = ValueSchema(parameter.Type, parameter.EnumNames);
-                            if (parameter.IsRequired)
+                            var formSchema = ValueSchema(parameter.Type, parameter.EnumNames);
+                            // Two parameters can bind one field, as for query fields; JSON Schema's required list must be unique.
+                            if (formProperties.TryGetPropertyValue(parameter.FieldName, out var bound) && !JsonNode.DeepEquals(bound, formSchema))
+                            {
+                                Problems.Add($"{where}: form field '{parameter.FieldName}' has conflicting binding schemas.");
+                                break;
+                            }
+
+                            formProperties[parameter.FieldName] = formSchema;
+                            if (parameter.IsRequired && !formRequired.Contains(parameter.FieldName))
                                 formRequired.Add(parameter.FieldName);
                             canFailBinding |= parameter.IsRequired || ElementType(parameter.Type) != typeof(string);
                             break;
@@ -757,6 +775,10 @@ namespace EmbedIO.OpenApi
                                 Problems.Add(where + ": more than one parameter reads the request body as JSON.");
                             jsonBody = parameter;
                             canFailBinding = true;
+                            break;
+
+                        // A service the dependency injection package supplies reads nothing from the request.
+                        case WebApiParameterSource.Custom when parameter.CustomAttribute == FromServicesAttributeName:
                             break;
 
                         case WebApiParameterSource.Custom:
@@ -828,7 +850,11 @@ namespace EmbedIO.OpenApi
                 if (!operation.Responses.Any(r => r.StatusCode >= 200 && r.StatusCode < 300))
                 {
                     var success = new JsonObject { ["description"] = "OK" };
-                    if (operation.ResultType != null)
+                    if (operation.ResultType != null && IsPolymorphic(operation.ResultType))
+                    {
+                        Problems.Add($"{where}: {operation.ResultType.FullName} is polymorphic, but a returned value is serialized as its runtime type, without the type discriminator its schema requires. Add [OpenApiIgnore] to leave the operation out.");
+                    }
+                    else if (operation.ResultType != null)
                     {
                         var schema = BodySchema(operation.ResultType, where);
                         if (schema != null)
@@ -897,24 +923,59 @@ namespace EmbedIO.OpenApi
                     return null;
                 }
 
+                // Some options cannot be exported (ReferenceHandler.Preserve, for one); report them like missing metadata.
+                JsonNode schema;
+                try
+                {
+                    schema = JsonSchemaExporter.GetJsonSchemaAsNode(typeInfo, ExporterOptions);
+                }
+                catch (Exception error) when (error is NotSupportedException || error is InvalidOperationException)
+                {
+                    Problems.Add($"{where}: the schema exporter cannot describe {type.FullName} with these JSON serializer options: {error.Message}");
+                    return null;
+                }
+
                 var name = UniqueSchemaName(type);
                 _schemaNames.Add(type, name);
-                var schema = JsonSchemaExporter.GetJsonSchemaAsNode(typeInfo, ExporterOptions);
                 Schemas[name] = RebaseReferences(schema, "#/components/schemas/" + name);
                 return Reference(name);
+            }
+
+            // A returned value is serialized through its runtime type's contract, which leaves out the
+            // discriminator a polymorphic base type's schema requires.
+            private bool IsPolymorphic(Type type)
+            {
+                try
+                {
+                    return _options.GetTypeInfo(type).PolymorphismOptions != null;
+                }
+                catch (Exception error) when (error is NotSupportedException || error is InvalidOperationException)
+                {
+                    return false; // BodySchema reports the missing metadata.
+                }
             }
 
             private static readonly JsonSchemaExporterOptions ExporterOptions = new() { TransformSchemaNode = DescribeCompatibleValue };
 
             // The exporter cannot see inside custom converters and describes their values as
-            // anything. EmbedIO's default options convert booleans, enums and dates this way; the
-            // schema states what those converters write.
+            // anything. EmbedIO's default options convert strings, booleans, enums and dates this
+            // way; the schema states what those converters write.
             private static JsonNode DescribeCompatibleValue(JsonSchemaExporterContext context, JsonNode schema)
             {
                 var typeInfo = context.TypeInfo;
                 var type = Nullable.GetUnderlyingType(typeInfo.Type);
                 var converter = type == null ? typeInfo.Converter : typeInfo.Options.GetTypeInfo(type).Converter;
-                if (converter.GetType().DeclaringType != typeof(EmbedIO.Serialization.CompatibleJsonConverterFactory))
+                var declaringType = converter.GetType().DeclaringType;
+                if (declaringType == typeof(EmbedIO.Serialization.Json) && typeInfo.Type == typeof(string))
+                {
+                    // It writes what the built-in string converter writes, so the exporter's own nullability rule applies.
+                    var nullable = context.PropertyInfo is { } property
+                        ? property.IsGetNullable || property.IsSetNullable
+                        : !ExporterOptions.TreatNullObliviousAsNonNullable;
+                    return nullable ? new JsonObject { ["type"] = new JsonArray((JsonNode?)"string", (JsonNode?)"null") } : StringSchema();
+                }
+
+                if (declaringType != typeof(EmbedIO.Serialization.CompatibleJsonConverterFactory))
                     return schema;
 
                 var valueType = type ?? typeInfo.Type;
@@ -929,12 +990,22 @@ namespace EmbedIO.OpenApi
 
             private string UniqueSchemaName(Type type)
             {
-                var baseName = SchemaName(type);
+                var baseName = ComponentKey(SchemaName(type));
                 var name = baseName;
                 for (var i = 2; Schemas.ContainsKey(name); i++)
                     name = baseName + i.ToString(CultureInfo.InvariantCulture);
 
                 return name;
+            }
+
+            // Component keys must match ^[a-zA-Z0-9.\-_]+$ (OpenAPI Components Object); C# type names need not.
+            private static string ComponentKey(string name)
+            {
+                var key = new StringBuilder(name.Length);
+                foreach (var character in name)
+                    key.Append(character is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '.' or '-' or '_' ? character : '_');
+
+                return key.ToString();
             }
 
             private static string SchemaName(Type type)
@@ -1047,9 +1118,9 @@ namespace EmbedIO.OpenApi
                 }
             }
 
-            private static (string Path, List<(string Name, bool Optional)> Parameters) PathTemplate(string basePath, string route)
+            private static (string Path, List<(string Name, bool Optional)> Parameters) PathTemplate(string route)
             {
-                var path = new StringBuilder(basePath);
+                var path = new StringBuilder();
                 var parameters = new List<(string, bool)>();
                 var position = 0;
                 while (position < route.Length)
