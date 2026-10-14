@@ -35,6 +35,12 @@
         // response (one write, flush, terminator) and one chunked write above the batching bound.
         new("h1-plain-chunk13-c64", Protocol.Http1, false, "/stream/13/13", 0, 64, 1, 1, 0, "13-byte chunked response in one write, 64 keep-alive connections"),
         new("h1-plain-chunked1m-c16", Protocol.Http1, false, "/stream/1048576/1048576", 0, 16, 1, 1, 0, "1 MiB chunked response in one write, 16 connections"),
+        // Dynamic response compression: the client sends a browser's Accept-Encoding
+        // (gzip, deflate, br) and each engine compresses a JSON document with its own
+        // defaults. Response bytes are the compressed body bytes.
+        new("h1-plain-json1k-c64", Protocol.Http1, false, "/json/1024", 0, 64, 1, 1, 0, "1 KiB JSON, compressed as negotiated, 64 keep-alive connections"),
+        new("h1-plain-json64k-c16", Protocol.Http1, false, "/json/65536", 0, 16, 1, 1, 0, "64 KiB JSON, compressed as negotiated, 16 connections"),
+        new("h1-plain-json1m-c16", Protocol.Http1, false, "/json/1048576", 0, 16, 1, 1, 0, "1 MiB JSON, compressed as negotiated, 16 connections"),
         new("h1-tls-small-c64", Protocol.Http1, true, "/plaintext", 0, 64, 1, 1, 0, "TLS 13-byte GET, 64 keep-alive connections"),
         new("h1-tls-churn-c32", Protocol.Http1, true, "/plaintext", 0, 32, 1, 1, 1, "TLS handshake plus one request per connection, 32 concurrent; 5 s cap (host TIME_WAIT capacity)", MaxSeconds: 5),
         new("h1-tls-large1m-c16", Protocol.Http1, true, "/bytes/1048576", 0, 16, 1, 1, 0, "TLS 1 MiB response, 16 connections"),

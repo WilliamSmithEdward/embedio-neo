@@ -2,6 +2,7 @@
 using System.Collections;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
@@ -132,27 +133,118 @@ namespace EmbedIO.Tests
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); server.Dispose(); Directory.Delete(directory, true); }
         }
 
-        [TestCase("br, identity;q=0", true, CompressionMethod.Brotli)]
-        [TestCase("br;q=1, gzip;q=0.5, identity;q=0", true, CompressionMethod.Brotli)]
-        [TestCase("gzip, br, deflate", true, CompressionMethod.Gzip)]
-        [TestCase("deflate, br", true, CompressionMethod.Deflate)]
-        [TestCase("br", false, CompressionMethod.None)]
-        [TestCase("br;q=0, gzip", true, CompressionMethod.Gzip)]
-        [TestCase("br, gzip", true, CompressionMethod.Brotli)]
-        [TestCase("deflate, gzip, br", true, CompressionMethod.Deflate)]
-        [TestCase("*", true, CompressionMethod.Gzip)]
-        public void NegotiationRespectsWeightsExclusionsAndExistingTieOrder(string accept, bool prefer, CompressionMethod expected)
+        // Expected coding on the .NET 10 asset, then on the .NET Standard 2.0 asset; null means
+        // negotiation fails. The Standard column is the behavior before Brotli preference. On .NET 10,
+        // Brotli wins a tie with gzip or deflate wherever the client lists it; before, the coding
+        // listed first won ("gzip, br, deflate" gave gzip, "*" gave gzip).
+        [TestCase("br, identity;q=0", true, CompressionMethod.Brotli, null)]
+        [TestCase("br;q=1, gzip;q=0.5, identity;q=0", true, CompressionMethod.Brotli, CompressionMethod.Gzip)]
+        [TestCase("gzip, br, deflate", true, CompressionMethod.Brotli, CompressionMethod.Gzip)]
+        [TestCase("deflate, br", true, CompressionMethod.Brotli, CompressionMethod.Deflate)]
+        [TestCase("br", false, CompressionMethod.None, CompressionMethod.None)]
+        [TestCase("br;q=0, gzip", true, CompressionMethod.Gzip, CompressionMethod.Gzip)]
+        [TestCase("br, gzip", true, CompressionMethod.Brotli, CompressionMethod.Gzip)]
+        [TestCase("deflate, gzip, br", true, CompressionMethod.Brotli, CompressionMethod.Deflate)]
+        [TestCase("*", true, CompressionMethod.Brotli, CompressionMethod.Gzip)]
+        [TestCase("gzip, deflate, br", true, CompressionMethod.Brotli, CompressionMethod.Gzip)]
+        [TestCase("gzip, deflate, br, zstd", true, CompressionMethod.Brotli, CompressionMethod.Gzip)]
+        [TestCase("gzip;q=1, br;q=0.5", true, CompressionMethod.Gzip, CompressionMethod.Gzip)]
+        [TestCase("gzip, br;q=0.9", true, CompressionMethod.Gzip, CompressionMethod.Gzip)]
+        [TestCase("gzip, *;q=0.5", true, CompressionMethod.Gzip, CompressionMethod.Gzip)]
+        [TestCase("deflate, gzip", true, CompressionMethod.Deflate, CompressionMethod.Deflate)]
+        [TestCase("identity, br", true, CompressionMethod.None, CompressionMethod.None)]
+        [TestCase("gzip, br", false, CompressionMethod.None, CompressionMethod.None)]
+        [TestCase("gzip, br, identity;q=0", false, CompressionMethod.Brotli, CompressionMethod.Gzip)]
+        [TestCase("identity;q=0", true, null, null)]
+        public void NegotiationPrefersBrotliAtEqualWeightAndKeepsWeightsAndIdentityRules(string accept, bool prefer, CompressionMethod? modern, CompressionMethod? standard)
         {
             ArgumentNullException.ThrowIfNull(accept);
-            var ok = new QValueList(true, accept).TryNegotiateContentEncoding(prefer, out var actual, out _);
-            if (!SupportsBrotli && expected == CompressionMethod.Brotli)
+            var expected = SupportsBrotli ? modern : standard;
+            var ok = new QValueList(true, accept).TryNegotiateContentEncoding(prefer, out var actual, out var name);
+            Assert.That(ok, Is.EqualTo(expected.HasValue));
+            if (expected is { } method)
             {
-                Assert.That(ok, accept.Contains("gzip", StringComparison.Ordinal) ? Is.True : Is.False);
-                if (ok) Assert.That(actual, Is.EqualTo(CompressionMethod.Gzip));
-                return;
+                Assert.That(actual, Is.EqualTo(method));
+                Assert.That(name, Is.EqualTo(CodingName(method)));
             }
-            Assert.That(ok, Is.True);
-            Assert.That(actual, Is.EqualTo(expected));
+        }
+
+        // Browsers send "gzip, deflate, br". On the .NET 10 asset a dynamic response is Brotli at
+        // quality 1 (CompressionLevel.Fastest), byte for byte; client weights still win. The
+        // .NET Standard 2.0 asset sends gzip as before.
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task DynamicResponsesUseBrotliFastestForBrowserAcceptEncoding(bool buffered)
+        {
+            var payload = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Range(0, 2000).Select(i => $"{{\"id\":{i},\"name\":\"item {i % 37}\",\"active\":{(i % 3 == 0 ? "false" : "true")}}},")));
+            var prefix = Resources.GetServerAddress();
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var server = new WebServer(o => o.WithUrlPrefix(prefix).WithMode(HttpListenerMode.EmbedIO));
+            server.OnAny(async context =>
+            {
+                context.Response.ContentType = MimeType.Json;
+                using var output = context.OpenResponseStream(buffered);
+                await output.WriteAsync(payload);
+            });
+            var running = server.RunAsync(stop.Token);
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                foreach (var (accept, modern, standard) in new[]
+                {
+                    ("gzip, deflate, br", CompressionMethod.Brotli, CompressionMethod.Gzip),
+                    ("gzip;q=1, br;q=0.5", CompressionMethod.Gzip, CompressionMethod.Gzip),
+                })
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Get, prefix);
+                    request.Headers.TryAddWithoutValidation("Accept-Encoding", accept);
+                    using var response = await client.SendAsync(request, stop.Token);
+                    response.EnsureSuccessStatusCode();
+                    var expected = SupportsBrotli ? modern : standard;
+                    var body = await response.Content.ReadAsByteArrayAsync(stop.Token);
+                    Assert.That(response.Content.Headers.ContentEncoding, Is.EqualTo(new[] { CodingName(expected) }), accept);
+                    Assert.That(Decode(body, expected), Is.EqualTo(payload), accept);
+                    if (expected == CompressionMethod.Brotli)
+                        Assert.That(body, Is.EqualTo(EncodeBrotli(payload, CompressionLevel.Fastest)), "Dynamic Brotli runs at quality 1.");
+                }
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+        }
+
+        // FileModule compresses a file once for its cache, or as it streams a file it does not cache,
+        // and keeps BrotliStream's own default, quality 4, either way: static content is not
+        // compressed at the dynamic level.
+        [TestCase(true)]
+        [TestCase(false)]
+        public async Task StaticFilesKeepBrotliQualityFourForBrowserAcceptEncoding(bool cached)
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "embedio-br-static-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var payload = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Range(0, 400).Select(i => $"line {i}: the quick brown fox {i % 11} jumps over the lazy dog {i % 7}\n")));
+            await File.WriteAllBytesAsync(Path.Combine(directory, "data.txt"), payload);
+            var prefix = Resources.GetServerAddress();
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var server = new WebServer(o => o.WithUrlPrefix(prefix).WithMode(HttpListenerMode.EmbedIO))
+                .WithStaticFolder("/", directory, false, module => module.ContentCaching = cached);
+            var running = server.RunAsync(stop.Token);
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                var expected = SupportsBrotli ? CompressionMethod.Brotli : CompressionMethod.Gzip;
+                for (var i = 0; i < 2; i++)
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Get, prefix + "data.txt");
+                    request.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate, br");
+                    using var response = await client.SendAsync(request, stop.Token);
+                    response.EnsureSuccessStatusCode();
+                    var body = await response.Content.ReadAsByteArrayAsync(stop.Token);
+                    Assert.That(response.Content.Headers.ContentEncoding, Is.EqualTo(new[] { CodingName(expected) }));
+                    Assert.That(Decode(body, expected), Is.EqualTo(payload));
+                    if (expected == CompressionMethod.Brotli)
+                        Assert.That(body, Is.EqualTo(EncodeBrotli(payload, null)), "Static files keep quality 4.");
+                }
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); server.Dispose(); Directory.Delete(directory, true); }
         }
 
         public static IEnumerable ConversionCases()
@@ -181,6 +273,23 @@ namespace EmbedIO.Tests
             var result = convert.Invoke(null, new object[] { source, sourceMethod, targetMethod }) as byte[] ?? throw new AssertionException("Missing conversion output.");
             Assert.That(Decode(result, targetMethod), Is.EqualTo(payload));
             if (sourceMethod == targetMethod) Assert.That(result, Is.SameAs(source));
+        }
+
+        private static string CodingName(CompressionMethod method) => method switch
+        {
+            CompressionMethod.Brotli => CompressionMethodNames.Brotli,
+            CompressionMethod.Gzip => CompressionMethodNames.Gzip,
+            CompressionMethod.Deflate => CompressionMethodNames.Deflate,
+            _ => CompressionMethodNames.None,
+        };
+
+        // One write and a dispose, as a response does; no level means BrotliStream's default (quality 4).
+        private static byte[] EncodeBrotli(byte[] bytes, CompressionLevel? level)
+        {
+            using var output = new MemoryStream();
+            using (var encoder = level is { } value ? new BrotliStream(output, value, true) : new BrotliStream(output, CompressionMode.Compress, true))
+                encoder.Write(bytes);
+            return output.ToArray();
         }
 
         private static byte[] Encode(byte[] bytes, CompressionMethod method)
