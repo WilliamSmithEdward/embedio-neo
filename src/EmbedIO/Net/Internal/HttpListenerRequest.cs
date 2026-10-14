@@ -285,7 +285,8 @@ namespace EmbedIO.Net.Internal
             _headerFieldBytes += name.Length + value.Length;
             if (name.Equals("Accept", StringComparison.OrdinalIgnoreCase)) AcceptTypes = value.SplitByComma();
             else if (name.Equals("Accept-Language", StringComparison.OrdinalIgnoreCase)) UserLanguages = value.SplitByComma();
-            else if (name.Equals("Cookie", StringComparison.OrdinalIgnoreCase)) _cookies = ParseCookies(value);
+            // The field combines repeated lines; parse it whole, as HTTP/2 parses its joined cookie field.
+            else if (name.Equals("Cookie", StringComparison.OrdinalIgnoreCase)) _cookies = ParseCookies(_head.Fields[name] ?? value);
             else if (name.Equals("Referer", StringComparison.OrdinalIgnoreCase))
             {
                 try { UrlReferrer = new Uri(value); }
