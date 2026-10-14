@@ -15,9 +15,6 @@ namespace EmbedIO.Net.Internal
         private readonly SemaphoreSlim _wake = new(0);
         private readonly ConcurrentDictionary<string, IHttpContextImpl> _pending = new();
         private ConcurrentQueue<IHttpContextImpl> _order = new();
-        // Tracks _pending's size: its IsEmpty and Count take every bucket lock,
-        // which contends with all concurrent publications on each pulse.
-        private int _pendingCount;
         private int _open;
         private int _producers;
         private int _readers;
@@ -51,7 +48,6 @@ namespace EmbedIO.Net.Internal
         internal void Publish(IHttpContextImpl context)
         {
             if (!_pending.TryAdd(context.Id, context)) throw new InvalidOperationException("Unable to register context.");
-            Interlocked.Increment(ref _pendingCount);
             Volatile.Read(ref _order).Enqueue(context);
             Interlocked.MemoryBarrier();
             Pulse();
@@ -131,7 +127,6 @@ namespace EmbedIO.Net.Internal
             while (Volatile.Read(ref _order).TryDequeue(out var candidate))
                 if (((ICollection<KeyValuePair<string, IHttpContextImpl>>)_pending).Remove(new(candidate.Id, candidate)))
                 {
-                    Interlocked.Decrement(ref _pendingCount);
                     context = candidate;
                     Pulse();
                     return true;
@@ -141,16 +136,12 @@ namespace EmbedIO.Net.Internal
         }
         private void Pulse()
         {
-            if (Volatile.Read(ref _waiters) != 0 && Volatile.Read(ref _pendingCount) > 0 && Interlocked.CompareExchange(ref _pulse, 1, 0) == 0)
+            if (Volatile.Read(ref _waiters) != 0 && !_pending.IsEmpty && Interlocked.CompareExchange(ref _pulse, 1, 0) == 0)
                 _wake.Release();
         }
         internal bool Withdraw(IHttpContextImpl context)
-        {
-            if (!((ICollection<KeyValuePair<string, IHttpContextImpl>>)_pending).Remove(new(context.Id, context))) return false;
-            Interlocked.Decrement(ref _pendingCount);
-            return true;
-        }
-        internal bool NeedsCompaction => Volatile.Read(ref _order).Count > Volatile.Read(ref _pendingCount) + 128;
+            => ((ICollection<KeyValuePair<string, IHttpContextImpl>>)_pending).Remove(new(context.Id, context));
+        internal bool NeedsCompaction => Volatile.Read(ref _order).Count > _pending.Count + 128;
         internal void Compact()
         {
             var replacement = new ConcurrentQueue<IHttpContextImpl>();
@@ -162,11 +153,7 @@ namespace EmbedIO.Net.Internal
         {
             var retired = new List<IHttpContextImpl>();
             foreach (var entry in _pending)
-                if (_pending.TryRemove(entry.Key, out var context))
-                {
-                    Interlocked.Decrement(ref _pendingCount);
-                    retired.Add(context);
-                }
+                if (_pending.TryRemove(entry.Key, out var context)) retired.Add(context);
             while (Volatile.Read(ref _order).TryDequeue(out _)) { }
             return retired.ToArray();
         }
