@@ -34,10 +34,35 @@ compatible when it matches the default versions supported by the executing
 runtime. Comparison uses the same normalization as authentication and never
 invokes callbacks.
 
-This check preserves existing fixed-certificate sharing. It does not establish
-that independently mutable `ServerCertificateSource` instances have equivalent
-ownership or rotation behavior. Prefer a deliberately shared source when sharing
-certificate rotation; this change does not resolve independent-source selection.
+Registration also compares the server certificate itself, because the endpoint
+presents one certificate to every connection, whichever logical owner the request
+path selects afterwards. Listeners share an HTTPS endpoint only when they present
+the same certificate: the same fixed certificate, compared by hash so that a
+certificate loaded twice from the same bytes still matches, or the same
+`ServerCertificateSource` instance. A fixed certificate and a source are never
+treated as equal, even while the source holds that certificate, because the source
+may rotate away from it while the endpoint is shared. A second owner with a
+different certificate is refused before its routes are published, with "different
+server certificates" in the `HttpListenerException`, and the first owner keeps
+serving. Owners that need rotation borrow one shared source.
+
+An https prefix on a listener that has neither a certificate nor a source fails at
+`Start` with an `InvalidOperationException`, and `WebServer.RunAsync` faults with
+it, instead of opening the port and dropping every connection at the handshake.
+The HTTP/3 and combined listeners already refuse a missing certificate when they
+are constructed. Configure the certificate or the source before starting.
+
+## Cleartext HTTP/2 and the `:scheme` pseudo-header
+
+Over a cleartext HTTP/2 connection (prior knowledge), the managed engine accepts a
+request whose `:scheme` is `https`. A TLS-terminating proxy that forwards h2c to
+EmbedIO sends the scheme the client used, and rejecting it would break every such
+deployment; RFC 9113 section 8.3.1 defines `:scheme` as the scheme of the target
+URI and does not tie it to the connection's transport. The request URL carries the
+scheme as sent, `IHttpRequest.IsSecureConnection` reports the actual transport
+(false over cleartext), and an application that needs to know whether the client's
+own hop was encrypted resolves that through the forwarded-header module's trusted
+proxies rather than through the URL scheme.
 
 ## A complete program: requiring client certificates
 

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+- Refuse to share an HTTPS endpoint between listeners that present different server
+  certificates. Owners share an endpoint only with the same fixed certificate (compared
+  by hash) or the same `ServerCertificateSource` instance; a second owner with another
+  certificate, or a fixed certificate beside a source, is refused before its routes are
+  published, with "different server certificates" in the `HttpListenerException`, and
+  the first owner keeps serving. Before, the endpoint presented its opener's certificate
+  and TLS policy to every owner, even after the opener left. The TLS-policy
+  compatibility rules are unchanged.
+- Refuse to start an https prefix on a managed listener that has neither a certificate
+  nor a certificate source: `Start` throws `InvalidOperationException`, and
+  `WebServer.RunAsync` faults with it, instead of opening the port and dropping every
+  connection at the TLS handshake. The HTTP/3 and combined listeners already refused a
+  missing certificate at construction.
 - HTTP/2 and HTTP/3 requests with a request deadline keep hearing the server's stop token
   through their context token, in the handler and in `OnRequestCompleted` callbacks after it.
   Installing the deadline disposed the token source behind the token the server captures

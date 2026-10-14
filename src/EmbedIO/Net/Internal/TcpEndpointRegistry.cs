@@ -43,6 +43,10 @@ namespace EmbedIO.Net.Internal
                 if (_leases.ContainsKey(text)) return;
                 var prefix = new ListenerPrefix(text);
                 if (!prefix.IsValid()) throw new HttpListenerException(400, "Invalid path.");
+                // A secure prefix needs a certificate before its endpoint opens: a port that
+                // accepts connections only to drop them at the handshake has not started.
+                if (prefix.Secure && !_owner.HasServerCertificate)
+                    throw new InvalidOperationException("An https prefix requires a server certificate; construct the listener with a certificate or a certificate source before it starts (" + text + ").");
                 var endpoints = new List<EndPointListener>();
                 var mutations = new List<EndPointListener>();
                 try
@@ -66,8 +70,8 @@ namespace EmbedIO.Net.Internal
             }
 
             // The process-wide endpoint for one address, bound on first use. Another
-            // owner's endpoint is joined only when scheme, connection limits and TLS
-            // policy let the two listeners share it.
+            // owner's endpoint is joined only when scheme, connection limits, TLS policy
+            // and server certificate let the two listeners share it.
             private EndPointListener Join(IPAddress address, ListenerPrefix prefix)
             {
                 var key = new IPEndPoint(address, prefix.Port);
@@ -86,6 +90,12 @@ namespace EmbedIO.Net.Internal
                     throw new HttpListenerException(400, "A listener with connection limits cannot share a listening endpoint with another listener.");
                 if (prefix.Secure && !ServerTlsPolicy.CanShareEndpoint(endpoint.Listener.TlsPolicy, _owner.TlsPolicy))
                     throw new HttpListenerException(400, "Listeners with incompatible TLS policies cannot share a listening endpoint.");
+                // The endpoint presents its opener's certificate to every connection, whichever
+                // owner the request path selects later, so every owner must present the same one.
+                if (prefix.Secure && !endpoint.Listener.SharesCertificateWith(_owner))
+                    throw new HttpListenerException(400, endpoint.Listener.UsesCertificateSource != _owner.UsesCertificateSource
+                        ? "Listeners with different server certificates cannot share a listening endpoint: one presents a fixed certificate and the other a certificate source that may rotate, so let both borrow the same source."
+                        : "Listeners with different server certificates cannot share a listening endpoint.");
                 return endpoint;
             }
 

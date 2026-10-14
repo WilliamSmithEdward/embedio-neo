@@ -1264,3 +1264,27 @@ AcceptTunnelAsync handoff instead of assigning the property manually. Negotiated
 HTTP/1 handshakes keep their 101 response; HTTP/2 and HTTP/3 do not use 101.
 Automatic 100 Continue remains supported. No informational assignment is silently
 rewritten into a different final status.
+
+### Shared HTTPS endpoints and secure prefixes (unreleased)
+
+Two managed-listener behaviors changed for https prefixes in EmbedIO mode.
+
+A listener now shares an address and port with another HTTPS listener only when
+both present the same server certificate: the same fixed certificate, compared by
+hash so that the same bytes loaded twice match, or the same
+`ServerCertificateSource` instance. A second owner with a different certificate,
+or a fixed certificate beside a source, is refused at `Start` with an
+`HttpListenerException` whose message contains "different server certificates",
+before any of its routes are published; the owner that opened the endpoint keeps
+serving. Previously the endpoint presented the opener's certificate and TLS policy
+to every owner, even after the opener stopped. To keep sharing, give every owner
+the same certificate instance or bytes, or let them borrow one shared source; use
+separate ports otherwise. The TLS-policy compatibility rules are unchanged.
+
+A listener with an https prefix and neither a certificate nor a certificate
+source now fails at `Start` with an `InvalidOperationException`, and
+`WebServer.RunAsync` faults with it, instead of opening the port and dropping every
+connection at the TLS handshake. Configure `WithCertificate` or
+`WithCertificateSource`, or pass the certificate to `HttpListener`, before starting,
+or use an http prefix. The HTTP/3 and combined listeners already refused a missing
+certificate at construction.
