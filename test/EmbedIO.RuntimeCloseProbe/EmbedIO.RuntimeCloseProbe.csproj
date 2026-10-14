@@ -5,7 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <RuntimeFrameworkVersion>10.0.12</RuntimeFrameworkVersion>
+    <RuntimeFrameworkVersion>10.0.13</RuntimeFrameworkVersion>
     <RollForward>Disable</RollForward>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- RequiredRuntime.Check reads this, so the runtime pin is only RuntimeFrameworkVersion. -->
+    <AssemblyMetadata Include="RequiredRuntime" Value="$(RuntimeFrameworkVersion)" />
+  </ItemGroup>
 </Project>

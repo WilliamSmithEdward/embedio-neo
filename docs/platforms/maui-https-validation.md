@@ -59,7 +59,9 @@ smokes run as separate required jobs.
 
 ## Reproduce CI
 
-The SDK and workload set are pinned to 10.0.401 and MAUI Controls to 10.0.110;
+The SDK follows `global.json`, the workload set is pinned to 10.0.401 (a
+workload set belongs to a feature band, and an SDK patch keeps its band's set)
+and MAUI Controls to 10.0.110;
 every target has its own committed dependency lock. Runners are Windows 2025,
 Ubuntu 24.04 and macOS 26. Apple uses Xcode 26.6 and the iOS 26.5 simulator;
 Android uses Android 10/API 29.
@@ -117,8 +119,9 @@ required alongside this native HTTPS fixture.
 The HTTPS Windows job installs its pinned SDK into a private runner-temporary
 directory. This keeps workload installation separate from the runner's Visual
 Studio installation, whose other workloads otherwise get updated as well. The
-SDK and workload versions remain 10.0.401. Each platform still performs its own
-locked restore, build, native trust checks, WebView checks and external probes.
+SDK and workload versions are the pinned ones above. Each platform still performs
+its own locked restore, build, native trust checks, WebView checks and external
+probes.
 
 CI caches only downloaded NuGet packages, keyed by committed dependency locks;
 it does not reuse compiled applications, generated certificates, simulator state

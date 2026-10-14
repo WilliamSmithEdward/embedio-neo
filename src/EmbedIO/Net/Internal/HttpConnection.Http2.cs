@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Diagnostics;
@@ -102,11 +103,40 @@ namespace EmbedIO.Net.Internal
                 using var idle = _http2IdleTimeout is int timeout ? new Http2IdleWatch(this, dispatcher, timeout) : null;
                 try { await dispatcher.RunAsync(DispatchHttp2Async, stop.Token).ConfigureAwait(false); }
                 finally { lock (_connectionSync) _http2Dispatcher = null; }
+                // Before the connection disposes its transport, which would close both directions.
+                if (dispatcher.EndedGracefully) await CloseHttp2InStagesAsync().ConfigureAwait(false);
             }
             finally
             {
                 CloseTransport(true);
                 lock (_connectionSync) _http2Stop = null;
+            }
+        }
+
+        private const int StagedCloseLingerMilliseconds = 2000;
+
+        // A graceful HTTP/2 end (drain or idle GOAWAY) leaves the peer free to keep
+        // sending: WINDOW_UPDATE for the final DATA, or HEADERS it sent before reading
+        // GOAWAY. Closing both directions with such bytes unread, or arriving afterwards,
+        // resets the connection, and the reset discards response bytes the peer has not
+        // read yet. As RFC 9112 section 9.6 describes, close in stages instead: half-close
+        // after the final frames, then read and discard until the peer closes. The
+        // connection deadline bounds the wait; its expiry retires the transport, which
+        // ends the read, and the ordinary close then takes over.
+        private async Task CloseHttp2InStagesAsync()
+        {
+            Socket? socket;
+            lock (_connectionSync) socket = _protocolEnded == 0 ? _protocolSocket : null;
+            if (socket == null || !_lifetime.ShortenDeadline(StagedCloseLingerMilliseconds)) return;
+            try
+            {
+                await CompleteOutputAsync(CancellationToken.None, false).ConfigureAwait(false);
+                var discard = new byte[4096];
+                while (await socket.ReceiveAsync(new ArraySegment<byte>(discard), SocketFlags.None).ConfigureAwait(false) != 0) { }
+            }
+            catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException)
+            {
+                // The deadline or a stop retired the transport, or the peer reset it.
             }
         }
 
@@ -182,14 +212,18 @@ namespace EmbedIO.Net.Internal
                 // Do not hold a connection lock while entering listener lifecycle
                 // synchronization: listener shutdown closes its connections.
                 await context.SendContinueAsync(listener.DeferContinue || RequestBodyPolicy.KnownRefusal(context.Request) != null).ConfigureAwait(false);
-                listener.RegisterMultiplexedContext(context, this);
+                // This exchange runs on its own work item, so a directly dispatched
+                // handler runs here without blocking the connection's frame loop. The
+                // server owns the handler's task, including failures, and the handler
+                // may keep running after the response completes.
+                _ = listener.RegisterMultiplexedContext(context, this);
                 registered = true;
                 var closed = false;
                 lock (_connectionSync) closed = _protocolSocket == null || _protocolEnded != 0;
                 if (closed)
                 {
                     listener.RemoveConnection(this);
-                    throw new IOException("Connection closed during routing.");
+                    throw new IOException("Connection closed while routing or handling the request.");
                 }
                 var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 using var registration = exchange.CancellationToken.Register(state => ((TaskCompletionSource<bool>)(state ?? throw new InvalidOperationException("Missing cancellation signal."))).TrySetResult(true), canceled);
