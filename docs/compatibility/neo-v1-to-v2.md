@@ -576,6 +576,12 @@ its tests may have relied on:
   as the default problem-details `title` and as the default OpenAPI response
   description. These statuses used to have an empty phrase, no default problem title
   and an OpenAPI description such as `Status 429`.
+- `CheckIfNoneMatch` compares entity tags weakly, as `If-None-Match` requires
+  (RFC 9110, Section 13.1.2) and as `EvaluatePreconditions` already did. A client that
+  sends `If-None-Match: W/"abc"` for a resource tagged `"abc"` receives 304 rather than
+  the representation, so a cache that revalidates with weak tags is served correctly.
+  `If-Match` stays strong, and a condition the method cannot parse still matches nothing
+  rather than rejecting the request.
 
 ## Brotli preferred at equal weight
 

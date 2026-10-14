@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Behavior change: `IHttpRequest.CheckIfNoneMatch` compares entity tags weakly, the comparison
+  `If-None-Match` requires (RFC 9110, Section 13.1.2) and the one `EvaluatePreconditions`
+  already applied. A client that sends `If-None-Match: W/"abc"` for a resource tagged `"abc"`
+  now receives 304 instead of the whole representation; `If-Match` stays strong. A condition
+  the method cannot parse still matches nothing rather than rejecting the request.
 - Behavior change: on the .NET 10 asset, a client that accepts Brotli at the same weight as
   gzip or deflate now gets Brotli, as with ASP.NET Core's response compression. Browsers send
   `Accept-Encoding: gzip, deflate, br` and got gzip: a tie went to the coding the client listed
