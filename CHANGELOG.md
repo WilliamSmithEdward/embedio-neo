@@ -14,6 +14,28 @@
   schema exporter refuses (such as `ReferenceHandler.Preserve`) and polymorphic result
   types, which are written without their discriminator. See
   [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
+- Behavior change: on the .NET 10 asset, a client that accepts Brotli at the same weight as
+  gzip or deflate now gets Brotli, as with ASP.NET Core's response compression. Browsers send
+  `Accept-Encoding: gzip, deflate, br` and got gzip: a tie went to the coding the client listed
+  first, and browsers list `br` last. Client weights still decide (`gzip;q=1, br;q=0.5` gets
+  gzip). Ties with `identity`, the choice between gzip and deflate, and the .NET Standard 2.0
+  asset are unchanged. Dynamic responses (`OpenResponseStream`, `OpenResponseText` and the
+  helpers built on them, such as `SendDataAsync` and `SendStringAsync`) compress Brotli at
+  quality 1 (`CompressionLevel.Fastest`, ASP.NET Core's default) instead of `BrotliStream`'s
+  default quality 4. `FileModule` keeps quality 4 for cached and streamed files, about the size
+  of the previous gzip responses. William accepted on 2026-10-14 the 6-17% larger dynamic
+  responses than the previous gzip default for 56-77% less compression CPU. One thread,
+  runtime 10.0.13, a JSON document compressed once per response (`--compression-timing`):
+
+  | JSON | gzip default level (before) | Brotli quality 1 (now) | Brotli quality 4 |
+  | --- | --- | --- | --- |
+  | 1 KiB | 514 B, 9.3 us | 545 B, 4.1 us | 499 B, 13.5 us |
+  | 64 KiB | 12,128 B, 347 us | 13,672 B, 81 us | 12,288 B, 329 us |
+  | 1 MiB | 174,771 B, 6.43 ms | 203,734 B, 1.66 ms | 174,491 B, 5.08 ms |
+
+  End to end over HTTP/1.1 with a browser's `Accept-Encoding` (load benchmark `-json`
+  scenarios, roles alternated), requests per second rose 1.23x, 3.08x and 3.62x for the
+  1 KiB, 64 KiB and 1 MiB documents, and server CPU per request fell to 0.82x, 0.32x and 0.28x.
 - HTTP/2 and HTTP/3 requests with a request deadline keep hearing the server's stop token
   through their context token, in the handler and in `OnRequestCompleted` callbacks after it.
   Installing the deadline disposed the token source behind the token the server captures

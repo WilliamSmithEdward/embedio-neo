@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.DependencyInjection;
 
 internal enum Protocol
 {
@@ -26,10 +27,18 @@ internal interface IBenchmarkServer : IAsyncDisposable
 }
 
 // The same application work for both engines: route parse, cached body or
-// validated upload, then an asynchronous write. No engine-specific middleware.
+// validated upload, then an asynchronous write. No engine-specific middleware, except
+// that the JSON route uses each engine's own response compression.
 internal static class Application
 {
     internal const int UploadBufferBytes = 16384;
+
+    internal static string ContentType(RouteKind kind) => kind switch
+    {
+        RouteKind.Plaintext or RouteKind.Upload => "text/plain",
+        RouteKind.Json => "application/json",
+        _ => "application/octet-stream",
+    };
 
     // Reads and validates the whole upload. Returns the acknowledgement or null on mismatch.
     internal static async Task<byte[]?> ReadUploadAsync(Stream body, CancellationToken cancellation)
@@ -123,11 +132,16 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
         var response = context.Response;
         if (!BenchmarkRoute.TryParse(context.Request.Url.AbsolutePath, out var route)) throw HttpException.NotFound();
         var cancellation = context.CancellationToken;
-        response.ContentType = route.Kind is RouteKind.Plaintext or RouteKind.Upload ? "text/plain" : "application/octet-stream";
+        response.ContentType = Application.ContentType(route.Kind);
         switch (route.Kind)
         {
             case RouteKind.Plaintext:
                 await WriteAsync(Payloads.Plaintext).ConfigureAwait(false);
+                break;
+            case RouteKind.Json:
+                // The path SendDataAsync takes for serialized JSON: negotiation, then chunked and
+                // compressed when the client accepts a coding.
+                await ResponseSerializer.None(false)(context, Payloads.Json(route.Length)).ConfigureAwait(false);
                 break;
             case RouteKind.Bytes:
                 await WriteAsync(Payloads.Get(route.Length)).ConfigureAwait(false);
@@ -250,7 +264,12 @@ internal sealed class KestrelServer(ServerSettings settings, ConnectionLedger? c
             });
         });
         if (settings.Protocol == Protocol.Http3) builder.WebHost.UseQuic();
+        // ASP.NET Core's defaults (Brotli, then gzip, both at Fastest), for the JSON route only.
+        builder.Services.AddResponseCompression(options => options.EnableForHttps = true);
         _application = builder.Build();
+        _application.UseWhen(
+            context => context.Request.Path.StartsWithSegments("/json", StringComparison.Ordinal),
+            json => json.UseResponseCompression());
         _application.Run(HandleAsync);
         return _application.StartAsync();
     }
@@ -286,11 +305,15 @@ internal sealed class KestrelServer(ServerSettings settings, ConnectionLedger? c
         }
 
         var cancellation = context.RequestAborted;
-        response.ContentType = route.Kind is RouteKind.Plaintext or RouteKind.Upload ? "text/plain" : "application/octet-stream";
+        response.ContentType = Application.ContentType(route.Kind);
         switch (route.Kind)
         {
             case RouteKind.Plaintext:
                 await WriteAsync(Payloads.Plaintext).ConfigureAwait(false);
+                break;
+            case RouteKind.Json:
+                // No Content-Length: the response compression middleware chooses the framing.
+                await response.Body.WriteAsync(Payloads.Json(route.Length), cancellation).ConfigureAwait(false);
                 break;
             case RouteKind.Bytes:
                 await WriteAsync(Payloads.Get(route.Length)).ConfigureAwait(false);

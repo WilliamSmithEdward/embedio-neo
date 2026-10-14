@@ -578,3 +578,20 @@ its tests may have relied on:
   a client that sends `Q=` now has its weight honored, so `Accept-Encoding: gzip;Q=0`
   refuses gzip. An uppercase `Q` used to be ignored, and the coding was accepted at
   full weight.
+
+## Brotli preferred at equal weight
+
+On the .NET 10 asset, a client that accepts Brotli at the same weight as gzip or
+deflate now gets Brotli. Browsers send `Accept-Encoding: gzip, deflate, br` and
+previously got gzip, because a tie went to the coding the client listed first.
+Client weights still decide: a client that needs gzip can send
+`gzip;q=1, br;q=0.5`. Ties with `identity`, the choice between gzip and deflate,
+and the .NET Standard 2.0 asset are unchanged.
+
+Dynamic responses from `OpenResponseStream`, `OpenResponseText` and the helpers built
+on them use Brotli quality 1 (`CompressionLevel.Fastest`): a quarter to half the CPU
+of gzip's default level, and 6 to 17% larger on a JSON document. Static files keep
+quality 4, about the size of the previous gzip responses. Tests or caches that expect
+`Content-Encoding: gzip` for these clients, or a gzip entity tag from `FileModule`,
+see `br` instead. See
+[Brotli responses](../guides/getting-started/files.md#brotli-responses-in-the-modern-engine-development-branch).
