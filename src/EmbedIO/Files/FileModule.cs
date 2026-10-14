@@ -22,6 +22,14 @@ namespace EmbedIO.Files
         /// </summary>
         public const string DefaultDocumentName = "index.html";
 
+        // A successful mapping is remembered so a repeated request skips the provider. The key is
+        // the requested path as the client sent it, and a case-insensitive file system maps many
+        // spellings of one resource (/index.html, /INDEX.HTML), so an unbounded cache would grow
+        // with the spellings clients choose rather than with the resources served. Past this many
+        // entries a mapping still succeeds, uncached: the bound costs a provider lookup, never a
+        // wrong answer, and it is far above the number of paths an ordinary site serves.
+        private const int MappingCacheLimit = 1024;
+
         private readonly string _cacheSectionName = UniqueIdGenerator.GetNext();
         private readonly MimeTypeCustomizer _mimeTypeCustomizer = new MimeTypeCustomizer();
         private readonly ConcurrentDictionary<string, (MappedResourceInfo Info, string UrlPath)>? _mappingCache;
@@ -400,7 +408,7 @@ namespace EmbedIO.Files
             else
             {
                 info = MapUrlPath(path, context, out urlPath);
-                if (info != null)
+                if (info != null && _mappingCache.Count < MappingCacheLimit)
                     _mappingCache[path] = (info, urlPath);
             }
 

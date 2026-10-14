@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- The Basic authentication challenge escapes its realm. A realm containing a quote or a
+  backslash produced a malformed `WWW-Authenticate` header, because the realm is a
+  quoted-string (RFC 9110, Section 5.6.4; RFC 7617, Section 2.1). The `Realm` property
+  still reports the value as given.
+- `FileModule` bounds the mapping cache it keeps for an immutable provider. The cache is
+  keyed by the requested path, and a case-insensitive file system maps every spelling of a
+  name to the same file, so a client could grow the cache without bound by varying the
+  case it asked for. Past 1024 entries a mapping still succeeds, uncached.
 - WebSocket closes end in time, and stopping the server closes WebSockets cleanly. A close
   on a protocol error or a rejected message, and `Dispose`, now give up after one second
   when the close frame cannot be written, for example because the client stopped reading,
