@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Allocate less per request. An uncontended asynchronous response write no longer
+  allocates a task, a release delegate and a lock object. The per-request start and
+  completion log messages are built only when a trace listener or a
+  `Log.MessageWritten` observer will receive them. Request completion no longer creates
+  an unused `Items` dictionary. HTTP/1 responses reuse the cached `Date` and charset
+  `Content-Type` values that HTTP/2 and HTTP/3 already used, context IDs are built
+  without intermediate arrays, and HTTP/1 header encoding no longer allocates
+  `AllKeys`. Behavior is unchanged; see the
+  [load comparison](docs/project/http-engine-load-comparison.md#request-path-allocation-october-2026).
 - Dispatch each admitted TCP request straight from its connection to the server's
   handler instead of queueing it for the accept loop, in plain and combined mode. The
   HTTP/1.1 actor starts the handler on its own thread and then yields to the thread
