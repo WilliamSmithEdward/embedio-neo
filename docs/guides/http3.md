@@ -14,6 +14,13 @@ CI also exercises macOS with its pinned native prerequisite; this is not a claim
 that every macOS deployment/runtime combination is supported. The .NET Standard
 asset rejects this mode with `PlatformNotSupportedException`.
 
+On Windows, .NET bundles MsQuic, so use runtime 10.0.13 or later. It is the .NET
+security release for [CVE-2026-105016](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-105016),
+a remote code execution vulnerability in Microsoft QUIC that MSRC rates Critical
+for .NET installed on Windows. Runtime 10.0.13 bundles `msquic.dll` 2.5.11;
+10.0.12 bundled 2.5.10. Linux and macOS load the MsQuic library installed on the
+host, which a runtime update does not change.
+
 Configure HTTPS prefixes and a server certificate containing its private key.
 Keep the certificate alive until the server is disposed. The OpenSSL QUIC backend
 used in validation requires an exportable key; choose provisioning appropriate to
@@ -77,9 +84,11 @@ for each disposed stream that sent data. Long-running HTTP/3 traffic therefore
 has a known runtime memory-growth risk. HTTP/1.1 and HTTP/2 do not use this path.
 The [upstream fix](https://github.com/dotnet/runtime/pull/135591) merged into
 runtime `main` on 13 October 2026, but no .NET 10 servicing backport or released
-fixed runtime has been verified. An upstream merge does not update an installed
-runtime. Until a fixed runtime is verified, leave optional HTTP/3 disabled where
-it is unnecessary or plan bounded process lifetimes for affected deployments.
+fixed runtime has been verified. Runtime 10.0.13, released the same day, does not
+contain it: the fix's merge commit is not in the `v10.0.13` tag. An upstream merge
+does not update an installed runtime. Until a fixed runtime is verified, leave
+optional HTTP/3 disabled where it is unnecessary or plan bounded process lifetimes
+for affected deployments.
 See the [attribution and verification status](../project/http-engine-endurance.md#upstream-fix-merged-13-october-2026)
 and [tracking issue278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278).
 

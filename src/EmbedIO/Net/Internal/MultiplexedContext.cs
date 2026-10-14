@@ -31,6 +31,11 @@ namespace EmbedIO.Net.Internal
         private CancellationTokenSource? _linked;
         private CancellationToken _cancellation;
         private CancellationToken _serverCancellation;
+        // Links replaced by a later server token, each with the server token it follows.
+        // The server reads the context token before it installs a request deadline and
+        // restores that token afterwards, so a replaced link must keep conveying shutdown
+        // to tokens already handed out. It is released when the context closes.
+        private List<(CancellationTokenSource Link, CancellationToken Server)>? _replaced;
         private bool _closed;
         private int _webSocketAccepted;
         internal MultiplexedContext(IMultiplexedExchange exchange, IPEndPoint local, IPEndPoint remote, bool secure)
@@ -54,7 +59,7 @@ namespace EmbedIO.Net.Internal
                     // assigns its shutdown token. Keep that request canceled without
                     // throwing into the server-wide accept loop or allocating a link.
                     if (_closed) { _cancellation = new CancellationToken(true); return; }
-                    _linked?.Dispose();
+                    if (_linked != null) (_replaced ??= new(2)).Add((_linked, _serverCancellation));
                     _serverCancellation = value;
                     _linked = CancellationTokenSource.CreateLinkedTokenSource(value, _exchange.CancellationToken);
                     _cancellation = _linked.Token;
@@ -177,16 +182,25 @@ namespace EmbedIO.Net.Internal
                     foreach (var callback in _callbacks)
                         try { callback(this); } catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback."); }
                 _linked?.Dispose();
+                if (_replaced != null)
+                    foreach (var replaced in _replaced) replaced.Link.Dispose();
                 if (failure == null) _completion.TrySetResult(true); else _completion.TrySetException(failure);
             }
         }
         private void PropagateCancellation()
         {
             // Parent callbacks run in reverse registration order. Closing from a later
-            // callback must not dispose the link before it conveys cancellation to
+            // callback must not dispose a link before it conveys cancellation to
             // application code, including tokens captured before this context closed.
-            if (_linked == null || (!_serverCancellation.IsCancellationRequested && !_exchange.CancellationToken.IsCancellationRequested)) return;
-            try { _linked.Cancel(); }
+            // Replaced links go first: the current link can follow one of their tokens.
+            if (_replaced != null)
+                foreach (var replaced in _replaced) PropagateCancellation(replaced.Link, replaced.Server);
+            PropagateCancellation(_linked, _serverCancellation);
+        }
+        private void PropagateCancellation(CancellationTokenSource? link, CancellationToken server)
+        {
+            if (link == null || (!server.IsCancellationRequested && !_exchange.CancellationToken.IsCancellationRequested)) return;
+            try { link.Cancel(); }
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
                 error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context cancellation callback.");

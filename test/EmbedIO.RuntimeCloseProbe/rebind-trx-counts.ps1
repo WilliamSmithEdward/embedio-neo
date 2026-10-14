@@ -1,7 +1,10 @@
-# Prints "total passed failed defect" for one TRX file, or for the single TRX file in a
-# directory: every result, the passes, the failures, and the failures that are the known
-# MsQuic rebind defect, namely QuicRuntimeRebindTest stopping at bind with
-# AddressAlreadyInUse. Callers decide what to tolerate; see docs/project/http-engine.md.
+# Prints "total passed failed defect credential" for one TRX file, or for the single TRX
+# file in a directory: every result, the passes, the failures, the failures that are the
+# known MsQuic rebind defect, namely QuicRuntimeRebindTest stopping at bind with
+# AddressAlreadyInUse, and the failures that are the known Windows QUIC credential failure
+# (issue #398), namely a combined TCP+QUIC Http3ListenerTest case whose captured output
+# reports ConfigurationLoadCredential failing with 0x8009030d. Callers decide what to
+# tolerate; see docs/project/http-engine.md.
 param([Parameter(Mandatory = $true)][string] $Path)
 $ErrorActionPreference = 'Stop'
 
@@ -23,6 +26,8 @@ $namespaces = [System.Xml.XmlNamespaceManager]::new($document.NameTable)
 $namespaces.AddNamespace('t', 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010')
 $rawIds = @($document.SelectNodes("//t:UnitTest[t:TestMethod[@className='EmbedIO.Tests.QuicRuntimeRebindTest'][@name='DisposedRuntimeListenerRebindsSameEndpoint']]", $namespaces) |
         ForEach-Object { $_.GetAttribute('id') })
+$credentialIds = @($document.SelectNodes("//t:UnitTest[t:TestMethod[@className='EmbedIO.Tests.Http3ListenerTest'][@name='CombinedDrainCanAbortAllProtocols' or @name='TcpAndQuicSharePortAndStopIndependently']]", $namespaces) |
+        ForEach-Object { $_.GetAttribute('id') })
 $results = @($document.SelectNodes('//t:UnitTestResult', $namespaces))
 $failed = @($results | Where-Object { $_.GetAttribute('outcome') -eq 'Failed' })
 $defect = @($failed | Where-Object {
@@ -32,5 +37,11 @@ $defect = @($failed | Where-Object {
         ($null -ne $output) -and $output.InnerText.Contains('stage=bind,') -and
         ($null -ne $message) -and $message.InnerText.Contains('SocketErrorCode: AddressAlreadyInUse')
     })
+$credential = @($failed | Where-Object {
+        $result = $_
+        $output = @($result.SelectNodes('t:Output/t:StdOut | t:Output/t:StdErr', $namespaces) | ForEach-Object { $_.InnerText }) -join "`n"
+        ($credentialIds -contains $result.GetAttribute('testId')) -and
+        $output.Contains('ConfigurationLoadCredential failed: Unknown (0x8009030d)')
+    })
 $passed = @($results | Where-Object { $_.GetAttribute('outcome') -eq 'Passed' })
-Write-Output ('{0} {1} {2} {3}' -f $results.Count, $passed.Count, $failed.Count, $defect.Count)
+Write-Output ('{0} {1} {2} {3} {4}' -f $results.Count, $passed.Count, $failed.Count, $defect.Count, $credential.Count)

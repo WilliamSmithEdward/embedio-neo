@@ -242,7 +242,7 @@ run_rebind_test() {
   trx="$(find "$directory" -name '*.trx' -type f)"
   test -n "$trx" && test "$(printf '%s\n' "$trx" | wc -l | tr -d ' ')" = 1 || return 2
   counts="$(pwsh -NoProfile -File "$repo/test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1" "$trx")" || return 2
-  read -r total passed failed matching <<< "$counts"
+  read -r total passed failed matching _ <<< "$counts"
   printf '%s\t%s\t%s\t%s\t%s' "$status" "$total" "$passed" "$failed" "$matching"
   test "$total" = 4 && test $((passed + failed)) = 4 || return 2
   jq -e '.verified == true' "$directory/loaded-library.json" > /dev/null || return 2

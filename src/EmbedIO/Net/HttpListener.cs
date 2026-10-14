@@ -8,7 +8,7 @@ using EmbedIO.Net.Internal;
 namespace EmbedIO.Net
 {
     /// <summary>The independently authored TCP HTTP listener with the existing public contract.</summary>
-    public sealed class HttpListener : IHttpListener, IGracefulHttpListener
+    public sealed class HttpListener : IHttpListener, IGracefulHttpListener, IDispatchingHttpListener
     {
         private readonly TcpListenerCoordinator _coordinator;
         /// <summary>Initializes a listener, optionally using the supplied server certificate.</summary>
@@ -76,8 +76,10 @@ namespace EmbedIO.Net
         public Task<IHttpContextImpl> GetContextAsync(CancellationToken cancellationToken) => _coordinator.AcceptAsync(cancellationToken);
         Task IGracefulHttpListener.DrainAsync(TimeSpan timeout, CancellationToken cancellationToken)
             => _coordinator.DrainAsync(timeout, cancellationToken);
-        internal void RegisterContext(IHttpContextImpl context) => _coordinator.Register(context, null);
-        internal void RegisterMultiplexedContext(IHttpContextImpl context, HttpConnection connection) => _coordinator.Register(context, connection);
+        void IDispatchingHttpListener.SetDispatcher(Func<IHttpContextImpl, Task> dispatcher) => _coordinator.SetDispatcher(dispatcher);
+        // Both return the handler's task when the server dispatches directly, or null when the request was queued for GetContextAsync.
+        internal Task? RegisterContext(IHttpContextImpl context) => _coordinator.Register(context, null);
+        internal Task? RegisterMultiplexedContext(IHttpContextImpl context, HttpConnection connection) => _coordinator.Register(context, connection);
         internal void UnregisterContext(IHttpContextImpl context) => _coordinator.Unregister(context);
         internal void AddConnection(HttpConnection connection) => _coordinator.AddSession(connection);
         internal void RemoveConnection(HttpConnection connection) => _coordinator.RemoveSession(connection);

@@ -16,9 +16,9 @@
       },
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[10.0.12, )",
-        "resolved": "10.0.12",
-        "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
+        "requested": "[10.0.13, )",
+        "resolved": "10.0.13",
+        "contentHash": "40yrBMsLEcjixBR4G+FiUaBPvxXIPSKJ2OgSrbOZcmSDBda4Sb0k7BWrfDpIvn3IvvDzwOL/tEPa6gDQfh6aRw=="
       },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
@@ -177,13 +177,13 @@
       "EmbedIO-Neo": {
         "type": "Project",
         "dependencies": {
-          "System.Threading.RateLimiting": "[10.0.12, )"
+          "System.Threading.RateLimiting": "[10.0.13, )"
         }
       },
       "System.Threading.RateLimiting": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "Y3f2aLAgynO44Q9xYHR35NC1KuSTcZwo49xjHuq0gQWyOWw8fvipIdoc+1e8FS+9neYZuQ1K4iwl5frNJXekgw=="
+        "resolved": "10.0.13",
+        "contentHash": "3+orva+l3D+EdXYQOJm9zKWgwSxf4/EieVZ0D+uQRjMOUaJMoNIkc/Wu7abCAK5VnAeStZoLcibFYQrmYdsJ0g=="
       }
     },
     "net10.0-maccatalyst26.5/maccatalyst-arm64": {}

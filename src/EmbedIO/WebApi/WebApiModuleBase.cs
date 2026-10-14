@@ -28,6 +28,7 @@ namespace EmbedIO.WebApi
         private static readonly MethodInfo AwaitResultMethod = typeof(WebApiModuleBase).GetMethod(nameof(AwaitResult), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("AwaitResultMethod");
         private static readonly MethodInfo AwaitAndCastResultMethod = typeof(WebApiModuleBase).GetMethod(nameof(AwaitAndCastResult), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("AwaitAndCastResultMethod");
         private static readonly MethodInfo DisposeMethod = typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose)) ?? throw new MissingMemberException("DisposeMethod");
+        private static readonly MethodInfo CastControllerMethod = typeof(WebApiModuleBase).GetMethod(nameof(CastController), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("CastControllerMethod");
         private static readonly MethodInfo SerializeResultAsyncMethod = typeof(WebApiModuleBase).GetMethod(nameof(SerializeResultAsync), BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new MissingMemberException("SerializeResultAsyncMethod");
 
         private readonly HashSet<Type> _controllerTypes = new HashSet<Type>();
@@ -244,8 +245,10 @@ namespace EmbedIO.WebApi
         /// <list type="bullet">
         /// <item><description><paramref name="controllerType"/> must be a subclass of <see cref="WebApiController"/>;</description></item>
         /// <item><description><paramref name="controllerType"/> must not be a generic type definition;</description></item>
-        /// <item><description><paramref name="factory"/>'s return type must be either <paramref name="controllerType"/>
-        /// or a subclass of <paramref name="controllerType"/>.</description></item>
+        /// <item><description><paramref name="factory"/>'s declared return type must be related to <paramref name="controllerType"/>:
+        /// <paramref name="controllerType"/>, a subclass of it, or a base class such as <see cref="WebApiController"/>.
+        /// A factory declared with a base class is checked when it creates a controller, and throws
+        /// <see cref="InvalidOperationException"/> if the instance is not a <paramref name="controllerType"/>.</description></item>
         /// </list>
         /// </summary>
         /// <param name="controllerType">The type of the controller.</param>
@@ -292,12 +295,18 @@ namespace EmbedIO.WebApi
 
             controllerType = ValidateControllerType(nameof(controllerType), controllerType, true);
             factory = Validate.NotNull(nameof(factory), factory);
-            if (!controllerType.IsAssignableFrom(factory.Method.ReturnType))
+
+            // A lambda converted to Func<WebApiController> is compiled with that return type, so only
+            // a return type unrelated to the controller is rejected here; the instance is checked when created.
+            var returnType = factory.Method.ReturnType;
+            if (!controllerType.IsAssignableFrom(returnType) && !returnType.IsAssignableFrom(controllerType))
                 throw new ArgumentException("Factory method has an incorrect return type.", nameof(factory));
 
-            var expression = Expression.Call(
+            Expression expression = Expression.Call(
                 factory.Target == null ? null : Expression.Constant(factory.Target),
                 factory.Method);
+            if (!controllerType.IsAssignableFrom(returnType))
+                expression = Expression.Call(CastControllerMethod.MakeGenericMethod(controllerType), expression);
 
             if (!TryRegisterControllerTypeCore(controllerType, expression))
                 throw new ArgumentException($"Type {controllerType.Name} contains no controller methods.");
@@ -348,6 +357,12 @@ namespace EmbedIO.WebApi
                     .Where(x => x.IsConstructedGenericType && x.GetGenericTypeDefinition() == definition)
                     .Select(x => (attr, x)))
                 .ToList();
+
+        // Checks what a factory declared with a base return type actually created.
+        private static TController CastController<TController>(WebApiController? controller)
+            where TController : WebApiController
+            => controller as TController ?? throw new InvalidOperationException(
+                $"The controller factory for {typeof(TController).FullName} returned {controller?.GetType().FullName ?? "null"}.");
 
         private static T? AwaitAndCastResult<T>(string parameterName, Task<object> task)
         {

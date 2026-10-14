@@ -2,8 +2,60 @@
 
 ## [Unreleased]
 
+- HTTP/2 and HTTP/3 requests with a request deadline keep hearing the server's stop token
+  through their context token, in the handler and in `OnRequestCompleted` callbacks after it.
+  Installing the deadline disposed the token source behind the token the server captures
+  and restores afterwards. With `WebServer` such a request still ended at shutdown, because
+  stopping the listener cancels its stream, but a host that stops the server without
+  cancelling the stream left the request waiting. HTTP/1 is unaffected.
+- Fix: a graceful HTTP/2 end (a drain or the idle GOAWAY) no longer resets the
+  connection. The peer may still be sending, for example WINDOW_UPDATE for the final
+  DATA or HEADERS it sent before reading GOAWAY, and closing both directions with
+  those bytes unread sent a TCP reset that discarded responses the peer had not read
+  yet. The connection now half-closes after its final frames and reads and discards
+  input until the peer closes, for at most 2 seconds, before it closes (RFC 9112
+  section 9.6).
+- Dispatch each admitted request straight from its connection to the server's
+  handler instead of queueing it for the accept loop, in plain, HTTP/3 and combined
+  mode. The HTTP/1.1 actor starts the handler on its own thread and then yields to
+  the thread pool's global queue once per request so that no connection monopolizes
+  a worker, HTTP/2 exchanges hand off on their own work item, and HTTP/3 requests
+  start the handler on their stream's own task instead of passing through the
+  listener's context channel, the combined listener's second channel and a
+  `Task.Run`. `IHttpListener.GetContextAsync` is unchanged and still serves
+  standalone listeners; admission, drain and stop semantics are unchanged, and a
+  handler may still run on after completing its response without holding the
+  connection's next request.
+- Fix: a request whose dispatch fails before the handler starts (an exception while the
+  server prepares the context) now closes its HTTP/1.1 connection, or resets its HTTP/2
+  stream, after logging the failure. Previously that request was never answered and its
+  connection stayed open until the client gave up. If closing that request's context
+  fails as well, its response is aborted instead of leaving the connection waiting for
+  a response that never ends. The server also observes and logs a fault a handler
+  leaves uncaught after its response, instead of leaving it unobserved.
+
 ## [2.0.0] - Unreleased
 
+- Build and test with .NET SDK 10.0.402 and runtime 10.0.13, the 13 October 2026
+  security release. Package dependency minimums move from 10.0.12 to 10.0.13:
+  `System.Threading.RateLimiting` on both core targets, `System.Text.Json` on the
+  core .NET Standard 2.0 asset, and `Microsoft.Extensions.DependencyInjection` and
+  `Microsoft.Extensions.Hosting.Abstractions` in the DI package. An application
+  that references one of these packages directly at an earlier version must move
+  it to 10.0.13 or later; NuGet otherwise reports a package downgrade (NU1605).
+  On Windows, run HTTP/3 on runtime 10.0.13 or later because of CVE-2026-105016;
+  see [HTTP/3 requirements](docs/guides/http3.md#requirements).
+- `WebApiModule.RegisterController(Type, Func<WebApiController>)` and
+  `WithController(Type, Func<WebApiController>)` accept a lambda factory. A lambda converted to
+  `Func<WebApiController>` is compiled with that return type, so every lambda was rejected with
+  "Factory method has an incorrect return type", as in upstream EmbedIO 3.5.2. An unrelated declared
+  return type is still rejected; a factory that creates a different controller now fails with an
+  `InvalidOperationException` naming both types. `RegisterController<TController>(Func<TController>)`
+  is unchanged.
+- `TestWebServer.RunAsync` (EmbedIO.Testing) now returns its task to the caller instead of
+  blocking it until the server stops, and a started test server no longer pins a thread-pool
+  thread. Awaiting `RunAsync` directly previously deadlocked. The blocking wait was inherited
+  unchanged from upstream EmbedIO 3.5.2.
 - Correct defects found by a review sweep. `ISession.Delete` and `Regenerate` now end
   a session that holds data, so an old cookie cannot resume it, and an expired session
   is no longer revived before the purge runs. A module whose own exception handler
@@ -39,8 +91,9 @@ are documented in the migration guide.
 
 The tested .NET 10.0.12 HTTP/3 transport has a per-stream native send-buffer
 retention defect in `System.Net.Quic`. The upstream fix merged into runtime
-`main`, but a .NET 10 servicing backport and released-runtime verification remain
-unconfirmed. See [HTTP/3 deployment guidance](docs/guides/http3.md#runtime-memory-limitation).
+`main` on 13 October 2026. Runtime 10.0.13 does not contain it, and a .NET 10
+servicing backport and released-runtime verification remain unconfirmed. See
+[HTTP/3 deployment guidance](docs/guides/http3.md#runtime-memory-limitation).
 
 Release acceptance remains in progress. The retained Windows HTTP/2 drain
 response-loss failure has no established cause or repair despite later passing
@@ -123,7 +176,7 @@ not automatic. Performance results apply only to their recorded source and host.
   chain), holds each permit until the request completes, and answers rejections with 429 and
   `Retry-After` when the limiter knows the wait. `RejectionStatusCode` and `OnRejected` customize
   rejections; `ClientKey` keys by connection address, IPv6 by /64, without trusting forwarded
-  headers. EmbedIO-Neo now depends on the `System.Threading.RateLimiting` package (10.0.12) on
+  headers. EmbedIO-Neo now depends on the `System.Threading.RateLimiting` package (10.0.13) on
   both targets. See [Rate limiting](docs/guides/rate-limiting.md).
 - Require TLS 1.2 or later for Neo v2 HTTPS, retaining TLS 1.3 where supported.
   TLS 1.0 and TLS 1.1 clients must update their TLS stack or intermediary backend

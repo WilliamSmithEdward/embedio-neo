@@ -84,11 +84,18 @@ namespace EmbedIO.Testing
         }
 
         /// <inheritdoc />
-        protected override Task ProcessRequestsAsync(CancellationToken cancellationToken)
+        protected override async Task ProcessRequestsAsync(CancellationToken cancellationToken)
         {
-            // Since there's nothing to listen to, just wait for the server to be stopped.
-            (_internalCancellationTokenSource ?? throw new InvalidOperationException("The server has not been prepared.")).Token.WaitHandle.WaitOne();
-            return Task.CompletedTask;
+            // Nothing to listen to: wait for the server to stop without blocking the caller of RunAsync.
+            // Dispose and fatal errors cancel only the internal source, so its cancellation is a normal stop.
+            var token = (_internalCancellationTokenSource ?? throw new InvalidOperationException("The server has not been prepared.")).Token;
+            try
+            {
+                await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+            }
         }
 
         /// <inheritdoc />
