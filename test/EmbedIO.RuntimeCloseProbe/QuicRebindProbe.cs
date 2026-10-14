@@ -25,7 +25,7 @@ internal static class QuicRebindProbe
     {
         var iterations = args.Length > 1 ? int.Parse(args[1], CultureInfo.InvariantCulture) : 2048;
         if (iterations is < 1 or > 4096) throw new ArgumentOutOfRangeException(nameof(args), "Use 1-4096 listener cycles.");
-        if (Environment.Version.ToString() != "10.0.13") throw new InvalidOperationException("The probe requires .NET 10.0.13.");
+        RequiredRuntime.Check();
         var output = Path.GetFullPath(args.Length > 2 ? args[2] : "TestResults/quic-rebind-probe");
         Directory.CreateDirectory(output);
         using var trace = new NativeTrace(Environment.GetEnvironmentVariable("EMBEDIO_QUIC_TRACE_LIBRARY"));

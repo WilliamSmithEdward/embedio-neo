@@ -246,6 +246,13 @@ namespace EmbedIO
         /// <inheritdoc />
         protected override async Task ProcessRequestsAsync(CancellationToken cancellationToken)
         {
+            // TCP connections hand each admitted request straight to the handler on
+            // their own thread, in plain and combined mode alike. The loop below
+            // serves what still arrives through GetContextAsync: HTTP/3 requests and
+            // any TCP request admitted before the dispatcher was installed. It ends
+            // when the listener stops.
+            if (Listener is IDispatchingHttpListener dispatching)
+                dispatching.SetDispatcher(context => DispatchAsync(context, cancellationToken));
             while (!cancellationToken.IsCancellationRequested && (Listener?.IsListening ?? false))
             {
                 IHttpContextImpl context;
@@ -257,12 +264,71 @@ namespace EmbedIO
                 // An application stopping the listener, directly or through disposal,
                 // ends the run normally; other listener failures still propagate.
                 catch (System.Net.HttpListenerException error) when (error.ErrorCode == 995 && (Volatile.Read(ref _disposeStarted) != 0 || !(Listener?.IsListening ?? false))) { return; }
-                context.CancellationToken = cancellationToken;
-                context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
 
                 // Once accepted, the context must reach the handler's cleanup even
                 // if shutdown wins before dispatch. The context still carries cancellation.
-                _ = Task.Run(() => DoHandleContextAsync(context));
+                _ = Task.Run(() => DispatchAsync(context, cancellationToken));
+            }
+        }
+
+        // The dispatcher outlives the accept loop: a connection admitted during a
+        // drain can still hand a request here after the loop ended, with the
+        // run's token already canceled, and the handler then answers that
+        // cancellation. On the pull path such a request stayed queued, unpulled,
+        // until the listener retired it.
+        private Task DispatchAsync(IHttpContextImpl context, CancellationToken cancellationToken)
+        {
+            Task handling;
+            try
+            {
+                context.CancellationToken = cancellationToken;
+                context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
+                handling = DoHandleContextAsync(context);
+            }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                return AnswerDispatchFailureAsync(context, error);
+            }
+            // The connection waits for the response, not for the handler, which may
+            // outlive it. This server therefore owns the handler's task: a fault the
+            // handler did not catch is observed and logged here instead of going
+            // unobserved, whether it surfaced at once or later. A handler that
+            // completed inline without fault needs no continuation.
+            if (handling.IsFaulted) ObserveHandlingFault(handling);
+            else if (!handling.IsCompleted)
+                _ = handling.ContinueWith(static (task, state) => ((WebServer)(state ?? throw new InvalidOperationException("Missing dispatch owner."))).ObserveHandlingFault(task),
+                    this, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            return handling;
+        }
+
+        // A failure while the server prepares the context, before any module ran,
+        // is answered like an unhandled handler failure: an empty 500 that closes
+        // the connection, unless a response already started. The unhandled-exception
+        // callback does not run here, since the context never reached the handlers.
+        private async Task AnswerDispatchFailureAsync(IHttpContextImpl context, Exception error)
+        {
+            error.Log(LogSource, $"[{context.Id}] Request dispatch failed before handling.");
+            try
+            {
+                if (!EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
+                {
+                    context.Response.StatusCode = (int)System.Net.HttpStatusCode.InternalServerError;
+                    context.Response.KeepAlive = false;
+                }
+            }
+            finally
+            {
+                if (context is MultiplexedContext multiplexed) await multiplexed.CloseAsync().ConfigureAwait(false);
+                else context.Close();
+            }
+        }
+
+        private void ObserveHandlingFault(Task handling)
+        {
+            try { handling.Exception?.Log(LogSource, "A request handler faulted after dispatch."); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                // A failing trace listener cannot turn an observed fault into another.
             }
         }
 

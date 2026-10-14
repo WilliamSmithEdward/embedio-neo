@@ -289,6 +289,8 @@
       href: project/http3-native-lifetime-campaigns.md
     - name: Managed engine load comparison
       href: project/http-engine-load-comparison.md
+    - name: Direct request dispatch from TCP connections
+      href: project/http1-direct-dispatch.md
     - name: HTTP teardown exception attribution
       href: project/http-teardown-exceptions.md
     - name: Managed engine load baseline on a second host
