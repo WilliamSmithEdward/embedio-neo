@@ -45,6 +45,12 @@ namespace EmbedIO.Net.Internal
                 // A directly dispatched handler that completed inline has already
                 // ended it, so this wait then continues without suspending.
                 if (!await WaitForResponseEndAsync().ConfigureAwait(false)) return;
+                // Discarding a body the handler never read is the one step of the cycle
+                // no deadline covered: the head deadline stopped once the head arrived and
+                // the keep-alive deadline is armed by PrepareNextRequest, after this read.
+                // A client that declares a body, takes its response and then stops sending
+                // would hold the connection and its admission slot with no timer at all.
+                if (!_context.HttpListenerRequest.IsBodyConsumed) ArmDrainDeadline();
                 if (!await _context.HttpListenerRequest.FlushInputAsync().ConfigureAwait(false))
                 { CloseTransport(true); return; }
                 if (!PrepareNextRequest()) { CloseTransport(true); return; }
@@ -209,6 +215,18 @@ namespace EmbedIO.Net.Internal
         void IValueTaskSource<bool>.OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
             => _responseCompletion.OnCompleted(continuation, state, token, flags);
 #endif
+
+        // Bounds the discard of an unread request body with the keep-alive budget: the
+        // response is already sent, so a client that stops sending only costs itself reuse.
+        private void ArmDrainDeadline()
+        {
+            lock (_connectionSync)
+            {
+                if (_protocolSocket == null || _protocolEnded != 0) return;
+                _sTimeout = _keepAliveTimeout;
+                _lifetime.ArmDeadline(_sTimeout);
+            }
+        }
 
         private bool PrepareNextRequest()
         {

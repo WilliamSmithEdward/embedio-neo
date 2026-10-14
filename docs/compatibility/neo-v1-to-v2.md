@@ -601,3 +601,13 @@ quality 4, about the size of the previous gzip responses. Tests or caches that e
 `Content-Encoding: gzip` for these clients, or a gzip entity tag from `FileModule`,
 see `br` instead. See
 [Brotli responses](../guides/getting-started/files.md#brotli-responses-in-the-modern-engine-development-branch).
+- An HTTP/1 client that declares a request body, receives its response and then stops
+  sending loses its connection once the keep-alive timeout elapses. The server discards
+  a body no handler read before reusing the connection, and that discard is now bounded
+  by `KeepAliveTimeout`; it previously waited with no deadline at all. A client that
+  finishes sending its body is unaffected.
+- An HTTP/1 connection that answered `101 Switching Protocols` is never reused for
+  another HTTP/1 message (RFC 9110, Section 7.8). This matters only to a handler that
+  accepts an upgrade through `IHttpContextImpl.AcceptWebSocketAsync` and returns while
+  the socket is still open: the connection is now closed instead of being recycled, and
+  such a handler must await its socket. `WebSocketModule` already does.

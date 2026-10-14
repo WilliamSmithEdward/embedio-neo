@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- An HTTP/1 connection bounds the two steps of its request cycle that were unbounded.
+  Discarding a request body a handler never read now honors the keep-alive deadline, so
+  a client that declares a body, takes its response and then stops sending no longer
+  holds the connection, and its admission slot, with no timer running. A connection that
+  has answered a `101 Switching Protocols` is no longer treated as reusable for another
+  HTTP/1 message (RFC 9110, Section 7.8), so a handler that returns while its WebSocket
+  is still open cannot leave the request cycle reading frames as a request head. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
 - Correct defects found by a second review sweep. On HTTP/1, a request field sent on
   several lines combines them in order (RFC 9110, Section 5.3) instead of keeping only
   the last, as HTTP/2 and HTTP/3 already did; Cookie lines join with `; `. A quality
