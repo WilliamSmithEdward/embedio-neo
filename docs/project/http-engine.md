@@ -6421,6 +6421,39 @@ Combined Windows: 4,388 total, 4,383 passed, five expected local/platform skips,
 zero failed. Combined focused Linux: 99 passed, zero failed. Both targets build
 without warnings/errors; guards and four resource budgets pass. Final combined
 macOS/CI/native experiments and admission performance acceptance remain pending.
+
+### Windows QUIC credential quarantine
+
+William approved a second narrow quarantine on 2026-10-14 for the Windows QUIC
+credential failure tracked in
+[issue #398](https://github.com/WilliamSmithEdward/embedio-neo/issues/398). On
+Windows CI, the first QUIC handshake of a combined TCP+QUIC test can fail while
+.NET's `QuicListener` loads the server credential. MsQuic
+`ConfigurationLoadCredential` returns SEC_E_UNKNOWN_CREDENTIALS (0x8009030d)
+for the test's fresh certificate, and the client sees the TLS alert
+UserCanceled. The failure is in .NET's QUIC accept path, before EmbedIO admits
+the request, and it occurred on runtime 10.0.12 before the 10.0.13 upgrade. Its
+cause is not established; the issue records the evidence and the deferred
+investigation.
+
+The regression wrapper counts a failed case as this failure only in the Windows
+test job, only for `Http3ListenerTest.CombinedDrainCanAbortAllProtocols` and
+`Http3ListenerTest.TcpAndQuicSharePortAndStopIndependently`, and only when the
+case's captured output contains
+`ConfigurationLoadCredential failed: Unknown (0x8009030d)`. The shared
+classifier, `test/EmbedIO.RuntimeCloseProbe/rebind-trx-counts.ps1`, reports
+these cases as its fifth count. A failed run passes only when every failure is
+such a case or the raw rebind defect above and the discovery floor holds; a
+warning then reports the cases and links the issue. Any other failure stays
+red, including these tests failing without that exact output.
+`TcpAndQuicSharePortAndStopIndependently` records no server QUIC trace today,
+so its failures cannot show the signature and stay red until it does.
+
+Remove this quarantine once the deferred investigation finds the cause, through
+a .NET-only repro and then an upstream report or a fixture change. It is
+independent of the rebind quarantine: retiring either leaves the other in
+place.
+
 ### Standards-audit bodyless response and drain-upload corrections
 
 Owner raw-wire regressions independently reproduced two source-traced audit
