@@ -190,6 +190,13 @@
   fails as well, its response is aborted instead of leaving the connection waiting for
   a response that never ends. The server also observes and logs a fault a handler
   leaves uncaught after its response, instead of leaving it unobserved.
+- Behavior change: a response trailer section refuses all seven response control data
+  fields of RFC 9110, Section 6.6.1, which Section 6.5.1 keeps out of a trailer. `Age`,
+  `Date`, `Expires` and `Vary` join `Cache-Control`, `Location` and `Retry-After`, which
+  were already refused. A recipient ignores control data in a trailer, so an application
+  that sent one of the four was losing the value silently; declaring one now throws
+  `InvalidDataException`. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
 
 ## [2.0.0] - Unreleased
 
