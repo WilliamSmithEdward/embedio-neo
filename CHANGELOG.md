@@ -30,6 +30,36 @@
   body and keeps the connection. The counted view of a body under a body limit reported `CanRead` as
   true after its transport stopped reading, as an HTTP/3 body does once a read is
   canceled; it now reports the transport's state.
+- Two more controller binding generator corrections. Two binding contexts whose full names
+  differed only in case, such as `One.Bindings` and `ONE.Bindings`, gave the generator two
+  hint names that Roslyn considers equal; it threw, and a generator that throws contributes
+  nothing, so every generated binding in that compilation disappeared. Generated file names
+  now carry a short fingerprint of the exact name, so a project that pins generated file
+  paths, such as one building with `EmitCompilerGeneratedFiles` or keeping a checked-in
+  snapshot of them, sees new file names. A `CultureInfo` query or form field was
+  rejected with EMBEDIO009 although the reflection-based binding converts it, so it joins the
+  intrinsic converters, with the converter-parity test covering it.
+- The controller binding generator no longer emits code a consumer cannot build. A binding for
+  a controller or route marked `[Obsolete]` warned (CS0612, CS0618) in the generated file, which
+  fails a build that treats warnings as errors; the generated file now suppresses those two
+  warnings, since calling the deprecated member is the binding's job. A binding context whose
+  name matches its controller's emitted a member named after its own type (CS0542) and is now
+  reported as a duplicate binding instead. A `partial record` or `partial struct` context was
+  ignored in silence although the emitter writes its declaration back correctly, so it now
+  generates like a class.
+- Behavior change: `IHttpRequest.CheckIfNoneMatch` compares entity tags weakly, the comparison
+  `If-None-Match` requires (RFC 9110, Section 13.1.2) and the one `EvaluatePreconditions`
+  already applied. A client that sends `If-None-Match: W/"abc"` for a resource tagged `"abc"`
+  now receives 304 instead of the whole representation; `If-Match` stays strong. A condition
+  the method cannot parse still matches nothing rather than rejecting the request.
+- The Basic authentication challenge escapes its realm. A realm containing a quote or a
+  backslash produced a malformed `WWW-Authenticate` header, because the realm is a
+  quoted-string (RFC 9110, Section 5.6.4; RFC 7617, Section 2.1). The `Realm` property
+  still reports the value as given.
+- `FileModule` bounds the mapping cache it keeps for an immutable provider. The cache is
+  keyed by the requested path, and a case-insensitive file system maps every spelling of a
+  name to the same file, so a client could grow the cache without bound by varying the
+  case it asked for. Past 1024 entries a mapping still succeeds, uncached.
 - WebSocket closes end in time, and stopping the server closes WebSockets cleanly. A close
   on a protocol error or a rejected message, and `Dispose`, now give up after one second
   when the close frame cannot be written, for example because the client stopped reading,
@@ -49,6 +79,17 @@
   `IWebSocket.SendAsync` throws `WebSocketException` when the WebSocket closes before the
   whole message is sent, where it returned as if the message had been sent. See
   [migration](docs/compatibility/neo-v1-to-v2.md#websocket-closes-sends-and-keep-alive).
+- Security: a file provider decodes a served path one segment at a time, so an encoded
+  separator can no longer reach a resource whose modules never ran. Modules are selected
+  from the undecoded path, because the route is built from `Url.AbsolutePath` and a `%2F`
+  stays encoded there (RFC 3986, Section 2.2), while `FileSystemProvider` and
+  `ZipFileProvider` decoded the whole path and turned that `%2F` into a separator. A
+  request for `/admin%2Fsecret.txt` therefore mapped to `admin/secret.txt` although the
+  modules mounted on `/admin`, an authentication module among them, never matched it.
+  Each segment now decodes on its own, and a segment that decodes to a separator, to a
+  `.` or `..` segment, or to a control character names no resource. Containment inside
+  the served root, which already held, is unchanged. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#encoded-separators-in-served-paths).
 - An HTTP/1 connection bounds the two steps of its request cycle that were unbounded.
   Discarding a request body a handler never read now honors the keep-alive deadline, so
   a client that declares a body, takes its response and then stops sending no longer
@@ -155,6 +196,13 @@
   fails as well, its response is aborted instead of leaving the connection waiting for
   a response that never ends. The server also observes and logs a fault a handler
   leaves uncaught after its response, instead of leaving it unobserved.
+- Behavior change: a response trailer section refuses all seven response control data
+  fields of RFC 9110, Section 6.6.1, which Section 6.5.1 keeps out of a trailer. `Age`,
+  `Date`, `Expires` and `Vary` join `Cache-Control`, `Location` and `Retry-After`, which
+  were already refused. A recipient ignores control data in a trailer, so an application
+  that sent one of the four was losing the value silently; declaring one now throws
+  `InvalidDataException`. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
 
 ## [2.0.0] - Unreleased
 

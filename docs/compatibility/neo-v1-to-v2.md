@@ -576,6 +576,26 @@ matching the supported default versions are compatible. Rejection rolls back
 only the rejected registration; existing listeners remain available. See
 [TLS policy](../guides/tls-policy.md#sharing-a-tcp-listening-endpoint).
 
+## Encoded separators in served paths
+
+Neo v2 decodes a served path one segment at a time. `FileSystemProvider` and
+`ZipFileProvider` previously decoded the whole path at once, so a percent-encoded
+separator became a real separator after the module pipeline had already selected its
+modules from the undecoded path. A request for `/admin%2Fsecret.txt` mapped to
+`admin/secret.txt` although the modules mounted on `/admin` never matched it. RFC 3986,
+Section 2.2 is explicit that a reserved character in its encoded form is not equivalent
+to the character itself, so an encoded separator stays inside its own segment.
+
+A segment that decodes to something which is not a single usable segment now names no
+resource, and the request becomes an ordinary mapping failure: a decoded `/` or `\`, a
+`.` or `..` segment, and control characters are all refused. Escapes that stay inside
+their segment are unaffected, so `/two%20words.txt` and `/sub/hello%20world.txt` resolve
+exactly as before, and containment inside the served root is unchanged.
+
+An application that relied on a percent-encoded separator to select a nested resource
+must send the real separator instead. On Unix, a file whose name contains a backslash is
+no longer reachable through `%5C`; rename it if it has to be served.
+
 <a id="release-preparation-still-required"></a>
 
 ## Before deployment
@@ -671,6 +691,19 @@ its tests may have relied on:
   as the default problem-details `title` and as the default OpenAPI response
   description. These statuses used to have an empty phrase, no default problem title
   and an OpenAPI description such as `Status 429`.
+- `CheckIfNoneMatch` compares entity tags weakly, as `If-None-Match` requires
+  (RFC 9110, Section 13.1.2) and as `EvaluatePreconditions` already did. A client that
+  sends `If-None-Match: W/"abc"` for a resource tagged `"abc"` receives 304 rather than
+  the representation, so a cache that revalidates with weak tags is served correctly.
+  `If-Match` stays strong, and a condition the method cannot parse still matches nothing
+  rather than rejecting the request.
+- A response trailer section refuses all seven response control data fields of
+  RFC 9110, Section 6.6.1, which Section 6.5.1 keeps out of a trailer: `Age`,
+  `Cache-Control`, `Expires`, `Date`, `Location`, `Retry-After` and `Vary`. `Age`,
+  `Date`, `Expires` and `Vary` used to be declared and sent, where a recipient ignores
+  them, so an application that sent one lost the value silently; declaring one now
+  throws `InvalidDataException`. `Cache-Control`, `Location` and `Retry-After` were
+  already refused. Send these fields before the content.
 
 ## Brotli preferred at equal weight
 
