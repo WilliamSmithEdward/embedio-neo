@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http;
@@ -64,6 +65,14 @@ namespace EmbedIO.Tests
 
             // The deadline is far away, so only server shutdown can end the wait.
             using var server = new PipelineServer(deadline ? TimeSpan.FromMinutes(10) : null);
+            // Shutdown cancels the deadline and the captured server token alike, so only the
+            // server-token check keeps a shutdown from being answered as an expired deadline.
+            var answered = new ConcurrentQueue<int>();
+            server.OnHttpException = (context, exception) =>
+            {
+                answered.Enqueue(exception.StatusCode);
+                return HttpExceptionHandler.Default(context, exception);
+            };
             server.WithModule(new ActionModule("/", HttpVerbs.Any, context =>
             {
                 if (!afterHandler) return AwaitShutdownAsync(context);
@@ -92,6 +101,7 @@ namespace EmbedIO.Tests
                         Assert.That(await Task.WhenAny(canceled.Task, Task.Delay(Deadline)), Is.SameAs(canceled.Task),
                             "Server shutdown did not reach the request.");
                         await (await handling.Task.WaitAsync(Deadline)).WaitAsync(Deadline);
+                        Assert.That(answered, Is.Empty, "Server shutdown was answered with an HTTP error, such as an expired-deadline 503.");
                     }
                     finally
                     {
