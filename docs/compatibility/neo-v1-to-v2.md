@@ -578,6 +578,12 @@ its tests may have relied on:
   a client that sends `Q=` now has its weight honored, so `Accept-Encoding: gzip;Q=0`
   refuses gzip. An uppercase `Q` used to be ignored, and the coding was accepted at
   full weight.
+- Statuses 103, 208, 226, 308, 421, 426, 428, 429, 431, 451, 506, 508, 510 and 511
+  have the reason phrase `HttpStatusDescription` returns, such as `Too Many Requests`
+  for 429. It appears in the HTTP/1 status line, as the default `StatusDescription`,
+  as the default problem-details `title` and as the default OpenAPI response
+  description. These statuses used to have an empty phrase, no default problem title
+  and an OpenAPI description such as `Status 429`.
 
 ## Brotli preferred at equal weight
 

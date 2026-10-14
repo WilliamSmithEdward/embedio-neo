@@ -54,8 +54,6 @@ namespace EmbedIO.Net.Internal
         public string? ContentType => Headers[HttpHeaderNames.ContentType];
         public string? UserAgent => Headers[HttpHeaderNames.UserAgent];
         public Uri? UrlReferrer { get; private set; }
-        public string[] AcceptTypes { get; private set; } = Array.Empty<string>();
-        public string[] UserLanguages { get; private set; } = Array.Empty<string>();
         public ICookieCollection Cookies => _cookies ??= new CookieList();
         public long ContentLength64 => _head.Framed ? _head.Length
             : long.TryParse(Headers[HttpHeaderNames.ContentLength], out var length) ? length : 0;
@@ -283,10 +281,8 @@ namespace EmbedIO.Net.Internal
             if (error != null) { _connection.SetError(error); return; }
             _headerFieldCount++;
             _headerFieldBytes += name.Length + value.Length;
-            if (name.Equals("Accept", StringComparison.OrdinalIgnoreCase)) AcceptTypes = value.SplitByComma();
-            else if (name.Equals("Accept-Language", StringComparison.OrdinalIgnoreCase)) UserLanguages = value.SplitByComma();
             // The field combines repeated lines; parse it whole, as HTTP/2 parses its joined cookie field.
-            else if (name.Equals("Cookie", StringComparison.OrdinalIgnoreCase)) _cookies = ParseCookies(_head.Fields[name] ?? value);
+            if (name.Equals("Cookie", StringComparison.OrdinalIgnoreCase)) _cookies = ParseCookies(_head.Fields[name] ?? value);
             else if (name.Equals("Referer", StringComparison.OrdinalIgnoreCase))
             {
                 try { UrlReferrer = new Uri(value); }
