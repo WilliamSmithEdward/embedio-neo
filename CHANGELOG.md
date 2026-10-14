@@ -14,6 +14,15 @@
   schema exporter refuses (such as `ReferenceHandler.Preserve`) and polymorphic result
   types, which are written without their discriminator. See
   [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
+- Allocate less per request. An uncontended asynchronous response write no longer
+  allocates a task, a release delegate and a lock object. The per-request start and
+  completion log messages are built only when a trace listener or a
+  `Log.MessageWritten` observer will receive them. Request completion no longer creates
+  an unused `Items` dictionary. HTTP/1 responses reuse the cached `Date` and charset
+  `Content-Type` values that HTTP/2 and HTTP/3 already used, context IDs are built
+  without intermediate arrays, and HTTP/1 header encoding no longer allocates
+  `AllKeys`. Behavior is unchanged; see the
+  [load comparison](docs/project/http-engine-load-comparison.md#request-path-allocation-october-2026).
 - Behavior change: on the .NET 10 asset, a client that accepts Brotli at the same weight as
   gzip or deflate now gets Brotli, as with ASP.NET Core's response compression. Browsers send
   `Accept-Encoding: gzip, deflate, br` and got gzip: a tie went to the coding the client listed

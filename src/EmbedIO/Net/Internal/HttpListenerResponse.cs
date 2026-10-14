@@ -3,11 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using EmbedIO.Internal;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
@@ -192,13 +190,11 @@ namespace EmbedIO.Net.Internal
         {
             if (!_handoff || (_mediaTypeAssigned && !_capsules))
             {
-                var hasCharset = _mediaType.IndexOf(";", StringComparison.Ordinal) >= 0
-                    && MediaTypeHeaderValue.TryParse(_mediaType, out var type) && type.CharSet != null;
-                Headers.Add(HttpHeaderNames.ContentType, ContentEncoding != null && !hasCharset
-                    ? _mediaType + "; charset=" + ContentEncoding.WebName : _mediaType);
+                Headers.Add(HttpHeaderNames.ContentType, ContentEncoding != null
+                    ? HttpResponseFieldSections.WithCharset(_mediaType, ContentEncoding.WebName) : _mediaType);
             }
             if (Headers[HttpHeaderNames.Server] == null) Headers.Add(HttpHeaderNames.Server, WebServer.Signature);
-            if (Headers[HttpHeaderNames.Date] == null) Headers.Add(HttpHeaderNames.Date, HttpDate.Format(DateTime.UtcNow));
+            if (Headers[HttpHeaderNames.Date] == null) Headers.Add(HttpHeaderNames.Date, HttpResponseFieldSections.CurrentDate());
         }
         private bool HasDeclaredLength => long.TryParse(Headers[HttpHeaderNames.ContentLength], NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) && count >= 0;
         private void PrepareFraming(bool closing)

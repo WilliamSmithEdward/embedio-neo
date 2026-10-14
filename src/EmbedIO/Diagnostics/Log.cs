@@ -13,6 +13,9 @@ namespace EmbedIO.Diagnostics
         internal static event Action<string>? MessageWritten;
         [ThreadStatic] private static bool _notifying;
 
+        // Hot paths build a message only when Write would deliver it to an observer or a listener.
+        internal static bool IsEnabled(TraceEventType level) => MessageWritten != null || Source.Switch.ShouldTrace(level);
+
         internal static void Write(TraceEventType level, string source, string message)
         {
             if (!_notifying)
