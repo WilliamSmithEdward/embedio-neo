@@ -56,6 +56,28 @@ namespace EmbedIO.Internal
         // The HTTP/1 head is encoded as ISO-8859-1, so nothing above 255 can be represented
         // there either. Http2RequestHeaders.ValidateField holds HTTP/2, HTTP/3, informational
         // sections and trailers to this same rule, and this is the one place HTTP/1 shares it.
+        //
+        // The head is written once per response, so this runs on the request path. Searching
+        // for the first character outside the permitted set is vectorized on the modern target,
+        // which is why it is a search rather than a loop; the older target keeps the loop.
+#if NET10_0_OR_GREATER
+        private static readonly System.Buffers.SearchValues<char> FieldValueCharacters =
+            System.Buffers.SearchValues.Create(PermittedFieldValueCharacters());
+
+        private static string PermittedFieldValueCharacters()
+        {
+            // HTAB, the printable range, and the rest of ISO-8859-1 above DEL.
+            var permitted = new char[1 + ('\u007f' - ' ') + (256 - 128)];
+            var next = 0;
+            permitted[next++] = '\t';
+            for (var character = ' '; character < '\u007f'; character++) permitted[next++] = character;
+            for (var character = '\u0080'; character < 'Ā'; character++) permitted[next++] = character;
+            return new string(permitted, 0, next);
+        }
+
+        internal static bool IsValidFieldValue(string value)
+            => value.AsSpan().IndexOfAnyExcept(FieldValueCharacters) < 0;
+#else
         internal static bool IsValidFieldValue(string value)
         {
             foreach (var character in value)
@@ -64,6 +86,7 @@ namespace EmbedIO.Internal
 
             return true;
         }
+#endif
 
         // A reason phrase carries the same characters as a field value (RFC 9112, Section 4).
         // Refusing it where it is assigned matches System.Net.HttpListenerResponse and reports
