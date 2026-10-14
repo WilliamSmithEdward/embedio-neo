@@ -19,7 +19,7 @@ namespace EmbedIO.Net.Internal.Http3
         internal MsQuicTransportConnection(MsQuicNativeConnection connection)
         { _connection = connection ?? throw new ArgumentNullException(nameof(connection)); }
         internal MsQuicTransportConnection(MsQuicNativeConnection connection, MsQuicNativeDatagrams datagrams)
-            : this(connection) { _datagrams = new MsQuicHttp3DatagramTransport(datagrams); }
+            : this(connection) { _datagrams = new Http3DatagramTransport(datagrams); }
         internal override Http3DatagramTransport? Datagrams => _datagrams;
         internal override async ValueTask<Http3TransportStream> OpenOutboundStreamAsync(QuicStreamType type, CancellationToken token)
         {

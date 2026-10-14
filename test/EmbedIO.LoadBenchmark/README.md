@@ -83,6 +83,29 @@ mismatched property. Body framing is read but HasEntityBody is not required to b
 false over HTTP/3, where a GET without content-length reports an unknown length. Churn scenarios are capped (5 s for HTTP/1.1,
 1.5 s for HTTP/2) to stay within the host's TIME_WAIT and ephemeral-port capacity.
 
+## Idle keep-alive connections
+
+`idle` measures what the server retains per idle connection, for any engine and
+protocol the server host supports:
+
+```sh
+dotnet <runner>/EmbedIO.LoadBenchmark.dll idle --output <fresh-directory> \
+  --baseline-dir <baseline runner> --engines candidate,baseline,kestrel \
+  --protocol Http1 [--tls] --connections 1000 --hold 5 --settle 2 [--rounds 1] [--server-cpus 0-3]
+```
+
+Each engine starts in its own process as in `run`. The orchestrator opens one
+`HttpClient` per connection (`MaxConnectionsPerServer = 1`, infinite pool
+lifetime), sends one `GET /plaintext` with the exact requested version, then
+holds every connection idle for `--hold` seconds. The server reports a collected
+snapshot before the connections open, while they are idle and `--settle`
+seconds after the client closed them all. `summary.md` lists managed heap,
+working set, private bytes and handles per idle connection, thread and
+thread-pool counts before, idle and after, what remains after the close, and the
+server-side socket states at both points. HTTP/3 implies TLS. The figures are
+retained state after two forced collections; a client-side pool holds the
+connections, so the client's own cost is excluded by design.
+
 ## Load failure accounting controls
 
 Run the bounded, socket-free controls against the prepared runner:
