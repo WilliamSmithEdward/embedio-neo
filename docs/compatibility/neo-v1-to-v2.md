@@ -640,6 +640,13 @@ its tests may have relied on:
   the representation, so a cache that revalidates with weak tags is served correctly.
   `If-Match` stays strong, and a condition the method cannot parse still matches nothing
   rather than rejecting the request.
+- A response trailer section refuses all seven response control data fields of
+  RFC 9110, Section 6.6.1, which Section 6.5.1 keeps out of a trailer: `Age`,
+  `Cache-Control`, `Expires`, `Date`, `Location`, `Retry-After` and `Vary`. `Age`,
+  `Date`, `Expires` and `Vary` used to be declared and sent, where a recipient ignores
+  them, so an application that sent one lost the value silently; declaring one now
+  throws `InvalidDataException`. `Cache-Control`, `Location` and `Retry-After` were
+  already refused. Send these fields before the content.
 
 ## Brotli preferred at equal weight
 
