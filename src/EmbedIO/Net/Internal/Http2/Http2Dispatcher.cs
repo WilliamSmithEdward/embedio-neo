@@ -16,6 +16,11 @@ namespace EmbedIO.Net.Internal.Http2
         private readonly Func<int, Exception, bool, Task> _abortTunnel;
         private Func<Http2Exchange, Task>? _application;
         private int _runningApplications;
+        // Streams whose application or directly dispatched handler is still running.
+        // Admission counts these against the concurrency limit; shutdown waits only
+        // for the applications, as a handler may outlive its response.
+        private int _occupied;
+        private readonly Action<Task, object?> _releaseOccupied;
         private TaskCompletionSource<bool>? _applicationsDone;
         private readonly object _creditSync = new();
         private readonly Dictionary<int, int> _credits = new();
@@ -41,7 +46,8 @@ namespace EmbedIO.Net.Internal.Http2
             _abortTunnel = AbortTunnelAsync;
             _connection.OutputFailed = Abort;
             _connection.UseTransportCancellation(_stop.Token);
-            _connection.Streams.RunningApplications = () => Volatile.Read(ref _runningApplications);
+            _releaseOccupied = static (_, state) => Interlocked.Decrement(ref ((Http2Dispatcher)(state ?? throw new InvalidOperationException("Missing dispatcher.")))._occupied);
+            _connection.Streams.RunningApplications = () => Volatile.Read(ref _occupied);
         }
 
         internal async Task RunAsync(Func<Http2Exchange, Task> application, CancellationToken token)
@@ -178,6 +184,7 @@ namespace EmbedIO.Net.Internal.Http2
         private void StartApplication(Http2Exchange exchange)
         {
             _ = Interlocked.Increment(ref _runningApplications);
+            _ = Interlocked.Increment(ref _occupied);
             ThreadPool.QueueUserWorkItem(_startApplication, exchange);
         }
 
@@ -212,6 +219,10 @@ namespace EmbedIO.Net.Internal.Http2
                 }
                 finally
                 {
+                    // A reset or completed stream whose handler still runs keeps its slot.
+                    var handler = exchange.Handler;
+                    if (handler == null || handler.IsCompleted) _ = Interlocked.Decrement(ref _occupied);
+                    else _ = handler.ContinueWith(_releaseOccupied, this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
                     // Cleanup failures must not strand connection shutdown.
                     // RunAsync reads the count and creates the signal under _sync.
                     if (Interlocked.Decrement(ref _runningApplications) == 0)

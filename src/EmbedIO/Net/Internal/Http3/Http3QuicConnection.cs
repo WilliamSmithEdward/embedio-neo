@@ -427,7 +427,14 @@ namespace EmbedIO.Net.Internal.Http3
                 token.ThrowIfCancellationRequested();
                 await _dispatch(exchange).ConfigureAwait(false);
             }
-            finally { Interlocked.Decrement(ref _applicationCount); }
+            finally
+            {
+                // A reset or completed request whose handler still runs keeps its slot.
+                var handler = exchange.Handler;
+                if (handler == null || handler.IsCompleted) Interlocked.Decrement(ref _applicationCount);
+                else _ = handler.ContinueWith(static (_, state) => Interlocked.Decrement(ref ((Http3QuicConnection)(state ?? throw new InvalidOperationException("Missing connection.")))._applicationCount),
+                    this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
         }
         // Observes one transport direction for the request's lifetime with a single
         // continuation, instead of a watcher task per direction. FIN is a normal

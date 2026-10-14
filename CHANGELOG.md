@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Security: a request handler that is still running counts against the connection's
+  128-request limit even after its stream is reset or its response has finished, on
+  HTTP/2 and HTTP/3. Before this, a client could reset streams to start an unbounded
+  number of concurrent handlers on one connection (the CVE-2023-44487 "Rapid Reset"
+  pattern). On HTTP/2 a new stream over the limit is refused with `REFUSED_STREAM`,
+  which clients retry, and a client refused more than 128 times within one second
+  receives `GOAWAY ENHANCE_YOUR_CALM`. HTTP/3 now allows 128 outstanding request
+  handlers per connection instead of 256, matching HTTP/2 and the QUIC stream limit;
+  a request over it is refused with `H3_REQUEST_REJECTED`. Graceful shutdown still
+  waits only for responses, not for handlers that outlive them.
 - HTTP/2 and HTTP/3 requests with a request deadline keep hearing the server's stop token
   through their context token, in the handler and in `OnRequestCompleted` callbacks after it.
   Installing the deadline disposed the token source behind the token the server captures
@@ -36,16 +46,6 @@
 
 ## [2.0.0] - Unreleased
 
-- Security: HTTP/2 counts a request handler that is still running against the
-  128-stream concurrency limit even after its stream is reset or has finished.
-  Before this, a client could reset streams to start an unbounded number of
-  concurrent handlers on one connection (the CVE-2023-44487 "Rapid Reset" pattern).
-  New streams over the limit are refused with `REFUSED_STREAM`, which clients retry,
-  and a client refused more than 128 times within one second receives
-  `GOAWAY ENHANCE_YOUR_CALM`. A handler that keeps working after its response now
-  holds its stream slot until it returns. HTTP/3 now allows 128 outstanding
-  request handlers per connection instead of 256, matching HTTP/2 and the QUIC
-  stream limit; a request over it is refused with `H3_REQUEST_REJECTED`.
 - Build and test with .NET SDK 10.0.402 and runtime 10.0.13, the 13 October 2026
   security release. Package dependency minimums move from 10.0.12 to 10.0.13:
   `System.Threading.RateLimiting` on both core targets, `System.Text.Json` on the

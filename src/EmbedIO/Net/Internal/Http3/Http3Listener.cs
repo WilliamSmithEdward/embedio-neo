@@ -356,7 +356,7 @@ namespace EmbedIO.Net.Internal.Http3
                     // which observes a fault it leaves uncaught, and is null on the pull
                     // path, where the context queues for GetContextAsync instead. The
                     // exchange waits for the response, not for the handler.
-                    var handling = Volatile.Read(ref _dispatcher)?.Invoke(context);
+                    var handling = exchange.Handler = Volatile.Read(ref _dispatcher)?.Invoke(context);
                     if (handling == null) await Contexts.Writer.WriteAsync(context, exchange.CancellationToken).ConfigureAwait(false);
                     await context.Completion.WaitAsync(exchange.CancellationToken).ConfigureAwait(false);
                 }
