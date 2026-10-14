@@ -8,6 +8,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using EmbedIO.PlatformTests;
 
 // Cancellation and recovery against one long-lived server process:
 // healthy load, an abort storm (clients reset mid-response and mid-upload),
@@ -56,7 +57,7 @@ internal static class Recovery
             thumbprint = certificate.Thumbprint;
         }
 
-        var port = Orchestrator.FreePort();
+        var port = LoopbackPorts.Free();
         var report = new JsonObject
         {
             ["startedUtc"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
