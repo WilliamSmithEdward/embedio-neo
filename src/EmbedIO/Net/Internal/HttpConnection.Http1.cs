@@ -24,14 +24,26 @@ namespace EmbedIO.Net.Internal
         private TaskCompletionSource<bool>? _responseEndSignal;
 #endif
 
+        // Requests the actor serves between yields to the pool's global FIFO queue.
+        // A socket completion resumes the actor on the completing thread, whose
+        // local queue is LIFO, so with the handler now inline the newest
+        // completions were served first and the oldest starved: p99 rose tenfold
+        // at 64 connections while p50 fell sixfold. Kestrel dispatches every
+        // receive completion to the pool for the same reason.
+        private const int InlineRequestBudget = 1;
+
         // A single actor advances the HTTP/1 request cycle. Applications may
         // complete a response on another thread, but never start another reader.
         private async Task RunHttp1Async(int count, bool prefetched)
         {
-            var inlineCycles = 0;
+            var inlineRequests = 0;
             while (Volatile.Read(ref _protocolEnded) == 0)
             {
                 if (!await ReadAndAdmitHeadAsync(count, prefetched).ConfigureAwait(false)) return;
+                // The next request waits for the response to end, not for the handler
+                // to return: a handler may keep running after completing its response.
+                // A directly dispatched handler that completed inline has already
+                // ended it, so this wait then continues without suspending.
                 if (!await WaitForResponseEndAsync().ConfigureAwait(false)) return;
                 if (!await _context.HttpListenerRequest.FlushInputAsync().ConfigureAwait(false))
                 { CloseTransport(true); return; }
@@ -39,9 +51,9 @@ namespace EmbedIO.Net.Internal
 
                 prefetched = _pendingInput.Count != 0;
                 count = prefetched ? 0 : await ReadHttp1InputAsync().ConfigureAwait(false);
-                if (++inlineCycles == 64)
+                if (++inlineRequests >= InlineRequestBudget)
                 {
-                    inlineCycles = 0;
+                    inlineRequests = 0;
                     await Task.Yield();
                 }
             }
@@ -116,7 +128,10 @@ namespace EmbedIO.Net.Internal
                     }
                     _contextBound = true;
                 }
-                owner.RegisterContext(_context);
+                // With a dispatcher installed the handler has run on this thread up to
+                // its first suspension; the server owns its task, including failures,
+                // and every outcome ends the response that the actor waits for next.
+                _ = owner.RegisterContext(_context);
                 return true;
             }
         }
