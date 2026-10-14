@@ -102,26 +102,28 @@ namespace EmbedIO
         {
             var mediaType = request.MediaType ?? throw new InvalidOperationException("Missing media type.");
             var slash = mediaType.IndexOf("/", StringComparison.Ordinal);
-            var subtypeLength = mediaType.Length - slash - 1;
             foreach (var format in _formats)
             {
-                if (format.Type != "*" && (format.Type.Length != slash || string.Compare(format.Type, 0, mediaType, 0, slash, StringComparison.OrdinalIgnoreCase) != 0)) continue;
-                if (format.Subtype != "*" && (format.Subtype.Length != subtypeLength || string.Compare(format.Subtype, 0, mediaType, slash + 1, subtypeLength, StringComparison.OrdinalIgnoreCase) != 0)) continue;
+                if (!format.Matches(mediaType, slash)) continue;
                 if (format.Parameters.Length != 0 && !parameters) continue;
-                var matches = true;
-                foreach (var required in format.Parameters)
-                {
-                    var found = false;
-                    foreach (var candidate in request.Parameters)
-                    {
-                        var value = candidate.Value;
-                        if (!string.Equals(candidate.Name, required.Key, StringComparison.OrdinalIgnoreCase) || value is null) continue;
-                        found = string.Equals(required.Value, Unquote(value), required.Key == "charset" ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-                        break;
-                    }
-                    if (!found) { matches = false; break; }
-                }
-                if (matches) return true;
+                if (HasParameters(request.Parameters, format.Parameters)) return true;
+            }
+            return false;
+        }
+        private static bool HasParameters(ICollection<NameValueHeaderValue> supplied, KeyValuePair<string, string>[] required)
+        {
+            foreach (var parameter in required)
+                if (!HasParameter(supplied, parameter)) return false;
+            return true;
+        }
+        // The first supplied parameter of the required name decides; a quoted value compares unquoted.
+        private static bool HasParameter(ICollection<NameValueHeaderValue> supplied, KeyValuePair<string, string> required)
+        {
+            foreach (var candidate in supplied)
+            {
+                var value = candidate.Value;
+                if (!string.Equals(candidate.Name, required.Key, StringComparison.OrdinalIgnoreCase) || value is null) continue;
+                return string.Equals(required.Value, Unquote(value), required.Key == "charset" ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
             }
             return false;
         }
@@ -176,6 +178,13 @@ namespace EmbedIO
             internal string Type { get; }
             internal string Subtype { get; }
             internal KeyValuePair<string, string>[] Parameters { get; }
+            // The range covers the type and subtype of a media type; "*" covers any.
+            internal bool Matches(string mediaType, int slash)
+            {
+                var subtypeLength = mediaType.Length - slash - 1;
+                return (Type == "*" || (Type.Length == slash && string.Compare(Type, 0, mediaType, 0, slash, StringComparison.OrdinalIgnoreCase) == 0))
+                    && (Subtype == "*" || (Subtype.Length == subtypeLength && string.Compare(Subtype, 0, mediaType, slash + 1, subtypeLength, StringComparison.OrdinalIgnoreCase) == 0));
+            }
         }
     }
 }

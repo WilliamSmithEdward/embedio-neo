@@ -7,11 +7,15 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Forwarding;
 using EmbedIO.Net;
+using EmbedIO.Routing;
+using EmbedIO.Sessions;
 using EmbedIO.Utilities;
 using NUnit.Framework;
 
@@ -56,6 +60,27 @@ namespace EmbedIO.Tests
 
         [Test]
         public void RequestCodingChains() => Run("request_coding", 3, GenerateCodingCase, EvaluateCoding, false, 300);
+
+        [Test]
+        public void QualityValueLists() => Run("qvalue", 2, GenerateQValueCase, EvaluateQValues, true, 600);
+
+        [Test]
+        public void ForwardedHeaders() => Run("forwarded", 1, GenerateForwardedCase, EvaluateForwarded, true, 500);
+
+        [Test]
+        public void XForwardedHeaders() => Run("x_forwarded", 3, GenerateXForwardedCase, EvaluateXForwarded, true, 300);
+
+        [Test]
+        public void ForwardedResolution() => Run("forwarded_resolve", 7, GenerateResolveCase, EvaluateResolve, true, 300);
+
+        [Test]
+        public void RequestCookieHeaders() => Run("request_cookies", 1, GenerateRequestCookieCase, EvaluateRequestCookies, true, 500);
+
+        [Test]
+        public void ExpectHeaders() => Run("expectations", 1, GenerateExpectationCase, EvaluateExpectation, true, 400);
+
+        [Test]
+        public void QueryFormatPolicies() => Run("query_format", 2, GenerateQueryFormatCase, EvaluateQueryFormat, true, 300);
 
         // Inputs come from the generator in record mode and, when regenerate is set, are
         // also regenerated in verify mode and compared with the file to catch generator drift.
@@ -842,6 +867,329 @@ namespace EmbedIO.Tests
             => typeof(WebServer).Assembly.GetType(name, true) ?? throw new AssertionException("Missing type " + name);
 
         // Our own parsers throw with fixed messages; BCL exceptions carry runtime-specific text.
+        // Quality-value lists: one to three header values (joined by '|'), elements with
+        // parameters in every spelling the legacy grammar accepts or rejects, and the wildcard flag.
+        private static string[] GenerateQValueCase(Rng rng)
+        {
+            var values = new List<string>();
+            var count = rng.Pick(1, 1, 1, 1, 2, 2, 3);
+            for (var v = 0; v < count; v++)
+            {
+                var text = new StringBuilder();
+                var elements = rng.Next(5);
+                for (var e = 0; e < elements; e++)
+                {
+                    if (e > 0) text.Append(rng.Pick(",", ",", ", ", " , ", ",,", "\t,"));
+                    text.Append(rng.Pick("gzip", "gzip", "GZIP", "br", "deflate", "*", "identity", "text/html", "text/html;level=1", "text/*", "", " ", "x-custom", "gzip gzip", "é"));
+                    var parameters = rng.Next(3);
+                    for (var p = 0; p < parameters; p++)
+                        text.Append(rng.Pick(";q=0.5", ";q=1", "; q=0.8", ";Q=0.3", ";q=1.0", ";q=1.1", ";q=0.1234", ";q=.5", ";q=0.", ";q=1.000", ";q=0.5x", "; q=0.5 ", ";level=1", ";q", ";q=", ";q=2", ";q=0.a", ";q=0.٣", "\t;\tq=0.9", ";q=0.5\n", ";q =0.5", ";q= 0.5", ";;q=0.7", ";q=1.01", ";q=0,5", ";q=00.5", ";q=0.50", ";q=1.", ";x=\"a;b\"", ";q=0.9;q=0.1"));
+                }
+
+                if (rng.Chance(10)) text.Append(rng.Pick(",", " ,", "\n"));
+                values.Add(text.ToString());
+            }
+
+            return new[] { string.Join("|", values), rng.Chance(60) ? "1" : "0" };
+        }
+
+        private static string EvaluateQValues(string[] inputs)
+        {
+            var values = inputs[0].Split('|');
+            var list = values.Length == 1 ? new QValueList(inputs[1] == "1", values[0]) : new QValueList(inputs[1] == "1", values);
+            var text = new StringBuilder("n:").Append(Invariant(list.QValues.Count));
+            foreach (var entry in list.QValues.OrderBy(e => e.Value.Ordinal).ThenBy(e => e.Key, StringComparer.Ordinal))
+                text.Append('|').Append(entry.Key).Append('=').Append(Invariant(entry.Value.Weight)).Append('@').Append(Invariant(entry.Value.Ordinal));
+            text.Append("|preferred:").Append(Invariant(list.FindPreferredIndex("gzip", "br", "deflate", "identity", "text/html", "*")));
+            text.Append("|gzip:").Append(list.IsCandidate("gzip") ? "1" : "0");
+            text.Append("|br:").Append(list.TryGetWeight("br", out var weight) ? Invariant(weight) : "-");
+            return text.ToString();
+        }
+
+        // Forwarded headers: elements of pairs with every spelling of the parameter names, quoted
+        // and malformed values, repeated and extension parameters, IPv4, IPv6, obfuscated and
+        // unknown nodes with ports, and chains past the hop limit.
+        private static string[] GenerateForwardedCase(Rng rng)
+        {
+            var text = new StringBuilder();
+            var elements = rng.Chance(3) ? 33 + rng.Next(3) : rng.Next(5);
+            for (var e = 0; e < elements; e++)
+            {
+                if (e > 0) text.Append(rng.Pick(",", ", ", " ,", ",,"));
+                var pairs = rng.Next(4);
+                for (var p = 0; p < pairs; p++)
+                {
+                    if (p > 0) text.Append(rng.Pick(";", "; ", " ;", ";;"));
+                    text.Append(ForwardedPair(rng));
+                }
+            }
+
+            if (rng.Chance(8)) text.Append(rng.Pick(";", ",", "\"", "=", " "));
+            return new[] { text.ToString() };
+        }
+
+        private static string ForwardedPair(Rng rng)
+        {
+            var name = rng.Pick("for", "for", "for", "For", "FOR", "proto", "proto", "PROTO", "host", "host", "Host", "by", "by", "secret", "x-ext", "fo r", "for=", "", "\"for\"", "for ", " for");
+            var value = rng.Next(4) switch
+            {
+                0 => ForwardedNode(rng),
+                1 => rng.Pick("http", "https", "HTTPS", "Http", "ftp", "https ", "\"https\"", "\"http\"", "h ttp", ""),
+                2 => rng.Pick("example.com", "Example.COM", "example.com:8443", "\"example.com:443\"", "[2001:db8::1]", "\"[2001:db8::1]:8443\"", "[2001:db8::1]:x", "example.com:", "example.com:0", "example.com:65536", "example.com:99999", "-bad-", "exa mple.com", "user@example.com", "example.com/evil", "203.0.113.9", "203.0.113.9:80", "::1", "", new string('a', 256)),
+                _ => rng.Pick("\"quoted\"", "\"with\\\"escape\"", "\"unterminated", "\"\"", "\"a\\", "\"ctrl\u0001\"", "\"tab\t\"", "tok", "tok en", "\"a,b\"", "\"a;b\""),
+            };
+            return rng.Chance(5) ? name : name + "=" + value;
+        }
+
+        private static string ForwardedNode(Rng rng)
+        {
+            var address = rng.Pick("203.0.113.9", "203.0.113.9", "198.51.100.7", "10.0.0.5", "127.0.0.1", "0.0.0.0", "255.255.255.255", "203.0.113.09", "203.0.113", "1", "0x7f.0.0.1", "300.1.1.1", "203.0.113.9.1",
+                "[2001:db8::7]", "[2001:db8::7]", "[::1]", "[::ffff:203.0.113.9]", "[fe80::1%eth0]", "[2001:db8::7", "[]", "[2001:db8:::7]", "2001:db8::7", "::ffff:203.0.113.9", "fe80::1%eth0", "::1",
+                "unknown", "UNKNOWN", "_hidden", "_a.b-c_d", "_", "_bad!", "_hidden:_port", "not-an-ip", "", "203.0.113.9 ");
+            var port = rng.Pick("", "", "", ":4711", ":80", ":0", ":65535", ":65536", ":99999", ":abc", ":_obf", ":_", ":", ": 80", ":80 ");
+            return address + port;
+        }
+
+        private static string EvaluateForwarded(string[] inputs)
+            => DescribeHops(CallHidden(ForwardedParser, "ParseForwarded", null, inputs[0]));
+
+        // X-Forwarded-For, -Proto and -Host lists (absent as <null>), aligned from the nearest proxy.
+        private static string[] GenerateXForwardedCase(Rng rng)
+        {
+            var forHeader = XForwardedList(rng, 20, () => ForwardedNode(rng));
+            var proto = XForwardedList(rng, 50, () => rng.Pick("http", "https", "HTTPS", "ws", "", " https", "https "));
+            var host = XForwardedList(rng, 50, () => rng.Pick("example.com", "example.com:8443", "EXAMPLE.com", "[2001:db8::1]:443", "bad host", "", "203.0.113.9"));
+            return new[] { forHeader ?? NullMarker, proto ?? NullMarker, host ?? NullMarker };
+        }
+
+        private static string? XForwardedList(Rng rng, int percentAbsent, Func<string> item)
+        {
+            if (rng.Chance(percentAbsent)) return null;
+            var count = rng.Chance(2) ? 33 : rng.Next(5);
+            var text = new StringBuilder();
+            for (var i = 0; i < count; i++)
+            {
+                if (i > 0) text.Append(rng.Pick(",", ", ", " ,", ",,", " , "));
+                text.Append(item());
+            }
+
+            return text.ToString();
+        }
+
+        private static string EvaluateXForwarded(string[] inputs)
+            => DescribeHops(CallHidden(ForwardedParser, "ParseXForwarded", null, Optional(inputs[0]), Optional(inputs[1]), Optional(inputs[2])));
+
+        private static string DescribeHops(object? hops)
+        {
+            if (hops == null) return NullMarker;
+            var text = new StringBuilder("n:").Append(Invariant(((System.Collections.ICollection)hops).Count));
+            foreach (var hop in ((System.Collections.IEnumerable)hops).Cast<object>())
+            {
+                var type = hop.GetType();
+                text.Append('|').Append(type.GetProperty("Client", Hidden)?.GetValue(hop) ?? NullMarker)
+                    .Append(',').Append(type.GetProperty("Proto", Hidden)?.GetValue(hop) ?? NullMarker)
+                    .Append(',').Append(type.GetProperty("Host", Hidden)?.GetValue(hop) ?? NullMarker);
+            }
+
+            return text.ToString();
+        }
+
+        // Module resolution: the selected sources, trusted networks, allowed hosts, hop limit,
+        // physical peer and its TLS state, and header lines carrying trusted and untrusted
+        // chains, conflicting header families, malformed values and oversize headers.
+        private static string[] GenerateResolveCase(Rng rng)
+        {
+            var sources = rng.Pick(1, 1, 2, 6, 14, 15, 3, 7, 8, 4, 10, 13);
+            var trusted = Enumerable.Range(0, 1 + rng.Next(3)).Select(_ => rng.Pick("10.0.0.5", "10.0.0.0/8", "127.0.0.1", "::1", "2001:db8::/32", "2001:db8::7", "198.51.100.0/24", "::ffff:10.0.0.0/104", "0.0.0.0/0", "::/0")).ToArray();
+            var hosts = rng.Chance(40) ? Array.Empty<string>() : Enumerable.Range(0, 1 + rng.Next(2)).Select(_ => rng.Pick("example.com", "example.com:8443", "api.example.com", "[2001:db8::1]", "[2001:db8::1]:443", "203.0.113.9:80")).ToArray();
+            var limit = rng.Pick(1, 1, 1, 2, 2, 3, 16, 5);
+            var remote = rng.Pick("10.0.0.5", "10.0.0.5", "10.9.9.9", "203.0.113.9", "127.0.0.1", "::1", "2001:db8::7", "2001:db8:1::9", "::ffff:10.0.0.5", "::ffff:203.0.113.9", "198.51.100.77");
+            var lines = new List<string>();
+            var count = rng.Next(4);
+            for (var i = 0; i < count; i++)
+            {
+                var name = rng.Pick("Forwarded", "Forwarded", "X-Forwarded-For", "X-Forwarded-For", "X-Forwarded-Proto", "X-Forwarded-Host", "Via");
+                lines.Add(name + ": " + ResolveHeaderValue(rng, name));
+            }
+
+            if (rng.Chance(1)) lines.Add("Forwarded: for=10.0.0.6;ext=\"" + new string('a', 8200) + "\"");
+            return new[] { Invariant(sources), string.Join(" ", trusted), string.Join(" ", hosts), Invariant(limit), remote, rng.Chance(30) ? "1" : "0", string.Join("\n", lines) };
+        }
+
+        private static string ResolveHeaderValue(Rng rng, string name)
+        {
+            switch (name)
+            {
+                case "Forwarded":
+                    return rng.Chance(15) ? GenerateForwardedCase(rng)[0] : ForwardedChain(rng);
+                case "X-Forwarded-For":
+                    return string.Join(rng.Pick(", ", ",", " , "), Enumerable.Range(0, 1 + rng.Next(4)).Select(_ => ResolveNode(rng)));
+                case "X-Forwarded-Proto":
+                    return string.Join(", ", Enumerable.Range(0, 1 + rng.Next(3)).Select(_ => rng.Pick("https", "http", "HTTPS", "ftp", "")));
+                case "X-Forwarded-Host":
+                    return string.Join(", ", Enumerable.Range(0, 1 + rng.Next(3)).Select(_ => rng.Pick("example.com", "evil.example", "example.com:8443", "EXAMPLE.COM", "[2001:db8::1]:443", "api.example.com")));
+                default:
+                    return "1.1 proxy";
+            }
+        }
+
+        private static string ForwardedChain(Rng rng)
+        {
+            var elements = new List<string>();
+            var hops = 1 + rng.Next(4);
+            for (var i = 0; i < hops; i++)
+            {
+                var pairs = new List<string>();
+                if (rng.Chance(85)) pairs.Add("for=" + ForwardedValue(rng, ResolveNode(rng)));
+                if (rng.Chance(40)) pairs.Add("proto=" + rng.Pick("https", "http", "HTTPS"));
+                if (rng.Chance(40)) pairs.Add("host=" + rng.Pick("example.com", "\"example.com:8443\"", "api.example.com", "evil.example", "EXAMPLE.COM", "\"[2001:db8::1]:443\""));
+                if (rng.Chance(10)) pairs.Add("by=" + ForwardedValue(rng, ResolveNode(rng)));
+                elements.Add(string.Join(";", pairs));
+            }
+
+            return string.Join(", ", elements);
+        }
+
+        // A node that is not a token (IPv6, a port) is usually quoted, as RFC 7239 requires.
+        private static string ForwardedValue(Rng rng, string node)
+            => node.IndexOfAny(new[] { ':', '[' }) >= 0 && rng.Chance(85) ? "\"" + node + "\"" : node;
+
+        private static string ResolveNode(Rng rng)
+            => rng.Pick("10.0.0.5", "10.0.0.6", "10.9.9.9", "203.0.113.9", "1.2.3.4", "198.51.100.7", "127.0.0.1", "2001:db8::7", "[2001:db8::7]:4711", "[2001:db8::9]", "2001:db8:1::9", "::ffff:203.0.113.9", "::ffff:10.0.0.6", "unknown", "_hidden", "203.0.113.9:4711", "bad", "", "[fe80::1%eth0]");
+
+        private static string EvaluateResolve(string[] inputs)
+        {
+            var module = new ForwardedHeadersModule("/", (ForwardedHeaderSources)int.Parse(inputs[0], CultureInfo.InvariantCulture))
+                .WithTrustedProxies(inputs[1].Split(' '));
+            if (inputs[2].Length != 0) module.WithAllowedHosts(inputs[2].Split(' '));
+            module.ForwardLimit = int.Parse(inputs[3], CultureInfo.InvariantCulture);
+            var headers = new NameValueCollection();
+            foreach (var line in inputs[6].Split('\n'))
+            {
+                if (line.Length == 0) continue;
+                var separator = line.IndexOf(": ", StringComparison.Ordinal);
+                headers.Add(line.Substring(0, separator), line.Substring(separator + 2));
+            }
+
+            var context = new ForwardedContext(new IPEndPoint(IPAddress.Parse(inputs[4]), 4711), inputs[5] == "1", headers);
+            var result = (ForwardedRequest)(CallHidden(typeof(ForwardedHeadersModule), "Resolve", module, context) ?? throw new AssertionException("Resolve returned null."));
+            return result.Outcome + "|" + result.ClientAddress + "|" + result.Scheme + "|" + (result.Host ?? NullMarker) + "|" + Invariant(result.HopsApplied)
+                + "|" + (result.HostRejected ? "rejected" : "accepted") + "|" + result.PhysicalRemoteEndPoint + "|" + (result.PhysicalIsSecure ? "tls" : "plain");
+        }
+
+        // Request Cookie headers: cookie pairs and "$Version", "$Path", "$Domain" and "$Port"
+        // attributes in every position, with quoting, blanks, invalid names and invalid values.
+        private static string[] GenerateRequestCookieCase(Rng rng)
+        {
+            var text = new StringBuilder();
+            var parts = rng.Next(7);
+            for (var p = 0; p < parts; p++)
+            {
+                if (p > 0) text.Append(rng.Pick(";", "; ", "; ", " ; ", ";;", "\t;"));
+                text.Append(RequestCookiePart(rng));
+            }
+
+            if (rng.Chance(10)) text.Append(rng.Pick(";", "; ", "=", " "));
+            return new[] { text.ToString() };
+        }
+
+        private static string RequestCookiePart(Rng rng)
+        {
+            var name = rng.Pick("a", "a", "session", "SID", "$Version", "$Version", "$Path", "$Path", "$Domain", "$Port", "$Port", "$Foo", "$", "", " ", "na me", "n,m", "n\"q", "x=y", "é", "sp ", " sp", "a\tb", "ok-name_1", "$Pathology");
+            var value = rng.Pick("b", "1", "", "", "\"quoted\"", "\"a,b\"", "\"\"", "\"", "abc def", "x=y=z", "/", "/x", "example.com", ".example.com", "80", "\"80\"", "80,81", "abc", "-1", "1", "2", "99999999999", "\"1\"", " 1 ", "€", "ctrl\u0001", "a\"b");
+            return rng.Next(8) switch
+            {
+                0 => name,
+                1 => name + "=",
+                2 => "=" + value,
+                3 => name + " = " + value,
+                _ => name + "=" + value,
+            };
+        }
+
+        private static string EvaluateRequestCookies(string[] inputs)
+        {
+            try
+            {
+                var cookies = (CookieList)(CallHidden(RequestCookieReader, "Read", null, inputs[0]) ?? throw new AssertionException("Read returned null."));
+                var text = new StringBuilder("n:").Append(Invariant(cookies.Count));
+                foreach (var cookie in cookies)
+                    text.Append('|').Append(cookie.Name).Append('=').Append(cookie.Value).Append(';').Append(cookie.Path).Append(';').Append(cookie.Domain).Append(';').Append(cookie.Port).Append(';').Append(Invariant(cookie.Version));
+                return text.ToString();
+            }
+            catch (Exception error) when (error is FormatException or OverflowException or CookieException or ArgumentOutOfRangeException)
+            {
+                return Describe(error);
+            }
+        }
+
+        // Expect headers: list members around "100-continue" in every letter case and spacing,
+        // quoted extension values holding commas and escapes, and unterminated quotes.
+        private static string[] GenerateExpectationCase(Rng rng)
+        {
+            if (rng.Chance(3)) return new[] { NullMarker };
+            var text = new StringBuilder();
+            var members = rng.Next(5);
+            for (var m = 0; m < members; m++)
+            {
+                if (m > 0) text.Append(rng.Pick(",", ", ", " ,", ",,", "\t,\t"));
+                text.Append(rng.Pick("100-continue", "100-continue", "100-CONTINUE", " 100-continue ", "\t100-continue", "100-continue=yes", "100-continue;x=1", "x100-continue", "100-continuex", "\"100-continue\"", "custom", "custom=\"a,100-continue,b\"", "custom=\"a\\\",100-continue\"", "custom=\"unterminated", "\"", "\\", "custom=\"x\\", "", " ", "100-continu", "100-continué", "100 continue", "100-cont\tinue"));
+            }
+
+            if (rng.Chance(10)) text.Append(rng.Pick(",", "\"", "\\", " "));
+            return new[] { text.ToString() };
+        }
+
+        private static string EvaluateExpectation(string[] inputs)
+            => CallHidden(Expectations, "ContainsContinue", null, Optional(inputs[0])) is true ? "continue" : "no";
+
+        // QUERY format policies: supported media ranges with parameters, some of which the
+        // constructor rejects, and a request Content-Type to check, absent as <null>.
+        private static string[] GenerateQueryFormatCase(Rng rng)
+        {
+            var formats = Enumerable.Range(0, 1 + rng.Next(3)).Select(_ => rng.Pick("application/json", "application/json", "text/*", "*/*", "application/json;charset=utf-8", "application/json; charset=\"utf-8\"", "text/plain;format=flowed", "application/x-ndjson;profile=\"a b\"", "Application/JSON", "text/plain;charset=UTF-8;format=flowed", "application/json;Charset=utf-8", "text", "*/json", "a/b;x=1;x=2", "a/b;x", "a/b;X-y_1.z=v", "a/b;1x=1", "a/b;x=\"q\\\"q\"", "a/b;x=\"é\"", "", "application/json;*=1")).ToArray();
+            var request = rng.Chance(5) ? NullMarker : rng.Pick("application/json", "application/json; charset=utf-8", "APPLICATION/JSON", "application/JSON;charset=UTF-8", "text/plain", "text/plain;charset=\"utf-8\"", "text/plain;format=flowed;charset=utf-8", "text/plain;format=FLOWED", "application/json;charset=utf-8;format=x", "*/*", "application/*", "application/json;charset", "application/json;charset=", "application/json;a=1;a=2", "text/plain;charset=utf-8;charset=latin1", "application/x-ndjson;profile=\"a b\"", "application/x-ndjson;profile=\"a  b\"", "garbage", "", "application/json ;", "application/json;x=\"q\\\"q\"", "application/json;x=\"é\"");
+            return new[] { string.Join("|", formats), request };
+        }
+
+        private static string EvaluateQueryFormat(string[] inputs)
+        {
+            QueryFormatPolicy policy;
+            try
+            {
+                policy = new QueryFormatPolicy(inputs[0].Split('|'));
+            }
+            catch (ArgumentException error)
+            {
+                return "constructor:" + Describe(error);
+            }
+
+            return (policy.IsSupported(Optional(inputs[1])) ? "supported" : "unsupported") + "|" + policy.AcceptQueryHeaderValue + "|" + policy.AcceptHeaderValue;
+        }
+
+        private static readonly Type ForwardedParser = CoreType("EmbedIO.Forwarding.Internal.ForwardedHeaderParser");
+        private static readonly Type RequestCookieReader = CoreType("EmbedIO.Net.Internal.RequestCookieFields");
+        private static readonly Type Expectations = CoreType("EmbedIO.Net.Internal.HttpExpectations");
+
+        private static Type CoreType(string name)
+            => typeof(WebServer).Assembly.GetType(name, true) ?? throw new InvalidOperationException("Missing " + name);
+
+        private static string? Optional(string text) => text == NullMarker ? null : text;
+
+        // Calls a hidden method and surfaces the parser's own exception, not the reflection wrapper.
+        private static object? CallHidden(Type type, string method, object? instance, params object?[] arguments)
+        {
+            var target = type.GetMethod(method, Hidden) ?? throw new AssertionException("Missing " + type.Name + "." + method);
+            try
+            {
+                return target.Invoke(instance, arguments);
+            }
+            catch (TargetInvocationException error) when (error.InnerException != null)
+            {
+                throw error.InnerException ?? error;
+            }
+        }
+
         private static string Describe(Exception error)
         {
             var name = error.GetType().Name;
@@ -953,6 +1301,67 @@ namespace EmbedIO.Tests
             public IPEndPoint RemoteEndPoint => new(IPAddress.Loopback, 1);
             public bool IsLocal => true;
             public bool IsSecureConnection => false;
+            public string? UserAgent => null;
+            public bool IsWebSocketRequest => false;
+            public IPEndPoint LocalEndPoint => new(IPAddress.Loopback, 2);
+            public string? ContentType => null;
+            public long ContentLength64 => 0;
+            public bool IsAuthenticated => false;
+            public Uri? UrlReferrer => null;
+        }
+        // Only the members the forwarded-headers module reads are populated.
+        private sealed class ForwardedContext : IHttpContext
+        {
+            internal ForwardedContext(IPEndPoint remote, bool secure, NameValueCollection headers)
+            {
+                RemoteEndPoint = remote;
+                Request = new ForwardedContextRequest(remote, secure, headers);
+            }
+
+            public IPEndPoint RemoteEndPoint { get; }
+            public IHttpRequest Request { get; }
+            public IDictionary<object, object> Items { get; } = new Dictionary<object, object>();
+            public string Id => throw new NotSupportedException();
+            public CancellationToken CancellationToken => throw new NotSupportedException();
+            public IPEndPoint LocalEndPoint => throw new NotSupportedException();
+            public RouteMatch Route => throw new NotSupportedException();
+            public string RequestedPath => throw new NotSupportedException();
+            public IHttpResponse Response => throw new NotSupportedException();
+            public IPrincipal User => throw new NotSupportedException();
+            public ISessionProxy Session => throw new NotSupportedException();
+            public bool SupportCompressedRequests => throw new NotSupportedException();
+            public long Age => throw new NotSupportedException();
+            public bool IsHandled => throw new NotSupportedException();
+            public void SetHandled() => throw new NotSupportedException();
+            public void OnClose(Action<IHttpContext> callback) => throw new NotSupportedException();
+            public string? GetMimeType(string extension) => throw new NotSupportedException();
+            public bool TryDetermineCompression(string mimeType, out bool preferCompression) => throw new NotSupportedException();
+        }
+
+        private sealed class ForwardedContextRequest : IHttpRequest
+        {
+            internal ForwardedContextRequest(IPEndPoint remote, bool secure, NameValueCollection headers)
+            {
+                RemoteEndPoint = remote;
+                IsSecureConnection = secure;
+                Headers = headers;
+            }
+
+            public NameValueCollection Headers { get; }
+            public IPEndPoint RemoteEndPoint { get; }
+            public bool IsSecureConnection { get; }
+            public string HttpMethod => "GET";
+            public ICookieCollection Cookies => throw new NotSupportedException();
+            public Version ProtocolVersion => HttpVersion.Version11;
+            public bool KeepAlive => true;
+            public string RawTarget => "/";
+            public NameValueCollection QueryString => throw new NotSupportedException();
+            public HttpVerbs HttpVerb => HttpVerbs.Get;
+            public Uri Url => new("http://localhost/");
+            public bool HasEntityBody => false;
+            public Stream InputStream => Stream.Null;
+            public Encoding ContentEncoding => Encoding.UTF8;
+            public bool IsLocal => true;
             public string? UserAgent => null;
             public bool IsWebSocketRequest => false;
             public IPEndPoint LocalEndPoint => new(IPAddress.Loopback, 2);

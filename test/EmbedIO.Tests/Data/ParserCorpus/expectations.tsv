@@ -1,0 +1,401 @@
+# expectations: 400 cases, 1 input columns, seed 5819336032291112354
+	no
+custom="a,100-continue,b",,100-continue;x=1,100-continu\u00e9	no
+custom\t,\t100-continue ,100-continu\u00e9 ,	continue
+	no
+	no
+100 continue ,100-continuex	no
+	no
+100-CONTINUE ,100-continue, 100-continue=yes,custom="a,100-continue,b"	continue
+<null>	no
+x100-continue,100-continue=yes	no
+	no
+100-continuex\t,\t"	no
+custom="a\\",100-continue"	no
+ ,,100-continue	continue
+ 100-continue  ,100-CONTINUE,,100-continue=yes	continue
+custom="a\\",100-continue",  \t,\t"\\	no
+custom="a\\",100-continue", custom	no
+"100-continue",,custom\t,\t100-CONTINUE	continue
+100-continue ,\t100-continue, 100-continue;x=1	continue
+custom="x\\, 	no
+"100-continue"	no
+custom="a,100-continue,b"	no
+100-continue,,\t100-continue	continue
+100-continue,,100-continuex\t,\tcustom="a\\",100-continue"	continue
+	no
+100-continue;x=1 ,100-continue,  100-continue , custom="a,100-continue,b"	continue
+<null>	no
+ ,x100-continue ,100-CONTINUE	continue
+ 100-continue , custom="a,100-continue,b", custom="a,100-continue,b"\t,\t100-continue=yes 	continue
+ 100-continue , 100-CONTINUE	continue
+ 100-continue ,,100-CONTINUE	continue
+100 continue	no
+custom="a,100-continue,b" , 	no
+	no
+100-continu\u00e9	no
+100-continue;x=1, custom="x\\	no
+100-continue,100-continue=yes , 100-continue \t,\t100-continu\u00e9	continue
+100-cont\tinue, custom="x\\	no
+	no
+<null>	no
+custom="a,100-continue,b"\t,\t100-continue,,custom="a,100-continue,b"	continue
+100-continuex,100-continue=yes," 	no
+100-continue;x=1 ,custom, custom="a\\",100-continue"	no
+custom="a\\",100-continue",,100-continue;x=1 ,custom="unterminated	no
+"\t,\tcustom="a\\",100-continue"	no
+"100-continue",,100-cont\tinue,,x100-continue ,x100-continue	no
+100-continue;x=1, 100-continu\u00e9	no
+100-continue;x=1 ,custom="a\\",100-continue"	no
+custom="x\\ ,100-continu\u00e9,100 continue\\	no
+\t100-continue , 100-continue \t,\tcustom="a\\",100-continue" ,	continue
+"100-continue"	no
+custom="a\\",100-continue", 100-CONTINUE	continue
+custom="a,100-continue,b"	no
+custom ,100-continue=yes,,\\	no
+100-continu\u00e9	no
+" ,custom="unterminated\t,\t"100-continue"	no
+custom="unterminated,,"100-continue"	no
+100-cont\tinue	no
+custom, ", 100 continue	no
+100-continuex	no
+	no
+ 	no
+custom="x\\, 100 continue	no
+x100-continue	no
+	no
+\t100-continue ,100-continue,,100-CONTINUE,,"100-continue"	continue
+x100-continue,,\\ ,100 continue ,100-cont\tinue	no
+\t,\tcustom="a\\",100-continue" ,100-continue=yes	no
+100-continue	continue
+	no
+	no
+100-cont\tinue\t,\t",\t100-continue,100-continue	no
+	no
+custom\t,\t\t100-continue,,100-continuex\t,\t100-continue	continue
+100-continu\u00e9, 100-continue=yes	no
+custom	no
+100 continue , ,custom="a,100-continue,b""	no
+"100-continue",  100-continue , "	continue
+ 	no
+custom="a,100-continue,b" ,\\ ,\t100-continue	continue
+custom="a,100-continue,b", \t100-continue	continue
+	no
+100-continue ,"100-continue"\t,\t100-continue	continue
+	no
+100-continuex\t,\tcustom="x\\,,\\	no
+100-CONTINUE,,\\,,100-continu 	continue
+	no
+100-continue,,100 continue, 100 continue ,100-continu	continue
+100-continu\u00e9\t,\t\t100-continue\t,\t100-continu	continue
+custom="unterminated,  100-continue 	no
+	no
+ 100-continue ,100-continu,100 continue\t,\t100 continue	continue
+	no
+100-continue;x=1 ,custom,,100-continue	continue
+\t100-continue,100-continuex\t,\tcustom	continue
+,	no
+100-cont\tinue	no
+	no
+custom="x\\,100-continu\u00e9,custom="unterminated\t,\t	no
+custom="unterminated\t,\t100-continu\u00e9\t,\t100-CONTINUE\t,\t100-CONTINUE\\	no
+\\,,\\	no
+ ,\t,\t100-continue;x=1	no
+	no
+100-continue\\	no
+custom="x\\	no
+custom="a,100-continue,b",  100-continue ,,custom\t,\t100-continue;x=1	continue
+custom="x\\\t,\t100-continuex	no
+custom="x\\\t,\tcustom="a,100-continue,b"\t,\tcustom="unterminated,,100 continue	continue
+	no
+custom, 100-continue;x=1	no
+100-continue;x=1 ,100-continu\u00e9 , , 100-continue;x=1	no
+custom,100-continue,custom="unterminated\t,\t100-CONTINUE	continue
+100-continuex\t,\t100-continue, custom="unterminated,,"100-continue"	continue
+100-continue , 100-continue 	continue
+	no
+	no
+100-cont\tinue	no
+	no
+100-continu,\\, custom="x\\\t,\t	no
+100 continue, \\	no
+100-CONTINUE,custom="a\\",100-continue"	continue
+100-continue , 	continue
+\t100-continue,  100-continue  ,custom="unterminated,, 	continue
+100-continue,,100 continue,custom="unterminated	continue
+100-continu	no
+<null>	no
+custom="x\\	no
+	no
+	no
+x100-continue, custom\\	no
+custom="a,100-continue,b", x100-continue,custom="x\\,  100-continue 	no
+\\	no
+custom\t,\t\t100-continue ,100-CONTINUE	continue
+	no
+\\\t,\t	no
+	no
+\t,\t\\	no
+100-continue;x=1 	no
+100 continue ,custom="x\\	no
+100-continuex,\t100-continue ,\t100-continue	continue
+\\ , ,custom="a\\",100-continue"	no
+	no
+custom="x\\	no
+ 100-continue , 100-continue;x=1,,	continue
+100-continu\u00e9 ,"100-continue"\t,\t100-continuex	no
+100-CONTINUE, 100-CONTINUE\t,\t"	continue
+"	no
+custom	no
+	no
+100-cont\tinue, ",custom="a,100-continue,b"	continue
+100-continue=yes	no
+100-continu,,100-continue	continue
+custom="unterminated,,x100-continue	no
+x100-continue	no
+100-continue;x=1	no
+\\, 100-continu\t,\t100 continue	no
+", \\,  100-continue ,100-continue=yes	no
+ 100-continue  	continue
+\\\t,\t100-continue	continue
+"100-continue",, 100-continue ,"100-continue"	continue
+custom="x\\,  100-continue \\	no
+custom="unterminated ,100-continue ,100-continue=yes	no
+,,100-cont\tinue	no
+	no
+ ,x100-continue ,100-continu\u00e9\t,\t100-continue=yes	no
+custom="a,100-continue,b"\t,\tcustom="a\\",100-continue"	no
+	no
+<null>	no
+100-CONTINUE, , \\	continue
+	no
+100-continu\u00e9	no
+<null>	no
+custom="unterminated\t,\t\t100-continue, custom="a,100-continue,b",,100-continu	continue
+x100-continue,custom="a,100-continue,b"	no
+100-continuex\t,\t""	no
+ ,,custom="x\\,  100-continue 	no
+ 100-continue ,,100-continu\u00e9\\	continue
+	no
+100-continuex	no
+",,custom="x\\, "100-continue",custom="a\\",100-continue"\\	no
+	no
+100-continue, 100-continue , 100-continue 	continue
+	no
+\t100-continue\t,\t100-continue,,	continue
+x100-continue\t,\t100-cont\tinue,,100-continue	continue
+100-continu\u00e9\t,\t"100-continue",, 100-continu\u00e9	no
+"100-continue", 100-continue 	continue
+"\t,\tcustom="a,100-continue,b",custom="a,100-continue,b" 	continue
+ 100-continue  ,custom="unterminated	continue
+100 continue	no
+	no
+custom="a,100-continue,b", custom="a,100-continue,b"	no
+custom="x\\	no
+ 100-continue , ,  100-continue ,custom="a,100-continue,b"	continue
+custom="x\\,100-continu\u00e9, 100-continue  ,custom="x\\	no
+\\	no
+100-continu ,100-continue,,custom="x\\	continue
+100-continue;x=1 ,100-continuex,,100-continue=yes, custom="a\\",100-continue" 	no
+\t100-continue , ,custom="unterminated,,x100-continue	continue
+custom="unterminated	no
+\\	no
+100-cont\tinue, 100 continue, 100-continu\u00e9, x100-continue	no
+100-continue=yes, 100-continu\u00e9, custom="a\\",100-continue"	no
+	no
+ 100-continue , custom="x\\	continue
+100-continue;x=1,  ,,100-continue;x=1,custom="a\\",100-continue"	no
+custom="x\\,,100-continue\t,\tcustom\t,\t100-continuex	no
+	no
+custom="unterminated ,\t100-continue	no
+100-continue;x=1 ,"100-continue",, 100-continue  ,x100-continue"	continue
+custom="x\\\t,\t100-continue=yes	no
+100-continu ,100-continu,,custom, custom="a\\",100-continue" 	no
+custom,,100-cont\tinue"	no
+"100-continue"	no
+100-continu\u00e9,,custom="unterminated	no
+	no
+custom="unterminated\t,\t\\	no
+100 continue,custom="a,100-continue,b" ,\\,custom="a,100-continue,b"\\	no
+ 100-continue ,"	continue
+",,x100-continue	no
+custom="x\\ ,custom="a\\",100-continue" , 100-continue ,,"100-continue"	continue
+100-continu\u00e9\t,\t100-cont\tinue,,"100-continue",100-continue	continue
+\\	no
+100-continu\u00e9	no
+ 100-continue 	continue
+	no
+	no
+custom="a,100-continue,b",, ,100-continuex, \\	no
+100-continue ,custom="a\\",100-continue"	continue
+ 	no
+100-continuex,custom="a\\",100-continue"	no
+100-continuex\t,\t100-continue=yes, 100-continu\u00e9,,100-continue\\	no
+100-CONTINUE\t,\tcustom="a\\",100-continue",,x100-continue,	continue
+100-continue;x=1,,100-continu\u00e9\t,\t100-continu\u00e9, "100-continue"	no
+100-continu\u00e9,,custom="unterminated	no
+	no
+	no
+	no
+100-CONTINUE	continue
+	no
+100-continuex ,100 continue,,,  	no
+\t100-continue	continue
+100-continue;x=1 ,custom="a,100-continue,b",\t100-continue\t,\t100-continue	continue
+	no
+custom="x\\,,100-continue,custom="unterminated	no
+custom="a,100-continue,b",,100-CONTINUE ,\\\t,\t100-continue	continue
+100-continu\u00e9 ,100-continue=yes,	no
+\t100-continue, custom="x\\ ,100 continue	continue
+100-continue;x=1\t,\t\\ ,x100-continue,,\t100-continue	continue
+custom,,custom="a\\",100-continue"\t,\t100-continue=yes	no
+	no
+100-CONTINUE,100-continue,custom="a,100-continue,b""	continue
+	no
+"100-continue" ,100-cont\tinue ,"100-continue"	no
+100-continuex	no
+100 continue,,\t,\t\\ ,100-continue	continue
+custom, 100-continue,  100-continue 	continue
+100-continue;x=1 ,100-continue, "	continue
+custom="a,100-continue,b" ,100 continue\t,\t\t100-continue ,custom="x\\	continue
+100-continue	continue
+custom="x\\\t,\t100-continu, 100-continu ,100-continue;x=1	no
+	no
+	no
+\t100-continue	continue
+ 100-continue ,,"	continue
+ 	no
+100-continue;x=1	no
+\t100-continue	continue
+	no
+\\	no
+100-continue=yes ,x100-continue	no
+100-continu\u00e9,100-CONTINUE, 100 continue\t,\t100-continu	continue
+100-continue	continue
+	no
+	no
+	no
+custom, 100-continue,,\\	continue
+	no
+custom="x\\ ," , \t,\t100-continue;x=1	no
+custom="x\\	no
+100-continu,100-continu\t,\t"100-continue" ,100-continu\u00e9	no
+	no
+100-continue, "100-continue" ,100-continue	continue
+custom="unterminated , 100-continue ,, 100-continue 	no
+custom="x\\, custom\t,\t ,,100 continue	no
+	no
+ 	no
+100-continue	continue
+	no
+<null>	no
+100-continue;x=1, 100-continue=yes,  100-continue 	continue
+custom="a,100-continue,b"	no
+custom="unterminated	no
+100-continue ,100-continue;x=1,,100-CONTINUE,100-CONTINUE	continue
+ \t,\t 100-continue 	continue
+100-continue	continue
+100 continue, custom="unterminated,custom="a\\",100-continue"	no
+100-continue=yes,," ,\t100-continue,,custom="a,100-continue,b"	continue
+	no
+100-continue=yes\t,\t100-cont\tinue	no
+",,100-continue,	no
+	no
+	no
+100 continue, 100-cont\tinue,	no
+100-continu	no
+	no
+100-continue;x=1	no
+custom="unterminated ,"\t,\t100-continu,,\\	no
+, 100 continue ,100-continu\u00e9	no
+100-cont\tinue\t,\t" ,"	no
+	no
+"	no
+100-continue ,custom="unterminated,custom="x\\ ,100-cont\tinue	continue
+custom,100-continue, custom,100 continue"	continue
+100-continue,, 100-continu	continue
+\\\t,\tx100-continue ,custom="a,100-continue,b"	no
+100-continue;x=1\t,\t100-continuex, 100-continue=yes	no
+	no
+100-continue=yes\t,\t,  100-continue 	continue
+ 100-continue 	continue
+100-continue;x=1 ,100-continue 	continue
+\\	no
+100-cont\tinue ,custom="a\\",100-continue"	no
+custom="a\\",100-continue", 100-cont\tinue,", 	no
+100-CONTINUE\t,\t100 continue,,custom"	continue
+x100-continue\t,\tcustom\t,\t100-continu\u00e9, x100-continue"	no
+	no
+100-continue;x=1,,"\t,\tcustom="a\\",100-continue",,"	no
+	no
+	no
+	no
+"100-continue",,100-continuex,,\t,\tcustom="a\\",100-continue"	no
+100-continuex,100-continue ,\\ ,100 continue	continue
+100-continue=yes, 100 continue ,custom="a,100-continue,b"	no
+100 continue	no
+	no
+	no
+100-continue, custom="a\\",100-continue",,100-continu	continue
+100-CONTINUE\t,\t100-cont\tinue,,"100-continue" ,custom="a,100-continue,b"	continue
+custom="unterminated,100-cont\tinue ,x100-continue	no
+	no
+\t100-continue, 100-continue\t,\t100-CONTINUE\t,\t100-continue=yes	continue
+	no
+"100-continue"	no
+100-continue=yes,,100-continu\u00e9 ,custom="a\\",100-continue"	no
+custom="unterminated\t,\tcustom="unterminated\t,\t"100-continue", 	no
+\t100-continue,  ,"	continue
+100-continue=yes,,100 continue	no
+100-continue=yes	no
+	no
+custom="x\\\t,\t100-continue, "100-continue""	no
+	no
+	no
+	no
+100-CONTINUE,, 100-continue ,custom="a\\",100-continue"	continue
+custom ,100-CONTINUE\t,\t100-continuex,\t100-continue	continue
+100-continue;x=1\t,\tcustom,,custom="unterminated	no
+100-continue;x=1\t,\t100-continuex, \t100-continue	continue
+100-continue=yes	no
+custom="unterminated ,100-CONTINUE,,\t100-continue\t,\t100-continue;x=1	no
+x100-continue,custom="unterminated	no
+	no
+100-continu,,100-continue=yes,,x100-continue	no
+custom="a\\",100-continue" ,100-continu\u00e9, 100-continu	no
+,100-continue,100-continue\t,\t100-continue;x=1	continue
+\\,100-continue	continue
+\t100-continue ,100-continue, 100-continue=yes	continue
+x100-continue	no
+100-continue,custom="a,100-continue,b"	continue
+100-continuex 	no
+100-continuex ,custom="a\\",100-continue",100-continue;x=1,,100-continuex	no
+100-CONTINUE	continue
+custom="a,100-continue,b",x100-continue,100-continue=yes ,custom="unterminated	no
+x100-continue ,\\ ,100-continuex,	no
+\t100-continue, 100-continuex,,","100-continue"	continue
+,,100-cont\tinue ,100-continuex, 	no
+custom	no
+\\\t,\t100 continue\\	no
+\\	no
+	no
+	no
+100-CONTINUE	continue
+\\,100-continu\u00e9, \\,custom="a,100-continue,b"	no
+custom , 100-continue \t,\t	continue
+custom="x\\	no
+custom"	no
+100-continue=yes\t,\tcustom	no
+	no
+	no
+100-continue;x=1	no
+	no
+ \t,\t100-CONTINUE, 100-continue=yes ,custom	continue
+x100-continue\t,\t100 continue, custom="x\\	no
+custom="x\\	no
+\t100-continue	continue
+100-continuex,100-continue;x=1, \t,\t100 continue	no
+\t100-continue,,100-continue;x=1	continue
+custom="a\\",100-continue"\\	no
+100-continu\u00e9,100-continue, \t100-continue,100-cont\tinue	continue
+,,x100-continue,,100-continue=yes\t,\t"100-continue"	no
