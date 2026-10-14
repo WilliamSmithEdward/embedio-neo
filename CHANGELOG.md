@@ -17,11 +17,14 @@
   `MaxMessageSize`). `MaximumConcurrentRequests` and `RequestTimeout` stay off. Because a
   body limit now applies by default, `100 Continue` is sent on a handler's first read of
   the body rather than before dispatch, so on HTTP/1.1 a handler that ignores an
-  `Expect: 100-continue` body answers with `Connection: close`; on HTTP/2 and HTTP/3 a
-  body the handler never opens is left to the transport, which ends the stream after the
-  response with `RST_STREAM` `NO_ERROR` or `STOP_SENDING` `H3_NO_ERROR`, instead of being
-  read first; and on HTTP/1.1 the request stream is closed once disposed, as on HTTP/2
-  and HTTP/3. See
+  `Expect: 100-continue` body answers with `Connection: close`; and on HTTP/1.1 the
+  request stream is closed once disposed, as on HTTP/2 and HTTP/3. A body the handler
+  never opens no longer holds back the response: request cleanup used to read it first,
+  under the body limit and read deadline, and turn an uncommitted response into 408 or
+  413 when the body stalled or ran over. Now the handler's response goes out first. HTTP/1.1
+  then discards the body under the keep-alive deadline, the body limit and the read
+  deadline, and closes the connection when one of them ends the discard; HTTP/2 and
+  HTTP/3 end the stream with `RST_STREAM` `NO_ERROR` or `STOP_SENDING` `H3_NO_ERROR`. See
   [migration](docs/compatibility/neo-v1-to-v2.md#finite-request-limit-defaults).
 - Correct two request-body defects that the new defaults would have exposed widely. On
   HTTP/1.1, a handler that disposed the request stream while a body read deadline was

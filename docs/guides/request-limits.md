@@ -136,12 +136,13 @@ connection continue.
 
 **Unread bodies.** When the handler returns, the server reads the rest of a body the
 handler opened, so an excess byte the handler never read still fails the request with
-413 while the response is not committed. On HTTP/1.1 it also reads a body the handler
-never opened, under the byte limit and the read deadline, before it reuses the
-connection. On HTTP/2 and HTTP/3 it leaves a body the handler never opened to the
-transport: after the response, HTTP/2 resets the stream with `NO_ERROR` and HTTP/3
-sends `STOP_SENDING` with `H3_NO_ERROR` (RFC 9113 section 8.1, RFC 9114 section 4.1).
-The response is not held back for that body, and neither limit applies to it.
+413 while the response is not committed; each read of that drain waits at most the read
+deadline. A body the handler never opened does not hold back the response. On HTTP/1.1
+the connection discards it after the response, under the keep-alive deadline, the byte
+limit and the read deadline, and closes instead of carrying another request when any of
+them ends the discard. On HTTP/2 and HTTP/3 the transport ends it after the response:
+HTTP/2 resets the stream with `NO_ERROR` and HTTP/3 sends `STOP_SENDING` with
+`H3_NO_ERROR` (RFC 9113 section 8.1, RFC 9114 section 4.1).
 
 ### `100 Continue`
 
@@ -346,6 +347,7 @@ and is skipped on hosts without QUIC support.
 | Default body read deadline | 60 s on a request with a body | same | same |
 | Body read deadline set to 5 s or null | 5 s, or none | none for null | n/a |
 | Body the handler never opened | n/a | response sent, body left to the transport | same, for a GET without `content-length` |
+| Trickled body the handler never opened | response at once, connection closed at the keep-alive deadline | n/a | n/a |
 | Handler disposes its body view under the read deadline | connection reused | n/a | n/a |
 | Second read of a disposed body | `ArgumentException` from the text helper, `ObjectDisposedException` from the byte helper | n/a | n/a |
 | Decoded limit with `SupportCompressedRequests` | follows the server or route body limit until set | n/a | n/a |

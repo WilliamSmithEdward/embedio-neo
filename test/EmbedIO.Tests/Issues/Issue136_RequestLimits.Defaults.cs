@@ -190,6 +190,55 @@ namespace EmbedIO.Tests.Issues
                 Is.EqualTo("abc|ArgumentException|ObjectDisposedException RawRequestBodyStream|ObjectDisposedException RawRequestBodyStream"));
         }
 
+        // A handler that neither reads the body nor ends its response had both held while request
+        // cleanup drained the body, bounded only by the 60-second wait for each read, so a client
+        // trickling the body held the response, the request and the connection. Cleanup now leaves
+        // an unopened body to the connection: the response goes out at once, and the discard after
+        // it ends at the keep-alive deadline, which a trickle cannot extend.
+        [Test]
+        public async Task TrickledUnopenedBodyHoldsNeitherTheResponseNorTheConnection()
+        {
+            await using var host = Host.Start(o => o.WithConnectionLimits(null, keepAliveTimeout: TimeSpan.FromSeconds(1)), context =>
+            {
+                context.SetHandled();
+                return Task.CompletedTask;
+            }, HttpVerbs.Any);
+            using var socket = await host.ConnectAsync();
+            await socket.SendAsync($"POST / HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 100000\r\n\r\n");
+            using var stop = new System.Threading.CancellationTokenSource();
+            var trickle = TrickleAsync(socket, stop.Token);
+            try
+            {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                Assert.That(await socket.ReadHeadAsync(), Does.StartWith("HTTP/1.1 200"), "The response is not held back for the unread body.");
+                var responded = clock.Elapsed;
+                Assert.That(await socket.ReadToEndAsync(), Is.Empty, "Nothing follows the empty response.");
+                Assert.That(clock.Elapsed - responded, Is.LessThan(TimeSpan.FromSeconds(5)),
+                    "The keep-alive deadline ends the discard although the client keeps sending.");
+            }
+            finally
+            {
+                stop.Cancel();
+                await trickle;
+            }
+        }
+
+        // Sends one body byte every 100 ms, so no read waits long, until stopped or refused.
+        private static async Task TrickleAsync(RawSocket socket, System.Threading.CancellationToken stop)
+        {
+            try
+            {
+                while (!stop.IsCancellationRequested)
+                {
+                    await socket.SendBytesAsync(new[] { (byte)'x' });
+                    await Task.Delay(100, stop);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (IOException) { }
+            catch (ObjectDisposedException) { }
+        }
+
         private static async Task<string> SecondRead(Func<Task<string>> read)
         {
             try { return "read " + await read(); }

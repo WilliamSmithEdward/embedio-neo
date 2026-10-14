@@ -480,7 +480,7 @@ namespace EmbedIO
                         try
                         {
                             if (!rawBodyFailureHandled && !bodyReadFailureHandled && !headerPolicyRejected && context.Request is Net.Internal.HttpListenerRequest http1)
-                                await http1.CompleteBodyInputAsync(context.CancellationToken).ConfigureAwait(false);
+                                await http1.CompleteOpenedBodyInputAsync(context.CancellationToken).ConfigureAwait(false);
                             else if (!rawBodyFailureHandled && !bodyReadFailureHandled && !headerPolicyRejected && context.Request is Net.Internal.MultiplexedRequest multiplexedRequest)
                                 await multiplexedRequest.CompleteBodyInputAsync(context.CancellationToken).ConfigureAwait(false);
                         }

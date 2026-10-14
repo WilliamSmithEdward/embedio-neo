@@ -43,10 +43,10 @@ namespace EmbedIO.Tests
                         await context.Response.OutputStream.FlushAsync(context.CancellationToken);
                         await resume.Task.WaitAsync(context.CancellationToken);
                     }
-                    // The handler deliberately does not read the entity. HTTP/1 cleanup must
-                    // enforce both the raw policy and the body-read deadline before it can
-                    // reuse the connection; HTTP/2 and HTTP/3 leave an unopened body to the
-                    // transport, which ends the stream after the response.
+                    // The handler deliberately does not read the entity. Cleanup leaves an
+                    // unopened body alone: HTTP/1 discards it after the response under the
+                    // connection's drain deadline, the raw policy and the body-read deadline;
+                    // HTTP/2 and HTTP/3 let the transport end the stream after the response.
                     context.SetHandled();
                 }, options => options.WithMaximumRequestBodyBytes(2).WithRequestBodyReadTimeout(TimeSpan.FromMilliseconds(200)),
                 server => server.OnHttpException = async (context, error) =>
@@ -65,10 +65,16 @@ namespace EmbedIO.Tests
                         $"POST /upload HTTP/1.1\r\nHost: localhost:{host.Port}\r\nContent-Length: 1\r\n\r\n"), host.Token);
                     if (!committed)
                     {
+                        // The handler's response goes out first. The connection then discards
+                        // the unopened body under its drain deadline, and the 200 ms read
+                        // deadline closes it when the declared byte never arrives. Cleanup used
+                        // to drain the body ahead of the response and answer 408 instead.
                         var response = await new RawHttp1Reader(wire).ReadResponseAsync(host.Token);
-                        Assert.That(response.Status, Is.EqualTo(408));
-                        Assert.That(Encoding.UTF8.GetString(response.Body), Does.Contain("within the configured time"));
-                        Assert.That(response.Headers["connection"], Is.EqualTo("close"));
+                        Assert.That(response.Status, Is.EqualTo(200));
+                        Assert.That(response.Body, Is.Empty);
+                        var end = new byte[1];
+                        try { Assert.That(await wire.ReadAsync(end, host.Token), Is.Zero, "The connection closes after the response."); }
+                        catch (IOException) { }
                     }
                     else
                     {
@@ -182,8 +188,8 @@ namespace EmbedIO.Tests
                     }
                     await peer.AssertHealthyAsync(host.Token);
                 }
-                Assert.That(Volatile.Read(ref formatted), Is.EqualTo(protocol == 1 && !committed ? 1 : 0),
-                    "Only the uncommitted HTTP/1 cleanup 408 invokes error formatting, exactly once.");
+                Assert.That(Volatile.Read(ref formatted), Is.Zero,
+                    "An unopened body never replaces the handler's response, so nothing is formatted as an error.");
                 Assert.That(host.Server.State, Is.EqualTo(WebServerState.Listening));
             }
             finally { resume.TrySetResult(true); }

@@ -174,6 +174,12 @@ namespace EmbedIO.Net.Internal
             Volatile.Read(ref _limitedInput)?.Retire();
             Volatile.Read(ref _timedInput)?.Retire();
         }
+        // Request cleanup runs before the response ends. A body the handler never opened is left
+        // to the connection, which discards it after the response under its drain deadline and
+        // this body limit (FlushInputAsync), so a slow client holds neither the response nor the
+        // request here. A body the handler opened is still validated now.
+        internal Task CompleteOpenedBodyInputAsync(CancellationToken token)
+            => Volatile.Read(ref _limitedInput) == null ? Task.CompletedTask : CompleteBodyInputAsync(token);
         internal Task CompleteBodyInputAsync(CancellationToken token)
         {
             if (_bodyPolicy == null || KnownBodyRefusal != null || IsContinueOwed) return Task.CompletedTask;

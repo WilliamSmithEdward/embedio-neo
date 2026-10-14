@@ -473,9 +473,15 @@ server that faces untrusted clients. Check these cases:
   it. A second read of the same request throws `ArgumentException` from the text
   helpers and `ObjectDisposedException` from the byte and stream helpers, where it
   returned an empty body. Read the body once and keep the result.
-- **Unread bodies on HTTP/2 and HTTP/3**: a body the handler never opens is no longer
-  read after the response. The server resets the stream with `NO_ERROR`, or on HTTP/3
-  sends `STOP_SENDING` with `H3_NO_ERROR`, so the response is not held back for it.
+- **Bodies the handler never opens** no longer hold back the response. With a body
+  limit configured, request cleanup used to read such a body before the response and
+  answer 408 or 413 instead of the handler's response when the body stalled or ran
+  over. Now the handler's response goes out first. HTTP/1.1 then discards the body under
+  the keep-alive deadline, the body limit and the read deadline, and closes the
+  connection when one of them ends the discard. HTTP/2 resets the stream with
+  `NO_ERROR`, and HTTP/3 sends `STOP_SENDING` with `H3_NO_ERROR`. A body the handler
+  opened is still read to its end during cleanup, and each of those reads waits at most
+  the read deadline.
 
 See [request limits](../guides/request-limits.md#defaults) for the full list.
 
