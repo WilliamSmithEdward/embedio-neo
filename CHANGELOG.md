@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- HTTP/2 and HTTP/3 requests with a request deadline keep hearing the server's stop token
+  through their context token, in the handler and in `OnRequestCompleted` callbacks after it.
+  Installing the deadline disposed the token source behind the token the server captures
+  and restores afterwards. With `WebServer` such a request still ended at shutdown, because
+  stopping the listener cancels its stream, but a host that stops the server without
+  cancelling the stream left the request waiting. HTTP/1 is unaffected.
 - Fix: a graceful HTTP/2 end (a drain or the idle GOAWAY) no longer resets the
   connection. The peer may still be sending, for example WINDOW_UPDATE for the final
   DATA or HEADERS it sent before reading GOAWAY, and closing both directions with
