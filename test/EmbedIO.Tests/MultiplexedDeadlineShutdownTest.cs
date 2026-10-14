@@ -254,7 +254,7 @@ namespace EmbedIO.Tests
 
             internal Task<CancellationToken> Running => _running.Task;
 
-            // The steps WebServer.ProcessRequestsAsync takes for an accepted context.
+            // The steps WebServer takes for each accepted context before handling it.
             internal Task HandleAsync(IHttpContextImpl context, CancellationToken serverToken)
             {
                 context.CancellationToken = serverToken;
