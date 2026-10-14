@@ -69,7 +69,14 @@ namespace EmbedIO.Net.Internal
         public Encoding? ContentEncoding { get; set; } = WebServer.DefaultEncoding;
         public bool KeepAlive { get => _keepAlive; set { EnsureHeaders(); _keepAlive = value; } }
         public bool SendChunked { get => _chunked; set { EnsureHeaders(); _chunked = value; } }
-        public string StatusDescription { get; set; } = "OK";
+        private string _statusDescription = "OK";
+        // HTTP/2 and HTTP/3 carry no reason phrase, but IHttpResponse is one contract: an
+        // application must not get a different answer depending on the protocol it is serving.
+        public string StatusDescription
+        {
+            get => _statusDescription;
+            set => _statusDescription = EmbedIO.Internal.HttpTokenSyntax.ValidatedReasonPhrase(value, nameof(value));
+        }
         public ICookieCollection Cookies => _cookies ??= new CookieList();
         public Version ProtocolVersion => _exchange.ProtocolVersion;
         private bool SuppressBody => _exchange.Request.Method == "HEAD" || _status == 204 || _status == 205 || _status == 304;

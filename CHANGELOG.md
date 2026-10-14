@@ -32,6 +32,28 @@
   keyed by the requested path, and a case-insensitive file system maps every spelling of a
   name to the same file, so a client could grow the cache without bound by varying the
   case it asked for. Past 1024 entries a mapping still succeeds, uncached.
+- Security: nothing an application puts in an HTTP/1 response head can start a field of its
+  own. The reason phrase was written into the status line unvalidated, so assigning
+  untrusted text to `IHttpResponse.StatusDescription` injected response headers, and
+  `System.Net.HttpListenerResponse`, which the managed response mirrors, has always refused
+  that. A cookie reached the field section the same way, because `System.Net.Cookie` does
+  not refuse control characters in a value and a cookie is serialized without passing
+  through `WebHeaderCollection`. `WebHeaderCollection` itself refuses a bare CRLF in a
+  value but accepts one followed by a space, which is obs-fold, and RFC 9112, Section 5.2
+  says a server must not generate it. The reason phrase is now refused where it is
+  assigned, on both response types so that one `IHttpResponse` contract behaves the same
+  on every protocol, and the field section, cookies included, is held to the character rule
+  that HTTP/2, HTTP/3, informational sections and trailers already enforce. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#response-field-and-reason-phrase-validation).
+- Security: a ban falls on the client that earned it. `IPBanningRegexCriterion` reads
+  process-wide diagnostic messages and charged each match to `IPBanningModule.ClientAddress`,
+  which holds whichever request passed through the module last, from any thread. A message
+  produced by one client could therefore ban another, and an offender's own matches could be
+  charged elsewhere. Matches are now charged to the request a message names, so a message
+  naming no request the module handled is charged to nobody. `ClientAddress` is unchanged
+  and still public, and nothing decides anything by reading it.
+- `BasicAuthenticationModule` compares a password in time that does not depend on how many
+  characters matched, and an unknown user now costs the same work as a known one.
 - WebSocket closes end in time, and stopping the server closes WebSockets cleanly. A close
   on a protocol error or a rejected message, and `Dispose`, now give up after one second
   when the close frame cannot be written, for example because the client stopped reading,
