@@ -39,7 +39,14 @@ namespace EmbedIO.Net.Internal
         }
         public WebHeaderCollection Headers { get; } = new();
         public Encoding? ContentEncoding { get; set; } = WebServer.DefaultEncoding;
-        public string StatusDescription { get; set; } = "OK";
+        private string _statusDescription = "OK";
+        // Refused where it is assigned, as System.Net.HttpListenerResponse does: this text goes
+        // straight into the status line, so a control character would start a field of its own.
+        public string StatusDescription
+        {
+            get => _statusDescription;
+            set => _statusDescription = EmbedIO.Internal.HttpTokenSyntax.ValidatedReasonPhrase(value, nameof(value));
+        }
         public Version ProtocolVersion => _request.ProtocolVersion.Minor == 0 ? HttpVersion.Version10 : HttpVersion.Version11;
         public Stream OutputStream => _output ??= _transport.GetResponseStream();
         // Body bytes sent so far; zero when no body was written.

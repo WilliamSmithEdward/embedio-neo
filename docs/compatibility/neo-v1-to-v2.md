@@ -539,6 +539,43 @@ An application that relied on a percent-encoded separator to select a nested res
 must send the real separator instead. On Unix, a file whose name contains a backslash is
 no longer reachable through `%5C`; rename it if it has to be served.
 
+## Response field and reason phrase validation
+
+Neo v2 refuses control characters in the text an application puts into an HTTP/1 response
+head, because that text is written into the status line and the field section as it stands.
+
+`IHttpResponse.StatusDescription` now throws `ArgumentException` when it is assigned a value
+carrying a control character, which is what `System.Net.HttpListenerResponse` has always
+done. Both response implementations validate, so the contract does not change with the
+protocol being served, even though HTTP/2 and HTTP/3 carry no reason phrase.
+
+Field values are validated as the head is produced, and an invalid one throws
+`InvalidOperationException` naming the field. This covers a value holding obs-fold, a CRLF
+followed by a space, which `WebHeaderCollection` accepts and RFC 9112, Section 5.2 forbids a
+server from generating. A cookie is checked where its text is produced, since
+`System.Net.Cookie` does not refuse control characters in a value.
+
+The rule is the one HTTP/2, HTTP/3, informational sections and chunked trailers already
+applied: no character below 32 other than HTAB, not 127, and nothing above 255, the last
+because the HTTP/1 head is encoded as ISO-8859-1 and a higher character could not be
+represented there anyway.
+
+An application that assigned such text was emitting a malformed response, and in the case of
+the reason phrase and cookie values an attacker-controlled value could start a field of its
+own. If any of this text comes from a request, validate or encode it before assigning it.
+
+## Bans are charged to the requesting client
+
+`IPBanningRegexCriterion` matches diagnostic messages, which are written for the whole
+process. It previously charged a match to `IPBanningModule.ClientAddress`, the last client
+seen by the module, so under concurrent traffic a message from one client could ban another.
+
+A match is now charged to the client of the request the message names. A message that names
+no request the module handled is charged to nobody, so a route the module does not guard no
+longer bans anyone. Mounting the module on `/`, the default, keeps every request in scope and
+behaves as before. `ClientAddress` keeps its meaning and its visibility; it reports the last
+client seen and is no longer consulted for any decision.
+
 <a id="release-preparation-still-required"></a>
 
 ## Before deployment
