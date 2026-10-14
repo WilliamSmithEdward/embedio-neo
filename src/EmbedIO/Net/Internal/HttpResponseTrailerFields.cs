@@ -8,7 +8,9 @@ using EmbedIO.Net.Internal.Http2;
 namespace EmbedIO.Net.Internal
 {
     // Applications remain responsible for choosing fields whose definitions
-    // permit trailer use (RFC 9110 6.5.1). Reject known early-only fields here.
+    // permit trailer use (RFC 9110 6.5.1). Reject known early-only fields here,
+    // which includes all seven response control data fields of RFC 9110 6.6.1:
+    // Age, Cache-Control, Expires, Date, Location, Retry-After and Vary.
     internal static class HttpResponseTrailerFields
     {
         internal static string LowercaseName(string name)
@@ -81,9 +83,14 @@ namespace EmbedIO.Net.Internal
                     case "www-authenticate":
                     case "proxy-authenticate":
                     case "set-cookie":
+                    // Response control data, RFC 9110 6.6.1.
+                    case "age":
                     case "cache-control":
+                    case "date":
+                    case "expires":
                     case "location":
                     case "retry-after":
+                    case "vary":
                         throw new InvalidDataException("This field must be sent before response content.");
                 }
             }

@@ -145,7 +145,16 @@ namespace EmbedIO.Tests
         [TestCase("content-type", "text/plain")]
         [TestCase("authorization", "Bearer example")]
         [TestCase("set-cookie", "name=value")]
+        // The response control data of RFC 9110, Section 6.6.1, which Section 6.5.1 keeps
+        // out of a trailer section. Each case also sends an ordinary trailer afterwards,
+        // so the refusal has to leave the encoder able to finish the section.
+        [TestCase("age", "60")]
+        [TestCase("cache-control", "no-store")]
+        [TestCase("date", "Tue, 14 Oct 2026 09:00:00 GMT")]
+        [TestCase("expires", "Tue, 14 Oct 2026 10:00:00 GMT")]
         [TestCase("location", "/other")]
+        [TestCase("retry-after", "120")]
+        [TestCase("vary", "accept-encoding")]
         [TestCase("x-invalid", "value\r\ninjected: true")]
         public async Task InvalidResponseTrailersDoNotCommitOrPoisonTheEncoder(string name, string value)
         {
