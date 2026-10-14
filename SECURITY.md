@@ -106,7 +106,9 @@ pinned SDK image to the SDK global.json names once MCR publishes that tag. The j
 that writes accepts only the pin and lock-file changes an SDK move can make.
 Because a pull request opened with the workflow's own token starts no workflows,
 it starts CI, Security and Malware scan on the branch itself. These pull requests
-stay open for review of every exact-head check. The .NET SDK canary builds and
+stay open for review of every exact-head check, and a workload-set pull request
+opens as a draft labelled `needs owner decision`, because a workload set can move
+the Apple packs to a newer Xcode. The .NET SDK canary builds and
 tests with the newest SDK weekly, ahead of the pin; it is informational.
 
 ### Semgrep installation
