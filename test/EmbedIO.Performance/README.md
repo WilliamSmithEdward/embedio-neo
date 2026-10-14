@@ -155,7 +155,8 @@ JSON input normalization on a plain and on a legacy-syntax document, byte-range
 selection (two ranges, and one open-ended range through the public helper), a
 Priority dictionary, a 64-chunk chunked body, a 2 KB DEFLATE stream through the
 framing validator, and an HTTP/3 control stream carrying SETTINGS and eight
-PRIORITY_UPDATE frames. Each row reports ns/op and B/op over 100,000 operations
+PRIORITY_UPDATE frames, URL-encoded data with and without grouped flags, and a
+gzip-then-deflate request coding chain. Each row reports ns/op and B/op over 100,000 operations
 after warmup, and every operation validates its result; the output names the
 core assembly and its SHA-256. Use the same runner against baseline and
 candidate cores (copy the output and replace only `EmbedIO.dll`), alternate the

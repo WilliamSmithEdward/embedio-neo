@@ -9,12 +9,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using EmbedIO;
+using EmbedIO.Utilities;
 
 // --parser-timing measures the parsers restructured in the complexity pass: JSON
 // input normalization, byte-range selection, Priority dictionaries, chunked request
-// bodies, DEFLATE framing validation and HTTP/3 control frames. Run the same build
-// against a baseline and a candidate EmbedIO.dll (copy the output and replace only
-// the core) and compare ns/op and B/op; every operation validates its result.
+// bodies, DEFLATE framing validation, HTTP/3 control frames, URL-encoded data and
+// request coding chains. Run the same build against a baseline and a candidate
+// EmbedIO.dll (copy the output and replace only the core) and compare ns/op and
+// B/op; every operation validates its result.
 internal static class ParserTiming
 {
     internal static bool Run(string[] args)
@@ -29,6 +31,8 @@ internal static class ParserTiming
         MeasureChunked(assembly);
         MeasureDeflate(assembly);
         MeasureControl(assembly);
+        MeasureUrlEncoded();
+        MeasureCodingChain(assembly);
         return true;
     }
 
@@ -174,6 +178,48 @@ internal static class ParserTiming
         if (value < 16384) return new[] { (byte)(0x40 | (value >> 8)), (byte)value };
         if (value < 1073741824) return new[] { (byte)(0x80 | (value >> 24)), (byte)(value >> 16), (byte)(value >> 8), (byte)value };
         return new[] { (byte)(0xC0 | (value >> 56)), (byte)(value >> 48), (byte)(value >> 40), (byte)(value >> 32), (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value };
+    }
+
+    private static void MeasureUrlEncoded()
+    {
+        var query = "?id=12345&name=Neo+bench&tag=a&tag=b&city=Z%C3%BCrich&flag&item[0]=first&item[1]=second";
+        Measure("url-encoded-query-" + query.Length, () => UrlEncodedDataParser.Parse(query, false).Count, 6);
+        Measure("url-encoded-grouped-" + query.Length, () => UrlEncodedDataParser.Parse(query, true).Count, 6);
+    }
+
+    private static void MeasureCodingChain(Assembly assembly)
+    {
+        var type = assembly.GetType("EmbedIO.Internal.RequestCodingChain", true) ?? throw new InvalidOperationException("Missing coding chain.");
+        var method = type.GetMethod("TryOpen", BindingFlags.Static | BindingFlags.NonPublic) ?? throw new InvalidOperationException("Missing TryOpen.");
+        var source = Expression.Parameter(typeof(Stream));
+        var decoded = Expression.Variable(typeof(Stream));
+        var open = Expression.Lambda<Func<Stream, Stream?>>(
+            Expression.Block(new[] { decoded },
+                Expression.Condition(
+                    Expression.Call(method, source, Expression.Constant("gzip, deflate"), Expression.Constant(true), decoded),
+                    decoded, Expression.Constant(null, typeof(Stream)))),
+            source).Compile();
+        var payload = new byte[64];
+        for (var i = 0; i < payload.Length; i++) payload[i] = (byte)('a' + i % 26);
+        var encoded = Encode(Encode(payload, "gzip"), "deflate");
+        var buffer = new byte[256];
+        Measure("request-coding-gzip-deflate-" + encoded.Length, () =>
+        {
+            using var memory = new MemoryStream(encoded, false);
+            using var stream = open(memory) ?? throw new InvalidOperationException("Rejected request codings.");
+            var total = 0;
+            int read;
+            while ((read = stream.Read(buffer, 0, buffer.Length)) != 0) total += read;
+            return total;
+        }, 64);
+    }
+
+    private static byte[] Encode(byte[] body, string coding)
+    {
+        using var output = new MemoryStream();
+        using (Stream encoder = coding == "gzip" ? new GZipStream(output, CompressionMode.Compress, true) : new DeflateStream(output, CompressionMode.Compress, true))
+            encoder.Write(body, 0, body.Length);
+        return output.ToArray();
     }
 
     // Only the members the range selectors read are populated.
