@@ -110,7 +110,24 @@ namespace EmbedIO.Generators
                     // Escape the marker too, so a literal "_0040" cannot collide with '@'.
                     encoded.Append('_').Append(((int)character).ToString("X4", CultureInfo.InvariantCulture));
             }
-            return encoded.ToString() + ".ControllerBindings.g.cs";
+            // Roslyn requires hint names to be unique ignoring case, while namespaces and types are
+            // case-sensitive: two contexts named One.Bindings and ONE.Bindings made AddSource throw,
+            // and a generator that throws contributes nothing at all to the compilation. The suffix
+            // keeps the readable name and still tells those apart, being taken from the exact one.
+            return encoded.Append('.').Append(Fingerprint(name)).Append(".ControllerBindings.g.cs").ToString();
+        }
+
+        // FNV-1a over the exact name: stable across runs and processes, unlike string.GetHashCode.
+        private static string Fingerprint(string name)
+        {
+            var hash = 2166136261u;
+            foreach (var character in name)
+            {
+                hash ^= character;
+                hash *= 16777619u;
+            }
+
+            return hash.ToString("x8", CultureInfo.InvariantCulture);
         }
     }
 }

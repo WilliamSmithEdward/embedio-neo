@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Two more controller binding generator corrections. Two binding contexts whose full names
+  differed only in case, such as `One.Bindings` and `ONE.Bindings`, gave the generator two
+  hint names that Roslyn considers equal; it threw, and a generator that throws contributes
+  nothing, so every generated binding in that compilation disappeared. Generated file names
+  now carry a short fingerprint of the exact name, so a project that pins generated file
+  paths, such as one building with `EmitCompilerGeneratedFiles` or keeping a checked-in
+  snapshot of them, sees new file names. A `CultureInfo` query or form field was
+  rejected with EMBEDIO009 although the reflection-based binding converts it, so it joins the
+  intrinsic converters, with the converter-parity test covering it.
 - The controller binding generator no longer emits code a consumer cannot build. A binding for
   a controller or route marked `[Obsolete]` warned (CS0612, CS0618) in the generated file, which
   fails a build that treats warnings as errors; the generated file now suppresses those two

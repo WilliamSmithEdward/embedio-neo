@@ -167,6 +167,41 @@ public sealed class C : WebApiController { [Route(HttpVerbs.Get, ""/{id}"")] pub
             Assert.That(result.GeneratorDiagnostics, Is.Empty);
             Assert.That(result.Generated, Does.Contain("global::Thing __arg1 = default(global::Thing);"));
         }
+        // Hint names are unique ignoring case, while namespaces are case-sensitive, so two contexts
+        // whose full names differ only in case used to make the generator throw. A generator that
+        // throws contributes nothing, so every binding in the compilation disappeared, not just
+        // these two.
+        [Test]
+        public void ContextsDifferingOnlyInCaseEachGenerate()
+        {
+            var result = Run(Usings + @"
+public sealed class C : WebApiController { [Route(HttpVerbs.Get, ""/"")] public string Get() { return """"; } }
+namespace One { [GeneratedControllerBinding(typeof(C))] internal static partial class Bindings { } }
+namespace ONE { [GeneratedControllerBinding(typeof(C))] internal static partial class Bindings { } }");
+
+            Assert.That(result.GeneratorDiagnostics, Is.Empty, string.Join("\n", result.GeneratorDiagnostics));
+            Assert.That(result.Generated, Does.Contain("namespace One").And.Contain("namespace ONE"));
+            Assert.That(result.CompilationDiagnostics.Where(d => d.Severity >= DiagnosticSeverity.Error),
+                Is.Empty, string.Join("\n", result.CompilationDiagnostics));
+        }
+
+        // A query or form field converts through the same intrinsic converter the reflection-based
+        // binding uses, so a type TypeDescriptor can convert must not be rejected here.
+        [Test]
+        public void ATypeDescriptorConvertibleParameterBinds()
+        {
+            var result = Run("using System.Globalization; " + Usings + @"
+public sealed class C : WebApiController
+{
+    [Route(HttpVerbs.Get, ""/"")] public string Get([QueryField] CultureInfo culture) { return """"; }
+}
+[GeneratedControllerBinding(typeof(C))] internal static partial class B { }");
+
+            Assert.That(result.GeneratorDiagnostics.Select(d => d.Id), Does.Not.Contain("EMBEDIO009"),
+                string.Join("\n", result.GeneratorDiagnostics));
+            Assert.That(result.CompilationDiagnostics.Where(d => d.Severity >= DiagnosticSeverity.Error),
+                Is.Empty, string.Join("\n", result.CompilationDiagnostics));
+        }
 
         // A deprecated route still answers requests, so its binding must compile. The generated
         // file carries the obsolete call, and a consumer that treats warnings as errors would

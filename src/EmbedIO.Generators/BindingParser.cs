@@ -45,6 +45,7 @@ namespace EmbedIO.Generators
             ("System.Int128", "System.ComponentModel.Int128Converter"),
             ("System.UInt128", "System.ComponentModel.UInt128Converter"),
             ("System.Half", "System.ComponentModel.HalfConverter"),
+            ("System.Globalization.CultureInfo", "System.ComponentModel.CultureInfoConverter"),
         };
 
         private readonly Compilation _compilation;
