@@ -16,9 +16,11 @@ internal static class ListenerQueue
             listener.Start(); // No prefixes: exercise the accept queue without opening sockets.
             var queue = ListenerInventory.Pending(listener);
             // Register through the listener so the gate measures its real admission path.
+            // No dispatcher is installed here, so every registration takes the queue path
+            // that GetContextAsync serves and returns null rather than a handler task.
             var register = ((typeof(EmbedIO.Net.HttpListener).GetMethod("RegisterContext", BindingFlags.Instance | BindingFlags.NonPublic))
                 ?? throw new System.InvalidOperationException("Expected a non-null test value."))
-                .CreateDelegate<Action<EmbedIO.Net.HttpListener, IHttpContextImpl>>();
+                .CreateDelegate<Func<EmbedIO.Net.HttpListener, IHttpContextImpl, Task?>>();
             var contexts = Enumerable.Range(0, size).Select(index =>
             {
                 var context = RuntimeHelpers.GetUninitializedObject(contextType);
