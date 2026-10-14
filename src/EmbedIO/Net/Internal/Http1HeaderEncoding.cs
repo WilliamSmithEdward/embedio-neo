@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Text;
+using EmbedIO.Internal;
 
 namespace EmbedIO.Net.Internal
 {
@@ -22,6 +23,7 @@ namespace EmbedIO.Net.Internal
                 foreach (var cookie in response.ExistingCookies) ResponseCookieFields.AppendLine(builder, cookie, response);
                 cookies = builder.ToString();
             }
+            ValidateHead(response, rawCookies);
             var version = response.ProtocolVersion == HttpVersion.Version11 ? "1.1"
                 : response.ProtocolVersion == HttpVersion.Version10 ? "1.0" : response.ProtocolVersion.ToString();
             var status = response.StatusCode.ToString(CultureInfo.InvariantCulture);
@@ -57,6 +59,31 @@ namespace EmbedIO.Net.Internal
             stream.Position = preamble.Length;
 
             return stream;
+        }
+
+        // WebHeaderCollection refuses a bare CRLF in a value but accepts one followed by a
+        // space, which is obs-fold, and RFC 9112, Section 5.2 says a server must not generate
+        // it. Nothing above 255 survives the ISO-8859-1 head either. The other three response
+        // paths validate through Http2RequestHeaders.ValidateField, so HTTP/1 is held to the
+        // same rule here, before any byte of the head exists. Values are scanned once; the
+        // encoder reads them again immediately afterwards.
+        private static void ValidateHead(HttpListenerResponse response, string[]? rawCookies)
+        {
+            if (!HttpTokenSyntax.IsValidFieldValue(response.StatusDescription))
+                throw new InvalidOperationException("The reason phrase carries control characters.");
+
+            var headers = response.Headers;
+            for (var index = 0; index < headers.Count; index++)
+            {
+                var value = headers.Get(index);
+                if (value != null && !HttpTokenSyntax.IsValidFieldValue(value))
+                    throw new InvalidOperationException($"The {headers.GetKey(index)} response field carries control characters.");
+            }
+
+            if (rawCookies == null) return;
+            foreach (var cookie in rawCookies)
+                if (cookie != null && !HttpTokenSyntax.IsValidFieldValue(cookie))
+                    throw new InvalidOperationException("A Set-Cookie response field carries control characters.");
         }
 
         private static int GetHeaderBufferCapacity(HttpListenerResponse response, int headerSize, int preambleSize, int bodyCount)

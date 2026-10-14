@@ -525,6 +525,9 @@ namespace EmbedIO
                         }
                     }
 
+                    // The leading "[id]" is read back: IPBanningModule.ResolveMessageClient takes
+                    // the request id from it to charge a criterion match to the right client, and
+                    // BanAttributionTest pins the shape. Keep the id first if this text changes.
                     if (Log.IsEnabled(TraceEventType.Information))
                     {
                         var handlingMilliseconds = (long)((Stopwatch.GetTimestamp() - requestStarted) * MillisecondsPerTimestamp);

@@ -30,6 +30,7 @@ internal static class ParserTiming
         Console.WriteLine($"core: {assembly.Location}; sha256={Hash(assembly.Location)}");
         MeasureJson(assembly);
         MeasureRanges();
+        MeasureResponseFields(assembly);
         MeasurePriority(assembly);
         MeasureChunked(assembly);
         MeasureDeflate(assembly);
@@ -70,6 +71,56 @@ internal static class ParserTiming
         var expected = normalize(legacy, JsonCommentHandling.Skip).Length;
         Measure("json-normalize-plain-" + plain.Length, () => ReferenceEquals(normalize(plain, JsonCommentHandling.Skip), plain) ? plain.Length : -1, plain.Length);
         Measure("json-normalize-legacy-" + legacy.Length, () => normalize(legacy, JsonCommentHandling.Skip).Length, expected);
+    }
+
+    // What the response-head validation costs per response. A baseline core has no such
+    // check, so its cost is zero by construction and this measures the whole addition. The
+    // copy of the same values, which the encoder performs immediately afterwards either way,
+    // is measured beside it to give the number a scale.
+    private static void MeasureResponseFields(Assembly assembly)
+    {
+        // A response EmbedIO writes itself: Vary, Content-Type, Server, Date, framing,
+        // Connection, and a session cookie.
+        var values = new[]
+        {
+            "Accept-Encoding",
+            "text/plain; charset=utf-8",
+            "EmbedIO/2.0.0+0a67aba81fc0cb37b53390ad550b0671f208da84",
+            "Wed, 14 Oct 2026 11:31:04 GMT",
+            "chunked",
+            "keep-alive",
+            "__session=5trkVx1rQk2hO2tAXk5Dmw; Path=/; HttpOnly",
+        };
+
+        var type = assembly.GetType("EmbedIO.Internal.HttpTokenSyntax", false);
+        var method = type?.GetMethod("IsValidFieldValue", BindingFlags.Static | BindingFlags.NonPublic);
+        if (method == null)
+        {
+            Console.WriteLine($"response-field-validate-{values.Length}: absent from this core, so it costs nothing here");
+        }
+        else
+        {
+            var valid = method.CreateDelegate<Func<string, bool>>();
+            Measure("response-field-validate-" + values.Length, () =>
+            {
+                var accepted = 0;
+                foreach (var value in values) accepted += valid(value) ? 1 : 0;
+                return accepted;
+            }, values.Length);
+        }
+
+        var destination = new char[512];
+        Measure("response-field-copy-" + values.Length, () =>
+        {
+            var position = 0;
+            foreach (var value in values)
+            {
+                value.AsSpan().CopyTo(destination.AsSpan(position));
+                position += value.Length;
+            }
+
+            return position;
+        }, values.Sum(value => value.Length));
     }
 
     private static void MeasureRanges()

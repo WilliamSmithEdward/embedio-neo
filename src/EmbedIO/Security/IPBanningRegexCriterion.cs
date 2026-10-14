@@ -173,9 +173,13 @@ namespace EmbedIO.Security
             /// <inheritdoc />
             private void OnMessage(string message)
             {
-                var clientAddress = _parent._parent.ClientAddress;
+                if (string.IsNullOrWhiteSpace(message))
+                    return;
 
-                if (clientAddress == null || string.IsNullOrWhiteSpace(message))
+                // The message names its own request, so the match is charged to that request's
+                // client. A message from no request this module handled is charged to nobody.
+                var clientAddress = _parent._parent.ResolveMessageClient(message);
+                if (clientAddress == null)
                     return;
 
                 _parent.MatchIP(clientAddress, message);
