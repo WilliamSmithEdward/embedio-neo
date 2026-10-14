@@ -73,6 +73,20 @@
   End to end over HTTP/1.1 with a browser's `Accept-Encoding` (load benchmark `-json`
   scenarios, roles alternated), requests per second rose 1.23x, 3.08x and 3.62x for the
   1 KiB, 64 KiB and 1 MiB documents, and server CPU per request fell to 0.82x, 0.32x and 0.28x.
+- Refuse to share an HTTPS endpoint between listeners that present different server
+  certificates. Owners share an endpoint only with the same `ServerCertificateSource`
+  instance or with certificates that compare equal by hash (a combined listener's internal
+  source counts as its fixed certificate); a second owner with another certificate, or a
+  fixed certificate beside a source the application can rotate, is refused before its routes are
+  published, with "different server certificates" in the `HttpListenerException`, and
+  the first owner keeps serving. Before, the endpoint presented its opener's certificate
+  and TLS policy to every owner, even after the opener left. The TLS-policy
+  compatibility rules are unchanged.
+- Refuse to start an https prefix on a managed listener that has neither a certificate
+  nor a certificate source: `Start` throws `InvalidOperationException`, and
+  `WebServer.RunAsync` faults with it, instead of opening the port and dropping every
+  connection at the TLS handshake. The HTTP/3 and combined listeners already refused a
+  missing certificate at construction.
 - HTTP/2 and HTTP/3 requests with a request deadline keep hearing the server's stop token
   through their context token, in the handler and in `OnRequestCompleted` callbacks after it.
   Installing the deadline disposed the token source behind the token the server captures
