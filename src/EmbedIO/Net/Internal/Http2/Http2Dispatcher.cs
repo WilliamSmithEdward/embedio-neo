@@ -22,6 +22,8 @@ namespace EmbedIO.Net.Internal.Http2
         private readonly CancellationTokenSource _stop = new();
         private readonly CancellationTokenSource _inputStop = new();
         private bool _gracefulInputEnd;
+        // True once RunAsync ended by a graceful drain whose final frames were all written.
+        internal bool EndedGracefully { get; private set; }
         private Task _creditPump = Task.CompletedTask;
         private bool _pumping;
         private int _running;
@@ -160,7 +162,11 @@ namespace EmbedIO.Net.Internal.Http2
                 // Queue a barrier behind controls already committed while the last
                 // application finished. Normal drain must not cancel shared output.
                 if (graceful && !_stop.IsCancellationRequested)
-                    try { await _connection.SendAsync(Array.Empty<Http2Frame>(), _stop.Token).ConfigureAwait(false); }
+                    try
+                    {
+                        await _connection.SendAsync(Array.Empty<Http2Frame>(), _stop.Token).ConfigureAwait(false);
+                        EndedGracefully = !_stop.IsCancellationRequested;
+                    }
                     catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
             }
             if (_failure != null) throw new IOException("HTTP/2 connection failed.", _failure);

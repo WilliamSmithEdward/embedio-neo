@@ -8,6 +8,13 @@
   and restores afterwards. With `WebServer` such a request still ended at shutdown, because
   stopping the listener cancels its stream, but a host that stops the server without
   cancelling the stream left the request waiting. HTTP/1 is unaffected.
+- Fix: a graceful HTTP/2 end (a drain or the idle GOAWAY) no longer resets the
+  connection. The peer may still be sending, for example WINDOW_UPDATE for the final
+  DATA or HEADERS it sent before reading GOAWAY, and closing both directions with
+  those bytes unread sent a TCP reset that discarded responses the peer had not read
+  yet. The connection now half-closes after its final frames and reads and discards
+  input until the peer closes, for at most 2 seconds, before it closes (RFC 9112
+  section 9.6).
 - Dispatch each admitted TCP request straight from its connection to the server's
   handler instead of queueing it for the accept loop, in plain and combined mode. The
   HTTP/1.1 actor starts the handler on its own thread and then yields to the thread
