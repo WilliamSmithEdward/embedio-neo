@@ -49,7 +49,7 @@ project. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 6052
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 6065
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -63,7 +63,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 6052 executed/reported test cases to catch accidental discovery loss; update
+least 6065 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
 suite budget is eight minutes on Windows/Linux and twelve minutes for macOS CI
 coverage. William approved the macOS increase on 2026-10-13 after CI
