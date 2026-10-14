@@ -4,6 +4,12 @@
 
 ## [2.0.0] - Unreleased
 
+- HTTP/2 and HTTP/3 requests with a request deadline keep hearing the server's stop token
+  through their context token, in the handler and in `OnRequestCompleted` callbacks after it.
+  Installing the deadline disposed the token source behind the token the server captures
+  and restores afterwards. With `WebServer` such a request still ended at shutdown, because
+  stopping the listener cancels its stream, but a host that stops the server without
+  cancelling the stream left the request waiting. HTTP/1 is unaffected.
 - Build and test with .NET SDK 10.0.402 and runtime 10.0.13, the 13 October 2026
   security release. Package dependency minimums move from 10.0.12 to 10.0.13:
   `System.Threading.RateLimiting` on both core targets, `System.Text.Json` on the
