@@ -143,15 +143,17 @@ namespace EmbedIO.Tests
                 await (Task)(Method("EmbedIO.Net.Internal.Http2.Http2Dispatcher", "RunAsync", BindingFlags.Instance)
                     .Invoke(dispatcher, new object[] { dispatch, stop.Token }) ?? throw new AssertionException("Missing dispatch."));
             });
+            // The client stays open until the server has stopped. Closing it first can reset the
+            // connection under the dispatcher's pending read, which RunAsync reports as a failure.
+            using var handler = new SocketsHttpHandler { UseProxy = false };
+            using var client = new HttpClient(handler)
+            {
+                DefaultRequestVersion = HttpVersion.Version20,
+                DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact,
+                Timeout = Timeout.InfiniteTimeSpan,
+            };
             try
             {
-                using var handler = new SocketsHttpHandler { UseProxy = false };
-                using var client = new HttpClient(handler)
-                {
-                    DefaultRequestVersion = HttpVersion.Version20,
-                    DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact,
-                    Timeout = Timeout.InfiniteTimeSpan,
-                };
                 await verify(client, new Uri($"http://127.0.0.1:{local.Port}/shutdown"));
             }
             finally
@@ -203,21 +205,22 @@ namespace EmbedIO.Tests
                 await (Task)(Method("EmbedIO.Net.Internal.Http3.Http3QuicConnection", "RunAsync", BindingFlags.Static)
                     .Invoke(null, new object[] { connection, dispatch, stop.Token }) ?? throw new AssertionException("Missing connection."));
             });
+            // As over HTTP/2, the client stays open until the server has stopped.
+            using var handler = new SocketsHttpHandler
+            {
+                SslOptions = new SslClientAuthenticationOptions
+                {
+                    RemoteCertificateValidationCallback = (_, peer, _, _) => peer?.GetCertHashString() == certificate.GetCertHashString(),
+                },
+            };
+            using var client = new HttpClient(handler)
+            {
+                DefaultRequestVersion = HttpVersion.Version30,
+                DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact,
+                Timeout = Timeout.InfiniteTimeSpan,
+            };
             try
             {
-                using var handler = new SocketsHttpHandler
-                {
-                    SslOptions = new SslClientAuthenticationOptions
-                    {
-                        RemoteCertificateValidationCallback = (_, peer, _, _) => peer?.GetCertHashString() == certificate.GetCertHashString(),
-                    },
-                };
-                using var client = new HttpClient(handler)
-                {
-                    DefaultRequestVersion = HttpVersion.Version30,
-                    DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact,
-                    Timeout = Timeout.InfiniteTimeSpan,
-                };
                 await verify(client, new Uri($"https://127.0.0.1:{local.Port}/shutdown"));
             }
             finally
