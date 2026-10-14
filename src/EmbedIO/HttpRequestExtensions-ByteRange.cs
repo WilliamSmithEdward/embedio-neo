@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using EmbedIO.Utilities;
 
 namespace EmbedIO
@@ -28,54 +29,76 @@ namespace EmbedIO
             if (contentLength < 0) throw new ArgumentOutOfRangeException(nameof(contentLength));
             start = 0;
             length = contentLength;
-            var currentWeak = false;
-            if (entityTag != null)
-            {
-                var offset = 0;
-                if (!ReadEntityTag(entityTag, ref offset, out currentWeak, out _, out _) || offset != entityTag.Length)
-                    throw new ArgumentException("Invalid selected-representation entity tag.", nameof(entityTag));
-            }
+            var currentWeak = IsWeakEntityTag(entityTag, "Invalid selected-representation entity tag.", nameof(entityTag));
             if (request.HttpMethod is not ("GET" or "QUERY")) return false;
             var range = request.Headers[HttpHeaderNames.Range];
             if (range is null) return false;
             var ifRange = request.Headers[HttpHeaderNames.IfRange];
             if (ifRange != null && !RangeValidatorMatches(ifRange, entityTag, currentWeak, lastModified, lastModifiedIsStrong)) return false;
             var index = 0;
+            if (!ReadBytesUnit(range, ref index)) return false;
             SkipTagWhitespace(range, ref index);
-            if (range.Length - index < 6 || string.Compare(range, index, "bytes=", 0, 6, StringComparison.OrdinalIgnoreCase) != 0) return false;
-            index += 6;
-            SkipTagWhitespace(range, ref index);
-            var suffix = index < range.Length && range[index] == '-';
-            if (suffix) index++;
-            if (!ReadRangeNumber(range, ref index, out var first, out var firstStart, out var firstDigits)) return false;
-            long end = contentLength - 1;
-            if (!suffix)
-            {
-                if (index == range.Length || range[index++] != '-') return false;
-                if (index < range.Length && range[index] is >= '0' and <= '9')
-                {
-                    if (!ReadRangeNumber(range, ref index, out end, out var endStart, out var endDigits)) return false;
-                    if (firstDigits > endDigits || firstDigits == endDigits
-                        && string.Compare(range, firstStart, range, endStart, firstDigits, StringComparison.Ordinal) > 0) return false;
-                }
-            }
+            if (!ReadRangeSpec(range, ref index, contentLength - 1, out var suffix, out var first, out var end)) return false;
             SkipTagWhitespace(range, ref index);
             if (index != range.Length) return false;
             if (suffix && first == 0) throw HttpException.RangeNotSatisfiable(contentLength);
             if (contentLength == 0) return false;
-            if (suffix)
-            {
-                start = first >= contentLength ? 0 : contentLength - first;
-                length = contentLength - start;
-            }
-            else
-            {
-                if (first >= contentLength) throw HttpException.RangeNotSatisfiable(contentLength);
-                start = first;
-                end = Math.Min(end, contentLength - 1);
-                length = end - start + 1;
-            }
+            if (!suffix && first >= contentLength) throw HttpException.RangeNotSatisfiable(contentLength);
+            var selected = Select(suffix, first, end, contentLength);
+            start = selected.Start;
+            length = selected.Length;
             return true;
+        }
+
+        // The application's entity tag must be a complete, valid tag; its
+        // weakness decides whether If-Range can match it.
+        private static bool IsWeakEntityTag(string? tag, string message, string parameterName)
+        {
+            if (tag == null) return false;
+            var cursor = 0;
+            if (!ReadEntityTag(tag, ref cursor, out var weak, out _, out _) || cursor != tag.Length)
+                throw new ArgumentException(message, parameterName);
+            return weak;
+        }
+
+        // Only the bytes unit is supported, case-insensitively, after optional whitespace.
+        private static bool ReadBytesUnit(string value, ref int index)
+        {
+            SkipTagWhitespace(value, ref index);
+            if (value.Length - index < 6 || string.Compare(value, index, "bytes=", 0, 6, StringComparison.OrdinalIgnoreCase) != 0) return false;
+            index += 6;
+            return true;
+        }
+
+        // One "first-last", "first-" or "-suffix" specification. An omitted last byte
+        // means lastByte; a last byte numerically below the first byte is rejected
+        // by digit count and then by digit order, so overlong numbers never overflow.
+        private static bool ReadRangeSpec(string value, ref int index, long lastByte, out bool suffix, out long first, out long end)
+        {
+            end = lastByte;
+            suffix = index < value.Length && value[index] == '-';
+            if (suffix) index++;
+            if (!ReadRangeNumber(value, ref index, out first, out var firstStart, out var firstDigits)) return false;
+            if (suffix) return true;
+            if (index == value.Length || value[index++] != '-') return false;
+            if (index == value.Length || value[index] is not (>= '0' and <= '9')) return true;
+            if (!ReadRangeNumber(value, ref index, out end, out var endStart, out var endDigits)) return false;
+            return firstDigits < endDigits
+                || (firstDigits == endDigits && string.Compare(value, firstStart, value, endStart, firstDigits, StringComparison.Ordinal) <= 0);
+        }
+
+        // A suffix of zero bytes or a first byte past the end selects nothing.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsSatisfiable(bool suffix, long first, long total)
+            => total != 0 && (suffix ? first != 0 : first < total);
+
+        // The bytes a satisfiable specification selects from a representation of the given length.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static SelectedByteRange Select(bool suffix, long first, long end, long total)
+        {
+            var start = suffix ? (first >= total ? 0 : total - first) : first;
+            var last = suffix ? total - 1 : Math.Min(end, total - 1);
+            return new SelectedByteRange(start, last - start + 1);
         }
         private static bool RangeValidatorMatches(string value, string? current, bool currentWeak,
             DateTimeOffset? modified, bool strongDate)
