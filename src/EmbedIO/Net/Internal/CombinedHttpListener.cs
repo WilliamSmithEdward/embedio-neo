@@ -96,7 +96,7 @@ namespace EmbedIO.Net.Internal
                 _drained = false;
             }
         }
-        // The TCP transport dispatches directly; QUIC requests keep the pull path through GetContextAsync.
+        // Both transports dispatch directly; a request admitted before the install keeps the pull path through GetContextAsync.
         void IDispatchingHttpListener.SetDispatcher(Func<IHttpContextImpl, Task> dispatcher)
         {
             lock (_sync)
@@ -184,7 +184,11 @@ namespace EmbedIO.Net.Internal
             internal bool IsRunning => Volatile.Read(ref _stopping) == 0;
             internal void SetIgnoreWriteExceptions(bool value)
             { _tcp.IgnoreWriteExceptions = value; _quic.IgnoreWriteExceptions = value; }
-            internal void SetDispatcher(Func<IHttpContextImpl, Task> dispatcher) => ((IDispatchingHttpListener)_tcp).SetDispatcher(dispatcher);
+            internal void SetDispatcher(Func<IHttpContextImpl, Task> dispatcher)
+            {
+                ((IDispatchingHttpListener)_tcp).SetDispatcher(dispatcher);
+                ((IDispatchingHttpListener)_quic).SetDispatcher(dispatcher);
+            }
             internal static Session Start(ServerCertificateSource certificates, ServerTlsPolicy? policy, List<string> prefixes, bool ignoreWriteExceptions, bool native, bool deferContinue, TcpConnectionPolicy connections, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
             {
                 var tcp = new HttpListener(certificates, bodyPolicy);

@@ -1,4 +1,4 @@
-using System.Collections.Specialized;
+﻿using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -73,7 +73,7 @@ internal static class AuditAllocations
         }, 11, null);
     }
 
-    private static void Measure(string name, Func<int> operation, int expected, int? maxBytes)
+    internal static void Measure(string name, Func<int> operation, int expected, int? maxBytes)
     {
         const int iterations = 100000;
         for (var i = 0; i < 1000; i++) _ = operation();

@@ -1,0 +1,801 @@
+# url_encoded: 800 cases, 3 input columns, seed 17044075560282641615
+item[0]=?&item[0]=1	1	1	count:1|item=[?],[1]|mutable:1
+KEY=x y&&&item[0]=x y&%zz=a=b	0	1	count:4|KEY=[x y]|=[],[]|item=[x y]|%zz=[a=b]|mutable:1
+a&a%26b=\u0001&&item[1]=\u0001&&&caf%C3%A9=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&	0	1	count:5|a=[]|a&b=[\u0001]|=[],[],[],[],[]|item=[\u0001]|caf\u00e9=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+?&k%5B0%5D=%C3&key=%41%42;x.y=%=%;a=v\u0000w	0	1	count:3|=[]|k=[\ufffd]|key=[AB;x.y=%=%;a=v\u0000w]|mutable:1
+a[b][c]=%C3&&	1	1	count:2|a=[\ufffd]|<null>=[],[]|mutable:1
+a[b][c]	1	0	count:1|<null>=[a[b][c]]|mutable:0
+a====;\u00e9	0	1	count:1|a=[===;\u00e9]|mutable:1
+=1&&a==v\u0000w&KEY=&k%5B0%5D=	1	1	count:5|=[1]|<null>=[]|a=[=v\u0000w]|KEY=[]|k=[]|mutable:1
+KEY=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&a%26b=a&&&&%zz=%C3=%C3	0	1	count:4|KEY=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|a&b=[a]|=[],[],[]|%zz=[\ufffd=\ufffd]|mutable:1
+[x]=a=b&&a==&&&sp ace=%u0041&&&key=%E2%82&a%26b=%80	1	1	count:6|[x]=[a=b]|<null>=[],[],[],[],[]|a=[=]|sp ace=[%u0041]|key=[\ufffd]|a&b=[\ufffd]|mutable:1
+x.y=%F0%9F%98%80&key=%E2%82&item[0]=\u0001=\u0001&k%5B0%5D=&caf%C3%A9	1	1	count:5|x.y=[\ud83d\ude00]|key=[\ufffd]|item=[\u0001=\u0001]|k=[]|<null>=[caf\u00e9]|mutable:1
+na%6De=hello+world&item[]=%4&&	0	1	count:3|name=[hello world]|item=[%4]|=[],[]|mutable:1
+%E2%82%AC=true=true&=%C3	0	1	count:2|\u20ac=[true=true]|=[\ufffd]|mutable:1
+a==2&%E2%82%AC=\u0001;a=%u0041=%u0041&%2=x y	0	1	count:3|a=[=2]|\u20ac=[\u0001;a=%u0041=%u0041]|%2=[x y]|mutable:1
+item[0]=2&	1	1	count:2|item=[2]|<null>=[]|mutable:1
+A=a=b&%2&&sp ace=true	1	1	count:3|A=[a=b]|<null>=[%2],[]|sp ace=[true]|mutable:1
+key=%F0%9F%98%80&item[0]=;item[0]=%	1	0	count:2|key=[\ud83d\ude00]|item=[;item[0]=%]|mutable:0
+	1	1	count:0|mutable:1
+==	0	1	count:1|=[=]|mutable:1
+n-m==longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&a=%	0	0	count:2|n-m=[=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|a=[%]|mutable:0
+??	1	0	count:1|<null>=[?]|mutable:0
+?na%6De=%	1	1	count:1|name=[%]|mutable:1
+%2=1&caf%C3%A9=Z%C3%BCrich	1	0	count:2|%2=[1]|caf\u00e9=[Z\u00fcrich]|mutable:0
+[x]=\u00e9&&&x.y=	0	0	count:3|[x]=[\u00e9]|=[],[]|x.y=[]|mutable:0
+%=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=	1	1	count:1|%=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=]|mutable:1
+%E2%82%AC=%4&&=%u0041&caf%C3%A9==&na%6De==hello+world	0	1	count:4|\u20ac=[%4]|=[],[%u0041]|caf\u00e9=[=]|name=[=hello world]|mutable:1
+?&key;KEY&a=?;item[]=%u0041	0	1	count:3|=[]|key;KEY=[]|a=[?;item[]=%u0041]|mutable:1
+caf%C3%A9=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&%zz=\u00e9=\u00e9;=a=b&key&x.y=\u0001=	0	0	count:5|caf\u00e9=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|=[]|%zz=[\u00e9=\u00e9;=a=b]|key=[]|x.y=[\u0001=]|mutable:0
+k%5B0%5D=%E2%82&a=%E2%82&=true	0	1	count:3|k=[\ufffd]|a=[\ufffd]|=[true]|mutable:1
+?+plus+==%41%42&&=1&k%5B0%5D=%80	0	1	count:3| plus =[=AB]|=[],[1]|k=[\ufffd]|mutable:1
+?sp ace=\u00e9=\u00e9&&item[]=%80&=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	1	count:4|sp ace=[\u00e9=\u00e9]|<null>=[]|item=[\ufffd]|=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+n-m=a=b;=%F0%9F%98%80	1	1	count:1|n-m=[a=b;=\ud83d\ude00]|mutable:1
+=%&a==true	1	1	count:2|=[%]|a=[=true]|mutable:1
+??	0	0	count:1|?=[]|mutable:0
+KEY==%u0041	1	0	count:1|KEY=[=%u0041]|mutable:0
+	0	1	count:0|mutable:1
+??a=true&&a&a==&item[0]==%F0%9F%98%80&&&key=a=b=a=b	0	1	count:5|?a=[true]|=[],[],[]|a=[],[=]|item=[=\ud83d\ude00]|key=[a=b=a=b]|mutable:1
+?[x]=&&&A=\u00e9;n-m	0	1	count:3|[x]=[]|=[],[]|A=[\u00e9;n-m]|mutable:1
+item[]===&key==%F0%9F%98%80&&a=?&+plus+=x y=x y&&k%5B0%5D	1	1	count:5|item=[==]|key=[=\ud83d\ude00]|<null>=[],[],[k[0]]|a=[?]| plus =[x y=x y]|mutable:1
+	1	1	count:0|mutable:1
+n-m=1=1	0	1	count:1|n-m=[1=1]|mutable:1
+?	1	1	count:0|mutable:1
+?&	0	0	count:1|=[],[]|mutable:0
+caf%C3%A9=%F0%9F%98%80&A=%2B%26%3D&=2	0	1	count:3|caf\u00e9=[\ud83d\ude00]|A=[+&=]|=[2]|mutable:1
+k%5B0%5D=hello+world&a==?&k=v&a=	0	0	count:2|k=[hello world],[v]|a=[=?],[]|mutable:0
+?na%6De=v\u0000w&=2;item[]=	0	0	count:2|name=[v\u0000w]|=[2;item[]=]|mutable:0
+	0	1	count:0|mutable:1
+?\u20ac=Z%C3%BCrich&KEY&&item[1]=a&;sp ace=%2B%26%3D	0	1	count:5|\u20ac=[Z\u00fcrich]|KEY=[]|=[]|item=[a]|;sp ace=[+&=]|mutable:1
+	1	0	count:0|mutable:0
+?&=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&n-m=%C3&&=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&a==2	0	1	count:3|=[],[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv],[],[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|n-m=[\ufffd]|a=[=2]|mutable:1
+%zz=%41%42&\u20ac=%E2%82=%E2%82&&key==hello+world&KEY&sp ace=%u0041	1	1	count:5|%zz=[AB]|\u20ac=[\ufffd=\ufffd]|<null>=[],[KEY]|key=[=hello world]|sp ace=[%u0041]|mutable:1
+?x.y;[x]=%F0%9F%98%80=%F0%9F%98%80&item[1]=%80&=	1	1	count:3|x.y;=[\ud83d\ude00=\ud83d\ude00]|item=[\ufffd]|=[]|mutable:1
+?item[]=;\u00e9==%80&\u20ac==x y&&a=%u0041&&key	0	1	count:5|item=[;\u00e9==\ufffd]|\u20ac=[=x y]|=[],[]|a=[%u0041]|key=[]|mutable:1
+[x]=hello+world&&&a[b][c]=x y=x y&&=%C3	1	1	count:4|[x]=[hello world]|<null>=[],[],[]|a=[x y=x y]|=[\ufffd]|mutable:1
+??a=2=2&&a=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&\u00e9=Z%C3%BCrich	0	1	count:4|?a=[2=2]|=[],[]|a=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|\u00e9=[Z\u00fcrich]|mutable:1
+?item[0]=	0	1	count:1|item=[]|mutable:1
+key=v\u0000w&&\u00e9=%E2%82&a=a=b&na%6De==&k%5B0%5D==%	0	1	count:6|key=[v\u0000w]|=[]|\u00e9=[\ufffd]|a=[a=b]|name=[=]|k=[=%]|mutable:1
+a=\u0001	0	1	count:1|a=[\u0001]|mutable:1
+??item[0]==v\u0000w&&key==a=b&&	1	1	count:3|?item=[=v\u0000w]|<null>=[],[],[]|key=[=a=b]|mutable:1
+?=a&&A=%F0%9F%98%80;k=v=%2B%26%3D=%2B%26%3D&&key=a&&item[]=%C3&&	1	1	count:5|=[a]|<null>=[],[],[],[],[]|A=[\ud83d\ude00;k=v=+&==+&=]|key=[a]|item=[\ufffd]|mutable:1
+?key=%E2%82&k=v=%C3&a[b][c]=?&KEY==true	0	0	count:3|key=[\ufffd],[=true]|k=[v=\ufffd]|a=[?]|mutable:0
+	0	0	count:0|mutable:0
+?&a[b][c]=v\u0000w=v\u0000w&a%26b	1	1	count:2|<null>=[],[a&b]|a=[v\u0000w=v\u0000w]|mutable:1
+a=Z%C3%BCrich	0	1	count:1|a=[Z\u00fcrich]|mutable:1
+?=v\u0000w&&item[0]=%&&a=\u00e9&x.y==;A=%C3	1	1	count:5|=[v\u0000w]|<null>=[],[]|item=[%]|a=[\u00e9]|x.y=[=;A=\ufffd]|mutable:1
+=	1	0	count:1|=[]|mutable:0
+key=&\u00e9=&&%=a&;%E2%82%AC=%u0041&+plus+=%=%	1	1	count:6|key=[]|\u00e9=[]|<null>=[]|%=[a]|;\u20ac=[%u0041]| plus =[%=%]|mutable:1
+\u20ac==%41%42&%&a[b][c]=2&&&item[]=%4	1	1	count:4|\u20ac=[=AB]|<null>=[%],[],[]|a=[2]|item=[%4]|mutable:1
+?a=hello+world&+plus+=x y	0	0	count:2|a=[hello world]| plus =[x y]|mutable:0
+=true	0	1	count:1|=[true]|mutable:1
+x.y=true&&&==%41%42	1	1	count:3|x.y=[true]|<null>=[],[]|=[=AB]|mutable:1
+[x]==1&\u20ac=	1	0	count:2|[x]=[=1]|\u20ac=[]|mutable:0
+??a=true&n-m=%80;a=&item[1]=%F0%9F%98%80=%F0%9F%98%80	1	1	count:3|?a=[true]|n-m=[\ufffd;a=]|item=[\ud83d\ude00=\ud83d\ude00]|mutable:1
+?&=;;=?	1	0	count:2|<null>=[]|=[;;=?]|mutable:0
+?&	1	1	count:1|<null>=[],[]|mutable:1
+key=%4=%4&A=%&=%F0%9F%98%80;=%41%42&sp ace=%C3	1	1	count:4|key=[%4=%4]|A=[%]|=[\ud83d\ude00;=AB]|sp ace=[\ufffd]|mutable:1
+?&key=%&\u20ac=\u0001&==	0	0	count:3|=[],[=]|key=[%]|\u20ac=[\u0001]|mutable:0
+key=%C3&&&na%6De=a=b;=%E2%82&[x]=	0	0	count:4|key=[\ufffd]|=[],[]|name=[a=b;=\ufffd]|[x]=[]|mutable:0
+?item[1]=%E2%82&\u00e9=&sp ace==%E2%82	1	1	count:3|item=[\ufffd]|\u00e9=[]|sp ace=[=\ufffd]|mutable:1
+?	0	0	count:0|mutable:0
+?item[]=&KEY=\u0001=\u0001&key	1	1	count:3|item=[]|KEY=[\u0001=\u0001]|<null>=[key]|mutable:1
+?key=1	1	1	count:1|key=[1]|mutable:1
+\u20ac=a=b&&&\u00e9=&+plus+=&=%80&=	1	1	count:5|\u20ac=[a=b]|<null>=[],[]|\u00e9=[]| plus =[]|=[\ufffd],[]|mutable:1
++plus+=%u0041&\u20ac=2	0	1	count:2| plus =[%u0041]|\u20ac=[2]|mutable:1
+	0	1	count:0|mutable:1
+%zz==1&&&\u00e9=\u00e9&key=hello+world&&	1	0	count:4|%zz=[=1]|<null>=[],[],[],[]|\u00e9=[\u00e9]|key=[hello world]|mutable:0
+=true	1	1	count:1|=[true]|mutable:1
+?&\u20ac==%E2%82&na%6De=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&[x]==&a=%E2%82=%E2%82	0	1	count:5|=[]|\u20ac=[=\ufffd]|name=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|[x]=[=]|a=[\ufffd=\ufffd]|mutable:1
+a=Z%C3%BCrich=Z%C3%BCrich&key=%u0041&&&\u00e9=%80&&KEY=%41%42	1	1	count:4|a=[Z\u00fcrich=Z\u00fcrich]|key=[%u0041],[AB]|<null>=[],[],[]|\u00e9=[\ufffd]|mutable:1
+a=x y&&&\u00e9=&&A==\u00e9&&KEY=&&&a[b][c]==	1	0	count:4|a=[x y],[=\u00e9],[=]|<null>=[],[],[],[],[],[]|\u00e9=[]|KEY=[]|mutable:0
+a%26b==longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&&%E2%82%AC&A&+plus+=x y&%E2%82%AC=a&=	1	1	count:5|a&b=[=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|<null>=[],[],[\u20ac],[A]| plus =[x y]|\u20ac=[a]|=[]|mutable:1
+n-m=?&&&%E2%82%AC==\u00e9	0	1	count:3|n-m=[?]|=[],[]|\u20ac=[=\u00e9]|mutable:1
+caf%C3%A9=;%E2%82%AC=x y&&&==&&&\u20ac=%80	0	1	count:3|caf\u00e9=[;\u20ac=x y]|=[],[],[=],[],[]|\u20ac=[\ufffd]|mutable:1
+?&KEY=true&&&item[0]=true=true	1	1	count:3|<null>=[],[],[]|KEY=[true]|item=[true=true]|mutable:1
+	1	1	count:0|mutable:1
+?a==longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&item[]=Z%C3%BCrich=Z%C3%BCrich&item[1]=\u00e9&&x.y=%E2%82&+plus+==%2B%26%3D	0	0	count:5|a=[=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|item=[Z\u00fcrich=Z\u00fcrich],[\u00e9]|=[]|x.y=[\ufffd]| plus =[=+&=]|mutable:0
+?a=?=?&+plus+=Z%C3%BCrich&=\u00e9	0	0	count:3|a=[?=?]| plus =[Z\u00fcrich]|=[\u00e9]|mutable:0
+??item[1]===&&&=hello+world&&&A=&&%2==&=	1	1	count:5|?item=[==]|<null>=[],[],[],[],[]|=[hello world],[]|A=[]|%2=[=]|mutable:1
+k%5B0%5D=%F0%9F%98%80&x.y=\u00e9&&a=&caf%C3%A9=%C3=%C3&&sp ace	0	0	count:6|k=[\ud83d\ude00]|x.y=[\u00e9]|=[],[]|a=[]|caf\u00e9=[\ufffd=\ufffd]|sp ace=[]|mutable:0
+?&KEY=%=%&+plus+=%41%42&a=Z%C3%BCrich&&&=%F0%9F%98%80&a=%4	0	1	count:4|=[],[],[],[\ud83d\ude00]|KEY=[%=%]| plus =[AB]|a=[Z\u00fcrich],[%4]|mutable:1
+a%26b=x y&&&key=%4&+plus+&na%6De=%E2%82&a%26b==	0	1	count:5|a&b=[x y],[=]|=[],[]|key=[%4]| plus =[]|name=[\ufffd]|mutable:1
+=1&item[]=%F0%9F%98%80=%F0%9F%98%80	0	1	count:2|=[1]|item=[\ud83d\ude00=\ud83d\ude00]|mutable:1
+n-m=%C3=%C3	0	1	count:1|n-m=[\ufffd=\ufffd]|mutable:1
+A=x y&%E2%82%AC=1=1&%zz=?&&&k%5B0%5D	0	0	count:5|A=[x y]|\u20ac=[1=1]|%zz=[?]|=[],[]|k=[]|mutable:0
+?&key=v\u0000w&%==	0	1	count:3|=[]|key=[v\u0000w]|%=[=]|mutable:1
+	1	1	count:0|mutable:1
+key=%41%42&sp ace=%41%42=%41%42&	0	1	count:3|key=[AB]|sp ace=[AB=AB]|=[]|mutable:1
+	0	1	count:0|mutable:1
+====;%2=	0	1	count:1|=[===;%2=]|mutable:1
+caf%C3%A9=\u0001;+plus+	0	1	count:1|caf\u00e9=[\u0001; plus ]|mutable:1
+?item[1]=a=b&&&+plus+=&sp ace==	1	0	count:4|item=[a=b]|<null>=[],[]| plus =[]|sp ace=[=]|mutable:0
+?&	1	1	count:1|<null>=[],[]|mutable:1
+?=%	0	0	count:1|=[%]|mutable:0
+?item[]=v\u0000w&KEY=Z%C3%BCrich&&sp ace=&item[]=%F0%9F%98%80	1	0	count:4|item=[v\u0000w],[\ud83d\ude00]|KEY=[Z\u00fcrich]|<null>=[]|sp ace=[]|mutable:0
+x.y==%4	1	1	count:1|x.y=[=%4]|mutable:1
+?	0	0	count:0|mutable:0
+item[]==%C3&&\u00e9=2	1	1	count:3|item=[=\ufffd]|<null>=[]|\u00e9=[2]|mutable:1
+	1	0	count:0|mutable:0
+caf%C3%A9=%2B%26%3D&&%zz=Z%C3%BCrich	0	1	count:3|caf\u00e9=[+&=]|=[]|%zz=[Z\u00fcrich]|mutable:1
+a%26b=?=?&a[b][c]=%F0%9F%98%80=%F0%9F%98%80	1	1	count:2|a&b=[?=?]|a=[\ud83d\ude00=\ud83d\ude00]|mutable:1
+??%=%41%42=%41%42&&&a%26b;a&\u20ac=&&%	0	1	count:5|?%=[AB=AB]|=[],[],[]|a&b;a=[]|\u20ac=[]|%=[]|mutable:1
+=\u0001&&a	1	0	count:2|=[\u0001]|<null>=[],[a]|mutable:0
+??na%6De&&&\u20ac=%4&&KEY=a=b&&item[0]=Z%C3%BCrich	1	1	count:4|<null>=[?name],[],[],[],[]|\u20ac=[%4]|KEY=[a=b]|item=[Z\u00fcrich]|mutable:1
+?item[]&=	1	1	count:2|<null>=[item[]]|=[]|mutable:1
+	0	1	count:0|mutable:1
+?	0	0	count:0|mutable:0
+a%26b=&&&item[]=%E2%82=%E2%82&x.y=\u0001=\u0001&=a=b&a=\u00e9	1	1	count:6|a&b=[]|<null>=[],[]|item=[\ufffd=\ufffd]|x.y=[\u0001=\u0001]|=[a=b]|a=[\u00e9]|mutable:1
+?	0	1	count:0|mutable:1
+?item[]=%C3&k%5B0%5D;=a&	0	1	count:3|item=[\ufffd]|k=[a]|=[]|mutable:1
+a=\u00e9&&&=\u00e9	1	1	count:3|a=[\u00e9]|<null>=[],[]|=[\u00e9]|mutable:1
+a==%2B%26%3D	0	1	count:1|a=[=+&=]|mutable:1
+&&	1	1	count:1|<null>=[],[],[]|mutable:1
+??%zz==%E2%82&&&item[0]&=2	0	1	count:3|?%zz=[=\ufffd]|=[],[],[2]|item=[]|mutable:1
+==&&&\u00e9==	0	1	count:2|=[=],[],[]|\u00e9=[=]|mutable:1
+a[b][c]=====	1	1	count:1|a=[====]|mutable:1
+item[1]=%&n-m==&=%2B%26%3D&a=%C3	0	1	count:4|item=[%]|n-m=[=]|=[+&=]|a=[\ufffd]|mutable:1
+k=v=x y=x y&%2=;n-m&&&=?	1	1	count:4|k=[v=x y=x y]|%2=[;n-m]|<null>=[],[]|=[?]|mutable:1
+%2=%u0041=%u0041&caf%C3%A9&&&[x]==%C3	0	1	count:4|%2=[%u0041=%u0041]|caf\u00e9=[]|=[],[]|[x]=[=\ufffd]|mutable:1
+	0	1	count:0|mutable:1
+??KEY==	0	1	count:1|?KEY=[=]|mutable:1
+\u00e9=%4	1	0	count:1|\u00e9=[%4]|mutable:0
+KEY=%4&	1	0	count:2|KEY=[%4]|<null>=[]|mutable:0
+?&%E2%82%AC=%&&&=%F0%9F%98%80&\u20ac&=\u0001&a=\u0001	0	1	count:3|=[],[],[],[\ud83d\ude00],[\u0001]|\u20ac=[%],[]|a=[\u0001]|mutable:1
+	1	1	count:0|mutable:1
+?&\u00e9=x y;=a&&item[0]=a&&&&=%;=%4	0	0	count:3|=[],[],[],[],[],[%;=%4]|\u00e9=[x y;=a]|item=[a]|mutable:0
+?a=a&&	1	0	count:2|a=[a]|<null>=[],[]|mutable:0
+a%26b=&item[0]&%zz=%C3&%2=Z%C3%BCrich	1	1	count:4|a&b=[]|<null>=[item[0]]|%zz=[\ufffd]|%2=[Z\u00fcrich]|mutable:1
+=&caf%C3%A9==\u00e9&na%6De=&&a=hello+world	0	1	count:4|=[],[]|caf\u00e9=[=\u00e9]|name=[]|a=[hello world]|mutable:1
+?&a=&x.y=	1	1	count:3|<null>=[]|a=[]|x.y=[]|mutable:1
+=\u00e9&sp ace=\u00e9&sp ace==longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&a=Z%C3%BCrich&a%26b=\u0001=\u0001	0	1	count:4|=[\u00e9],[]|sp ace=[\u00e9],[=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|a=[Z\u00fcrich]|a&b=[\u0001=\u0001]|mutable:1
+	1	1	count:0|mutable:1
+a[b][c]==Z%C3%BCrich&%E2%82%AC=&&&=1	0	1	count:3|a=[=Z\u00fcrich]|\u20ac=[]|=[],[],[1]|mutable:1
+a%26b=&key=\u0001&=a=b&&%=&&&a=	1	0	count:6|a&b=[]|key=[\u0001]|=[a=b]|<null>=[],[],[]|%=[]|a=[]|mutable:0
+?%E2%82%AC=%4=%4&==&k%5B0%5D=%u0041	0	1	count:3|\u20ac=[%4=%4]|=[=]|k=[%u0041]|mutable:1
+?%==;key=true&k%5B0%5D=;a=v\u0000w&&&A=hello+world	0	0	count:4|%=[=;key=true]|k=[;a=v\u0000w]|=[],[]|A=[hello world]|mutable:0
+?=v\u0000w	1	0	count:1|=[v\u0000w]|mutable:0
+\u20ac=a=b&\u00e9=\u0001	0	0	count:2|\u20ac=[a=b]|\u00e9=[\u0001]|mutable:0
+?a=	0	1	count:1|a=[]|mutable:1
+%=a&=a&&%=2	1	1	count:3|%=[a],[2]|=[a]|<null>=[]|mutable:1
+&=	0	1	count:1|=[],[]|mutable:1
+key=?;a%26b=\u0001=\u0001&+plus+&%2=\u0001=\u0001	0	1	count:3|key=[?;a&b=\u0001=\u0001]| plus =[]|%2=[\u0001=\u0001]|mutable:1
+=v\u0000w&&na%6De&k%5B0%5D==a=b	0	1	count:3|=[v\u0000w],[]|name=[]|k=[=a=b]|mutable:1
+?a%26b=hello+world&x.y=%u0041&\u20ac=&&&a=\u00e9&&a==1	0	1	count:5|a&b=[hello world]|x.y=[%u0041]|\u20ac=[]|=[],[],[]|a=[\u00e9],[=1]|mutable:1
+x.y=%80&&=&+plus+=&k=v&n-m==x y	0	0	count:5|x.y=[\ufffd]|=[],[]| plus =[]|k=[v]|n-m=[=x y]|mutable:0
+k=v=	0	1	count:1|k=[v=]|mutable:1
+a%26b=&a=\u0001=\u0001&[x]=%u0041=%u0041;x.y=1&a%26b=%C3=%C3	1	1	count:3|a&b=[],[\ufffd=\ufffd]|a=[\u0001=\u0001]|[x]=[%u0041=%u0041;x.y=1]|mutable:1
+=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&a=%&a=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&a%26b=%;[x]==v\u0000w	0	1	count:3|=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv],[]|a=[%],[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|a&b=[%;[x]==v\u0000w]|mutable:1
+%2=true&\u20ac=1&%zz=v\u0000w&key=Z%C3%BCrich	1	1	count:4|%2=[true]|\u20ac=[1]|%zz=[v\u0000w]|key=[Z\u00fcrich]|mutable:1
+?a[b][c]=&sp ace=%F0%9F%98%80	1	1	count:2|a=[]|sp ace=[\ud83d\ude00]|mutable:1
+a=%4;\u20ac=%&&item[]=x y&&&a[b][c]=%C3	1	1	count:3|a=[%4;\u20ac=%],[\ufffd]|<null>=[],[],[]|item=[x y]|mutable:1
+item[0]==&x.y=true&sp ace=&a=%E2%82&=2&&	1	0	count:6|item=[=]|x.y=[true]|sp ace=[]|a=[\ufffd]|=[2]|<null>=[],[]|mutable:0
+=a&&=%F0%9F%98%80&&&na%6De=Z%C3%BCrich	0	1	count:2|=[a],[],[\ud83d\ude00],[],[]|name=[Z\u00fcrich]|mutable:1
+item[1]=\u0001&na%6De=a&&k%5B0%5D=?&KEY	1	1	count:4|item=[\u0001]|name=[a]|<null>=[],[KEY]|k=[?]|mutable:1
+?x.y=%	0	1	count:1|x.y=[%]|mutable:1
+item[1]=%80;item[];item[1]=x y	1	1	count:1|item=[\ufffd;item[];item[1]=x y]|mutable:1
+?A==a=b	1	1	count:1|A=[=a=b]|mutable:1
+a%26b=true&&&+plus+;key=&na%6De	1	1	count:3|a&b=[true]|<null>=[],[],[name]| plus ;key=[]|mutable:1
+x.y==?&=;k=v=x y&item[1]&k%5B0%5D==	0	0	count:4|x.y=[=?]|=[;k=v=x y]|item=[]|k=[=]|mutable:0
+a=a=b&A==true&%2=&==	1	1	count:3|a=[a=b],[=true]|%2=[]|=[=]|mutable:1
+	1	0	count:0|mutable:0
+?item[1]=%C3&%2==%u0041&\u20ac=hello+world=hello+world&&&=%2B%26%3D	0	0	count:4|item=[\ufffd]|%2=[=%u0041]|\u20ac=[hello world=hello world]|=[],[],[+&=]|mutable:0
+=%E2%82;a	0	1	count:1|=[\ufffd;a]|mutable:1
+?	0	1	count:0|mutable:1
+?a%26b=a&;[x];==	1	1	count:2|a&b=[a]|;=[=]|mutable:1
+a[b][c]=\u00e9&sp ace=%E2%82	1	1	count:2|a=[\u00e9]|sp ace=[\ufffd]|mutable:1
++plus+=\u0001	0	0	count:1| plus =[\u0001]|mutable:0
+??item[0]=	0	0	count:1|?item=[]|mutable:0
+k=v=%u0041	1	1	count:1|k=[v=%u0041]|mutable:1
+%E2%82%AC=a=b&&&k=v=;%2=	0	1	count:3|\u20ac=[a=b]|=[],[]|k=[v=;%2=]|mutable:1
+?A==%4&%=v\u0000w=v\u0000w&=	0	0	count:3|A=[=%4]|%=[v\u0000w=v\u0000w]|=[]|mutable:0
+?	0	1	count:0|mutable:1
+=2	0	0	count:1|=[2]|mutable:0
+KEY=v\u0000w&%2=&&=%F0%9F%98%80	0	1	count:3|KEY=[v\u0000w]|%2=[]|=[],[\ud83d\ude00]|mutable:1
+a==	0	1	count:1|a=[=]|mutable:1
+=%4&\u00e9&&a=%C3	0	0	count:3|=[%4],[]|\u00e9=[]|a=[\ufffd]|mutable:0
+	1	0	count:0|mutable:0
+	1	1	count:0|mutable:1
+sp ace	0	1	count:1|sp ace=[]|mutable:1
+=%80&&\u20ac=true	0	1	count:2|=[\ufffd],[]|\u20ac=[true]|mutable:1
+na%6De==Z%C3%BCrich=	0	1	count:1|name=[=Z\u00fcrich=]|mutable:1
+?&%2=%u0041&=x y&\u20ac=&=2	0	1	count:3|=[],[x y],[2]|%2=[%u0041]|\u20ac=[]|mutable:1
+[x]=2&a==%F0%9F%98%80&KEY==%4&&x.y=a&&na%6De=%F0%9F%98%80	0	1	count:6|[x]=[2]|a=[=\ud83d\ude00]|KEY=[=%4]|=[],[]|x.y=[a]|name=[\ud83d\ude00]|mutable:1
+?&%=%F0%9F%98%80&%E2%82%AC=true&=a=b&[x]==Z%C3%BCrich&&&+plus+=x y=x y&&	0	0	count:5|=[],[a=b],[],[],[],[]|%=[\ud83d\ude00]|\u20ac=[true]|[x]=[=Z\u00fcrich]| plus =[x y=x y]|mutable:0
+item[]=&\u20ac=&=%41%42=	0	0	count:3|item=[]|\u20ac=[]|=[AB=]|mutable:0
+key=%F0%9F%98%80&na%6De=&=1&k%5B0%5D==\u00e9&A=?=?	1	1	count:5|key=[\ud83d\ude00]|name=[]|=[1]|k=[=\u00e9]|A=[?=?]|mutable:1
+??KEY=%4&&%2=hello+world	0	1	count:3|?KEY=[%4]|=[]|%2=[hello world]|mutable:1
+n-m=?&item[0]=1=1&key;KEY=x y=x y	1	1	count:3|n-m=[?]|item=[1=1]|key;KEY=[x y=x y]|mutable:1
+?item[1]=Z%C3%BCrich&&%E2%82%AC&%E2%82%AC=&item[0]=%u0041&=?	1	0	count:4|item=[Z\u00fcrich],[%u0041]|<null>=[],[\u20ac]|\u20ac=[]|=[?]|mutable:0
+a%26b=Z%C3%BCrich=Z%C3%BCrich	0	0	count:1|a&b=[Z\u00fcrich=Z\u00fcrich]|mutable:0
+?[x]=2&%E2%82%AC=%2B%26%3D;=a=b&&=v\u0000w&item[0]=&&	1	1	count:5|[x]=[2]|\u20ac=[+&=;=a=b]|<null>=[],[],[]|=[v\u0000w]|item=[]|mutable:1
+	0	0	count:0|mutable:0
+k%5B0%5D=%u0041	1	1	count:1|k=[%u0041]|mutable:1
+=%E2%82&caf%C3%A9=&=%41%42	0	1	count:2|=[\ufffd],[AB]|caf\u00e9=[]|mutable:1
+key=&&&=%2B%26%3D&[x]=%41%42&key=Z%C3%BCrich&a==%4	1	1	count:5|key=[],[Z\u00fcrich]|<null>=[],[]|=[+&=]|[x]=[AB]|a=[=%4]|mutable:1
+KEY==&item[1]=hello+world&%2=%2B%26%3D=%2B%26%3D	0	1	count:3|KEY=[=]|item=[hello world]|%2=[+&==+&=]|mutable:1
+?&KEY=%E2%82&[x]=%&&&%2=\u0001=\u0001	1	1	count:4|<null>=[],[],[]|KEY=[\ufffd]|[x]=[%]|%2=[\u0001=\u0001]|mutable:1
+\u00e9	1	1	count:1|<null>=[\u00e9]|mutable:1
+a%26b=2	1	1	count:1|a&b=[2]|mutable:1
+item[0]=\u00e9=\u00e9;key=&&&sp ace=%C3&item[]=&a==%C3	0	0	count:4|item=[\u00e9=\u00e9;key=],[]|=[],[]|sp ace=[\ufffd]|a=[=\ufffd]|mutable:0
+?a=%C3&&&k%5B0%5D=true&a&=%E2%82	0	0	count:3|a=[\ufffd],[]|=[],[],[\ufffd]|k=[true]|mutable:0
+?[x]=2&a%26b=%41%42	1	1	count:2|[x]=[2]|a&b=[AB]|mutable:1
+key=&caf%C3%A9=x y	1	1	count:2|key=[]|caf\u00e9=[x y]|mutable:1
+item[1]=%u0041;k=v=%2B%26%3D=%2B%26%3D	0	0	count:1|item=[%u0041;k=v=+&==+&=]|mutable:0
+??=\u0001;KEY&a[b][c]&&=hello+world&&a[b][c]=%	1	1	count:4|?=[\u0001;KEY]|<null>=[a[b][c]],[],[]|=[hello world]|a=[%]|mutable:1
+a=%C3&KEY=%2B%26%3D	1	1	count:2|a=[\ufffd]|KEY=[+&=]|mutable:1
+	0	1	count:0|mutable:1
+a[b][c]=	1	1	count:1|a=[]|mutable:1
+?&%2==longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	0	count:2|<null>=[]|%2=[=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:0
+?+plus+=a=b&a%26b=?&A=&=	1	0	count:4| plus =[a=b]|a&b=[?]|A=[]|=[]|mutable:0
+A=a&&KEY==%C3&=%4;=&a==%u0041	1	1	count:4|A=[a],[=%u0041]|<null>=[]|KEY=[=\ufffd]|=[%4;=]|mutable:1
+?&na%6De=a&=a&&k%5B0%5D=v\u0000w&n-m=v\u0000w;k%5B0%5D=	0	0	count:4|=[],[a],[]|name=[a]|k=[v\u0000w]|n-m=[v\u0000w;k[0]=]|mutable:0
+n-m=\u00e9;A&&&%E2%82%AC=&a%26b=2	0	1	count:4|n-m=[\u00e9;A]|=[],[]|\u20ac=[]|a&b=[2]|mutable:1
+	1	0	count:0|mutable:0
+a=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	1	count:1|a=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+x.y=a=b	0	1	count:1|x.y=[a=b]|mutable:1
+[x]=a=b&na%6De==;a%26b&a==	1	0	count:3|[x]=[a=b]|name=[=;a&b]|a=[=]|mutable:0
+?=x y&&k%5B0%5D=v\u0000w;=1&n-m=\u0001	0	0	count:3|=[x y],[]|k=[v\u0000w;=1]|n-m=[\u0001]|mutable:0
+?%E2%82%AC=true&&a%26b=a&&a[b][c]=1	1	1	count:4|\u20ac=[true]|<null>=[],[]|a&b=[a]|a=[1]|mutable:1
+?&a==%4&sp ace=a&&%&	1	1	count:3|<null>=[],[],[%],[]|a=[=%4]|sp ace=[a]|mutable:1
+x.y=%F0%9F%98%80&A=&key	0	1	count:3|x.y=[\ud83d\ude00]|A=[]|key=[]|mutable:1
++plus+=v\u0000w&=%u0041	1	1	count:2| plus =[v\u0000w]|=[%u0041]|mutable:1
+?item[1]=%F0%9F%98%80&=a&&x.y=%u0041	0	1	count:3|item=[\ud83d\ude00]|=[a],[]|x.y=[%u0041]|mutable:1
+	1	1	count:0|mutable:1
+item[1]==\u0001&&&a=&+plus+=%80=%80&%=a&&=	1	1	count:6|item=[=\u0001]|<null>=[],[],[]|a=[]| plus =[\ufffd=\ufffd]|%=[a]|=[]|mutable:1
+?key=%2B%26%3D	0	1	count:1|key=[+&=]|mutable:1
+?=\u0001;=1&key=v\u0000w&n-m==%u0041	0	0	count:3|=[\u0001;=1]|key=[v\u0000w]|n-m=[=%u0041]|mutable:0
+item[0]=true&key==1	1	1	count:2|item=[true]|key=[=1]|mutable:1
+a%26b=%&a=?&&&n-m=%C3	0	1	count:4|a&b=[%]|a=[?]|=[],[]|n-m=[\ufffd]|mutable:1
+%=%2B%26%3D&A=Z%C3%BCrich&na%6De=\u0001&A=\u0001&caf%C3%A9=2	1	0	count:4|%=[+&=]|A=[Z\u00fcrich],[\u0001]|name=[\u0001]|caf\u00e9=[2]|mutable:0
+k=v=%2B%26%3D=%2B%26%3D&=?&%zz==x y	0	0	count:3|k=[v=+&==+&=]|=[?]|%zz=[=x y]|mutable:0
+	1	1	count:0|mutable:1
+a%26b=%E2%82	0	1	count:1|a&b=[\ufffd]|mutable:1
+??item[0]&item[1]=%41%42&na%6De=%4&%2==a&	1	1	count:4|<null>=[?item[0]],[]|item=[AB]|name=[%4]|%2=[=a]|mutable:1
+[x]==x y=	1	1	count:1|[x]=[=x y=]|mutable:1
+A=?&key&k%5B0%5D=Z%C3%BCrich&&%E2%82%AC=a=b&a=a=b	0	0	count:5|A=[?],[a=b]|key=[]|k=[Z\u00fcrich]|=[]|\u20ac=[a=b]|mutable:0
+key=\u0001&KEY==a=b&a%26b=a=b=	0	1	count:2|key=[\u0001],[=a=b]|a&b=[a=b=]|mutable:1
+	1	0	count:0|mutable:0
+?+plus+==&caf%C3%A9=\u00e9=\u00e9&k=v=;key==	1	0	count:3| plus =[=]|caf\u00e9=[\u00e9=\u00e9]|k=[v=;key==]|mutable:0
+?item[0]=%80;item[0]=%2B%26%3D=%2B%26%3D;sp ace=x y;A=%	1	1	count:1|item=[\ufffd;item[0]=+&==+&=;sp ace=x y;A=%]|mutable:1
+	0	1	count:0|mutable:1
+	0	1	count:0|mutable:1
+\u20ac=%u0041&a&k%5B0%5D=%80&caf%C3%A9=%u0041	1	1	count:4|\u20ac=[%u0041]|<null>=[a]|k=[\ufffd]|caf\u00e9=[%u0041]|mutable:1
+?&\u00e9=	0	1	count:2|=[]|\u00e9=[]|mutable:1
+\u00e9=%2B%26%3D&A=&=a=b&&&%2=&&&a=	0	1	count:4|\u00e9=[+&=]|A=[],[]|=[a=b],[],[],[],[]|%2=[]|mutable:1
+%zz=a&	1	1	count:2|%zz=[a]|<null>=[]|mutable:1
+sp ace===;key=\u0001	1	1	count:1|sp ace=[==;key=\u0001]|mutable:1
+?key=&k=v=%E2%82=%E2%82&item[]=%u0041=%u0041	0	1	count:3|key=[]|k=[v=\ufffd=\ufffd]|item=[%u0041=%u0041]|mutable:1
+=%C3;%E2%82%AC=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	1	count:1|=[\ufffd;\u20ac=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+	1	1	count:0|mutable:1
+a=&&key=%E2%82=%E2%82&item[0]==%E2%82&a=%F0%9F%98%80	1	0	count:4|a=[],[\ud83d\ude00]|<null>=[]|key=[\ufffd=\ufffd]|item=[=\ufffd]|mutable:0
+	1	1	count:0|mutable:1
+&&	0	1	count:1|=[],[],[]|mutable:1
+=\u00e9&item[1]=x y&na%6De=%2B%26%3D&%zz=	0	1	count:4|=[\u00e9]|item=[x y]|name=[+&=]|%zz=[]|mutable:1
+key=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	1	count:1|key=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+x.y=%;\u00e9=%80	0	1	count:1|x.y=[%;\u00e9=\ufffd]|mutable:1
+a%26b=a&&item[]=a=b&&&a[b][c]==%2B%26%3D&&n-m==a=b	1	1	count:5|a&b=[a]|<null>=[],[],[],[]|item=[a=b]|a=[=+&=]|n-m=[=a=b]|mutable:1
+\u20ac=true&a[b][c]=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&=	0	1	count:3|\u20ac=[true]|a=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|=[]|mutable:1
+?item[0]=2&[x]=?&=hello+world&n-m==hello+world&&&=%2B%26%3D	1	1	count:5|item=[2]|[x]=[?]|=[hello world],[+&=]|n-m=[=hello world]|<null>=[],[]|mutable:1
+\u20ac=a=b=a=b=	1	1	count:1|\u20ac=[a=b=a=b=]|mutable:1
+	1	1	count:0|mutable:1
+KEY=%4;%2=%41%42&&	1	1	count:2|KEY=[%4;%2=AB]|<null>=[],[]|mutable:1
+&&	0	1	count:1|=[],[],[]|mutable:1
+?&%==%&&key=	1	0	count:3|<null>=[],[]|%=[=%]|key=[]|mutable:0
+na%6De=%80&a=x y	0	0	count:2|name=[\ufffd]|a=[x y]|mutable:0
+A=hello+world&&&a==hello+world&a=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&a[b][c]=a&	0	0	count:2|A=[hello world],[=hello world],[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv],[a]|=[],[],[],[]|mutable:0
+	0	0	count:0|mutable:0
+a=%C3&&&a%26b=%41%42&&	0	1	count:3|a=[\ufffd]|=[],[],[],[]|a&b=[AB]|mutable:1
+?&item[]=\u0001	0	1	count:2|=[]|item=[\u0001]|mutable:1
+	0	1	count:0|mutable:1
+item[0]=;KEY=hello+world&caf%C3%A9=x y	0	1	count:2|item=[;KEY=hello world]|caf\u00e9=[x y]|mutable:1
+%zz==Z%C3%BCrich&k%5B0%5D=%=%	0	1	count:2|%zz=[=Z\u00fcrich]|k=[%=%]|mutable:1
+?caf%C3%A9=a=b&=hello+world&=Z%C3%BCrich&a%26b&&n-m=	1	1	count:4|caf\u00e9=[a=b]|=[hello world],[Z\u00fcrich]|<null>=[a&b],[]|n-m=[]|mutable:1
+KEY=hello+world	0	0	count:1|KEY=[hello world]|mutable:0
+key==%4	0	1	count:1|key=[=%4]|mutable:1
+%E2%82%AC=x y=x y&+plus+;caf%C3%A9=hello+world&=2=2&%2&=	1	1	count:4|\u20ac=[x y=x y]| plus ;caf\u00e9=[hello world]|=[2=2],[]|<null>=[%2]|mutable:1
+item[1]=true	1	1	count:1|item=[true]|mutable:1
+?=hello+world&&a=v\u0000w&k=v=a=b=a=b&=%4	1	0	count:4|=[hello world],[%4]|<null>=[]|a=[v\u0000w]|k=[v=a=b=a=b]|mutable:0
+a[b][c]=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&=true	0	1	count:2|a=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|=[true]|mutable:1
+	1	1	count:0|mutable:1
+	1	1	count:0|mutable:1
+??\u20ac=%u0041&&KEY==1	0	1	count:3|?\u20ac=[%u0041]|=[]|KEY=[=1]|mutable:1
+?%=;caf%C3%A9=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	1	count:1|%=[;caf\u00e9=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+k%5B0%5D=%F0%9F%98%80;k=v	1	1	count:1|k=[\ud83d\ude00;k=v]|mutable:1
+key&&a=&&%=1=1&&&key=%=%;item[0]=	0	0	count:4|key=[],[%=%;item[0]=]|=[],[],[],[]|a=[]|%=[1=1]|mutable:0
+k%5B0%5D=Z%C3%BCrich=Z%C3%BCrich	0	1	count:1|k=[Z\u00fcrich=Z\u00fcrich]|mutable:1
+=\u00e9;+plus+=%u0041&&&a	1	1	count:2|=[\u00e9; plus =%u0041]|<null>=[],[],[a]|mutable:1
+x.y=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;k%5B0%5D=%C3=%C3	0	0	count:1|x.y=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;k[0]=\ufffd=\ufffd]|mutable:0
+	1	1	count:0|mutable:1
+%==	0	0	count:1|%=[=]|mutable:0
+	0	1	count:0|mutable:1
+x.y==&k%5B0%5D=%80	0	1	count:2|x.y=[=]|k=[\ufffd]|mutable:1
+?A===&item[];a%26b==;a=%4	0	1	count:2|A=[==]|item=[=;a=%4]|mutable:1
+?	1	0	count:0|mutable:0
+item[0]=%u0041&%2=&=hello+world	0	0	count:3|item=[%u0041]|%2=[]|=[hello world]|mutable:0
+%E2%82%AC=\u0001	1	1	count:1|\u20ac=[\u0001]|mutable:1
+?&sp ace=2=2;=%80&sp ace=a=b&a&n-m=Z%C3%BCrich	1	1	count:3|<null>=[],[a]|sp ace=[2=2;=\ufffd],[a=b]|n-m=[Z\u00fcrich]|mutable:1
+a=%E2%82&%E2%82%AC=%C3&sp ace=&&	1	1	count:4|a=[\ufffd]|\u20ac=[\ufffd]|sp ace=[]|<null>=[],[]|mutable:1
+?&=%4&sp ace;key=\u00e9&&&%zz==%80&a	1	0	count:4|<null>=[],[],[],[a]|=[%4]|sp ace;key=[\u00e9]|%zz=[=\ufffd]|mutable:0
++plus+=&a%26b=x y	1	1	count:2| plus =[]|a&b=[x y]|mutable:1
+?%E2%82%AC==1	0	0	count:1|\u20ac=[=1]|mutable:0
+%E2%82%AC=hello+world=hello+world	0	1	count:1|\u20ac=[hello world=hello world]|mutable:1
+??A=\u00e9	1	0	count:1|?A=[\u00e9]|mutable:0
+item[1]	1	1	count:1|<null>=[item[1]]|mutable:1
+	0	1	count:0|mutable:1
+	1	1	count:0|mutable:1
+a=%4&%2=x y&&\u00e9=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&item[0]==&%	0	1	count:6|a=[%4]|%2=[x y]|=[]|\u00e9=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|item=[=]|%=[]|mutable:1
+%E2%82%AC=a=b&x.y=1	0	0	count:2|\u20ac=[a=b]|x.y=[1]|mutable:0
+?	1	0	count:0|mutable:0
+?	1	1	count:0|mutable:1
+A&A=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&&k=v==&&	1	1	count:3|<null>=[A],[],[],[],[]|A=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|k=[v==]|mutable:1
+=\u00e9&=%2B%26%3D&&\u00e9=1	0	1	count:2|=[\u00e9],[+&=],[]|\u00e9=[1]|mutable:1
+?sp ace=%u0041&k%5B0%5D=%F0%9F%98%80	0	1	count:2|sp ace=[%u0041]|k=[\ud83d\ude00]|mutable:1
+=%4&&&+plus+=hello+world&a[b][c]=%80&=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	1	count:3|=[%4],[],[],[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]| plus =[hello world]|a=[\ufffd]|mutable:1
+	1	0	count:0|mutable:0
+	0	1	count:0|mutable:1
+?&%====	1	0	count:2|<null>=[]|%=[===]|mutable:0
+?caf%C3%A9=2=2;a[b][c]=%4	0	1	count:1|caf\u00e9=[2=2;a[b][c]=%4]|mutable:1
+	1	1	count:0|mutable:1
+a=%E2%82&caf%C3%A9=&%E2%82%AC=Z%C3%BCrich&x.y=&na%6De=hello+world	0	0	count:5|a=[\ufffd]|caf\u00e9=[]|\u20ac=[Z\u00fcrich]|x.y=[]|name=[hello world]|mutable:0
+caf%C3%A9	1	1	count:1|<null>=[caf\u00e9]|mutable:1
+?%=hello+world&KEY=%u0041&a[b][c]=	0	0	count:3|%=[hello world]|KEY=[%u0041]|a=[]|mutable:0
+?	1	1	count:0|mutable:1
+=?&x.y==%80&item[0]=	1	0	count:3|=[?]|x.y=[=\ufffd]|item=[]|mutable:0
+KEY=%41%42;%2&%zz=&%E2%82%AC&&&\u20ac=a=b	1	1	count:4|KEY=[AB;%2]|%zz=[]|<null>=[\u20ac],[],[]|\u20ac=[a=b]|mutable:1
+key=true&key=%4=%4&&a%26b=%F0%9F%98%80&%=%80=%80&&&k%5B0%5D=%	0	0	count:5|key=[true],[%4=%4]|=[],[],[]|a&b=[\ud83d\ude00]|%=[\ufffd=\ufffd]|k=[%]|mutable:0
+?	0	1	count:0|mutable:1
+?=	0	1	count:1|=[]|mutable:1
+	0	1	count:0|mutable:1
+%E2%82%AC=%80	0	1	count:1|\u20ac=[\ufffd]|mutable:1
+	1	1	count:0|mutable:1
+?x.y=%E2%82	0	1	count:1|x.y=[\ufffd]|mutable:1
+?%2&key==&=&&&KEY=%2B%26%3D&=%F0%9F%98%80&=	0	1	count:3|%2=[]|key=[=],[+&=]|=[],[],[],[\ud83d\ude00],[]|mutable:1
+key=x y&\u20ac=&=%80&&n-m=%41%42=%41%42&n-m=a=b=a=b	0	0	count:4|key=[x y]|\u20ac=[]|=[\ufffd],[]|n-m=[AB=AB],[a=b=a=b]|mutable:0
+	0	1	count:0|mutable:1
+??k%5B0%5D=true&item[]=	1	1	count:2|?k=[true]|item=[]|mutable:1
+key=\u00e9&=%4&\u20ac=%F0%9F%98%80	0	1	count:3|key=[\u00e9]|=[%4]|\u20ac=[\ud83d\ude00]|mutable:1
+a=%2B%26%3D	1	1	count:1|a=[+&=]|mutable:1
+caf%C3%A9====;key=Z%C3%BCrich	1	1	count:1|caf\u00e9=[===;key=Z\u00fcrich]|mutable:1
+?%2=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;a=%2B%26%3D;=%2B%26%3D&&n-m=%2B%26%3D=%2B%26%3D&&k=v=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	1	count:4|%2=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;a=+&=;=+&=]|<null>=[],[]|n-m=[+&==+&=]|k=[v=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+n-m=a&&a=&caf%C3%A9=	1	1	count:4|n-m=[a]|<null>=[]|a=[]|caf\u00e9=[]|mutable:1
+a&a%26b=hello+world&&&na%6De;k%5B0%5D=Z%C3%BCrich=Z%C3%BCrich	1	1	count:3|<null>=[a],[],[]|a&b=[hello world]|name;k=[Z\u00fcrich=Z\u00fcrich]|mutable:1
+%=Z%C3%BCrich&n-m==1&caf%C3%A9=a&	0	1	count:4|%=[Z\u00fcrich]|n-m=[=1]|caf\u00e9=[a]|=[]|mutable:1
+?&k%5B0%5D=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;item[]=%80=%80&=v\u0000w&=%C3	1	1	count:3|<null>=[]|k=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;item[]=\ufffd=\ufffd]|=[v\u0000w],[\ufffd]|mutable:1
+?%=	0	1	count:1|%=[]|mutable:1
+	0	1	count:0|mutable:1
+a[b][c];key=\u00e9&\u20ac=\u00e9	1	1	count:2|a=[\u00e9]|\u20ac=[\u00e9]|mutable:1
+?&	0	1	count:1|=[],[]|mutable:1
+\u20ac&&a=%2B%26%3D&x.y==&&&a=2	1	0	count:3|<null>=[\u20ac],[],[],[]|a=[+&=],[2]|x.y=[=]|mutable:0
+?&%==%&&item[0]=?&&a=a&;na%6De=%&+plus+=hello+world	0	1	count:6|=[],[],[]|%=[=%]|item=[?]|a=[a]|;name=[%]| plus =[hello world]|mutable:1
+%=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=	0	1	count:1|%=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=]|mutable:1
+key=%2B%26%3D&=hello+world&%=%&&&na%6De=v\u0000w=v\u0000w&%zz=a=b	0	1	count:5|key=[+&=]|=[hello world],[],[]|%=[%]|name=[v\u0000w=v\u0000w]|%zz=[a=b]|mutable:1
+%E2%82%AC=%E2%82=%E2%82;A=&\u00e9==\u00e9&\u20ac=a=b&%2=true	1	1	count:3|\u20ac=[\ufffd=\ufffd;A=],[a=b]|\u00e9=[=\u00e9]|%2=[true]|mutable:1
+KEY==	1	1	count:1|KEY=[=]|mutable:1
+?caf%C3%A9&\u20ac=%41%42&&%2=&&&a[b][c]=a=b	0	1	count:5|caf\u00e9=[]|\u20ac=[AB]|=[],[],[]|%2=[]|a=[a=b]|mutable:1
+?%E2%82%AC=%C3&&&=hello+world&\u20ac==\u0001&&&[x]=	1	1	count:4|\u20ac=[\ufffd],[=\u0001]|<null>=[],[],[],[]|=[hello world]|[x]=[]|mutable:1
+k=v=%C3&k=v==&&sp ace=a&;%E2%82%AC=&&&=%u0041	1	0	count:5|k=[v=\ufffd],[v==]|<null>=[],[],[]|sp ace=[a]|;\u20ac=[]|=[%u0041]|mutable:0
+KEY=%E2%82=%E2%82&=a=b&caf%C3%A9==2&&a====	0	0	count:4|KEY=[\ufffd=\ufffd]|=[a=b],[]|caf\u00e9=[=2]|a=[===]|mutable:0
+k=v=x y&&[x]&=2&&item[1]=%41%42&a%26b=%4&&	0	0	count:5|k=[v=x y]|=[],[2],[],[],[]|[x]=[]|item=[AB]|a&b=[%4]|mutable:0
+item[1]===&a=&=1=	0	1	count:3|item=[==]|a=[]|=[1=]|mutable:1
+??item[]=%80&&=hello+world	1	1	count:3|?item=[\ufffd]|<null>=[]|=[hello world]|mutable:1
+?&n-m=%2B%26%3D&%=Z%C3%BCrich&&&%E2%82%AC=	1	1	count:4|<null>=[],[],[]|n-m=[+&=]|%=[Z\u00fcrich]|\u20ac=[]|mutable:1
+item[0]=	1	1	count:1|item=[]|mutable:1
+item[]=%4&=	1	1	count:2|item=[%4]|=[]|mutable:1
+%2&&&caf%C3%A9==%80	0	1	count:3|%2=[]|=[],[]|caf\u00e9=[=\ufffd]|mutable:1
+?	1	0	count:0|mutable:0
+k=v=a=b&a==1&&&a%26b	1	1	count:3|k=[v=a=b]|a=[=1]|<null>=[],[],[a&b]|mutable:1
+a=1;=%u0041;a=%2B%26%3D&sp ace=%C3	1	1	count:2|a=[1;=%u0041;a=+&=]|sp ace=[\ufffd]|mutable:1
+?&=true	1	1	count:2|<null>=[]|=[true]|mutable:1
+?[x]=%C3;%2=hello+world=hello+world&item[1]=%&item[]=%41%42&%E2%82%AC=	1	1	count:3|[x]=[\ufffd;%2=hello world=hello world]|item=[%],[AB]|\u20ac=[]|mutable:1
+key=x y&na%6De====&&a=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&&key&&=Z%C3%BCrich	1	0	count:5|key=[x y]|name=[===]|<null>=[],[],[],[key],[]|a=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|=[Z\u00fcrich]|mutable:0
+k%5B0%5D=%E2%82&k%5B0%5D=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&&na%6De&&&+plus+==%F0%9F%98%80&&	0	1	count:4|k=[\ufffd],[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|=[],[],[],[],[],[]|name=[]| plus =[=\ud83d\ude00]|mutable:1
+\u20ac=%E2%82	1	0	count:1|\u20ac=[\ufffd]|mutable:0
+a=a=b;key=%;KEY=%4	0	1	count:1|a=[a=b;key=%;KEY=%4]|mutable:1
+?&	0	0	count:1|=[],[]|mutable:0
+??%E2%82%AC=a&=a&;%E2%82%AC=\u0001&&&k=v==&a%26b=%4=	1	1	count:6|?\u20ac=[a]|=[a]|;\u20ac=[\u0001]|<null>=[],[]|k=[v==]|a&b=[%4=]|mutable:1
+item[1]=&a%26b=a=b&=2&\u20ac=	0	0	count:4|item=[]|a&b=[a=b]|=[2]|\u20ac=[]|mutable:0
+?&	0	1	count:1|=[],[]|mutable:1
+\u20ac=%41%42&item[]==%2B%26%3D&&item[0]=%;item[0]=	0	1	count:3|\u20ac=[AB]|item=[=+&=],[%;item[0]=]|=[]|mutable:1
+?a=%2B%26%3D=%2B%26%3D&=	0	1	count:2|a=[+&==+&=]|=[]|mutable:1
+%&na%6De===	0	0	count:2|%=[]|name=[==]|mutable:0
+%2=%4&&%E2%82%AC=%4=%4&&key==%u0041&a=;=	1	0	count:5|%2=[%4]|<null>=[],[]|\u20ac=[%4=%4]|key=[=%u0041]|a=[;=]|mutable:0
+\u00e9=%E2%82=%E2%82;[x]=%80	1	1	count:1|\u00e9=[\ufffd=\ufffd;[x]=\ufffd]|mutable:1
+	1	1	count:0|mutable:1
+n-m=1;+plus+=%	1	0	count:1|n-m=[1; plus =%]|mutable:0
+?	1	1	count:0|mutable:1
+?&key=a&=a&&a=?;item[1]=%C3&key==v\u0000w	0	1	count:3|=[],[a],[]|key=[a],[=v\u0000w]|a=[?;item[1]=\ufffd]|mutable:1
+?+plus+=hello+world&[x]==\u00e9&=Z%C3%BCrich&&item[0]=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	1	count:4| plus =[hello world]|[x]=[=\u00e9]|=[Z\u00fcrich],[]|item=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+\u20ac=%E2%82&&n-m=%F0%9F%98%80&na%6De=%C3=%C3&n-m;A==Z%C3%BCrich	0	1	count:5|\u20ac=[\ufffd]|=[]|n-m=[\ud83d\ude00]|name=[\ufffd=\ufffd]|n-m;A=[=Z\u00fcrich]|mutable:1
+?&	0	1	count:1|=[],[]|mutable:1
+?&%E2%82%AC=	1	0	count:2|<null>=[]|\u20ac=[]|mutable:0
+?A=%4&&&[x]=true&key&a[b][c]=%41%42	0	0	count:4|A=[%4],[AB]|=[],[]|[x]=[true]|key=[]|mutable:0
+sp ace=x y&%	1	0	count:2|sp ace=[x y]|<null>=[%]|mutable:0
+?a=\u0001&&&key=1&\u20ac=&&key=;a=x y	1	1	count:4|a=[\u0001]|<null>=[],[],[]|key=[1],[;a=x y]|\u20ac=[]|mutable:1
+[x]=%u0041	0	1	count:1|[x]=[%u0041]|mutable:1
+n-m=a=b=a=b&&&k=v=1	1	1	count:3|n-m=[a=b=a=b]|<null>=[],[]|k=[v=1]|mutable:1
+?	1	0	count:0|mutable:0
+key=%u0041&\u20ac==hello+world;[x]=\u0001	1	1	count:2|key=[%u0041]|\u20ac=[=hello world;[x]=\u0001]|mutable:1
+?n-m==&item[1]==&&a=true=true&na%6De=a=b&%2	1	1	count:5|n-m=[=]|item=[=]|<null>=[],[%2]|a=[true=true]|name=[a=b]|mutable:1
+x.y==%F0%9F%98%80&%zz&&&k=v=1	0	0	count:4|x.y=[=\ud83d\ude00]|%zz=[]|=[],[]|k=[v=1]|mutable:0
+??key=\u0001&k%5B0%5D=	0	1	count:2|?key=[\u0001]|k=[]|mutable:1
+[x]=%4&item[0]=true;key=v\u0000w&%zz=v\u0000w&A==x y	1	0	count:4|[x]=[%4]|item=[true;key=v\u0000w]|%zz=[v\u0000w]|A=[=x y]|mutable:0
+=	1	0	count:1|=[]|mutable:0
+	0	0	count:0|mutable:0
+na%6De=v\u0000w&k=v&a&a;item[0]=hello+world	1	1	count:4|name=[v\u0000w]|k=[v]|<null>=[a]|a;item=[hello world]|mutable:1
+k%5B0%5D=%2B%26%3D&key==%&key	0	1	count:2|k=[+&=]|key=[=%],[]|mutable:1
+k%5B0%5D=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	1	count:1|k=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+??a=\u00e9	0	1	count:1|?a=[\u00e9]|mutable:1
+?=a&&n-m=%2B%26%3D;key=%	1	1	count:3|=[a]|<null>=[]|n-m=[+&=;key=%]|mutable:1
+caf%C3%A9=?&a=%F0%9F%98%80&&A=	1	0	count:3|caf\u00e9=[?]|a=[\ud83d\ude00],[]|<null>=[]|mutable:0
+?	0	1	count:0|mutable:1
+a[b][c]=&&A==hello+world&&&a==	1	1	count:2|a=[],[=hello world],[=]|<null>=[],[],[]|mutable:1
+a=;%zz=%2B%26%3D&item[]=2&item[0]=	0	1	count:2|a=[;%zz=+&=]|item=[2],[]|mutable:1
+?caf%C3%A9=%C3&item[]&	0	0	count:3|caf\u00e9=[\ufffd]|item=[]|=[]|mutable:0
+KEY=Z%C3%BCrich&k%5B0%5D	0	1	count:2|KEY=[Z\u00fcrich]|k=[]|mutable:1
+	1	0	count:0|mutable:0
+a[b][c]==%C3&&&sp ace=%=%&&\u20ac=v\u0000w	1	1	count:4|a=[=\ufffd]|<null>=[],[],[]|sp ace=[%=%]|\u20ac=[v\u0000w]|mutable:1
+n-m=%4	0	1	count:1|n-m=[%4]|mutable:1
+%zz==;%E2%82%AC=&&=%80;+plus+=hello+world&&KEY==x y=	0	1	count:3|%zz=[=;\u20ac=]|=[],[\ufffd; plus =hello world],[]|KEY=[=x y=]|mutable:1
+a=&&%=a=b&&=%C3&&caf%C3%A9=%2B%26%3D&=	1	1	count:5|a=[]|<null>=[],[],[]|%=[a=b]|=[\ufffd],[]|caf\u00e9=[+&=]|mutable:1
+=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;\u20ac=&&na%6De	0	0	count:2|=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;\u20ac=],[]|name=[]|mutable:0
+KEY&\u20ac=a=b	1	1	count:2|<null>=[KEY]|\u20ac=[a=b]|mutable:1
++plus+=&&\u20ac=a&&key=%2B%26%3D=%2B%26%3D&a=x y&KEY=	0	1	count:5| plus =[]|=[],[]|\u20ac=[a]|key=[+&==+&=],[]|a=[x y]|mutable:1
+??+plus+==v\u0000w&a[b][c]==&=%C3&&&caf%C3%A9=Z%C3%BCrich=Z%C3%BCrich	1	1	count:5|? plus =[=v\u0000w]|a=[=]|=[\ufffd]|<null>=[],[]|caf\u00e9=[Z\u00fcrich=Z\u00fcrich]|mutable:1
+na%6De=true	0	0	count:1|name=[true]|mutable:0
+?key=Z%C3%BCrich;%=	1	1	count:1|key=[Z\u00fcrich;%=]|mutable:1
+=1&a[b][c]=%E2%82&na%6De=%F0%9F%98%80&+plus+=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	1	count:4|=[1]|a=[\ufffd]|name=[\ud83d\ude00]| plus =[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+sp ace=%C3&&&KEY&a[b][c]=2&a%26b=%41%42	1	0	count:4|sp ace=[\ufffd]|<null>=[],[],[KEY]|a=[2]|a&b=[AB]|mutable:0
+item[0]==Z%C3%BCrich	1	1	count:1|item=[=Z\u00fcrich]|mutable:1
+?&a=%u0041&key=Z%C3%BCrich&key=a&&a%26b=Z%C3%BCrich	0	1	count:4|=[],[]|a=[%u0041]|key=[Z\u00fcrich],[a]|a&b=[Z\u00fcrich]|mutable:1
+a==?	1	1	count:1|a=[=?]|mutable:1
+?=v\u0000w&item[0]=%41%42	1	0	count:2|=[v\u0000w]|item=[AB]|mutable:0
+%=a=b	1	1	count:1|%=[a=b]|mutable:1
+a=x y	0	0	count:1|a=[x y]|mutable:0
+	0	1	count:0|mutable:1
+	0	1	count:0|mutable:1
+sp ace=%41%42	0	1	count:1|sp ace=[AB]|mutable:1
+item[]=a=b=a=b&=%C3;caf%C3%A9=%F0%9F%98%80	0	0	count:2|item=[a=b=a=b]|=[\ufffd;caf\u00e9=\ud83d\ude00]|mutable:0
+	1	1	count:0|mutable:1
+key=a&=a&&key=%F0%9F%98%80&key=a=b&&&x.y=	0	1	count:3|key=[a],[\ud83d\ude00],[a=b]|=[a],[],[],[]|x.y=[]|mutable:1
+=hello+world&a	0	1	count:2|=[hello world]|a=[]|mutable:1
+?k=v=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&a%26b=1&=hello+world&&%zz=v\u0000w&a=x y	0	0	count:5|k=[v=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|a&b=[1]|=[hello world],[]|%zz=[v\u0000w]|a=[x y]|mutable:0
+[x]==a&;%E2%82%AC=&&&=%	1	1	count:4|[x]=[=a]|;\u20ac=[]|<null>=[],[]|=[%]|mutable:1
+a=%u0041	0	0	count:1|a=[%u0041]|mutable:0
+	1	0	count:0|mutable:0
+a=v\u0000w	1	0	count:1|a=[v\u0000w]|mutable:0
+x.y=hello+world&x.y=%u0041	1	0	count:1|x.y=[hello world],[%u0041]|mutable:0
+KEY==%u0041&item[1]=?&a%26b=%&&&a%26b&k=v	1	1	count:5|KEY=[=%u0041]|item=[?]|a&b=[%]|<null>=[],[],[a&b]|k=[v]|mutable:1
+%E2%82%AC=%4&=2&&&na%6De&%zz=?&\u20ac=%u0041&	0	1	count:4|\u20ac=[%4],[%u0041]|=[2],[],[],[]|name=[]|%zz=[?]|mutable:1
+?item[1]=&&&a[b][c]=%C3&=%80	1	0	count:4|item=[]|<null>=[],[]|a=[\ufffd]|=[\ufffd]|mutable:0
+?item[0]=?&sp ace;item[1]=2&%E2%82%AC=&na%6De=1	0	0	count:4|item=[?]|sp ace;item=[2]|\u20ac=[]|name=[1]|mutable:0
+	1	0	count:0|mutable:0
+?\u00e9=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&%E2%82%AC=2&\u20ac=%u0041&&&k=v=&&k=v=	0	1	count:4|\u00e9=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|\u20ac=[2],[%u0041]|=[],[],[]|k=[v=],[v=]|mutable:1
+?==&a[b][c];item[1]=Z%C3%BCrich	1	1	count:2|=[=]|a=[Z\u00fcrich]|mutable:1
+=x y&n-m=&&&=x y&&=	1	0	count:3|=[x y],[x y],[]|n-m=[]|<null>=[],[],[]|mutable:0
+=%41%42	0	1	count:1|=[AB]|mutable:1
+%E2%82%AC===&	0	1	count:2|\u20ac=[==]|=[]|mutable:1
+\u20ac=%F0%9F%98%80;a[b][c]=%F0%9F%98%80&key=%F0%9F%98%80	1	1	count:2|\u20ac=[\ud83d\ude00;a[b][c]=\ud83d\ude00]|key=[\ud83d\ude00]|mutable:1
+key=%41%42&&&key=v\u0000w=v\u0000w=	0	1	count:2|key=[AB],[v\u0000w=v\u0000w=]|=[],[]|mutable:1
+?=x y;%=v\u0000w&k=v=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	1	count:2|=[x y;%=v\u0000w]|k=[v=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+item[]=%80&item[1]=v\u0000w	0	1	count:1|item=[\ufffd],[v\u0000w]|mutable:1
+	1	0	count:0|mutable:0
+%zz=true&=%E2%82&sp ace=x y&=	0	1	count:3|%zz=[true]|=[\ufffd],[]|sp ace=[x y]|mutable:1
+a%26b=hello+world=hello+world	1	1	count:1|a&b=[hello world=hello world]|mutable:1
+?a[b][c]=%2B%26%3D=%2B%26%3D&&&na%6De=%E2%82	1	1	count:3|a=[+&==+&=]|<null>=[],[]|name=[\ufffd]|mutable:1
+=%4	1	1	count:1|=[%4]|mutable:1
+?item[0]=a=b	1	1	count:1|item=[a=b]|mutable:1
+item[]=hello+world=hello+world&item[]=1	0	1	count:1|item=[hello world=hello world],[1]|mutable:1
+?[x]=%=%&&&+plus+=\u00e9;[x]==1&item[]=;item[1]==%u0041	1	1	count:4|[x]=[%=%]|<null>=[],[]| plus =[\u00e9;[x]==1]|item=[;item[1]==%u0041]|mutable:1
+x.y=%2B%26%3D=%2B%26%3D&&&=\u0001&caf%C3%A9=%F0%9F%98%80&	1	1	count:4|x.y=[+&==+&=]|<null>=[],[],[]|=[\u0001]|caf\u00e9=[\ud83d\ude00]|mutable:1
++plus+=%;%2=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&+plus+=\u00e9=	0	1	count:1| plus =[%;%2=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv],[\u00e9=]|mutable:1
++plus+=&key=%2B%26%3D&a[b][c]=%F0%9F%98%80	1	1	count:3| plus =[]|key=[+&=]|a=[\ud83d\ude00]|mutable:1
+	1	1	count:0|mutable:1
+?&na%6De====	1	1	count:2|<null>=[]|name=[===]|mutable:1
+a%26b=%41%42=%41%42&\u00e9=true&a%26b===&&&a==x y&%zz=Z%C3%BCrich=Z%C3%BCrich	1	1	count:5|a&b=[AB=AB],[==]|\u00e9=[true]|<null>=[],[]|a=[=x y]|%zz=[Z\u00fcrich=Z\u00fcrich]|mutable:1
+??%=v\u0000w&&&%=\u0001&&&a=v\u0000w&&&=2&=	1	1	count:5|?%=[v\u0000w]|<null>=[],[],[],[],[],[]|%=[\u0001]|a=[v\u0000w]|=[2],[]|mutable:1
+=a&&[x]=&&x.y=&&a=v\u0000w	0	1	count:4|=[a],[],[],[]|[x]=[]|x.y=[]|a=[v\u0000w]|mutable:1
+\u00e9=hello+world&&KEY=1&=%F0%9F%98%80&&&%2=true&item[1]==%80&=	0	1	count:5|\u00e9=[hello world]|=[],[\ud83d\ude00],[],[],[]|KEY=[1]|%2=[true]|item=[=\ufffd]|mutable:1
+?key=Z%C3%BCrich&a[b][c]=%&&&key=v\u0000w&=a=b&k%5B0%5D=%E2%82	0	1	count:4|key=[Z\u00fcrich],[v\u0000w]|a=[%]|=[],[],[a=b]|k=[\ufffd]|mutable:1
+%E2%82%AC=%E2%82&=%80&&=v\u0000w&a[b][c]==%	0	1	count:3|\u20ac=[\ufffd]|=[\ufffd],[],[v\u0000w]|a=[=%]|mutable:1
+%=%E2%82	0	0	count:1|%=[\ufffd]|mutable:0
+=a&	0	1	count:1|=[a],[]|mutable:1
+?na%6De=%2B%26%3D&=?;[x]=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	0	count:2|name=[+&=]|=[?;[x]=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:0
+?item[0]=&item[0]==%41%42&x.y=2=2&&=a&&&&a=2	0	1	count:4|item=[],[=AB]|x.y=[2=2]|=[],[a],[],[],[]|a=[2]|mutable:1
+a=&=\u00e9	0	0	count:2|a=[]|=[\u00e9]|mutable:0
+=a&&=%2B%26%3D&a%26b=	1	0	count:3|=[a],[+&=]|<null>=[]|a&b=[]|mutable:0
+n-m=	0	0	count:1|n-m=[]|mutable:0
+a%26b=	1	1	count:1|a&b=[]|mutable:1
+k=v==1;item[0]=%2B%26%3D&%2=true&a==hello+world&&&na%6De=%	1	1	count:5|k=[v==1;item[0]=+&=]|%2=[true]|a=[=hello world]|<null>=[],[]|name=[%]|mutable:1
+\u20ac=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;%zz=%E2%82;a&&&caf%C3%A9=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&=%41%42	0	1	count:3|\u20ac=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;%zz=\ufffd;a]|=[],[],[AB]|caf\u00e9=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+a[b][c]=%C3	1	1	count:1|a=[\ufffd]|mutable:1
+=\u00e9&=%4&&=%2B%26%3D&&&=2=	1	0	count:2|=[\u00e9],[%4],[+&=],[2=]|<null>=[],[],[]|mutable:0
+?%2=&&a%26b=&=%2B%26%3D;sp ace==a=b	1	1	count:4|%2=[]|<null>=[]|a&b=[]|=[+&=;sp ace==a=b]|mutable:1
+n-m==%4&A=hello+world=hello+world&&k=v&&[x]=&&n-m==	1	0	count:5|n-m=[=%4],[=]|A=[hello world=hello world]|<null>=[],[],[]|k=[v]|[x]=[]|mutable:0
+\u20ac=%41%42&	0	1	count:2|\u20ac=[AB]|=[]|mutable:1
+caf%C3%A9=\u0001	0	1	count:1|caf\u00e9=[\u0001]|mutable:1
+k=v=a=b=a=b&&[x]=%&caf%C3%A9=a&	1	1	count:4|k=[v=a=b=a=b]|<null>=[],[]|[x]=[%]|caf\u00e9=[a]|mutable:1
+?caf%C3%A9=	0	1	count:1|caf\u00e9=[]|mutable:1
+a=1&item[]==Z%C3%BCrich&=a=b&%E2%82%AC=1=1&=	0	1	count:4|a=[1]|item=[=Z\u00fcrich]|=[a=b],[]|\u20ac=[1=1]|mutable:1
+?caf%C3%A9&&&A==%E2%82&&&k=v=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&=%41%42&A=	0	0	count:4|caf\u00e9=[]|=[],[],[],[],[AB]|A=[=\ufffd],[]|k=[v=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:0
+a=2&=\u0001&\u20ac=&KEY=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	1	count:4|a=[2]|=[\u0001]|\u20ac=[]|KEY=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+?A=%4&%E2%82%AC=%4	1	1	count:2|A=[%4]|\u20ac=[%4]|mutable:1
+?item[];\u20ac=%u0041	1	1	count:1|item=[%u0041]|mutable:1
+item[0]==x y&n-m&sp ace=a=b	1	1	count:3|item=[=x y]|<null>=[n-m]|sp ace=[a=b]|mutable:1
+?item[1]====&&sp ace====&%	0	1	count:4|item=[===]|=[]|sp ace=[===]|%=[]|mutable:1
+?%E2%82%AC=;%=true&key==%41%42&a=&=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	0	count:4|\u20ac=[;%=true]|key=[=AB]|a=[]|=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:0
+item[0]&=v\u0000w&&=%u0041;a[b][c]=%C3	0	0	count:2|item=[]|=[v\u0000w],[],[%u0041;a[b][c]=\ufffd]|mutable:0
+?%=;a[b][c]=%u0041=%u0041&	0	1	count:2|%=[;a[b][c]=%u0041=%u0041]|=[]|mutable:1
+?%E2%82%AC=%&=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&KEY=%F0%9F%98%80	0	1	count:3|\u20ac=[%]|=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|KEY=[\ud83d\ude00]|mutable:1
+?+plus+;k%5B0%5D=%80&&%2=%2B%26%3D	0	1	count:3| plus ;k=[\ufffd]|=[]|%2=[+&=]|mutable:1
+?	1	1	count:0|mutable:1
+key====&[x]=1=1&a==%41%42	1	1	count:3|key=[===]|[x]=[1=1]|a=[=AB]|mutable:1
+?\u00e9=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	0	count:1|\u00e9=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:0
+?	1	1	count:0|mutable:1
+item[0]	0	1	count:1|item=[]|mutable:1
+na%6De=%C3=%C3	1	1	count:1|name=[\ufffd=\ufffd]|mutable:1
+A=&%E2%82%AC=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&KEY=\u0001&&&+plus+=1;x.y=%C3=%C3	1	1	count:5|A=[]|\u20ac=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|KEY=[\u0001]|<null>=[],[]| plus =[1;x.y=\ufffd=\ufffd]|mutable:1
+=?&&%E2%82%AC&&&na%6De=	0	0	count:3|=[?],[],[],[]|\u20ac=[]|name=[]|mutable:0
+?item[1]=%F0%9F%98%80&+plus+	0	1	count:2|item=[\ud83d\ude00]| plus =[]|mutable:1
+?KEY=&&+plus+=	1	0	count:3|KEY=[]|<null>=[]| plus =[]|mutable:0
+key=%41%42	0	1	count:1|key=[AB]|mutable:1
+?&=\u0001;%==true&&&item[1]=\u00e9&%==%E2%82	1	0	count:4|<null>=[],[],[]|=[\u0001;%==true]|item=[\u00e9]|%=[=\ufffd]|mutable:0
+a==true&na%6De=%80&=a&&%zz&+plus+=2	1	1	count:5|a=[=true]|name=[\ufffd]|=[a]|<null>=[],[%zz]| plus =[2]|mutable:1
+item[1]=%4=	1	0	count:1|item=[%4=]|mutable:0
+=%&&&a%26b&%=%4=%4&[x]=%E2%82	1	0	count:4|=[%]|<null>=[],[],[a&b]|%=[%4=%4]|[x]=[\ufffd]|mutable:0
+\u20ac==;k=v=%E2%82	1	1	count:1|\u20ac=[=;k=v=\ufffd]|mutable:1
+a%26b=?;item[]=?	0	1	count:1|a&b=[?;item[]=?]|mutable:1
+?A=%F0%9F%98%80&&=1&&=v\u0000w&=%C3	1	1	count:3|A=[\ud83d\ude00]|<null>=[],[]|=[1],[v\u0000w],[\ufffd]|mutable:1
+[x]==hello+world&=2&%E2%82%AC=?&a[b][c]=%u0041	1	1	count:4|[x]=[=hello world]|=[2]|\u20ac=[?]|a=[%u0041]|mutable:1
+sp ace=%C3;item[1]=%&&a;k=v==Z%C3%BCrich&\u20ac&&	0	1	count:4|sp ace=[\ufffd;item[1]=%]|=[],[],[]|a;k=[v==Z\u00fcrich]|\u20ac=[]|mutable:1
+=%2B%26%3D=	1	1	count:1|=[+&==]|mutable:1
+x.y=\u00e9&%2&&k%5B0%5D=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	1	count:3|x.y=[\u00e9]|<null>=[%2],[]|k=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+??=\u00e9&KEY=	0	1	count:2|?=[\u00e9]|KEY=[]|mutable:1
+=%2B%26%3D&sp ace&&%=%u0041&	1	1	count:3|=[+&=]|<null>=[sp ace],[],[]|%=[%u0041]|mutable:1
+a==true&&&item[0]=&%E2%82%AC==&&	0	1	count:4|a=[=true]|=[],[],[],[]|item=[]|\u20ac=[=]|mutable:1
+k=v=%&&&sp ace=	1	1	count:3|k=[v=%]|<null>=[],[]|sp ace=[]|mutable:1
+	1	1	count:0|mutable:1
+item[0]=1	0	1	count:1|item=[1]|mutable:1
+&=	1	1	count:2|<null>=[]|=[]|mutable:1
+?\u20ac=%E2%82&=	1	1	count:2|\u20ac=[\ufffd]|=[]|mutable:1
+k=v==longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&&=%2B%26%3D;=v\u0000w=v\u0000w&A=a&	0	1	count:3|k=[v==longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|=[],[],[+&=;=v\u0000w=v\u0000w],[]|A=[a]|mutable:1
+KEY=&k%5B0%5D=%F0%9F%98%80	1	1	count:2|KEY=[]|k=[\ud83d\ude00]|mutable:1
+a=true	0	1	count:1|a=[true]|mutable:1
+=hello+world;n-m=	0	1	count:1|=[hello world;n-m=]|mutable:1
+=x y&a%26b=%2B%26%3D&&&\u00e9==&=x y&n-m=\u0001=\u0001	0	1	count:4|=[x y],[],[],[x y]|a&b=[+&=]|\u00e9=[=]|n-m=[\u0001=\u0001]|mutable:1
+item[]=a&&k=v===&&k%5B0%5D===&a=%u0041	1	1	count:4|item=[a]|<null>=[],[]|k=[v===],[==]|a=[%u0041]|mutable:1
+=%4&=v\u0000w	0	1	count:1|=[%4],[v\u0000w]|mutable:1
+\u20ac=%2B%26%3D	0	1	count:1|\u20ac=[+&=]|mutable:1
+	0	1	count:0|mutable:1
+a%26b=hello+world=hello+world	1	1	count:1|a&b=[hello world=hello world]|mutable:1
+%==%C3	0	1	count:1|%=[=\ufffd]|mutable:1
+[x]=%F0%9F%98%80=%F0%9F%98%80&+plus+=&&&=\u0001&key=%2B%26%3D&%E2%82%AC=a=b	1	1	count:6|[x]=[\ud83d\ude00=\ud83d\ude00]| plus =[]|<null>=[],[]|=[\u0001]|key=[+&=]|\u20ac=[a=b]|mutable:1
+a=a&&&sp ace=?=?	0	1	count:3|a=[a]|=[],[]|sp ace=[?=?]|mutable:1
+	1	1	count:0|mutable:1
+key=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&=%80&k=v=%C3&key==true	0	1	count:3|key=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv],[=true]|=[\ufffd]|k=[v=\ufffd]|mutable:1
+??n-m=v\u0000w;a=%80&&&%2=&&%2=true	0	0	count:3|?n-m=[v\u0000w;a=\ufffd]|=[],[],[]|%2=[],[true]|mutable:0
+a=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;%=%u0041&k=v=v\u0000w	1	1	count:2|a=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;%=%u0041]|k=[v=v\u0000w]|mutable:1
+?na%6De==\u00e9&key=true	0	1	count:2|name=[=\u00e9]|key=[true]|mutable:1
+caf%C3%A9==%2B%26%3D&KEY=1&&key=\u00e9&=	0	0	count:3|caf\u00e9=[=+&=]|KEY=[1],[\u00e9]|=[],[]|mutable:0
+a=a&&a%26b&sp ace=%u0041	0	1	count:4|a=[a]|=[]|a&b=[]|sp ace=[%u0041]|mutable:1
+key&a[b][c];k=v==	0	0	count:2|key=[]|a=[v==]|mutable:0
+a=%F0%9F%98%80&&item[1]=true&k=v=true&&&a%26b=%&x.y=	1	1	count:6|a=[\ud83d\ude00]|<null>=[],[],[]|item=[true]|k=[v=true]|a&b=[%]|x.y=[]|mutable:1
+%2=v\u0000w=v\u0000w&sp ace=\u00e9	1	1	count:2|%2=[v\u0000w=v\u0000w]|sp ace=[\u00e9]|mutable:1
+	0	1	count:0|mutable:1
+a[b][c]=%F0%9F%98%80&&KEY=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&&k=v=%41%42	0	1	count:4|a=[\ud83d\ude00]|=[],[],[]|KEY=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|k=[v=AB]|mutable:1
+item[0]=1&x.y=%C3&na%6De=&	0	0	count:4|item=[1]|x.y=[\ufffd]|name=[]|=[]|mutable:0
+=%E2%82	0	1	count:1|=[\ufffd]|mutable:1
+?&item[]=&[x]=%4	1	1	count:3|<null>=[]|item=[]|[x]=[%4]|mutable:1
+na%6De=;\u00e9=%E2%82=%E2%82=	1	1	count:1|name=[;\u00e9=\ufffd=\ufffd=]|mutable:1
+\u00e9=%41%42=%41%42&&&%zz=	0	1	count:3|\u00e9=[AB=AB]|=[],[]|%zz=[]|mutable:1
+?a%26b==&=%C3&%=true&\u00e9==%E2%82&&&KEY	1	1	count:5|a&b=[=]|=[\ufffd]|%=[true]|\u00e9=[=\ufffd]|<null>=[],[],[KEY]|mutable:1
+%E2%82%AC=%41%42&%E2%82%AC=%	1	1	count:1|\u20ac=[AB],[%]|mutable:1
+na%6De=\u0001=\u0001&&&n-m=%80	0	1	count:3|name=[\u0001=\u0001]|=[],[]|n-m=[\ufffd]|mutable:1
+item[1]=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	1	count:1|item=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+k=v=1&key=x y=x y;==%F0%9F%98%80&k%5B0%5D=\u0001&=%C3	1	1	count:3|k=[v=1],[\u0001]|key=[x y=x y;==\ud83d\ude00]|=[\ufffd]|mutable:1
+sp ace=v\u0000w	0	0	count:1|sp ace=[v\u0000w]|mutable:0
+na%6De==%41%42&&&n-m=%80=%80&a=%E2%82	1	1	count:4|name=[=AB]|<null>=[],[]|n-m=[\ufffd=\ufffd]|a=[\ufffd]|mutable:1
+==&\u00e9=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	1	count:2|=[=]|\u00e9=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+=%41%42	1	1	count:1|=[AB]|mutable:1
+?&n-m=%2B%26%3D=%2B%26%3D&&a=Z%C3%BCrich&&&k=v=%41%42&&\u00e9=%E2%82	0	0	count:5|=[],[],[],[],[]|n-m=[+&==+&=]|a=[Z\u00fcrich]|k=[v=AB]|\u00e9=[\ufffd]|mutable:0
+item[]	1	1	count:1|<null>=[item[]]|mutable:1
+\u00e9&&&=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&%E2%82%AC=%41%42&sp ace===&=1	1	1	count:4|<null>=[\u00e9],[],[]|=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv],[1]|\u20ac=[AB]|sp ace=[==]|mutable:1
+??&&	1	1	count:1|<null>=[?],[],[]|mutable:1
+&	1	1	count:1|<null>=[],[]|mutable:1
+KEY=a=b&\u20ac	1	0	count:2|KEY=[a=b]|<null>=[\u20ac]|mutable:0
+?caf%C3%A9=%80&item[]==x y&=	0	1	count:3|caf\u00e9=[\ufffd]|item=[=x y]|=[]|mutable:1
+??\u00e9==	1	0	count:1|?\u00e9=[=]|mutable:0
+sp ace=a&&==&key=a&&&&%E2%82%AC=;n-m=\u0001	0	1	count:4|sp ace=[a]|=[],[=],[],[],[]|key=[a]|\u20ac=[;n-m=\u0001]|mutable:1
+	0	0	count:0|mutable:0
+item[]=a=b	0	1	count:1|item=[a=b]|mutable:1
+??	1	1	count:1|<null>=[?]|mutable:1
+[x]=&&&+plus+=;k%5B0%5D==a=b	1	1	count:3|[x]=[]|<null>=[],[]| plus =[;k[0]==a=b]|mutable:1
+??na%6De=%u0041&&KEY=Z%C3%BCrich&&&a[b][c]=&&&key=%C3&k%5B0%5D	0	1	count:5|?name=[%u0041]|=[],[],[],[],[]|KEY=[Z\u00fcrich],[\ufffd]|a=[]|k=[]|mutable:1
+	1	0	count:0|mutable:0
+?&=%41%42&&&item[1]=%E2%82=%E2%82&[x]=x y;[x]=&&	1	1	count:4|<null>=[],[],[],[],[]|=[AB]|item=[\ufffd=\ufffd]|[x]=[x y;[x]=]|mutable:1
+	1	1	count:0|mutable:1
+na%6De=Z%C3%BCrich&&&item[]=\u0001&&&k%5B0%5D===&%2=2	0	1	count:5|name=[Z\u00fcrich]|=[],[],[],[]|item=[\u0001]|k=[==]|%2=[2]|mutable:1
+a=%41%42&x.y=a=b	1	1	count:2|a=[AB]|x.y=[a=b]|mutable:1
+%zz=%2B%26%3D&=?&a	0	1	count:3|%zz=[+&=]|=[?]|a=[]|mutable:1
+n-m	0	1	count:1|n-m=[]|mutable:1
+x.y=&&%zz=hello+world&\u20ac=	0	1	count:4|x.y=[]|=[]|%zz=[hello world]|\u20ac=[]|mutable:1
+?a%26b=\u0001&&a=true=true&\u00e9=true&&a[b][c]&=%F0%9F%98%80	0	1	count:4|a&b=[\u0001]|=[],[],[\ud83d\ude00]|a=[true=true],[]|\u00e9=[true]|mutable:1
+A=%u0041&%E2%82%AC	0	1	count:2|A=[%u0041]|\u20ac=[]|mutable:1
+	1	1	count:0|mutable:1
+a[b][c]&\u20ac=x y&=2	1	0	count:3|<null>=[a[b][c]]|\u20ac=[x y]|=[2]|mutable:0
+a=&=%C3&%=a=b=a=b	0	1	count:3|a=[]|=[\ufffd]|%=[a=b=a=b]|mutable:1
+??%E2%82%AC=a&&&&key&=	0	1	count:3|?\u20ac=[a]|=[],[],[],[]|key=[]|mutable:1
+?na%6De=%2B%26%3D&&&a=%41%42&a=hello+world&item[0]=\u00e9	1	1	count:4|name=[+&=]|<null>=[],[]|a=[AB],[hello world]|item=[\u00e9]|mutable:1
+?a=Z%C3%BCrich&&item[]=\u0001=\u0001&\u00e9=%80;sp ace	1	0	count:4|a=[Z\u00fcrich]|<null>=[]|item=[\u0001=\u0001]|\u00e9=[\ufffd;sp ace]|mutable:0
+?	1	1	count:0|mutable:1
+item[0]=&%zz=true&&=%2B%26%3D&caf%C3%A9	0	1	count:4|item=[]|%zz=[true]|=[],[+&=]|caf\u00e9=[]|mutable:1
+a[b][c]=%F0%9F%98%80	1	0	count:1|a=[\ud83d\ude00]|mutable:0
+k%5B0%5D=true	1	1	count:1|k=[true]|mutable:1
++plus+;k%5B0%5D&caf%C3%A9==	1	0	count:2|<null>=[ plus ;k[0]]|caf\u00e9=[=]|mutable:0
+x.y=x y&&&A=;%E2%82%AC==true	1	1	count:3|x.y=[x y]|<null>=[],[]|A=[;\u20ac==true]|mutable:1
+?\u00e9=x y&&&k%5B0%5D=;item[0]==2	0	0	count:3|\u00e9=[x y]|=[],[]|k=[;item[0]==2]|mutable:0
+a=&[x]	1	1	count:2|a=[]|<null>=[[x]]|mutable:1
+?&item[1]=Z%C3%BCrich=Z%C3%BCrich&&%2=?&=2&&x.y=1&==\u00e9&=	0	1	count:4|=[],[],[2],[],[=\u00e9],[]|item=[Z\u00fcrich=Z\u00fcrich]|%2=[?]|x.y=[1]|mutable:1
+n-m=&x.y&%=%u0041=%u0041&a==%80&	0	1	count:5|n-m=[]|x.y=[]|%=[%u0041=%u0041]|a=[=\ufffd]|=[]|mutable:1
+item[0]=2;a=%E2%82&\u00e9=2&&&key=hello+world=	0	0	count:4|item=[2;a=\ufffd]|\u00e9=[2]|=[],[]|key=[hello world=]|mutable:0
+??	1	1	count:1|<null>=[?]|mutable:1
+?	0	0	count:0|mutable:0
+?%=1&sp ace=%C3&key=true	0	1	count:3|%=[1]|sp ace=[\ufffd]|key=[true]|mutable:1
+sp ace;item[1]=&%E2%82%AC=&&na%6De&&&key=\u0001	1	1	count:4|sp ace;item=[]|\u20ac=[]|<null>=[],[name],[],[]|key=[\u0001]|mutable:1
+a%26b==a&&%2=%E2%82=%E2%82&a=hello+world;%2=v\u0000w&&&item[0]==	0	1	count:5|a&b=[=a]|=[],[],[]|%2=[\ufffd=\ufffd]|a=[hello world;%2=v\u0000w]|item=[=]|mutable:1
+?=%u0041&&%zz==a&&a%26b=hello+world=	0	1	count:3|=[%u0041],[],[]|%zz=[=a]|a&b=[hello world=]|mutable:1
+	0	1	count:0|mutable:1
+item[0]=%u0041&==%F0%9F%98%80&=	1	0	count:2|item=[%u0041]|=[=\ud83d\ude00],[]|mutable:0
+??	1	1	count:1|<null>=[?]|mutable:1
+?	0	0	count:0|mutable:0
+?caf%C3%A9==hello+world;a%26b=%80&=a&&a=%2B%26%3D	0	1	count:3|caf\u00e9=[=hello world;a&b=\ufffd]|=[a],[]|a=[+&=]|mutable:1
+=?&item[0]==&	0	1	count:2|=[?],[]|item=[=]|mutable:1
+a%26b&[x]=x y	1	0	count:2|<null>=[a&b]|[x]=[x y]|mutable:0
+	1	1	count:0|mutable:1
+?=\u00e9&item[]=&&%zz=\u00e9&&&caf%C3%A9=%41%42	0	1	count:4|=[\u00e9],[],[],[]|item=[]|%zz=[\u00e9]|caf\u00e9=[AB]|mutable:1
+??KEY=true&item[1]=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv;+plus+=\u0001&a	1	1	count:3|?KEY=[true]|item=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv; plus =\u0001]|<null>=[a]|mutable:1
+%zz=a=b;%E2%82%AC=Z%C3%BCrich&[x]=&a&&&caf%C3%A9=%41%42	0	1	count:5|%zz=[a=b;\u20ac=Z\u00fcrich]|[x]=[]|a=[]|=[],[]|caf\u00e9=[AB]|mutable:1
+=true&%zz=%E2%82&&&+plus+==hello+world	1	1	count:4|=[true]|%zz=[\ufffd]|<null>=[],[]| plus =[=hello world]|mutable:1
+na%6De=%2B%26%3D=%2B%26%3D;\u20ac=&&x.y&caf%C3%A9	1	0	count:2|name=[+&==+&=;\u20ac=]|<null>=[],[x.y],[caf\u00e9]|mutable:0
+\u00e9=\u0001&a=&a%26b=2&%E2%82%AC==%41%42	0	1	count:4|\u00e9=[\u0001]|a=[]|a&b=[2]|\u20ac=[=AB]|mutable:1
+	1	1	count:0|mutable:1
+%zz==x y&sp ace=%41%42&item[]==1&item[]=%2B%26%3D&&+plus+=%F0%9F%98%80	0	0	count:5|%zz=[=x y]|sp ace=[AB]|item=[=1],[+&=]|=[]| plus =[\ud83d\ude00]|mutable:0
+	0	1	count:0|mutable:1
+%2==%4&KEY=a&&%=v\u0000w&a[b][c]&a==	1	1	count:5|%2=[=%4]|KEY=[a]|<null>=[],[a[b][c]]|%=[v\u0000w]|a=[=]|mutable:1
+=true=	1	1	count:1|=[true=]|mutable:1
+??item[0]=a&=a&&&sp ace	0	1	count:3|?item=[a]|=[a],[],[]|sp ace=[]|mutable:1
+item[0]==%&&A=%2B%26%3D&sp ace==%E2%82	0	1	count:4|item=[=%]|=[]|A=[+&=]|sp ace=[=\ufffd]|mutable:1
+KEY&item[0]=%u0041=%u0041	0	1	count:2|KEY=[]|item=[%u0041=%u0041]|mutable:1
+??x.y=;%==&item[]==x y&a[b][c]&=%4	1	1	count:4|?x.y=[;%==]|item=[=x y]|<null>=[a[b][c]]|=[%4]|mutable:1
+??x.y=Z%C3%BCrich	0	0	count:1|?x.y=[Z\u00fcrich]|mutable:0
+KEY=?;a	1	1	count:1|KEY=[?;a]|mutable:1
+key=a&&&&k=v=%F0%9F%98%80&sp ace=%80	1	1	count:4|key=[a]|<null>=[],[],[]|k=[v=\ud83d\ude00]|sp ace=[\ufffd]|mutable:1
+\u20ac&=hello+world	0	1	count:2|\u20ac=[]|=[hello world]|mutable:1
+caf%C3%A9=&sp ace=x y=x y&&&+plus+==?	1	1	count:4|caf\u00e9=[]|sp ace=[x y=x y]|<null>=[],[]| plus =[=?]|mutable:1
+?=%u0041&+plus+=Z%C3%BCrich=Z%C3%BCrich&&a=&&&key=%41%42=%41%42	0	1	count:4|=[%u0041],[],[],[]| plus =[Z\u00fcrich=Z\u00fcrich]|a=[]|key=[AB=AB]|mutable:1
+sp ace&%=%4&%zz=a&&&&na%6De=	0	0	count:5|sp ace=[]|%=[%4]|%zz=[a]|=[],[],[]|name=[]|mutable:0
+??%=2&k=v=&=a=b&k%5B0%5D=%C3&&caf%C3%A9=%41%42=	1	1	count:5|?%=[2]|k=[v=],[\ufffd]|=[a=b]|<null>=[]|caf\u00e9=[AB=]|mutable:1
+n-m=%C3;a=	0	0	count:1|n-m=[\ufffd;a=]|mutable:0
+?a[b][c]==%2B%26%3D	1	1	count:1|a=[=+&=]|mutable:1
+[x]=%C3&key=&k%5B0%5D	0	1	count:3|[x]=[\ufffd]|key=[]|k=[]|mutable:1
+?&	0	1	count:1|=[],[]|mutable:1
+item[0]=%4&caf%C3%A9&&&\u00e9=%F0%9F%98%80&k=v=a&=	0	1	count:5|item=[%4]|caf\u00e9=[]|=[],[],[]|\u00e9=[\ud83d\ude00]|k=[v=a]|mutable:1
+=;a=%C3&&k=v==a&&&=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	0	count:2|=[;a=\ufffd],[],[],[],[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|k=[v==a]|mutable:0
+a[b][c]=?=?	0	0	count:1|a=[?=?]|mutable:0
+%==\u00e9	0	1	count:1|%=[=\u00e9]|mutable:1
+?item[1]==longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	0	1	count:1|item=[=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+	1	1	count:0|mutable:1
+na%6De&x.y=%=%;caf%C3%A9=&&A=1&&%	0	1	count:5|name=[]|x.y=[%=%;caf\u00e9=]|=[],[]|A=[1]|%=[]|mutable:1
+a=%2B%26%3D&&+plus+=2;A=%41%42	0	0	count:3|a=[+&=]|=[]| plus =[2;A=AB]|mutable:0
+=%C3;key==v\u0000w&key==%80	1	0	count:2|=[\ufffd;key==v\u0000w]|key=[=\ufffd]|mutable:0
+a==%2B%26%3D&=%41%42;%zz=&&&item[1]=	0	1	count:3|a=[=+&=]|=[AB;%zz=],[],[]|item=[]|mutable:1
+?&na%6De&&&n-m=	0	0	count:3|=[],[],[]|name=[]|n-m=[]|mutable:0
+item[]==true&&&na%6De=%u0041&&%2=Z%C3%BCrich&	0	0	count:4|item=[=true]|=[],[],[],[]|name=[%u0041]|%2=[Z\u00fcrich]|mutable:0
+	0	1	count:0|mutable:1
+=?&%E2%82%AC=%&a=&a=%E2%82=%E2%82&=	1	0	count:3|=[?],[]|\u20ac=[%]|a=[],[\ufffd=\ufffd]|mutable:0
+?%zz=%F0%9F%98%80&&a%26b==%E2%82	0	1	count:3|%zz=[\ud83d\ude00]|=[]|a&b=[=\ufffd]|mutable:1
+?&[x]	1	1	count:1|<null>=[],[[x]]|mutable:1
+	0	0	count:0|mutable:0
+?k=v=%C3=%C3	0	1	count:1|k=[v=\ufffd=\ufffd]|mutable:1
+?&key=true&KEY&%==%F0%9F%98%80&a=\u0001	0	0	count:4|=[]|key=[true],[]|%=[=\ud83d\ude00]|a=[\u0001]|mutable:0
+	0	1	count:0|mutable:1
+	1	1	count:0|mutable:1
+?item[0]==?&&caf%C3%A9=true;%2=;item[]=&&&x.y==%4	1	1	count:4|item=[=?]|<null>=[],[],[]|caf\u00e9=[true;%2=;item[]=]|x.y=[=%4]|mutable:1
+\u00e9=%41%42&=%C3&=%E2%82&a[b][c]	1	0	count:3|\u00e9=[AB]|=[\ufffd],[\ufffd]|<null>=[a[b][c]]|mutable:0
+sp ace=x y&&	1	1	count:2|sp ace=[x y]|<null>=[],[]|mutable:1
+=2;+plus+=%C3;a=%&&&=a&	0	1	count:1|=[2; plus =\ufffd;a=%],[],[],[a],[]|mutable:1
+?&	0	1	count:1|=[],[]|mutable:1
+?sp ace=&==	0	1	count:2|sp ace=[]|=[=]|mutable:1
+?==&item[]=	0	1	count:2|=[=]|item=[]|mutable:1
+=x y&&&a=%C3&a==%80&a%26b=&k=v=2	1	0	count:5|=[x y]|<null>=[],[]|a=[\ufffd],[=\ufffd]|a&b=[]|k=[v=2]|mutable:0
+item[1];na%6De=2&=	1	1	count:2|item=[2]|=[]|mutable:1
+?%E2%82%AC&a&&k%5B0%5D=&item[1]==%41%42	0	1	count:5|\u20ac=[]|a=[]|=[]|k=[]|item=[=AB]|mutable:1
+?=%F0%9F%98%80	0	1	count:1|=[\ud83d\ude00]|mutable:1
+k=v&key=v\u0000w	1	0	count:2|k=[v]|key=[v\u0000w]|mutable:0
+x.y=%C3	1	1	count:1|x.y=[\ufffd]|mutable:1
+%E2%82%AC=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&&	1	1	count:2|\u20ac=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|<null>=[],[],[]|mutable:1
+%zz==v\u0000w&&k=v=&[x]	0	1	count:4|%zz=[=v\u0000w]|=[]|k=[v=]|[x]=[]|mutable:1
+=Z%C3%BCrich&%zz=%2B%26%3D	0	1	count:2|=[Z\u00fcrich]|%zz=[+&=]|mutable:1
+??k%5B0%5D=%C3&[x]=a=b&%zz=	1	1	count:3|?k=[\ufffd]|[x]=[a=b]|%zz=[]|mutable:1
+sp ace=true&&&key&sp ace=%u0041=%u0041;k=v=&=\u00e9	1	1	count:3|sp ace=[true],[%u0041=%u0041;k=v=]|<null>=[],[],[key]|=[\u00e9]|mutable:1
+?%E2%82%AC=2&=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&=%2B%26%3D=%2B%26%3D&&	0	1	count:2|\u20ac=[2]|=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv],[+&==+&=],[],[]|mutable:1
+%2=%80;sp ace=&a%26b=%2B%26%3D=%2B%26%3D	1	1	count:2|%2=[\ufffd;sp ace=]|a&b=[+&==+&=]|mutable:1
+??	0	1	count:1|?=[]|mutable:1
+a%26b=%C3&n-m=&&item[0]=true=true&key=a&;item[0]=\u0001	1	1	count:6|a&b=[\ufffd]|n-m=[]|<null>=[]|item=[true=true]|key=[a]|;item=[\u0001]|mutable:1
+item[1]=hello+world&&&n-m=?;A=%F0%9F%98%80&key=2&&	0	0	count:4|item=[hello world]|=[],[],[],[]|n-m=[?;A=\ud83d\ude00]|key=[2]|mutable:0
+k=v=%41%42&na%6De&=v\u0000w&&&na%6De=	1	1	count:4|k=[v=AB]|<null>=[name],[],[]|=[v\u0000w]|name=[]|mutable:1
+na%6De=%F0%9F%98%80	0	0	count:1|name=[\ud83d\ude00]|mutable:0
+	0	1	count:0|mutable:1
+na%6De=%80&key=?=?;item[1]=a&&A=a=b&key	1	1	count:4|name=[\ufffd]|key=[?=?;item[1]=a]|<null>=[],[key]|A=[a=b]|mutable:1
+key=%41%42=%41%42;k%5B0%5D===	1	1	count:1|key=[AB=AB;k[0]===]|mutable:1
+key=%u0041&item[1]=x y=x y&&&=%C3;\u00e9=?	0	1	count:3|key=[%u0041]|item=[x y=x y]|=[],[],[\ufffd;\u00e9=?]|mutable:1
+=2&item[1]==%F0%9F%98%80&&na%6De=	0	1	count:3|=[2],[]|item=[=\ud83d\ude00]|name=[]|mutable:1
+%zz==%;%zz=2&==%F0%9F%98%80&x.y=a=b=	0	1	count:3|%zz=[=%;%zz=2]|=[=\ud83d\ude00]|x.y=[a=b=]|mutable:1
++plus+	0	1	count:1| plus =[]|mutable:1
+x.y=Z%C3%BCrich&&&=%4&&sp ace=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&a%26b=&sp ace==?	0	0	count:4|x.y=[Z\u00fcrich]|=[],[],[%4],[]|sp ace=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv],[=?]|a&b=[]|mutable:0
+	1	0	count:0|mutable:0
+\u00e9=&&a=%E2%82&=2&&&n-m=%u0041&key=\u00e9	1	1	count:6|\u00e9=[]|<null>=[],[],[]|a=[\ufffd]|=[2]|n-m=[%u0041]|key=[\u00e9]|mutable:1
+=Z%C3%BCrich;=hello+world&&item[0]=%80&&KEY=%41%42	0	1	count:3|=[Z\u00fcrich;=hello world],[],[]|item=[\ufffd]|KEY=[AB]|mutable:1
+a%26b==%2B%26%3D&na%6De==&key=%80&&&n-m=%2B%26%3D&&key=true=true&	1	1	count:5|a&b=[=+&=]|name=[=]|key=[\ufffd],[true=true]|<null>=[],[],[],[]|n-m=[+&=]|mutable:1
+?&=?;=%u0041	0	1	count:1|=[],[?;=%u0041]|mutable:1
+sp ace	1	1	count:1|<null>=[sp ace]|mutable:1
+=%C3&na%6De=a&&item[0]=&x.y=	0	1	count:4|=[\ufffd],[]|name=[a]|item=[]|x.y=[]|mutable:1
+\u00e9	1	0	count:1|<null>=[\u00e9]|mutable:0
+?%zz=%C3&key=&sp ace=\u0001&&&n-m=?	0	1	count:5|%zz=[\ufffd]|key=[]|sp ace=[\u0001]|=[],[]|n-m=[?]|mutable:1
+??a=a=b;key=\u0001	1	1	count:1|?a=[a=b;key=\u0001]|mutable:1
+x.y=2&&&\u20ac==%F0%9F%98%80	0	1	count:3|x.y=[2]|=[],[]|\u20ac=[=\ud83d\ude00]|mutable:1
+?[x]=v\u0000w	0	1	count:1|[x]=[v\u0000w]|mutable:1
+?caf%C3%A9=&na%6De=&a%26b==1;	0	0	count:3|caf\u00e9=[]|name=[]|a&b=[=1;]|mutable:0
+%2=%E2%82	1	1	count:1|%2=[\ufffd]|mutable:1
+	1	1	count:0|mutable:1
+	0	1	count:0|mutable:1
+\u20ac=\u00e9	1	1	count:1|\u20ac=[\u00e9]|mutable:1
+x.y=;=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&&key=\u0001=\u0001	0	1	count:3|x.y=[;=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|=[],[]|key=[\u0001=\u0001]|mutable:1
+	0	1	count:0|mutable:1
+?&[x];a=%F0%9F%98%80	1	1	count:2|<null>=[]|[x];a=[\ud83d\ude00]|mutable:1
+x.y=%80	0	1	count:1|x.y=[\ufffd]|mutable:1
+k%5B0%5D=hello+world&&%2=?&	1	1	count:3|k=[hello world]|<null>=[],[]|%2=[?]|mutable:1
+x.y=&&=hello+world&&&A==2	1	1	count:4|x.y=[]|<null>=[],[],[]|=[hello world]|A=[=2]|mutable:1
+n-m====;=%C3&k=v=&&a=%u0041=%u0041;item[]==x y&&	0	0	count:4|n-m=[===;=\ufffd]|k=[v=]|=[],[],[]|a=[%u0041=%u0041;item[]==x y]|mutable:0
+	1	1	count:0|mutable:1
+x.y===&&&a=&&=2&&&[x]=%2B%26%3D	1	1	count:5|x.y=[==]|<null>=[],[],[],[],[]|a=[]|=[2]|[x]=[+&=]|mutable:1
+a%26b==%4&a%26b=1=1&a&\u00e9=%&&&sp ace=%C3	1	0	count:4|a&b=[=%4],[1=1]|<null>=[a],[],[]|\u00e9=[%]|sp ace=[\ufffd]|mutable:0
+&&	1	1	count:1|<null>=[],[],[]|mutable:1
+A=%41%42&&sp ace=%C3&&+plus+=	1	0	count:4|A=[AB]|<null>=[],[]|sp ace=[\ufffd]| plus =[]|mutable:0
+?	1	1	count:0|mutable:1
+?+plus+=%C3&key=a=b;A&a;item[1]=	1	1	count:3| plus =[\ufffd]|key=[a=b;A]|a;item=[]|mutable:1
+	1	1	count:0|mutable:1
+KEY=\u0001&[x]=a=b&&=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&n-m=%41%42&&a=%41%42	0	0	count:5|KEY=[\u0001]|[x]=[a=b]|=[],[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv],[],[]|n-m=[AB]|a=[AB]|mutable:0
+a=true&&KEY=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv	1	1	count:3|a=[true]|<null>=[]|KEY=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|mutable:1
+?item[1]=2&a=hello+world&k%5B0%5D=true&&&a=1	1	0	count:4|item=[2]|a=[hello world],[1]|k=[true]|<null>=[],[]|mutable:0
+a==true&k=v=%C3&&&%=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&&x.y&a=1	0	1	count:5|a=[=true],[1]|k=[v=\ufffd]|=[],[],[]|%=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|x.y=[]|mutable:1
+??+plus+=%4	0	0	count:1|? plus =[%4]|mutable:0
+key=	0	1	count:1|key=[]|mutable:1
+&	1	1	count:1|<null>=[],[]|mutable:1
+	1	0	count:0|mutable:0
+??%=%C3&%E2%82%AC=%80	0	1	count:2|?%=[\ufffd]|\u20ac=[\ufffd]|mutable:1
+key=Z%C3%BCrich=Z%C3%BCrich&item[]=%C3=%C3	1	1	count:2|key=[Z\u00fcrich=Z\u00fcrich]|item=[\ufffd=\ufffd]|mutable:1
+item[]&&&KEY=&\u00e9=	0	1	count:4|item=[]|=[],[]|KEY=[]|\u00e9=[]|mutable:1
+	0	0	count:0|mutable:0
+item[]==&a=?=?&&	0	1	count:3|item=[=]|a=[?=?]|=[],[]|mutable:1
+A=hello+world;k%5B0%5D=%E2%82&na%6De	1	1	count:2|A=[hello world;k[0]=\ufffd]|<null>=[name]|mutable:1
+\u00e9=%80=%80;key=1	1	1	count:1|\u00e9=[\ufffd=\ufffd;key=1]|mutable:1
+key=Z%C3%BCrich&x.y=&na%6De==	0	1	count:3|key=[Z\u00fcrich]|x.y=[]|name=[=]|mutable:1
+key=a&&+plus+=%=%;+plus+=Z%C3%BCrich;na%6De=%80	0	1	count:3|key=[a]|=[]| plus =[%=%; plus =Z\u00fcrich;name=\ufffd]|mutable:1
+A=2=2&k%5B0%5D=%E2%82&\u20ac=\u00e9&&&%;item[1]	1	1	count:4|A=[2=2]|k=[\ufffd]|\u20ac=[\u00e9]|<null>=[],[],[%;item[1]]|mutable:1
+?&a=%F0%9F%98%80&item[]	0	1	count:3|=[]|a=[\ud83d\ude00]|item=[]|mutable:1
+[x]&a=&\u20ac==%80&&[x]=%&item[1]=hello+world=hello+world	0	1	count:5|[x]=[],[%]|a=[]|\u20ac=[=\ufffd]|=[]|item=[hello world=hello world]|mutable:1
+key=1&\u00e9=&\u00e9=1=1&%zz=x y&	1	0	count:4|key=[1]|\u00e9=[],[1=1]|%zz=[x y]|<null>=[]|mutable:0
+=a=b	1	1	count:1|=[a=b]|mutable:1
+a=%80;caf%C3%A9=a=b&&&k%5B0%5D=%	1	1	count:3|a=[\ufffd;caf\u00e9=a=b]|<null>=[],[]|k=[%]|mutable:1
+a[b][c]=true&&item[0]=&key=a&	1	1	count:4|a=[true]|<null>=[],[]|item=[]|key=[a]|mutable:1
+%2=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&==%80&&x.y====&&&item[0]=&&&x.y=	0	0	count:4|%2=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|=[=\ufffd],[],[],[],[],[]|x.y=[===],[]|item=[]|mutable:0
+?	1	1	count:0|mutable:1
+KEY=%41%42&&&a==v\u0000w	0	1	count:3|KEY=[AB]|=[],[]|a=[=v\u0000w]|mutable:1
+k=v=%u0041&&na%6De=Z%C3%BCrich;a%26b=?=?&caf%C3%A9==?	1	0	count:4|k=[v=%u0041]|<null>=[]|name=[Z\u00fcrich;a&b=?=?]|caf\u00e9=[=?]|mutable:0
+	0	1	count:0|mutable:1
+%2=2&+plus+=v\u0000w;%=%41%42	0	1	count:2|%2=[2]| plus =[v\u0000w;%=AB]|mutable:1
+item[1]=%F0%9F%98%80=%F0%9F%98%80&n-m==%2B%26%3D&KEY=Z%C3%BCrich&sp ace==%u0041&%E2%82%AC==%80	1	1	count:5|item=[\ud83d\ude00=\ud83d\ude00]|n-m=[=+&=]|KEY=[Z\u00fcrich]|sp ace=[=%u0041]|\u20ac=[=\ufffd]|mutable:1
+KEY=a&&%zz=longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv&%2=%u0041&&&\u00e9	1	1	count:4|KEY=[a]|<null>=[],[],[],[\u00e9]|%zz=[longvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv]|%2=[%u0041]|mutable:1
+=%E2%82;KEY	0	0	count:1|=[\ufffd;KEY]|mutable:0
+	0	0	count:0|mutable:0

@@ -1,0 +1,501 @@
+# http3_control: 500 cases, 2 input columns, seed 3287485261926215016
+0405070207500004020102	1	events:|Http3ProtocolException(0x109):Duplicate HTTP/3 setting identifier.
+040801800100002150000308C000000040000000070240640D0104	0	events:4:0:<null>:<null>;3:1073741824:<null>:<null>;7:100:<null>:<null>;13:4:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040208010D010D	0	events:4:0:<null>:<null>;13:13:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04080101335000064064800F07000BC000000040000000753D39	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0407014064214064C02101BC	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+04050680010000800F070002406407010C	0	events:4:0:<null>:<null>;984832:100::u=3,i=False;7:12:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0404330001020D010C800F0701060C6261643D28	0	events:4:0:<null>:<null>;13:12:<null>:<null>|Http3ProtocolException(0x101):Malformed priority field dictionary.
+040A33406401800100000801	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0405015000020103010807024064	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+0401C0407E164522FDFC030D0AB0F87549E2B68ADCEAC9987C60AB52	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0403075000070108407E048CF129E5060150800F070106086261643D28	0	events:4:0:<null>:<null>;7:8:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040007010407010007098295	0	events:4:0:<null>:<null>;7:4:<null>:<null>;7:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0403064064040801406408013340640D0240640701C0800F07000408753D39	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+04000D010D800F0701040D753D390D08C0	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0402010206074A3D46189D043A050577822DDE91030108	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040A01800100003380	1	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+0404065000C00D010C800F07010240640301040308	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+04020701030108	0	events:4:0:<null>:<null>;3:8:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04023300	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04090101218001000008010D08FFFFFFFFFFFFFFFF407E08706AE5B8A1C73721	0	events:4:0:<null>:<null>;13:4611686018427387903:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040507800100000701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+040A338001000001800100000407	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0D08FFFFFFFFFFFFFFFF0403215000	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+04	1	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+040733800100000800407E104378329ADF84FB1DEB723EB02D35750A	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040506000800C02A140D72CA0C61009F55E36647F66CD94CD658F454230700	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0400800F07000BC000000040000000753D39	0	events:4:0:<null>:<null>;984832:1073741824:u=9:u=3,i=False|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040821023302015000C00004F99794A20D0104	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04030750002A111D23773C419EBA9A46A18183382DA81975800F07000BC000000040000000753D33	0	events:4:0:<null>:<null>;984832:1073741824:u=3:u=3,i=False|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+040021211340B19E74A76A628D2D1E351709BD09A9474041	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04060600330101020708C000000040000000	0	events:4:0:<null>:<null>;7:1073741824:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0301000903E258140701C006062EE6001C638B	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040B07800100000840643350000708FFFFFFFFFFFFFFFF	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04000D08FFFFFFFFFFFFFFFF407E1DB7E8EB6CF04098652F733937267D8F4E9CE259DA617F783A41945687CE0709C91506355C1D107AC3	0	events:4:0:<null>:<null>;13:4611686018427387903:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040233	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04030601C00308FFFFFFFFFFFFFFFF407E141985B9FECCD62BF733278133937D5A9F97E379580710EDEB5F7B5B3139769924C262CCD5A137	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0405018001000003010C2A2722D258401FA3702D8A718A48A460D30F3AE682	1	events:4:0:<null>:<null>;3:12:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040041000F3C4ACCB7472F9A9B873C6B1B53C1C30D0240640D08C000000040000000	0	events:4:0:<null>:<null>;13:100:<null>:<null>;13:1073741824:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04090180010000210108020701C00701C0800F07010508753D3F312100	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0D0100040707500002002100050657BEB2E117C1	1	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040B0640640750000180010000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040507012100C0090366CEEC410003475B6303010821221E4B0A9E906959E3FCAF3B254CDAA968E893B2416F8E70934BCC6EFE6B84CBD8E444	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0405060208500041001F2E9A69D873DECC362860E842709772C09CABA14E65A3FB5A29FA4657DC9A1D0701C0	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040007101C8E4FE1A9EF07309B62E065ED1B9C80	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040808010150000750000710DA2050EB686E	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0401C0800F07010404753D330700	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0401C0040701003380010000800F070109FFFFFFFFFFFFFFFF69040C070106800100000880010000	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+040C0780010000018001000008020D08C000000040000000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0D01040701040709D6C745956ABE2596912108FF779BC11106B7C9	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0404330007020701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+04023302040833800100000840640701C0800F07000504753D3380211582D74E3217454E9F9E04D4C7578F8437C1C2E0612E	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04030140640701C007010C800F0700050C753D33800701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+0601B6	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040D2180010000330207	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040A018001000033500006010D010C0D08FFFFFFFFFFFFFFFF	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0404060101000400211FE2DB9AEE7D1DAEE2C197B438	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+040733800100000702800F07000BFFFFFFFFFFFFFFFF753D39	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040821500007800100002A209DEE05A2CECB5640645D17F345110CC1FFC8EC9E3A84C0980224D3560F2FE687	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04060801010208010D0100800F0701020069800F07000604753D332C69	1	events:|Http3ProtocolException(0x109):Duplicate HTTP/3 setting identifier.
+040221020301080308FFFFFFFFFFFFFFFF	0	events:4:0:<null>:<null>;3:8:<null>:<null>;3:4611686018427387903:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04082140640180010000030108	0	events:4:0:<null>:<null>;3:8:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040721	1	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+0405010208500007	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040007091C	1	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04040801010106018C0700	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0402330104000D08C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+0405	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040733800100000100	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040A018001000007	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040333500001045FD16833800F07000408753D3304004100105B566A7522B39B3D403D2FAD2046B295	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040A064064088001000033	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04050700064064070001000709B84AC82C6FE344595D0403085000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04090650000140640640640D08C00000004000000007002A075DF0B44F8794E6	0	events:|Http3ProtocolException(0x109):Duplicate HTTP/3 setting identifier.
+407E20	1	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040502010800C0	1	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+0407210108500006020701080700050790C4288A844D28	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040233010701C00D08FFFFFFFFFFFFFFFF0301002A13BAC7165A477F66B28E637B6BE9014CE2967938	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+0405025000080107010C0308FFFFFFFFFFFFFFFF	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+04060101074064C0800F07000608753D332C690400	1	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+04042100	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04030640640406065000085000800F07000CC000000040000000753D3380800F070108C0000000400000000701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+040221	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+0401C00002510E800F07010508753D33800308FFFFFFFFFFFFFFFF	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+040501500008020701C00709280A372C880094F4F5	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04093380010000070233020710F5ED94705829CF07C7DAF8D4190DB4BB407E1DDC6F865D03111152653F04C8093F1E1257CCE0707951F85427958C06340701C0	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0408	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040908800100000100330203010421277E1E78946B7E32C212E29E0B588F8739A0D1515D3A9EB6FDC075EFD96AF7A18C8C5A4C19D0D34C0007F4526796A1AD20	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04020600071006E3EAE5069900987AB7DB	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040506406421012A0D3582DF0B2D8A149669C929A10507000D0108	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04000D010C800F07000608753D332C69	0	events:4:0:<null>:<null>;13:12:<null>:<null>;984832:8:u=3,i:u=3,i=True|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0401C007095DB6F6095759402A120700	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+040007010C03010D21052BB4363B0A010336F18D	0	events:4:0:<null>:<null>;7:12:<null>:<null>;3:13:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0401C00106FC43DED921B304000406210208000701	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+04030840640502BDBC	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04030700C00701C0	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+040602010601070203010C03010D0701C02A07F436789E39B554	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+04000D0108	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+800F07010BFFFFFFFFFFFFFFFF753D33030104	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040933010780010000080204030700C00308FFFFFFFFFFFFFFFF0802F1AF	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0404330133000708	0	events:|Http3ProtocolException(0x109):Duplicate HTTP/3 setting identifier.
+040421010800	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0D010C050798DCEA707473BF070108	1	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+04083350000101084064800F07010CC000000040000000753D338041000C2CA8581644B0D39DF7325EEC07101BADAC2AB1A91D7F92235B9D9B98506B	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0403074064	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0407068001000021020D0100	0	events:4:0:<null>:<null>;13:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04060880010000C003010408000708C000	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0400070240640407014064060002020308C000000040000000	0	events:4:0:<null>:<null>;7:100:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+0701C00708C00000004000000001	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040533020801C004000710E37AFF186613EA666717E0A66E2454240701C0	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04020100	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040001000708C00000004000000009065DFA92CBA2A1	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+04063380010000C004053301084064040501010740640708C00000004000000007024064	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0405334064210103024064070939188184A9F2260BF2	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040721800100000102800F0701040D753D33407E02B8D7	0	events:4:0:<null>:<null>;984833:13:u=3:u=3,i=False|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040D08800100000640643380010000800F070006046261643D280607A6D9D9D9556113	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040207002A0007024064030100	0	events:4:0:<null>:<null>;7:100:<null>:<null>;3:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040A078001000001406433020400	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040A07010840640280010000	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040A21500033000180010000040721406401000802800F0700010D0701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+020664297FBFB20F07010C800F0701040C753D330701C0	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0405330207500007093CBF5D02AB8320AA6B07095B909C151B510B24A6	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04000709D3FB52BAC679F12FED0006C2	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0409088001000007012101800F0700054064753D330400040433010101	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040721406402020801800F07000400753D39070104	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+04060880010000C0800F07000504753D3380800F070006006261643D	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040706022150000101	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04060601210133000702406407010C0701C0	0	events:4:0:<null>:<null>;7:100:<null>:<null>;7:12:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+41001BA4EE293468CAE21FB6652D0F91777B5C08ADBC68906F0553B6B1350400	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040506020240640405215000010009080A83A38238963C610701C007010C	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+04052150	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040208020402070003010D	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0406015000085000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0404020001020701C02A0EB45CF695F43B55DD2FE639BD527A04060140640750000700	1	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+040307406441001A0AFF0F663374ABCDD0E742967DE4CB7503052284AA9684D9B59E	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400070100	0	events:4:0:<null>:<null>;7:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+2A15D64E63378919A9EE25651165E31F64D1592CFFA835	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+04080640640880010000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0400070240640D08C000000040000000	0	events:4:0:<null>:<null>;7:100:<null>:<null>;13:1073741824:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040A065000078001000008020901700701C0	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040833406406010750000308C000000040000000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04000100070240642A13773E5CAA2AEFE1ABCFD0D0AF9C3F0F1C8CCE8703024064	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0406330008020601070100	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04000709FE306834E4AB751A07	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0400	1	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04062101060101000700	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0409	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+0D024064800F070106006261643D280308C0000000400000000D010C	1	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0400800F070106006261643D28030104030100	0	events:4:0:<null>:<null>|Http3ProtocolException(0x101):Malformed priority field dictionary.
+040206012A26C125E0E07792AB8669CC4EA96C24A63875E173DC4466F264FEA1A3B308144CEF45D4C388F8930701C0410003225E370700	1	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+04040102330107	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+040202	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040421000700407E1F172AECFAFD9B6ABFE119F606B2329772CA36775B0E02705DC050933854A5330400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+040007010D	0	events:4:0:<null>:<null>;7:13:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04020600030240640607E6FA2CC62B387C800F07000CFFFFFFFFFFFFFFFF753D33800702	1	events:4:0:<null>:<null>;3:100:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0005E8BE9C0DA4	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+04093380010000215000C003010D	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0405338001000003010D0701C00403214064	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04060850002140640D0104	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0402210100000701C0800F070006046261643D282A27080E	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040502800100000301000710EAEEEC2686657526D11190C568897CA7800F07000DFFFFFFFFFFFFFFFF753D332C69	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+04040101330005084354A033A1DE8CF92113AF422694D5D3B7EF05453A8BD600743720A326	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0403065000407E16FB74E1990AD6A5D19429AED3D68F2ADE7050C70D8ABF800F0700050C753D33800D010D030108	0	events:4:0:<null>:<null>|Http3ProtocolException(0x101):Priority field is not ASCII.
+04060750000702C007100F	1	events:|Http3ProtocolException(0x109):Duplicate HTTP/3 setting identifier.
+040233020D010D0701C00508577FBE565311E2BD0403214064	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040601000600080106077F230F726C47AD04000000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040707800100003301211A13A41C08913D	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040A074064218001000001020710689B60F92810B820FA0AAA	1	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0701C0	1	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0402080107095358381CE85F91773005024E4F	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04070880010000330007105FA519AF05C281AC359F80F0D5031D23010007010C	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04002A1E8819B943A69159BAF5F5434AC61372344459B5C4267FB1E69B91AB386054070104	0	events:4:0:<null>:<null>;7:4:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04070100088001000007103E3A70633A403CF7F90B2CDF81E71D1F0D08FFFFFFFFFFFFFFFF	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0409080106800100000701800F07000504753D3F310D010007105AF990C6D9D2C67C49BA3EE7125696B407024064	0	events:4:0:<null>:<null>;984832:4:u=?1:u=3,i=False;13:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+0406064064334064	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040521023300C007010D	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0407215000070008010D	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+0407080133500021020404015000C000014C800F070009FFFFFFFFFFFFFFFF69070100	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04060250000850000710A7924D7F6770BD34FFD95FE358BAFC7B0701C0800F07000CC0000000	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+0708C000000040000000800F070001080301040710E2F220606A656BD94919E8FB90F1EEAF	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0402060241002708727CE5274AECADE03BEE41F7AC4E1398271E4FD50430988DB7919E900FE58A524C208569DBB007010D0701C0	0	events:4:0:<null>:<null>;7:13:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+0D08C000000040000000800F07000DFFFFFFFFFFFFFFFF6261643D28030104	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040B01800100000650000702C0040501406433000708C00000	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+040008000701C00D0100800F07010404753D39	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+	1	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04050780010000800F0701054064753D39	0	events:4:0:<null>:<null>;984833:100:u=9:u=3,i=False|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400	1	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040003010C03010C070933EF9EF58F08A21071	0	events:4:0:<null>:<null>;3:12:<null>:<null>;3:12:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0403015000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04020702	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040521003340640103FC2EE2040721800100002100070104	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04000301040710753D07C5E61ADF3A50087532D6E029A00D08C000000040000000	0	events:4:0:<null>:<null>;3:4:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04030702C0800F07000400753D390600	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0400210EE1061D2F9D3B40A9FD264DC7B1720709D0250A4705ECF4BD97800F0700034064690804FCB19BDD	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04032101C001000701	1	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+04060601210007010709ECCE50E969BF92A502	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+800F0701010C070104040401002101	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0409060021800100000801800F07000408753D33	0	events:4:0:<null>:<null>;984832:8:u=3:u=3,i=False|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040306406407000D0104040907010680010000020141001CA12C1029A0EE3319B1018C23CB2BBC011F347747A585CEAAC528DA18	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0406070101020800800F07000404753D33407E27F8B456F6A8D8EB2A2C3676502ED68065319BE938837731349F8E24A137345313B3374A1B4E31340701C0210C9F90390AABCD3F09C8BF4815	0	events:4:0:<null>:<null>;984832:4:u=3:u=3,i=False|Http3ProtocolException(0x106):Truncated control identifier.
+0405	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04000701C0800F070106046261643D28	1	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+0400800F07000CC000000040000000753D3F31800F07010508753D33800902105F	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):A server cannot send PRIORITY_UPDATE.
+0700	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0407210233500008022A0819AC091CCD322462	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040C0680010000088001000008010407018001000033010D01080701C0	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04000308FFFFFFFF	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+0807544D51F1D81BE70D01000701C007024064	1	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+	1	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04040100210101079624A5F2E0199303010C0709F49D6251A779867BA50308FFFFFFFFFFFFFFFF	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040333	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040A078001000008010640640701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+0007EBEE6D15AD961F0D08C000000040000000	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0408065000078001000021240B14E06B8854860AE7DC190A043B5FE6EC2F302FE0E3C9A6F26E9A6CA113B780840A9248	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+800F07010CFFFFFFFFFFFFFFFF753D3380	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0403215000	1	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04060840640600C004030701C00701C001015A0709764133B4238D023A10	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04060650003350000701C00308FFFFFFFFFFFFFFFF0108DFFF24	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04030602C007004100203ABFBEBCBFDDFC151B05DAE085E81AF04B3ABCCE3D2F3AFBF89EB8691194D0CA0900	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0200	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040D08500006800100000180010000	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0708C0000000400000000710C016569345EAB05C0B58BBEB592416D303024064410016D1354F79635A7ED2E291C0C4DB24D7341A322502F730	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0403085000800F0701050D753D3F31	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040407003300	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0402	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+0D08C000000040000000	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+04030650000407080106800100000701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+0403075000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0402080007099471EE9B6F21853C35410013A39CDC99F2B169FF447DD6900D5422A03B82290308C000000040000000070938D59562EC04C56167	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04040600	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+030100407E1BBC7E17CD54729A34CCFAE66C68	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+04	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04022101	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040733012150000200407E27EB63A72186C08EBA2E1BBB0293386D562638B0B0A426C015A814696088902018B51D7F298B3431	1	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+040701800100002101	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040421010600	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040206000710A0B38DA11E4A6D97BE148BF4055C8B8008027ECE	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0406018001	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04050700084064	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+800F0701040C753D39800F07010604753D332C69	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040621406433500004060650000101C00701	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040433010602040806800100000740640400	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+040A334064075000065000C007000301040308C000000040000000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0701C0	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040606010701080202051A307360AC	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0407070221020102C002026D40	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+04050880010000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04023300	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04062150000702C003010D2A12966705539204D4CE45FC1A82963834ACFCE32A07F83C4F8C25AC6507095B5C9A45CAACDA5FE8	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0407075000210201000308FFFFFFFFFFFFFFFF07099C59B5B557CD9F5C702A046599CCB4	0	events:4:0:<null>:<null>;3:4611686018427387903:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0407070102800100000701C00906	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+0409018001000006013300800F07010404753D330D010D0700	0	events:4:0:<null>:<null>;984833:4:u=3:u=3,i=False;13:13:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040206020701C0070911945E017F983ADAC221071C	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+0404010233022A25B2C15821BD9689394FFD33935984F0B4A7B8EFB1FD80B8AF871BE5F9743BE63407FC9A5B7807099B593BC962C3E17EF4	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04053300074064	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04000902EB410701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040806406408800100000506A899AE21D6AA	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+800F07010DFFFFFFFFFFFFFFFF6261643D28	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040007010D01069C291FFA39A107	0	events:4:0:<null>:<null>;7:13:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040A010133800100002150000301080710FE33E32C920660AF8BF444FDD51C904E0701C0	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04030640640701C00701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+0403334064070007102E15F9322A3416F1C4B2609D12FB40F307000D0108	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040008084F37FB54347AB232407E00040307406407101A71B3A3AA7CBDE09FE6A26DB2708B44	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0405210007406407109B4DA9BF4229C731075980085CD463010709A3840280E8D1E9DFB8	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040621000102330102031701A60710C0F448D4FD340F53D71C9C4958D6F30C	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+04000701C003010D0D010D21091B0442BB20FE132D52	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+040206	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+040801020880010000C0800F0700050C753D3F31	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+090777FBD67031816C07000308FFFFFFFFFFFFFFFF	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0400040207020D010D	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+040533406402000106	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0406080233000601800F070109FFFFFFFFFFFFFFFF690701C00308FFFFFFFFFFFFFFFF0D0108	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0405088001000007024064	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0409080007012180010000800F0700054064753D3304050702334064	0	events:4:0:<null>:<null>;984832:100:u=3:u=3,i=False|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+0403084064	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04050880010000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040608020701210141002881A0BA52702977B78D4AF802384A8C4052C159041AFDC82287305F2C322EDA231093DFE55AC674AC0701C00D08C000000040000000800F0700020069	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0406335000014064800F07010740646261643D280406074064084064800F070106086261643D28	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+040201	1	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040706020850000202	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040A210106023380010000C00709AD50E0BE3C5A4D864D0701C0040908500002500033500004080740640680010000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040701800100002100060623C7	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040003010C0701C0	0	events:4:0:<null>:<null>;3:12:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+04030101C00701C02122FA902B4A2A45D4562CE75F825B8C2B15C1D24DA9981FB2E0E2CE262DF83D197548F22117D202CC9C5E59D4F46CCB2FBE108C58F55C525DEAD211AC	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0404070121022A1C44DD40E547D46825D3AACF46DAE1968848DC4933FAB0DA1FC56C054501023A4E0701C00700	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040706500001010802407E04F6B6BA8C09077609A768CEC45D	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040B07800100000150000840640D0100	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040708010780010000800F07000508753D33800701C00709FC169EA13A100ECC8E	0	events:4:0:<null>:<null>|Http3ProtocolException(0x101):Priority field is not ASCII.
+0403065000211F513EC7EB8F9D0249B4E95E261357C6E7844CC716A9867125C5C9090B72F7C1	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0407330001500007000403214064070100	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+04000308C0000000400000000701C00D024064800F07000CC000000040000000753D3380	0	events:4:0:<null>:<null>;3:1073741824:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+04000709E7971559CCE823A3F00D010D	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040706800100000801070104800F0701020C69070988213A1D4927502E4541002351A9B6949E8293AE87D4547E251F44CB4D	0	events:4:0:<null>:<null>;7:4:<null>:<null>;984833:12:i:u=3,i=True|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04052180010000407E257DF8AB2B93BE2EAFFE074EE7CA19F77C9F91C811335E1599A842D7AF9F3F5E54B030D949FB0406070108012102407E2381F5F6CDE7A67B499020FBDEB2F168D4DD1FCF3A3176BA834943EF110016E8643E41AC	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+040007010C	1	events:4:0:<null>:<null>;7:12:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040A010006800100003301C0	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0400800F070009C00000004000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04033340640701C02A20E709B365F5B3486E978D184BEF7397F61FE3D0A0B49763B9357FC00B50F65824407E28A6460D4B8670F2E1D16DCC7D1228E70005F432D8B3134E3F5077FFC2A9AF5DFF6C8C69B7B1C33E9F0D010C	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04000701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+04023302071026D72AA872F91B957126EB567B27E8F5	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04030201C0040401000102	1	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+040221000701C0071089192C7FA158A9EC6129685B22FDCB	1	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+040707023380010000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040401010800030104050697E25F9CBA70	0	events:4:0:<null>:<null>;3:4:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0605780E11852F	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040007002A0EC9C5E4D65AADBB4E145B9BB2E9AB800F07000408753D33	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0407070133500008010D010C0208CB01A9D56A6A2F110D08C000000040000000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040408002102071080D9CA005ADFEF1B802D2505A6052DDC	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040A06020680010000074064407E09DDF6109E33A6364C302A124A5FBC82E7C1EEFEBFE09C1A0F23986B10070005AAC6A527C6800F070003406469	0	events:|Http3ProtocolException(0x109):Duplicate HTTP/3 setting identifier.
+04000D010D4100000400	0	events:4:0:<null>:<null>;13:13:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+04073300214064080041000E61A9C6DFE3606A7DD8AE8A17C69D070961E8D15596FB759A5107092984C6499BB26CCD50	1	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0406074064065000	1	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0405338001000003010C020041000D24888D3D12099DA1040F0EBCBC	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040003024064080884279B65334180020710FBC05950927A862716BC73443A9FA268	1	events:4:0:<null>:<null>;3:100:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0401C00000	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+040508800100000701C007	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0400030240	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+040433002102800F070008C0000000400000004100	0	events:4:0:<null>:<null>;984832:1073741824::u=3,i=False|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+407E2507132BB4AF1129210C91EFDE11E71CA02C45D448125199886B0D20195F698FEFDB1CA2A5B3	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+04022101800F07000CC000000040000000753D3F310709F260E445E83114184E0400070108	0	events:4:0:<null>:<null>;984832:1073741824:u=?1:u=3,i=False|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04000710F351C40C	1	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040041000614	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04090200078001000008000D010C2A11A07BDFE07A39B122C3E515B6B00C9D4FE0	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+0401C00701C0	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0409215000084064335000040733000180010000410013C720A3759CD9043A34C380D25AC5CD22AF9BEB0701C00708C000000040000000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0401C0040206020406085000014064	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+040208000506C0C9039408B5030240640308FFFFFFFFFFFFFFFF0710E895AF16ED71DA7DC209B600E17EE445	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040A078001000033500006000708FFFFFFFFFFFFFFFF060184	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040508800100002A1689B47AAB36599E53879AAB43BF036B70DC461FCA85	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04060701214064C004050101084064	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04050680010000800F07000DFFFFFFFFFFFFFFFF6261643D282A0F6A45329DC4B1CFD8132C9769C9675E800F07010404753D330710DF2DF74C24D1A8DC01EA9A14EA60C458	0	events:4:0:<null>:<null>|Http3ProtocolException(0x108):Priority target is not a request stream.
+04060840642100C0040B06800100000280010000C0	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040702012180010000	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+04	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+04060740640640642A173416AE06B25C6D5216AB1FB1B9AA3AFA957974CC2EFE5409076B2D6C4987F817	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0403214064	1	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400040B33800100000640640601C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+040A01500008800100002101040807406406023301C00710DB526BC12D34098B4B284646142009DA0600	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040A33800100000850000700040A01800100000180010000407E00	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04052180010000800F07010CC000000040000000753D33800701C00709C6E8EEDA7B1B5FE4DB0701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x101):Priority field is not ASCII.
+04022101	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040507406421000D010807100AF80E891F738E91834704DCEE7C7AFF	0	events:4:0:<null>:<null>;13:8:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040633500006500003	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040421000600040908500033500001500005000D010D0D010D	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+0400410020529A54D9A259889DE50CDB0BA1A8B39F502E18A05C9DCC071928F6A3751219060102D11A03010D	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+04000D01080407210108023301C0	0	events:4:0:<null>:<null>;13:8:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+040207010701C0070108800F07000400753D39	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+04000404080006000308FFFFFFFFFFFFFFFF03010C0708C000000040000000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+04090880010000210101002A12E5331D98981756B68A2209484C261A2F2F3C0D0240642120689CE81F18A9B4D97D69A91761F1217E0BB05ED904515330A830425470ADDDB80D0108	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040208020D01040D0104	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040507000840640709CCE82EE8C2A9E2570C0400	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04080780010000334064800F07000DFFFFFFFFFFFFFFFF6261643D280709D200FBF9C4AFB34B03	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+04030850000701C0090476CE50DE	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040208000108A17F8502FD7C4A650700	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0409024064	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04073302215000020104022102	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04000701C021096564D97FEECB3F27A7	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+04023302800F07000DC0000000400000006261643D28	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0406060101003301	1	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040008046F1A3B25	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+04	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+040402010700410000	1	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0402330004020701	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+0404210006002A0A039EA650EB627EAC015D0D01040608E97C7555CB6459B80708FFFFFFFFFFFFFFFF	0	events:4:0:<null>:<null>;13:4:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040621000102080002022DD1800F07010400753D330700	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+04082180010000085000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040B0650002180010000014064040D2150000780010000088001000003024064070104	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+04072100060201500007102293D2F7A17F8A00765ECDA5C2942577407E07951FE1F42B31D4	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040C3380010000	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040A0780010000214064060003010C0407215000075000C0	0	events:4:0:<null>:<null>;3:12:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+030108070240640407210108000200C0800F0700040C	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0403015000211965FD966BF10C36CDF7052D62A75226A2A71B57C0E5AD2874890701C00710CD1F2365F8C3807A52267626FF54713F040706013380010000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+040206000701C008025B970701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+04000D010C	0	events:4:0:<null>:<null>;13:12:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040207020701C0800F0701010C	1	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+04053380010000071018ED470A80F6C02D81EC81EF5EBB929D41001F325CEAD3215B6488FB6F734D549E38702BC5FFF79C	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04020601	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040C0101	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04053380010000	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040433010700	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0407088001000006000D01040709CF17EB22B96A6388F30708C000000040	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0403065000800F0701050C753D3F310701C00902749E	0	events:4:0:<null>:<null>;984833:12:u=?1:u=3,i=False|Http3ProtocolException(0x106):Truncated control identifier.
+0405215000080004000701C00701C0	1	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+040208000308FFFFFFFFFFFFFFFF2A043C0B430807091796A02ABEEF0EE84721120E22D620429C1A8E6C3AC4FD64833EF212A0	0	events:4:0:<null>:<null>;3:4611686018427387903:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04023300071046BAD5DF936D125670BB2F66DAC1312A0D010D800F07000DC000000040000000753D332C69	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0407080221010702C004040602010007010D	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04050100215000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040007004100039DFFC0	1	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04030740	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04050780010000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04020802040708500033	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0401C0	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0407078001000021022A25C30E0A259EBDD37A7A92AE479D2EAF200EC74D2F0B2BCC4A1E855F44FF22EABDEFA0432AAC800F0701064064753D33800D0104	0	events:4:0:<null>:<null>|Http3ProtocolException(0x101):Priority field is not ASCII.
+0407070121800100000308FFFFFFFFFFFFFFFF0D01000701002A08CAD4762606A030C2	0	events:4:0:<null>:<null>;3:4611686018427387903:<null>:<null>;13:0:<null>:<null>;7:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04080680010000215000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400210F467EE66DEB33AACAC19AEEF5166D940701C0800F07000BC000000040000000753D330403015000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+040508800100000708C0000000400000000D08FFFFFFFFFFFFFFFF2A12081A6A0C065918D76E4125EED3C9FD46C0C6030100	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04080140640780010000	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04033340640701C00701C0	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0403024064	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+0405015000080107024064211CD6304DDEC634859BFDC3E4CF0738610F642780F560781B298044	0	events:4:0:<null>:<null>;7:100:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+0408075000	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040C07800100003380010000020207024064070108	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0404210201022A080F378FED51B753A7030108	0	events:4:0:<null>:<null>;3:8:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0701C0060007010002	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040706800100000101071093C08E2045869C1F17F8DE1E113BA0BA0701C007010C0701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040206020708FFFFFFFFFFFF	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04090180010000070233010106E8F4D2CC9D030701C00701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040208014100033E20B02A2368C3F644B55B3C8E7226	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040321500041000CBE228DAF3308C862878BF35A0701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+0404064064C0	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+040007010C09000205367CDC6B730804370C3863	0	events:4:0:<null>:<null>;7:12:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+040506500007010D010C0D08C000000040000000	0	events:4:0:<null>:<null>;13:12:<null>:<null>;13:1073741824:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400800F0700020D6903010407102C4729BF11412B2138E5E747E284BFC3407E18E16EC335EDBE9053C45CCAED257CB0077CCF470EE5D969EF	0	events:4:0:<null>:<null>|Http3ProtocolException(0x108):Priority target is not a request stream.
+0407214064210007000709CF682BA77F0B20768E0105AE2A4FA84907010D0D0108	0	events:|Http3ProtocolException(0x109):Duplicate HTTP/3 setting identifier.
+0400800F070001080301	0	events:4:0:<null>:<null>;984832:8::u=3,i=False|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+2A165E80BC53A2ABED50A52D3ED2F521FF9B6B3E9F4CB8A42A08EF19E99BFD33069C	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040A088001000001002140640701C007090ACCD83C	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0409075000335000084064800F07000DC0000000400000006261643D	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04060140640602C0040701500002002102	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+040807500021023300C00700	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+04080840640680010000040208020301000701C0	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040821406406500021010701C00701C00700	0	events:|Http3ProtocolException(0x109):Duplicate HTTP/3 setting identifier.
+0005DA287EFC880D08FFFFFFFFFFFFFFFF0308C000000040000000	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+040501406406000308FFFFFFFFFFFFFFFF0308FFFFFFFFFFFFFFFF07108EA56C7C66A4CC2D92F6D7E6693797D303024064	0	events:4:0:<null>:<null>;3:4611686018427387903:<null>:<null>;3:4611686018427387903:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04030240640D0240642128D9BE7D4262BEB5C3607358A3A4C18D01B4A2BC3FB6CC633F59FEE00269EABE73EE2389B4532186BE	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+040407000202800F0701064064753D3F31	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+0406080121003300800F07000BC000000040000000753D33800F0700054064753D330D0100030100	0	events:4:0:<null>:<null>;984832:1073741824:u=3:u=3,i=False;984832:100:u=3:u=3,i=False;13:0:<null>:<null>;3:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040207020709	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0400210AAEAA7029D4D79BF15BFA	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04000D010D040208010D0104	0	events:4:0:<null>:<null>;13:13:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+0409020121800100000601800F07000208690D010D0701C0050712BAAF06648ED2	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+0402060080	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame integer.
+07010D040233010708FFFFFFFFFFFFFFFF	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+04000701	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040633020202010104050140642102	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040707000180010000410003B707350701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+0404080121020903DCE1F607000708C0000000400000000700	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0405014064330003010D0700	0	events:4:0:<null>:<null>;3:13:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+0400	1	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04004100265986C65CA61987475D0B34EB92A5E1F990E15BC30BE59AA6712E73D3D48E8372AA474EB75E6E060406512B98	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+04092102028001000033010708C0000000400000000804064970DA0701C007024064	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+04080150000802074064071081C10504BF9270DF13E0D1BAC6533CAD0308C000000040000000070104	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+040621	1	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+0406060202020702800F070008C00000004000000003010C	0	events:|Http3ProtocolException(0x109):HTTP/2-only setting received in HTTP/3.
+0400407E064E35DFB9478F	1	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400040521800100000710120231949D2F2444D33BF062261E281E	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+04000708FFFFFFFFFFFFFFFF070004060100060107002A0C60091C8D72157A65FCD069B9	0	events:4:0:<null>:<null>;7:4611686018427387903:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+040508800100000701C00308C000000040000000	1	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0405014064	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04080640640802074064071072319DD731165922AF6F02BCEA1CAF71	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+0407060207800100000701C0407E0869D0C7B2262697C4071083DEEAEBF0D1B195245BBCD7CC62429F	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+04040601210103010D0405070206500007010C	0	events:4:0:<null>:<null>;3:13:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.
+040003	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame header.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+010541291E53940701C001065AA4E9814606	0	events:|Http3ProtocolException(0x10a):SETTINGS must be the first control frame.
+0400407E27EDB13CF672C17F9CC105F1D7AC9EE20FCCBF9D31700CAA6D1E682A8CE51005D9C585FFD2397761800F070103406469800F0701054064753D39	0	events:4:0:<null>:<null>;984833:100:i:u=3,i=True;984833:100:u=9:u=3,i=False|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+040507800100000D08FFFFFFFFFFFFFFFF08026624410005B94C51E15941000C4E1EC0A2CA73F600	0	events:4:0:<null>:<null>;13:4611686018427387903:<null>:<null>|Http3ProtocolException(0x105):Frame is forbidden on this HTTP/3 control stream.
+0400	0	events:4:0:<null>:<null>|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04060700010008000701C007010C0602F4780701C0	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+0409068001000021002102	0	events:|Http3ProtocolException(0x109):Duplicate HTTP/3 setting identifier.
+040507800100000701C00709FF1841C8D407B51CBF0605FB274CF0E7800F0700064064753D33	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+040507800100	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+04002106	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040821500001800100002A21F5FC116832A42F4A31A7A6C7110FE1F967857D3CC073EBA9FBDE8E9EDA69977D0E0710CF5E51A25FA79C655FD1989DF7BDFD3D07010C	1	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Invalid HTTP/3 control identifier length.
+04000701C00002113A	0	events:4:0:<null>:<null>|Http3ProtocolException(0x106):Truncated control identifier.
+	0	events:|Http3ProtocolException(0x104):Peer closed the HTTP/3 control stream.
+04090650003300074064C0	0	events:|Http3ProtocolException(0x106):Truncated HTTP/3 setting.
+0407060001	1	events:|Http3ProtocolException(0x106):Truncated HTTP/3 frame payload.
+040708023380010000407E07E23C196FDDF2E20D01080D02406406059B85F420CA	0	events:|Http3ProtocolException(0x109):Invalid HTTP/3 boolean setting.
+04000406070233000800070939CFF5976B4915DCA8070108	0	events:4:0:<null>:<null>|Http3ProtocolException(0x105):Repeated HTTP/3 SETTINGS.

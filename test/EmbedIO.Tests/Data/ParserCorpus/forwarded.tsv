@@ -1,0 +1,501 @@
+# forwarded: 500 cases, 1 input columns, seed 16134482951587649675
+proto="tab\t" ,for==Http, 	<null>
+proto=HTTPS;;for =[]:_; for=::ffff:203.0.113.9:65536 ,proto=https; proto=127.0.0.1:_obf,for="tab\t"; "for"=Http	<null>
+host="[2001:db8::1]:8443",for="", "	<null>
+	n:1|<null>,<null>,<null>
+"for"=Example.COM ;Host=https ,="http"	<null>
+,,for=	<null>
+	n:1|<null>,<null>,<null>
+For=10.0.0.5:65535 ;for==example.com:,,,,x-ext=[2001:db8::7]:65536 ;host=[2001:db8::1]:x,,	<null>
+	n:1|<null>,<null>,<null>
+ , ,host=[2001:db8::7]:99999 ,	<null>
+for=-bad- ;PROTO="a;b";for=203.0.113.9	<null>
+for="quoted"	<null>
+FOR="a\\; for=fe80::1%eth0:_obf ;host=fe80::1%eth0,,,x-ext="https" ;"for"=[::1]: ,host=:abc ;by=exa mple.com	<null>
+by=exa mple.com; host=tok, "	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+fo r=Http,, ,x-ext=not-an-ip:65535=	<null>
+for=example.com:65536;;secret=h ttp,"for"=2001:db8::7:99999, 	<null>
+by;;fo r=,,proto=[::1]:65535;PROTO="a;b"	<null>
+	n:1|<null>,<null>,<null>
+,PROTO="a\\; proto="a;b";for=[]:_	<null>
+x-ext=203.0.113.9 :80  ;for==203.0.113.9:80;by=https,secret="quoted";proto=https,for==203.0.113;;PROTO=example.com:8443 ;by=HTTPS,,"for"=	<null>
+proto=http;;proto=_hidden:65535, for="a;b"; PROTO=not-an-ip:abc,proto="with\\"escape",=https 	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+proto=::1;for=tok ;for=203.0.113	<null>
+,for=example.com/evil	<null>
+by="https" ;host="https", for="quoted",  ,for =h ttp	<null>
+	n:1|<null>,<null>,<null>
+host=1:65535	<null>
+,, ,proto=203.0.113.09; secret=::1:99999	<null>
+ ,by=Example.COM,PROTO=_bad!:0; Host ;for =[2001:db8:::7]: 80	<null>
+ ,PROTO="a;b"	<null>
+for="https",,for=http	<null>
+Host=:99999 ;For=203.0.113.9.1	<null>
+x-ext=ftp; =http ,	<null>
+host=_a.b-c_d:abc;;host=exa mple.com;;for,,FOR=https ,Host=:4711	<null>
+	n:1|<null>,<null>,<null>
+FOR=203.0.113.9 :99999	<null>
+, host=198.51.100.7 ;host=ftp ;host="ctrl\u0001", 	<null>
+, =Http;fo r="with\\"escape" ;for="unterminated	<null>
+	n:1|<null>,<null>,<null>
+"for"=1: ;for =example.com:65536, x-ext=203.0.113.9, 	<null>
+PROTO=user@example.com; secret=ftp, host; "for"=user@example.com;;for=exa mple.com	<null>
+,, for=_hidden:99999;;host=1:; proto=203.0.113.9:0	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+, ,for=example.com:65536;for==tok en,host=_a.b-c_d:0;;Host=:65536	<null>
+	n:1|<null>,<null>,<null>
+,	n:2|<null>,<null>,<null>|<null>,<null>,<null>
+FOR=HTTPS	<null>
+proto=HTTPS ; for=exa mple.com ;fo r=-bad-	<null>
+"for"=0x7f.0.0.1:99999 ;"for"=1;; for="a;b",proto=	<null>
+for=="unterminated	<null>
+FOR=example.com:8443;;for=tok ;for==aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ,proto=_a.b-c_d:4711;;by=[2001:db8::7]:99999 ;for=tok	<null>
+	n:1|<null>,<null>,<null>
+host="a;b";=http ,secret=_bad! ,by=Http	<null>
+FOR="with\\"escape", for="", ,host=203.0.113.9:	<null>
+FOR=_hidden:_port:4711;for==[2001:db8::1]:x, FOR=http;by	<null>
+for=tok; host=exa mple.com ;host="tab\t"	<null>
+ ,	n:2|<null>,<null>,<null>|<null>,<null>,<null>
+ ,Host=203.0.113.9;fo r=ftp, Host=300.1.1.1:4711;;proto=tok en;;fo r=198.51.100.7:65535	<null>
+secret=example.com:; by=https; =203.0.113.9:	<null>
+Host="", proto=203.0.113.9:abc ;for=0x7f.0.0.1:_obf, 	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+by=HTTPS;PROTO=-bad-	<null>
+=http; by=[2001:db8:::7],,proto, ,,PROTO="https"; secret=exa mple.com;;host=203.0.113.9:80	<null>
+	n:1|<null>,<null>,<null>
+,,,,For=;;FOR=user@example.com ,For=[]:80 	<null>
+host=not-an-ip:0,,for =HTTPS; by=Http,host=https;; for=203.0.113.9:80,=::ffff:203.0.113.9:80 ; PROTO=[fe80::1%eth0]:4711;; for=198.51.100.7:99999	<null>
+by="quoted"	n:1|<null>,<null>,<null>
+"for"=example.com:8443 ;for==http, PROTO=[2001:db8::7, For=203.0.113.9:_ ;x-ext="a,b";;by=[2001:db8::1]:x,	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+fo r="a,b";proto=[::1]; Host=_hidden:4711,fo r="tab\t";;x-ext=h ttp;fo r=203.0.113.9.1:4711,,for=0.0.0.0:65535=	<null>
+Host=::1:65536,,for==Http, 	<null>
+fo r="[2001:db8::1]:8443", ,x-ext"	<null>
+PROTO="https";;x-ext=[2001:db8::7]:80 ;x-ext="a;b", secret=[::1]:4711	<null>
+,,for="tab\t",,for =HTTPS	<null>
+	n:1|<null>,<null>,<null>
+, for==_a.b-c_d:65536	<null>
+secret=tok;proto=203.0.113.9:80;;=user@example.com,PROTO="http";proto=::1; For=example.com:0 ,for=::1,for ="https"	<null>
+,for=1 ,host=203.0.113.9 :4711; for="a\\,by=::1; x-ext=203.0.113.9:80; by="tab\t"	<null>
+for =example.com; by=example.com; for=[2001:db8:::7]:_	<null>
+for=0.0.0.0 ;=example.com:99999, for=example.com:0"	<null>
+host="https",	n:2|<null>,<null>,https|<null>,<null>,<null>
+proto=[2001:db8::7:;;Host="https" ;="tab\t",,by=	<null>
+Host=exa mple.com , for=127.0.0.1:4711; host=tok;;FOR=0.0.0.0:65536	<null>
+by=:99999; fo r=http; host="",,for=300.1.1.1:80 ;host="unterminated	<null>
+for=="" ,FOR=tok en;PROTO=[2001:db8::7:80 ;PROTO=203.0.113.09:80, by=example.com/evil=	<null>
+	n:1|<null>,<null>,<null>
+host=http;  for="ctrl\u0001",, ,proto="quoted"; by="""	<null>
+"for"=example.com:65536;x-ext="tab\t";;host="a\\,,FOR=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; FOR="http"	<null>
+,  ,host="a\\;for =example.com: ,=user@example.com,,for=-bad-,,for== ; for="ctrl\u0001" ,for="";for="with\\"escape";secret=example.com:0 ,For=;For="a,b" ,for=tok ;Host ;Host=tok en, for="a;b";;host=203.0.113.9; for=[2001:db8::7]:_obf, host=example.com/evil;secret=example.com/evil ,for=203.0.113.9:80;;FOR=UNKNOWN:65536, for=203.0.113.9.1: 80;host=203.0.113.9.1:65535, FOR=[2001:db8::7:0,,x-ext=::ffff:203.0.113.9: 80 ;proto="a;b","for"="https" ;FOR="tab\t" ,for="http"; for=300.1.1.1:_, ,,FOR=https ; for=203.0.113.9.1: 80,,FOR,,"for"="a;b";for=10.0.0.5:0, =[2001:db8:::7]:99999;;=https  ;="unterminated,Host=https ;by ;for =Http,for =https ,x-ext=h ttp,,for=,proto=https  ;for=ftp, for=Http ;by=HTTPS;;for =::1, x-ext="",, ;host=example.com/evil ,for=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;Host=h ttp,,,,host=unknown:80 ,host=user@example.com;  for=::1:80	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+for=="a\\ ,x-ext="with\\"escape"	<null>
+for=tok en ;proto=Http	<null>
+, for ="tab\t"; for==203.0.113.9:80;fo r=h ttp ,	<null>
+FOR="http"; for=tok en,,Host=255.255.255.255: ;host=example.com/evil; For=example.com:99999, secret	<null>
+, Host=_,,host=203.0.113.9:80 ;"for"=203.0.113.9.1:65535,,secret=-bad-;;for=255.255.255.255:80	<null>
+host="quoted";;for=[];;"for"=HTTPS,proto=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ;for=Http;;by=ftp,	<null>
+for ="a,b" ;FOR="a\\ ,for ="a\\ ;"for"=Http,PROTO=Example.COM; "for"=[::1]:_;for=https ,,for =ftp	<null>
+proto=_hidden:_port; "for"=http;by=127.0.0.1:4711,,,host=not-an-ip:;by="unterminated ;Host=example.com/evil,by=203.0.113.9;host=203.0.113.9	<null>
+, 	n:2|<null>,<null>,<null>|<null>,<null>,<null>
+ ,	n:2|<null>,<null>,<null>|<null>,<null>,<null>
+for;x-ext=[2001:db8:::7]:99999	<null>
+for==0.0.0.0:65536,host=Http; for="ctrl\u0001"; FOR="with\\"escape",for	<null>
+Host=203.0.113.09:;x-ext=tok en; x-ext="https"	<null>
+For=0x7f.0.0.1:80 ;by=ftp	<null>
+	n:1|<null>,<null>,<null>
+, host=127.0.0.1:99999 ;FOR="a,b"; for=="a;b" ,FOR=203.0.113.9:80 ;Host="unterminated;proto="ctrl\u0001",host ;host=tok en	<null>
+for==[2001:db8::7;proto=https  ;for=example.com/evil,,,secret=::1; for="a;b"; for 	<null>
+	n:1|<null>,<null>,<null>
+by=user@example.com; host=example.com:99999 ,PROTO=https  ,	<null>
+FOR="ctrl\u0001";;host=::ffff:203.0.113.9:80 	<null>
+by=_: ;host=[2001:db8::7]: ;=Http	<null>
+host=UNKNOWN: 80 ;PROTO=exa mple.com; by=::ffff:203.0.113.9 ,"for"="http";for="with\\"escape"; for=ftp	<null>
+proto=Http;;Host=[2001:db8::1]:x;Host=203.0.113.9:4711,,fo r= ,host="" ;for =198.51.100.7:_	<null>
+proto, 	<null>
+	n:1|<null>,<null>,<null>
+fo r= ;proto=example.com/evil;for=255.255.255.255: 80,proto=[::1]:0; host=http ;PROTO=203.0.113.9:65535,,"	<null>
+	n:1|<null>,<null>,<null>
+for=203.0.113.9:65535	<null>
+ for=203.0.113:65535;;,x-ext=https; for=ftp"	<null>
+For="unterminated;;proto="a\\ ;proto="a\\, host=example.com:0; proto="unterminated ,for =[::1]:4711 ;proto=fe80::1%eth0:80 	<null>
+,	n:2|<null>,<null>,<null>|<null>,<null>,<null>
+for=fe80::1%eth0:_; For=https ;;PROTO=Example.COM,,x-ext=https;,,proto=unknown:65535;proto=203.0.113.9:65536 ;=exa mple.com,,for=203.0.113.9 :0	<null>
+Host="tab\t",by="a\\ ; for=_a.b-c_d:_obf ;host=tok,,	<null>
+	n:1|<null>,<null>,<null>
+,,,host=not-an-ip: ;by="https"; for=http	<null>
+for 	<null>
+"for"=unknown:_obf; fo r="a;b"; =example.com:8443,,x-ext=-bad- ;by=[]: 80;;For=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,,	<null>
+	n:1|<null>,<null>,<null>
+fo r="quoted"	<null>
+	n:1|<null>,<null>,<null>
+"for"="with\\"escape"	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+, "for"="";;For=https; fo r=::1:65536 ,=h ttp; PROTO=UNKNOWN:4711; "for"="example.com:443" ,for=; for="http" ;Host=example.com:65536,,host="tab\t";secret=example.com, for=example.com:65536;  for=exa mple.com;;for="a,b", x-ext=[2001:db8::7]:99999;;x-ext=tok;for="a\\,FOR="tab\t",,,for, FOR=unknown: ;for=="http",for=="quoted",,fo r=example.com:,,proto=[2001:db8::1]; proto=https ,  ,for==h ttp ;for==aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;host=example.com:8443, proto=203.0.113.09:_ ;PROTO=::1,,"for"=1:65535, for=="unterminated ,,,secret=203.0.113.9 ;secret=203.0.113.9 ;="a;b",by=tok; for=203.0.113.9,,,secret=203.0.113.9;FOR="a,b";;for=1:65536,,=example.com:65536 ,,, for="https";;for=203.0.113.9, for==;For=example.com:99999,,host=203.0.113.9; for=h ttp ;fo r , , ,by=ftp;FOR=0x7f.0.0.1:80 ;secret="https"	<null>
+for="unterminated; PROTO=example.com/evil;by=example.com: ,,,=h ttp	<null>
+	n:1|<null>,<null>,<null>
+PROTO="a;b";host=example.com/evil	<null>
+for =example.com:0; =203.0.113.9 :,,PROTO=HTTPS ;secret="" , for=HTTPS;proto=not-an-ip:_obf;;secret=h ttp ,secret="unterminated;PROTO="with\\"escape";;host="ctrl\u0001"	<null>
+host=-bad-; for=example.com, ,x-ext="tab\t";FOR= ;proto=203.0.113.9 ,	<null>
+ , ,PROTO, x-ext="https";; for=tok en	<null>
+, host="unterminated,For=example.com:8443 ,for=user@example.com, host=example.com/evil; for=tok;;by= ,by=example.com/evil ,for="a,b", x-ext="a,b",, ,="a,b";;for ="https",fo r="a;b" ;for="tab\t"; For="tab\t" , , ,PROTO=ftp;;for=:_; for=2001:db8::7:_obf,x-ext=https  ;for="https", ;;FOR=http, , by=https;;proto; by=203.0.113.09:0,,proto=10.0.0.5:0 ,proto=example.com/evil,, ,,host=;for =,for==[2001:db8::7]:_obf;host=example.com:;=http, for =example.com/evil;PROTO=example.com:65536,by="a;b";;host=203.0.113.9.1, for=example.com:65536 ;secret=2001:db8::7:_;x-ext="with\\"escape" ,,,host=[2001:db8::1]:x;for=example.com:,  ,proto=HTTPS ;host=tok,  ,proto=tok en,,,fo r=example.com:65536	<null>
+	n:1|<null>,<null>,<null>
+PROTO=ftp,,host=[2001:db8::7]: 80;;host=ftp,by=example.com:65536	<null>
+host=tok;x-ext	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+x-ext;PROTO="a;b"	<null>
+for=127.0.0.1; proto=https 	n:1|127.0.0.1,https,<null>
+by=203.0.113.9 :abc	<null>
+ ,for=tok ;FOR=h ttp ;by=example.com:8443=	<null>
+for=203.0.113.9:4711,,proto="a;b",PROTO=_a.b-c_d:99999;=203.0.113.9,	<null>
+	n:1|<null>,<null>,<null>
+proto=ftp;;=HTTPS ;Host=2001:db8::7:99999	<null>
+;	n:1|<null>,<null>,<null>
+,  , for="[2001:db8::1]:8443"; x-ext=example.com:99999,for=203.0.113.9 : 80;;"for"=""	<null>
+	n:1|<null>,<null>,<null>
+=198.51.100.7:99999 ;for="unterminated; Host=tok en,,for=="tab\t";by=[2001:db8:::7]:80 ;Host=_hidden: 80 ,for=300.1.1.1:99999; host=h ttp;;"for"="tab\t"	<null>
+proto=_bad!:0,by=https ;;;for, x-ext="a\\, host=fe80::1%eth0:_;;for ="a,b";  for=[2001:db8::7	<null>
+"	<null>
+fo r="a;b";by="a\\"	<null>
+for=example.com:65536, , for="a;b"; for=_hidden:80,,Host="quoted"; x-ext=tok; "for"	<null>
+, x-ext=:4711;  for=HTTPS	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+for=https 	<null>
+, "	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+proto="unterminated ,	<null>
+ ,	n:2|<null>,<null>,<null>|<null>,<null>,<null>
+ ,FOR="tab\t";for ="tab\t","for"=[2001:db8::1]:x;;FOR=tok en ;for=0x7f.0.0.1:4711	<null>
+host=203.0.113.09:4711;  for=fe80::1%eth0:80 ,	<null>
+x-ext="a;b";; for=_a.b-c_d:65535; x-ext=127.0.0.1,secret=h ttp;host="a\\=	<null>
+host="https";for=203.0.113.9 : 80; fo r=example.com:0	<null>
+by=ftp; secret=0x7f.0.0.1: 80 ,=Http ;for=="tab\t";for="with\\"escape"	<null>
+secret="tab\t";;proto=HTTPS ;for ="with\\"escape" ,for, for =https ; secret=Http;Host=user@example.com ,	<null>
+for =https;by="a,b" ,PROTO="a\\ ;by="http";Host=https , fo r="a\\; for=tok ,by=fe80::1%eth0:65535;for =""	<null>
+by="example.com:443";host=""	<null>
+,FOR=example.com/evil	<null>
+proto="a;b"; by=http ,PROTO=tok	<null>
+	n:1|<null>,<null>,<null>
+ ,,	n:3|<null>,<null>,<null>|<null>,<null>,<null>|<null>,<null>,<null>
+For=http;Host="";Host=tok en ,, fo r=ftp, 	<null>
+ ,for =_:99999;;host=ftp;PROTO=https, by ;host="a;b"	<null>
+PROTO=1,secret="unterminated, , by=user@example.com ;by=[2001:db8::1]	<null>
+	n:1|<null>,<null>,<null>
+proto="quoted"; PROTO=[]:abc	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+for==255.255.255.255:abc ;secret ;for =http	<null>
+ ,For="https";;fo r="[2001:db8::1]:8443"; for=="with\\"escape",,proto=UNKNOWN:4711	<null>
+,x-ext=-bad- ;proto=HTTPS,,proto=[2001:db8:::7]: 80 ;proto=0x7f.0.0.1:80,,host=example.com	<null>
+;x-ext="a,b"	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+Host=127.0.0.1; by=not-an-ip:99999; for ="http"	<null>
+ ,for ="a,b", x-ext=tok en ,Host=""	<null>
+for =h ttp;for =1: 80; for=="", , host=https ; for	<null>
+by="a,b"; "for"=example.com;;host="a\\, secret=; for=,, for=0x7f.0.0.1 	<null>
+Host="tab\t"; PROTO="a\\; for=203.0.113.9=	<null>
+= ;proto=HTTPS	<null>
+host=unknown,,,proto="unterminated	<null>
+for =[::ffff:203.0.113.9]:80 ;proto=203.0.113.9:_obf ;FOR=exa mple.com, fo r=UNKNOWN:_ ;secret=tok;=_bad!: 80,PROTO=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;;PROTO=[fe80::1%eth0]:65536;for="a,b"	<null>
+ 	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+by=[2001:db8:::7]: 80;for=="a\\	<null>
+,, host="";;for ="tab\t";proto="with\\"escape"	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+"for"=[2001:db8:::7] ,,host=[2001:db8:::7]:_;by=Http ,proto="a,b" ;by=example.com/evil,x-ext=example.com:65536;;by=HTTPS ,="ctrl\u0001",,secret=unknown:_; by=[2001:db8::1]:x ,,,secret=tok en ;"for"=203.0.113.09:80,,by=[2001:db8::7:_obf;;PROTO=_hidden:65535;for=,PROTO="http";;for="a;b", ,,proto=https;by=_hidden:80,  ,, host=203.0.113.9 ;"for"="" , ,secret;;=300.1.1.1:65536 ;for=[2001:db8:::7]:65535,proto=203.0.113.9:_obf ,secret=203.0.113.9:80,x-ext=tok en;for=2001:db8::7:65536;;proto=example.com:8443,fo r=10.0.0.5:0,,For="ctrl\u0001";;host=127.0.0.1:0, secret ;secret="a;b", secret="quoted"; for=:4711;;for=https,Host=not-an-ip:99999;host="ctrl\u0001",,fo r=255.255.255.255: 80 ;PROTO="ctrl\u0001",,fo r=tok;For="example.com:443" ,, , "for"="https",host=::1;;For=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ,	<null>
+x-ext=_hidden:_port:_obf ;proto=Http ,	<null>
+	n:1|<null>,<null>,<null>
+FOR=-bad-;;host=not-an-ip:_,,,for="quoted", FOR="a,b";;by=203.0.113.9 :_	<null>
+for=[2001:db8::7]:65535	<null>
+ ,PROTO,,,fo r="with\\"escape"	<null>
+for=; Host=::ffff:203.0.113.9:80; for=ftp ,=HTTPS	<null>
+,,FOR=198.51.100.7,for="http"; for=example.com:0; proto="tab\t"	<null>
+proto=_hidden:_port:0;proto=1:65536 ;by="ctrl\u0001", by=0x7f.0.0.1:99999;for=203.0.113.9 :0	<null>
+for=UNKNOWN;;proto=ftp;by=http,secret=_hidden:_port:4711, proto="a,b"; x-ext=user@example.com,by="a;b" ;host=	<null>
+for=https;by=example.com:99999,,PROTO=10.0.0.5:80	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+,x-ext="quoted"; secret="a\\, "for"=fe80::1%eth0:80; ="a;b", for=tok; proto=;;host	<null>
+proto ;Host=: ;for==exa mple.com,,,	<null>
+fo r=[2001:db8:::7]:_obf;;for =[2001:db8::1]:x;;PROTO=example.com:8443, Host=HTTPS,,proto=exa mple.com ;host=203.0.113:80,host="http" ;for ="example.com:443" ,,for=:abc, host=https  ;for="http" ,,for=[2001:db8::1];;,for ="a;b",Host=::1;;Host=example.com:99999 ,"for"= ;FOR, FOR="quoted" ,host="with\\"escape", =_a.b-c_d;fo r=user@example.com, for=ftp;;Host=h ttp;;x-ext=, ,, , ,Host ;by=tok,  ,FOR="tab\t";=tok ,Host=_a.b-c_d:_obf; "for"=-bad-,,Host="https";;host=1:99999; For="https",for="unterminated;;FOR, =203.0.113.9:65536 ;=[::1]: 80, host=h ttp; for=https  ,PROTO="ctrl\u0001";"for"=[2001:db8::1]; proto,by=http, fo r=example.com:0 ;proto=203.0.113.9.1; for =_hidden:_port:_obf ,,,by="";;for=::1; =example.com:65536 ,x-ext="unterminated,for=="with\\"escape" ;x-ext=example.com/evil, fo r=Example.COM;;for==user@example.com	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+by="example.com:443";proto=::1: 80;;fo r=203.0.113.09:80	<null>
+	n:1|<null>,<null>,<null>
+PROTO="example.com:443"	<null>
+secret=10.0.0.5: ;for=Example.COM; FOR ,PROTO=;;for=tok en ,,,for=-bad- ;FOR="ctrl\u0001"; for=	<null>
+	n:1|<null>,<null>,<null>
+ for=[fe80::1%eth0]: 80 ;For=https; for="ctrl\u0001",  ,FOR=http ; for=[2001:db8::7:65536	<null>
+	n:1|<null>,<null>,<null>
+for="quoted";;for=="https",,by=h ttp	<null>
+	n:1|<null>,<null>,<null>
+by=tok;;For=,,FOR=ftp;by=;by=h ttp	<null>
+x-ext="unterminated ;for=Http;;for="a\\, host=tok, =h ttp;;"for"=example.com:65536;  for=_hidden:_	<null>
+	n:1|<null>,<null>,<null>
+proto=203.0.113.9:99999;;proto=Http ;host=example.com/evil,for ="a,b"; for=https "	<null>
+	n:1|<null>,<null>,<null>
+secret=http; for=h ttp	<null>
+PROTO="";; for=ftp; proto="tab\t",x-ext=[::1]:99999;  for=tok en 	<null>
+	n:1|<null>,<null>,<null>
+proto="with\\"escape";;by=203.0.113.9; for=203.0.113.9:80,,for=example.com:65536;;secret="[2001:db8::1]:8443", for=ftp ;for=tok;fo r=[2001:db8::1], proto=[2001:db8:::7]	<null>
+,	n:2|<null>,<null>,<null>|<null>,<null>,<null>
+by=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ,FOR=https ;;for=example.com:	<null>
+for="with\\"escape"; for="a;b"	<null>
+proto=example.com/evil; host="with\\"escape"; "for"=[2001:db8::7:80 ,  ,host="tab\t" ;by=; for  ,	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+for=="ctrl\u0001" ;for=ftp,, ,host=example.com:8443;="a,b";FOR="example.com:443"	<null>
+for=ftp ,host="http" ;"for"="example.com:443";  for=_a.b-c_d:80,proto=198.51.100.7:99999	<null>
+	n:1|<null>,<null>,<null>
+, for==exa mple.com ;for=h ttp,for=[2001:db8::7: 80	<null>
+ ,for=https; by=example.com:8443;;for="unterminated,PROTO=not-an-ip:_, x-ext=HTTPS; fo r=_hidden:abc;; for=203.0.113.9	<null>
+for=https; for=example.com:65536 ;For="a;b"	<null>
+Host=h ttp;proto=::1;;=HTTPS 	<null>
+	n:1|<null>,<null>,<null>
+,,for==example.com,fo r=exa mple.com ;proto="a\\,x-ext	<null>
+	n:1|<null>,<null>,<null>
+host=_hidden:_port:0;fo r="a;b" ,,,for="unterminated; proto=Http	<null>
+for =example.com/evil ;for==300.1.1.1:65535,, =::1:99999; for=="with\\"escape" ;=HTTPS	<null>
+	n:1|<null>,<null>,<null>
+by=[2001:db8::1]:x; secret=[]:80 ,,FOR=ftp; for=203.0.113.9:65536; host=300.1.1.1: 80	<null>
+for="a;b","for"="quoted" ;For=::1:abc	<null>
+	n:1|<null>,<null>,<null>
+For=tok en;secret=0.0.0.0:80,x-ext=:65535;;"for"=user@example.com ,	<null>
+x-ext=example.com:; by=HTTPS;For=example.com	<null>
+FOR=https , proto="a,b" ;FOR=https 	<null>
+Host="with\\"escape"; secret=::1;  for=::1 ,, for=https ;FOR=ftp; host=[2001:db8:::7]:0, by="quoted" ;FOR="example.com:443";;for=="ctrl\u0001"	<null>
+"	<null>
+For=tok en;host=Http ,for =http;;Host=203.0.113.9;;for ="a\\, host=Http ,x-ext=::1:99999;;for ; for=example.com:65536,,by="tab\t"; by=tok;Host=HTTPS,for==[::ffff:203.0.113.9] , for=tok en;for=h ttp ,fo r="https";;for =example.com ,"for"=0.0.0.0: 80 ;for=example.com:99999,,Host=[2001:db8::7]:65536, fo r=,host=203.0.113.9;fo r=203.0.113.9; for=example.com:0,proto=203.0.113.9:80 ;for=="a\\; for =_:4711, For="";;for =https ;fo r=h ttp ,For=HTTPS; proto=example.com:65536 ,proto=ftp,host="a,b" ;for=example.com/evil; for,,for=example.com ;host=2001:db8::7:80 ,secret=tok ;fo r=_hidden:; proto=HTTPS,  ,secret="quoted" ,FOR=203.0.113:;"for"=example.com; for =aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,,for=http, for==not-an-ip:_obf; proto="tab\t", proto="quoted";;Host=[2001:db8::1]:x ,Host=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;  for=http, for=="https" , ,,host=300.1.1.1:;host="a,b", PROTO=""; FOR,,"	<null>
+"	<null>
+, proto=203.0.113.9:80, for="ctrl\u0001", proto=http,	<null>
+by=Http; fo r=; for,,proto=h ttp ; for=ftp;;For=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,proto=Http	<null>
+PROTO=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ;=198.51.100.7	<null>
+="quoted"; fo r=[2001:db8::7:65536;;by="https" ,	<null>
+,,	n:3|<null>,<null>,<null>|<null>,<null>,<null>|<null>,<null>,<null>
+for ="example.com:443";;x-ext=https 	<null>
+Host,"for";;Host=tok en,, ,host=user@example.com	<null>
+Host=tok en,for== ,,,for=UNKNOWN:;FOR=Example.COM	<null>
+x-ext=300.1.1.1;;host=255.255.255.255:65536;;FOR=Http ,for=::1 ;host=[fe80::1%eth0]:99999,PROTO="unterminated; host=HTTPS	<null>
+fo r=h ttp; FOR=tok,host=http; secret=-bad- ,,for=tok en ;secret=tok	<null>
+Host=_:abc; by ;for=tok en,for=not-an-ip	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+proto=127.0.0.1:_,for=198.51.100.7:80 ;;secret="[2001:db8::1]:8443"	<null>
+	n:1|<null>,<null>,<null>
+Host;="";  for="https", for=[2001:db8::7]:65535;;FOR="ctrl\u0001", ="a;b" ;PROTO=tok en;=_: 80"	<null>
+	n:1|<null>,<null>,<null>
+proto="a\\;for ="[2001:db8::1]:8443";for==tok , 	<null>
+	n:1|<null>,<null>,<null>
+,fo r=UNKNOWN:80 ;fo r=[2001:db8::1]:x;For=203.0.113.9	<null>
+host="",Host="tab\t"	<null>
+	n:1|<null>,<null>,<null>
+fo r="a,b";;for=203.0.113.9:80 ,fo r=::ffff:203.0.113.9: 80; Host="unterminated,FOR="a,b" ; for="a,b","for"=::1;;by=::1	<null>
+For=https , host="ctrl\u0001"; x-ext=_;by="a;b" ,"for"="a\\ ;proto=https ;host=tok en, by=user@example.com ;=HTTPS ,by=user@example.com,,=ftp ;PROTO=203.0.113.9,host=HTTPS; proto="with\\"escape";by=_a.b-c_d:65535, =203.0.113.9:_obf ;FOR="a\\; for==example.com:8443,,proto=::1;;FOR=[2001:db8::1],,x-ext=;;For=203.0.113.9: 80;PROTO=203.0.113.9 :abc,  ,for=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;;for =aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, FOR=tok en; For="with\\"escape";by=[2001:db8::1]:x ,,,=h ttp; for==300.1.1.1:99999, , proto=[2001:db8::7]:_;;"for"=HTTPS ;for=https  ,for=h ttp; PROTO="";;fo r=203.0.113.9 :80 ,,,For="with\\"escape";FOR=unknown:abc ,x-ext=; by=; fo r="unterminated ,FOR="tab\t";;For=;;For=Example.COM ,,,host=Example.COM; for=_a.b-c_d:65536,secret ,x-ext=::1:4711;;for =-bad- ;"for"=_a.b-c_d,,secret="ctrl\u0001"; proto=example.com; for=_:80,,,,for=="tab\t";for="a;b";for="a;b",,secret="tab\t"; secret=2001:db8::7 ,fo r="https";proto="https";;PROTO=203.0.113.9 ,for =-bad- ,Host=::1, proto=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;  for=-bad-;;for=Http	<null>
+	n:1|<null>,<null>,<null>
+for =ftp ;"for"=198.51.100.7 ;host=example.com/evil, proto=https ;proto=exa mple.com;;for=_:abc ,for=Example.COM;for=300.1.1.1;host="https", for="a,b";for==ftp	<null>
+ ,for="ctrl\u0001"	<null>
+x-ext=UNKNOWN:_obf;by=HTTPS;; for,"for"=https ; x-ext;PROTO=example.com:8443,,For=203.0.113.9;proto=tok en;host="unterminated ,by=https ;;secret="quoted" ,=::1,,, host=http; proto="https";secret=https ,,PROTO="https";"for"="a,b";fo r=Http ,by="[2001:db8::1]:8443";proto=::1; proto="http" ,fo r=_:0;;for==HTTPS,,by="with\\"escape",,proto="unterminated;  for="a,b",,host="https" ;For=ftp ,, for="quoted"; proto=203.0.113.9:80,for==203.0.113.09:;proto="a;b" , ,,,For=[2001:db8:::7]:80 ; for="tab\t",,for=example.com/evil, host=""; ;fo r=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ,PROTO="ctrl\u0001";For=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;; for, , ,,host; proto=203.0.113.9 ;For=-bad-,,,,for==https,for==-bad-,,fo r=example.com:65536, ,, ,for=user@example.com ;for=="ctrl\u0001", for=::1;by=[::ffff:203.0.113.9]:0	<null>
+for=exa mple.com;secret=Http;;x-ext=tok	<null>
+for==example.com; for=Http;;fo r=https 	<null>
+,for==198.51.100.7:_obf;for==not-an-ip; "for"=ftp ,secret=h ttp	<null>
+	n:1|<null>,<null>,<null>
+for=example.com:8443;PROTO=HTTPS;FOR="a,b",by=example.com/evil;;for=example.com:99999,,for=http;	<null>
+=	<null>
+=	<null>
+	n:1|<null>,<null>,<null>
+,, , ,, by="ctrl\u0001";fo r=http , for="tab\t"; by=203.0.113.9;;proto=203.0.113.9  ,, host=; "for"="http"; proto="http" ,host=example.com:99999;by=https ,,,,for ;;x-ext=Http,,for=[]:65536;Host=[2001:db8::7]:80; For="with\\"escape" ,for =HTTPS ,host=https ,,Host=h ttp;;for =example.com:;by=unknown:80 ,  ,for="a,b";;proto=203.0.113.9.1:80, "for"=203.0.113.9 ; for=::1:99999 ;for ,, for=ftp; for=HTTPS ;for="quoted",,FOR=exa mple.com;;"for"=user@example.com ;host=https , proto=example.com/evil;;proto=https,,For=HTTPS,,proto=ftp;;for==example.com:8443; by=https, for==[]:4711 ;proto=2001:db8::7:_; =_: 80 ,, ,  for=198.51.100.7:65535; host=https;;x-ext=unknown:99999 ,,,FOR=::ffff:203.0.113.9:65535 ;fo r="quoted",secret=example.com:65536; by=,,Host=203.0.113.9 :0,for =_hidden:_; for,proto=0.0.0.0:0 ;by=_a.b-c_d;for=2001:db8::7:65535,,for =https ;Host=http	<null>
+proto="";  for=[fe80::1%eth0]:65536; proto=_bad!:4711,for=="ctrl\u0001" ;fo r;for==_:0,	<null>
+"for";for="a,b"; by="" ,for= ,	<null>
+	n:1|<null>,<null>,<null>
+for==example.com:99999, fo r="ctrl\u0001", Host=https  ;for=="unterminated; proto=https ,PROTO=Example.COM;;by=[2001:db8::7]:4711; For=example.com:99999 , ,; for==ftp;;by="quoted",,secret=::ffff:203.0.113.9: ;="https";proto=[2001:db8::1],,FOR=::ffff:203.0.113.9: 80 ;for=not-an-ip:99999;;"for"=[]: 80 ,for=203.0.113.9.1;for==[2001:db8::7: ,PROTO=ftp;=exa mple.com ;for=300.1.1.1:_obf,host=,,for=example.com:,,PROTO=203.0.113.9 :65535,,fo r="ctrl\u0001"; host="example.com:443", for=ftp; for="unterminated;"for"="quoted" , for=HTTPS, host=_:80 ;For=http; PROTO="tab\t",,proto=unknown: 80;for==[2001:db8::7]:_;fo r="https",,for=ftp,secret=203.0.113.9:80 ;x-ext,,host="ctrl\u0001";;for=="a;b",,,,PROTO=http; for="a\\,,Host=10.0.0.5:abc, =0x7f.0.0.1:abc;Host=Http;;by=Http ,Host=203.0.113.9 :99999 ;host="http";;proto=https,,,by=Http;host=,For="ctrl\u0001", host=example.com:;  for=_bad!:99999; FOR=ftp ,,Host=Example.COM , for=user@example.com; Host=[2001:db8::1]:x; FOR=_:0	<null>
+	n:1|<null>,<null>,<null>
+FOR=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; for =example.com,by=exa mple.com;for==https,for==example.com:8443, "for"="a;b" ;host=[2001:db8::1]:x	<null>
+=example.com:, , ,Host=::1:4711;;for=203.0.113.9.1:_;x-ext=198.51.100.7:_obf	<null>
+,FOR=tok;  for="a;b";;for=https ,by,proto=[2001:db8::7]:65536;PROTO=exa mple.com	<null>
+ for="[2001:db8::1]:8443";For=unknown: 80;proto=tok	<null>
+	n:1|<null>,<null>,<null>
+For=tok ,proto=10.0.0.5:4711;;for =203.0.113.9:abc, PROTO="a\\;;by=""; for=203.0.113.9:80	<null>
+ for="a;b"	<null>
+For=::1 ;for="a\\; FOR=Http	<null>
+Host="tab\t" ,	<null>
+by=[2001:db8::7]:80 , =	<null>
+	n:1|<null>,<null>,<null>
+for ="http"	<null>
+proto="a\\; PROTO=300.1.1.1:_obf	<null>
+fo r=http; for =h ttp,  for=; proto=example.com:,by=203.0.113.9:99999;Host=https	<null>
+ ,Host=https; "for"=300.1.1.1:80 	<null>
+proto=https; =HTTPS ,secret=example.com:99999;for=="quoted" ;For=https,,for=::1; by="quoted";  for= ,	<null>
+	n:1|<null>,<null>,<null>
+for=example.com:8443,FOR=Http;	<null>
+For=[2001:db8::7:65536;for=example.com:;host=tok en, =http;proto="https";;for=203.0.113.9:80,secret=[fe80::1%eth0]:_obf ;proto=http;for==example.com:65536, fo r="a;b";by=_hidden:abc,,,for=https ,host=tok,by=http;;Host="a;b", =example.com; proto=::1,secret="tab\t",,,,,, for=HTTPS,,secret=[2001:db8::7]:_obf ;host=[2001:db8::1]:x, "for"=example.com:,,for=tok en;;For=_:99999,,PROTO=https ,,FOR=https;;host=tok;;PROTO=203.0.113.9, by=;;proto="https",,by="a;b" ,,by=example.com:99999 ;for=example.com:0;  for="tab\t", host=ftp;;"for"=Example.COM, host=;Host="a,b";by="tab\t" ,proto="",, for=ftp ,host=::1:99999;;for=1:65536;proto=UNKNOWN:_obf,,FOR="with\\"escape";;for=::1 ;Host=:0 , ,,secret="unterminated ;fo r=https ;proto=user@example.com, Host=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ;PROTO=198.51.100.7	<null>
+for==example.com:0; For=tok	<null>
+ ,	n:2|<null>,<null>,<null>|<null>,<null>,<null>
+FOR=Example.COM,proto=https;;fo r="", secret=[2001:db8::7]:80,,	<null>
+for ="unterminated;secret=h ttp	<null>
+=exa mple.com;;For=::1 ,proto=not-an-ip:80,fo r=Http; For=	<null>
+by=Http, ,,Host="ctrl\u0001";for=not-an-ip:4711, 	<null>
+ for=_; Host=203.0.113.9 ,  ,FOR=203.0.113.9:4711,	<null>
+for==_:abc;proto=Example.COM;for=::ffff:203.0.113.9:99999,, for=300.1.1.1:4711, 	<null>
+,,	n:3|<null>,<null>,<null>|<null>,<null>,<null>|<null>,<null>,<null>
+PROTO=exa mple.com ,for="a;b" ; for=203.0.113.9.1	<null>
+	n:1|<null>,<null>,<null>
+,For="ctrl\u0001" ;For=-bad-; "for"="ctrl\u0001",	<null>
+,,,,Host=Example.COM	n:5|<null>,<null>,<null>|<null>,<null>,<null>|<null>,<null>,<null>|<null>,<null>,<null>|<null>,<null>,example.com
+,,host=203.0.113.9.1:_obf ;proto;proto=_hidden, host="tab\t";;proto=example.com:;;proto="[2001:db8::1]:8443"	<null>
+for=[::1]:65535; For="https";;by=203.0.113.9.1:abc, Host=https;proto=0.0.0.0:_ ;secret="https",=user@example.com	<null>
+"for"= ;proto=203.0.113: 80,by=unknown:80; "for"="quoted";;by=[fe80::1%eth0], proto="quoted";=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	<null>
+for="ctrl\u0001";; ,for==exa mple.com ;for=HTTPS;x-ext=user@example.com ,For="ctrl\u0001"	<null>
+by="a\\,,	<null>
+PROTO=; =203.0.113.9:80;;PROTO="quoted" ,secret=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; Host=HTTPS , 	<null>
+	n:1|<null>,<null>,<null>
+=300.1.1.1:4711 ,	<null>
+for==tok;host=[2001:db8::1]:x ;Host=example.com:99999	<null>
+proto="http",,	n:3|<null>,http,<null>|<null>,<null>,<null>|<null>,<null>,<null>
+proto=[2001:db8::1]:x;for=unknown:65535	<null>
+ ,for=::ffff:203.0.113.9; for=tok en, for=_a.b-c_d:80; x-ext=exa mple.com;for="https"	<null>
+fo r=:_	<null>
+Host=127.0.0.1:4711;;for=https ,proto=Example.COM,proto="";; for=[fe80::1%eth0]:99999 ;PROTO=tok,	<null>
+by=::1 ,proto=exa mple.com,"for",,Host="unterminated; for="https"	<null>
+=203.0.113.9; x-ext=203.0.113.09:80 	<null>
+Host=10.0.0.5:65536, for==HTTPS;x-ext=HTTPS ;for=[::ffff:203.0.113.9]:65536 ,For="quoted"	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+=tok,,for="quoted"; =_a.b-c_d ;for="quoted" ,, Host="" ;for==ftp ;For=203.0.113.9:80 	<null>
+host=unknown: 80 ;PROTO=ftp ;"for"=203.0.113.9	<null>
+"for"=0x7f.0.0.1:_obf;Host="http";;for ="",,host="http"; x-ext=203.0.113.9:80 ,FOR=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;;for =203.0.113.09:abc; for=example.com:	<null>
+=example.com/evil;;host=1:65535 ;host="ctrl\u0001",host=_bad!: 80	<null>
+ ,for =aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;;host;;for=ftp, 	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+host=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;for="a\\;  for=unknown, for=https  ;for=Http;;For=[::1]:abc	<null>
+Host=""; secret=_:_obf; PROTO=tok	<null>
+	n:1|<null>,<null>,<null>
+,,"for"=HTTPS	<null>
+For="quoted";for=[2001:db8::7]	<null>
+for=; for=Http , for=_hidden:_port:0, host=HTTPS ; for=0x7f.0.0.1: 80 ;for=="example.com:443",	<null>
+	n:1|<null>,<null>,<null>
+"for"=10.0.0.5:65536	<null>
+	n:1|<null>,<null>,<null>
+,  ,	n:3|<null>,<null>,<null>|<null>,<null>,<null>|<null>,<null>,<null>
+;	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+for=h ttp;;secret=example.com:8443;;proto="quoted"	<null>
+fo r="tab\t";; for=,  ,	<null>
+for=ftp;;proto=300.1.1.1: 80,,, For=::ffff:203.0.113.9:abc;="a;b", proto="http";;x-ext="a;b";;for ="[2001:db8::1]:8443"	<null>
+PROTO=example.com:, "for"=,proto=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;for=Http,	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+host="http";;proto=example.com:8443; PROTO="a,b",,,secret=:80;x-ext=http,host=tok; =_hidden:_port:_ ;secret=[2001:db8::7: 80	<null>
+ ,"for"=_hidden:80 ; for=-bad-,, for ="unterminated;by=unknown:	<null>
+fo r=[];;secret="ctrl\u0001";;for==ftp ,	<null>
+	n:1|<null>,<null>,<null>
+,, for=_a.b-c_d:65535 ;fo r=h ttp; Host="a;b" ,fo r="ctrl\u0001"	<null>
+, proto=_a.b-c_d; for ="ctrl\u0001"	<null>
+	n:1|<null>,<null>,<null>
+host="tab\t" ,fo r=_hidden:_port ;host=example.com:99999, proto=Http;; for=tok en;;host=[2001:db8::7:65535 ,PROTO=HTTPS; for=255.255.255.255:_obf ;secret	<null>
+	n:1|<null>,<null>,<null>
+, for=Example.COM;;Host	<null>
+	n:1|<null>,<null>,<null>
+"for"=203.0.113.9:0; PROTO=HTTPS	<null>
+for="a;b";;host=[2001:db8::7]:99999;for==[2001:db8::1] ,secret=example.com:; For=exa mple.com,	<null>
+secret=::1,,PROTO=203.0.113.9:80	<null>
+ ,for=h ttp,,"for"=example.com:; For=_bad!:_obf;; for=https,,	<null>
+for="http",FOR=203.0.113.9:0; for="example.com:443"	<null>
+ for=ftp	<null>
+Host=_: 80;host=example.com;  for=tok	<null>
+for =example.com/evil;for==tok en ,fo r=http;;x-ext=ftp;=https,,	<null>
+,  for=:4711,, "for"=203.0.113.9:80;fo r="ctrl\u0001"; secret=https	<null>
+PROTO=https ; by=203.0.113.09:99999	<null>
+="a,b" ;host=203.0.113.09 ;PROTO="tab\t" ,, ,,=Http;;host=_hidden:_port:4711	<null>
+ ,proto=203.0.113.9:80; secret="a\\,,,,for =not-an-ip:99999;;proto=[2001:db8::1]:x ;fo r=http	<null>
+by=https ;by=_a.b-c_d:80, 	<null>
+	n:1|<null>,<null>,<null>
+Host="ctrl\u0001", For;fo r=https ,for=[2001:db8:::7]:; by="a,b"	<null>
+secret=127.0.0.1:80 , ,proto="http" ;for=::1	<null>
+,for =aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;host=10.0.0.5:80 	<null>
+	n:1|<null>,<null>,<null>
+, for=example.com;;PROTO=203.0.113:80 ,fo r=-bad- ;proto="http"	<null>
+by=h ttp ;for =[2001:db8::1];;"for"=203.0.113.9, =example.com;; for=-bad-;FOR=ftp,for=="[2001:db8::1]:8443";for=;;"for"=-bad-	<null>
+for=255.255.255.255: ,proto="example.com:443", For=[2001:db8::1],="with\\"escape"; FOR=0x7f.0.0.1:65536	<null>
+proto=Http;;by="https"; PROTO=example.com/evil ,proto=https ;for ="tab\t" ;fo r="tab\t"	<null>
+host=https;by=ftp	n:1|<null>,<null>,https
+fo r=0.0.0.0:0;secret="tab\t";; for=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, , ,	<null>
+for=="quoted",proto=https ;;by="a,b",,for="a;b"	<null>
+by=exa mple.com, for="quoted"	<null>
+=;proto=203.0.113.9:80;for =Http	<null>
+Host=Http	n:1|<null>,<null>,http
+,x-ext=ftp ;fo r=example.com:0	<null>
+For="ctrl\u0001";"for"=https ;x-ext ,=::1;;x-ext=user@example.com,by="quoted" ;host="tab\t",,host=203.0.113.9:80, , for=tok;;host=http ,FOR=203.0.113:0,  ,proto=h ttp ,x-ext=[fe80::1%eth0]: 80 ;host=203.0.113.9.1:abc; FOR="a;b", secret=203.0.113.9:80 ,FOR="[2001:db8::1]:8443",by=203.0.113.9 ,host=::1:65535;;proto=255.255.255.255:65535 ,fo r="http", for="" ;"for"=203.0.113.9 :_ ,host=Example.COM ;Host=example.com:8443 ;FOR="a\\,for==http,,host="with\\"escape" ;by=tok en; fo r=203.0.113.9:80,,for="[2001:db8::1]:8443";by=203.0.113:80 , , x-ext=example.com:0 ;host="",,,host=Http, ,, ,Host="a,b" ;secret=_,For="a\\,  , for="[2001:db8::1]:8443" ,fo r="a,b",proto=::ffff:203.0.113.9;;fo r=0.0.0.0:_obf;=tok	<null>
+for==https;;by=https  ,by=127.0.0.1:65535 ;FOR=[2001:db8::7]:65536 ,by=http	<null>
+	n:1|<null>,<null>,<null>
+,,,PROTO=[2001:db8::1] ;fo r="a;b";;secret	<null>
+FOR="quoted";;for=198.51.100.7: ;for=127.0.0.1:4711,,fo r=exa mple.com;;fo r=[2001:db8::7]: 80;secret=h ttp ,fo r=203.0.113.9 ;for=h ttp ;fo r=198.51.100.7: 80	<null>
+for ="quoted";for=tok en;;fo r="a;b", 	<null>
+=tok en; =https;;by=example.com:0,,secret=10.0.0.5:4711 ;x-ext="unterminated,	<null>
+host=203.0.113.9,,,secret=http ;for=https; Host="https" ,For=https	<null>
+ for=::1: 80;  for="a;b" ,for=-bad-	<null>
+, for =http; For=https	<null>
+	n:1|<null>,<null>,<null>
+,, ,proto=203.0.113.9.1:0; by=example.com	<null>
+	n:1|<null>,<null>,<null>
+For= ;host=[2001:db8::1] ;host=	<null>
+,PROTO=203.0.113.9 ;PROTO=exa mple.com,	<null>
+ for=[2001:db8::1];;=example.com:65536,,, fo r=::1:80 ;; for=Http;by=example.com:8443, by=:abc;;host="a,b"	<null>
+proto=https;;FOR="quoted",  ,	<null>
+	n:1|<null>,<null>,<null>
+;	n:1|<null>,<null>,<null>
+by=""	n:1|<null>,<null>,<null>
+,,proto=2001:db8::7: ;x-ext=tok, for=;;for=="https"; for="a;b",for=""	<null>
+for=: 80 ;fo r="with\\"escape"	<null>
+by=http, by=UNKNOWN:abc,fo r=https  ;host=;=UNKNOWN:80 	<null>
+proto=[]:0 ,	<null>
+for=0.0.0.0:0; for=http;host=203.0.113.9.1:_obf, ,,,"for"=[2001:db8::1]:x ;proto="https";host=example.com:99999	<null>
+,host=[fe80::1%eth0]: 80 ; for=::ffff:203.0.113.9:4711	<null>
+secret=fe80::1%eth0:0;;host ,For="with\\"escape";fo r=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,="http",fo r="",,fo r=h ttp;host=[2001:db8::7:4711; ="a\\,,proto=[2001:db8::1]:x ;by="unterminated,host="a;b" ,for==https; For=[2001:db8::1],,,,for==tok en ;by=fe80::1%eth0:99999 ;for=https ,fo r="ctrl\u0001";;PROTO=::1; for  ,PROTO=""; host=,for ="http";  for=203.0.113.9.1:65536; x-ext="https", host=::1, ,for="unterminated, fo r=203.0.113.09 ,,FOR=, ,fo r=203.0.113.9:80; for;;proto=Http, host=[];;host=2001:db8::7:_obf, fo r,for==203.0.113.9 :0,proto=[2001:db8::1]:x,for=, by=; x-ext="ctrl\u0001"; fo r=203.0.113.9:80,,by=https ;"for"=Example.COM ;for=http,,proto=0.0.0.0:;;fo r=_:65536;x-ext=_hidden ,for=203.0.113.9:65535 ,PROTO="a,b" ; for=::1;;x-ext="https" ,FOR=ftp ;"for"="a\\ ,by=::1:_ ,PROTO="tab\t";;secret=https ,PROTO=unknown:80 	<null>
+	n:1|<null>,<null>,<null>
+for==example.com:65536;;for="https"	<null>
+, "for"=h ttp, For=tok en;;FOR=127.0.0.1:4711	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+for=2001:db8::7: 80,,,,proto=https; Host="ctrl\u0001"	<null>
+ ,	n:2|<null>,<null>,<null>|<null>,<null>,<null>
+proto=https ,	n:2|<null>,https,<null>|<null>,<null>,<null>
+for =203.0.113.9.1 ,host="http";;for =http	<null>
+	n:1|<null>,<null>,<null>
+=[2001:db8::7] ;fo r="quoted";=h ttp ,=[2001:db8::1]:x, ,host=203.0.113	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+;	n:1|<null>,<null>,<null>
+proto=example.com/evil;"for"=255.255.255.255:_obf,,=1:80; for =255.255.255.255:4711; host=HTTPS, ,	<null>
+proto=example.com:0 ;=203.0.113.9:80; Host=,	<null>
+proto=example.com:	<null>
+	n:1|<null>,<null>,<null>
+	n:1|<null>,<null>,<null>
+for =http, ,	<null>
+For=example.com:99999;x-ext=user@example.com ;host=tok en,by=h ttp;x-ext=203.0.113.9:65535 , ,for="unterminated	<null>
+by=::ffff:203.0.113.9:_obf ,FOR=203.0.113.09	<null>
+for==[2001:db8::1];by=https; for="tab\t", for=exa mple.com,Host=[2001:db8::1];for="tab\t",secret=example.com:99999	<null>
+	n:1|<null>,<null>,<null>
+ for=example.com:; by="a\\; host="quoted",for =[::1]:80 ; for="with\\"escape", fo r="a;b";fo r=HTTPS	<null>
+host="example.com:443";FOR="a;b" ,,Host="a;b";for ="with\\"escape";;fo r=http	<null>
+ ,"for"="a;b"; For="",,Host=, for =not-an-ip:_;;for="a;b"	<null>
+for==http,,,fo r="unterminated;for=https  ,	<null>
+ 	n:1|<null>,<null>,<null>

@@ -157,6 +157,12 @@ other raw-runtime failures, WebSocket timeouts, compatibility failures, crashes
 and other failed checks remain failures. The candidate native experiment full
 suite remains a strict check. No production native library is patched.
 
+On Windows, the same wrapper and classifier also carry a separate
+owner-approved exception for the QUIC credential failure in
+[issue #398](https://github.com/WilliamSmithEdward/embedio-neo/issues/398); see
+[the HTTP engine notes](http-engine.md#windows-quic-credential-quarantine). It
+does not widen the rebind exception, and the two are retired independently.
+
 ## Remaining decisions and retirement gates
 
 Issue #202 keeps the following work visible:
@@ -357,8 +363,10 @@ The gate is executable and lives in the repository:
   called absent there.
 - Retirement: only after the candidate passes, remove the retry
   (`QuicEndpointReleases` and its two `Http3Listener` call sites), remove the
-  quarantine branch from `ci.yml` and the classifier use, keep the raw and owned
-  cases as ordinary strict tests, rerun the gate and the full suite on the final
+  rebind branch of the `ci.yml` quarantine and its classifier count (the
+  Windows credential exception for issue #398 has its own removal condition),
+  keep the raw and owned cases as ordinary strict tests, rerun the gate and the
+  full suite on the final
   source, and recheck `FailedMultiEndpointStartupRollsBackEarlierBindings`,
   foreign-process endpoint conflicts and resource cleanup. The idle case covers
   behavior A and the served and contended cases cover behavior B; fixing one

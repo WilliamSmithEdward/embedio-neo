@@ -42,64 +42,57 @@ namespace EmbedIO.Forwarding.Internal
             var hops = new List<ForwardedHop>(elements.Count);
             foreach (var element in elements)
             {
-                var pairs = SplitOutsideQuotes(element, ';');
-                if (pairs == null)
+                var hop = ParseElement(element);
+                if (hop == null)
                     return null;
 
-                IPAddress? client = null;
-                bool hasFor = false, hasProto = false, hasHost = false;
-                string? proto = null, host = null;
-                foreach (var rawPair in pairs)
-                {
-                    var pair = rawPair.Trim();
-                    if (pair.Length == 0)
-                        continue;
-
-                    var equals = EmbedIO.Internal.StringOperations.IndexOfOrdinal(pair, '=');
-                    if (equals <= 0)
-                        return null;
-
-                    var name = pair.Substring(0, equals);
-                    if (!EmbedIO.Utilities.Validate.IsRfc2616Token(name))
-                        return null;
-
-                    var value = Unquote(pair.Substring(equals + 1));
-                    if (value == null)
-                        return null;
-
-                    switch (name.ToUpperInvariant())
-                    {
-                        case "FOR":
-                            if (hasFor || !TryParseNode(value, false, out client))
-                                return null;
-                            hasFor = true;
-                            break;
-
-                        case "PROTO":
-                            if (hasProto || (proto = Scheme(value)) == null)
-                                return null;
-                            hasProto = true;
-                            break;
-
-                        case "HOST":
-                            if (hasHost || (host = Authority(value)) == null)
-                                return null;
-                            hasHost = true;
-                            break;
-
-                        case "BY":
-                            break;
-
-                        default:
-                            // RFC 7239 allows extension parameters; they carry nothing this module uses.
-                            break;
-                    }
-                }
-
-                hops.Add(new ForwardedHop(client, proto, host));
+                hops.Add(hop);
             }
 
             return hops;
+        }
+
+        // One element's pairs; null when a pair is malformed, repeats a parameter or names a
+        // value the module does not accept.
+        private static ForwardedHop? ParseElement(string element)
+        {
+            var pairs = SplitOutsideQuotes(element, ';');
+            if (pairs == null)
+                return null;
+
+            var fields = default(ForwardedElement);
+            foreach (var rawPair in pairs)
+            {
+                var pair = rawPair.Trim();
+                if (pair.Length == 0)
+                    continue;
+
+                if (!TryReadPair(pair, out var name, out var value) || !fields.TryApply(name, value))
+                    return null;
+            }
+
+            return fields.ToHop();
+        }
+
+        // pair = token "=" value; value = token / quoted-string.
+        private static bool TryReadPair(string pair, out string name, out string value)
+        {
+            name = string.Empty;
+            value = string.Empty;
+            var equals = EmbedIO.Internal.StringOperations.IndexOfOrdinal(pair, '=');
+            if (equals <= 0)
+                return false;
+
+            name = pair.Substring(0, equals);
+            if (!EmbedIO.Utilities.Validate.IsRfc2616Token(name))
+                return false;
+
+            var unquoted = Unquote(pair.Substring(equals + 1));
+            if (unquoted == null)
+                return false;
+
+            value = unquoted;
+            return true;
         }
 
         // X-Forwarded-For, -Proto and -Host each list one value per hop, client first. They are aligned
@@ -199,56 +192,13 @@ namespace EmbedIO.Forwarding.Internal
         private static bool TryParseNode(string value, bool allowBareIPv6, out IPAddress? address)
         {
             address = null;
-            if (string.Equals(value, "unknown", StringComparison.OrdinalIgnoreCase) || (value.Length > 1 && value[0] == '_' && IsObfuscated(value)))
+            if (string.Equals(value, "unknown", StringComparison.OrdinalIgnoreCase) || IsObfuscatedNode(value))
                 return true;
 
-            string addressPart;
-            string? port = null;
-            if (value.Length > 0 && value[0] == '[')
-            {
-                var close = EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, ']');
-                if (close < 0)
-                    return false;
-
-                addressPart = value.Substring(1, close - 1);
-                var rest = value.Substring(close + 1);
-                if (rest.Length > 0)
-                {
-                    if (rest[0] != ':')
-                        return false;
-                    port = rest.Substring(1);
-                }
-
-                if (!IPAddress.TryParse(addressPart, out var v6) || v6.AddressFamily != AddressFamily.InterNetworkV6 || EmbedIO.Internal.StringOperations.IndexOfOrdinal(addressPart, '%') >= 0)
-                    return false;
-
-                address = v6;
-            }
-            else
-            {
-                var colons = Count(value, ':');
-                if (colons > 1)
-                {
-                    if (!allowBareIPv6 || EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, '%') >= 0 || !IPAddress.TryParse(value, out var bare) || bare.AddressFamily != AddressFamily.InterNetworkV6)
-                        return false;
-
-                    address = bare;
-                }
-                else
-                {
-                    addressPart = colons == 1 ? value.Substring(0, EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, ':')) : value;
-                    if (colons == 1)
-                        port = value.Substring(EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, ':') + 1);
-
-                    // Only canonical dotted decimal: IPAddress.TryParse also accepts "1" or "0x7f.1".
-                    if (!IPAddress.TryParse(addressPart, out var v4) || v4.AddressFamily != AddressFamily.InterNetwork || v4.ToString() != addressPart)
-                        return false;
-
-                    address = v4;
-                }
-            }
-
-            if (port != null && !IsPort(port) && !(port.Length > 1 && port[0] == '_' && IsObfuscated(port)))
+            var parsed = value.Length > 0 && value[0] == '['
+                ? TryParseBracketed(value, out address, out var port)
+                : TryParseUnbracketed(value, allowBareIPv6, out address, out port);
+            if (!parsed || (port != null && !IsPort(port) && !IsObfuscatedNode(port)))
                 return false;
 
             if (address != null && address.IsIPv4MappedToIPv6)
@@ -256,6 +206,71 @@ namespace EmbedIO.Forwarding.Internal
 
             return true;
         }
+
+        // "[" IPv6 "]" with an optional ":" port; the address may not carry a zone.
+        private static bool TryParseBracketed(string value, out IPAddress? address, out string? port)
+        {
+            address = null;
+            port = null;
+            var close = EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, ']');
+            return close >= 0
+                && TrySplitPort(value.Substring(close + 1), out port)
+                && TryParseIPv6(value.Substring(1, close - 1), out address);
+        }
+
+        // A bare IPv6 address where allowed, or canonical dotted-decimal IPv4 with an optional ":" port.
+        private static bool TryParseUnbracketed(string value, bool allowBareIPv6, out IPAddress? address, out string? port)
+        {
+            address = null;
+            port = null;
+            var colons = Count(value, ':');
+            if (colons > 1)
+                return allowBareIPv6 && TryParseIPv6(value, out address);
+
+            var colon = colons == 1 ? EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, ':') : -1;
+            if (colon >= 0)
+                port = value.Substring(colon + 1);
+
+            return TryParseCanonicalIPv4(colon >= 0 ? value.Substring(0, colon) : value, out address);
+        }
+
+        // Nothing after the address, or ":" and a port to validate.
+        private static bool TrySplitPort(string rest, out string? port)
+        {
+            port = null;
+            if (rest.Length == 0)
+                return true;
+
+            if (rest[0] != ':')
+                return false;
+
+            port = rest.Substring(1);
+            return true;
+        }
+
+        private static bool TryParseIPv6(string text, out IPAddress? address)
+        {
+            address = null;
+            if (EmbedIO.Internal.StringOperations.IndexOfOrdinal(text, '%') >= 0 || !IPAddress.TryParse(text, out var parsed) || parsed.AddressFamily != AddressFamily.InterNetworkV6)
+                return false;
+
+            address = parsed;
+            return true;
+        }
+
+        // Only canonical dotted decimal: IPAddress.TryParse also accepts "1" or "0x7f.1".
+        private static bool TryParseCanonicalIPv4(string text, out IPAddress? address)
+        {
+            address = null;
+            if (!IPAddress.TryParse(text, out var parsed) || parsed.AddressFamily != AddressFamily.InterNetwork || parsed.ToString() != text)
+                return false;
+
+            address = parsed;
+            return true;
+        }
+
+        private static bool IsObfuscatedNode(string value)
+            => value.Length > 1 && value[0] == '_' && IsObfuscated(value);
 
         private static bool IsPort(string value)
             => value.Length > 0 && value.Length <= 5
@@ -365,6 +380,51 @@ namespace EmbedIO.Forwarding.Internal
             }
 
             return count;
+        }
+
+        // The fields one forwarded-element names, each at most once.
+        private struct ForwardedElement
+        {
+            private IPAddress? _client;
+            private string? _proto;
+            private string? _host;
+            private bool _hasFor;
+            private bool _hasProto;
+            private bool _hasHost;
+
+            // False when a parameter repeats or its value is not one the module accepts.
+            internal bool TryApply(string name, string value)
+            {
+                switch (name.ToUpperInvariant())
+                {
+                    case "FOR":
+                        if (_hasFor || !TryParseNode(value, false, out _client))
+                            return false;
+
+                        _hasFor = true;
+                        return true;
+
+                    case "PROTO":
+                        if (_hasProto || (_proto = Scheme(value)) == null)
+                            return false;
+
+                        _hasProto = true;
+                        return true;
+
+                    case "HOST":
+                        if (_hasHost || (_host = Authority(value)) == null)
+                            return false;
+
+                        _hasHost = true;
+                        return true;
+
+                    default:
+                        // "by" and RFC 7239 extension parameters carry nothing this module uses.
+                        return true;
+                }
+            }
+
+            internal readonly ForwardedHop ToHop() => new ForwardedHop(_client, _proto, _host);
         }
     }
 }

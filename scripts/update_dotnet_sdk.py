@@ -1,7 +1,7 @@
 """Propose the newest .NET SDK patch and workload set for the feature band global.json pins.
 
 global.json pins the exact SDK with roll-forward disabled, and other pins follow
-it. update-dotnet-sdk.yml runs this script each week. It can open two pull
+it. update-dotnet-sdk.yml runs this script each week. It can open three pull
 requests, each moving its pins together:
 
 - An SDK move: `sdk.version` in global.json, each workflow line
@@ -46,7 +46,9 @@ $GITHUB_OUTPUT.
 proposal must come from the commit and branch the workflow ran on, and every
 changed file must be one its move may change, changed only as the rules allow.
 It commits through the GitHub API (no git credentials on disk), opens each pull
-request against that branch and leaves it open for exact-head review. A pull
+request against that branch and leaves it open for exact-head review. A workload
+set's pull request opens as a draft labelled "needs owner decision", because the
+set can move the Apple packs to a newer Xcode; that call is the owner's. A pull
 request opened with the workflow's own token starts no workflows, so it starts
 CI, Security and Malware scan on the new branch itself.
 """
@@ -100,6 +102,11 @@ WORKLOAD_PIN_FILES = (".github/workflows/*.yml", "scripts/*.ps1", "scripts/*.sh"
 # The required checks. They are started by hand because the pull request is not.
 GATES = ("ci.yml", "security.yml", "malware-scan.yml")
 LABELS = (".NET", "dependencies")
+# A workload set decides the MAUI apps' Apple and Android packs, and an Apple pack move can need a
+# newer Xcode, so those pull requests open as drafts that wait for the owner's decision.
+OWNER_DECISION_KINDS = frozenset({"workloads"})
+OWNER_DECISION_LABEL = "needs owner decision"
+APPLE_MANIFEST = re.compile(r"Microsoft\.NET\.Sdk\.(iOS|MacCatalyst|macOS|tvOS)", re.IGNORECASE)
 STABLE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 LOCK_NAME = re.compile(r"packages(\.[a-z]+)?\.lock\.json")
 SHA512_HEX = re.compile(r"[0-9a-f]{128}")
@@ -613,15 +620,34 @@ def sdk_body(old_sdk: str, old_runtime: str, move: dict[str, Any], moves: dict[s
     return "\n".join(lines) + "\n"
 
 
+def apple_platform_moves(old: dict[str, str], new: dict[str, str]) -> list[tuple[str, str, str]]:
+    """Apple SDK packs whose platform version (the major.minor of the pack version) changes."""
+    def platform(manifest: str | None) -> str:
+        return ".".join(manifest.split("/")[0].split(".")[:2]) if manifest else "-"
+    return [(name, platform(old.get(name)), platform(new.get(name)))
+            for name in sorted(set(old) | set(new))
+            if APPLE_MANIFEST.fullmatch(name) and platform(old.get(name)) != platform(new.get(name))]
+
+
 def workloads_body(old_set: str, move: dict[str, Any]) -> str:
     reason = (f"it brings runtime {move['runtime']}, a security release, so the seven-day cooldown does not apply"
               if move["security"] else "at least seven days old")
     lines = [
         "The weekly .NET workload set update, proposed by `update-dotnet-sdk.yml`.",
         "",
+        "**Needs owner decision.** Workload sets open as drafts labelled `needs owner decision`: a set "
+        "decides the MAUI apps' Mono runtime and their Apple and Android SDK packs. Mark it ready for "
+        "review once the owner has decided.",
+        "",
         f"- Workload set {old_set} -> {move['set']}, published {move['published']}: {reason}.",
         f"- The MAUI apps' Mono runtime moves {move['old_runtime']} -> {move['runtime']}"
         if move["runtime"] != move["old_runtime"] else f"- The MAUI apps' Mono runtime stays {move['runtime']}.",
+    ]
+    apple = apple_platform_moves(move["old_manifests"], move["manifests"])
+    if apple:
+        lines.append("- Apple SDK packs change platform version, which usually needs the matching Xcode: "
+                     + ", ".join(f"{name} {old} -> {new}" for name, old, new in apple) + ".")
+    lines += [
         "",
         "The package matched the SHA-512 in nuget.org's catalog. Its manifests:",
         "",
@@ -930,12 +956,16 @@ def propose_one(root: Path, inp: Path, repository: str, base_sha: str, base_ref:
     tree = api(f"{base}/git/trees", "POST", {"base_tree": commit["tree"]["sha"], "tree": tree_entries})
     created = api(f"{base}/git/commits", "POST", {"message": title, "tree": tree["sha"], "parents": [base_sha]})
     api(f"{base}/git/refs", "POST", {"ref": f"refs/heads/{branch}", "sha": created["sha"]})
+    # check_proposal lets workload pins change only under the workloads rules, so the kind decides.
+    owner_decision = proposal["kind"] in OWNER_DECISION_KINDS
     pull = api(f"{base}/pulls", "POST", {"title": title, "head": branch, "base": base_ref,
-                                         "body": (inp / "body.md").read_text(encoding="utf-8")})
+                                         "body": (inp / "body.md").read_text(encoding="utf-8"),
+                                         "draft": owner_decision})
     # The gates first: nothing after this may leave the pull request without its checks.
     for workflow in GATES:
         api(f"{base}/actions/workflows/{workflow}/dispatches", "POST", {"ref": branch})
-    api(f"{base}/issues/{pull['number']}/labels", "POST", {"labels": list(LABELS)})
+    labels = [*LABELS, OWNER_DECISION_LABEL] if owner_decision else list(LABELS)
+    api(f"{base}/issues/{pull['number']}/labels", "POST", {"labels": labels})
     api(f"{base}/issues/{pull['number']}/assignees", "POST", {"assignees": [owner]})
     review_merge(pull["html_url"])
     return pull["html_url"]

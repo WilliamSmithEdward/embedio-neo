@@ -24,7 +24,7 @@ internal static class ProtocolChecks
     {
         Require(QuicListener.IsSupported, "QUIC is not supported on this host, so HTTP/3 cannot be checked.");
         using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
-        var url = $"https://localhost:{FreePort()}/";
+        var url = $"https://localhost:{LoopbackPorts.Free()}/";
 
         var services = new ServiceCollection().AddScoped<Greeter>().BuildServiceProvider();
         await using var disposeServices = services;
@@ -97,13 +97,6 @@ internal static class ProtocolChecks
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
         Require(socket.State == WebSocketState.Closed, "WebSocket ended in state " + socket.State);
         return text;
-    }
-
-    private static int FreePort()
-    {
-        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
     private static void Require(bool condition, string message)

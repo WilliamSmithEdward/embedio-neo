@@ -11,20 +11,59 @@
   without intermediate arrays, and HTTP/1 header encoding no longer allocates
   `AllKeys`. Behavior is unchanged; see the
   [load comparison](docs/project/http-engine-load-comparison.md#request-path-allocation-october-2026).
-- Dispatch each admitted TCP request straight from its connection to the server's
-  handler instead of queueing it for the accept loop, in plain and combined mode. The
-  HTTP/1.1 actor starts the handler on its own thread and then yields to the thread
-  pool's global queue once per request so that no connection monopolizes a worker,
-  and HTTP/2 exchanges hand off on their own work item, removing the accept-queue
-  bookkeeping and the `Task.Run` hop per request. `IHttpListener.GetContextAsync` is
-  unchanged and still serves standalone listeners and HTTP/3; admission, drain and
-  stop semantics are unchanged, and a handler may still run on after completing its
-  response without holding the connection's next request.
+- Behavior change: on the .NET 10 asset, a client that accepts Brotli at the same weight as
+  gzip or deflate now gets Brotli, as with ASP.NET Core's response compression. Browsers send
+  `Accept-Encoding: gzip, deflate, br` and got gzip: a tie went to the coding the client listed
+  first, and browsers list `br` last. Client weights still decide (`gzip;q=1, br;q=0.5` gets
+  gzip). Ties with `identity`, the choice between gzip and deflate, and the .NET Standard 2.0
+  asset are unchanged. Dynamic responses (`OpenResponseStream`, `OpenResponseText` and the
+  helpers built on them, such as `SendDataAsync` and `SendStringAsync`) compress Brotli at
+  quality 1 (`CompressionLevel.Fastest`, ASP.NET Core's default) instead of `BrotliStream`'s
+  default quality 4. `FileModule` keeps quality 4 for cached and streamed files, about the size
+  of the previous gzip responses. William accepted on 2026-10-14 the 6-17% larger dynamic
+  responses than the previous gzip default for 56-77% less compression CPU. One thread,
+  runtime 10.0.13, a JSON document compressed once per response (`--compression-timing`):
+
+  | JSON | gzip default level (before) | Brotli quality 1 (now) | Brotli quality 4 |
+  | --- | --- | --- | --- |
+  | 1 KiB | 514 B, 9.3 us | 545 B, 4.1 us | 499 B, 13.5 us |
+  | 64 KiB | 12,128 B, 347 us | 13,672 B, 81 us | 12,288 B, 329 us |
+  | 1 MiB | 174,771 B, 6.43 ms | 203,734 B, 1.66 ms | 174,491 B, 5.08 ms |
+
+  End to end over HTTP/1.1 with a browser's `Accept-Encoding` (load benchmark `-json`
+  scenarios, roles alternated), requests per second rose 1.23x, 3.08x and 3.62x for the
+  1 KiB, 64 KiB and 1 MiB documents, and server CPU per request fell to 0.82x, 0.32x and 0.28x.
+- HTTP/2 and HTTP/3 requests with a request deadline keep hearing the server's stop token
+  through their context token, in the handler and in `OnRequestCompleted` callbacks after it.
+  Installing the deadline disposed the token source behind the token the server captures
+  and restores afterwards. With `WebServer` such a request still ended at shutdown, because
+  stopping the listener cancels its stream, but a host that stops the server without
+  cancelling the stream left the request waiting. HTTP/1 is unaffected.
+- Fix: a graceful HTTP/2 end (a drain or the idle GOAWAY) no longer resets the
+  connection. The peer may still be sending, for example WINDOW_UPDATE for the final
+  DATA or HEADERS it sent before reading GOAWAY, and closing both directions with
+  those bytes unread sent a TCP reset that discarded responses the peer had not read
+  yet. The connection now half-closes after its final frames and reads and discards
+  input until the peer closes, for at most 2 seconds, before it closes (RFC 9112
+  section 9.6).
+- Dispatch each admitted request straight from its connection to the server's
+  handler instead of queueing it for the accept loop, in plain, HTTP/3 and combined
+  mode. The HTTP/1.1 actor starts the handler on its own thread and then yields to
+  the thread pool's global queue once per request so that no connection monopolizes
+  a worker, HTTP/2 exchanges hand off on their own work item, and HTTP/3 requests
+  start the handler on their stream's own task instead of passing through the
+  listener's context channel, the combined listener's second channel and a
+  `Task.Run`. `IHttpListener.GetContextAsync` is unchanged and still serves
+  standalone listeners; admission, drain and stop semantics are unchanged, and a
+  handler may still run on after completing its response without holding the
+  connection's next request.
 - Fix: a request whose dispatch fails before the handler starts (an exception while the
   server prepares the context) now closes its HTTP/1.1 connection, or resets its HTTP/2
   stream, after logging the failure. Previously that request was never answered and its
-  connection stayed open until the client gave up. The server also observes and logs a
-  fault a handler leaves uncaught after its response, instead of leaving it unobserved.
+  connection stayed open until the client gave up. If closing that request's context
+  fails as well, its response is aborted instead of leaving the connection waiting for
+  a response that never ends. The server also observes and logs a fault a handler
+  leaves uncaught after its response, instead of leaving it unobserved.
 
 ## [2.0.0] - Unreleased
 
@@ -64,6 +103,12 @@
   `CorsModule` sends `Vary: Origin`; the Basic challenge uses the standard
   `Basic realm="...", charset="UTF-8"` form; and directory listings requested
   without a trailing slash link inside the directory. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
+- HTTP/1 status lines carry the standard reason phrase for every status that
+  `HttpStatusDescription` lists. 103, 208, 226, 308, 421, 426, 428, 429, 431, 451,
+  506, 508, 510 and 511 used to go out with an empty phrase; the same phrases are
+  now also their default `StatusDescription`, problem-details `title` and OpenAPI
+  response description. See
   [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
 
 - Require explicit AcceptTunnelAsync before successful HTTP/2 or HTTP/3 extended
