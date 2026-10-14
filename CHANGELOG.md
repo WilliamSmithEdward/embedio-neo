@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- Security: a file provider decodes a served path one segment at a time, so an encoded
+  separator can no longer reach a resource whose modules never ran. Modules are selected
+  from the undecoded path, because the route is built from `Url.AbsolutePath` and a `%2F`
+  stays encoded there (RFC 3986, Section 2.2), while `FileSystemProvider` and
+  `ZipFileProvider` decoded the whole path and turned that `%2F` into a separator. A
+  request for `/admin%2Fsecret.txt` therefore mapped to `admin/secret.txt` although the
+  modules mounted on `/admin`, an authentication module among them, never matched it.
+  Each segment now decodes on its own, and a segment that decodes to a separator, to a
+  `.` or `..` segment, or to a control character names no resource. Containment inside
+  the served root, which already held, is unchanged. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#encoded-separators-in-served-paths).
 - An HTTP/1 connection bounds the two steps of its request cycle that were unbounded.
   Discarding a request body a handler never read now honors the keep-alive deadline, so
   a client that declares a body, takes its response and then stops sending no longer

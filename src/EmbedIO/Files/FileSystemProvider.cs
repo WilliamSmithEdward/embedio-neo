@@ -93,8 +93,11 @@ namespace EmbedIO.Files
             // Invalid or inaccessible filesystem paths cannot map to a resource.
             try
             {
-                // Unescape the url before continue
-                requestPath = Uri.UnescapeDataString(requestPath);
+                // Decode one segment at a time, so an encoded separator stays inside its own
+                // segment instead of becoming a boundary that module routing never matched.
+                // Internal.RequestPathDecoder explains why that distinction is load bearing.
+                if (!Internal.RequestPathDecoder.TryDecodeSegments(requestPath, out requestPath))
+                    return null;
 
                 // Bail out early if the path is a rooted path,
                 // as Path.Combine would ignore our base path.
