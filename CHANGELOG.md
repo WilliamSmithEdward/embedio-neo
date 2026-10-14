@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Security: a request handler that is still running counts against the connection's
+  128-request limit even after its stream is reset or its response has finished, on
+  HTTP/2 and HTTP/3. Before this, a client could reset streams to start an unbounded
+  number of concurrent handlers on one connection (the CVE-2023-44487 "Rapid Reset"
+  pattern). On HTTP/2 a new stream over the limit is refused with `REFUSED_STREAM`,
+  which clients retry, and a client refused more than 128 times within one second
+  receives `GOAWAY ENHANCE_YOUR_CALM`. HTTP/3 now allows 128 outstanding request
+  handlers per connection instead of 256, matching HTTP/2 and the QUIC stream limit;
+  a request over it is refused with `H3_REQUEST_REJECTED`. Graceful shutdown still
+  waits only for responses, not for handlers that outlive them.
 - Allocate less per request. An uncontended asynchronous response write no longer
   allocates a task, a release delegate and a lock object. The per-request start and
   completion log messages are built only when a trace listener or a

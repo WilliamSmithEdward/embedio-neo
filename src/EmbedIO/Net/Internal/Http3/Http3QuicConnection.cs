@@ -45,6 +45,10 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Http3DatagramRouter? _datagrams;
         private Exception? _failure;
         private int _critical;
+        // Matches the HTTP/2 concurrent-stream limit and QUIC's inbound
+        // bidirectional stream limit (Http3ListenerBinding), so one number
+        // bounds concurrent application work per connection on both protocols.
+        private const int MaximumApplications = 128;
         private int _applicationCount;
         private CancellationToken _drainToken;
         private static readonly TimeSpan ApplicationDrainTimeout = TimeSpan.FromSeconds(30);
@@ -373,7 +377,7 @@ namespace EmbedIO.Net.Internal.Http3
                     _admitted.Add(stream.Id);
                 }
                 // Isolate even callbacks that block before returning their Task.
-                if (Interlocked.Increment(ref _applicationCount) > 256)
+                if (Interlocked.Increment(ref _applicationCount) > MaximumApplications)
                 {
                     Interlocked.Decrement(ref _applicationCount);
                     throw new Http3StreamException(stream.Id, 0x107, "Too many outstanding application callbacks.");
@@ -423,7 +427,14 @@ namespace EmbedIO.Net.Internal.Http3
                 token.ThrowIfCancellationRequested();
                 await _dispatch(exchange).ConfigureAwait(false);
             }
-            finally { Interlocked.Decrement(ref _applicationCount); }
+            finally
+            {
+                // A reset or completed request whose handler still runs keeps its slot.
+                var handler = exchange.Handler;
+                if (handler == null || handler.IsCompleted) Interlocked.Decrement(ref _applicationCount);
+                else _ = handler.ContinueWith(static (_, state) => Interlocked.Decrement(ref ((Http3QuicConnection)(state ?? throw new InvalidOperationException("Missing connection.")))._applicationCount),
+                    this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
         }
         // Observes one transport direction for the request's lifetime with a single
         // continuation, instead of a watcher task per direction. FIN is a normal
