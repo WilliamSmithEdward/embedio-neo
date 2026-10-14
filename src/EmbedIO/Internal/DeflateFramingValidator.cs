@@ -107,130 +107,176 @@ namespace EmbedIO.Internal
             if (_final) { _trailingBytes = _bitCount / 8; _bits = 0; _bitCount = 0; }
         }
 
+        // One step of the current phase. False when more input is needed.
         private bool Advance()
         {
-            int value;
             switch (_phase)
             {
-                case Phase.Header:
-                    if (!ReadBits(3, out value)) return false;
-                    _final = (value & 1) != 0;
-                    switch (value >> 1)
-                    {
-                        case 0:
-                            var padding = _bitCount & 7;
-                            _bits >>= padding;
-                            _bitCount -= padding;
-                            _phase = Phase.StoredLength;
-                            break;
-                        case 1: _literals = FixedLiterals; _distances = FixedDistances; _phase = Phase.Symbol; break;
-                        case 2: _phase = Phase.DynamicHeader; break;
-                        default: throw new InvalidDataException("Reserved DEFLATE block type.");
-                    }
-                    return true;
-                case Phase.StoredLength:
-                    if (!ReadBits(32, out value)) return false;
-                    _remaining = value & 65535;
-                    if (((value >> 16) & 65535) != (_remaining ^ 65535)) throw new InvalidDataException("Invalid DEFLATE stored block length.");
-                    _phase = Phase.StoredData;
-                    if (_remaining == 0) EndBlock();
-                    return true;
-                case Phase.StoredData:
-                    var buffered = Math.Min(_remaining, _bitCount / 8);
-                    if (buffered == 0) return false;
-                    _bits = buffered == 8 ? 0 : _bits >> (buffered * 8);
-                    _bitCount -= buffered * 8;
-                    _remaining -= buffered;
-                    AddOutput(buffered);
-                    if (_remaining == 0) EndBlock();
-                    return true;
-                case Phase.DynamicHeader:
-                    if (!ReadBits(14, out value)) return false;
-                    _literalCount = 257 + (value & 31);
-                    if (_literalCount > 286) throw new InvalidDataException("Reserved DEFLATE literal count.");
-                    _distanceCount = 1 + ((value >> 5) & 31);
-                    _codeCount = 4 + (value >> 10);
-                    _codeLengths = new int[19];
-                    _treeLengths = new int[_literalCount + _distanceCount];
-                    _index = 0;
-                    _phase = Phase.CodeLengths;
-                    return true;
-                case Phase.CodeLengths:
-                    if (!ReadBits(3, out value)) return false;
-                    var codeLengths = _codeLengths ?? throw new InvalidOperationException("Missing code lengths.");
-                    codeLengths[CodeOrder[_index++]] = value;
-                    if (_index == _codeCount)
-                    {
-                        _codes = new Huffman(codeLengths, false, true);
-                        _index = 0;
-                        _phase = Phase.TreeLengths;
-                    }
-                    return true;
-                case Phase.TreeLengths:
-                    var codes = _codes ?? throw new InvalidOperationException("Missing code tree.");
-                    if (!codes.Read(ref _bits, ref _bitCount, out value)) return false;
-                    var treeLengths = _treeLengths ?? throw new InvalidOperationException("Missing tree lengths.");
-                    if (value <= 15)
-                    {
-                        treeLengths[_index++] = value;
-                        FinishTrees();
-                    }
-                    else
-                    {
-                        if (value == 16 && _index == 0) throw new InvalidDataException("DEFLATE length repeat lacks a previous length.");
-                        _repeatSymbol = value;
-                        _phase = Phase.Repeat;
-                    }
-                    return true;
-                case Phase.Repeat:
-                    if (!ReadBits(_repeatSymbol == 16 ? 2 : _repeatSymbol == 17 ? 3 : 7, out value)) return false;
-                    var repeat = value + (_repeatSymbol == 18 ? 11 : 3);
-                    var lengths = _treeLengths ?? throw new InvalidOperationException("Missing repeated tree lengths.");
-                    if (repeat > lengths.Length - _index) throw new InvalidDataException("DEFLATE length repeat exceeds the tree.");
-                    var length = _repeatSymbol == 16 ? lengths[_index - 1] : 0;
-                    while (repeat-- != 0) lengths[_index++] = length;
-                    _phase = Phase.TreeLengths;
-                    FinishTrees();
-                    return true;
-                case Phase.Symbol:
-                    var literals = _literals ?? throw new InvalidOperationException("Missing literal tree.");
-                    var literalBytes = 0;
-                    while (literals.Read(ref _bits, ref _bitCount, out value))
-                    {
-                        if (value < 256) { literalBytes++; continue; }
-                        AddOutput(literalBytes);
-                        if (value == 256) EndBlock();
-                        else
-                        {
-                            if (value > 285) throw new InvalidDataException("Reserved DEFLATE length symbol.");
-                            _lengthIndex = value - 257;
-                            _phase = Phase.Length;
-                        }
-                        return true;
-                    }
-                    AddOutput(literalBytes);
-                    return false;
-                case Phase.Length:
-                    if (!ReadBits(LengthBits[_lengthIndex], out value)) return false;
-                    _length = LengthBase[_lengthIndex] + value;
-                    _phase = Phase.Distance;
-                    return true;
-                case Phase.Distance:
-                    var distances = _distances ?? throw new InvalidOperationException("Missing distance tree.");
-                    if (!distances.Read(ref _bits, ref _bitCount, out value)) return false;
-                    if (value > 29) throw new InvalidDataException("Reserved DEFLATE distance symbol.");
-                    _distanceIndex = value;
-                    _phase = Phase.DistanceExtra;
-                    return true;
-                case Phase.DistanceExtra:
-                    if (!ReadBits(DistanceBits[_distanceIndex], out value)) return false;
-                    var distance = DistanceBase[_distanceIndex] + value;
-                    if (distance > _maximumDistance || (ulong)distance > DecodedBytes) throw new InvalidDataException("DEFLATE distance precedes the output history.");
-                    AddOutput(_length);
-                    _phase = Phase.Symbol;
-                    return true;
+                case Phase.Header: return ReadBlockHeader();
+                case Phase.StoredLength: return ReadStoredLength();
+                case Phase.StoredData: return SkipBufferedStoredData();
+                case Phase.DynamicHeader: return ReadDynamicHeader();
+                case Phase.CodeLengths: return ReadCodeLength();
+                case Phase.TreeLengths: return ReadTreeLength();
+                case Phase.Repeat: return ReadRepeat();
+                case Phase.Symbol: return ReadSymbols();
+                case Phase.Length: return ReadLength();
+                case Phase.Distance: return ReadDistance();
+                case Phase.DistanceExtra: return ReadDistanceExtra();
                 default: return false;
             }
+        }
+
+        private bool ReadBlockHeader()
+        {
+            if (!ReadBits(3, out var value)) return false;
+            _final = (value & 1) != 0;
+            switch (value >> 1)
+            {
+                case 0:
+                    var padding = _bitCount & 7;
+                    _bits >>= padding;
+                    _bitCount -= padding;
+                    _phase = Phase.StoredLength;
+                    break;
+                case 1: _literals = FixedLiterals; _distances = FixedDistances; _phase = Phase.Symbol; break;
+                case 2: _phase = Phase.DynamicHeader; break;
+                default: throw new InvalidDataException("Reserved DEFLATE block type.");
+            }
+            return true;
+        }
+
+        private bool ReadStoredLength()
+        {
+            if (!ReadBits(32, out var value)) return false;
+            _remaining = value & 65535;
+            if (((value >> 16) & 65535) != (_remaining ^ 65535)) throw new InvalidDataException("Invalid DEFLATE stored block length.");
+            _phase = Phase.StoredData;
+            if (_remaining == 0) EndBlock();
+            return true;
+        }
+
+        // Stored bytes already in the bit buffer; Feed skips the rest directly.
+        private bool SkipBufferedStoredData()
+        {
+            var buffered = Math.Min(_remaining, _bitCount / 8);
+            if (buffered == 0) return false;
+            _bits = buffered == 8 ? 0 : _bits >> (buffered * 8);
+            _bitCount -= buffered * 8;
+            _remaining -= buffered;
+            AddOutput(buffered);
+            if (_remaining == 0) EndBlock();
+            return true;
+        }
+
+        private bool ReadDynamicHeader()
+        {
+            if (!ReadBits(14, out var value)) return false;
+            _literalCount = 257 + (value & 31);
+            if (_literalCount > 286) throw new InvalidDataException("Reserved DEFLATE literal count.");
+            _distanceCount = 1 + ((value >> 5) & 31);
+            _codeCount = 4 + (value >> 10);
+            _codeLengths = new int[19];
+            _treeLengths = new int[_literalCount + _distanceCount];
+            _index = 0;
+            _phase = Phase.CodeLengths;
+            return true;
+        }
+
+        private bool ReadCodeLength()
+        {
+            if (!ReadBits(3, out var value)) return false;
+            var codeLengths = _codeLengths ?? throw new InvalidOperationException("Missing code lengths.");
+            codeLengths[CodeOrder[_index++]] = value;
+            if (_index == _codeCount)
+            {
+                _codes = new Huffman(codeLengths, false, true);
+                _index = 0;
+                _phase = Phase.TreeLengths;
+            }
+            return true;
+        }
+
+        private bool ReadTreeLength()
+        {
+            var codes = _codes ?? throw new InvalidOperationException("Missing code tree.");
+            if (!codes.Read(ref _bits, ref _bitCount, out var value)) return false;
+            var treeLengths = _treeLengths ?? throw new InvalidOperationException("Missing tree lengths.");
+            if (value <= 15)
+            {
+                treeLengths[_index++] = value;
+                FinishTrees();
+            }
+            else
+            {
+                if (value == 16 && _index == 0) throw new InvalidDataException("DEFLATE length repeat lacks a previous length.");
+                _repeatSymbol = value;
+                _phase = Phase.Repeat;
+            }
+            return true;
+        }
+
+        private bool ReadRepeat()
+        {
+            if (!ReadBits(_repeatSymbol == 16 ? 2 : _repeatSymbol == 17 ? 3 : 7, out var value)) return false;
+            var repeat = value + (_repeatSymbol == 18 ? 11 : 3);
+            var lengths = _treeLengths ?? throw new InvalidOperationException("Missing repeated tree lengths.");
+            if (repeat > lengths.Length - _index) throw new InvalidDataException("DEFLATE length repeat exceeds the tree.");
+            var length = _repeatSymbol == 16 ? lengths[_index - 1] : 0;
+            while (repeat-- != 0) lengths[_index++] = length;
+            _phase = Phase.TreeLengths;
+            FinishTrees();
+            return true;
+        }
+
+        // Counts literals until a length symbol or end-of-block; false at the end of the buffered bits.
+        private bool ReadSymbols()
+        {
+            var literals = _literals ?? throw new InvalidOperationException("Missing literal tree.");
+            var literalBytes = 0;
+            while (literals.Read(ref _bits, ref _bitCount, out var value))
+            {
+                if (value < 256) { literalBytes++; continue; }
+                AddOutput(literalBytes);
+                if (value == 256) EndBlock();
+                else
+                {
+                    if (value > 285) throw new InvalidDataException("Reserved DEFLATE length symbol.");
+                    _lengthIndex = value - 257;
+                    _phase = Phase.Length;
+                }
+                return true;
+            }
+            AddOutput(literalBytes);
+            return false;
+        }
+
+        private bool ReadLength()
+        {
+            if (!ReadBits(LengthBits[_lengthIndex], out var value)) return false;
+            _length = LengthBase[_lengthIndex] + value;
+            _phase = Phase.Distance;
+            return true;
+        }
+
+        private bool ReadDistance()
+        {
+            var distances = _distances ?? throw new InvalidOperationException("Missing distance tree.");
+            if (!distances.Read(ref _bits, ref _bitCount, out var value)) return false;
+            if (value > 29) throw new InvalidDataException("Reserved DEFLATE distance symbol.");
+            _distanceIndex = value;
+            _phase = Phase.DistanceExtra;
+            return true;
+        }
+
+        private bool ReadDistanceExtra()
+        {
+            if (!ReadBits(DistanceBits[_distanceIndex], out var value)) return false;
+            var distance = DistanceBase[_distanceIndex] + value;
+            if (distance > _maximumDistance || (ulong)distance > DecodedBytes) throw new InvalidDataException("DEFLATE distance precedes the output history.");
+            AddOutput(_length);
+            _phase = Phase.Symbol;
+            return true;
         }
 
         private void FinishTrees()
