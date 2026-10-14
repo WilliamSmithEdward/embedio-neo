@@ -15,13 +15,14 @@ namespace EmbedIO.Net.Internal
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("macos")]
-    internal sealed class CombinedHttpListener : IHttpListener, IGracefulHttpListener
+    internal sealed class CombinedHttpListener : IHttpListener, IGracefulHttpListener, IDispatchingHttpListener
     {
         private readonly object _sync = new();
         private readonly ServerCertificateSource _certificates;
         private readonly bool _native;
         private readonly RequestPolicyResolver? _bodyPolicy;
         private readonly List<string> _prefixes = new();
+        private Func<IHttpContextImpl, Task>? _dispatcher;
         private Session? _session;
         private bool _disposed;
         private bool _stopping;
@@ -91,7 +92,17 @@ namespace EmbedIO.Net.Internal
                 }
                 if (_prefixes.Count == 0) throw new InvalidOperationException("At least one HTTPS prefix is required.");
                 _session = Session.Start(_certificates, TlsPolicy, _prefixes, _ignoreWriteExceptions, _native, DeferContinue, ConnectionPolicy, Telemetry, _bodyPolicy);
+                if (_dispatcher != null) _session.SetDispatcher(_dispatcher);
                 _drained = false;
+            }
+        }
+        // The TCP transport dispatches directly; QUIC requests keep the pull path through GetContextAsync.
+        void IDispatchingHttpListener.SetDispatcher(Func<IHttpContextImpl, Task> dispatcher)
+        {
+            lock (_sync)
+            {
+                _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+                _session?.SetDispatcher(dispatcher);
             }
         }
         public Task DrainAsync(TimeSpan timeout, CancellationToken cancellationToken)
@@ -173,6 +184,7 @@ namespace EmbedIO.Net.Internal
             internal bool IsRunning => Volatile.Read(ref _stopping) == 0;
             internal void SetIgnoreWriteExceptions(bool value)
             { _tcp.IgnoreWriteExceptions = value; _quic.IgnoreWriteExceptions = value; }
+            internal void SetDispatcher(Func<IHttpContextImpl, Task> dispatcher) => ((IDispatchingHttpListener)_tcp).SetDispatcher(dispatcher);
             internal static Session Start(ServerCertificateSource certificates, ServerTlsPolicy? policy, List<string> prefixes, bool ignoreWriteExceptions, bool native, bool deferContinue, TcpConnectionPolicy connections, EmbedIO.Internal.ServerTelemetry? telemetry, RequestPolicyResolver? bodyPolicy)
             {
                 var tcp = new HttpListener(certificates, bodyPolicy);

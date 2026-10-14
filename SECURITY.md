@@ -81,14 +81,33 @@ paths. The accepted entry documents the affected code and the review boundary.
 Actions use full commit SHAs, runners named OS releases, scanner images digests,
 Python tools hash-locked files, and NuGet packages committed `packages.lock.json`
 files. global.json pins the exact SDK with roll-forward disabled, matching the
-workflows' SDK and MAUI workload pins.
+workflows' SDK pins; the MAUI workload set is pinned for the same feature band.
+The runtime has no separate pin in CI: actions/setup-dotnet first installs the
+latest LTS runtime to get the newest `dotnet` host and offers no input to skip
+it, so framework-dependent test hosts can run on a newer patch than the pinned
+SDK carries until the next SDK move. Pinning it would mean replacing
+setup-dotnet in every workflow. Test probes that need an exact runtime pin it
+with `RuntimeFrameworkVersion` and roll-forward disabled.
 YARA Forge rules and the YARA-X engine use releases and SHA-256 digests. ClamAV's
 signatures change too often to pin, so freshclam fetches and verifies them.
 
-Dependabot proposes actions, Docker, Python, NuGet and SDK updates with a seven-day
+Dependabot proposes actions, Docker, Python and NuGet updates with a seven-day
 cooldown, except security updates and the owner's Python packages. The Update YARA
 rules workflow proposes pin updates weekly. Minor and patch updates and YARA
 updates merge once the three gates pass; third-party major versions wait for review.
+
+The Update .NET SDK workflow proposes the newest SDK patch in the pinned feature
+band weekly, with the same cooldown, waived when Microsoft marks the release as
+a security release. It checks the SDK archive against the SHA-512 in Microsoft's
+releases.json before running it and restores with a read-only token. In separate
+pull requests it proposes the newest workload set for the pinned SDK patch,
+checked against nuget.org's catalog SHA-512, and moves the conformance runner's
+pinned SDK image to the SDK global.json names once MCR publishes that tag. The job
+that writes accepts only the pin and lock-file changes an SDK move can make.
+Because a pull request opened with the workflow's own token starts no workflows,
+it starts CI, Security and Malware scan on the branch itself. These pull requests
+stay open for review of every exact-head check. The .NET SDK canary builds and
+tests with the newest SDK weekly, ahead of the pin; it is informational.
 
 ### Semgrep installation
 
