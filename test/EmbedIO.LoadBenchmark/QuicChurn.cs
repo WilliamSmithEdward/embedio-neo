@@ -12,6 +12,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using EmbedIO.PlatformTests;
 
 // Paced (open-loop) QUIC connection churn against one long-lived HTTP/3 server
 // process. Each attempt is timed in three separate phases on a raw QuicConnection:
@@ -139,7 +140,7 @@ internal static class QuicChurn
     private static async Task<JsonObject> RunEngineAsync(string engine, string label, string output, string serverDirectory, string? serverCpus,
         string certificatePath, string password, string thumbprint, ChurnSettings settings)
     {
-        var port = Orchestrator.FreePort();
+        var port = LoopbackPorts.Free();
         var timeout = TimeSpan.FromMinutes(2);
         var arguments = new List<string>
         {

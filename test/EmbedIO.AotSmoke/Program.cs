@@ -1,12 +1,12 @@
 ﻿using System.Diagnostics;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using EmbedIO;
 using EmbedIO.Actions;
 using EmbedIO.Files;
+using EmbedIO.PlatformTests;
 using EmbedIO.Routing;
 using EmbedIO.WebApi;
 
@@ -66,7 +66,7 @@ internal static class Program
         try
         {
             await File.WriteAllTextAsync(Path.Combine(root, "index.html"), "<p>static</p>");
-            var url = $"http://127.0.0.1:{FreePort()}/";
+            var url = $"http://127.0.0.1:{LoopbackPorts.Free()}/";
 
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithTelemetry("aot-smoke"))
                 .WithModule(new RoutingModule("/api")
@@ -190,13 +190,6 @@ internal static class Program
         }
 
         await ProtocolChecks.RunAsync(checks);
-    }
-
-    private static int FreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
     private static void Require(bool condition, string message)
