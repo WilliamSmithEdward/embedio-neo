@@ -19,6 +19,7 @@ namespace EmbedIO.Tests
             internal Registry(int maximum = 128) => _instance = (Activator.CreateInstance(Type("Http2StreamRegistry"), Flags, null, new object[] { maximum }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             internal int Count => (int)((_instance.GetType().GetProperty("ActiveCount") ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).GetValue(_instance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value."));
             internal int Pending => (int)(_instance.GetType().GetProperty("PendingPriorityCount")?.GetValue(_instance) ?? throw new AssertionException("Missing pending count."));
+            internal void Set(string property, object value) => (_instance.GetType().GetProperty(property, Flags) ?? throw new AssertionException("Missing " + property + ".")).SetValue(_instance, value);
             internal object? Call(string name, params object[] args)
             {
                 try { return (_instance.GetType().GetMethod(name, Flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null fixture value.")).Invoke(_instance, args); }
@@ -114,6 +115,54 @@ namespace EmbedIO.Tests
             Error(() => registry.Frame(1, 1), 7, 1);
             Assert.That(registry.Count, Is.Zero);
             Assert.That(Priority(registry.Frame(1, 3)), Is.EqualTo((3, true)));
+        }
+        [Test]
+        public void ResetStreamsWhoseApplicationsStillRunKeepOccupyingTheLimit()
+        {
+            var running = 0;
+            var registry = new Registry(2); registry.Set("RunningApplications", new Func<int>(() => running));
+            registry.Frame(1, 1); running++;
+            registry.Frame(3, 1);
+            registry.Frame(1, 3); running++;
+            registry.Frame(3, 3);
+            Assert.That(registry.Count, Is.Zero, "Both streams are closed from the registry's view.");
+            Error(() => registry.Frame(1, 5), 7, 5);
+            running--;
+            Assert.That(registry.Frame(1, 7), Is.Not.Null, "A finished application frees its slot.");
+        }
+        [Test]
+        public void ApplicationsOutlivingCompletedStreamsKeepOccupyingTheLimit()
+        {
+            var running = 0;
+            var registry = new Registry(1); registry.Set("RunningApplications", new Func<int>(() => running));
+            registry.Frame(1, 1, 1); running++;
+            registry.Call("EndLocal", 1);
+            Assert.That(registry.Count, Is.Zero);
+            Error(() => registry.Frame(1, 3), 7, 3);
+            running--;
+            Assert.That(registry.Frame(1, 5), Is.Not.Null);
+        }
+        [Test]
+        public void RefusingMoreThanOneLimitWithinTheWindowEndsTheConnection()
+        {
+            var registry = new Registry(2); registry.Set("RunningApplications", new Func<int>(() => 2));
+            registry.Set("Timestamp", new Func<long>(() => 1000));
+            Error(() => registry.Frame(1, 1), 7, 1);
+            Error(() => registry.Frame(1, 3), 7, 3);
+            Error(() => registry.Frame(1, 5), 11, 0);
+        }
+        [Test]
+        public void RefusalCountRestartsAfterTheWindow()
+        {
+            var now = 0L;
+            var registry = new Registry(2); registry.Set("RunningApplications", new Func<int>(() => 2));
+            registry.Set("Timestamp", new Func<long>(() => now));
+            Error(() => registry.Frame(1, 1), 7, 1);
+            Error(() => registry.Frame(1, 3), 7, 3);
+            now += System.Diagnostics.Stopwatch.Frequency + 1;
+            Error(() => registry.Frame(1, 5), 7, 5);
+            Error(() => registry.Frame(1, 7), 7, 7);
+            Error(() => registry.Frame(1, 9), 11, 0);
         }
         [Test]
         public void EndedResponsesIgnoreUpdatesAndAbortClearsIdleTargets()

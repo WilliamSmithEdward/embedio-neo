@@ -215,7 +215,10 @@ namespace EmbedIO.Tests
                     var session = await sessionReady.Task.WaitAsync(deadline.Token);
                     var gate = connection.GetField("_sync", Flags)?.GetValue(session) ?? throw new AssertionException("Missing gate.");
                     var workers = (System.Collections.IDictionary)(connection.GetField("_workers", Flags)?.GetValue(session) ?? throw new AssertionException("Missing workers."));
-                    for (var i = 0; i < 256; ++i)
+                    // Http3QuicConnection.MaximumApplications: the same per-connection
+                    // limit as HTTP/2's concurrent streams.
+                    const int limit = 128;
+                    for (var i = 0; i < limit; ++i)
                     {
                         await using var stalled = await client.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, deadline.Token);
                         await stalled.WriteAsync(Convert.FromHexString("01100000D1D7C150096C6F63616C686F7374"), true, deadline.Token);
@@ -229,12 +232,12 @@ namespace EmbedIO.Tests
                     }
                     await using var rejected = await client.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, deadline.Token);
                     await rejected.WriteAsync(Convert.FromHexString("01100000D1D7C150096C6F63616C686F7374"), true, deadline.Token);
-                    QuicException? limit = null;
+                    QuicException? refusal = null;
                     try { await rejected.ReadExactlyAsync(new byte[1], deadline.Token); }
-                    catch (QuicException error) { limit = error; }
-                    Assert.That(limit?.QuicError, Is.EqualTo(QuicError.StreamAborted));
-                    Assert.That(limit?.ApplicationErrorCode, Is.EqualTo(0x107));
-                    Assert.That(application.EnteredCount, Is.EqualTo(256));
+                    catch (QuicException error) { refusal = error; }
+                    Assert.That(refusal?.QuicError, Is.EqualTo(QuicError.StreamAborted));
+                    Assert.That(refusal?.ApplicationErrorCode, Is.EqualTo(0x107));
+                    Assert.That(application.EnteredCount, Is.EqualTo(limit));
                 }
                 else
                 {
