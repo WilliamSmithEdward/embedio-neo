@@ -570,6 +570,37 @@ its tests may have relied on:
 - Complete WebSocket messages report `EndOfMessage` as true.
 - Directory listings requested without a trailing slash link to entries inside the
   directory instead of its parent.
+- On HTTP/1, a request field sent on several lines reads as one value that combines
+  the lines in order, separated by `, ` (RFC 9110, Section 5.3); Cookie lines join
+  with `; ` and all of their cookies appear in `Request.Cookies`. Only the last line
+  was kept before. HTTP/2 and HTTP/3 already combined repeated fields.
+- A quality value's weight name is case-insensitive (RFC 9110, Section 12.4.2):
+  a client that sends `Q=` now has its weight honored, so `Accept-Encoding: gzip;Q=0`
+  refuses gzip. An uppercase `Q` used to be ignored, and the coding was accepted at
+  full weight.
+- Statuses 103, 208, 226, 308, 421, 426, 428, 429, 431, 451, 506, 508, 510 and 511
+  have the reason phrase `HttpStatusDescription` returns, such as `Too Many Requests`
+  for 429. It appears in the HTTP/1 status line, as the default `StatusDescription`,
+  as the default problem-details `title` and as the default OpenAPI response
+  description. These statuses used to have an empty phrase, no default problem title
+  and an OpenAPI description such as `Status 429`.
+
+## Brotli preferred at equal weight
+
+On the .NET 10 asset, a client that accepts Brotli at the same weight as gzip or
+deflate now gets Brotli. Browsers send `Accept-Encoding: gzip, deflate, br` and
+previously got gzip, because a tie went to the coding the client listed first.
+Client weights still decide: a client that needs gzip can send
+`gzip;q=1, br;q=0.5`. Ties with `identity`, the choice between gzip and deflate,
+and the .NET Standard 2.0 asset are unchanged.
+
+Dynamic responses from `OpenResponseStream`, `OpenResponseText` and the helpers built
+on them use Brotli quality 1 (`CompressionLevel.Fastest`): a quarter to half the CPU
+of gzip's default level, and 6 to 17% larger on a JSON document. Static files keep
+quality 4, about the size of the previous gzip responses. Tests or caches that expect
+`Content-Encoding: gzip` for these clients, or a gzip entity tag from `FileModule`,
+see `br` instead. See
+[Brotli responses](../guides/getting-started/files.md#brotli-responses-in-the-modern-engine-development-branch).
 - An HTTP/1 client that declares a request body, receives its response and then stops
   sending loses its connection once the keep-alive timeout elapses. The server discards
   a body no handler read before reusing the connection, and that discard is now bounded

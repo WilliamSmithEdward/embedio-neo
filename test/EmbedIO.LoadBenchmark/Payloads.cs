@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Globalization;
+using EmbedIO.PlatformTests;
 
 // Request paths and response bodies shared by every server engine and the client,
 // so each engine runs identical application work.
@@ -10,6 +11,10 @@ internal enum RouteKind
     Stream,
     Upload,
     Inspect,
+
+    // A JSON document of the given length, compressed by each engine's own response
+    // compression when the request accepts it.
+    Json,
 }
 
 internal readonly record struct BenchmarkRoute(RouteKind Kind, int Length, int Chunk)
@@ -22,7 +27,17 @@ internal readonly record struct BenchmarkRoute(RouteKind Kind, int Length, int C
         RouteKind.Bytes => "/bytes/" + Length.ToString(CultureInfo.InvariantCulture),
         RouteKind.Stream => "/stream/" + Length.ToString(CultureInfo.InvariantCulture) + "/" + Chunk.ToString(CultureInfo.InvariantCulture),
         RouteKind.Inspect => InspectRequest.Target,
+        RouteKind.Json => "/json/" + Length.ToString(CultureInfo.InvariantCulture),
         _ => "/upload",
+    };
+
+    // The body the client expects once any content coding is removed.
+    internal byte[] ExpectedBody(int uploadBytes) => Kind switch
+    {
+        RouteKind.Plaintext or RouteKind.Inspect => Payloads.Plaintext,
+        RouteKind.Upload => Payloads.UploadAcknowledgement(uploadBytes),
+        RouteKind.Json => Payloads.Json(Length),
+        _ => Payloads.Get(ResponseLength),
     };
 
     // Expected response body length for the client's validation.
@@ -65,6 +80,12 @@ internal readonly record struct BenchmarkRoute(RouteKind Kind, int Length, int C
             && TryLength(segments[3], out var chunk) && chunk > 0)
         {
             route = new(RouteKind.Stream, length, chunk);
+            return true;
+        }
+
+        if (segments.Length == 3 && segments[1] == "json" && TryLength(segments[2], out length) && length >= Payloads.MinimumJsonLength)
+        {
+            route = new(RouteKind.Json, length, 0);
             return true;
         }
 
@@ -123,6 +144,13 @@ internal static class Payloads
 
     internal static byte[] UploadAcknowledgement(long length)
         => System.Text.Encoding.ASCII.GetBytes(length.ToString(CultureInfo.InvariantCulture));
+
+    internal const int MinimumJsonLength = 22;
+
+    private static readonly ConcurrentDictionary<int, byte[]> JsonCache = new();
+
+    // A deterministic JSON document; every engine serves the same cached array.
+    internal static byte[] Json(int length) => JsonCache.GetOrAdd(length, static size => CompressibleJson.Create(size));
 
     // A precomputed reference makes body validation a vectorized comparison in
     // every engine. Bodies beyond it fall back to computing each byte.

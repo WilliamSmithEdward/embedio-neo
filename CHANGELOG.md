@@ -10,6 +10,59 @@
   HTTP/1 message (RFC 9110, Section 7.8), so a handler that returns while its WebSocket
   is still open cannot leave the request cycle reading frames as a request head. See
   [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
+- Correct defects found by a second review sweep. On HTTP/1, a request field sent on
+  several lines combines them in order (RFC 9110, Section 5.3) instead of keeping only
+  the last, as HTTP/2 and HTTP/3 already did; Cookie lines join with `; `. A quality
+  value's weight name matches case-insensitively (RFC 9110, Section 12.4.2), so
+  `gzip;Q=0` refuses gzip as `gzip;q=0` does. The OpenAPI builder describes strings
+  under EmbedIO's default JSON options, documents operations with `[FromServices]`
+  parameters, declares parameters of a module's base route, lists a form field bound
+  twice as required once, keeps component keys within OpenAPI's allowed characters,
+  and reports instead of throwing or misdescribing what it cannot describe: options the
+  schema exporter refuses (such as `ReferenceHandler.Preserve`) and polymorphic result
+  types, which are written without their discriminator. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
+- Security: a request handler that is still running counts against the connection's
+  128-request limit even after its stream is reset or its response has finished, on
+  HTTP/2 and HTTP/3. Before this, a client could reset streams to start an unbounded
+  number of concurrent handlers on one connection (the CVE-2023-44487 "Rapid Reset"
+  pattern). On HTTP/2 a new stream over the limit is refused with `REFUSED_STREAM`,
+  which clients retry, and a client refused more than 128 times within one second
+  receives `GOAWAY ENHANCE_YOUR_CALM`. HTTP/3 now allows 128 outstanding request
+  handlers per connection instead of 256, matching HTTP/2 and the QUIC stream limit;
+  a request over it is refused with `H3_REQUEST_REJECTED`. Graceful shutdown still
+  waits only for responses, not for handlers that outlive them.
+- Allocate less per request. An uncontended asynchronous response write no longer
+  allocates a task, a release delegate and a lock object. The per-request start and
+  completion log messages are built only when a trace listener or a
+  `Log.MessageWritten` observer will receive them. Request completion no longer creates
+  an unused `Items` dictionary. HTTP/1 responses reuse the cached `Date` and charset
+  `Content-Type` values that HTTP/2 and HTTP/3 already used, context IDs are built
+  without intermediate arrays, and HTTP/1 header encoding no longer allocates
+  `AllKeys`. Behavior is unchanged; see the
+  [load comparison](docs/project/http-engine-load-comparison.md#request-path-allocation-october-2026).
+- Behavior change: on the .NET 10 asset, a client that accepts Brotli at the same weight as
+  gzip or deflate now gets Brotli, as with ASP.NET Core's response compression. Browsers send
+  `Accept-Encoding: gzip, deflate, br` and got gzip: a tie went to the coding the client listed
+  first, and browsers list `br` last. Client weights still decide (`gzip;q=1, br;q=0.5` gets
+  gzip). Ties with `identity`, the choice between gzip and deflate, and the .NET Standard 2.0
+  asset are unchanged. Dynamic responses (`OpenResponseStream`, `OpenResponseText` and the
+  helpers built on them, such as `SendDataAsync` and `SendStringAsync`) compress Brotli at
+  quality 1 (`CompressionLevel.Fastest`, ASP.NET Core's default) instead of `BrotliStream`'s
+  default quality 4. `FileModule` keeps quality 4 for cached and streamed files, about the size
+  of the previous gzip responses. William accepted on 2026-10-14 the 6-17% larger dynamic
+  responses than the previous gzip default for 56-77% less compression CPU. One thread,
+  runtime 10.0.13, a JSON document compressed once per response (`--compression-timing`):
+
+  | JSON | gzip default level (before) | Brotli quality 1 (now) | Brotli quality 4 |
+  | --- | --- | --- | --- |
+  | 1 KiB | 514 B, 9.3 us | 545 B, 4.1 us | 499 B, 13.5 us |
+  | 64 KiB | 12,128 B, 347 us | 13,672 B, 81 us | 12,288 B, 329 us |
+  | 1 MiB | 174,771 B, 6.43 ms | 203,734 B, 1.66 ms | 174,491 B, 5.08 ms |
+
+  End to end over HTTP/1.1 with a browser's `Accept-Encoding` (load benchmark `-json`
+  scenarios, roles alternated), requests per second rose 1.23x, 3.08x and 3.62x for the
+  1 KiB, 64 KiB and 1 MiB documents, and server CPU per request fell to 0.82x, 0.32x and 0.28x.
 - HTTP/2 and HTTP/3 requests with a request deadline keep hearing the server's stop token
   through their context token, in the handler and in `OnRequestCompleted` callbacks after it.
   Installing the deadline disposed the token source behind the token the server captures
@@ -80,6 +133,12 @@
   `CorsModule` sends `Vary: Origin`; the Basic challenge uses the standard
   `Basic realm="...", charset="UTF-8"` form; and directory listings requested
   without a trailing slash link inside the directory. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
+- HTTP/1 status lines carry the standard reason phrase for every status that
+  `HttpStatusDescription` lists. 103, 208, 226, 308, 421, 426, 428, 429, 431, 451,
+  506, 508, 510 and 511 used to go out with an empty phrase; the same phrases are
+  now also their default `StatusDescription`, problem-details `title` and OpenAPI
+  response description. See
   [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
 
 - Require explicit AcceptTunnelAsync before successful HTTP/2 or HTTP/3 extended

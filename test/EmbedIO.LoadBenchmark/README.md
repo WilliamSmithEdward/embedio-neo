@@ -83,6 +83,15 @@ mismatched property. Body framing is read but HasEntityBody is not required to b
 false over HTTP/3, where a GET without content-length reports an unknown length. Churn scenarios are capped (5 s for HTTP/1.1,
 1.5 s for HTTP/2) to stay within the host's TIME_WAIT and ephemeral-port capacity.
 
+Scenarios named `-json` request `/json/<length>`, a deterministic JSON document
+(`test/Shared/CompressibleJson.cs`), with a browser's `Accept-Encoding: gzip, deflate, br`.
+Each engine compresses it with its own defaults: EmbedIO through `ResponseSerializer.None`,
+the path `SendDataAsync` takes, and Kestrel through ASP.NET Core's response compression
+middleware, added for `/json` only. Response bytes are the compressed body bytes, and the
+client report counts responses per content coding (`contentCodings`). The client decodes
+the first body of each coding and compares it with the document; a later body with the same
+bytes is accepted as it stands, and any other body is decoded and compared.
+
 ## Idle keep-alive connections
 
 `idle` measures what the server retains per idle connection, for any engine and
