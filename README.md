@@ -120,6 +120,7 @@ which module handles a request.
 | Accept a capsule tunnel | [Tunnel ownership and authorization](docs/guides/capsule-tunnels.md) |
 | Run a command-line server | [CLI and plugins](docs/guides/cli.md) |
 | Serve a JSON file as REST collections | [JsonServer integration](CONTRIBUTING.md#extras-integration) |
+| Build an app with an AI coding agent | [Agent primer](AGENT_PRIMER.md) |
 
 Browse the [documentation index](docs/README.md) for additional usage,
 platform and compatibility guides.
