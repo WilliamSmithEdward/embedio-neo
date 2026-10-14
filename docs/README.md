@@ -11,6 +11,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Serve HTML and files](guides/getting-started/files.md): serve a folder and combine it with an API.
 - [Use a controller](guides/getting-started/controllers.md): group endpoints with explicit routes.
 - [Routes, verbs, and parameters](guides/getting-started/requests.md): GET, POST, PUT, DELETE, query strings, and JSON bodies.
+- [Agent primer](../AGENT_PRIMER.md): rules, APIs and pitfalls for an AI agent building an application on v2.
 
 ## Usage guides
 
