@@ -95,6 +95,12 @@
   `Basic realm="...", charset="UTF-8"` form; and directory listings requested
   without a trailing slash link inside the directory. See
   [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
+- HTTP/1 status lines carry the standard reason phrase for every status that
+  `HttpStatusDescription` lists. 103, 208, 226, 308, 421, 426, 428, 429, 431, 451,
+  506, 508, 510 and 511 used to go out with an empty phrase; the same phrases are
+  now also their default `StatusDescription`, problem-details `title` and OpenAPI
+  response description. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
 
 - Require explicit AcceptTunnelAsync before successful HTTP/2 or HTTP/3 extended
   CONNECT output. An ordinary catch-all 2xx becomes an empty 501; explicit errors,
