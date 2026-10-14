@@ -83,6 +83,7 @@ internal static class LoadClient
             measuredSeconds = result.Seconds,
             requestsPerSecond = result.Requests / result.Seconds,
             responseBytes = result.ResponseBytes,
+            contentCodings = result.ContentCodings,
             requestBodyBytes = result.RequestBodyBytes,
             connectionsOpened = result.ConnectionsOpened,
             serverInitiatedCloses = result.ServerCloses,
@@ -114,7 +115,7 @@ internal static class LoadClient
         var latency = new LatencyHistogram();
         foreach (var histogram in state.Histograms) latency.Add(histogram);
         return new RunResult(state.Requests, state.Clock.Elapsed.TotalSeconds, latency, state.ResponseBytes, state.RequestBodyBytes,
-            state.ConnectionsOpened, state.ServerCloses, state.UnansweredRequests, state.Error);
+            state.ConnectionsOpened, state.ServerCloses, state.UnansweredRequests, state.Error, state.Codings);
     }
 
     internal static RemoteCertificateValidationCallback Pinned(string thumbprint)
@@ -122,7 +123,7 @@ internal static class LoadClient
             && string.Equals(certificate.GetCertHashString(), thumbprint, StringComparison.OrdinalIgnoreCase);
 
     internal sealed record RunResult(long Requests, double Seconds, LatencyHistogram Latency, long ResponseBytes, long RequestBodyBytes,
-        long ConnectionsOpened, long ServerCloses, long UnansweredRequests, string? Error);
+        long ConnectionsOpened, long ServerCloses, long UnansweredRequests, string? Error, Dictionary<string, long> ContentCodings);
 }
 
 internal sealed class RunState(TimeSpan duration, CancellationToken cancellation, double requestRate = 0) : IDisposable
@@ -138,6 +139,7 @@ internal sealed class RunState(TimeSpan duration, CancellationToken cancellation
     private long _serverCloses;
     private long _unanswered;
     private string? _error;
+    private readonly Dictionary<string, long> _codings = new(StringComparer.Ordinal);
 
     internal Stopwatch Clock { get; } = Stopwatch.StartNew();
 
@@ -164,6 +166,23 @@ internal sealed class RunState(TimeSpan duration, CancellationToken cancellation
         var histogram = new LatencyHistogram();
         lock (_histograms) _histograms.Add(histogram);
         return histogram;
+    }
+
+    // Responses per content coding on routes that ask for compression, merged from each worker.
+    internal Dictionary<string, long> Codings
+    {
+        get
+        {
+            lock (_codings) return new(_codings, StringComparer.Ordinal);
+        }
+    }
+
+    internal void AddCodings(Dictionary<string, long> codings)
+    {
+        lock (_codings)
+        {
+            foreach (var (coding, count) in codings) _codings[coding] = _codings.GetValueOrDefault(coding) + count;
+        }
     }
 
     internal void Completed(long responseBytes, long requestBodyBytes)
@@ -232,12 +251,14 @@ internal static class Http1Worker
     internal static async Task RunAsync(LoadSettings settings, RunState state)
     {
         var histogram = state.CreateHistogram();
-        var expected = settings.IsUpload ? Payloads.UploadAcknowledgement(settings.UploadBytes) : Payloads.Get(settings.Route.ResponseLength);
-        if (settings.Route.Kind is RouteKind.Plaintext or RouteKind.Inspect) expected = Payloads.Plaintext;
+        var expected = settings.Route.ExpectedBody(settings.UploadBytes);
+        // The JSON route asks for compression with a browser's Accept-Encoding.
+        var coded = settings.Route.Kind == RouteKind.Json ? new CodedBody(expected) : null;
+        var codingLine = coded is null ? string.Empty : "Accept-Encoding: " + CodedBody.AcceptEncoding + "\r\n";
         var host = "localhost:" + settings.Port.ToString(CultureInfo.InvariantCulture);
         var head = settings.IsUpload
             ? $"POST /upload HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/octet-stream\r\nContent-Length: {settings.UploadBytes}\r\n\r\n"
-            : $"GET {settings.Route.Path} HTTP/1.1\r\nHost: {host}\r\n{InspectHeaderLines(settings.Route)}\r\n";
+            : $"GET {settings.Route.Path} HTTP/1.1\r\nHost: {host}\r\n{InspectHeaderLines(settings.Route)}{codingLine}\r\n";
         var body = settings.IsUpload ? Payloads.Get(settings.UploadBytes) : [];
         var single = Encoding.ASCII.GetBytes(head).Concat(body).ToArray();
         var closing = Encoding.ASCII.GetBytes(head.Replace("\r\n\r\n", "\r\nConnection: close\r\n\r\n", StringComparison.Ordinal)).Concat(body).ToArray();
@@ -281,7 +302,7 @@ internal static class Http1Worker
                         sent += settings.Pipeline;
                         for (var index = 0; index < settings.Pipeline && open; index++)
                         {
-                            var response = await reader.ReadAsync(expected, state.Token).ConfigureAwait(false);
+                            var response = await reader.ReadAsync(expected, state.Token, coded).ConfigureAwait(false);
                             histogram.RecordTicks(Stopwatch.GetTimestamp() - started);
                             state.Completed(response.BodyBytes, body.Length);
                             if (response.Close)
@@ -305,11 +326,71 @@ internal static class Http1Worker
         {
             state.Fail(exception);
         }
+        finally
+        {
+            if (coded is not null) state.AddCodings(coded.Codings);
+        }
+    }
+}
+
+// Checks compressed bodies without decoding every response. The first body of each content
+// coding is decoded and compared with the expected document; a later body with the same bytes
+// is then valid as it stands, and one that differs is decoded and compared too.
+internal sealed class CodedBody(byte[] expected)
+{
+    internal const string AcceptEncoding = "gzip, deflate, br";
+
+    private readonly Dictionary<string, byte[]> _verified = new(StringComparer.Ordinal);
+    private byte[] _body = new byte[65536];
+    private int _length;
+
+    // Responses per content coding, "identity" for none.
+    internal Dictionary<string, long> Codings { get; } = new(StringComparer.Ordinal);
+
+    // No coding makes this document larger than its own length plus framing overhead.
+    internal long MaximumBytes => expected.Length + 65536L;
+
+    internal void Append(ReadOnlySpan<byte> bytes)
+    {
+        if (_length + bytes.Length > _body.Length) Array.Resize(ref _body, Math.Max(_body.Length * 2, _length + bytes.Length));
+        bytes.CopyTo(_body.AsSpan(_length));
+        _length += bytes.Length;
+    }
+
+    internal void Complete(string coding)
+    {
+        var body = _body.AsSpan(0, _length);
+        _length = 0;
+        if (!_verified.TryGetValue(coding, out var known) || !body.SequenceEqual(known))
+        {
+            if (!Decode(coding, body).AsSpan().SequenceEqual(expected)) throw new InvalidDataException($"The {coding} response body does not decode to the document.");
+            known ??= _verified[coding] = body.ToArray();
+        }
+
+        Codings[coding] = Codings.GetValueOrDefault(coding) + 1;
+    }
+
+    private static byte[] Decode(string coding, ReadOnlySpan<byte> body)
+    {
+        if (coding == "identity") return body.ToArray();
+        using var input = new MemoryStream(body.ToArray(), writable: false);
+        using Stream decoder = coding switch
+        {
+            "br" => new System.IO.Compression.BrotliStream(input, System.IO.Compression.CompressionMode.Decompress),
+            "gzip" => new System.IO.Compression.GZipStream(input, System.IO.Compression.CompressionMode.Decompress),
+            // EmbedIO's "deflate" is the raw DEFLATE format.
+            "deflate" => new System.IO.Compression.DeflateStream(input, System.IO.Compression.CompressionMode.Decompress),
+            _ => throw new InvalidDataException("Unexpected content coding: " + coding),
+        };
+        using var output = new MemoryStream();
+        decoder.CopyTo(output);
+        return output.ToArray();
     }
 }
 
 // Parses HTTP/1.1 responses with Content-Length or chunked framing and compares
-// every decoded body byte with the expected payload.
+// every decoded body byte with the expected payload. A response with a content coding
+// is accepted only when a CodedBody is given, which collects and checks it.
 internal sealed class Http1ResponseReader(Stream stream)
 {
     private readonly byte[] _buffer = new byte[65536];
@@ -318,20 +399,21 @@ internal sealed class Http1ResponseReader(Stream stream)
 
     internal readonly record struct Response(long BodyBytes, bool Close);
 
-    internal async Task<Response> ReadAsync(byte[] expected, CancellationToken cancellation)
+    internal async Task<Response> ReadAsync(byte[] expected, CancellationToken cancellation, CodedBody? coded = null)
     {
         int boundary;
         while ((boundary = _buffer.AsSpan(_start, _end - _start).IndexOf("\r\n\r\n"u8)) < 0) await FillAsync(cancellation).ConfigureAwait(false);
         // Parsed in place without strings: the client must stay cheaper than the servers it drives.
-        var (length, chunked, close) = ParseHead(_buffer.AsSpan(_start, boundary + 2));
+        var (length, chunked, close, coding) = ParseHead(_buffer.AsSpan(_start, boundary + 2), coded is not null);
         _start += boundary + 4;
 
         if (chunked == (length >= 0)) throw new InvalidDataException("Response must use exactly one length framing.");
+        var limit = coded?.MaximumBytes ?? expected.Length;
         long received = 0;
         if (!chunked)
         {
-            if (length != expected.Length) throw new InvalidDataException($"Content-Length {length}, expected {expected.Length}.");
-            await ReadBodyAsync(expected, 0, length, cancellation).ConfigureAwait(false);
+            if (coded is null ? length != expected.Length : length > limit) throw new InvalidDataException($"Content-Length {length}, expected {expected.Length}.");
+            await ReadBodyAsync(expected, 0, length, coded, cancellation).ConfigureAwait(false);
             received = length;
         }
         else
@@ -351,25 +433,27 @@ internal sealed class Http1ResponseReader(Stream stream)
                     break;
                 }
 
-                if (received + size > expected.Length) throw new InvalidDataException("Chunked body longer than expected.");
-                await ReadBodyAsync(expected, received, size, cancellation).ConfigureAwait(false);
+                if (received + size > limit) throw new InvalidDataException("Chunked body longer than expected.");
+                await ReadBodyAsync(expected, received, size, coded, cancellation).ConfigureAwait(false);
                 received += size;
                 if ((await ReadLineAsync(cancellation).ConfigureAwait(false)).Length != 0) throw new InvalidDataException("Malformed chunk terminator.");
             }
 
-            if (received != expected.Length) throw new InvalidDataException($"Chunked body {received} bytes, expected {expected.Length}.");
+            if (coded is null && received != expected.Length) throw new InvalidDataException($"Chunked body {received} bytes, expected {expected.Length}.");
         }
 
+        coded?.Complete(coding ?? "identity");
         return new Response(received, close);
     }
 
-    private static (long Length, bool Chunked, bool Close) ParseHead(ReadOnlySpan<byte> head)
+    private static (long Length, bool Chunked, bool Close, string? Coding) ParseHead(ReadOnlySpan<byte> head, bool acceptCoding)
     {
         if (!head.StartsWith("HTTP/1.1 200 "u8))
             throw new InvalidDataException("Unexpected status: " + Encoding.ASCII.GetString(head[..Math.Max(0, head.IndexOf("\r\n"u8))]));
         long length = -1;
         var chunked = false;
         var close = false;
+        string? coding = null;
         head = head[(head.IndexOf("\r\n"u8) + 2)..];
         while (!head.IsEmpty)
         {
@@ -390,7 +474,7 @@ internal sealed class Http1ResponseReader(Stream stream)
             }
             else if (Ascii.EqualsIgnoreCase(name, "Content-Encoding"u8))
             {
-                throw new InvalidDataException("Unexpected content coding.");
+                coding = acceptCoding ? Encoding.ASCII.GetString(value).ToLowerInvariant() : throw new InvalidDataException("Unexpected content coding.");
             }
             else if (Ascii.EqualsIgnoreCase(name, "Connection"u8))
             {
@@ -398,7 +482,7 @@ internal sealed class Http1ResponseReader(Stream stream)
             }
         }
 
-        return (length, chunked, close);
+        return (length, chunked, close, coding);
     }
 
     private static bool ContainsIgnoreCase(ReadOnlySpan<byte> value, ReadOnlySpan<byte> token)
@@ -417,13 +501,14 @@ internal sealed class Http1ResponseReader(Stream stream)
             throw new InvalidDataException("Unexpected data after the final response.");
     }
 
-    private async Task ReadBodyAsync(byte[] expected, long offset, long count, CancellationToken cancellation)
+    private async Task ReadBodyAsync(byte[] expected, long offset, long count, CodedBody? coded, CancellationToken cancellation)
     {
         while (count > 0)
         {
             if (_start == _end) await FillAsync(cancellation).ConfigureAwait(false);
             var take = (int)Math.Min(count, _end - _start);
-            if (!_buffer.AsSpan(_start, take).SequenceEqual(expected.AsSpan((int)offset, take))) throw new InvalidDataException("Response body mismatch.");
+            if (coded is not null) coded.Append(_buffer.AsSpan(_start, take));
+            else if (!_buffer.AsSpan(_start, take).SequenceEqual(expected.AsSpan((int)offset, take))) throw new InvalidDataException("Response body mismatch.");
             _start += take;
             offset += take;
             count -= take;
@@ -464,8 +549,8 @@ internal static class MultiplexedWorker
         // Each stream records independently; reuse its histogram across connection rotations.
         var histograms = Enumerable.Range(0, settings.Streams).Select(_ => state.CreateHistogram()).ToArray();
         var version = settings.Protocol == Protocol.Http3 ? HttpVersion.Version30 : HttpVersion.Version20;
-        var expected = settings.IsUpload ? Payloads.UploadAcknowledgement(settings.UploadBytes) : Payloads.Get(settings.Route.ResponseLength);
-        if (settings.Route.Kind is RouteKind.Plaintext or RouteKind.Inspect) expected = Payloads.Plaintext;
+        // No Accept-Encoding is sent here, so the JSON route arrives uncompressed.
+        var expected = settings.Route.ExpectedBody(settings.UploadBytes);
         var uploadBody = settings.IsUpload ? Payloads.Get(settings.UploadBytes) : null;
         var uri = new Uri($"{(settings.Tls ? "https" : "http")}://localhost:{settings.Port}{settings.Route.Path}");
         try

@@ -108,15 +108,23 @@ An API handler registered after it would not get that request.
 ## Brotli responses in the modern-engine development branch
 
 The unreleased .NET 10 asset can negotiate `br` for `OpenResponseStream`,
-`OpenResponseText`, and compressible static files. Clients select it with
-`Accept-Encoding: br`; an absent header still produces an uncompressed response.
-Existing quality weights and client order determine negotiation. Gzip/deflate
-remain ahead of Brotli when a wildcard leaves all compressed choices tied.
+`OpenResponseText`, and compressible static files. An absent `Accept-Encoding`
+header still produces an uncompressed response. Quality weights decide first. At
+equal weight Brotli wins over gzip and deflate wherever the client lists it, so a
+browser's `Accept-Encoding: gzip, deflate, br` gets Brotli, as with ASP.NET Core,
+and so does a wildcard. A client that prefers gzip says so with weights, for example
+`gzip;q=1, br;q=0.5`. Between gzip and deflate the coding the client lists first
+still wins, and a tie with `identity` keeps the existing rules.
 `preferCompression: false` continues to prefer an acceptable identity response.
 
-Both buffered and streaming responses use the runtime Brotli compressor. File
-caching retains distinct identity, gzip, deflate and Brotli variants, and their
-ETags differ. A cached HEAD response describes the selected representation;
+Dynamic responses (`OpenResponseStream`, `OpenResponseText`, and helpers built on
+them such as `SendDataAsync` and `SendStringAsync`) compress Brotli at quality 1,
+`CompressionLevel.Fastest`, ASP.NET Core's default. Measured on a JSON document
+it takes a quarter to half the CPU of gzip's default level and is 6 to 17% larger.
+Static files keep `BrotliStream`'s default, quality 4, for cached and streamed
+files alike, about the size of gzip's default level; precompressed files go further
+(see below). File caching retains distinct identity, gzip, deflate and Brotli
+variants, and their ETags differ. A cached HEAD response describes the selected representation;
 when its compressed size is unknown, HEAD omits Content-Length. Conditional
 requests use the ETag for the negotiated variant.
 
