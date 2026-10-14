@@ -123,7 +123,9 @@ namespace EmbedIO.WebSockets
         /// <para>Applies to WebSockets over HTTP/1.1, HTTP/2 and HTTP/3. Messages already being sent are sent
         /// before the close. <see cref="OnClientDisconnectedAsync"/> runs once per connection, as for any close.</para>
         /// <para>Set this before the module starts. Stopping the server through <c>RunAsync</c> cancellation or
-        /// disposal is not a drain and is not affected.</para>
+        /// disposal is not a drain and does not depend on this setting: the server then sends each open WebSocket
+        /// a 1001 close without a reason, and waits at most one second for the closes before it stops the
+        /// listener.</para>
         /// </remarks>
         /// <exception cref="InvalidOperationException">This property is being set, and the module's
         /// configuration is locked.</exception>
@@ -138,9 +140,14 @@ namespace EmbedIO.WebSockets
         }
 
         /// <summary>
-        /// Gets or sets the keep-alive interval for the WebSocket connection.
-        /// The default is 30 seconds.
+        /// <para>Gets or sets how often the server pings each WebSocket client. The default is 30 seconds.</para>
+        /// <para>A connection whose client has not answered the previous ping when the next one is due is closed.
+        /// <see cref="TimeSpan.Zero"/> or <see cref="Timeout.InfiniteTimeSpan"/> disables keep-alive.</para>
         /// </summary>
+        /// <remarks>
+        /// <para>Set this before the module starts. Any pong from the client counts as an answer, and messages do
+        /// not delay the pings.</para>
+        /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException">This property is being set to a value
         /// that is too small to be acceptable.</exception>
         protected TimeSpan KeepAliveInterval
@@ -315,27 +322,55 @@ namespace EmbedIO.WebSockets
                 CloseForDrain(context);
         }
 
+        // RunAsync cancellation or disposal: every open WebSocket gets a 1001 close while its
+        // transport is alive, and the task completes when every listed socket is released: its
+        // client answered the close, its own close timeout expired, or its transport failed. The
+        // server bounds the wait, once for all sockets. A socket already closing is waited for
+        // the same way, for example because its request handler saw the canceled token first and
+        // disposed it. A written close frame is not enough: when the stop then ends an HTTP/2
+        // connection, the client aborts the stream and drops a close frame it has received but
+        // not read. The close carries no reason, so it matches the one WebSocket disposal sends.
+        Task IDrainAwareModule.CloseForStopAsync()
+        {
+            var closing = new List<Task>();
+            foreach (var context in _contexts.Values)
+            {
+                if (context.WebSocket is Internal.WebSocket managed)
+                {
+                    if (managed.State == WebSocketState.Open)
+                        _ = CloseGoingAwayAsync(context, string.Empty);
+                    closing.Add(managed.Released);
+                }
+                else if (context.WebSocket?.State == WebSocketState.Open)
+                {
+                    closing.Add(CloseGoingAwayAsync(context, string.Empty));
+                }
+            }
+
+            return Task.WhenAll(closing);
+        }
+
         private void CloseForDrain(IWebSocketContext context)
         {
             if (!_drainClosed.TryAdd(context.Id, 0))
                 return;
 
-            _ = CloseForDrainAsync(context);
+            _ = CloseGoingAwayAsync(context, DrainCloseReason);
         }
 
-        private async Task CloseForDrainAsync(IWebSocketContext context)
+        private async Task CloseGoingAwayAsync(IWebSocketContext context, string reason)
         {
             try
             {
                 if (context.WebSocket is Internal.WebSocket managed)
-                    await managed.CloseAfterPendingSendAsync(CloseStatusCode.Away, DrainCloseReason).ConfigureAwait(false);
+                    await managed.CloseAfterPendingSendAsync(CloseStatusCode.Away, reason).ConfigureAwait(false);
                 else if (context.WebSocket.State == WebSocketState.Open)
-                    await context.WebSocket.CloseAsync(CloseStatusCode.Away, DrainCloseReason, CancellationToken.None).ConfigureAwait(false);
+                    await context.WebSocket.CloseAsync(CloseStatusCode.Away, reason, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
-                // The connection may already be closing or gone; the drain deadline still bounds it.
-                $"{BaseRoute} - Could not send the drain close: {ex.Message}".Debug(nameof(WebSocketModule));
+                // The connection may already be closing or gone; the drain deadline or the stop budget still bounds it.
+                $"{BaseRoute} - Could not send the going-away close: {ex.Message}".Debug(nameof(WebSocketModule));
             }
         }
 
@@ -621,10 +656,13 @@ namespace EmbedIO.WebSockets
 
         private void RemoveWebSocket(IWebSocketContext context)
         {
+            // Disposed while still listed: a server stop that runs meanwhile waits for its release.
+            if (!_contexts.ContainsKey(context.Id))
+                return;
+            context.WebSocket?.Dispose();
             if (!_contexts.TryRemove(context.Id, out _))
                 return;
             _ = _drainClosed.TryRemove(context.Id, out _);
-            context.WebSocket?.Dispose();
 
             // OnClientDisconnectedAsync is better called in its own task,
             // so it may call methods that require a lock on _contextsAccess.

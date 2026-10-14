@@ -15,6 +15,83 @@
   already applied. A client that sends `If-None-Match: W/"abc"` for a resource tagged `"abc"`
   now receives 304 instead of the whole representation; `If-Match` stays strong. A condition
   the method cannot parse still matches nothing rather than rejecting the request.
+- The Basic authentication challenge escapes its realm. A realm containing a quote or a
+  backslash produced a malformed `WWW-Authenticate` header, because the realm is a
+  quoted-string (RFC 9110, Section 5.6.4; RFC 7617, Section 2.1). The `Realm` property
+  still reports the value as given.
+- `FileModule` bounds the mapping cache it keeps for an immutable provider. The cache is
+  keyed by the requested path, and a case-insensitive file system maps every spelling of a
+  name to the same file, so a client could grow the cache without bound by varying the
+  case it asked for. Past 1024 entries a mapping still succeeds, uncached.
+- WebSocket closes end in time, and stopping the server closes WebSockets cleanly. A close
+  on a protocol error or a rejected message, and `Dispose`, now give up after one second
+  when the close frame cannot be written, for example because the client stopped reading,
+  and release the connection. They could wait without limit before, holding a thread. A
+  WebSocket finalized without being disposed releases its connection without a closing
+  handshake. `RunAsync` cancellation and `WebServer.Dispose` send each open WebSocket a
+  1001 close, then wait at most one second for those closes and any close already under
+  way before the listener stops; clients previously saw the connection end without a
+  close (1006).
+- `WebSocketModule.KeepAliveInterval` takes effect. The server pings each client at that
+  interval (30 seconds by default) and closes a connection whose client has not answered
+  the previous ping when the next one is due. `TimeSpan.Zero` turns it off. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#websocket-closes-sends-and-keep-alive).
+- `IWebSocket.CloseAsync` throws `ArgumentException` for a status a server cannot send
+  (RFC 6455 section 7.4), a comment with `NoStatus`, or a comment longer than 123 UTF-8
+  bytes, as `System.Net.WebSockets` does; these calls were ignored or sent as given.
+  `IWebSocket.SendAsync` throws `WebSocketException` when the WebSocket closes before the
+  whole message is sent, where it returned as if the message had been sent. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#websocket-closes-sends-and-keep-alive).
+- Security: a file provider decodes a served path one segment at a time, so an encoded
+  separator can no longer reach a resource whose modules never ran. Modules are selected
+  from the undecoded path, because the route is built from `Url.AbsolutePath` and a `%2F`
+  stays encoded there (RFC 3986, Section 2.2), while `FileSystemProvider` and
+  `ZipFileProvider` decoded the whole path and turned that `%2F` into a separator. A
+  request for `/admin%2Fsecret.txt` therefore mapped to `admin/secret.txt` although the
+  modules mounted on `/admin`, an authentication module among them, never matched it.
+  Each segment now decodes on its own, and a segment that decodes to a separator, to a
+  `.` or `..` segment, or to a control character names no resource. Containment inside
+  the served root, which already held, is unchanged. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#encoded-separators-in-served-paths).
+- An HTTP/1 connection bounds the two steps of its request cycle that were unbounded.
+  Discarding a request body a handler never read now honors the keep-alive deadline, so
+  a client that declares a body, takes its response and then stops sending no longer
+  holds the connection, and its admission slot, with no timer running. A connection that
+  has answered a `101 Switching Protocols` is no longer treated as reusable for another
+  HTTP/1 message (RFC 9110, Section 7.8), so a handler that returns while its WebSocket
+  is still open cannot leave the request cycle reading frames as a request head. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
+- Correct defects found by a second review sweep. On HTTP/1, a request field sent on
+  several lines combines them in order (RFC 9110, Section 5.3) instead of keeping only
+  the last, as HTTP/2 and HTTP/3 already did; Cookie lines join with `; `. A quality
+  value's weight name matches case-insensitively (RFC 9110, Section 12.4.2), so
+  `gzip;Q=0` refuses gzip as `gzip;q=0` does. The OpenAPI builder describes strings
+  under EmbedIO's default JSON options, documents operations with `[FromServices]`
+  parameters, declares parameters of a module's base route, lists a form field bound
+  twice as required once, keeps component keys within OpenAPI's allowed characters,
+  and reports instead of throwing or misdescribing what it cannot describe: options the
+  schema exporter refuses (such as `ReferenceHandler.Preserve`) and polymorphic result
+  types, which are written without their discriminator. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
+- Security: a request handler that is still running counts against the connection's
+  128-request limit even after its stream is reset or its response has finished, on
+  HTTP/2 and HTTP/3. Before this, a client could reset streams to start an unbounded
+  number of concurrent handlers on one connection (the CVE-2023-44487 "Rapid Reset"
+  pattern). On HTTP/2 a new stream over the limit is refused with `REFUSED_STREAM`,
+  which clients retry, and a client refused more than 128 times within one second
+  receives `GOAWAY ENHANCE_YOUR_CALM`. HTTP/3 now allows 128 outstanding request
+  handlers per connection instead of 256, matching HTTP/2 and the QUIC stream limit;
+  a request over it is refused with `H3_REQUEST_REJECTED`. Graceful shutdown still
+  waits only for responses, not for handlers that outlive them.
+- Allocate less per request. An uncontended asynchronous response write no longer
+  allocates a task, a release delegate and a lock object. The per-request start and
+  completion log messages are built only when a trace listener or a
+  `Log.MessageWritten` observer will receive them. Request completion no longer creates
+  an unused `Items` dictionary. HTTP/1 responses reuse the cached `Date` and charset
+  `Content-Type` values that HTTP/2 and HTTP/3 already used, context IDs are built
+  without intermediate arrays, and HTTP/1 header encoding no longer allocates
+  `AllKeys`. Behavior is unchanged; see the
+  [load comparison](docs/project/http-engine-load-comparison.md#request-path-allocation-october-2026).
 - Behavior change: on the .NET 10 asset, a client that accepts Brotli at the same weight as
   gzip or deflate now gets Brotli, as with ASP.NET Core's response compression. Browsers send
   `Accept-Encoding: gzip, deflate, br` and got gzip: a tie went to the coding the client listed
@@ -37,6 +114,20 @@
   End to end over HTTP/1.1 with a browser's `Accept-Encoding` (load benchmark `-json`
   scenarios, roles alternated), requests per second rose 1.23x, 3.08x and 3.62x for the
   1 KiB, 64 KiB and 1 MiB documents, and server CPU per request fell to 0.82x, 0.32x and 0.28x.
+- Refuse to share an HTTPS endpoint between listeners that present different server
+  certificates. Owners share an endpoint only with the same `ServerCertificateSource`
+  instance or with certificates that compare equal by hash (a combined listener's internal
+  source counts as its fixed certificate); a second owner with another certificate, or a
+  fixed certificate beside a source the application can rotate, is refused before its routes are
+  published, with "different server certificates" in the `HttpListenerException`, and
+  the first owner keeps serving. Before, the endpoint presented its opener's certificate
+  and TLS policy to every owner, even after the opener left. The TLS-policy
+  compatibility rules are unchanged.
+- Refuse to start an https prefix on a managed listener that has neither a certificate
+  nor a certificate source: `Start` throws `InvalidOperationException`, and
+  `WebServer.RunAsync` faults with it, instead of opening the port and dropping every
+  connection at the TLS handshake. The HTTP/3 and combined listeners already refused a
+  missing certificate at construction.
 - HTTP/2 and HTTP/3 requests with a request deadline keep hearing the server's stop token
   through their context token, in the handler and in `OnRequestCompleted` callbacks after it.
   Installing the deadline disposed the token source behind the token the server captures

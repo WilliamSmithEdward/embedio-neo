@@ -14,8 +14,9 @@ Two opt-in settings let the drain end sooner:
 - `WebServer.DrainStarted` is a cancellation token canceled when the drain starts.
   Use it to end other long-lived work, such as event streams.
 
-Without them nothing changes. `RunAsync` cancellation and disposal stop the server
-immediately, as before; they are not drains.
+Without them nothing changes. `RunAsync` cancellation and disposal are not drains:
+they send each open WebSocket a 1001 close without a reason, wait at most one second
+for those closes and for any close already under way, and then stop the server.
 
 This is unreleased and available only from source.
 
