@@ -163,6 +163,20 @@ candidate cores (copy the output and replace only `EmbedIO.dll`), alternate the
 process order, and set `DOTNET_TieredCompilation=0` for stable-JIT comparisons.
 Timings exclude I/O and application work and do not establish server throughput.
 
+## Static-file timing
+
+`--static-file-timing` measures `FileModule` in process, without a listener: a
+1 KB file served from the content cache by GET and by HEAD, a single byte range
+of that file, a precompressed Brotli variant selected by `Accept-Encoding`, and a
+256 KB file above the cache threshold streamed from disk. Each request goes
+through the module's public `HandleRequestAsync` with a minimal context that is
+reset per operation, so the rows cover the module's own work rather than request
+construction. Each row reports the median ns/op of five rounds and B/op counted
+for the whole process (file reads complete on I/O threads); every operation
+validates the status and the body, and the output names the core assembly and its
+SHA-256. Compare baseline and candidate cores with the same runner as for the
+parser timing. Timings exclude the transport and do not establish server throughput.
+
 ## Separate-process engine comparison
 
 Build this runner once, copy its output to a baseline directory, and replace only
