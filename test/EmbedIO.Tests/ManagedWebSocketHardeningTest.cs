@@ -22,7 +22,12 @@ namespace EmbedIO.Tests
         {
             internal int Calls;
             internal int Largest;
-            internal Limited(int maximum) : base("/ws", false) => MaxMessageSize = maximum;
+            // Null keeps the module's default limit.
+            internal Limited(int? maximum) : base("/ws", false)
+            {
+                if (maximum is int value) MaxMessageSize = value;
+            }
+            internal int Configured => MaxMessageSize;
             protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
             {
                 Interlocked.Increment(ref Calls);
@@ -227,6 +232,45 @@ namespace EmbedIO.Tests
                 Assert.That(RawClient.CloseCode(close.Payload), Is.EqualTo(1009));
             });
             Assert.That(module.Calls, Is.Zero);
+        }
+
+        // A module that never sets MaxMessageSize refuses a message over 4 MiB as soon as
+        // its length is announced.
+        [Test]
+        public async Task DefaultMaxMessageSizeIsFourMiB()
+        {
+            var module = new Limited(null);
+            Assert.That(module.Configured, Is.EqualTo(4 * 1024 * 1024));
+            await WithServerAsync(module, async (url, token) =>
+            {
+                using var client = await RawClient.ConnectAsync(url, token);
+                await client.Stream.WriteAsync(RawClient.Frame(0x82, Array.Empty<byte>(), 4L * 1024 * 1024 + 1), token);
+                using var prompt = CancellationTokenSource.CreateLinkedTokenSource(token);
+                prompt.CancelAfter(TimeSpan.FromSeconds(5));
+                var close = await client.ReadFrameAsync(prompt.Token);
+                Assert.That(close.Flags, Is.EqualTo(0x88));
+                Assert.That(RawClient.CloseCode(close.Payload), Is.EqualTo(1009));
+            });
+            Assert.That(module.Calls, Is.Zero);
+        }
+
+        // The default delivers a message of exactly 4 MiB; zero still lifts the limit.
+        [TestCase(null, 4 * 1024 * 1024)]
+        [TestCase(0, 4 * 1024 * 1024 + 1)]
+        public async Task MessagesWithinTheConfiguredSizeAreDelivered(int? maximum, int length)
+        {
+            var module = new Limited(maximum);
+            await WithServerAsync(module, async (url, token) =>
+            {
+                using var client = await RawClient.ConnectAsync(url, token);
+                var bytes = Pattern(length);
+                await client.SendAsync(0x82, bytes, token);
+                var (opcode, echoed) = await client.ReadMessageAsync(token);
+                Assert.That(opcode, Is.EqualTo(2));
+                Assert.That(echoed, Is.EqualTo(bytes));
+            });
+            Assert.That(module.Calls, Is.EqualTo(1));
+            Assert.That(module.Largest, Is.EqualTo(length));
         }
 
         [Test]

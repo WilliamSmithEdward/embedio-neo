@@ -633,8 +633,9 @@ are unchanged.
   managed listener ignored it, so applications that set it received messages
   of any size. A message whose frames add up to more than the limit now closes
   the connection with 1009 before `OnMessageReceivedAsync` runs and before its
-  payload is buffered. The default of 0 still means no limit. Review the value
-  you set if you relied on larger messages arriving.
+  payload is buffered. Zero still means no limit, but the default is now 4 MiB
+  (see [finite request limit defaults](neo-v1-to-v2.md#finite-request-limit-defaults)).
+  Review the value you set if you relied on larger messages arriving.
 - After rejecting a message (1009, or 1007 for invalid UTF-8 text), the server
   skips the rejected payload, sends its close frame and keeps reading, without
   delivering anything, until the peer's close arrives or the existing

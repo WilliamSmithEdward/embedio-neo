@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -44,7 +45,14 @@ namespace EmbedIO.Internal
         internal bool HasLimitFailure => LimitFailure != null;
         internal bool ReadInProgress => Volatile.Read(ref _reading) != 0;
         internal bool TrailerInputAbandoned => Volatile.Read(ref _trailerInputAbandoned) != 0;
-        public override bool CanRead => Volatile.Read(ref _disposed) == 0 && Volatile.Read(ref _retired) == 0;
+        // True once a read reached the validated end and nothing has happened since: completing
+        // the input would read nothing more and could not fail.
+        internal bool IsValidatedEnd => Volatile.Read(ref _complete) && Volatile.Read(ref _reading) == 0
+            && Volatile.Read(ref _retired) == 0 && LimitFailure == null;
+        // Like the other body wrappers, the view reports a source that stopped reading on its
+        // own, as an HTTP/3 body does once a canceled read abandons its input.
+        public override bool CanRead => Volatile.Read(ref _disposed) == 0 && Volatile.Read(ref _retired) == 0
+            && _source.Value.CanRead;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
         public override long Length => throw new NotSupportedException();
@@ -171,8 +179,12 @@ namespace EmbedIO.Internal
         // make unread-input cleanup bypass the configured entity-byte ceiling.
         internal async Task CompleteInputAsync(CancellationToken token)
         {
-            var buffer = new byte[2048];
-            while (await ReadCoreAsync(buffer, 0, buffer.Length, token, true).ConfigureAwait(false) != 0) { }
+            const int length = 2048;
+            var buffer = ArrayPool<byte>.Shared.Rent(length);
+            while (await ReadCoreAsync(buffer, 0, length, token, true).ConfigureAwait(false) != 0) { }
+            // Every read above has settled. A failed drain leaves the buffer to the collector
+            // rather than return storage a source might still be writing.
+            ArrayPool<byte>.Shared.Return(buffer, true);
         }
 
         internal void Retire()

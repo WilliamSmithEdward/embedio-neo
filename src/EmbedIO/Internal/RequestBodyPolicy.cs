@@ -27,9 +27,11 @@ namespace EmbedIO.Internal
 
         // CONNECT carries a negotiated transport, not an ordinary HTTP entity.
         // HTTP/1 Upgrade requests still have their separately framed entity body.
+        // A request framed without a body has nothing to count, so it keeps the
+        // plain input path and pays nothing for the limit.
         internal void Apply(IHttpRequest request)
         {
-            if (request.HttpMethod == "CONNECT") return;
+            if (request.HttpMethod == "CONNECT" || !request.HasEntityBody) return;
             if (request is HttpListenerRequest http1) http1.SetBodyPolicy(this);
             else if (request is MultiplexedRequest multiplexed) multiplexed.SetBodyPolicy(this);
             else throw new NotSupportedException("Raw request body limits require an owned request backend.");

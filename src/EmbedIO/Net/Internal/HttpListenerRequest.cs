@@ -107,7 +107,7 @@ namespace EmbedIO.Net.Internal
             }
         }
         private RequestTelemetry? _countBody;
-        void IRequestPolicyTarget.LimitBody(long maximumBytes, Action onExceeded)
+        void IRequestPolicyTarget.LimitBody(long maximumBytes, Action? onExceeded)
         {
             if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
                 throw new InvalidOperationException("The request body was already opened.");
@@ -120,7 +120,7 @@ namespace EmbedIO.Net.Internal
                 throw new InvalidOperationException("The request body was already opened.");
             _countBody = scope;
         }
-        void IRequestPolicyTarget.TimeBodyReads(TimeSpan timeout, Action onTimeout)
+        void IRequestPolicyTarget.TimeBodyReads(TimeSpan timeout, Action? onTimeout)
         {
             if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
                 throw new InvalidOperationException("The request body was already opened.");
@@ -177,6 +177,9 @@ namespace EmbedIO.Net.Internal
         internal Task CompleteBodyInputAsync(CancellationToken token)
         {
             if (_bodyPolicy == null || KnownBodyRefusal != null || IsContinueOwed) return Task.CompletedTask;
+            // A handler that read the body to its validated end leaves nothing to drain or check.
+            if (Volatile.Read(ref _bodyLimitRetired) == 0 && Volatile.Read(ref _limitedInput) is { IsValidatedEnd: true })
+                return Task.CompletedTask;
             TaskCompletionSource<bool> completion;
             CancellationToken readToken;
             lock (LazyInitializer.EnsureInitialized(ref _bodyCleanupSync)
@@ -331,7 +334,13 @@ namespace EmbedIO.Net.Internal
                 }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { return false; }
             }
-            var input = InputStream;
+            // This drain only lets the connection carry the next request, and the keep-alive
+            // deadline bounds it. It reads the framing input, not the application's view: the
+            // handler may have disposed that view, and its read deadline and byte count belong
+            // to application reads. A read the deadline abandoned may still be pending on the
+            // transport, so that body is not drained and the connection closes.
+            if (Volatile.Read(ref _timedInput)?.HasUnsettledRead == true) return false;
+            var input = FramingInput;
             if (input is RequestStream body && body.IsBodyConsumed) return true;
             var buffer = ArrayPool<byte>.Shared.Rent(2048);
             try

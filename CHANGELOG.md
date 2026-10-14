@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+- Behavior change: request limits have finite defaults, modelled on Kestrel's
+  `KestrelServerLimits` in ASP.NET Core 10.0.13. A request body may carry 30,000,000
+  bytes (`MaximumRequestBodyBytes`, as Kestrel's `MaxRequestBodySize`), header fields may
+  total 32 KiB (`MaximumRequestHeaderBytes`, as `MaxRequestHeadersTotalSize`) in at most
+  100 lines (`MaximumRequestHeaderCount`, as `MaxRequestHeaderCount`), and a new
+  connection must deliver its first request head within 30 seconds instead of 90
+  (`RequestHeadersTimeout`, as Kestrel's). One read of a request body may wait 60 seconds
+  for data (`RequestBodyReadTimeout`; Kestrel enforces a minimum data rate instead), and a
+  WebSocket message may be 4 MiB (`WebSocketModule.MaxMessageSize`, previously
+  unlimited). With `SupportCompressedRequests`, the decoded body limit follows the
+  request's body limit, including a route's, until `MaximumDecompressedRequestBodyBytes`
+  is set. Every default is replaced as before, and null still removes a limit (zero for
+  `MaxMessageSize`). `MaximumConcurrentRequests` and `RequestTimeout` stay off. Because a
+  body limit now applies by default, `100 Continue` is sent on a handler's first read of
+  the body rather than before dispatch, so on HTTP/1.1 a handler that ignores an
+  `Expect: 100-continue` body answers with `Connection: close`; on HTTP/2 and HTTP/3 a
+  body the handler never opens is left to the transport, which ends the stream after the
+  response with `RST_STREAM` `NO_ERROR` or `STOP_SENDING` `H3_NO_ERROR`, instead of being
+  read first; and on HTTP/1.1 the request stream is closed once disposed, as on HTTP/2
+  and HTTP/3. See
+  [migration](docs/compatibility/neo-v1-to-v2.md#finite-request-limit-defaults).
+- Correct two request-body defects that the new defaults would have exposed widely. On
+  HTTP/1.1, a handler that disposed the request stream while a body read deadline was
+  set made the server close the connection after a response that had promised to keep it
+  open, so a client that reused it saw a reset; the server now discards the rest of the
+  body and keeps the connection. The counted view of a body under a body limit reported `CanRead` as
+  true after its transport stopped reading, as an HTTP/3 body does once a read is
+  canceled; it now reports the transport's state.
 - WebSocket closes end in time, and stopping the server closes WebSockets cleanly. A close
   on a protocol error or a rejected message, and `Dispose`, now give up after one second
   when the close frame cannot be written, for example because the client stopped reading,

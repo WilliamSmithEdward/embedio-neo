@@ -1,20 +1,48 @@
 # Request limits, admission and deadlines
 
 [Neo #136](https://github.com/WilliamSmithEdward/embedio-neo/issues/136) asks for
-opt-in resource policies for HTTP requests. This guide covers them: limits on request
-headers and bodies, the number of connections and of requests handled at once, how long
-a connection, a body read and a request may take, and per-route policies that replace
-the server-wide values under a base route. All of them default to off, so a server that
-sets none of them behaves exactly as before.
+resource policies for HTTP requests. This guide covers them: limits on request headers
+and bodies, the number of connections and of requests handled at once, how long a
+connection, a body read and a request may take, and per-route policies that replace the
+server-wide values under a base route.
 
 | Option | Default | Rejection |
 | --- | --- | --- |
-| `MaximumRequestHeaderBytes` | null (no limit) | HTTP 431 |
-| `MaximumRequestHeaderCount` | null (no limit) | HTTP 431 |
-| `MaximumRequestBodyBytes` | null (unlimited) | HTTP 413 |
-| `RequestBodyReadTimeout` | null (no read deadline) | HTTP 408 |
-| `MaximumConcurrentRequests` with `RequestQueueLimit` | null, queue 0 | HTTP 503 |
+| `MaximumRequestHeaderBytes` | 32 KiB (32,768 bytes) | HTTP 431 |
+| `MaximumRequestHeaderCount` | 100 field lines | HTTP 431 |
+| `MaximumRequestBodyBytes` | 30,000,000 bytes (about 28.6 MiB) | HTTP 413 |
+| `RequestBodyReadTimeout` | 60 seconds per read | HTTP 408 |
+| `MaximumConcurrentRequests` with `RequestQueueLimit` | null (unlimited), queue 0 | HTTP 503 |
 | `RequestTimeout` | null (no deadline) | HTTP 503 |
+
+## Defaults
+
+The header, body and body-read limits are on by default, with values modelled on
+Kestrel's `KestrelServerLimits` in ASP.NET Core 10.0.13. Before v2 they were all off.
+
+| EmbedIO option | Default | Kestrel equivalent |
+| --- | --- | --- |
+| `MaximumRequestBodyBytes` | 30,000,000 bytes | `MaxRequestBodySize`, 30,000,000 bytes |
+| `MaximumRequestHeaderBytes` | 32 KiB | `MaxRequestHeadersTotalSize`, 32 KiB |
+| `MaximumRequestHeaderCount` | 100 | `MaxRequestHeaderCount`, 100 |
+| `RequestHeadersTimeout` (TCP connections) | 30 seconds | `RequestHeadersTimeout`, 30 seconds |
+| `RequestBodyReadTimeout` | 60 seconds per read | none: Kestrel enforces `MinRequestBodyDataRate`, 240 bytes per second after a 5-second grace period |
+| `WebSocketModule.MaxMessageSize` | 4 MiB | none: ASP.NET Core's `WebSocketOptions` has no message size limit |
+
+- Each default can be replaced in the same way as before, server-wide or, for the body
+  limit and the body read deadline, by a [route policy](#per-route-policies). Null
+  removes a limit, as it always did: `WithMaximumRequestBodyBytes(null)`,
+  `WithRequestHeaderLimits(null, null)`, `WithRequestBodyReadTimeout(null)`. For
+  `MaxMessageSize`, zero disables the check, as before.
+- The 32 KiB header default equals the fixed ceiling of each protocol parser, which
+  applies first, so it refuses nothing the server accepted before; lowering it takes
+  effect.
+- With `SupportCompressedRequests`, the decoded body limit follows the request's body
+  limit, including a route's, until `MaximumDecompressedRequestBodyBytes` is set.
+- `MaximumConcurrentRequests` and `RequestTimeout` stay off. The right values depend on
+  what the handlers do, and a request deadline would cut off long downloads, streamed
+  responses and server-sent events. Set them for a server that faces untrusted clients,
+  and lift the deadline per route where requests legitimately run long.
 
 They live on `WebServerOptionsBase`, next to the existing
 `MaximumDecompressedRequestBodyBytes`, and are enforced in the server's shared
@@ -28,7 +56,7 @@ HTTP/1.1 and HTTP/2 but not HTTP/3; see [connection limits](#connection-limits).
 | Option | Default | When exceeded |
 | --- | --- | --- |
 | `MaximumConnections` | null (unlimited) | new connection closed |
-| `RequestHeadersTimeout` | null (90 seconds) | connection closed |
+| `RequestHeadersTimeout` | null (30 seconds) | connection closed |
 | `KeepAliveTimeout` | null (15 s on HTTP/1.1, none on HTTP/2) | connection closed, GOAWAY on HTTP/2 |
 
 ## Example
@@ -106,12 +134,22 @@ which for a chunked body has no end the server controls. HTTP/2 and HTTP/3 reset
 stream when the response completes before its body, so other streams on the same
 connection continue.
 
+**Unread bodies.** When the handler returns, the server reads the rest of a body the
+handler opened, so an excess byte the handler never read still fails the request with
+413 while the response is not committed. On HTTP/1.1 it also reads a body the handler
+never opened, under the byte limit and the read deadline, before it reuses the
+connection. On HTTP/2 and HTTP/3 it leaves a body the handler never opened to the
+transport: after the response, HTTP/2 resets the stream with `NO_ERROR` and HTTP/3
+sends `STOP_SENDING` with `H3_NO_ERROR` (RFC 9113 section 8.1, RFC 9114 section 4.1).
+The response is not held back for that body, and neither limit applies to it.
+
 ### `100 Continue`
 
 A client that sends `Expect: 100-continue` waits for an interim `100 Continue` response
-before uploading its body. Without a body limit the engine sends it as soon as the
-request head arrives, as before. While `MaximumRequestBodyBytes` is set, the engine
-holds it back and sends it when a handler first reads the body:
+before uploading its body. While a body limit applies, which by default it does, the
+engine holds `100 Continue` back and sends it when a handler first reads the body. With
+`MaximumRequestBodyBytes` set to null and no route setting a limit, the engine sends it
+as soon as the request head arrives, as v1 did. While it is held back:
 
 - A request refused before dispatch, whether by its declared length, its headers, a
   full queue or a deadline, is answered without `100 Continue`, so the client never
@@ -120,8 +158,10 @@ holds it back and sends it when a handler first reads the body:
   client starts sending immediately rather than after its own fallback timer.
 - On HTTP/1.1, a response that completes while `100 Continue` is still owed is sent
   with `Connection: close`, and the connection closes instead of waiting for a body
-  the client was never invited to send. HTTP/2 and HTTP/3 reset the stream as for
-  any unread body.
+  the client was never invited to send. A handler that ignores the body of an
+  `Expect: 100-continue` request therefore closes the connection. .NET's `HttpClient`
+  sends the body anyway after a 2xx response, and can then see the close as a reset.
+  HTTP/2 and HTTP/3 reset the stream as for any unread body.
 - A handler that starts its response before reading the body cannot send
   `100 Continue` any more. The client sends its body only when its own expectation
   timer expires (one second by default in .NET), and on HTTP/1.1 the connection is
@@ -136,7 +176,8 @@ when the server closes with unread data; HTTP/2 and HTTP/3 clients receive the 4
 
 `RequestBodyReadTimeout` bounds how long one read of the request body may wait for
 data. It applies to each read separately, so a slow but steady upload is not cut off;
-a client that stops sending is.
+a client that stops sending is. The default is 60 seconds, and null removes it. Only
+requests that carry a body are timed.
 
 - A read that misses the deadline throws a 408 `HttpException`, and so does every
   later read of the same body. A handler that lets it propagate answers 408.
@@ -161,8 +202,9 @@ and `EmbedIOCombined` modes. Setting any of them on an `EmbedIOHttp3` server thr
   connections when their deadline passes.
 - **`RequestHeadersTimeout`** bounds how long a new connection may take to deliver its
   first complete request head, including the TLS handshake and, on HTTP/2, the
-  connection preface. A connection that misses it is closed without a response. The
-  default stays at 90 seconds.
+  connection preface. A connection that misses it is closed without a response. Null
+  applies the default of 30 seconds, Kestrel's `RequestHeadersTimeout`; before v2 the
+  default was 90 seconds.
 - **`KeepAliveTimeout`** bounds idle time between requests. On HTTP/1.1 it runs from
   the end of a response until the next request head is complete, replacing the fixed
   15 seconds, and the `Keep-Alive` response header advertises it in whole seconds,
@@ -207,7 +249,8 @@ using var server = new WebServer(o => o
 - `RouteRequestLimits` lists the policies; they lock with the options.
 - The declared-length check, the `100 Continue` deferral, the byte count, the read
   deadline and the request deadline all use the route's values. `100 Continue` is
-  deferred when the server or any route sets a body limit.
+  deferred when the server or any route sets a body limit, as the server's default
+  limit does.
 - Header limits, admission and connection limits stay server-wide: they apply before
   routing or to whole connections.
 
@@ -251,8 +294,8 @@ in the queue.
 ## Measured scenarios
 
 `test/EmbedIO.Tests/Issues/Issue136_RequestLimits.cs`, `Issue136_RequestLimits.Headers.cs`,
-`Issue136_RequestLimits.Connections.cs` and `Issue136_RequestLimits.Routes.cs` drive the
-managed engine over real connections.
+`Issue136_RequestLimits.Connections.cs`, `Issue136_RequestLimits.Routes.cs` and
+`Issue136_RequestLimits.Defaults.cs` drive the managed engine over real connections.
 HTTP/2 uses cleartext prior knowledge; HTTP/3 uses QUIC with a generated certificate
 and is skipped on hosts without QUIC support.
 
@@ -268,7 +311,7 @@ and is skipped on hosts without QUIC support.
 | `Expect: 100-continue`, body refused | 413 without `100 Continue` | client never sends the body | same |
 | `Expect: 100-continue`, body read | `100 Continue` on first read | same | same |
 | `Expect: 100-continue`, body never read | response with `Connection: close`, then close | n/a | n/a |
-| `Expect: 100-continue` without a body limit | `100 Continue` before dispatch, unchanged | n/a | n/a |
+| `Expect: 100-continue` with the body limit set to null | `100 Continue` before dispatch, as in v1 | n/a | n/a |
 | Zero limit | bodyless GET 200, any body 413 | n/a | n/a |
 | Transferred and decoded limits together | independent, distinct messages | n/a | n/a |
 | Slots and queue full | 503, module never entered, slots return | same | 503 |
@@ -296,6 +339,16 @@ and is skipped on hosts without QUIC support.
 | Route request deadline lifted or shortened | long request completes; 503 elsewhere | n/a | n/a |
 | Route body read deadline lifted | slow upload completes; 408 elsewhere | same | n/a |
 | Route body limit with `Expect: 100-continue` | n/a | refused body never sent | n/a |
+| Default body limit, declared length 30,000,001 | 413 before dispatch; 30,000,000 dispatched | 413, body never sent | same |
+| Body limit set to null, declared length 30,000,001 | dispatched | n/a | n/a |
+| Default header count | 100 field lines served, 101 refused with 431 | 101 refused with 431, 90 served | same |
+| Header count replaced or removed | 120 allows 120 and refuses 121; null allows 150 | n/a | n/a |
+| Default body read deadline | 60 s on a request with a body | same | same |
+| Body read deadline set to 5 s or null | 5 s, or none | none for null | n/a |
+| Body the handler never opened | n/a | response sent, body left to the transport | same, for a GET without `content-length` |
+| Handler disposes its body view under the read deadline | connection reused | n/a | n/a |
+| Second read of a disposed body | `ArgumentException` from the text helper, `ObjectDisposedException` from the byte helper | n/a | n/a |
+| Decoded limit with `SupportCompressedRequests` | follows the server or route body limit until set | n/a | n/a |
 
 The .NET HTTP/1.1 client aborts its own connection after a refusal that arrives
 without `100 Continue`, so the HTTP/1.1 refusal case is checked on the wire with a raw

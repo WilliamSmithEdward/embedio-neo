@@ -108,8 +108,8 @@ namespace EmbedIO.Tests.Issues
         public void HeaderLimitDefaultsValidationAndLocking()
         {
             var options = new WebServerOptions();
-            Assert.That(options.MaximumRequestHeaderBytes, Is.Null);
-            Assert.That(options.MaximumRequestHeaderCount, Is.Null);
+            Assert.That(options.MaximumRequestHeaderBytes, Is.EqualTo(32 * 1024));
+            Assert.That(options.MaximumRequestHeaderCount, Is.EqualTo(100));
             Assert.That(() => options.MaximumRequestHeaderBytes = 0, Throws.InstanceOf<ArgumentOutOfRangeException>());
             Assert.That(() => options.MaximumRequestHeaderCount = 0, Throws.InstanceOf<ArgumentOutOfRangeException>());
             options.WithUrlPrefix(Resources.GetServerAddress()).WithRequestHeaderLimits(1024, 20);
@@ -178,7 +178,7 @@ namespace EmbedIO.Tests.Issues
         [Test]
         public async Task WithoutABodyLimitContinueIsStillSentBeforeDispatch()
         {
-            await using var host = Host.Start(_ => { },
+            await using var host = Host.Start(o => o.WithMaximumRequestBodyBytes(null),
                 context => context.SendStringAsync("ignored", "text/plain", WebServer.Utf8NoBomEncoding), HttpVerbs.Any);
             using var socket = await host.ConnectAsync();
             await socket.SendAsync($"POST / HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 4\r\nExpect: 100-continue\r\nConnection: close\r\n\r\nbody");
@@ -300,9 +300,11 @@ namespace EmbedIO.Tests.Issues
                     if (context.Request.HttpMethod == "GET")
                     { await context.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding); return; }
                     Interlocked.Increment(ref posts);
-                    var lifted = context.Request.Url.AbsolutePath.StartsWith("/lifted", StringComparison.Ordinal);
+                    // A request without body content has nothing to count, so it keeps the plain input.
+                    var counted = !context.Request.Url.AbsolutePath.StartsWith("/lifted", StringComparison.Ordinal)
+                        && context.Request.HasEntityBody;
                     Assert.That(context.Request.InputStream.GetType().Name,
-                        lifted ? Is.Not.EqualTo("RawRequestBodyStream") : Is.EqualTo("RawRequestBodyStream"));
+                        counted ? Is.EqualTo("RawRequestBodyStream") : Is.Not.EqualTo("RawRequestBodyStream"));
                     var body = await context.GetRequestBodyAsByteArrayAsync();
                     await context.SendStringAsync(body.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         "text/plain", WebServer.Utf8NoBomEncoding);

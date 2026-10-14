@@ -107,7 +107,7 @@ namespace EmbedIO.Net.Internal
             }
         }
         private RequestTelemetry? _countBody;
-        void IRequestPolicyTarget.LimitBody(long maximumBytes, Action onExceeded)
+        void IRequestPolicyTarget.LimitBody(long maximumBytes, Action? onExceeded)
         {
             if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
                 throw new InvalidOperationException("The request body was already opened.");
@@ -120,7 +120,7 @@ namespace EmbedIO.Net.Internal
                 throw new InvalidOperationException("The request body was already opened.");
             _countBody = scope;
         }
-        void IRequestPolicyTarget.TimeBodyReads(TimeSpan timeout, Action onTimeout)
+        void IRequestPolicyTarget.TimeBodyReads(TimeSpan timeout, Action? onTimeout)
         {
             if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
                 throw new InvalidOperationException("The request body was already opened.");
@@ -165,12 +165,26 @@ namespace EmbedIO.Net.Internal
         internal RawRequestBodyLimitException? KnownBodyRefusal => Volatile.Read(ref _knownBodyRefusal);
         internal void MarkKnownBodyRefusal(RawRequestBodyLimitException failure)
             => Interlocked.CompareExchange(ref _knownBodyRefusal, failure, null);
+        // Validates the rest of a body the handler opened, so an excess byte it never read
+        // still fails the request. A body the handler never opened is left to the transport,
+        // which ends it after the response as it does without a limit: HTTP/2 resets the
+        // stream and HTTP/3 stops reading it. Draining it first would build the counted view
+        // only to have the transport abort the read, and HTTP/3 would pay for that on every
+        // GET sent without content-length, which cannot be known bodyless at dispatch.
         internal async System.Threading.Tasks.Task CompleteBodyInputAsync(CancellationToken token)
         {
             if (_bodyPolicy == null || KnownBodyRefusal != null || IsContinueOwed) return;
-            _ = InputStream;
-            await (_limitedInput ?? throw new InvalidOperationException("Missing raw body view."))
-                .CompleteInputAsync(token).ConfigureAwait(false);
+            var view = Volatile.Read(ref _limitedInput);
+            if (view == null || view.IsValidatedEnd) return;
+            // A body the transport stopped reading, as HTTP/3 does after a read the handler
+            // canceled, or one with a read still outstanding, is left to the transport like an
+            // unopened one: draining it could only fail. An expired read deadline still drains,
+            // which reports its 408.
+            var timed = Volatile.Read(ref _timedInput);
+            if (timed?.HasExpired != true
+                && (view.ReadInProgress || timed?.HasUnsettledRead == true || !_exchange.InputStream.CanRead))
+                return;
+            await view.CompleteInputAsync(token).ConfigureAwait(false);
         }
         internal void RetireBodyLimit()
         {

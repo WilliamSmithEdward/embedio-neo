@@ -10,9 +10,10 @@ namespace EmbedIO.Net.Internal
     // opened them, so a listener with its own policy never shares an endpoint.
     internal sealed class TcpConnectionPolicy
     {
-        // 90 seconds for the first request head and 15 between requests; HTTP/2
-        // connections without streams have no idle deadline.
-        internal static readonly TcpConnectionPolicy Default = new(null, 90000, null);
+        // 30 seconds for the first request head, as Kestrel's RequestHeadersTimeout, and 15
+        // between requests; HTTP/2 connections without streams have no idle deadline.
+        internal const int DefaultHeaderTimeoutMilliseconds = 30000;
+        internal static readonly TcpConnectionPolicy Default = new(null, DefaultHeaderTimeoutMilliseconds, null);
 
         private int _open;
 

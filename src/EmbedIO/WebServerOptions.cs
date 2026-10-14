@@ -262,8 +262,8 @@ namespace EmbedIO
 
         /// <summary>
         /// Gets or sets how long a new TCP connection may take to deliver its first complete
-        /// request head, including the TLS handshake. The default is null, preserving the
-        /// existing 90 seconds.
+        /// request head, including the TLS handshake. The default is null, which applies
+        /// 30 seconds.
         /// </summary>
         /// <remarks>
         /// When the deadline passes the connection is closed without a response. On HTTP/2 the
@@ -313,7 +313,8 @@ namespace EmbedIO
         // The listener-level policy; the shared default when no limit is configured.
         internal Net.Internal.TcpConnectionPolicy CreateConnectionPolicy() => HasConnectionLimits
             ? new Net.Internal.TcpConnectionPolicy(_maximumConnections,
-                _requestHeadersTimeout.HasValue ? (int)_requestHeadersTimeout.Value.TotalMilliseconds : 90000,
+                _requestHeadersTimeout.HasValue ? (int)_requestHeadersTimeout.Value.TotalMilliseconds
+                    : Net.Internal.TcpConnectionPolicy.DefaultHeaderTimeoutMilliseconds,
                 _keepAliveTimeout.HasValue ? (int)_keepAliveTimeout.Value.TotalMilliseconds : null)
             : Net.Internal.TcpConnectionPolicy.Default;
 

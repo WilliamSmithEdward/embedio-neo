@@ -12,13 +12,13 @@ namespace EmbedIO.Internal
         // Sum of the name and value lengths of those field lines.
         long HeaderFieldBytes { get; }
 
-        // Must be applied before InputStream is first read. onExceeded runs once, on the
-        // reading thread, when a read crosses the limit.
-        void LimitBody(long maximumBytes, Action onExceeded);
+        // Must be applied before InputStream is first read. onExceeded, when given, runs
+        // once, on the reading thread, when a read crosses the limit.
+        void LimitBody(long maximumBytes, Action? onExceeded);
 
-        // Must be applied before InputStream is first read. onTimeout runs once, on the
-        // reading thread, when a read waits longer than the timeout for data.
-        void TimeBodyReads(TimeSpan timeout, Action onTimeout);
+        // Must be applied before InputStream is first read. onTimeout, when given, runs
+        // once, on the reading thread, when a read waits longer than the timeout for data.
+        void TimeBodyReads(TimeSpan timeout, Action? onTimeout);
 
         // Must be applied before InputStream is first read. Counts the body bytes the
         // application reads into the request's telemetry scope.

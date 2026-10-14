@@ -42,6 +42,8 @@ namespace EmbedIO
         /// <see cref="WebServerOptionsBase.MaximumRequestBodyBytes"/>. Null inherits the server value;
         /// <see cref="long.MaxValue"/> lifts the limit.
         /// </summary>
+        /// <remarks>Unless <see cref="WebServerOptionsBase.MaximumDecompressedRequestBodyBytes"/> is
+        /// set, the route's limit also bounds what the compressed-request helpers decode.</remarks>
         /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
         /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
         public long? MaximumRequestBodyBytes

@@ -20,7 +20,15 @@ namespace EmbedIO.Tests.Issues
         public async Task OriginalFourRequestsSucceedWithoutMandatoryBodyReading(HttpListenerMode mode, bool expectContinue)
         {
             var url = Resources.GetServerAddress();
-            using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(mode))
+            // The reported requests got 100 Continue before dispatch, which needs a server
+            // without a body limit. With one, the default, 100 Continue waits for the handler's
+            // first read, and a handler that never reads answers with Connection: close; .NET
+            // then sends the body after a 2xx response and can see the close as a reset.
+            using var server = new WebServer(o =>
+                {
+                    o.WithUrlPrefix(url).WithMode(mode);
+                    if (expectContinue) o.WithMaximumRequestBodyBytes(null);
+                })
                 .WithLocalSessionManager()
                 .WithWebApi("/api", m => m.WithController<OriginalController>());
             using var stop = new CancellationTokenSource();

@@ -174,9 +174,10 @@ using var server = new WebServer(options => options
 The request-stream helpers, including JSON/form/body readers, raise HTTP 413
 when decoded content exceeds one MiB. The limit counts bytes, including all
 bytes of UTF-8 characters; an exactly sized body is accepted after checking EOF.
-Zero accepts only an empty decoded body. Null preserves the existing unlimited
-behavior, and negative values are rejected during configuration. Request
-compression remains disabled unless explicitly enabled.
+Zero accepts only an empty decoded body. Until the limit is set it follows the
+request's body limit, 30,000,000 bytes by default; null removes it, and negative
+values are rejected during configuration. Request compression remains disabled
+unless explicitly enabled.
 
 The .NET 10 asset handles gzip, deflate and Brotli. The .NET Standard 2.0 asset
 handles gzip/deflate and rejects Brotli explicitly. This setting applies when a
