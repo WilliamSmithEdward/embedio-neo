@@ -8,7 +8,6 @@ namespace EmbedIO.Net.Internal.Http2
     {
         private bool _receivedInitial;
         public bool NoRfc7540Priorities { get; private set; }
-        public uint HeaderTableSize { get; private set; } = 4096;
         public bool EnablePush { get; private set; } = true;
         public uint MaximumConcurrentStreams { get; private set; } = uint.MaxValue;
         public int InitialWindowSize { get; private set; } = 65535;
@@ -45,7 +44,7 @@ namespace EmbedIO.Net.Internal.Http2
                 var value = ReadUInt32(payload, offset + 2);
                 switch (id)
                 {
-                    case 1: adjustHeaderTable(value); HeaderTableSize = value; break;
+                    case 1: adjustHeaderTable(value); break;
                     case 2: EnablePush = value != 0; break;
                     case 3: MaximumConcurrentStreams = value; break;
                     case 4:

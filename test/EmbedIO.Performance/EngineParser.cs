@@ -11,6 +11,7 @@ internal static class EngineParser
     internal static bool Run(string[] args)
     {
         if (!args.Contains("--engine-parser", StringComparer.Ordinal)) return false;
+        var browserHeaders = args.Contains("--browser-headers", StringComparer.Ordinal);
         var type = (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true) ?? throw new System.InvalidOperationException("Expected a non-null fixture value."));
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var connection = RuntimeHelpers.GetUninitializedObject(type);
@@ -47,7 +48,9 @@ internal static class EngineParser
         var rows = new List<object>();
         foreach (var batch in new[] { 1, 16, 64 })
         {
-            var request = "GET /baseline11?a=13&b=42 HTTP/1.1\r\nHost: localhost\r\nX-Padding: " + new string('p', 128) + "\r\n\r\n";
+            var request = "GET /baseline11?a=13&b=42 HTTP/1.1\r\nHost: localhost\r\n"
+                + (browserHeaders ? "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\nAccept-Language: en-US,en;q=0.9\r\n" : string.Empty)
+                + "X-Padding: " + new string('p', 128) + "\r\n\r\n";
             var bytes = Encoding.ASCII.GetBytes(string.Concat(Enumerable.Repeat(request, batch)));
             void Parse()
             {
@@ -86,6 +89,7 @@ internal static class EngineParser
         {
             runtime = RuntimeInformation.FrameworkDescription,
             os = RuntimeInformation.OSDescription,
+            headers = browserHeaders ? "browser" : "minimal",
             note = "Parser/context construction and pipeline handoff with one shared runner. Reflection observes baseline cursor (boxed int) or candidate segment (boxed struct); these observation costs differ and are included. No sockets or URI finalization; not end-to-end throughput.",
             rows
         },
