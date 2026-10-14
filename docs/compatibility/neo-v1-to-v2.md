@@ -333,6 +333,36 @@ module registration first; use a readiness message as described in the
 ReceiveLimits is disabled by default. Configure it explicitly when your
 application needs bounded outstanding delivery.
 
+## WebSocket closes, sends and keep-alive
+
+These v2 changes affect applications that close WebSockets with explicit statuses,
+send while a socket may be closing, or keep idle connections open:
+
+- `IWebSocket.CloseAsync(code, comment)` throws `ArgumentException`, as
+  `System.Net.WebSockets` does, for a status a server cannot send: below 1000,
+  1006, 1010, 1015 to 2999, and 5000 and above (RFC 6455, section 7.4). It also
+  throws for a comment with `CloseStatusCode.NoStatus` and for a comment longer
+  than 123 UTF-8 bytes, and it checks its arguments even after the socket closed.
+  These calls used to be ignored or sent as given. To end a connection without a
+  close frame, which `Abnormal` (1006) and `TlsHandshakeFailure` (1015) used to
+  do, call `CloseAsync(CloseStatusCode.Undefined)`.
+- `IWebSocket.SendAsync` throws `WebSocketException` when the WebSocket closes
+  before the whole message is sent: when the client's close arrives between two
+  frames of a long message, or when the socket closes while the message waits for
+  another send. It used to return as if the message had been sent.
+  `WebSocketModule.SendAsync` and `BroadcastAsync` log the failure, as they already
+  did for a socket that was closed when the send started.
+- `WebSocketModule.KeepAliveInterval` now takes effect. The server pings each
+  client at that interval, 30 seconds by default, and closes a connection whose
+  client has not answered the previous ping when the next one is due. Any pong
+  counts as an answer. Browsers answer pings automatically; `ClientWebSocket`
+  answers them while a `ReceiveAsync` is pending. Set the interval to
+  `TimeSpan.Zero` to keep connections whose clients do not answer open, as before.
+- `RunAsync` cancellation and `WebServer.Dispose` send each open WebSocket a 1001
+  (Going Away) close without a reason, and wait at most one second for those closes,
+  and for any close already under way, before they stop the listener. Clients used to
+  see the connection end without a close (1006).
+
 ## Optional v2 capabilities
 
 The new APIs are optional capabilities, not requirements for existing handlers:

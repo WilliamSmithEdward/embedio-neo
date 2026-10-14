@@ -136,6 +136,13 @@ namespace EmbedIO.Tests
             }
         }
 
+        // True once a response head is followed by a WebSocket close frame.
+        private static bool FollowsHeadWithClose(byte[] received)
+        {
+            var head = received.AsSpan().IndexOf("\r\n\r\n"u8);
+            return head >= 0 && received.Length > head + 4 && received[head + 4] == 0x88;
+        }
+
         private static async Task FinishUpgrade(NetworkStream stream, Task release, CancellationToken timeout)
         {
             await release;
@@ -143,12 +150,20 @@ namespace EmbedIO.Tests
             {
                 await stream.WriteAsync(new byte[] { 13, 10 }, timeout);
                 var buffer = new byte[1024];
-                var received = 0;
+                using var received = new MemoryStream();
+                var answered = false;
                 int count;
                 while ((count = await stream.ReadAsync(buffer, timeout)) != 0)
                 {
-                    received += count;
-                    Assert.That(received, Is.LessThan(32768));
+                    received.Write(buffer, 0, count);
+                    Assert.That(received.Length, Is.LessThan(32768));
+                    // The stop sends an upgraded socket a 1001 close and waits up to a second for the
+                    // answer; answer it, as clients do, so the stop does not wait out that budget.
+                    if (!answered && FollowsHeadWithClose(received.ToArray()))
+                    {
+                        answered = true;
+                        await stream.WriteAsync(new byte[] { 0x88, 0x80, 0, 0, 0, 0 }, timeout);
+                    }
                 }
             }
             catch (IOException error) when (error.InnerException is SocketException socketError
@@ -185,7 +200,14 @@ namespace EmbedIO.Tests
                 }
                 Assert.That(headers.ToString(), Does.StartWith("HTTP/1.1 101"));
                 await module.Entered.Task.WaitAsync(timeout.Token);
-                stop.Cancel();
+                var stopping = Task.Run(stop.Cancel);
+                // The stop sends the open WebSocket a 1001 close, a WebSocket frame, and waits up to a
+                // second for the answer. The client answers, as clients do; nothing else may follow.
+                var close = new byte[4];
+                await stream.ReadExactlyAsync(close, timeout.Token);
+                Assert.That(close, Is.EqualTo(new byte[] { 0x88, 0x02, 0x03, 0xE9 }));
+                await stream.WriteAsync(new byte[] { 0x88, 0x80, 0, 0, 0, 0 }, timeout.Token);
+                await stopping.WaitAsync(timeout.Token);
                 await running.WaitAsync(timeout.Token);
                 using var trailing = new MemoryStream();
                 try { await stream.CopyToAsync(trailing, timeout.Token); }

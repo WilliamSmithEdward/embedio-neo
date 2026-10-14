@@ -42,7 +42,9 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(((socket).GetType().GetField("_sendGatesDisposed", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket), Is.False);
             }
             finally { transport.Release.TrySetResult(true); }
-            await Task.WhenAll(data, queued).WaitAsync(TimeSpan.FromSeconds(5));
+            // The close ended the connection before either message was sent in full, so neither send reports success.
+            await Assert.ThatAsync(async () => await data.WaitAsync(TimeSpan.FromSeconds(5)), Throws.TypeOf<EmbedIO.WebSockets.WebSocketException>());
+            await Assert.ThatAsync(async () => await queued.WaitAsync(TimeSpan.FromSeconds(5)), Throws.TypeOf<EmbedIO.WebSockets.WebSocketException>());
             Assert.That(transport.FrameHeaders.ToArray(), Is.EqualTo(new byte[] { 2 }));
             Assert.That(transport.CloseCount, Is.EqualTo(1));
             Assert.That(((socket).GetType().GetField("_sendGatesDisposed", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket), Is.True);
@@ -62,7 +64,9 @@ namespace EmbedIO.Tests.Issues
                 while (socket.State == WebSocketState.Open) await Task.Delay(1, wait.Token);
             }
             finally { transport.Release.TrySetResult(true); }
-            await Task.WhenAll(data, disposing).WaitAsync(TimeSpan.FromSeconds(5));
+            // The close went out after the message's first frame, so the send fails rather than report a whole message.
+            await Assert.ThatAsync(async () => await data.WaitAsync(TimeSpan.FromSeconds(5)), Throws.TypeOf<EmbedIO.WebSockets.WebSocketException>());
+            await disposing.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(transport.FrameHeaders.ToArray(), Is.EqualTo(new byte[] { 2, 136 }));
             Assert.That(transport.MaximumConcurrentWrites, Is.EqualTo(1));
             Assert.That(transport.CloseCount, Is.EqualTo(1));
@@ -134,7 +138,12 @@ namespace EmbedIO.Tests.Issues
                 control = (Task)((((type).GetMethod("Send", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, new[] { frame })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
             transport.Release.TrySetResult(true);
-            await Task.WhenAll(data, (control)).WaitAsync(TimeSpan.FromSeconds(5));
+            await control.WaitAsync(TimeSpan.FromSeconds(5));
+            // A close sent between the message's frames ends it, so that send fails; ping and pong frames do not.
+            if (kind == "close")
+                await Assert.ThatAsync(async () => await data.WaitAsync(TimeSpan.FromSeconds(5)), Throws.TypeOf<EmbedIO.WebSockets.WebSocketException>());
+            else
+                await data.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(transport.MaximumConcurrentWrites, Is.EqualTo(1));
             var headers = transport.FrameHeaders.ToArray();
             Assert.That(headers.Count(h => (h & 15) == (kind == "pong" ? 10 : kind == "ping" ? 9 : 8)), Is.EqualTo(1));
@@ -156,7 +165,8 @@ namespace EmbedIO.Tests.Issues
             else cancelled.Cancel();
             if (failWrite) await Assert.ThatAsync(async () => await active, Throws.TypeOf<IOException>());
             else await Assert.ThatAsync(async () => await active, Throws.InstanceOf<OperationCanceledException>());
-            await queued.WaitAsync(TimeSpan.FromSeconds(5));
+            // The interrupted transport ended the connection before the queued message started, so its send fails.
+            await Assert.ThatAsync(async () => await queued.WaitAsync(TimeSpan.FromSeconds(5)), Throws.TypeOf<EmbedIO.WebSockets.WebSocketException>());
             Assert.That(socket.State, Is.EqualTo(WebSocketState.Closed));
             Assert.That(transport.CloseCount, Is.EqualTo(1));
             Assert.That(transport.FrameHeaders.Count, Is.EqualTo(1));
