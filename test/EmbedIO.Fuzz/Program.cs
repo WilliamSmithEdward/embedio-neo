@@ -4,9 +4,11 @@ using System.IO;
 using System.Text.Json;
 using EmbedIO.Utilities;
 
+if (FsCheckProperties.Run(args)) return;
+
 if (HpackInterop.Run(args) || Http1HeadFuzz.Run(args) || await Http2TransportFuzz.RunAsync(args) || await Http3TransportFuzz.RunAsync(args) || await WebSocketFuzz.RunAsync(args)) return;
 
-// Dependency-free mutation/property harness. Its scope is URL paths and query
+// Custom mutation/property mode. Its scope is URL paths and query
 // data; it does not claim to fuzz the listener or WebSocket frame parser.
 var seed = args.Length > 0 ? int.Parse(args[0]) : 1729;
 var iterations = args.Length > 1 ? int.Parse(args[1]) : 100_000;

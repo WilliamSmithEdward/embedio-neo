@@ -210,6 +210,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
+- [Generated URL and query properties](guides/property-testing.md): bounded FsCheck generation, shrinking and reproducible campaigns.
+
 - [Performance and cleanup audit](project/performance-cleanup-audit.md): allocation measurements, compatibility-preserving simplifications and TLS callback regression coverage.
 
 - [Shared HTTP/1 listener shutdown](project/shared-http1-owner-shutdown.md): logical-owner retirement, idle transport handoff and final-endpoint cleanup.

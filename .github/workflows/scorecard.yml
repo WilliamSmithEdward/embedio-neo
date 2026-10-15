@@ -7,7 +7,7 @@ name: Scorecard
 #
 # The SARIF is kept as a run artifact rather than uploaded to code scanning:
 # the checks a single-maintainer project cannot meet (code review by a second
-# person, several contributing organizations, fuzzing) would stand there as
+# person, several contributing organizations) would stand there as
 # permanent open alerts.
 #
 # When results are published, Scorecard's API only accepts them from a

@@ -1,5 +1,7 @@
 - name: Documentation
   href: README.md
+- name: Generated URL and query properties
+  href: guides/property-testing.md
 - name: Parity audit
   items:
     - name: Baseline, findings, and reproduction

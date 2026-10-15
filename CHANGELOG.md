@@ -17,6 +17,11 @@
 
 ### Fixed
 
+- Ignore unsupported Range units and preserve equal-quality preference order across
+  separate header values. Return acquired rate-limiter permits when close-callback
+  registration fails; IP-ban cleanup preserves renewed bans and concurrent regex
+  matches.
+
 - Locally canceled HTTP/3 request-body reads on System.Net.Quic preserve the early
   response by stopping upload with H3_NO_ERROR. Genuine request-wide failures
   retain their error codes; native transport and CONNECT tunnel behavior are unchanged.
