@@ -25,6 +25,7 @@ namespace EmbedIO
         private long? _maximumRequestBodyBytes;
         private TimeSpan? _requestBodyReadTimeout;
         private TimeSpan? _requestTimeout;
+        private MinimumDataRate? _minimumRequestBodyDataRate;
 
         internal RequestLimitPolicy(string baseRoute)
         {
@@ -93,6 +94,22 @@ namespace EmbedIO
             }
         }
 
+        /// <summary>
+        /// Gets or sets the minimum rate at which a request body must arrive on this route,
+        /// replacing <see cref="WebServerOptionsBase.MinimumRequestBodyDataRate"/>. Null inherits
+        /// the server value; <see cref="MinimumDataRate.None"/> lifts the rate.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public MinimumDataRate? MinimumRequestBodyDataRate
+        {
+            get => _minimumRequestBodyDataRate;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _minimumRequestBodyDataRate = value;
+            }
+        }
+
         internal bool Matches(string requestedPath) => _matcher.Match(requestedPath) != null;
 
         internal void Lock() => LockConfiguration();
@@ -103,6 +120,9 @@ namespace EmbedIO
 
         internal static TimeSpan? Resolve(TimeSpan? route, TimeSpan? server)
             => route is TimeSpan value ? (value == Timeout.InfiniteTimeSpan ? null : value) : server;
+
+        internal static MinimumDataRate? Resolve(MinimumDataRate? route, MinimumDataRate? server)
+            => route != null ? (route.IsNone ? null : route) : server;
 
         private static TimeSpan? ValidateDeadline(TimeSpan? value)
         {

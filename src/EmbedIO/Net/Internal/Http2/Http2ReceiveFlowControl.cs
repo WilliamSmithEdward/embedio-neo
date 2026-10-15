@@ -35,6 +35,13 @@ namespace EmbedIO.Net.Internal.Http2
             _initial = initialWindow;
         }
 
+        // True while unread bodies hold most of the connection window, so a stream's body
+        // may be waiting on the server's own credit rather than on its client.
+        internal bool IsConnectionWindowLow
+        {
+            get { lock (_sync) return _connection < 65535 / 2; }
+        }
+
         internal void Open(int streamId)
         {
             if (streamId <= 0) throw new ArgumentOutOfRangeException(nameof(streamId));

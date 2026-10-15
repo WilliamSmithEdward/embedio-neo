@@ -367,6 +367,8 @@ namespace EmbedIO
                         : RequestLimitPolicy.Resolve(routeLimits?.RequestTimeout, Options.RequestTimeout);
                     var effectiveBodyReadTimeout = capturedPolicy != null ? capturedPolicy.BodyReadTimeout
                         : RequestLimitPolicy.Resolve(routeLimits?.RequestBodyReadTimeout, Options.RequestBodyReadTimeout);
+                    var effectiveBodyDataRate = capturedPolicy != null ? capturedPolicy.BodyDataRate
+                        : RequestLimitPolicy.Resolve(routeLimits?.MinimumRequestBodyDataRate, Options.MinimumRequestBodyDataRate);
                     CancellationTokenSource? deadline = null;
                     try
                     {
@@ -386,7 +388,7 @@ namespace EmbedIO
                                 throw knownBodyRefusal;
                             admitted = await AdmitAsync(context).ConfigureAwait(false);
                             if (capturedPolicy == null) ApplyBodyPolicies(context, routeLimits);
-                            else ApplyBodyReadTimeout(context, effectiveBodyReadTimeout);
+                            else ApplyBodyReadPolicies(context, effectiveBodyReadTimeout, effectiveBodyDataRate);
 
                             // RFC 10008 requires QUERY media-type information before processing.
                             if (context.Request.HttpMethod == "QUERY"
@@ -678,30 +680,34 @@ namespace EmbedIO
                 context.Response.KeepAlive = false;
         }
 
-        // Raw accounting was bound by the owned listener before Continue.
-        // Only the independent body-read deadline is applied at this stage.
-        private static void ApplyBodyReadTimeout(IHttpContext context, TimeSpan? readTimeout)
+        // Raw accounting was bound by the owned listener before Continue. Only the
+        // independent body-read deadline and minimum data rate are applied at this stage.
+        private static void ApplyBodyReadPolicies(IHttpContext context, TimeSpan? readTimeout, MinimumDataRate? dataRate)
         {
             var request = context.Request;
             // A bodyless request has nothing to time; CONNECT carries tunnel data, not a body.
-            if (readTimeout is not TimeSpan timeout || !request.HasEntityBody || request.HttpMethod == "CONNECT") return;
-            if (request is IRequestPolicyTarget target) target.TimeBodyReads(timeout, StopReuseOnBodyFailure(context));
+            if ((readTimeout == null && dataRate == null) || !request.HasEntityBody || request.HttpMethod == "CONNECT") return;
+            if (!(request is IRequestPolicyTarget target)) return;
+            var onFailure = StopReuseOnBodyFailure(context);
+            if (readTimeout is TimeSpan timeout) target.TimeBodyReads(timeout, onFailure);
+            if (dataRate != null) target.EnforceBodyDataRate(dataRate, onFailure);
         }
 
-        // Applies MaximumRequestBodyBytes and RequestBodyReadTimeout. A declared length over
-        // the limit is rejected before dispatch, and the body stream counts what is actually
-        // read and bounds how long each read waits. HTTP/1 stops connection reuse on any
-        // rejection, because keep-alive would otherwise drain the unread remainder, which is
-        // unbounded for chunked bodies. HTTP/2 and HTTP/3 reset the stream when the response
-        // completes before its body.
+        // Applies MaximumRequestBodyBytes, RequestBodyReadTimeout and MinimumRequestBodyDataRate.
+        // A declared length over the limit is rejected before dispatch, and the body stream
+        // counts what is actually read, bounds how long each read waits and measures the rate
+        // at which the body arrives. HTTP/1 stops connection reuse on any rejection, because
+        // keep-alive would otherwise drain the unread remainder, which is unbounded for chunked
+        // bodies. HTTP/2 and HTTP/3 reset the stream when the response completes before its body.
         private void ApplyBodyPolicies(IHttpContext context, RequestLimitPolicy? routeLimits)
         {
             var limit = RequestLimitPolicy.Resolve(routeLimits?.MaximumRequestBodyBytes, Options.MaximumRequestBodyBytes);
             var readTimeout = RequestLimitPolicy.Resolve(routeLimits?.RequestBodyReadTimeout, Options.RequestBodyReadTimeout);
+            var dataRate = RequestLimitPolicy.Resolve(routeLimits?.MinimumRequestBodyDataRate, Options.MinimumRequestBodyDataRate);
             var request = context.Request;
-            // Nothing to limit or time, or no body to apply it to. CONNECT carries tunnel
-            // data, not a request body.
-            if ((limit == null && readTimeout == null) || !request.HasEntityBody || request.HttpMethod == "CONNECT") return;
+            // Nothing to limit, time or measure, or no body to apply it to. CONNECT carries
+            // tunnel data, not a request body.
+            if ((limit == null && readTimeout == null && dataRate == null) || !request.HasEntityBody || request.HttpMethod == "CONNECT") return;
 
             if (limit is long maximum && request.ContentLength64 > maximum)
             {
@@ -713,6 +719,7 @@ namespace EmbedIO
             var onFailure = StopReuseOnBodyFailure(context);
             if (limit is long bytes) target.LimitBody(bytes, onFailure);
             if (readTimeout is TimeSpan timeout) target.TimeBodyReads(timeout, onFailure);
+            if (dataRate != null) target.EnforceBodyDataRate(dataRate, onFailure);
         }
 
         // After a body limit or read deadline failure, HTTP/1 stops connection reuse unless the
