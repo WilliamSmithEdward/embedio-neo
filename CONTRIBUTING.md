@@ -113,9 +113,24 @@ For coverage, append these options to the test command:
 ```
 
 Coverlet's MIT-licensed MTP integration replaces `coverlet.msbuild`. Reports are
-written under the results directory and uploaded with TRX reports in CI. Coverage
-is collected for the core, JsonServer, and CLI; test utilities are excluded. There is
-no coverage percentage gate until a meaningful baseline is agreed.
+written under the results directory and uploaded with TRX reports in CI. CI passes
+`--coverlet` only on pushes to `main`; pull requests run the same suite, floor
+and timeouts without the instrumentation, since nothing consumes the reports
+there. Coverage is collected for the core, JsonServer, and CLI; test utilities
+are excluded. There is no coverage percentage gate until a meaningful baseline
+is agreed.
+
+A pull request that changes only documentation (`docs/**`, `images/**`, any
+`*.md`, `docfx.json`, `toc.yml`; the `changes` job in `ci.yml` lists the exact
+patterns) skips the test matrix, the compatibility jobs and the platform app
+smokes. Static analysis, the package build (which still packs and checks
+`README.md` and the icon) and `CI passed` run on every pull request. Pushes to
+`main` and manual dispatches always run everything.
+
+The opt-in QUIC and runtime diagnostics (`quic-cleanup-experiment`,
+`quic-self-contained-experiment`, `quic-openssl-experiment`, `quic-rebind-probe`,
+`runtime-close-probe`, `quic-retirement-gate`) are in `diagnostics.yml`, which
+runs only by hand: `gh workflow run diagnostics.yml --ref <branch> -f <input>=true`.
 The explicit filters in `test/EmbedIO.Tests/testconfig.json` avoid Coverlet's
 automatic exclusions, which otherwise exclude `EmbedIO.Cli` from this test suite.
 
@@ -273,7 +288,7 @@ The QUIC lifetime retirement gate is opt-in. Its four owned restart cases are
 skipped unless `EMBEDIO_QUIC_RETIREMENT_GATE=1`; select them with the raw
 runtime rebind cases using
 `--filter "TestCategory=QuicLifetimeRetirementGate|FullyQualifiedName~QuicRuntimeRebindTest"`,
-or dispatch CI with the `quic-retirement-gate` input. The gate tolerates no
+or dispatch `diagnostics.yml` with the `quic-retirement-gate` input. The gate tolerates no
 retry and applies no quarantine, so a runtime whose MsQuic still keeps a
 disposed listener's port bound fails it by design. See
 [QUIC lifetime and rebind](docs/project/quic-lifetime.md#retirement-gates).

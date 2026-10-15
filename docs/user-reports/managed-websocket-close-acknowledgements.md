@@ -35,9 +35,9 @@ The arguments select connections per scenario, concurrent independent clients an
 To request hosted Windows, Linux and macOS execution with two logical processors:
 
 ```sh
-gh workflow run ci.yml --ref main -f runtime-close-probe=true
+gh workflow run diagnostics.yml --ref main -f runtime-close-probe=true
 ```
 
-The diagnostic defaults to off, avoiding three additional jobs on ordinary PRs. When requested, all three probe jobs must pass along with the normal CI jobs. An unrequested diagnostic is the only additional skip accepted by `CI passed`; the existing required checks remain required.
+The diagnostic lives in the manual `Diagnostics` workflow (`.github/workflows/diagnostics.yml`), not in CI, so ordinary pull requests never run it. When requested, all three probe jobs must pass; they are separate from the required CI checks, which are unchanged.
 
 A successful probe establishes only that this bounded experiment did not reproduce the internal client failure. It does not prove the runtime's disposal implementation is free of races or that every peer/application sequence is equivalent.
