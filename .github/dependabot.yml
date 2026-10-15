@@ -43,10 +43,24 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
 
+  # Semgrep pins its own dependencies exactly (pyjwt~=2.13.0, mcp==1.29.0,
+  # click~=8.4.2 in 1.178.0), so a dependency moved on its own fails the
+  # image's pip check. Only semgrep is proposed; the rest of the closure is
+  # re-resolved with it.
+  - package-ecosystem: pip
+    directory: /.github/security/semgrep
+    schedule:
+      interval: daily
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+    allow:
+      - dependency-name: semgrep
+
   - package-ecosystem: pip
     directories:
       - /.github/requirements
-      - /.github/security/semgrep
       - /test/EmbedIO.Conformance/drivers
       - /test/EmbedIO.Fuzz
       - /test/EmbedIO.NativeDependencyProbe
@@ -71,6 +85,10 @@ updates:
       default-days: 7
     commit-message:
       prefix: chore
+    # The source generator compiles against Roslyn 4.8, the .NET 8 SDK's
+    # compiler; a newer reference stops it loading in older supported SDKs.
+    ignore:
+      - dependency-name: Microsoft.CodeAnalysis.CSharp
     groups:
       minor-and-patch:
         patterns: ["*"]
