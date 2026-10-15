@@ -6,9 +6,9 @@ old listener unusable. JRosanowski proposed that removal reconstructed a prefix
 whose reference did not match a dictionary key. The original application,
 runtime/version and a minimal suspension reproduction were not supplied.
 
-## Endpoint-retirement evidence from the integration branch
+## Endpoint-retirement evidence
 
-The PR #182 integration branch uses an owner-scoped prefix-lease ledger. Shutdown
+Neo v2 uses an owner-scoped prefix-lease ledger. Shutdown
 retires the registered leases themselves, detaches the final endpoint binding and
 closes its listening socket. A subsequent listener gets a fresh endpoint. Retiring
 one owner of a shared endpoint preserves the other owner's routes and socket.
@@ -67,7 +67,7 @@ await RunGeneration("first");
 await RunGeneration("replacement");
 ```
 
-The example is for the unreleased integration source. It demonstrates orderly
+The example targets Neo v2. It demonstrates orderly
 replacement, not permission to serve indefinitely while an iOS app is suspended.
 For HTTPS, retain strict client certificate trust; see [HTTPS guidance](../guides/https.md).
 

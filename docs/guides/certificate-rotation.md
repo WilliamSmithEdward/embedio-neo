@@ -8,7 +8,7 @@ starts, and connections that are already open keep the one they started with.
 It is opt-in through `WebServerOptions.CertificateSource` (or
 `WithCertificateSource`). Servers configured with `Certificate` behave as before.
 
-This is unreleased and available only from source.
+This is new in Neo v2; the published 1.0.x packages do not include it.
 
 ## A complete program
 

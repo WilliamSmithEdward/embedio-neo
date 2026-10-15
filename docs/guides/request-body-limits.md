@@ -27,4 +27,4 @@ CONNECT carries a negotiated transport rather than an ordinary entity and is exc
 
 Custom `WebServerBase` context adapters retain their existing policy path, including declared-length rejection where applicable. Automatic owned-stream accounting is not imposed on arbitrary third-party request implementations; their integration must provide its own stream ownership and actual-byte enforcement.
 
-See [request limits, admission and deadlines](request-limits.md) for header budgets, queueing and timeouts. This work is part of the unreleased Neo v2 candidate. Compiling the .NET Standard asset is separate from execution evidence on an older runtime.
+See [request limits, admission and deadlines](request-limits.md) for header budgets, queueing and timeouts. This work is new in Neo v2. Compiling the .NET Standard asset is separate from execution evidence on an older runtime.

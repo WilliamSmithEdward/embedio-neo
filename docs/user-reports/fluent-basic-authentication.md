@@ -8,16 +8,15 @@ existing `EmbedIO.WebModuleContainerExtensions` class; it uses the existing
 
 ## Availability
 
-The helper is unreleased. Published EmbedIO-Neo 1.0.3 supports the equivalent
-manual registration shown below. Until an authorized release includes this API,
-try it against a checkout containing the change:
+The helper is new in Neo v2. Published EmbedIO-Neo 1.0.3 supports the equivalent
+manual registration shown below. To try the helper:
 
 ```sh
 dotnet new console --framework net10.0 -n AuthDemo -o TestResults/AuthDemo
-dotnet add TestResults/AuthDemo/AuthDemo.csproj reference src/EmbedIO/EmbedIO.csproj
+dotnet add TestResults/AuthDemo/AuthDemo.csproj package EmbedIO-Neo --version 2.0.0
 ```
 
-Run these commands from the repository root. Replace `TestResults/AuthDemo/Program.cs` with
+Replace `TestResults/AuthDemo/Program.cs` with
 this complete local demonstration, then run `dotnet run --project TestResults/AuthDemo`.
 Keep temporary verification projects under ignored `TestResults` when contributing.
 
@@ -111,5 +110,3 @@ validation. Real HTTP tests exercise server and nested-group registration on bot
 listener modes: missing, malformed and wrong credentials, case-insensitive Basic
 scheme, colon-containing passwords, isolated protected handlers, unprotected
 routes and subsequent denials. Existing authentication regression coverage remains.
-CI must validate the complete change before merge; published availability is not
-claimed by a source-only demonstration.

@@ -102,5 +102,5 @@ setters already support object initializers, the lock points match when each
 value is consumed, and startup validation catches cross-property mistakes that
 init-only properties cannot. The concrete weakness the comparison exposed, mutable
 collections behind read-only interfaces, is fixed in place without changing any
-public signature. The correction is on the engine development branch and is
-unreleased; published 1.0.3 returns the backing collections.
+public signature. The correction is new in Neo v2; published 1.0.3 returns the
+backing collections.

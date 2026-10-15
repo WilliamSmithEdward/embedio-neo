@@ -542,7 +542,7 @@ requiring legacy CLI plugins to be rebuilt against the current APIs. See
 [CLI.md](../guides/cli.md#provenance-and-migration) for the command and plugin migration.
 
 
-## Malformed typed route values (unreleased, owner-approved)
+## Malformed typed route values (Neo v2, owner-approved)
 
 Supported controller route conversions that reject a nonempty malformed value
 now produce HTTP 400 instead of the inherited 500. The handler method is not
@@ -561,12 +561,12 @@ Existing transport closure policies are unchanged. See
 precise scope, tests and limitations. No release date/version is promised.
 
 
-## Suffix byte ranges (unreleased)
+## Suffix byte ranges (Neo v2)
 
 
 The owner-requested correction in [#170](https://github.com/WilliamSmithEdward/embedio-neo/issues/170) changes `Range: bytes=-N` from an incorrect leading slice to the final N bytes, clamped to file size. `bytes=-0` now returns 416; a positive suffix on an empty file is ignored and returns 200. HEAD, If-Range validation, explicit/open-ended ranges and existing multipart handling retain their policies. Clients using explicit offsets may continue to do so; clients relying on wrong leading bytes must adopt correct suffix semantics. Published 1.0.3 retains the defect. No public API, dependency or target changes. See [suffix-range guidance](../user-reports/suffix-range-responses.md).
 
-## Managed HTTP framing (unreleased)
+## Managed HTTP framing (Neo v2)
 
 The owner approved strict framing on 2026-10-08 as part of the modern engine
 replacement. The managed listener now decodes chunked request bodies. Such
@@ -595,7 +595,7 @@ bytes. The native Microsoft backend is unchanged. No package version or release
 is implied; see the [engine program](../project/http-engine.md) for validation
 status and the HTTP/2 and HTTP/3 milestones.
 
-## Managed WebSocket framing (unreleased)
+## Managed WebSocket framing (Neo v2)
 
 The managed WebSocket audit in [#190](https://github.com/WilliamSmithEdward/embedio-neo/issues/190)
 now rejects invalid masking, reserved bits and fragmentation state as soon as the
@@ -616,7 +616,7 @@ These checks apply to the existing managed HTTP/1.1 WebSocket engine and its
 HTTP/2 stream integration. Valid masked frames and interleaved control frames
 remain supported. Public APIs, callback scheduling and message-size defaults
 are unchanged. The native Microsoft WebSocket backend is unchanged. These
-changes are unreleased.
+changes are new in Neo v2.
 
 Managed close frames now reject a one-byte status, forbidden/reserved codes and
 codes outside the supported 1000-4999 ranges with 1002. Incoming 1012-1014 codes
@@ -629,7 +629,7 @@ shutdown state, an invalid peer may observe transport closure/reset rather than
 a readable close frame. Applications must not rely on echoing malformed close
 payloads. This change does not alter application text-message callback policy.
 
-### Managed WebSocket limits, delivery and send framing (unreleased)
+### Managed WebSocket limits, delivery and send framing (Neo v2)
 
 These changes from [#190](https://github.com/WilliamSmithEdward/embedio-neo/issues/190)
 affect only the managed listener (`HttpListenerMode.EmbedIO`), over HTTP/1.1
@@ -664,7 +664,7 @@ are unchanged.
   conforming clients are unaffected; the correction belongs to the HTTP/1
   transport and is tracked in #190.
 
-## Warning-free API cleanup (unreleased, owner-approved)
+## Warning-free API cleanup (Neo v2, owner-approved)
 
 William approved the necessary source and binary changes for the compiler/analyzer
 cleanup. These changes are in source and require consumers to rebuild before
@@ -724,7 +724,7 @@ targets and runtime dependency groups are unchanged. CI enables analyzers for
 test/platform builds, treats warnings as errors, verifies formatting, and rejects
 compiler/analyzer suppression directives, null-forgiving operators, and build opt-outs.
 
-### Managed WebSocket text validation (unreleased)
+### Managed WebSocket text validation (Neo v2)
 
 Incoming text messages now require valid UTF-8 before application callbacks run,
 as required by [RFC 6455 section 8.1](https://www.rfc-editor.org/rfc/rfc6455.html#section-8.1).
@@ -737,7 +737,7 @@ bytes as text must encode UTF-8 or use binary messages. These checks apply to th
 managed engine over HTTP/1.1, HTTP/2 and HTTP/3; native-backend behavior, public
 APIs, callback scheduling and message-size defaults are unchanged.
 
-### Managed HTTP/1 WebSocket opening handshake (unreleased)
+### Managed HTTP/1 WebSocket opening handshake (Neo v2)
 
 The managed HTTP/1 listener now requires GET over HTTP/1.1, the websocket Upgrade
 and Connection Upgrade tokens, one base64 nonce representing 16 bytes, and one
@@ -769,7 +769,7 @@ compatibility shim. It does not establish a general guarantee for cancellation
 while a native upgrade itself is still in progress.
 
 
-## HTTP/2 extensible priority settings (unreleased)
+## HTTP/2 extensible priority settings (Neo v2)
 
 The new engine advertises RFC 9218 priority support by sending
 SETTINGS_NO_RFC7540_PRIORITIES=1 in its initial SETTINGS frame. Peer values must
@@ -784,7 +784,7 @@ requirements remain checked, and HEADERS compression state remains synchronized.
 Use the Priority header or PRIORITY_UPDATE for extensible urgency/incremental
 signals. These are scheduling hints, not guaranteed response completion order.
 
-## Default managed listener transition (unreleased)
+## Default managed listener transition (Neo v2)
 
 The Neo v2 engine branch has removed both the Microsoft backend and the inherited
 Mono-derived listener implementation. The earlier plan to retain Microsoft mode
@@ -800,11 +800,10 @@ HTTP/3 remains opt-in through `EmbedIOHttp3`, or `EmbedIOCombined` for TCP and Q
 hosting together, with the documented .NET 10, certificate and native QUIC
 prerequisites. Public HTTP/3 selection uses System.Net.Quic, which is distinct
 from the removed System.Net.HttpListener backend. Implementation retirement does
-not establish final program, extension or platform acceptance, and v2 is not yet
-published. See the [default listener transition acceptance criteria](../project/http-engine.md#default-listener-transition)
+not establish final program, extension or platform acceptance. See the [default listener transition acceptance criteria](../project/http-engine.md#default-listener-transition)
 and [HTTP/3 guide](../guides/http3.md) for the remaining validation scope.
 
-## QUERY routing (unreleased, development increment)
+## QUERY routing (Neo v2, development increment)
 
 `HttpVerbs.Query` adds explicit QUERY routes while preserving existing enum values.
 Existing wildcard handlers can still receive the method. Method names are case
@@ -817,7 +816,7 @@ modules run. Applications must still reject unsupported media types or content
 inconsistent with their declared type. Complete QUERY support remains under
 development; do not advertise full support based on the enum alone.
 
-## HTTP/1 parser rejection responses (unreleased)
+## HTTP/1 parser rejection responses (Neo v2)
 
 The managed listener now attempts a fixed, empty HTTP 400 response for request
 line, header or framing initialization errors before closing the connection.
@@ -827,7 +826,7 @@ request deadline remains active through the write. A disconnected peer or expire
 deadline can still prevent response delivery. Prefix-routing rejection remains
 unchanged. This does not add CONNECT tunneling or accept authority-form targets.
 
-## HTTP/1 request-target syntax (unreleased)
+## HTTP/1 request-target syntax (Neo v2)
 
 Request targets without a leading slash or a valid absolute HTTP(S) URI are
 rejected with 400 before URI reconstruction. This includes query-only targets
@@ -849,7 +848,7 @@ URI parsing. Correctly escaped `%23` and `%25` remain accepted. Encode literal
 reserved characters in client paths or query values. Existing transport scheme,
 local port and valid path/query case behavior remain covered by regression tests.
 
-### HTTP/1 Host authority syntax (unreleased)
+### HTTP/1 Host authority syntax (Neo v2)
 
 The managed listener now rejects Host values containing userinfo, path/query/fragment
 delimiters, control/non-ASCII characters, or non-digit ports before constructing
@@ -865,7 +864,7 @@ extended CONNECT, treating them as the scheme default when comparing Host and
 authority. Classic CONNECT still requires an explicit nonempty port. The original
 authority text remains available through the request headers.
 
-### HTTP/2 and HTTP/3 path/query syntax (unreleased)
+### HTTP/2 and HTTP/3 path/query syntax (Neo v2)
 
 The shared request parser now rejects incomplete/non-hex percent escapes and
 characters outside the URI path/query grammar before application dispatch. Encode
@@ -883,7 +882,7 @@ the bounded empty 400 response and closes before application dispatch. Existing
 transport scheme/local-port URL behavior is preserved; absolute-form authority
 precedence is a separate outstanding conformance item.
 
-### HTTP/1 absolute-form host precedence (unreleased)
+### HTTP/1 absolute-form host precedence (Neo v2)
 
 When an absolute request-target and Host header identify different hosts, the
 managed listener now uses the target URI host for `Request.Url` and prefix routing,
@@ -895,7 +894,7 @@ scheme/local-port URL behavior is unchanged in this increment; full absolute-URI
 scheme/port handling remains under audit. Unregistered target hosts retain the
 existing prefix-routing rejection behavior.
 
-### HTTP/1 absolute-target userinfo (unreleased)
+### HTTP/1 absolute-target userinfo (Neo v2)
 
 The managed listener rejects a userinfo component in an absolute request target,
 including an empty component marked by `@`, with an empty 400 response followed
@@ -910,7 +909,7 @@ receive the empty 400 response and connection closure. Empty ports and decimal
 leading zeros remain accepted.
 
 
-### Canceled response cleanup and combined drain (unreleased)
+### Canceled response cleanup and combined drain (Neo v2)
 
 Closing a canceled managed HTTP context now aborts its unfinished response rather
 than synthesizing an empty successful response during cleanup. Already written
@@ -954,7 +953,7 @@ failures no longer replace the connection shutdown outcome with an aggregate
 exception. This does not change exceptions raised when application code directly
 cancels a token source it owns.
 
-### Rejected HTTP/1.1 CONNECT persistence (unreleased)
+### Rejected HTTP/1.1 CONNECT persistence (Neo v2)
 
 A managed HTTP/1.1 response with status 300 or greater to the exact `CONNECT`
 method now closes the connection even when application code requests keep-alive.
@@ -968,7 +967,7 @@ headers have been sent. Mutating the public header collection afterward cannot
 reopen a response that committed connection closure. This does not add a CONNECT
 tunnel API or complete authority-form handling.
 
-### HTTP/1 interim continue responses (unreleased)
+### HTTP/1 interim continue responses (Neo v2)
 
 The managed listener ignores `Expect: 100-continue` on HTTP/1.0 requests, as
 required by [RFC 9110 section 10.1.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.1).
@@ -983,7 +982,7 @@ request-header deadline until it completes. This change does not yet implement
 all expectation-list syntax, extension expectations or an application-controlled
 early final-response policy. Public request/response APIs are unchanged.
 
-### Managed WebSocket disconnection notification (unreleased)
+### Managed WebSocket disconnection notification (Neo v2)
 
 Managed WebSocket processing now observes terminal transport cleanup directly
 instead of checking state every 500 ms. Disconnection notifications can therefore
@@ -992,7 +991,7 @@ message/disconnection dispatch are unchanged; notification does not promise that
 all asynchronous application message callbacks have finished. Close handshakes,
 close deadlines and the native Microsoft backend are unchanged.
 
-### Continue expectations across HTTP versions (unreleased)
+### Continue expectations across HTTP versions (Neo v2)
 
 HTTP/1.1, HTTP/2 and HTTP/3 now recognize a bare `100-continue` member in an
 Expect list, including repeated members, case differences and optional whitespace.
@@ -1011,7 +1010,7 @@ are unchanged. Multiplexed CONNECT tunnels are excluded from automatic continue 
 The .NET Standard asset's existing cleartext HTTP/2 support and lack of TLS ALPN
 and QUIC are unchanged.
 
-## Unreleased modern engine: strict deflate request completion
+## Strict deflate request completion (Neo v2)
 
 When compressed requests are enabled, the request helpers now reject truncated
 raw-DEFLATE data and bytes after its final block with HTTP 400. This applies to
@@ -1035,7 +1034,7 @@ selection, response encoding or cached variants. The broader standards-format
 migration remains unfinished. These changes are development work and have not
 been released.
 
-### Buffered bytes at HTTP/1 WebSocket upgrade (unreleased)
+### Buffered bytes at HTTP/1 WebSocket upgrade (Neo v2)
 
 An accepted managed WebSocket now receives any unread bytes already buffered by
 its HTTP/1 connection. The handoff copies only that unread tail, replays it once,
@@ -1048,7 +1047,7 @@ coverage rather than valid-client conformance. Accepting an upgrade no longer
 silently discards those buffered bytes; it does not authorize clients to skip
 handshake validation.
 
-### Incomplete and malformed HTTP/1 request bodies (unreleased)
+### Incomplete and malformed HTTP/1 request bodies (Neo v2)
 
 A managed fixed-length request body that ends before its declared Content-Length
 now throws `EndOfStreamException` rather than returning normal EOF. Applications
@@ -1080,7 +1079,7 @@ The 15-second keep-alive idle timeout, explicit Connection: close, response poli
 that require closure, cancellation, stop and graceful drain remain in effect.
 Applications and tests that used the old request count as an implicit connection
 rotation mechanism should request closure explicitly. The Microsoft backend is
-unchanged. This change is unreleased and is part of the HTTP-engine candidate.
+unchanged. This change is part of the Neo v2 HTTP engine.
 ### Bodyless managed responses and HTTP/2 graceful drain
 
 The managed HTTP/1 response stream now discards body writes for informational,
@@ -1102,9 +1101,9 @@ and counts/discards DATA against connection flow control, including padding.
 Accepted responses finish instead of being canceled by a spurious idle-stream
 protocol error. Invalid even client stream IDs still produce a connection error.
 See [HTTP/2 section 6.8](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.8).
-These corrections are unreleased HTTP-engine work.
+These corrections are part of the Neo v2 HTTP engine.
 
-## HTTP/1.0 response delimitation (unreleased)
+## HTTP/1.0 response delimitation (Neo v2)
 
 The managed listener closes an HTTP/1.0 response with an unknown-length body,
 even when the client requests keep-alive or the handler sets KeepAlive. HTTP/1.0
@@ -1114,7 +1113,7 @@ Set ContentLength64 before writing to retain HTTP/1.0 persistence when the exact
 length is known. HEAD and bodyless status responses retain their existing
 persistence policy; HTTP/1.1 chunked responses are unchanged. See
 [RFC 9112 section 9.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-9.3).
-## HTTP/2 malformed WebSocket version negotiation (unreleased)
+## HTTP/2 malformed WebSocket version negotiation (Neo v2)
 
 An extended CONNECT request with `:protocol: websocket` and a missing, empty or
 unsupported Sec-WebSocket-Version receives 400 with Sec-WebSocket-Version: 13
@@ -1122,7 +1121,7 @@ before application dispatch. Previously the failed socket acceptance could becom
 500. This matches the existing HTTP/3 negotiation policy. The rejection affects
 its request stream; other HTTP/2 streams remain usable. Valid version-13
 WebSocket handshakes and the public acceptance API are unchanged.
-## HTTP/3 request field-section limit isolation (unreleased)
+## HTTP/3 request field-section limit isolation (Neo v2)
 
 An encoded or decoded request HEADERS section over the existing size limit now
 fails its request stream with H3_EXCESSIVE_LOAD (0x107). Previously these limits
@@ -1136,7 +1135,7 @@ connection. Aggregate blocked-storage and decoder-feedback exhaustion also retai
 their connection-wide policy. Applications should handle the rejected request
 stream independently instead of assuming all requests on the connection failed.
 
-## Higher HTTP/1 minor versions (unreleased)
+## Higher HTTP/1 minor versions (Neo v2)
 
 The managed listener now processes syntactically valid higher HTTP/1 minor
 versions, such as HTTP/1.2 or HTTP/1.9, using its HTTP/1.1 semantics. These requests
@@ -1154,7 +1153,7 @@ received minor version into a response.
 
 References: [HTTP version semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
 and [single-digit HTTP/1 version syntax](https://www.rfc-editor.org/rfc/rfc9112.html#section-2.3).
-## HTTP/1 request-head limit statuses (unreleased)
+## HTTP/1 request-head limit statuses (Neo v2)
 
 The managed engine retains its 32,768-byte request-head budget, including the
 request line and CRLF terminators. Requests that exceed it are still rejected
@@ -1175,7 +1174,7 @@ higher-minor handling, framing and request deadlines remain. HTTP/2, HTTP/3 and
 the Microsoft listener backend are unchanged. This increment does not settle
 separate method-length policy or every HTTP limit requirement.
 
-## Multiplexed response stream disposal (unreleased)
+## Multiplexed response stream disposal (Neo v2)
 
 William explicitly approved this behavior change for the managed HTTP/2 and
 HTTP/3 engines. Disposing the response output stream synchronously now starts
@@ -1198,7 +1197,7 @@ The shared close operation remains idempotent; writes after stream disposal
 fail, and cancellation and graceful drain still join completion. HTTP/1 and the
 Microsoft listener backend are unchanged. No new public API or dependency is
 introduced.
-## Generic tunnel and capsule carriers (unreleased)
+## Generic tunnel and capsule carriers (Neo v2)
 
 William approved the optional `IHttpTunnelContext`, `HttpTunnel` and
 `HttpCapsuleChannel` APIs. Existing context interfaces are unchanged. The managed
@@ -1230,13 +1229,14 @@ cleanup errors. Synchronous disposal starts the same operation without blocking.
 The server joins completion when the handler ends, so retain handler lifetime
 while consuming peer input after send completion. See
 [capsule development and current validation](../project/http-capsule-transport.md)
-for platform and runtime limits. These APIs remain under validation and unreleased.
+for platform and runtime limits. These APIs are new in Neo v2 and remain under
+validation.
 
-## Optional response field sections (unreleased)
+## Optional response field sections (Neo v2)
 
 The managed responses optionally implement `IHttpResponseSections` for awaited interim responses and declared response trailers. `IHttpResponse` is unchanged, so existing implementations and consumers remain compatible. The optional interface is identical on both target assets; unsupported backends do not advertise it. Existing automatic100 Continue, final-status property behavior and ordinary response framing remain unchanged. Opting into HTTP/1 trailers selects chunked framing and requires no configured Content-Length. Multiplexed trailers retain exact body-length validation and defer the final stream end until trailing HEADERS. The sender must choose fields whose definitions allow trailer use, and finish configuration before output disposal or handler completion. See [the guide](../guides/response-field-sections.md) for bounded snapshots, exclusions and validation limits.
 
-## HTTP/3 application read cancellation (unreleased)
+## HTTP/3 application read cancellation (Neo v2)
 
 An application that cancels a pending HTTP/3 request-body or tunnel read can
 still send its response or tunnel output, provided the peer has not reset the
@@ -1249,7 +1249,7 @@ returns false and another read throws IOException. Catch the canceled read,
 write the intended response (for example, 408 for a timed-out upload), and
 complete output. A token canceled before a read begins does not abandon input.
 Peer resets, connection failure and canceled output still end the request.
-## Final response status validation (unreleased)
+## Final response status validation (Neo v2)
 
 William approved limiting the public Response.StatusCode setter to final
 statuses, 200 through 599. Assigning 100 through 199 or 600 through 999 now throws
@@ -1273,7 +1273,7 @@ HTTP/1 handshakes keep their 101 response; HTTP/2 and HTTP/3 do not use 101.
 Automatic 100 Continue remains supported. No informational assignment is silently
 rewritten into a different final status.
 
-### Shared HTTPS endpoints and secure prefixes (unreleased)
+### Shared HTTPS endpoints and secure prefixes (Neo v2)
 
 Two managed-listener behaviors changed for https prefixes in EmbedIO mode.
 

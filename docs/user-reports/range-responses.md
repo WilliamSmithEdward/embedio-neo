@@ -91,6 +91,5 @@ declared `Content-Length` and `Content-Range` describe the stored bytes.
 No new API is needed for this request. The helper the roadmap asked for exists,
 is opt-in, reuses the shared range and precondition parsing, and now has
 end-to-end coverage of every acceptance criterion over real HTTP/1.1 and HTTP/2
-connections from an ordinary action module. The helper is on the engine
-development branch and is unreleased; published 1.0.3 has only `FileModule`
-ranges and the `IsRangeRequest` parser.
+connections from an ordinary action module. The helper is new in Neo v2;
+published 1.0.3 has only `FileModule` ranges and the `IsRangeRequest` parser.

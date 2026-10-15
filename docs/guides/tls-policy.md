@@ -14,7 +14,7 @@ certificate is requested, TLS 1.2 or later is allowed where supported, and
 the configured certificate is used. It combines with a fixed `Certificate` or a
 [`ServerCertificateSource`](certificate-rotation.md).
 
-This is unreleased and available only from source.
+This is new in Neo v2; the published 1.0.x packages do not include it.
 
 ## Sharing a TCP listening endpoint
 

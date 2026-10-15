@@ -2,9 +2,9 @@
 
 [![NuGet version](https://img.shields.io/nuget/v/EmbedIO-Neo)](https://www.nuget.org/packages/EmbedIO-Neo)
 [![Downloads](https://img.shields.io/nuget/dt/EmbedIO-Neo)](https://www.nuget.org/packages/EmbedIO-Neo)
-[![CI](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/ci.yml/badge.svg?branch=codex%2Fmanaged-http-engine)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/ci.yml)
-[![Security](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml/badge.svg?branch=codex%2Fmanaged-http-engine)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml)
-[![Malware scan](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml/badge.svg?branch=codex%2Fmanaged-http-engine)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml)
+[![CI](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/ci.yml)
+[![Security](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml)
+[![Malware scan](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml)
 [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/WilliamSmithEdward/embedio-neo?label=openssf%20score)](https://scorecard.dev/viewer/?uri=github.com/WilliamSmithEdward/embedio-neo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -17,8 +17,9 @@
 A small, modular web server for .NET. EmbedIO-Neo lets you add JSON APIs, static
 files and WebSockets to desktop apps, local tools and services.
 
-See the [v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md) before
-upgrading to Neo v2.
+Upgrading? Coming from the original EmbedIO 3.x, start with the
+[upgrade checklist](docs/compatibility/upgrading-from-embedio-3.md). Already on
+EmbedIO-Neo v1, read the [v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md).
 
 ## Overview
 
@@ -125,7 +126,18 @@ which module handles a request.
 Browse the [documentation index](docs/README.md) for additional usage,
 platform and compatibility guides.
 
-## Upgrading to v2
+## Upgrading
+
+### From the original EmbedIO 3.x
+
+EmbedIO-Neo carries the archived [unosquare/embedio](https://github.com/unosquare/embedio)
+forward. Namespaces, assembly names and the fluent `WebServer` pipeline are
+unchanged, so most applications move by swapping packages, replacing SWAN and
+rebuilding. Work through the
+[upgrade checklist](docs/compatibility/upgrading-from-embedio-3.md): it lists
+each change in order, with links into the detailed guides.
+
+### From EmbedIO-Neo v1 to v2
 
 Read the [Neo v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md).
 It covers listener removal, approved API changes, stricter request and response

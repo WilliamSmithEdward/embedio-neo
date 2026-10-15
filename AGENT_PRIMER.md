@@ -15,12 +15,12 @@ disagree, the guide and the source win.
 | NuGet package | `EmbedIO-Neo` (DI integration: `EmbedIO-Neo.DependencyInjection`) |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Published version | 1.0.x. v2 (version 2.0.0) is unreleased. |
-| How to use v2 today | Reference `src/EmbedIO/EmbedIO.csproj` from a source checkout. |
+| Current version | 2.0.0, the v2 engine. 1.0.x is the previous major version. |
+| Install | `dotnet add package EmbedIO-Neo` |
 
-Check which version the project references before you write code. The v1
-package lacks the v2 engine, HTTP/2, HTTP/3 and every API marked unreleased in
-the guides. Many guides say "unreleased": that means v2-only.
+Check which version the project references before you write code. A 1.0.x
+package lacks the v2 engine, HTTP/2, HTTP/3 and every API the guides mark as
+new in Neo v2.
 
 The `net10.0` asset is the full product. The `netstandard2.0` asset has no
 HTTP/3, no HTTP/2 over TLS (no ALPN), no telemetry, no Brotli and no TLS

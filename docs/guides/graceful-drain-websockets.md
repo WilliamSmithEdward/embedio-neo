@@ -18,7 +18,7 @@ Without them nothing changes. `RunAsync` cancellation and disposal are not drain
 they send each open WebSocket a 1001 close without a reason, wait at most one second
 for those closes and for any close already under way, and then stop the server.
 
-This is unreleased and available only from source.
+This is new in Neo v2; the published 1.0.x packages do not include it.
 
 ## A complete program
 

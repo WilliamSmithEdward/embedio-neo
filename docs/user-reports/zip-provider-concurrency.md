@@ -91,8 +91,7 @@ disabled; file-backed tests also verify parallel reads and handle release.
 The actual .NET Standard 2.0 asset passed the focused tests on a modern host.
 An additional Windows .NET Framework probe targeting 4.7.2 checked 48 concurrent
 byte/stream-error/ownership assertions using the installed CLR. This does not
-claim exact original application, SharpZipLib or Raspberry Pi validation. Required
-cross-platform and security gates remain necessary before merge.
+claim exact original application, SharpZipLib or Raspberry Pi validation.
 
 ## Constrained worker pools
 
@@ -109,4 +108,4 @@ after the change. CI also runs the full ZIP fixture with a two-processor limit.
 The .NET Standard asset uses the host runtime's thread-pool policy; do not infer
 modern compensation behavior for .NET Framework or other legacy hosts. Existing
 cancellation, disposal, cursor and stream-ownership regressions still apply.
-This follow-up is unreleased and requires all PR checks to pass before merge.
+This follow-up is new in Neo v2; the published 1.0.x packages do not include it.

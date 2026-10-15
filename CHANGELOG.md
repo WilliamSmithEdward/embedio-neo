@@ -584,7 +584,7 @@ not automatic. Performance results apply only to their recorded source and host.
 - Restrict public response StatusCode assignments to final statuses (200-599),
   as explicitly approved. Use informational-response and protocol-handoff APIs
   for 1xx; automatic Continue and negotiated 101 remain supported. See the
-  [migration note](docs/compatibility/migration.md#final-response-status-validation-unreleased).
+  [migration note](docs/compatibility/migration.md#final-response-status-validation-neo-v2).
 - Enable TCP_NODELAY on accepted managed TCP sockets to avoid delayed small
   writes while preserving protocol framing and writer batching. See the
   [controlled latency comparison](docs/project/http-tcp-latency.md).
@@ -606,7 +606,7 @@ not automatic. Performance results apply only to their recorded source and host.
   callbacks so cleanup and connection shutdown continue after callback failures.
 - Start managed HTTP/2 and HTTP/3 response-output stream closure without blocking
   synchronous Dispose, as explicitly approved. Context completion still awaits
-  closure; see the [migration note](docs/compatibility/migration.md#multiplexed-response-stream-disposal-unreleased).
+  closure; see the [migration note](docs/compatibility/migration.md#multiplexed-response-stream-disposal-neo-v2).
 - Reserve the bounded first-body prefix in managed HTTP/1 response-header buffers,
   preserving framing and write boundaries while avoiding fitting-header growth.
 - Defer unused managed HTTP/1 query/item collections while preserving populated
@@ -615,11 +615,11 @@ not automatic. Performance results apply only to their recorded source and host.
   preserving byte framing, immediate application writes and cancellation.
 - Distinguish managed HTTP/1 request-head limit failures with 414 for oversized
   targets and 431 for oversized field sections, retaining limits and connection
-  closure; see the [migration note](docs/compatibility/migration.md#http1-request-head-limit-statuses-unreleased).
+  closure; see the [migration note](docs/compatibility/migration.md#http1-request-head-limit-statuses-neo-v2).
 - Process valid higher HTTP/1 minor versions using HTTP/1.1 framing while retaining
   received request metadata and advertising only the supported response version.
   Preserve strict framing and HTTP/1.0/1.1 behavior; see the
-  [migration note](docs/compatibility/migration.md#higher-http1-minor-versions-unreleased).
+  [migration note](docs/compatibility/migration.md#higher-http1-minor-versions-neo-v2).
 
 - Remove the approved managed HTTP/1 keep-alive cap of 100 requests. Connections
   can remain reusable beyond that count; the 15-second idle timeout, explicit
@@ -667,7 +667,7 @@ not automatic. Performance results apply only to their recorded source and host.
   decoding, asynchronous body reads and draining, strict framing validation,
   pipeline buffer adoption and reduced response-header allocations. Malformed or
   ambiguous requests previously tolerated are rejected; see the
-  [migration notes](docs/compatibility/migration.md#managed-http-framing-unreleased)
+  [migration notes](docs/compatibility/migration.md#managed-http-framing-neo-v2)
   and [protocol roadmap](docs/project/http-engine.md). The development branch now
   includes HTTP/2, HPACK and RFC 8441 WebSockets, plus internal HTTP/3/QPACK/QUIC
   connection dispatch. Public HTTP/3 and combined listeners are now integrated.
@@ -677,7 +677,7 @@ not automatic. Performance results apply only to their recorded source and host.
   enforce minimal wire-length encoding, and reject lengths that cannot fit the
   current payload representation before integer conversion. Validate incoming
   close status codes and UTF-8 reasons before processing or echoing them (#190). See the
-  [compatibility notes](docs/compatibility/migration.md#managed-websocket-framing-unreleased).
+  [compatibility notes](docs/compatibility/migration.md#managed-websocket-framing-neo-v2).
 
 - Enforce `WebSocketModule.MaxMessageSize` on the managed listener before payloads
   are buffered, complete the close handshake after rejecting oversized or invalid
@@ -686,7 +686,7 @@ not automatic. Performance results apply only to their recorded source and host.
   reads, 64 KiB send frames and fewer copies raise managed echo throughput by
   about 8x for 64 KiB messages and 11x for 1 MiB messages in the documented
   benchmark. A bounded stateful fuzzer now runs in the Fuzz workflow (#190). See the
-  [migration notes](docs/compatibility/migration.md#managed-websocket-limits-delivery-and-send-framing-unreleased)
+  [migration notes](docs/compatibility/migration.md#managed-websocket-limits-delivery-and-send-framing-neo-v2)
   and [benchmark](test/EmbedIO.Performance/README.md#managed-websocket-echo).
 
 - Keep the managed WebSocket receiver active during local closing so valid peer acknowledgements complete promptly. Use asynchronous receive-completion signaling while preserving close payloads, cancellation and shutdown limits (issue #184).
@@ -696,7 +696,7 @@ not automatic. Performance results apply only to their recorded source and host.
   platform builds. CI checks formatting and rejects new suppressions. The owner-approved
   API migration uses `RawTarget`, `Validate.RoutePath`, and URI-valued URL APIs while
   retaining compatible string inputs where possible; see the
-  [migration guide](docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved).
+  [migration guide](docs/compatibility/migration.md#warning-free-api-cleanup-neo-v2-owner-approved).
   Recovery boundaries propagate process/resource corruption exceptions rather than
   treating them as ordinary request failures.
 

@@ -7,8 +7,8 @@ token bucket and concurrency limiters, each partitioned by a key the application
 with optional queueing. A request that gets a permit continues to the next module; one that
 does not is answered with 429 Too Many Requests.
 
-This is unreleased and available only from source. It adds the `System.Threading.RateLimiting`
-package as a dependency of EmbedIO-Neo.
+This is new in Neo v2; the published 1.0.x packages do not include it. It adds the
+`System.Threading.RateLimiting` package as a dependency of EmbedIO-Neo.
 
 ## A complete program
 

@@ -229,7 +229,7 @@ this is a cleanup correction, not a new performance claim.
 
 William explicitly approved nonblocking synchronous response-output stream
 disposal for HTTP/2 and HTTP/3. See the
-[migration guidance](../compatibility/migration.md#multiplexed-response-stream-disposal-unreleased)
+[migration guidance](../compatibility/migration.md#multiplexed-response-stream-disposal-neo-v2)
 for completion/error timing and awaited alternatives. HTTP/3 shares this
 response adapter; its framing transport is not changed by the HTTP/2 output
 batching.

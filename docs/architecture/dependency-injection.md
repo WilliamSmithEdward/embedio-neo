@@ -291,8 +291,8 @@ Configuration is read when the server is constructed. This integration does not
 reload listener options while running. Use normal application configuration or
 `IOptions<T>` in your own services where appropriate. Core diagnostic messages
 still use `TraceSource`; this adapter logs hosting faults but does not replace
-all EmbedIO diagnostics with Microsoft logging. The separately opted-in,
-unreleased `factory.ForwardEmbedIODiagnostics()` registration forwards the
+all EmbedIO diagnostics with Microsoft logging. The separately opted-in
+`factory.ForwardEmbedIODiagnostics()` registration, new in Neo v2, forwards the
 process-wide source to the borrowed factory; it is not in published 1.0.3.
 See [logging provider integration](../user-reports/logging-provider-integration.md)
 for startup/disposal ownership, provider filtering and scope limits.

@@ -54,7 +54,7 @@ pinned package version, EmbedIO-Neo 1.0.0: JSON, folder, generated HTML, combine
 JSON/files, controller, and verbs/input. Checks exercise actual HTTP responses,
 route/query binding, POST/PUT/DELETE, JSON bodies, invalid input returning 400,
 and the documented cancellation path. These examples use established APIs;
-they do not depend on unreleased features.
+they do not depend on features new in Neo v2.
 
 This is a verified documentation and design answer, not a measurement proving
 that every developer prefers the API or that the original v2 application has

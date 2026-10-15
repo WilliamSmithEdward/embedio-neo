@@ -18,7 +18,7 @@ is that baseline for the Neo v2 engine branch.
 
 StyleCop was removed in the Neo baseline and is not reinstalled. The API and
 nullability changes made to reach a warning-free build are recorded in the
-[migration guide](../compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved).
+[migration guide](../compatibility/migration.md#warning-free-api-cleanup-neo-v2-owner-approved).
 
 ## Baseline
 

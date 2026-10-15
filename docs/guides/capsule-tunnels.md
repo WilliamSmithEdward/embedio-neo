@@ -1,7 +1,7 @@
 # Capsule and tunnel carriers
 
-These APIs are unreleased development work for the new managed engine. They are
-not in the published package. Current evidence and remaining platform gates are
+These APIs are new in Neo v2 and remain development work for the managed
+engine. They are not in the published 1.0.x packages. Current evidence and remaining platform gates are
 in [capsule transport development](../project/http-capsule-transport.md).
 
 Use the optional `IHttpTunnelContext` capability when implementing an HTTP
@@ -119,7 +119,7 @@ without it rejects TLS handoff before sending the success head. TLS 1.2 closure 
 
 ## Native HTTP datagrams
 
-The unreleased native HTTP/3 candidate also exposes `HttpTunnel.Datagrams` after
+The native HTTP/3 development candidate also exposes `HttpTunnel.Datagrams` after
 explicit tunnel acceptance. Public provider selection has not yet switched to
 that candidate; the normal current provider returns null. Native provider
 activation and final platform acceptance remain development work.

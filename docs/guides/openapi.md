@@ -8,7 +8,7 @@ response types follow the routes and binding rules that answer requests. Authent
 modules add their security requirements, and routes outside generated bindings are added
 by declaration. It uses no reflection and works in trimmed and Native AOT applications.
 
-This is unreleased and available only from source. The published 1.0.3 package does not
+This is new in Neo v2. The published 1.0.3 package does not
 contain it; [OpenAPI and Swagger UI](../user-reports/openapi-and-swagger-ui.md) shows how to
 serve a document you write yourself with any version.
 

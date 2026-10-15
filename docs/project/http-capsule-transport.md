@@ -214,7 +214,7 @@ netstandard-asset cases passed on .NET 10.0.12, including the public TLS-shutdow
 binding; this does not establish older TLS or .NET Framework runtime support.
 Final hosted checks and wider cancellation/drain/resource campaigns remain required.
 See [the usage guide](../guides/capsule-tunnels.md) and
-[approved migration impact](../compatibility/migration.md#generic-tunnel-and-capsule-carriers-unreleased).
+[approved migration impact](../compatibility/migration.md#generic-tunnel-and-capsule-carriers-neo-v2).
 
 ### Initial capsule CI corrections
 

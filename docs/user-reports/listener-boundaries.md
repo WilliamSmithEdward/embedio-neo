@@ -1,9 +1,9 @@
 ﻿# HTTP listener framing and accept boundaries
 
-The unreleased [modern engine increment](../project/http-engine.md) supersedes
+The Neo v2 [modern engine increment](../project/http-engine.md) supersedes
 this report's managed chunked-input and synchronous-read limitations, and tightens
 ambiguous framing. Measurements below describe the earlier source; see the
-[migration notes](../compatibility/migration.md#managed-http-framing-unreleased).
+[migration notes](../compatibility/migration.md#managed-http-framing-neo-v2).
 
 This audit starts at main commit `e3b7bfe` and follows the
 [connection lifetime work](listener-connection-lifetimes.md). It covers fragmented

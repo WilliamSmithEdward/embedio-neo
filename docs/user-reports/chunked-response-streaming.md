@@ -21,12 +21,11 @@ be delivered. Dispose it only after the last part.
 
 This complete example uses existing APIs. The HTTP/1.1 chunked-writing pattern
 works in 1.0.3. The separate managed keep-alive initialization correction described
-below is available from source and is not in a published release yet.
-From the source checkout with its selected SDK installed:
+below is in Neo v2. Create the application:
 
 ```sh
 dotnet new console --framework net10.0 --output TestResults/chunked-demo --no-restore
-dotnet add TestResults/chunked-demo/chunked-demo.csproj reference src/EmbedIO/EmbedIO.csproj
+dotnet add TestResults/chunked-demo/chunked-demo.csproj package EmbedIO-Neo --version 2.0.0
 ```
 
 Replace `Program.cs` with:

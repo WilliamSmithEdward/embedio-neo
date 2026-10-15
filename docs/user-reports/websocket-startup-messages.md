@@ -130,7 +130,7 @@ The actual published **EmbedIO-Neo 1.0.3** package also passes all 12 HTTP/1 con
 with each of its .NET 10 and .NET Standard 2.0 assemblies on a .NET 10 host. This
 verifies the package's fix for the controlled timing window; it does not reproduce
 the unavailable original application or Chrome 78/.NET Framework 4.8 environment.
-HTTP/2 startup controls apply to the unreleased integration engine, not that v1
+HTTP/2 startup controls apply to the Neo v2 engine, not that v1
 package. [Fork tracking issue #324](https://github.com/WilliamSmithEdward/embedio-neo/issues/324)
 records the attributed report, discussion, reactions and validation.
 

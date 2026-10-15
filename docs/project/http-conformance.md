@@ -254,7 +254,7 @@ skips, zero failures in 3m27s under the shared workload lock. The tested core
 SHA-256 is `B348E9B0AEC885CFBE340A9856EB50180839ED4274865CF2A0D2F6BE3527D575`.
 Hosted exact-head checks remain required. Evidence: ignored
 TestResults/final-status. See the
-[final-status migration note](../compatibility/migration.md#final-response-status-validation-unreleased).
+[final-status migration note](../compatibility/migration.md#final-response-status-validation-neo-v2).
 
 **A1, reproduced and corrected in the candidate (contract consistency).** On HTTP/3, an application that
 cancels its own pending request-body or tunnel read loses the whole stream:
@@ -634,7 +634,7 @@ sections exceeding it after the request line, and keeps malformed syntax at 400.
 The response is empty, non-cacheable and closes the rejected pipeline without
 application dispatch. Classification scans already bounded input only on failure;
 it does not add an ordinary-request target copy. See the
-[migration note](../compatibility/migration.md#http1-request-head-limit-statuses-unreleased).
+[migration note](../compatibility/migration.md#http1-request-head-limit-statuses-neo-v2).
 
 The unchanged-engine duplex wire reproduction failed four status cases while all
 four malformed controls passed. Eighteen new unit/wire cases cover fragmentation,

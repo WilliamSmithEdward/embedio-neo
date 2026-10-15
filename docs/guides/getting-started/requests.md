@@ -192,11 +192,11 @@ direct reads of `Request.InputStream` need separate policies. For streaming
 processing, read through EOF before treating the whole request as accepted;
 data read before a later limit error may already have reached application code.
 The limit does not bound native codec memory or replace transport/slow-peer
-limits. These APIs are unreleased development work.
+limits. These APIs are new in Neo v2.
 
 ## Decode content-coding chains
 
-The unreleased modern-engine branch accepts recognized Content-Encoding lists
+Neo v2 accepts recognized Content-Encoding lists
 when `SupportCompressedRequests` is enabled. For `Content-Encoding: gzip, br`,
 the sender applies gzip first and Brotli second; the helpers undo Brotli and then
 gzip. Up to eight compression layers are supported. That cap limits the depth
@@ -227,7 +227,7 @@ Next: [Serve HTML and files](files.md) alongside this API, or
 
 ## Advertise and validate QUERY formats
 
-The unreleased engine branch adds `QueryFormatPolicy` for resources that support
+Neo v2 adds `QueryFormatPolicy` for resources that support
 QUERY. Create the policy once and apply it before writing response headers:
 
 ```csharp
@@ -277,7 +277,7 @@ safe. See [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-3).
 
 ## Evaluate selected-representation preconditions
 
-The unreleased `Request.EvaluatePreconditions(entityTag, lastModified,
+The Neo v2 `Request.EvaluatePreconditions(entityTag, lastModified,
 representationExists)` helper evaluates entity-tag and date conditions in HTTP
 order. It returns null to continue, 304 for unchanged GET/HEAD/QUERY results, or
 412 when a condition fails. Strong comparison is used for If-Match; weak comparison
@@ -303,7 +303,7 @@ and [QUERY conditional requests](https://www.rfc-editor.org/rfc/rfc10008.html#se
 
 ## Select a single GET or QUERY byte range
 
-The unreleased `Request.TryGetByteRange(contentLength, entityTag, lastModified,
+The Neo v2 `Request.TryGetByteRange(contentLength, entityTag, lastModified,
 out start, out length, lastModifiedIsStrong: false)` helper selects one applicable
 range for exact GET or QUERY. Supply the selected encoded representation's byte
 length and validators after evaluating preconditions. QUERY metadata must describe
@@ -327,7 +327,7 @@ application handler; the managed transports exercise the extended numeral path.
 
 ## Stream a selected representation with multiple ranges
 
-The unreleased `Context.SendRepresentationAsync(content, contentType, entityTag,
+The Neo v2 `Context.SendRepresentationAsync(content, contentType, entityTag,
 lastModified, leaveOpen: false, lastModifiedIsStrong: false, maximumRanges: 16)`
 helper streams an already selected readable, seekable representation. Call it
 before committing response headers, after authorization and content negotiation.

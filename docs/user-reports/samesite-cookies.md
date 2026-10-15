@@ -8,10 +8,9 @@ been identified as a Neo cookie; Neo's default session cookie is `__session`.
 
 ## Availability and defaults
 
-This describes the new source implementation, tracked in
+This describes the Neo v2 implementation, tracked in
 [Neo #168](https://github.com/WilliamSmithEdward/embedio-neo/issues/168).
-It is **unreleased** and is not available in published EmbedIO-Neo 1.0.3.
-Use a checkout containing this change until a release is announced.
+It is new in Neo v2 and is not available in EmbedIO-Neo 1.0.x.
 
 Existing `SetCookie(cookie)` calls retain their listener's existing validation
 and duplicate-cookie semantics. SameSite is omitted unless explicitly selected.
@@ -21,11 +20,11 @@ No listener switch, interface member or production dependency was added.
 
 ## A complete local example
 
-From a repository checkout containing this change, create an application:
+Create an application:
 
 ```sh
 dotnet new console --name CookieDemo --framework net10.0 --output TestResults/CookieDemo
-dotnet add TestResults/CookieDemo/CookieDemo.csproj reference src/EmbedIO/EmbedIO.csproj
+dotnet add TestResults/CookieDemo/CookieDemo.csproj package EmbedIO-Neo --version 2.0.0
 ```
 
 Replace `TestResults/CookieDemo/Program.cs` with:
@@ -149,4 +148,4 @@ against the Standard asset on the installed CLR; it does not certify an original
 4.7.2 runtime or the reporters' exact applications/browsers.
 
 Wire correctness is verified; browser acceptance under every privacy setting is
-not claimed. The APIs remain unreleased until the owner requests publication.
+not claimed. The APIs are new in Neo v2 and are not in the published 1.0.x packages.

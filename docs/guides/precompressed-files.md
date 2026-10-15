@@ -7,7 +7,7 @@ at a level too slow to use on every request, and the server sends its bytes as t
 It is opt-in through `FileModule.PrecompressedVariants`. Without it, nothing changes: the module
 compresses files itself as before.
 
-This is unreleased and available only from source.
+This is new in Neo v2; the published 1.0.x packages do not include it.
 
 ## A complete program
 
@@ -141,7 +141,7 @@ What this supports:
 - Responses written through `OpenResponseStream` and the helpers built on it, such as
   `SendDataAsync`, use Brotli quality 1 instead, as ASP.NET Core does. On these corpora it takes
   0.32 and 0.41 times the CPU of quality 4, for output 15% and 23% larger. See
-  [Brotli responses](getting-started/files.md#brotli-responses-in-the-modern-engine-development-branch).
+  [Brotli responses](getting-started/files.md#brotli-responses-neo-v2).
 
 These are two text corpora on one machine. Measure your own files before relying on the numbers:
 images and already compressed formats gain little or nothing, which is why the MIME policy that
