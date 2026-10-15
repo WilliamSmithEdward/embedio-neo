@@ -11,6 +11,7 @@ server-wide values under a base route.
 | `MaximumRequestHeaderBytes` | 32 KiB (32,768 bytes) | HTTP 431 |
 | `MaximumRequestHeaderCount` | 100 field lines | HTTP 431 |
 | `MaximumRequestBodyBytes` | 30,000,000 bytes (about 28.6 MiB) | HTTP 413 |
+| `MinimumRequestBodyDataRate` | 240 bytes per second after a 5-second grace period | HTTP 408 |
 | `RequestBodyReadTimeout` | null (no deadline) | HTTP 408 |
 | `MaximumConcurrentRequests` with `RequestQueueLimit` | null (unlimited), queue 0 | HTTP 503 |
 | `RequestTimeout` | null (no deadline) | HTTP 503 |
@@ -26,7 +27,8 @@ Kestrel's `KestrelServerLimits` in ASP.NET Core 10.0.13. Before v2 they were all
 | `MaximumRequestHeaderBytes` | 32 KiB | `MaxRequestHeadersTotalSize`, 32 KiB |
 | `MaximumRequestHeaderCount` | 100 | `MaxRequestHeaderCount`, 100 |
 | `RequestHeadersTimeout` (TCP connections) | 30 seconds | `RequestHeadersTimeout`, 30 seconds |
-| `RequestBodyReadTimeout` | null (no deadline) | none: Kestrel enforces `MinRequestBodyDataRate`, 240 bytes per second after a 5-second grace period; EmbedIO has no data rate yet, [#424](https://github.com/WilliamSmithEdward/embedio-neo/issues/424) |
+| `MinimumRequestBodyDataRate` | 240 bytes per second after a 5-second grace period | `MinRequestBodyDataRate`, the same |
+| `RequestBodyReadTimeout` | null (no deadline) | none: Kestrel has no per-read deadline either |
 | `WebSocketModule.MaxMessageSize` | 4 MiB | none: ASP.NET Core's `WebSocketOptions` has no message size limit |
 
 - Each default can be replaced in the same way as before, server-wide or, for the body
@@ -43,23 +45,20 @@ Kestrel's `KestrelServerLimits` in ASP.NET Core 10.0.13. Before v2 they were all
   responses and server-sent events. Set them for a server that faces untrusted clients,
   and lift the deadline per route where requests legitimately run long.
 
-**No default bounds how long a body takes to arrive.** The body defaults bound its
+**The data rate is the one default that bounds time.** The body defaults bound its
 size: 30,000,000 bytes as transferred and, with `SupportCompressedRequests`, a decoded
 limit that follows it. Setting `MaximumDecompressedRequestBodyBytes` explicitly to
 null opts out of that decoded limit: the transferred bytes keep their own limit, but
 decoded output becomes unbounded, the shape of a decompression bomb. The header
-defaults bound the head: 32 KiB, 100 field lines,
-and 30 seconds for it to arrive on a TCP connection. `RequestBodyReadTimeout`,
-`RequestTimeout` and `MaximumConcurrentRequests` are null. So a client that sends a
-head and then stalls, or sends its body a byte at a time, keeps a handler that is
-reading that body, and its connection, until the client disconnects or the server
-stops. The keep-alive deadline does not cover this: on HTTP/1.1 it bounds only the
-discard of a body the handler never read (see [request body bytes](#request-body-bytes)).
-To bound a body the application reads, set `RequestBodyReadTimeout`, server-wide or
-for a route, or `RequestTimeout`. A minimum data rate like Kestrel's
-`MinRequestBodyDataRate`, which also stops a client that trickles its body, is tracked
-in [#424](https://github.com/WilliamSmithEdward/embedio-neo/issues/424). No earlier
-version bounded this by default either; these defaults leave it unchanged.
+defaults bound the head: 32 KiB, 100 field lines, and 30 seconds for it to arrive on
+a TCP connection. `MinimumRequestBodyDataRate` bounds how long a body the application
+is reading may take: a client that sends its body a byte at a time, or sends a head and
+then stalls once the handler reads, is refused with 408 about five seconds after the
+handler started waiting (see [minimum body data rate](#minimum-body-data-rate)).
+`RequestBodyReadTimeout`, `RequestTimeout` and `MaximumConcurrentRequests` are null;
+set them where a route needs a per-read deadline, a whole-request deadline or a
+concurrency cap. The keep-alive deadline bounds only the discard of a body the handler
+never read on HTTP/1.1 (see [request body bytes](#request-body-bytes)).
 
 They live on `WebServerOptionsBase`, next to the existing
 `MaximumDecompressedRequestBodyBytes`, and are enforced in the server's shared
@@ -87,6 +86,7 @@ using var server = new WebServer(o => o
             keepAliveTimeout: TimeSpan.FromSeconds(30))
         .WithRequestHeaderLimits(8 * 1024, maximumCount: 64)  // 8 KiB, 64 fields
         .WithMaximumRequestBodyBytes(1024 * 1024)            // 1 MiB transferred
+        .WithMinimumRequestBodyDataRate(1024, TimeSpan.FromSeconds(10)) // 1 KiB/s after 10 s
         .WithRequestBodyReadTimeout(TimeSpan.FromSeconds(15)) // per read
         .WithMaximumConcurrentRequests(64, queueLimit: 128)   // 64 at once, 128 waiting
         .WithRequestTimeout(TimeSpan.FromSeconds(30)))
@@ -153,12 +153,13 @@ connection continue.
 
 **Unread bodies.** When the handler returns, the server reads the rest of a body the
 handler opened, so an excess byte the handler never read still fails the request with
-413 while the response is not committed; each read of that drain waits at most the read
-deadline, when one is set. A body the handler never opened does not hold back the
-response. On HTTP/1.1 the connection discards it after the response, under the
-keep-alive deadline, the byte limit and any read deadline, and closes instead of
-carrying another request when one of them ends the discard. On HTTP/2 and HTTP/3 the
-transport ends it after the response:
+413 while the response is not committed; that drain is held to the minimum data rate,
+and each of its reads waits at most the read deadline, when one is set. A body the
+handler never opened does not hold back the response. On HTTP/1.1 the connection
+discards it after the response, under the keep-alive deadline, the byte limit and any
+read deadline, but not the data rate, and closes instead of carrying another request
+when one of them ends the discard. On HTTP/2 and HTTP/3 the transport ends it after the
+response:
 HTTP/2 resets the stream with `NO_ERROR` and HTTP/3 sends `STOP_SENDING` with
 `H3_NO_ERROR` (RFC 9113 section 8.1, RFC 9114 section 4.1).
 
@@ -191,6 +192,72 @@ once. An HTTP/1.1 client that is still sending when the server answers 413 and
 closes often sees a connection reset instead of the response. That is TCP behavior
 when the server closes with unread data; HTTP/2 and HTTP/3 clients receive the 413.
 
+### Minimum body data rate
+
+`MinimumRequestBodyDataRate` refuses a body that arrives too slowly while the
+application is reading it. The default, 240 bytes per second after a 5-second grace
+period, is Kestrel's `MinRequestBodyDataRate`. It applies to every protocol and
+listener mode; `CONNECT` tunnels are not request bodies and are not measured. Null
+disables it server-wide; a route policy replaces it, or lifts it with
+`MinimumDataRate.None`.
+
+- The rate is measured only while a read of `Request.InputStream`, or of a helper that
+  reads through it, is waiting for data. Time the handler spends not reading, for
+  example before it opens the body or between reads, does not count, and neither does
+  a body the handler never opens. The grace period starts with the first read of each
+  body.
+- A shared heartbeat checks every body with a pending read once per second. Once the
+  time spent waiting exceeds the grace period, a body whose bytes read divided by that
+  time fall below the rate is refused: the pending read throws a 408 `HttpException`,
+  and so does every later read of the same body. A handler that lets it propagate
+  answers 408. The check granularity is the heartbeat: a refusal lands between the
+  grace period and one second after it.
+- On HTTP/1.1 the response carries `Connection: close` and the connection is not
+  reused, because the canceled read left the transport at an unknown point of the body.
+  The 408 is written before the connection closes, but, as with the 413 above, an
+  HTTP/1.1 client that is still sending at that moment can see a connection reset
+  instead of the response. Kestrel closes the same way, without a lingering read.
+  On HTTP/2 and HTTP/3 the stream is reset after the response and the connection
+  carries on.
+- An HTTP/2 body that is waiting because the connection's receive window is held by
+  other streams' unread bodies, rather than because its client is slow, is not refused
+  while that window is low.
+- The cost is two timestamps per read and no buffer copy or per-read timer; the source is
+  read with the body's own token so the heartbeat can end a pending read, and the
+  caller's token is linked to that token once per body, not per read. A synchronous
+  `Read` goes through the same path and blocks on it. Measured in
+  [the load benchmark](#measured-cost), small requests are unchanged, HTTP/2 and HTTP/3
+  1 MiB uploads are at parity, and HTTP/1.1 uploads cost about 1%.
+- Unlike the read deadline, the rate stops a client that sends a byte just before each
+  deadline. Unlike the request deadline, it does not depend on the handler observing
+  the context token.
+
+#### Measured cost
+
+`test/EmbedIO.LoadBenchmark`, the default rate against the same core without it (main
+`8083fed5`), runtime 10.0.13, two rounds in each harness role with the roles alternated,
+server on CPUs 0-3 and client on 4-11, samples with outlying background CPU excluded.
+The scorecard tool is the one Perf Hunt used for #384. Values are baseline to candidate.
+
+| Scenario | Requests/s | Server CPU us/req | Server B/req |
+| --- | --- | --- | --- |
+| 13 B GET, 64 connections | 216,599 to 215,923 (0.997) | 18.0 to 18.1 | 5,118 to 5,154 |
+| TLS 13 B GET, 64 connections | 203,236 to 202,988 (0.999) | 19.3 to 19.2 | 5,170 to 5,196 |
+| HTTP/2 TLS 13 B GET, 8 x 32 | 462,881 to 460,860 (0.996) | 8.3 to 8.4 | 9,226 to 9,257 |
+| HTTP/3 13 B GET, 8 x 32 | 306,181 to 307,796 (1.005) | 19.8 to 19.6 | 11,953 to 12,008 |
+| 1 MiB upload, 16 connections | 13,833 to 13,700 (0.990) | 284.4 to 287.5 | 6,231 to 6,608 |
+| TLS 1 MiB upload, 16 connections | 8,913 to 8,826 (0.990) | 439.6 to 442.9 | 6,586 to 6,983 |
+| HTTP/2 TLS 1 MiB upload, 4 x 4 | 2,067 to 2,086 (1.009) | 1,504.1 to 1,531.6 | 150,111 to 150,566 |
+| HTTP/3 1 MiB upload, 4 x 4 | 1,514 to 1,603 (1.059) | 2,392.5 to 2,292.7 | 96,508 to 96,947 |
+
+Small requests carry no body and are unchanged within the run-to-run spread. HTTP/1.1
+uploads cost about 1% throughput and 1% CPU, and about 380 bytes per request: the
+body's cancellation source, its link to the caller's token and its heartbeat entry,
+allocated once per body, not per read. HTTP/2 and HTTP/3 uploads are at parity. An
+earlier revision that registered the caller's token on every read and let the read's
+state machine box cost HTTP/3 uploads 17% of their throughput; that is why the link is
+per body and the `ValueTask` read uses the pooling builder.
+
 ### Body read deadline
 
 `RequestBodyReadTimeout` bounds how long one read of the request body may wait for
@@ -207,8 +274,8 @@ Only requests that carry a body are timed.
 - It complements `RequestTimeout`: the read deadline catches a stalled upload even when
   the handler does not observe the context token, and the request deadline bounds the
   whole request.
-- It does not stop a client that sends a byte just before each deadline. A minimum data
-  rate would; see [#424](https://github.com/WilliamSmithEdward/embedio-neo/issues/424).
+- It does not stop a client that sends a byte just before each deadline. The
+  [minimum body data rate](#minimum-body-data-rate), on by default, does.
 - Each timed read lands in a private buffer and is then copied, so a read the deadline
   abandons never writes into the caller's buffer later. In the load benchmark this cost
   about 9% more server CPU per 1 MiB HTTP/1.1 upload, and HTTP/2 and HTTP/3 uploads
@@ -244,9 +311,10 @@ the first keeps serving.
 
 ## Per-route policies
 
-A route policy replaces the server-wide body limit, body read deadline and request
-deadline for requests under one base route. Typical uses are a larger body limit for an
-upload endpoint, a tighter one for a JSON API, or no deadline for a long report.
+A route policy replaces the server-wide body limit, minimum body data rate, body read
+deadline and request deadline for requests under one base route. Typical uses are a
+larger body limit for an upload endpoint, a tighter one for a JSON API, or no deadline
+for a long report.
 
 ```csharp
 using var server = new WebServer(o => o
@@ -259,21 +327,23 @@ using var server = new WebServer(o => o
             p.MaximumRequestBodyBytes = 512L * 1024 * 1024;     // 512 MiB here
             p.RequestTimeout = Timeout.InfiniteTimeSpan;         // no request deadline
             p.RequestBodyReadTimeout = TimeSpan.FromSeconds(30); // but each read must progress
+            p.MinimumRequestBodyDataRate = MinimumDataRate.None; // and the rate is lifted
         })
         .WithRouteRequestLimits("/api", p => p.MaximumRequestBodyBytes = 16 * 1024))
     .WithWebApi("/api", m => m.WithController<ImportController>());
 ```
 
 - A policy property left null inherits the server-wide value. `long.MaxValue` lifts the
-  body limit and `Timeout.InfiniteTimeSpan` lifts a deadline for the route.
+  body limit, `Timeout.InfiniteTimeSpan` lifts a deadline and `MinimumDataRate.None`
+  lifts the data rate for the route.
 - The base route is matched like a module's base route, against the request path before
   any module runs. It can contain parameters such as `/tenants/{id}`, and it also matches
   every path below it.
 - Policies are checked in the order they were added and the first match applies, so add
   more specific routes first. A base route can have only one policy.
 - `RouteRequestLimits` lists the policies; they lock with the options.
-- The declared-length check, the `100 Continue` deferral, the byte count, the read
-  deadline and the request deadline all use the route's values. `100 Continue` is
+- The declared-length check, the `100 Continue` deferral, the byte count, the data
+  rate, the read deadline and the request deadline all use the route's values. `100 Continue` is
   deferred when the server or any route sets a body limit, as the server's default
   limit does.
 - Header limits, admission and connection limits stay server-wide: they apply before
@@ -319,8 +389,9 @@ in the queue.
 ## Measured scenarios
 
 `test/EmbedIO.Tests/Issues/Issue136_RequestLimits.cs`, `Issue136_RequestLimits.Headers.cs`,
-`Issue136_RequestLimits.Connections.cs`, `Issue136_RequestLimits.Routes.cs` and
-`Issue136_RequestLimits.Defaults.cs` drive the managed engine over real connections.
+`Issue136_RequestLimits.Connections.cs`, `Issue136_RequestLimits.Routes.cs`,
+`Issue136_RequestLimits.Defaults.cs` and `Issue136_RequestLimits.DataRate.cs` drive the
+managed engine over real connections.
 HTTP/2 uses cleartext prior knowledge; HTTP/3 uses QUIC with a generated certificate
 and is skipped on hosts without QUIC support.
 
@@ -375,6 +446,15 @@ and is skipped on hosts without QUIC support.
 | Handler disposes its body view under the read deadline | connection reused | n/a | n/a |
 | Second read of a disposed body | `ArgumentException` from the text helper, `ObjectDisposedException` from the byte helper | n/a | n/a |
 | Decoded limit with `SupportCompressedRequests` | follows the server or route body limit until set | n/a | n/a |
+| Trickled body, handler reading | 408 and close after the grace period, asynchronous and synchronous reads | 408, connection carries on | same |
+| Body at the rate | completes | completes | n/a |
+| Trickled body the handler is not reading yet | not refused; read in full afterwards | n/a | n/a |
+| 4 MiB upload under the default rate | completes | same | same |
+| Rate null, route sets one; rate set, route lifts it | trickle served; 408 on the route, and the reverse | n/a | n/a |
+| Trickled body the handler never opened, rate set | not monitored; discarded at the keep-alive deadline | n/a | n/a |
+| Rate monitor alone | starves only a pending read past the grace period; back pressure excuses it; failing cancels the read with a sticky 408 | n/a | n/a |
+
+The data-rate cases shorten the heartbeat to 200 ms through reflection and restore it.
 
 The .NET HTTP/1.1 client aborts its own connection after a refusal that arrives
 without `100 Continue`, so the HTTP/1.1 refusal case is checked on the wire with a raw

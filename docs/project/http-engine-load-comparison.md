@@ -910,5 +910,20 @@ The 64 KiB compressed response gains about 5% (1.049 and 1.047). Allocation is u
 the sink's held-write buffer is pooled. The uncompressed scenarios do not run the new
 code and stay inside the sample spread, except the p99 of the 1 MiB streamed response
 (both roles higher, 1.398 and 1.181, at unchanged throughput and p50), which takes no
-new branch beyond a null check per write and is rechecked below. The remaining gap at 1 KiB is mostly the header collections and content-coding
-negotiation listed in the profile above.
+new branch beyond a null check per write and is rechecked below. The remaining gap at
+1 KiB is mostly the header collections and content-coding negotiation listed in the
+profile above.
+
+Recheck of the 1 MiB streamed response in a separate window, same runners and method,
+four rounds in each role (`TestResults/perf-hunt-2/results/cand3s-{a,b}`, three of 16
+samples excluded for background CPU):
+
+| Scenario (valid samples base/candidate) | Requests/s | Server CPU us/req | Server B/req | p50 ms | p99 ms | p99.9 ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 MiB chunked flushed 16 KiB, 16 conn (7/6) | 4,626 -> 4,620 (0.999) | 853.0 -> 856.6 (1.004) | 5,012 -> 4,984 (0.994) | 3.423 -> 3.422 (1.000) | 5.529 -> 5.828 (1.054) | 14.12 -> 19.19 (1.359) |
+
+The p99 ratio per role is 1.015 and 1.005, so the earlier 1.29 did not reproduce; the
+same core's p99 moved from 7.8 ms in the first window to 5.5 ms in this one, which is the
+size of this scenario's tail noise between windows. The scenario writes an uncompressed
+chunked body and never takes the new ending path: each of its writes passes
+`ending: false`, so the only added work is a null check on the absent tail.

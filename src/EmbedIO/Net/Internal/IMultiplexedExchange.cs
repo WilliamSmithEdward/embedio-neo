@@ -26,6 +26,13 @@ namespace EmbedIO.Net.Internal
         Task CompleteAsync(CancellationToken token);
     }
 
+    // Reports when the transport, not the peer, is holding the request body back, so the
+    // minimum body data rate is not enforced against a client that cannot send.
+    internal interface IMultiplexedInputBackPressure
+    {
+        bool IsInputBackPressured();
+    }
+
     // Reserve before final headers so a declared body does not end the stream
     // before the application's ending field section can be written.
     internal interface IMultiplexedResponseTrailers

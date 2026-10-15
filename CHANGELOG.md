@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- `WebServerOptionsBase.MinimumRequestBodyDataRate`, with the `MinimumDataRate` type,
+  `WithMinimumRequestBodyDataRate` and `RequestLimitPolicy.MinimumRequestBodyDataRate`
+  (#424). A request body that arrives below the rate while the application is reading
+  it is refused with 408 once the handler has waited longer than the grace period; the
+  default is 240 bytes per second after 5 seconds, Kestrel's `MinRequestBodyDataRate`.
+  Only time spent waiting for the body counts, a shared one-second heartbeat does the
+  checking, and a read costs two timestamps with no copy or per-read timer. On HTTP/1.1
+  the connection then closes; HTTP/2 and HTTP/3 reset the stream. Null disables it and
+  `MinimumDataRate.None` lifts it for a route. The request-limits guide and the v1 to v2
+  notes describe the default; v2.0.0 bounded neither stalled nor trickled bodies.
+
+### Changed
+
 - A compressed HTTP/1 response sends the compressor's final block and the chunked
   terminator in one transport write, and the response serializer disposes its stream
   asynchronously on .NET 10. Each compressor write is still its own chunk, so the bytes on

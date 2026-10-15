@@ -64,6 +64,9 @@ namespace EmbedIO.Net.Internal
         private TimeSpan? _readTimeout;
         private Action? _onReadTimeout;
         private ReadTimeoutStream? _timedInput;
+        private MinimumDataRate? _dataRate;
+        private Action? _onDataRateFailure;
+        private RequestBodyRateStream? _ratedInput;
         private object? _applicationInputSync;
         private long _legacyBodyLimit = -1;
         private Action? _onLegacyLimitExceeded;
@@ -71,40 +74,58 @@ namespace EmbedIO.Net.Internal
         {
             get
             {
-                if (!HasEntityBody || (_sendContinue == null && _readTimeout == null && _countBody == null && _legacyBodyLimit < 0)) return FramingInput;
+                if (!HasEntityBody || (_sendContinue == null && _readTimeout == null && _dataRate == null && _countBody == null && _legacyBodyLimit < 0)) return FramingInput;
                 var current = Volatile.Read(ref _applicationInput);
                 if (current != null)
                 {
-                    if (Volatile.Read(ref _bodyLimitRetired) != 0) Volatile.Read(ref _timedInput)?.Retire();
+                    if (Volatile.Read(ref _bodyLimitRetired) != 0) RetireBodyViews();
                     return current;
                 }
                 // Resolve the physical framing owner before taking the publication
                 // gate, so request publication cannot invert the connection lock.
                 var framing = FramingInput;
-                ReadTimeoutStream? timed;
                 lock (LazyInitializer.EnsureInitialized(ref _applicationInputSync)
                     ?? throw new InvalidOperationException("Missing application input publication."))
                 {
                     if (_applicationInput == null)
                     {
                         var input = framing;
+                        // The rate view sits on the framing input, so it times transport waits only.
+                        var rated = _dataRate is MinimumDataRate rate ? new RequestBodyRateStream(input, rate, _onDataRateFailure, null) : null;
+                        if (rated != null)
+                        {
+                            if (Volatile.Read(ref _dataRateSuspended) != 0) rated.Suspend();
+                            input = rated;
+                        }
                         if (_countBody != null && _bodyPolicy == null) input = new CountingReadStream(input, _countBody);
-                        timed = _readTimeout is TimeSpan timeout ? new ReadTimeoutStream(input, timeout, _onReadTimeout) : null;
+                        var timed = _readTimeout is TimeSpan timeout ? new ReadTimeoutStream(input, timeout, _onReadTimeout) : null;
                         if (timed != null) input = timed;
                         if (_sendContinue != null) input = new DeferredContinueStream(input, StartContinue);
                         if (_legacyBodyLimit >= 0) input = new LimitedRequestStream(input, _legacyBodyLimit,
                             LimitedRequestStream.TransferredLimitMessage, _onLegacyLimitExceeded);
+                        Volatile.Write(ref _ratedInput, rated);
                         Volatile.Write(ref _timedInput, timed);
                         Volatile.Write(ref _applicationInput, input);
                     }
-                    timed = _timedInput;
                     current = _applicationInput ?? throw new InvalidOperationException("Missing published application input.");
                 }
                 // Retirement never takes the publication gate or disposes a
                 // borrowed source. This recheck covers publication after retire.
-                if (Volatile.Read(ref _bodyLimitRetired) != 0) timed?.Retire();
+                if (Volatile.Read(ref _bodyLimitRetired) != 0) RetireBodyViews();
                 return current;
             }
+        }
+        private void RetireBodyViews()
+        {
+            Volatile.Read(ref _timedInput)?.Retire();
+            Volatile.Read(ref _ratedInput)?.Retire();
+        }
+        private int _dataRateSuspended;
+        // Suspends the rate for the rest of the body, whether its view exists yet or not.
+        private void SuspendBodyDataRate()
+        {
+            Interlocked.Exchange(ref _dataRateSuspended, 1);
+            Volatile.Read(ref _ratedInput)?.Suspend();
         }
         private RequestTelemetry? _countBody;
         void IRequestPolicyTarget.LimitBody(long maximumBytes, Action? onExceeded)
@@ -126,6 +147,13 @@ namespace EmbedIO.Net.Internal
                 throw new InvalidOperationException("The request body was already opened.");
             _readTimeout = timeout;
             _onReadTimeout = onTimeout;
+        }
+        void IRequestPolicyTarget.EnforceBodyDataRate(MinimumDataRate rate, Action? onFailure)
+        {
+            if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
+                throw new InvalidOperationException("The request body was already opened.");
+            _dataRate = rate;
+            _onDataRateFailure = onFailure;
         }
         internal void DeferContinue(Func<CancellationToken, Task> send) => _sendContinue = send;
         internal bool IsContinueOwed => _sendContinue != null && Volatile.Read(ref _continueStarted) == 0;
@@ -158,7 +186,8 @@ namespace EmbedIO.Net.Internal
                 return Interlocked.CompareExchange(ref _rawApplicationInput, application, null) ?? application;
             }
         }
-        internal bool IsBodyReadTimeoutFailure(Exception error) => Volatile.Read(ref _timedInput)?.IsTimeoutFailure(error) == true;
+        internal bool IsBodyReadTimeoutFailure(Exception error) => Volatile.Read(ref _timedInput)?.IsTimeoutFailure(error) == true
+            || Volatile.Read(ref _ratedInput)?.IsRateFailure(error) == true;
         internal RequestPolicySnapshot? CapturedRequestPolicy { get; private set; }
         internal void CaptureRequestPolicy(RequestPolicySnapshot policy) => CapturedRequestPolicy = policy;
         internal void SetBodyPolicy(RequestBodyPolicy policy) => _bodyPolicy = policy;
@@ -169,10 +198,10 @@ namespace EmbedIO.Net.Internal
         internal bool HasBodyLimitFailure => Volatile.Read(ref _limitedInput)?.HasLimitFailure == true;
         internal void RetireBodyLimit()
         {
-            if (_bodyPolicy == null && _readTimeout == null) return;
+            if (_bodyPolicy == null && _readTimeout == null && _dataRate == null) return;
             Interlocked.Exchange(ref _bodyLimitRetired, 1);
             Volatile.Read(ref _limitedInput)?.Retire();
-            Volatile.Read(ref _timedInput)?.Retire();
+            RetireBodyViews();
         }
         // Request cleanup runs before the response ends. A body the handler never opened is left
         // to the connection, which discards it after the response under its drain deadline and
@@ -331,10 +360,14 @@ namespace EmbedIO.Net.Internal
         {
             if (!HasEntityBody) return true;
             if (IsContinueOwed) return false;
+            // A read the data rate canceled left the transport at an unknown boundary.
+            if (Volatile.Read(ref _ratedInput)?.HasFailed == true) return false;
             if (_bodyPolicy != null)
             {
                 try
                 {
+                    // The keep-alive deadline bounds this discard; the data rate does not.
+                    SuspendBodyDataRate();
                     await CompleteBodyInputAsync(CancellationToken.None).ConfigureAwait(false);
                     return Volatile.Read(ref _bodyLimitRetired) == 0 && IsBodyConsumed;
                 }

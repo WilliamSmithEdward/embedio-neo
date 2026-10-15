@@ -437,7 +437,8 @@ Request limits that v1 left off now have finite defaults, modelled on Kestrel's
 | `MaximumRequestHeaderBytes` | unlimited | 32 KiB | `MaxRequestHeadersTotalSize`, the same |
 | `MaximumRequestHeaderCount` | unlimited | 100 field lines | `MaxRequestHeaderCount`, the same |
 | `RequestHeadersTimeout` | 90 seconds | 30 seconds | `RequestHeadersTimeout`, the same |
-| `RequestBodyReadTimeout` | none | none | none; a minimum data rate of 240 bytes per second instead |
+| `MinimumRequestBodyDataRate` | none | 240 bytes per second after a 5-second grace period | `MinRequestBodyDataRate`, the same |
+| `RequestBodyReadTimeout` | none | none | none |
 | `MaximumDecompressedRequestBodyBytes` | unlimited | the request's body limit, until set | request decompression applies the body size limit |
 | `WebSocketModule.MaxMessageSize` | 0, unlimited | 4 MiB | none |
 
@@ -445,16 +446,16 @@ Each default is replaced as before, and null removes a limit; for `MaxMessageSiz
 zero does. `RequestBodyReadTimeout`, `MaximumConcurrentRequests` and `RequestTimeout`
 stay off; set them for a server that faces untrusted clients.
 
-**No default bounds how long a body takes to arrive.** Every body and header default
-above bounds size or count, and the 30-second `RequestHeadersTimeout` covers only the
-request head. `RequestBodyReadTimeout`, `RequestTimeout` and `MaximumConcurrentRequests`
-are null, so a client that stalls or trickles a body keeps the handler reading it, and
-its connection, until the client disconnects or the server stops. The keep-alive
-deadline bounds only the discard of a body the handler never read on HTTP/1.1, not a
-body the application is reading. To bound that, set `RequestBodyReadTimeout`,
-server-wide or per route, or `RequestTimeout`. A minimum data rate like Kestrel's is
-tracked in [#424](https://github.com/WilliamSmithEdward/embedio-neo/issues/424).
-Earlier versions behaved the same way; this is not a change.
+**The data rate is the one default that bounds how long a body takes to arrive.** The
+other body and header defaults above bound size or count, and the 30-second
+`RequestHeadersTimeout` covers only the request head. `MinimumRequestBodyDataRate`
+refuses, with 408, a body that the handler is reading and that arrives below 240 bytes
+per second once the handler has waited more than five seconds for it; time the handler
+spends not reading does not count. On HTTP/1.1 the connection then closes; HTTP/2 and
+HTTP/3 reset the stream. Null disables it, and a route policy replaces it or lifts it
+with `MinimumDataRate.None`. `RequestBodyReadTimeout`, `RequestTimeout` and
+`MaximumConcurrentRequests` stay null. Earlier versions, including v2.0.0, bounded
+neither a stalled nor a trickled body; see [#424](https://github.com/WilliamSmithEdward/embedio-neo/issues/424).
 
 Check these cases:
 
@@ -472,6 +473,14 @@ Check these cases:
   `WithRequestHeaderLimits(8192, 100)` to keep it.
 - **Slow connection starts**: a new connection must deliver its first request head
   within 30 seconds instead of 90.
+- **Slow uploads**: a handler that reads a body arriving below 240 bytes per second,
+  after waiting more than five seconds for it, sees a 408 `HttpException` from the read.
+  Clients on very slow links, or applications that read a body a long time after a
+  client started sending it and then wait for the rest, are refused where v2.0.0
+  waited. Lift the rate for the route with
+  `WithRouteRequestLimits("/uploads", p => p.MinimumRequestBodyDataRate = MinimumDataRate.None)`,
+  or set a lower rate or longer grace period server-wide with
+  `WithMinimumRequestBodyDataRate(bytesPerSecond, gracePeriod)`.
 - **`Expect: 100-continue`**: while a body limit applies, `100 Continue` is sent when
   the handler first reads the body, not before dispatch. On HTTP/1.1, a handler that
   ignores such a body answers with `Connection: close`; .NET's `HttpClient` sends the

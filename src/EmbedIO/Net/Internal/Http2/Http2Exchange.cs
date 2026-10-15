@@ -7,7 +7,7 @@ using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Net.Internal.Http2
 {
-    internal sealed class Http2Exchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedResponseTrailers, IMultiplexedTunnelControl, IDisposable
+    internal sealed class Http2Exchange : IMultiplexedExchange, IMultiplexedHeaderCoalescing, IMultiplexedResponseTrailers, IMultiplexedTunnelControl, IMultiplexedInputBackPressure, IDisposable
     {
         private readonly Http2Connection _connection;
         private readonly Func<int, Exception, bool, Task>? _abortTunnel;
@@ -42,6 +42,8 @@ namespace EmbedIO.Net.Internal.Http2
         private static readonly Version Version = new(2, 0);
         public Version ProtocolVersion => Version;
         public bool InitialBodyComplete => State.InitialEndStream;
+        // Read once per second per monitored body, never on the request path.
+        public bool IsInputBackPressured() => _connection.ReceiveFlow.IsConnectionWindowLow;
         public bool Ended => _ended;
         public bool FinalHeadersSent => _headersSent;
         public bool CloseConnectionAfterResponse { get; set; }
