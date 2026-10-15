@@ -76,9 +76,9 @@ namespace EmbedIO.Net.Internal
 
         private async Task FlushCoreAsync(bool synchronous, CancellationToken token)
         {
-            using var head = PrepareHead(false);
-            if (head != null)
-                await SubmitAsync(head.GetBuffer(), checked((int)head.Position), checked((int)(head.Length - head.Position)), synchronous, token).ConfigureAwait(false);
+            using var head = PrepareHead(false, 0);
+            if (!head.IsEmpty)
+                await SubmitAsync(head.Buffer, 0, head.Length, synchronous, token).ConfigureAwait(false);
             if (Volatile.Read(ref _failed) != 0) return;
             try
             {
@@ -149,9 +149,11 @@ namespace EmbedIO.Net.Internal
             return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var length) && length >= 0 ? length : null;
         }
 
-        private MemoryStream? PrepareHead(bool completing)
+        // The head is encoded with room for the first body segment of bodyCount bytes, so
+        // the first write appends behind it instead of copying the head into a new segment.
+        private Http1Head PrepareHead(bool completing, int bodyCount)
         {
-            var headers = _response.HeadersSent ? null : _response.SendHeaders(completing, 0);
+            var headers = _response.HeadersSent ? default : _response.SendHeaders(completing, bodyCount);
             if (!_headCaptured)
             {
                 _bodyLimit = DeclaredBodyLimit();
@@ -167,7 +169,7 @@ namespace EmbedIO.Net.Internal
             if (limit.HasValue && count > limit.Value - _committedBody)
                 throw new ProtocolViolationException("The response body exceeds its declared Content-Length.");
 
-            using var head = PrepareHead(false);
+            using var head = PrepareHead(false, count);
 
             // Framing is final only once the head is prepared: HTTP/1.0 drops chunking but keeps a
             // declared Content-Length. Nothing has been submitted yet, so excess bytes never leave.
@@ -175,20 +177,20 @@ namespace EmbedIO.Net.Internal
                 throw new ProtocolViolationException("The response body exceeds its declared Content-Length.");
 
             var chunked = _response.SendChunked && !_response.SuppressesBody;
-            if (head != null)
+            if (!head.IsEmpty)
             {
-                var start = checked((int)head.Position);
-                var length = checked((int)(head.Length - head.Position));
+                var length = head.Length;
                 if (count == 0)
                 {
-                    await SubmitAsync(head.GetBuffer(), start, length, synchronous, token).ConfigureAwait(false);
+                    await SubmitAsync(head.Buffer, 0, length, synchronous, token).ConfigureAwait(false);
                     return;
                 }
                 if (length <= BatchedBodyBound)
                 {
-                    var segment = RentFirstSegment(head.GetBuffer(), start, length, buffer, offset, count, chunked, out var segmentLength, out var prefix);
+                    var segment = head.Buffer;
+                    var segmentLength = AppendFirstSegment(segment, length, buffer, offset, count, chunked, out var prefix);
                     try { await SubmitAsync(segment, 0, segmentLength, synchronous, token).ConfigureAwait(false); }
-                    finally { ReturnCleared(segment, segmentLength); }
+                    finally { Array.Clear(segment, length, segmentLength - length); }
                     if (prefix != count)
                     {
                         await SubmitAsync(buffer, offset + prefix, count - prefix, synchronous, token).ConfigureAwait(false);
@@ -197,7 +199,7 @@ namespace EmbedIO.Net.Internal
                     CommitBody(count);
                     return;
                 }
-                await SubmitAsync(head.GetBuffer(), start, length, synchronous, token).ConfigureAwait(false);
+                await SubmitAsync(head.Buffer, 0, length, synchronous, token).ConfigureAwait(false);
             }
             if (count == 0) return;
             if (!chunked)
@@ -259,9 +261,9 @@ namespace EmbedIO.Net.Internal
                         if (!_transport.Value.CanWrite) Volatile.Write(ref _failed, 1);
                         else
                         {
-                            using var head = PrepareHead(true);
-                            if (head != null)
-                                SubmitAsync(head.GetBuffer(), checked((int)head.Position), checked((int)(head.Length - head.Position)), true, default).GetAwaiter().GetResult();
+                            using var head = PrepareHead(true, 0);
+                            if (!head.IsEmpty)
+                                SubmitAsync(head.Buffer, 0, head.Length, true, default).GetAwaiter().GetResult();
                             if (_response.SendChunked && !_response.SuppressesBody)
                             {
                                 var ending = _response.EndingChunk ?? GetChunkSizeBytes(0, true);
@@ -291,17 +293,27 @@ namespace EmbedIO.Net.Internal
                 }
             }
         }
-        // One transport segment for the first write: head, chunk-size line, the whole
-        // body with its chunk CRLF when it fits the bound, otherwise a 16 KiB prefix.
-        // The caller sends any remaining body bytes directly and ends the chunk.
-        private static byte[] RentFirstSegment(byte[] head, int headStart, int headLength,
-            byte[] buffer, int offset, int count, bool chunked, out int length, out int prefix)
+        // Room the head encoder leaves behind a head of headLength bytes for the first
+        // write of count body bytes: the chunk-size line, the whole body with its chunk
+        // CRLF when it fits the bound, otherwise a 16 KiB prefix. Zero when the head alone
+        // exceeds the bound, which keeps its own transport write.
+        internal static int FirstSegmentReserve(int headLength, int count, bool chunked)
+        {
+            if (count == 0 || headLength > BatchedBodyBound) return 0;
+            var complete = count <= BatchedBodyBound;
+            var prefix = complete ? count : FirstSegmentPrefix;
+            return prefix + (chunked ? GetChunkPrefixLength(count) + (complete ? CrLf.Length : 0) : 0);
+        }
+
+        // One transport segment for the first write, appended behind the encoded head in
+        // its own array: chunk-size line, the whole body with its chunk CRLF when it fits
+        // the bound, otherwise a 16 KiB prefix. The caller sends any remaining body bytes
+        // directly and ends the chunk. Returns the segment length.
+        private static int AppendFirstSegment(byte[] segment, int headLength,
+            byte[] buffer, int offset, int count, bool chunked, out int prefix)
         {
             var complete = count <= BatchedBodyBound;
             prefix = complete ? count : FirstSegmentPrefix;
-            length = headLength + prefix + (chunked ? GetChunkPrefixLength(count) + (complete ? CrLf.Length : 0) : 0);
-            var segment = ArrayPool<byte>.Shared.Rent(length);
-            Buffer.BlockCopy(head, headStart, segment, 0, headLength);
             var position = headLength;
             if (chunked) position += WriteChunkPrefix(segment, position, count);
             Buffer.BlockCopy(buffer, offset, segment, position, prefix);
@@ -310,8 +322,9 @@ namespace EmbedIO.Net.Internal
             {
                 segment[position] = 13;
                 segment[position + 1] = 10;
+                position += CrLf.Length;
             }
-            return segment;
+            return position;
         }
 
         // One transport segment for a subsequent chunk of at most BatchedBodyBound bytes.

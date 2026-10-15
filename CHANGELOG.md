@@ -15,6 +15,15 @@
   `MinimumDataRate.None` lifts it for a route. The request-limits guide and the v1 to v2
   notes describe the default; v2.0.0 bounded neither stalled nor trickled bodies.
 
+### Changed
+
+- HTTP/1 responses encode their head straight into the pooled array that carries the
+  first body segment, instead of into a `MemoryStream` whose bytes were then copied into
+  that segment, and the status code text is shared between responses. A small response
+  allocates about 6% less (5,119 -> 4,802 bytes per request in the load harness); the
+  wire bytes and write boundaries are unchanged. See the
+  [load comparison](docs/project/http-engine-load-comparison.md#http1-response-head-in-the-first-write-segment-2026-10-15).
+
 ## [2.0.0] - 2026-10-15
 
 Major release. The inherited HTTP listeners are replaced by an independently

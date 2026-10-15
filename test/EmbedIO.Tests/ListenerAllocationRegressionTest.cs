@@ -81,13 +81,19 @@ namespace EmbedIO.Tests
             context.Response.Headers["X-Text"] = value;
             context.Response.Headers["X-Last"] = "tail";
             var expected = Encoding.UTF8.GetBytes($"HTTP/1.1 201 Created\r\nX-Text: {value}\r\nX-Last: tail\r\n\r\n");
-            using var wire = (MemoryStream)((((context).Response.GetType().GetMethod("WriteHeaders", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(context.Response, new object[] { bodyLength })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            Assert.That((wire).Position, Is.EqualTo(0), "Default encoding has no preamble.");
-            Assert.That(wire.ToArray(), Is.EqualTo(expected));
+            // The head is a pooled lease with room behind it for a body of bodyLength bytes;
+            // the extra parameters a later revision adds to WriteHeaders default to false.
+            var writeHeaders = (context).Response.GetType().GetMethod("WriteHeaders", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
+            var arguments = writeHeaders.GetParameters().Select((parameter, index) => index == 0 ? (object)bodyLength : false).ToArray();
+            var head = writeHeaders.Invoke(context.Response, arguments) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
+            using var lease = (IDisposable)head;
+            var buffer = (byte[])(head.GetType().GetProperty("Buffer", PrivateInstance)?.GetValue(head) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            var length = (int)(head.GetType().GetProperty("Length", PrivateInstance)?.GetValue(head) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            Assert.That(buffer.AsSpan(0, length).ToArray(), Is.EqualTo(expected), "The head starts at the first byte: the default encoding has no preamble.");
+            Assert.That(buffer.Length, Is.GreaterThanOrEqualTo(length + bodyLength), "The lease has room for the first body segment.");
             var body = Enumerable.Repeat((byte)'z', bodyLength).ToArray();
-            wire.Position = wire.Length;
-            wire.Write(body);
-            Assert.That(wire.ToArray(), Is.EqualTo(expected.Concat(body).ToArray()));
+            body.CopyTo(buffer, length);
+            Assert.That(buffer.AsSpan(0, length + bodyLength).ToArray(), Is.EqualTo(expected.Concat(body).ToArray()));
         }
 
         [TestCase(false, "full")]

@@ -198,7 +198,7 @@ namespace EmbedIO.Net.Internal
                 Connection.BeginTunnel();
                 owned = new Http1TunnelStream(Connection, Connection.TakeUpgradeStream());
                 using var head = HttpListenerResponse.SendHeaders(false, 0);
-                await Connection.Stream.WriteAsync(head.GetBuffer(), (int)head.Position, (int)(head.Length - head.Position), cancellationToken).ConfigureAwait(false);
+                await Connection.Stream.WriteAsync(head.Buffer, 0, head.Length, cancellationToken).ConfigureAwait(false);
                 var tunnel = new HttpTunnel(owned, owned.CompleteOutputAsync, protocol, useCapsules, _ =>
                 {
                     Connection.ForceClose();

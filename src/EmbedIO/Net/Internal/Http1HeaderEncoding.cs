@@ -1,20 +1,47 @@
 ﻿using System;
+using System.Buffers;
 using System.Globalization;
-using System.IO;
 using System.Net;
 using System.Text;
 using EmbedIO.Internal;
 
 namespace EmbedIO.Net.Internal
 {
+    // A response head encoded into a pooled array: the bytes [0, Length) are the head, and
+    // the array also holds the room the output owner asked for (the first body segment it
+    // appends behind the head), so the head and the first body bytes leave in one transport
+    // write without a copy of the head. Dispose clears the head bytes and returns the lease;
+    // the owner clears what it appended itself before that.
+    internal readonly struct Http1Head : IDisposable
+    {
+        internal Http1Head(byte[] buffer, int length)
+        {
+            Buffer = buffer;
+            Length = length;
+        }
+
+        internal byte[] Buffer { get; }
+        internal int Length { get; }
+        internal bool IsEmpty => Buffer == null;
+
+        public void Dispose()
+        {
+            if (Buffer == null) return;
+            Array.Clear(Buffer, 0, Length);
+            ArrayPool<byte>.Shared.Return(Buffer);
+        }
+    }
+
     // Retains the independently authored bounded first-body header encoder from
     // the performance work. Metadata/transport ownership stays with its callers.
     internal static class Http1HeaderEncoding
     {
-        internal static MemoryStream Encode(HttpListenerResponse response, int bodyCount)
+        // Status lines repeat a few codes; the code text is shared instead of formatted per response.
+        private static readonly string?[] StatusTexts = new string?[600];
+
+        internal static Http1Head Encode(HttpListenerResponse response, int bodyCount)
         {
             var encoding = WebServer.DefaultEncoding;
-            var preamble = encoding.GetPreamble();
             var rawCookies = response.Headers.GetValues(HttpHeaderNames.SetCookie);
             string? cookies = null;
             if (response.ExistingCookies != null && response.ExistingCookies.Count > 0)
@@ -26,8 +53,10 @@ namespace EmbedIO.Net.Internal
             ValidateHead(response, rawCookies);
             var version = response.ProtocolVersion == HttpVersion.Version11 ? "1.1"
                 : response.ProtocolVersion == HttpVersion.Version10 ? "1.0" : response.ProtocolVersion.ToString();
-            var status = response.StatusCode.ToString(CultureInfo.InvariantCulture);
-            MemoryStream stream;
+            var status = StatusText(response.StatusCode);
+            var chunked = response.SendChunked && !response.SuppressesBody;
+            byte[] buffer;
+            int size;
 #if NET10_0_OR_GREATER
             // Common headers fit on the stack: concatenate without a builder, then
             // perform one encoding operation. Large fields use the exact-size path.
@@ -37,28 +66,28 @@ namespace EmbedIO.Net.Internal
             if (!characters.Overflow)
             {
                 var content = text.Slice(0, characters.Position);
-                var size = checked(preamble.Length + encoding.GetByteCount(content));
-                stream = new MemoryStream(GetHeaderBufferCapacity(response, size, preamble.Length, bodyCount));
-                stream.SetLength(size);
-                preamble.CopyTo(stream.GetBuffer(), 0);
-                encoding.GetBytes(content, stream.GetBuffer().AsSpan(preamble.Length));
+                size = encoding.GetByteCount(content);
+                buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked));
+                encoding.GetBytes(content, buffer);
             }
             else
 #endif
             {
-                var writer = new HeaderWriter(encoding, null, preamble.Length);
+                var writer = new HeaderWriter(encoding, null, 0);
                 WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
-                stream = new MemoryStream(GetHeaderBufferCapacity(response, writer.Position, preamble.Length, bodyCount));
-                stream.SetLength(writer.Position);
-                var buffer = stream.GetBuffer();
-                Buffer.BlockCopy(preamble, 0, buffer, 0, preamble.Length);
-                writer = new HeaderWriter(encoding, buffer, preamble.Length);
+                size = writer.Position;
+                buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked));
+                writer = new HeaderWriter(encoding, buffer, 0);
                 WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
             }
 
-            stream.Position = preamble.Length;
+            return new Http1Head(buffer, size);
+        }
 
-            return stream;
+        private static string StatusText(int statusCode)
+        {
+            if ((uint)statusCode >= (uint)StatusTexts.Length) return statusCode.ToString(CultureInfo.InvariantCulture);
+            return StatusTexts[statusCode] ??= statusCode.ToString(CultureInfo.InvariantCulture);
         }
 
         // WebHeaderCollection refuses a bare CRLF in a value but accepts one followed by a
@@ -86,20 +115,6 @@ namespace EmbedIO.Net.Internal
                     throw new InvalidOperationException("A Set-Cookie response field carries control characters.");
         }
 
-        private static int GetHeaderBufferCapacity(HttpListenerResponse response, int headerSize, int preambleSize, int bodyCount)
-        {
-            if (bodyCount == 0 || response.SuppressesBody) return headerSize;
-            var chunkSize = 0;
-            if (response.SendChunked)
-            {
-                chunkSize = 3; // At least one hexadecimal digit and CRLF.
-                for (var remaining = (uint)bodyCount >> 4; remaining != 0; remaining >>= 4) chunkSize++;
-            }
-            // Match ResponseStream's bounded first write exactly. Large headers and
-            // bodies retain their existing transport write boundaries.
-            var prefix = Math.Min(bodyCount, Math.Max(0, 16384 - (headerSize - preambleSize + chunkSize)));
-            return checked(headerSize + chunkSize + prefix);
-        }
         private static void WriteHeaderFields(HttpListenerResponse response, ref HeaderWriter writer, string version, string status,
             string? cookies, string[]? rawCookies)
         {
