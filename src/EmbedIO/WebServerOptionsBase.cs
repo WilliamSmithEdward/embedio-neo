@@ -9,11 +9,13 @@ namespace EmbedIO
     public abstract class WebServerOptionsBase : ConfiguredObject
     {
         // Finite defaults, modelled on Kestrel's KestrelServerLimits in ASP.NET Core 10.0.13:
-        // MaxRequestBodySize, MaxRequestHeadersTotalSize and MaxRequestHeaderCount. Kestrel has
-        // no per-read body deadline; it enforces a minimum data rate instead.
+        // MaxRequestBodySize, MaxRequestHeadersTotalSize, MaxRequestHeaderCount and
+        // MinRequestBodyDataRate. Kestrel has no per-read body deadline; it enforces the
+        // minimum data rate instead.
         internal const long DefaultMaximumRequestBodyBytes = 30_000_000;
         internal const int DefaultMaximumRequestHeaderBytes = 32 * 1024;
         internal const int DefaultMaximumRequestHeaderCount = 100;
+        internal static readonly MinimumDataRate DefaultMinimumRequestBodyDataRate = new(240, TimeSpan.FromSeconds(5));
 
         private bool _supportCompressedRequests;
         private bool _decompressedLimitSet;
@@ -75,6 +77,7 @@ namespace EmbedIO
         private int? _maximumRequestHeaderBytes = DefaultMaximumRequestHeaderBytes;
         private int? _maximumRequestHeaderCount = DefaultMaximumRequestHeaderCount;
         private TimeSpan? _requestBodyReadTimeout;
+        private MinimumDataRate? _minimumRequestBodyDataRate = DefaultMinimumRequestBodyDataRate;
         private bool _enableTelemetry;
         private string? _telemetryServerName;
 
@@ -206,6 +209,37 @@ namespace EmbedIO
                 if (value.HasValue && (value.Value.TotalMilliseconds < 1 || value.Value.TotalMilliseconds > int.MaxValue))
                     throw new ArgumentOutOfRangeException(nameof(value));
                 _requestBodyReadTimeout = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the minimum rate at which a request body must arrive while the
+        /// application is reading it. The default is 240 bytes per second after a grace
+        /// period of 5 seconds, as Kestrel's <c>MinRequestBodyDataRate</c>. Null disables it.
+        /// </summary>
+        /// <remarks>
+        /// <para>The rate is measured only while a read of <see cref="IHttpRequest.InputStream"/>
+        /// is waiting for data, so time the handler spends not reading does not count, and it
+        /// is checked once per second. Once the time spent waiting exceeds the grace period, a
+        /// body whose bytes read divided by that time fall below the rate is refused: the
+        /// pending read throws an <see cref="HttpException"/> with status 408, and so does every
+        /// later read of the same body. On HTTP/1.x the connection is not reused; HTTP/2 and
+        /// HTTP/3 reset the stream after the response. An HTTP/2 body held back by the
+        /// connection's receive window, rather than by the client, is not refused.</para>
+        /// <para>Unlike <see cref="RequestBodyReadTimeout"/>, which bounds each read separately,
+        /// the rate also stops a client that trickles its body. It costs two timestamps per
+        /// read and no buffer copy, which is why it is on by default. The rate applies to every
+        /// protocol and listener mode. <c>CONNECT</c> tunnels are not request bodies and are not
+        /// measured. A route policy can replace or lift it.</para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        public MinimumDataRate? MinimumRequestBodyDataRate
+        {
+            get => _minimumRequestBodyDataRate;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _minimumRequestBodyDataRate = value is { IsNone: true } ? null : value;
             }
         }
 

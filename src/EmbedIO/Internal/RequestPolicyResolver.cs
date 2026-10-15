@@ -15,10 +15,12 @@ namespace EmbedIO.Internal
                 ? new RequestBodyPolicy(bytes, options.MaximumRequestHeaderBytes, options.MaximumRequestHeaderCount) : null;
             BodyReadTimeout = RequestLimitPolicy.Resolve(route?.RequestBodyReadTimeout, options.RequestBodyReadTimeout);
             RequestTimeout = RequestLimitPolicy.Resolve(route?.RequestTimeout, options.RequestTimeout);
+            BodyDataRate = RequestLimitPolicy.Resolve(route?.MinimumRequestBodyDataRate, options.MinimumRequestBodyDataRate);
             MaximumDecodedBytes = options.DecompressedLimitFor(maximum);
         }
         internal RequestBodyPolicy? BodyPolicy { get; }
         internal TimeSpan? BodyReadTimeout { get; }
+        internal MinimumDataRate? BodyDataRate { get; }
         internal TimeSpan? RequestTimeout { get; }
         // Limits what the compressed-request helpers decode. It follows the effective body
         // limit, as ASP.NET Core's request decompression does, unless configured separately.

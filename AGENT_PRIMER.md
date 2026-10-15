@@ -330,7 +330,7 @@ For any server reachable from an untrusted network:
 | Concern | Do this |
 | --- | --- |
 | Large bodies | `WithMaximumRequestBodyBytes(n)`, or per route with `WithRouteRequestLimits` |
-| Slow or stalled clients | `WithRequestTimeout(t)` caps total request time. `WithRequestBodyReadTimeout(t)` caps each body read. No default bounds how long a body being read may take. |
+| Slow or stalled clients | `MinimumRequestBodyDataRate` (240 B/s after 5 s, on by default) refuses a body that arrives too slowly while a handler reads it. `WithRequestTimeout(t)` caps total request time. `WithRequestBodyReadTimeout(t)` caps each body read. |
 | Too many requests in flight | `WithMaximumConcurrentRequests(n, queueLimit)` |
 | Too many connections | `WithConnectionLimits(maximumConnections, ...)` (not with `EmbedIOHttp3`) |
 | Header abuse | `WithRequestHeaderLimits(bytes, count)`. Pass both arguments: omitting the count removes the count limit. |

@@ -143,6 +143,45 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Sets the minimum rate at which a request body must arrive while the application reads it.
+        /// </summary>
+        /// <typeparam name="TOptions">The options type.</typeparam>
+        /// <param name="this">The options instance.</param>
+        /// <param name="value">The minimum rate, or null to disable it. The default is 240 bytes
+        /// per second after a 5-second grace period.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static TOptions WithMinimumRequestBodyDataRate<TOptions>(this TOptions @this, MinimumDataRate? value)
+            where TOptions : WebServerOptionsBase
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.MinimumRequestBodyDataRate = value;
+            return @this;
+        }
+
+        /// <summary>
+        /// Sets the minimum rate at which a request body must arrive while the application reads it.
+        /// </summary>
+        /// <typeparam name="TOptions">The options type.</typeparam>
+        /// <param name="this">The options instance.</param>
+        /// <param name="bytesPerSecond">The minimum rate, in bytes per second.</param>
+        /// <param name="gracePeriod">How long the rate may stay below the minimum before it is
+        /// enforced; longer than one second.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The rate is not positive, or the grace
+        /// period is one second or less or too large.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static TOptions WithMinimumRequestBodyDataRate<TOptions>(this TOptions @this, double bytesPerSecond, TimeSpan gracePeriod)
+            where TOptions : WebServerOptionsBase
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.MinimumRequestBodyDataRate = new MinimumDataRate(bytesPerSecond, gracePeriod);
+            return @this;
+        }
+
+        /// <summary>
         /// Limits the total size and the number of a request's header fields.
         /// </summary>
         /// <typeparam name="TOptions">The options type.</typeparam>

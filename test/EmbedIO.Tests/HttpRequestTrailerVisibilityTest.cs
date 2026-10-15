@@ -89,10 +89,11 @@ namespace EmbedIO.Tests
                 catch (Exception error) { entered.TrySetException(error); finished.SetException(error); throw; }
             },
             // Reading after disposal reaches the physical HTTP/1 body, which the handler gets
-            // only without a body limit or read deadline. With either default, the request
-            // stream is a view that throws ObjectDisposedException once disposed, as HTTP/2 and
-            // HTTP/3 bodies do; ReadingADisposedHttp1BodyThrowsUnderTheDefaults pins that.
-            options => { if (abandon) options.WithMaximumRequestBodyBytes(null).WithRequestBodyReadTimeout(null); });
+            // only without a body limit, read deadline or minimum data rate. With any of those
+            // defaults, the request stream is a view that throws ObjectDisposedException once
+            // disposed, as HTTP/2 and HTTP/3 bodies do; ReadingADisposedHttp1BodyThrowsUnderTheDefaults
+            // pins that.
+            options => { if (abandon) options.WithMaximumRequestBodyBytes(null).WithRequestBodyReadTimeout(null).WithMinimumRequestBodyDataRate(null); });
             using var tcp = new TcpClient { NoDelay = true };
             await tcp.ConnectAsync(IPAddress.Loopback, host.Port, host.Token);
             await tcp.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"POST / HTTP/1.1\r\nHost: localhost:{host.Port}\r\nContent-Length: {length}\r\n\r\n"), host.Token);
@@ -166,9 +167,11 @@ namespace EmbedIO.Tests
                     {
                         var failure = await Assert.CatchAsync<Exception>(async () => await context.Request.InputStream.CopyToAsync(content));
                         // Reset cancels the context and fails its body. Context disposal
-                        // races the resumed reader, so verify both concrete outcomes.
+                        // races the resumed reader, so verify both concrete outcomes. The
+                        // disposed object is the body, or the data-rate view the default
+                        // rate wraps it in, which context close retires.
                         if (failure is ObjectDisposedException disposed)
-                            Assert.That(disposed.ObjectName, Is.EqualTo("Http2RequestBody"));
+                            Assert.That(disposed.ObjectName, Is.EqualTo("Http2RequestBody").Or.EqualTo("RequestBodyRateStream"));
                         else
                         {
                             Assert.That(failure, Is.TypeOf<IOException>());

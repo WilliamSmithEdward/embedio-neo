@@ -20,6 +20,10 @@ namespace EmbedIO.Internal
         // once, on the reading thread, when a read waits longer than the timeout for data.
         void TimeBodyReads(TimeSpan timeout, Action? onTimeout);
 
+        // Must be applied before InputStream is first read. onFailure, when given, runs once,
+        // on the reading thread, when the body is refused for arriving below the rate.
+        void EnforceBodyDataRate(MinimumDataRate rate, Action? onFailure);
+
         // Must be applied before InputStream is first read. Counts the body bytes the
         // application reads into the request's telemetry scope.
         void CountBody(RequestTelemetry scope);
