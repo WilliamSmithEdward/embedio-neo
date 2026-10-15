@@ -105,6 +105,10 @@ The result must report executed cases, and any saved crash or hang fails the job
 even if the fuzzer exits zero. Artifacts retain coverage maps, run parameters,
 logs, the generated corpus and failure inputs. Replay a saved AFL input with the
 same standalone replay command shown above; it uses the shared callback.
+Hosted evidence is packaged as `afl-evidence.tar.gz` because AFL's original
+queue/crash filenames contain colons that GitHub artifact upload rejects.
+Extract those names on Linux; when replaying on Windows, copy the selected
+input's bytes to a filename such as `repro.bin` first.
 
 The initial five-second local Linux-container validation completed 1,696 cases,
 retained 24 new corpus entries and reported 68 edges with no crashes or hangs.

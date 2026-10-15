@@ -23,12 +23,10 @@ jobs:
         with:
           global-json-file: global.json
       - name: Replay seeds and run coverage-guided mutations
-        shell: pwsh
+        shell: bash
         env:
           CAMPAIGN_SECONDS: ${{ github.event_name == 'schedule' && '600' || '60' }}
-        run: |
-          $seed = [int]([long]$env:GITHUB_RUN_ID % 2147483646) + 1
-          ./scripts/run-sharpfuzz.ps1 -Seconds ([int]$env:CAMPAIGN_SECONDS) -Seed $seed
+        run: pwsh -NoProfile -File ./scripts/run-sharpfuzz.ps1 -Seconds "$CAMPAIGN_SECONDS" -Seed "$((GITHUB_RUN_ID % 2147483646 + 1))"
       - name: Retain coverage log, corpus and crash reproducers
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
