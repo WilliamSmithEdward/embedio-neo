@@ -118,7 +118,9 @@ namespace EmbedIO.Tests.Issues
             await using var host = await MultiHost.StartAsync(protocol, o => o.WithMinimumRequestBodyDataRate(Tight), Host.EchoLength, HttpVerbs.Any);
             // Refusal can stop serialization early. Do not promise a full fixed-length body:
             // HttpClient's HTTP/3 sender otherwise replaces the response with a length error.
-            using var content = new SlowContent(1, TimeSpan.FromMilliseconds(50), 200, swallowErrors: true, advertiseLength: false);
+            // HTTP/3 must let CopyToAsync wrap the upload error so HttpClient can
+            // recognize graceful STOP_SENDING; swallowing it triggers a buffered reflush.
+            using var content = new SlowContent(1, TimeSpan.FromMilliseconds(50), 200, swallowErrors: protocol == 2, advertiseLength: false);
             var clock = Stopwatch.StartNew();
             using var response = await host.SendAsync(HttpMethod.Post, content);
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.RequestTimeout));
@@ -159,6 +161,13 @@ namespace EmbedIO.Tests.Issues
             await content.CopyToAsync(destination);
             Assert.That(destination.Length, Is.EqualTo(2), "The peer refused the second write.");
             Assert.That(content.Headers.ContentLength, Is.Null, "An interrupted upload must not claim all six bytes were sent.");
+
+            using var propagated = new SlowContent(2, TimeSpan.Zero, 3, advertiseLength: false);
+            using var refused = new RefusingUploadStream();
+            var error = await Assert.ThrowsAsync<HttpRequestException>(() => propagated.CopyToAsync(refused));
+            Assert.That(error?.InnerException, Is.SameAs(refused.Refusal),
+                "HttpContent must preserve the upload failure for HttpClient's graceful HTTP/3 stop handling.");
+            Assert.That(refused.Length, Is.EqualTo(2));
         }
 
         // ---------------------------------------------------------------- acceptances
@@ -441,9 +450,10 @@ namespace EmbedIO.Tests.Issues
 
         private sealed class RefusingUploadStream : MemoryStream
         {
+            internal IOException Refusal { get; } = new IOException("The peer refused further upload bytes.");
             public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
                 => Length == 0 ? base.WriteAsync(buffer, offset, count, cancellationToken)
-                    : Task.FromException(new IOException("The peer refused further upload bytes."));
+                    : Task.FromException(Refusal);
         }
 
         // A body source that completes a read only when supplied, honoring cancellation.
