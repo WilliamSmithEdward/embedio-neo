@@ -88,22 +88,24 @@ namespace EmbedIO.Testing.Internal
         // because nobody outside the .NET team will ever need them, right?
         // https://github.com/dotnet/corefx/blob/master/src/System.Net.Http/src/System/Net/Http/Headers/KnownHeaders.cs
         // Here are the "content" headers, extracted on 2019-07-06:
-        private static ResponseHeaderType GetResponseHeaderType(string name) => name switch
+        private static readonly System.Collections.Generic.Dictionary<string, ResponseHeaderType> ResponseHeaderTypes = new(System.StringComparer.OrdinalIgnoreCase)
         {
             // Content-Length is set automatically and shall not be touched
-            HttpHeaderNames.ContentLength => ResponseHeaderType.None,
+            [HttpHeaderNames.ContentLength] = ResponseHeaderType.None,
             // These headers belong to Content
-            HttpHeaderNames.Allow => ResponseHeaderType.Content,
-            HttpHeaderNames.ContentDisposition => ResponseHeaderType.Content,
-            HttpHeaderNames.ContentEncoding => ResponseHeaderType.Content,
-            HttpHeaderNames.ContentLanguage => ResponseHeaderType.Content,
-            HttpHeaderNames.ContentLocation => ResponseHeaderType.Content,
-            HttpHeaderNames.ContentMD5 => ResponseHeaderType.Content,
-            HttpHeaderNames.ContentRange => ResponseHeaderType.Content,
-            HttpHeaderNames.ContentType => ResponseHeaderType.Content,
-            HttpHeaderNames.Expires => ResponseHeaderType.Content,
-            HttpHeaderNames.LastModified => ResponseHeaderType.Content,
-            _ => ResponseHeaderType.Response
+            [HttpHeaderNames.Allow] = ResponseHeaderType.Content,
+            [HttpHeaderNames.ContentDisposition] = ResponseHeaderType.Content,
+            [HttpHeaderNames.ContentEncoding] = ResponseHeaderType.Content,
+            [HttpHeaderNames.ContentLanguage] = ResponseHeaderType.Content,
+            [HttpHeaderNames.ContentLocation] = ResponseHeaderType.Content,
+            [HttpHeaderNames.ContentMD5] = ResponseHeaderType.Content,
+            [HttpHeaderNames.ContentRange] = ResponseHeaderType.Content,
+            [HttpHeaderNames.ContentType] = ResponseHeaderType.Content,
+            [HttpHeaderNames.Expires] = ResponseHeaderType.Content,
+            [HttpHeaderNames.LastModified] = ResponseHeaderType.Content,
         };
+
+        private static ResponseHeaderType GetResponseHeaderType(string name)
+            => ResponseHeaderTypes.TryGetValue(name, out var type) ? type : ResponseHeaderType.Response;
     }
 }
