@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -41,27 +42,30 @@ internal static class ListenerAllocations
             context.Response.Headers["X-Text"] = text;
             context.Response.Headers["X-Last"] = "tail";
             var expected = Encoding.UTF8.GetBytes($"HTTP/1.1 201 Created\r\nX-Text: {text}\r\nX-Last: tail\r\n\r\n");
-            var write = ((context.Response.GetType().GetMethod("WriteHeaders", PrivateInstance)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).CreateDelegate<Func<int, MemoryStream>>(context.Response);
+            var write = HeadWriter(context.Response);
+            // The head is encoded into a pooled lease: no managed allocation at any head size
+            // (main allocated 144 B to 49,432 B per head in these rows before the lease).
+            HeadCheck headOnly = (buffer, length) => buffer.AsSpan(0, length).SequenceEqual(expected);
             Measure("headers-" + size, () =>
             {
-                using var wire = write(0);
-                if (!wire.GetBuffer().AsSpan(0, (int)wire.Length).SequenceEqual(expected))
-                    throw new InvalidOperationException("Header bytes changed.");
-            }, size == 0 ? 1000 : size == 1024 ? 8500 : 105000);
+                if (!write(0, headOnly)) throw new InvalidOperationException("Header bytes changed.");
+            }, 64);
+            // The head is encoded with room for the first body segment, which the response
+            // output appends behind it in the same pooled array; there is no growth path.
             var body = Encoding.ASCII.GetBytes("Hello, World!");
-            foreach (var reserve in new[] { false, true })
+            HeadCheck withBody = (buffer, length) =>
             {
-                Measure("headers-" + size + "-first-body-13-" + (reserve ? "reserved" : "growth"), () =>
-                {
-                    using var wire = write(reserve ? body.Length : 0);
-                    if (!wire.GetBuffer().AsSpan(0, (int)wire.Length).SequenceEqual(expected))
-                        throw new InvalidOperationException("Header bytes changed.");
-                    wire.Position = wire.Length;
-                    wire.Write(body);
-                    if (!wire.GetBuffer().AsSpan((int)wire.Length - body.Length, body.Length).SequenceEqual(body))
-                        throw new InvalidOperationException("Body bytes changed.");
-                }, size == 0 ? 2000 : size == 1024 ? 17000 : 210000);
-            }
+                if (!buffer.AsSpan(0, length).SequenceEqual(expected)) return false;
+                if (buffer.Length < length + body.Length) throw new InvalidOperationException("The head left no room for the first body segment.");
+                body.CopyTo(buffer, length);
+                var appended = buffer.AsSpan(length, body.Length).SequenceEqual(body);
+                Array.Clear(buffer, length, body.Length);
+                return appended;
+            };
+            Measure("headers-" + size + "-first-body-13-reserved", () =>
+            {
+                if (!write(body.Length, withBody)) throw new InvalidOperationException("Header or body bytes changed.");
+            }, 64);
         }
         Console.WriteLine(JsonSerializer.Serialize(new
         {
@@ -90,6 +94,29 @@ internal static class ListenerAllocations
             rows.Add(new { name, medianNanoseconds = ns, allocatedBytes = bytes, maxBytes });
             if (verify && bytes > maxBytes + 1) throw new InvalidOperationException($"{name}: {bytes} B exceeds {maxBytes} B.");
         }
+    }
+
+    private delegate bool HeadCheck(byte[] buffer, int length);
+
+    // WriteHeaders returns an internal pooled head lease; the compiled call hands its bytes to
+    // the check and disposes the lease, as the response output does after its first write.
+    private static Func<int, HeadCheck, bool> HeadWriter(IHttpResponse response)
+    {
+        var method = response.GetType().GetMethod("WriteHeaders", PrivateInstance)
+            ?? throw new InvalidOperationException("Missing response head encoder.");
+        var leaseType = method.ReturnType;
+        var bodyCount = Expression.Parameter(typeof(int), "bodyCount");
+        var check = Expression.Parameter(typeof(HeadCheck), "check");
+        var head = Expression.Variable(leaseType, "head");
+        var buffer = leaseType.GetProperty("Buffer", PrivateInstance) ?? throw new InvalidOperationException("Missing head buffer.");
+        var length = leaseType.GetProperty("Length", PrivateInstance) ?? throw new InvalidOperationException("Missing head length.");
+        var dispose = leaseType.GetMethod(nameof(IDisposable.Dispose), Type.EmptyTypes) ?? throw new InvalidOperationException("Missing head release.");
+        var block = Expression.Block(typeof(bool), new[] { head },
+            Expression.Assign(head, Expression.Call(Expression.Constant(response), method, bodyCount)),
+            Expression.TryFinally(
+                Expression.Invoke(check, Expression.Property(head, buffer), Expression.Property(head, length)),
+                Expression.Call(head, dispose)));
+        return Expression.Lambda<Func<int, HeadCheck, bool>>(block, bodyCount, check).Compile();
     }
 
     private static IHttpContext Context(Stream source)
