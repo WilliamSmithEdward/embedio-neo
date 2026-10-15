@@ -102,20 +102,16 @@ internal static class ListenerAllocations
     // the check and disposes the lease, as the response output does after its first write.
     private static Func<int, HeadCheck, bool> HeadWriter(IHttpResponse response)
     {
-        var method = response.GetType().GetMethod("WriteHeaders", PrivateInstance)
-            ?? throw new InvalidOperationException("Missing response head encoder.");
-        var leaseType = method.ReturnType;
         var bodyCount = Expression.Parameter(typeof(int), "bodyCount");
         var check = Expression.Parameter(typeof(HeadCheck), "check");
-        var head = Expression.Variable(leaseType, "head");
-        var buffer = leaseType.GetProperty("Buffer", PrivateInstance) ?? throw new InvalidOperationException("Missing head buffer.");
-        var length = leaseType.GetProperty("Length", PrivateInstance) ?? throw new InvalidOperationException("Missing head length.");
-        var dispose = leaseType.GetMethod(nameof(IDisposable.Dispose), Type.EmptyTypes) ?? throw new InvalidOperationException("Missing head release.");
+        // Members resolve by name inside the expression tree, non-public ones included.
+        var encode = Expression.Call(Expression.Constant(response), "WriteHeaders", null, bodyCount);
+        var head = Expression.Variable(encode.Type, "head");
         var block = Expression.Block(typeof(bool), new[] { head },
-            Expression.Assign(head, Expression.Call(Expression.Constant(response), method, bodyCount)),
+            Expression.Assign(head, encode),
             Expression.TryFinally(
-                Expression.Invoke(check, Expression.Property(head, buffer), Expression.Property(head, length)),
-                Expression.Call(head, dispose)));
+                Expression.Invoke(check, Expression.Property(head, "Buffer"), Expression.Property(head, "Length")),
+                Expression.Call(head, "Dispose", null)));
         return Expression.Lambda<Func<int, HeadCheck, bool>>(block, bodyCount, check).Compile();
     }
 
