@@ -17,6 +17,9 @@
 
 ### Fixed
 
+- Testing helpers classify content headers without case, run close callbacks once
+  even when diagnostics fail, and return null for negative stock-resource ranges.
+
 - Ignore unsupported Range units and preserve equal-quality preference order across
   separate header values. Return acquired rate-limiter permits when close-callback
   registration fails; IP-ban cleanup preserves renewed bans and concurrent regex
@@ -32,6 +35,10 @@
   during heartbeat registration also removes the registration reliably.
 
 ### Changed
+
+- Consolidate duplicate Web API result casting and remove unreachable CIDR logic
+  and duplicate HTTP-date formats. The production maintenance audit records all
+  434 reviewed source files and the compatibility-preserving cleanup.
 
 - A compressed HTTP/1 response sends the compressor's final block and the chunked
   terminator in one transport write, and the response serializer disposes its stream
