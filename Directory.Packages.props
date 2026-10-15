@@ -1,6 +1,8 @@
 <Project>
 
   <ItemGroup>
+    <!-- Property generation and shrinking in the nonpackable fuzz harness only. -->
+    <PackageVersion Include="FsCheck" Version="3.4.0" />
     <!-- The source generator's compiler API. 4.8 is the Roslyn of the .NET 8 SDK; a newer
          version would stop the generator loading in older supported SDKs. -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
