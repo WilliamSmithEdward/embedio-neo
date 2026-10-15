@@ -803,3 +803,66 @@ be separated from the other changes. Starting the HTTP/1 socket read outside
 adding a second gate acquisition per pending read.
 
 Not measured here: idle memory per connection, startup time and the HTTP/3 handshake.
+
+## HTTP/1 response head in the first-write segment (2026-10-15)
+
+The candidate (`codex/perf-hunt-2`, measured as the uncommitted change on `8083fed5`,
+core SHA-256 `e59295e0...`) against main `8083fed5` (core `dcc0f1c7...`), both in one
+harness build (runner `79cc12bd...`). What the candidate changes:
+
+- `Http1HeaderEncoding.Encode` writes the head into an array rented from
+  `ArrayPool<byte>.Shared` with room behind it for the first body segment the output
+  owner appends (the chunk-size line and the whole body up to 64 KiB, or a 16 KiB
+  prefix), instead of into a `MemoryStream` whose exact-size buffer the output owner
+  then copied into a second rented segment. Head and first body bytes still leave in
+  one transport write with the same boundaries; the lease is cleared and returned as
+  the second segment was.
+- The status line's code text comes from a shared table instead of `int.ToString` per
+  response.
+
+Method as in the previous section: SDK 10.0.402 and runtime 10.0.13, server logical
+CPUs 0-3 and client 4-11, benchmark lock and both heavy-work slots held, 4 s warmup and
+8 s measurement, three rounds in each harness role, samples classified by the core
+hash the server loaded, two of 42 samples excluded for background CPU above the
+scenario rule. Means of the valid samples, base -> candidate (ratio). Raw data:
+`TestResults/perf-hunt-2/results/cand1-{a,b}` in the branch worktree.
+
+| Scenario (valid samples base/candidate/Kestrel) | Requests/s | Server CPU us/req | Server B/req | p50 ms | p99 ms | p99.9 ms | Requests/s vs Kestrel |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 13 B, 64 conn (6/6/3) | 216,867 -> 217,502 (1.003) | 18.0 -> 17.9 (0.995) | 5,119 -> 4,802 (0.938) | 0.277 -> 0.276 (0.996) | 0.591 -> 0.590 (0.998) | 1.60 -> 1.57 (0.980) | 0.84x |
+| 13 B, 64 conn, closed after 100 (6/6/3) | 209,122 -> 210,155 (1.005) | 18.6 -> 18.4 (0.990) | 5,252 -> 4,973 (0.947) | 0.280 -> 0.279 (0.996) | 0.767 -> 0.772 (1.007) | 3.29 -> 2.96 (0.900) | 0.84x |
+| 13 B chunked, 64 conn (6/6/3) | 136,295 -> 137,186 (1.007) | 28.7 -> 28.3 (0.986) | 5,298 -> 4,994 (0.943) | 0.444 -> 0.442 (0.995) | 0.797 -> 0.861 (1.080) | 2.49 -> 2.23 (0.896) | 0.54x |
+| 1 MiB response, 16 conn (6/6/3) | 14,418 -> 14,377 (0.997) | 271.1 -> 273.1 (1.007) | 5,289 -> 4,954 (0.937) | 1.073 -> 1.069 (0.996) | 1.636 -> 1.647 (1.007) | 13.33 -> 14.71 (1.104) | 1.00x |
+| TLS 13 B, 64 conn (6/5/3) | 200,962 -> 203,948 (1.015) | 19.5 -> 19.2 (0.984) | 5,175 -> 4,856 (0.938) | 0.298 -> 0.296 (0.992) | 0.619 -> 0.601 (0.972) | 1.80 -> 1.53 (0.851) | 0.86x |
+| 1 KiB JSON compressed, 64 conn (5/6/3) | 81,943 -> 81,783 (0.998) | 47.1 -> 46.9 (0.996) | 6,676 -> 6,317 (0.946) | 0.735 -> 0.735 (1.000) | 1.364 -> 1.361 (0.997) | 5.71 -> 6.07 (1.062) | 0.48x |
+
+Allocation fell 5.3 to 6.3% per request in every scenario and in both harness roles
+(ratios 0.932 to 0.962 per role). Requests per second, CPU per request, p50 and p99
+moved by at most 1.5%, inside the spread between samples of the same core; the p99
+rise on 13 B chunked responses (0.797 -> 0.861 ms) comes from one role pair (1.120)
+while the other measured 1.042, with p99.9 lower in both. The gain is the
+`MemoryStream`, its exact-size buffer and the head copy, about 300 bytes per response.
+
+The same window profiled the engine at `8083fed5` against Kestrel with the harness's
+sampled allocation and dotnet-trace 10.0.745401 (`TestResults/perf-hunt-2/results/profile1-a`
+and `trace1-a`), as the starting point for the rest of this round:
+
+- 13 B over HTTP/1: 18.9 us and 5,160 B per request against Kestrel's 15.6 us and
+  33 B. The request and response header collections (`Hashtable` buckets, `ArrayList`,
+  `NameObjectEntry`, `NameValueCollection`, `WebHeaderCollection`) and the parsed
+  strings are about 2.9 KB of it; one asynchronous socket send is 23% of busy thread
+  time.
+- 1 KiB JSON compressed over HTTP/1: 47.5 us and 6,725 B against 23.3 us and 1,278 B.
+  Three transport writes per response: Brotli emits a first chunk during the
+  application's write, its disposal writes the final block synchronously, and the
+  response's disposal writes the chunked terminator synchronously; the two synchronous
+  sends are 15% of busy thread time against 9% for the asynchronous one. Content-coding
+  negotiation allocates a dictionary and interface enumerators (about 500 B).
+- 13 B over h2c, 8 connections x 32 streams: 9.4 us and 9,274 B against 2.9 us and
+  33 B. Lock spinning is 11.6% of busy thread time, at `StreamWrite.Commit` (the send
+  flow-control and stream registry locks), `DispatchHttp2Async` (the connection lock
+  around its per-request routing table), `Http2SendFlowControl.Open`, the dispatcher's
+  release and `MultiplexedResponse.EnterAsync`; token registration contention is another
+  2.1%, three quarters of it disposing the per-request linked source that joins the
+  server token at close; the finalizer thread holds 5.8%.
+
