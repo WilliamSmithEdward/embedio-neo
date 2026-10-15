@@ -1,5 +1,7 @@
 - name: Documentation
   href: README.md
+- name: Generated URL and query properties
+  href: guides/property-testing.md
 - name: Parity audit
   items:
     - name: Baseline, findings, and reproduction
@@ -354,6 +356,8 @@
 
 - name: WebTransport upstream readiness
   href: project/webtransport-upstream-readiness.md
+- name: Coverage-guided URL fuzzing
+  href: guides/coverage-guided-fuzzing.md
 
 - name: Production source maintenance audit
   href: project/source-maintenance-audit.md

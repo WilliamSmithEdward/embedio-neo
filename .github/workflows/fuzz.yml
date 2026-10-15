@@ -24,7 +24,13 @@ jobs:
           global-json-file: global.json
       - name: Restore the locked dependencies
         run: dotnet restore test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj --locked-mode
-      - name: Run reproducible mutation and property checks
+      - name: Run FsCheck properties with replay and shrinking
+        shell: bash
+        run: |
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          mkdir -p TestResults/fuzz
+          dotnet run --project test/EmbedIO.Fuzz -c Release --no-restore -- --fscheck "$seed" 10000 2>&1 | tee TestResults/fuzz/fscheck.log
+      - name: Run existing mutation campaigns
         run: |
           seed=$((GITHUB_RUN_ID % 2147483647))
           dotnet run --project test/EmbedIO.Fuzz -c Release --no-restore -- "$seed" 100000

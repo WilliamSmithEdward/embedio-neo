@@ -213,6 +213,7 @@ internal static class Program
         reservation.Stop();
         var prefix = $"http://127.0.0.1:{port}/";
         using var lifetime = new CancellationTokenSource();
+        var echo = new EchoSocket();
         using var server = new WebServer(o => o.WithUrlPrefix(prefix).WithMode(mode))
             .WithLocalSessionManager()
             .WithCors("https://client.example", "content-type", "GET,POST,PUT,DELETE")
@@ -224,7 +225,7 @@ internal static class Program
                 c.Session["visits"] = count;
                 return c.SendStringAsync(count.ToString(CultureInfo.InvariantCulture), "text/plain", Encoding.UTF8);
             }))
-            .WithModule(new EchoSocket())
+            .WithModule(echo)
             .WithWebApi("/api", m => m.WithController<ConsumerController>())
             .WithStaticFolder("/", directory, false);
         var running = server.RunAsync(lifetime.Token);
@@ -333,7 +334,7 @@ internal static class Program
             {
                 foreach (var binary in new[] { false, true })
                     foreach (var fragmented in new[] { false, true })
-                        await WebSocket(prefix, label, binary, fragmented);
+                        await WebSocket(prefix, label, binary, fragmented, echo);
             }
             await Request("healthy-after-errors", HttpMethod.Get, "api/number/3");
         }
@@ -354,15 +355,17 @@ internal static class Program
     private static string? Header(HttpResponseMessage response, string name)
         => response.Headers.TryGetValues(name, out var values) ? string.Join(",", values) : null;
 
-    private static async Task WebSocket(string prefix, string label, bool binary, bool fragmented)
+    private static async Task WebSocket(string prefix, string label, bool binary, bool fragmented, EchoSocket echo)
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         using var socket = new ClientWebSocket();
+        var connected = echo.ExpectConnection();
         await socket.ConnectAsync(new Uri(prefix.Replace("http:", "ws:", StringComparison.Ordinal) + "ws"), deadline.Token);
-        // Wait for an application-owned greeting, avoiding upstream's known early-message bug.
+        // The greeting precedes handler publication in upstream; observe both before sending.
         var buffer = new byte[1024];
         var greeting = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), deadline.Token);
         if (Encoding.UTF8.GetString(buffer, 0, greeting.Count) != "ready") throw new InvalidOperationException("Missing readiness greeting");
+        await EchoSocket.WaitForMessageHandlerAsync(await connected.WaitAsync(deadline.Token), deadline.Token);
         var payload = binary ? new byte[] { 0, 1, 127, 128, 255 } : Encoding.UTF8.GetBytes("caf\u00e9 \ud83d\ude00");
         var type = binary ? WebSocketMessageType.Binary : WebSocketMessageType.Text;
         if (fragmented)
@@ -444,7 +447,37 @@ public sealed class CycleRow { public CycleRow Next => this; }
 public sealed class EchoSocket : WebSocketModule
 {
     public EchoSocket() : base("/ws", true) { }
-    protected override Task OnClientConnectedAsync(IWebSocketContext context) => SendAsync(context, "ready");
+    private TaskCompletionSource<IWebSocketContext>? _connected;
+
+    internal Task<IWebSocketContext> ExpectConnection()
+    {
+        _connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        return _connected.Task;
+    }
+
+    internal static async Task WaitForMessageHandlerAsync(IWebSocketContext context, CancellationToken cancellationToken)
+    {
+        var socket = context.WebSocket;
+        var type = socket.GetType();
+        // Test-only observation of the pinned upstream and current Neo implementations.
+        // An open transport or completed greeting does not prove the module has subscribed.
+        var handler = type.GetField("OnMessage", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? type.GetField("_onMessage", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Unknown managed WebSocket message-handler field.");
+        if (!typeof(Delegate).IsAssignableFrom(handler.FieldType))
+            throw new InvalidOperationException("Unexpected managed WebSocket message-handler field type.");
+        while (handler.GetValue(socket) == null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Delay(1, cancellationToken);
+        }
+    }
+
+    protected override Task OnClientConnectedAsync(IWebSocketContext context)
+    {
+        (_connected ?? throw new InvalidOperationException("Unexpected WebSocket connection.")).SetResult(context);
+        return SendAsync(context, "ready");
+    }
     protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
         => (result ?? throw new ArgumentNullException(nameof(result))).MessageType == (int)WebSocketMessageType.Binary
             ? SendAsync(context, buffer)

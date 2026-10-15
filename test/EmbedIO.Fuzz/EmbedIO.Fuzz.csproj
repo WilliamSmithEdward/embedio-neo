@@ -5,6 +5,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="FsCheck" PrivateAssets="all" />
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
     <None Update="corpus.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

@@ -2,6 +2,7 @@
 # Set default behavior to automatically normalize line endings.
 ###############################################################################
 * text=auto
+scripts/run-afl-container.sh text eol=lf
 
 ###############################################################################
 # Set default behavior for command prompt diff.

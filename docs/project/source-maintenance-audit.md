@@ -87,6 +87,11 @@ zero failures, including the original trickle fixture and both raw rebind
 variants. This does not claim the underlying runtime rebind issue was repaired.
 The policy corrections merged in [PR #456](https://github.com/WilliamSmithEdward/embedio-neo/pull/456)
 after all exact-head checks and the overall result passed. Testing-adapter
-corrections and safe simplifications accompany this report; their own
-cross-platform checks remain required before merge. No release or publication
-is part of this audit.
+corrections and safe simplifications merged in
+[PR #457](https://github.com/WilliamSmithEdward/embedio-neo/pull/457) after all 33
+checks completed successfully or were intentionally skipped, with an overall
+passing result. Each desktop suite reported 6,395 cases with zero failures.
+The source reorganization in
+[PR #455](https://github.com/WilliamSmithEdward/embedio-neo/pull/455) preserved
+the contents of all 434 production source files; its 36 checks and subsequent
+main CI passed. No release or publication is part of this audit.
