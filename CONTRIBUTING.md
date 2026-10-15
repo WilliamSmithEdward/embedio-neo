@@ -26,9 +26,14 @@ Python guard rejects compiler/analyzer directives and build configuration opt-ou
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
 The tests target .NET 10.
 
-CI requires the Android and Mac Catalyst smoke jobs and all four MAUI HTTPS
-platform jobs to succeed. Their reusable workflows and standalone manual
-workflows are enabled at William's request. Skipped jobs do not supply platform
+CI requires the Mac Catalyst smoke job and the Windows, Mac Catalyst and Android
+MAUI HTTPS platform jobs to succeed on every code change. The Android lifecycle
+smoke runs on pushes to `main` and manual dispatches only. The iOS HTTPS job
+and the Windows AppContainer smoke are manual only (owner decision,
+2026-10-15): `gh workflow run maui-https.yml --ref <branch>` includes iOS by
+default, and `gh workflow run appcontainer.yml --ref <branch>` runs the
+AppContainer smoke. Their reusable workflows and standalone manual workflows
+are enabled at William's request. Skipped jobs do not supply platform
 validation evidence.
 
 The HTTPS jobs run a test-only native app on Windows,
@@ -100,8 +105,9 @@ second before a 15-minute job limit cancelled it (approved 2026-10-13).
 
 CI also runs test-only MAUI Mac Catalyst and Android apps outside the ordinary
 solution and shipped packages. The Android fixture uses the pinned .NET 10 SDK,
-MAUI workload, locked packages, and an Android 10/API 29 emulator; the job is
-included in `CI passed`. Run it independently with
+MAUI workload, locked packages, and an Android 10/API 29 emulator; the job runs
+on pushes to `main` and manual dispatches, and `CI passed` expects it skipped on
+pull requests. Run it independently with
 `gh workflow run android-smoke.yml --ref <branch>` and inspect its `android-smoke`
 artifact. See [Android hosting guidance](docs/platforms/maui-android.md) for the
 tested lifecycle phases and limits. A desktop test pass is not Android evidence.
@@ -124,8 +130,9 @@ A pull request that changes only documentation (`docs/**`, `images/**`, any
 `*.md`, `docfx.json`, `toc.yml`; the `changes` job in `ci.yml` lists the exact
 patterns) skips the test matrix, the compatibility jobs and the platform app
 smokes. Static analysis, the package build (which still packs and checks
-`README.md` and the icon) and `CI passed` run on every pull request. Pushes to
-`main` and manual dispatches always run everything.
+`README.md` and the icon) and `CI passed` run on every pull request. A code pull
+request runs the compatibility jobs on Windows and Linux; pushes to `main` and
+manual dispatches run them on macOS as well, plus the Android lifecycle smoke.
 
 The opt-in QUIC and runtime diagnostics (`quic-cleanup-experiment`,
 `quic-self-contained-experiment`, `quic-openssl-experiment`, `quic-rebind-probe`,

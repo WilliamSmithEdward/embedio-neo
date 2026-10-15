@@ -36,7 +36,9 @@ jobs:
     # The build job packs and checks README.md and the icon on every run, so a
     # change to either is still verified. Everything else (source, tests, scripts,
     # workflows, lock files, licenses, props) is code. Pushes and manual dispatches
-    # always run everything.
+    # always run everything, including the legs that pull requests leave out (the
+    # Android lifecycle smoke and the macOS compatibility job); iOS and the
+    # Windows AppContainer smoke are manual only.
     name: Classify the changed files
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -285,8 +287,9 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-2025, macos-15]
+      # macOS runs on pushes to main and manual dispatches only (owner decision,
+      # 2026-10-15): the leg is absent from pull-request runs, not skipped.
+      matrix: ${{ fromJSON(github.event_name == 'pull_request' && '{"os":["ubuntu-24.04","windows-2025"]}' || '{"os":["ubuntu-24.04","windows-2025","macos-15"]}') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
@@ -473,8 +476,11 @@ jobs:
 
   android:
     name: Android
+    # The Android 10 lifecycle smoke runs on pushes to main and manual
+    # dispatches only (owner decision, 2026-10-15: about 4.3 minutes per run);
+    # the MAUI HTTPS android leg below still runs on every code pull request.
     needs: [changes]
-    if: needs.changes.outputs.code == 'true'
+    if: github.event_name != 'pull_request' && needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/android-smoke.yml
 
   maui-https:
@@ -484,12 +490,11 @@ jobs:
     uses: ./.github/workflows/maui-https.yml
     with:
       update-locks: ${{ inputs.update-https-locks == true }}
+      # iOS runs on demand only: gh workflow run maui-https.yml --ref <branch>
+      include-ios: false
 
-  appcontainer:
-    name: Windows AppContainer
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
-    uses: ./.github/workflows/appcontainer.yml
+  # The Windows AppContainer smoke (appcontainer.yml) is manual only since
+  # 2026-10-15: gh workflow run appcontainer.yml --ref <branch>
 
   aot-smoke:
     name: Native AOT
@@ -500,7 +505,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, test, compatibility, static-analysis, build, mac-catalyst, android, maui-https, appcontainer, aot-smoke]
+    needs: [changes, test, compatibility, static-analysis, build, mac-catalyst, android, maui-https, aot-smoke]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -508,16 +513,20 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
           CODE_CHANGED: ${{ needs.changes.outputs.code }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           python3 - <<'PY'
           import json, os
           results = json.loads(os.environ['RESULTS'])
-          # Only the documentation-only classification lets a job be skipped; any
-          # other skip, a failure or a cancellation fails the gate.
+          # Two skips are expected: every gated job on a documentation-only pull
+          # request, and the Android lifecycle smoke on any pull request. Any other
+          # skip, a failure or a cancellation fails the gate.
           docs_only = results['changes']['result'] == 'success' and os.environ['CODE_CHANGED'] == 'false'
-          gated = {'test', 'compatibility', 'mac-catalyst', 'android', 'maui-https', 'appcontainer', 'aot-smoke'}
+          pull_request = os.environ['EVENT_NAME'] == 'pull_request'
+          gated = {'test', 'compatibility', 'mac-catalyst', 'android', 'maui-https', 'aot-smoke'}
           for name, job in results.items():
-              expected = 'skipped' if docs_only and name in gated else 'success'
+              optional = (docs_only and name in gated) or (pull_request and name == 'android')
+              expected = 'skipped' if optional else 'success'
               assert job['result'] == expected, f"{name}: {job['result']}; required {expected}"
           print('Documentation-only change: the test matrix and the app smokes were skipped.' if docs_only else 'All required CI jobs passed.')
           PY

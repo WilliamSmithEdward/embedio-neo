@@ -3,18 +3,35 @@
 Feature [#26](https://github.com/WilliamSmithEdward/embedio-neo/issues/26) tracks
 TLS hosting on desktop and in MAUI apps. The test-only
 `test/EmbedIO.MauiHttpsSmoke` app runs on Windows, iOS, Mac Catalyst and Android;
-it is outside the solution and all production packages. CI requires
-its four jobs through `CI passed`. A configured job is supported evidence only after its
-actual run and artifact have been verified.
+it is outside the solution and all production packages. CI requires the
+Windows, Mac Catalyst and Android jobs through `CI passed` on every code change;
+the iOS job runs on demand only (see below). A configured job is supported
+evidence only after its actual run and artifact have been verified.
 
 <a id="temporary-owner-requested-pause"></a>
 
 ## CI status and retained evidence
 
 William has requested that all MAUI CI jobs run again. CI requires the standalone
-Android and Mac Catalyst smoke jobs and all four HTTPS platform jobs to succeed.
-Their reusable workflows and manual dispatch entry points are enabled. A failed
-or skipped MAUI job cannot satisfy `CI passed`.
+Mac Catalyst smoke job and the Windows, Mac Catalyst and Android HTTPS platform
+jobs to succeed on every code change; the standalone Android lifecycle smoke
+runs on pushes to `main` and manual dispatches, not on pull requests. Their
+reusable workflows and manual dispatch entry points are enabled. A failed or
+unexpectedly skipped MAUI job cannot satisfy `CI passed`.
+
+Since 2026-10-15 (owner decision) the iOS HTTPS job is not part of CI: its
+simulator boot, SDK setup and trust import cost about eight minutes of macOS
+wall time per run, and it had the only intermittent failures in the matrix
+(issue #185). The job definition, its pins and the app code are unchanged; run
+it by hand, which includes iOS by default:
+
+```sh
+gh workflow run maui-https.yml --ref <branch>
+```
+
+Pass `-f include-ios=false` to run only the three CI platforms. The
+`maui-https-ios` artifact is the evidence; a merged change that touches the
+listener or TLS code should have one on record.
 
 The temporary pause that began on 2026-10-10 is historical. Its skipped jobs
 provide no new platform validation evidence; previously verified runs and their
@@ -67,9 +84,11 @@ Ubuntu 24.04 and macOS 26. Apple uses Xcode 26.6 and the iOS 26.5 simulator;
 Android uses Android 10/API 29.
 
 ```sh
-gh workflow run ci.yml --ref <branch>
+gh workflow run maui-https.yml --ref <branch>
 ```
 
+(`gh workflow run ci.yml --ref <branch>` runs the Windows, Mac Catalyst and
+Android legs with the rest of CI; only the direct dispatch above includes iOS.)
 Download `maui-https-windows`, `maui-https-ios`, `maui-https-maccatalyst` and
 `maui-https-android` from the run. Each `result.json` must report `passed: true`
 and every named check must pass. A build pass alone is insufficient. The
@@ -134,11 +153,14 @@ workload-install times. Cold and warm runs can differ, and hosted runner queue
 time is separate from execution time. These setup changes do not repair the
 intermittent iOS navigation/finish failures tracked in issue #185.
 
-Desktop regression/coverage jobs run alongside separate compatibility and
-allocation-budget jobs on all three desktop operating systems. Performance
+Desktop regression jobs run alongside separate compatibility and
+allocation-budget jobs: the regression suite on all three desktop operating
+systems, the compatibility jobs on Windows and Linux for pull requests and on
+all three for pushes to `main`. Performance
 probes remain sequential within each dedicated job to avoid competing with the
 regression suite on the same host. Both job groups are required by `CI passed`;
-regression TRX/coverage and compatibility/probe reports have separate artifacts.
+regression TRX (with coverage on pushes to `main`) and compatibility/probe
+reports have separate artifacts.
 
 ## Investigating slow or failed smoke runs
 
