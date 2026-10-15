@@ -214,6 +214,9 @@ disables it server-wide; a route policy replaces it, or lifts it with
   grace period and one second after it.
 - On HTTP/1.1 the response carries `Connection: close` and the connection is not
   reused, because the canceled read left the transport at an unknown point of the body.
+  The 408 is written before the connection closes, but, as with the 413 above, an
+  HTTP/1.1 client that is still sending at that moment can see a connection reset
+  instead of the response. Kestrel closes the same way, without a lingering read.
   On HTTP/2 and HTTP/3 the stream is reset after the response and the connection
   carries on.
 - An HTTP/2 body that is waiting because the connection's receive window is held by

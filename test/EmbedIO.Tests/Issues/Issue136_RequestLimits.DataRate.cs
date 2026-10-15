@@ -46,6 +46,11 @@ namespace EmbedIO.Tests.Issues
         // measured over the time the handler waited, stays below the minimum past the grace
         // period. The connection closes; the server stays healthy. Both read paths are covered:
         // the handler's asynchronous read and a synchronous Read on the request stream.
+        // The HTTP/1.1 clients here send three bytes 50 ms apart, well inside the 400 ms grace
+        // period, and then stall: a client still sending when the server closes can see a
+        // reset that discards the 408 already sent (CI run 38781253883 on Windows TLS), which
+        // is the documented limitation of HTTP/1.1 refusals, not of the rate. The HTTP/2 and
+        // HTTP/3 cases below keep trickling throughout.
         [TestCase(false)]
         [TestCase(true)]
         public async Task TrickledHttp1BodyIsRefusedAfterTheGracePeriod(bool synchronousRead)
@@ -55,22 +60,13 @@ namespace EmbedIO.Tests.Issues
                 synchronousRead ? EchoLengthSynchronously : Host.EchoLength, HttpVerbs.Any);
             using var socket = await host.ConnectAsync();
             await socket.SendAsync($"POST / HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 100000\r\n\r\n");
-            using var stop = new CancellationTokenSource();
-            var trickle = TrickleAsync(socket, stop.Token, TimeSpan.FromMilliseconds(50));
-            try
-            {
-                var clock = Stopwatch.StartNew();
-                var wire = await socket.ReadToEndAsync();
-                Assert.That(wire, Does.StartWith("HTTP/1.1 408"));
-                Assert.That(wire, Does.Contain("Connection: close"));
-                Assert.That(wire, Does.Contain("minimum data rate"));
-                Assert.That(clock.Elapsed, Is.LessThan(TimeSpan.FromSeconds(3)), "The refusal follows the grace period, not the client's pace.");
-            }
-            finally
-            {
-                stop.Cancel();
-                await trickle;
-            }
+            var clock = Stopwatch.StartNew();
+            await TrickleBytesAsync(socket, 3, TimeSpan.FromMilliseconds(50));
+            var wire = await socket.ReadToEndAsync();
+            Assert.That(wire, Does.StartWith("HTTP/1.1 408"));
+            Assert.That(wire, Does.Contain("Connection: close"));
+            Assert.That(wire, Does.Contain("minimum data rate"));
+            Assert.That(clock.Elapsed, Is.LessThan(TimeSpan.FromSeconds(3)), "The refusal follows the grace period, not the client's pace.");
             Assert.That(await host.ProbeAsync(), Is.EqualTo("healthy"));
             Assert.That(MonitoredBodies, Is.Zero, "A refused body leaves the heartbeat.");
         }
@@ -93,40 +89,24 @@ namespace EmbedIO.Tests.Issues
             await tls.AuthenticateAsClientAsync("localhost");
             var head = System.Text.Encoding.ASCII.GetBytes($"POST / HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 100000\r\n\r\n");
             await tls.WriteAsync(head, 0, head.Length);
-            using var stop = new CancellationTokenSource();
-            var trickle = Task.Run(async () =>
+            for (var i = 0; i < 3; ++i)
             {
-                try
-                {
-                    while (!stop.IsCancellationRequested)
-                    {
-                        await tls.WriteAsync(new[] { (byte)'x' }, 0, 1, stop.Token);
-                        await Task.Delay(50, stop.Token);
-                    }
-                }
-                catch (Exception error) when (error is OperationCanceledException or IOException or ObjectDisposedException) { }
-            });
+                await tls.WriteAsync(new[] { (byte)'x' }, 0, 1);
+                await Task.Delay(50);
+            }
+            var received = new MemoryStream();
+            var buffer = new byte[4096];
+            using var timeout = new CancellationTokenSource(Deadline);
             try
             {
-                var received = new MemoryStream();
-                var buffer = new byte[4096];
-                using var timeout = new CancellationTokenSource(Deadline);
-                try
-                {
-                    int read;
-                    while ((read = await tls.ReadAsync(buffer, 0, buffer.Length, timeout.Token)) > 0) received.Write(buffer, 0, read);
-                }
-                catch (IOException) { }
-                var wire = System.Text.Encoding.Latin1.GetString(received.ToArray());
-                Assert.That(wire, Does.StartWith("HTTP/1.1 408"));
-                Assert.That(wire, Does.Contain("Connection: close"));
-                Assert.That(wire, Does.Contain("minimum data rate"));
+                int read;
+                while ((read = await tls.ReadAsync(buffer, 0, buffer.Length, timeout.Token)) > 0) received.Write(buffer, 0, read);
             }
-            finally
-            {
-                stop.Cancel();
-                await trickle;
-            }
+            catch (IOException) { }
+            var wire = System.Text.Encoding.Latin1.GetString(received.ToArray());
+            Assert.That(wire, Does.StartWith("HTTP/1.1 408"));
+            Assert.That(wire, Does.Contain("Connection: close"));
+            Assert.That(wire, Does.Contain("minimum data rate"));
             Assert.That(MonitoredBodies, Is.Zero);
         }
 
@@ -163,24 +143,26 @@ namespace EmbedIO.Tests.Issues
         }
 
         // Time the handler spends not reading does not count: the client trickles for three
-        // grace periods while the handler sleeps, then the handler reads the whole body.
+        // grace periods while the handler waits, then sends the rest, and only then is the
+        // handler released to read the whole body. A fixed handler sleep raced the client: on a
+        // slow runner the trickle outlasted it (CI run 38781253883, macOS), the handler then read
+        // a body that really was arriving below the rate, and the monitor rightly refused it.
         [Test]
         public async Task BodyTheHandlerIsNotReadingIsNotRefused()
         {
             using var fast = new FastHeartbeat();
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             await using var host = Host.Start(o => o.WithMinimumRequestBodyDataRate(Tight), async context =>
             {
-                await Task.Delay(1200);
+                await release.Task.WaitAsync(Deadline);
                 await Host.EchoLength(context);
             }, HttpVerbs.Any);
             using var socket = await host.ConnectAsync();
             await socket.SendAsync($"POST / HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 2000\r\nConnection: close\r\n\r\n");
-            for (var i = 0; i < 24; ++i)
-            {
-                await socket.SendBytesAsync(new[] { (byte)'x' });
-                await Task.Delay(50);
-            }
+            await TrickleBytesAsync(socket, 24, TimeSpan.FromMilliseconds(50));
             await socket.SendBytesAsync(new byte[2000 - 24]);
+            await Task.Delay(100);
+            release.TrySetResult(true);
             var wire = await socket.ReadToEndAsync();
             Assert.That(wire, Does.StartWith("HTTP/1.1 200"));
             Assert.That(wire, Does.Contain("\r\n2000\r\n"), "The whole body was read.");
@@ -206,13 +188,13 @@ namespace EmbedIO.Tests.Issues
             await using (var lenient = Host.Start(o => o.WithMinimumRequestBodyDataRate(null)
                 .WithRouteRequestLimits("/strict", p => p.MinimumRequestBodyDataRate = Tight), Host.EchoLength, HttpVerbs.Any))
             {
-                Assert.That(await TrickleRequestAsync(lenient, "/"), Does.StartWith("HTTP/1.1 200").And.Contain("\r\n20\r\n"), "Null leaves a trickle alone.");
-                Assert.That(await TrickleRequestAsync(lenient, "/strict"), Does.StartWith("HTTP/1.1 408"), "The route sets a rate the server lacks.");
+                Assert.That(await TrickleRequestAsync(lenient, "/", 20), Does.StartWith("HTTP/1.1 200").And.Contain("\r\n20\r\n"), "Null leaves a trickle alone.");
+                Assert.That(await TrickleRequestAsync(lenient, "/strict", 3), Does.StartWith("HTTP/1.1 408"), "The route sets a rate the server lacks.");
             }
             await using var strict = Host.Start(o => o.WithMinimumRequestBodyDataRate(Tight)
                 .WithRouteRequestLimits("/free", p => p.MinimumRequestBodyDataRate = MinimumDataRate.None), Host.EchoLength, HttpVerbs.Any);
-            Assert.That(await TrickleRequestAsync(strict, "/free"), Does.StartWith("HTTP/1.1 200").And.Contain("\r\n20\r\n"), "The route lifts the server's rate.");
-            Assert.That(await TrickleRequestAsync(strict, "/other"), Does.StartWith("HTTP/1.1 408"));
+            Assert.That(await TrickleRequestAsync(strict, "/free", 20), Does.StartWith("HTTP/1.1 200").And.Contain("\r\n20\r\n"), "The route lifts the server's rate.");
+            Assert.That(await TrickleRequestAsync(strict, "/other", 3), Does.StartWith("HTTP/1.1 408"));
         }
 
         // A body the handler never opens is not monitored: the response goes out at once and
@@ -368,24 +350,30 @@ namespace EmbedIO.Tests.Issues
             catch (ObjectDisposedException) { }
         }
 
-        // Posts a 20-byte body one byte every 50 ms, a second in total, and returns the wire.
-        // A refusal arrives while the body is still being sent; the remaining sends then fail.
-        private static async Task<string> TrickleRequestAsync(Host host, string path)
+        // Sends count body bytes one every pause, then stops; errors from a refused body are ignored.
+        private static async Task TrickleBytesAsync(RawSocket socket, int count, TimeSpan pause)
         {
-            using var socket = await host.ConnectAsync();
-            await socket.SendAsync($"POST {path} HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 20\r\nConnection: close\r\n\r\n");
-            var read = socket.ReadToEndAsync();
             try
             {
-                for (var i = 0; i < 20; ++i)
+                for (var i = 0; i < count; ++i)
                 {
                     await socket.SendBytesAsync(new[] { (byte)'x' });
-                    await Task.Delay(50);
+                    await Task.Delay(pause);
                 }
             }
             catch (IOException) { }
             catch (ObjectDisposedException) { }
-            return await read;
+        }
+
+        // Posts a 20-byte body, trickling sent bytes one every 50 ms and then stalling, and
+        // returns the wire: 20 bytes complete the body, 3 leave the handler waiting past the
+        // grace period with nothing unread when the server closes.
+        private static async Task<string> TrickleRequestAsync(Host host, string path, int sent)
+        {
+            using var socket = await host.ConnectAsync();
+            await socket.SendAsync($"POST {path} HTTP/1.1\r\nHost: {host.Authority}\r\nContent-Length: 20\r\nConnection: close\r\n\r\n");
+            await TrickleBytesAsync(socket, sent, TimeSpan.FromMilliseconds(50));
+            return await socket.ReadToEndAsync();
         }
 
         // Writes a fixed number of bytes per write with a pause between writes.
