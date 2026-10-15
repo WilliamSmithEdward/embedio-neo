@@ -17,6 +17,10 @@
 
 ### Fixed
 
+- Locally canceled HTTP/3 request-body reads on System.Net.Quic preserve the early
+  response by stopping upload with H3_NO_ERROR. Genuine request-wide failures
+  retain their error codes; native transport and CONNECT tunnel behavior are unchanged.
+
 - Testing helpers classify content headers without case, run close callbacks once
   even when diagnostics fail, and return null for negative stock-resource ranges.
 
