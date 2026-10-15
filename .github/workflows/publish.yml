@@ -212,6 +212,9 @@ jobs:
             capture { print }
             END { if (!found) exit 1 }
           ' CHANGELOG.md > release_notes.md || { echo "CHANGELOG.md has no section for $VERSION"; exit 1; }
+          # Relative links resolve under /releases/ on the release page; point them at
+          # the tagged files instead. Links with a scheme or only an anchor are left alone.
+          sed -i -E "s#\]\(([^):\#][^):]*)\)#](https://github.com/$GITHUB_REPOSITORY/blob/v$VERSION/\1)#g" release_notes.md
           if ! grep -q '[^[:space:]]' release_notes.md; then
             echo "CHANGELOG.md's section for $VERSION is empty"
             exit 1

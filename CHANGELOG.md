@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-15
+
+Major release. The inherited HTTP listeners are replaced by an independently
+authored managed engine with HTTP/1.1 and HTTP/2; HTTP/2 over TLS and opt-in
+HTTP/3 need the .NET 10 asset. The Microsoft `HttpListener` backend is removed, request
+limits have finite defaults modelled on Kestrel, malformed requests are rejected
+rather than normalized, and HTTPS requires TLS 1.2 or later. Namespaces, assembly
+names and the fluent `WebServer` pipeline are unchanged, but this is not a
+binary-compatible upgrade: rebuild dependent assemblies and read the
+[v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md). Applications
+coming from the archived EmbedIO 3.x should start with the
+[upgrade checklist](docs/compatibility/upgrading-from-embedio-3.md).
+
 - Behavior change: request limits have finite defaults, modelled on Kestrel's
   `KestrelServerLimits` in ASP.NET Core 10.0.13. A request body may carry 30,000,000
   bytes (`MaximumRequestBodyBytes`, as Kestrel's `MaxRequestBodySize`), header fields may
@@ -232,8 +245,6 @@
   that sent one of the four was losing the value silently; declaring one now throws
   `InvalidDataException`. See
   [migration](docs/compatibility/neo-v1-to-v2.md#request-and-response-corrections).
-
-## [2.0.0] - Unreleased
 
 - Build and test with .NET SDK 10.0.402 and runtime 10.0.13, the 13 October 2026
   security release. Package dependency minimums move from 10.0.12 to 10.0.13:
