@@ -23,7 +23,7 @@ commit = subprocess.check_output(["git", "rev-parse", args.baseline], cwd=ROOT, 
 original = subprocess.check_output(["git", "show", f"{commit}:{EXCHANGE}"], cwd=ROOT)
 tracked = subprocess.check_output(["git", "ls-files", "src/EmbedIO"], cwd=ROOT, text=True).splitlines()
 shared = ["Directory.Build.props", "Directory.Packages.props", ".editorconfig", "global.json", "LICENSE", "README.md",
-          "src/AnalyzerUtilities.cs", "src/NullableAttributes.cs", "images/embedio_neo_icons.png"]
+          "src/Shared/AnalyzerUtilities.cs", "src/Shared/NullableAttributes.cs", "src/Shared/ResponseCookieFormatter.cs", "src/Shared/TrimmingAttributes.cs", "images/embedio_neo_icons.png"]
 manifest = {"baseline_commit": commit, "method": "Identical current core sources except baseline HTTP/3 exchange from specified commit. Real loopback QUIC and HttpClient share a process. TLS setup/warmup excluded; body validation included. Three within-process samples, alternating variant process order, stable JIT. CPU/allocation cover both server and client; native allocation is not counted.", "process_pairs": args.processes, "variants": {}}
 binaries = {}
 for variant in ("baseline", "candidate"):

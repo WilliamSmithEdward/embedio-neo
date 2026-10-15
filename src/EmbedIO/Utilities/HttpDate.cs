@@ -31,9 +31,7 @@ namespace EmbedIO.Utilities
             "ddd MMM d H:m:s yyyy", // ANSI C's asctime() format
 
             "ddd, d MMM yyyy H:m:s zzz", // RFC 5322
-            "ddd, d MMM yyyy H:m:s", // RFC 5322 no zone
             "d MMM yyyy H:m:s zzz", // RFC 5322 no day-of-week
-            "d MMM yyyy H:m:s", // RFC 5322 no day-of-week, no zone
         };
 
         /// <summary>

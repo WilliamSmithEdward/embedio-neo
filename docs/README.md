@@ -211,6 +211,7 @@ for a complete app you can run, then choose files or controllers as needed.
 ## Project and contribution
 
 - [Generated URL and query properties](guides/property-testing.md): bounded FsCheck generation, shrinking and reproducible campaigns.
+- [Source layout](project/source-layout.md): responsibilities, partial-file naming and shared-source links.
 
 - [Performance and cleanup audit](project/performance-cleanup-audit.md): allocation measurements, compatibility-preserving simplifications and TLS callback regression coverage.
 
@@ -245,3 +246,4 @@ points for existing links.
 - [WebTransport upstream readiness](project/webtransport-upstream-readiness.md): decision to await a current-wire provider, test-only evidence and resumption gates.
 
 - [Coverage-guided URL fuzzing](guides/coverage-guided-fuzzing.md): instrumented parser campaigns, seed replay and crash artifacts.
+- [Production source maintenance audit](project/source-maintenance-audit.md): complete 434-file implementation review, reproduced defects and compatibility-preserving cleanup.

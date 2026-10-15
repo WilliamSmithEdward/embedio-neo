@@ -358,3 +358,9 @@
   href: project/webtransport-upstream-readiness.md
 - name: Coverage-guided URL fuzzing
   href: guides/coverage-guided-fuzzing.md
+
+- name: Production source maintenance audit
+  href: project/source-maintenance-audit.md
+
+- name: Source layout
+  href: project/source-layout.md

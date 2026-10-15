@@ -22,7 +22,7 @@ baseline = subprocess.check_output(["git", "show", f"{base_commit}:{FLOW}"], cwd
 candidate = (ROOT / FLOW).read_text(encoding="utf-8-sig")
 (out / "Baseline.cs").write_text(baseline.replace("Http2SendFlowControl", "BaselineSendFlowControl"), encoding="utf-8-sig")
 (out / "Candidate.cs").write_text(candidate, encoding="utf-8-sig")
-(out / "HttpPriority.cs").write_bytes((ROOT / "src/EmbedIO/Net/Internal/HttpPriority.cs").read_bytes())
+(out / "HttpPriority.cs").write_bytes((ROOT / "src/EmbedIO/Net/Internal/Headers/HttpPriority.cs").read_bytes())
 frame = (ROOT / "src/EmbedIO/Net/Internal/Http2/Http2Frame.cs").read_text(encoding="utf-8-sig")
 (out / "Http2ProtocolException.cs").write_text(frame[:frame.index("    internal sealed class Http2Frame")] + "}\n", encoding="utf-8-sig")
 (out / "Program.cs").write_bytes((ROOT / "test/EmbedIO.Performance/Http2FlowBenchmark.cs.txt").read_bytes())

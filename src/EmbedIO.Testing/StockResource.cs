@@ -141,7 +141,7 @@ namespace EmbedIO.Testing
         {
             using var stream = Open(path) ?? throw new FileNotFoundException("The resource was not found.", path);
             var length = (int)stream.Length;
-            if (start >= length || upperBound < start || upperBound >= length)
+            if (start < 0 || start >= length || upperBound < start || upperBound >= length)
                 return null;
 
             var rangeLength = upperBound - start + 1;

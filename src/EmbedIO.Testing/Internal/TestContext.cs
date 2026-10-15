@@ -70,10 +70,13 @@ namespace EmbedIO.Testing.Internal
 
         public void OnClose(Action<IHttpContext> callback)
         {
-            if (_closed)
-                throw new InvalidOperationException("HTTP context has already been closed.");
+            lock (_closeCallbacks)
+            {
+                if (_closed)
+                    throw new InvalidOperationException("HTTP context has already been closed.");
 
-            _closeCallbacks.Push(Validate.NotNull(nameof(callback), callback));
+                _closeCallbacks.Push(Validate.NotNull(nameof(callback), callback));
+            }
         }
 
         public Task<IWebSocketContext> AcceptWebSocketAsync(IEnumerable<string> requestedProtocols,
@@ -85,12 +88,19 @@ namespace EmbedIO.Testing.Internal
 
         public void Close()
         {
-            _closed = true;
+            Action<IHttpContext>[] callbacks;
+            lock (_closeCallbacks)
+            {
+                if (_closed) return;
+                _closed = true;
+                callbacks = _closeCallbacks.ToArray();
+                _closeCallbacks.Clear();
+            }
 
             // Always close the response stream no matter what.
             Response.Close();
 
-            foreach (var callback in _closeCallbacks)
+            foreach (var callback in callbacks)
             {
                 try
                 {
@@ -98,7 +108,9 @@ namespace EmbedIO.Testing.Internal
                 }
                 catch (Exception e) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(e))
                 {
-                    Log.Source.TraceEvent(System.Diagnostics.TraceEventType.Error, 0, "HTTP context: close callback failed: {0}", e);
+                    // A diagnostic listener must not prevent remaining close callbacks.
+                    try { Log.Source.TraceEvent(System.Diagnostics.TraceEventType.Error, 0, "HTTP context: close callback failed: {0}", e); }
+                    catch (Exception diagnostic) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnostic)) { }
                 }
             }
         }

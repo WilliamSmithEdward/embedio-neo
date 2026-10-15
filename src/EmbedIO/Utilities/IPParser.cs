@@ -101,9 +101,6 @@ namespace EmbedIO.Utilities
             var shiftBits = (byte)(32 - prefixLen);
             var ip1 = prefixLen == 0 ? 0u : (ip >> shiftBits) << shiftBits;
 
-            if ((ip1 & ip) != ip1) // Check correct subnet address
-                return Enumerable.Empty<IPAddress>();
-
             var ip2 = ip1 >> shiftBits;
             for (var k = 0; k < shiftBits; k++)
             {
