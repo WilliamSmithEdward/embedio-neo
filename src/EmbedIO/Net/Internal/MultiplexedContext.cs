@@ -160,7 +160,7 @@ namespace EmbedIO.Net.Internal
                     try { await ((MultiplexedResponse)Response).CloseAsync(new CancellationToken(true)).ConfigureAwait(false); }
                     catch (Exception cleanup) when (ExceptionPolicy.IsRecoverable(cleanup))
                     {
-                        if (!ReferenceEquals(cleanup, failure)) cleanup.Log("HTTP context", $"[{Id}] Exception thrown while releasing failed tunnel output.");
+                        if (!ReferenceEquals(cleanup, failure)) LogCleanupFailure(cleanup, "Exception thrown while releasing failed tunnel output.");
                     }
                 }
                 _acceptedTunnel?.Dispose();
@@ -169,7 +169,7 @@ namespace EmbedIO.Net.Internal
                 // BeginClose set _closed under _sync after the last registration.
                 if (_callbacks != null)
                     foreach (var callback in _callbacks)
-                        try { callback(this); } catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context close callback."); }
+                        try { callback(this); } catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { LogCleanupFailure(error, "Exception thrown by a HTTP context close callback."); }
                 _linked?.Dispose();
                 if (_replaced != null)
                     foreach (var replaced in _replaced) replaced.Link.Dispose();
@@ -192,8 +192,15 @@ namespace EmbedIO.Net.Internal
             try { link.Cancel(); }
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
-                error.Log("HTTP context", $"[{Id}] Exception thrown by a HTTP context cancellation callback.");
+                LogCleanupFailure(error, "Exception thrown by a HTTP context cancellation callback.");
             }
+        }
+        private void LogCleanupFailure(Exception error, string message)
+        {
+            // Diagnostic observers must not interrupt remaining cleanup or replace
+            // the response failure reported through Completion.
+            try { error.Log("HTTP context", $"[{Id}] {message}"); }
+            catch (Exception diagnostic) when (ExceptionPolicy.IsRecoverable(diagnostic)) { }
         }
         internal bool HasAcceptedTunnel => _acceptedTunnel != null;
         internal bool ResponseHeadersSent => ((MultiplexedResponse)Response).HeadersSent;

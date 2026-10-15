@@ -15,6 +15,22 @@
   `MinimumDataRate.None` lifts it for a route. The request-limits guide and the v1 to v2
   notes describe the default; v2.0.0 bounded neither stalled nor trickled bodies.
 
+### Fixed
+
+- Ignore unsupported Range units and preserve equal-quality preference order across
+  separate header values. Return acquired rate-limiter permits when close-callback
+  registration fails; IP-ban cleanup preserves renewed bans and concurrent regex
+  matches.
+
+- HTTP/2 batched writes retain every contributing cancellation source until the
+  transport write finishes. Multiplexed contexts finish cleanup even when a
+  recoverable diagnostic listener throws, and explicit SameSite cookie metadata
+  works on the built-in HTTP/2 and HTTP/3 responses.
+
+- Request-body rate monitoring detaches the previous read's cancellation token when
+  the next read uses a different token or none. Retiring or suspending a monitor
+  during heartbeat registration also removes the registration reliably.
+
 ### Changed
 
 - A compressed HTTP/1 response sends the compressor's final block and the chunked

@@ -120,7 +120,15 @@ namespace EmbedIO.RateLimiting
             var lease = await _limiter.AcquireAsync(context, 1, context.CancellationToken).ConfigureAwait(false);
             if (lease.IsAcquired)
             {
-                context.OnClose(_ => lease.Dispose());
+                try
+                {
+                    context.OnClose(_ => lease.Dispose());
+                }
+                catch
+                {
+                    lease.Dispose();
+                    throw;
+                }
                 return;
             }
 

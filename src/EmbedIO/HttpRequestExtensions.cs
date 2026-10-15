@@ -276,7 +276,8 @@ namespace EmbedIO
             }
 
             // Ignore the Range request header if it cannot be parsed successfully.
-            if (!RangeHeaderValue.TryParse(rangeHeader, out var range))
+            if (!RangeHeaderValue.TryParse(rangeHeader, out var range)
+                || !string.Equals(range.Unit, "bytes", StringComparison.OrdinalIgnoreCase))
                 return false;
 
             // EmbedIO does not support multipart/byteranges responses (yet),
