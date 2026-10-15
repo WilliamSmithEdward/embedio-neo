@@ -17,6 +17,10 @@
 
 ### Fixed
 
+- Locally canceled HTTP/3 request-body reads on System.Net.Quic preserve the early
+  response by stopping upload with H3_NO_ERROR. Genuine request-wide failures
+  retain their error codes; native transport and CONNECT tunnel behavior are unchanged.
+
 - HTTP/2 batched writes retain every contributing cancellation source until the
   transport write finishes. Multiplexed contexts finish cleanup even when a
   recoverable diagnostic listener throws, and explicit SameSite cookie metadata
