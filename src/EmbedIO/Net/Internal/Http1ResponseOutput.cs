@@ -12,11 +12,13 @@ namespace EmbedIO.Net.Internal
     // Independently authored HTTP/1 output owner. The transport is borrowed: only
     // the connection closes it. One gate orders application writes and completion.
     // Framing counters describe committed body bytes, never prepared submissions.
-    internal sealed class ResponseStream : Stream
+    internal sealed class ResponseStream : Stream, IEndingBodyOutput
     {
         private const int BatchedBodyBound = 65536;
         private const int FirstSegmentPrefix = 16384;
         private static readonly byte[] CrLf = { 13, 10 };
+        private static readonly byte[] EndOfChunks = { (byte)'0', 13, 10, 13, 10 };
+        private static readonly byte[] CrLfEndOfChunks = { 13, 10, (byte)'0', 13, 10, 13, 10 };
         private readonly AsyncWriteGate _writers = new();
         private readonly BorrowedResource<Stream> _transport;
         private readonly HttpListenerResponse _response;
@@ -25,6 +27,8 @@ namespace EmbedIO.Net.Internal
         private int _completionFinished;
         private int _failed;
         private bool _headCaptured;
+        // The chunked terminator (or trailer section) already left with the last body write.
+        private bool _endingSent;
         private long? _bodyLimit;
         private long _committedBody;
         private long _sentBody;
@@ -99,7 +103,7 @@ namespace EmbedIO.Net.Internal
             using var writer = _writers.Enter();
             CheckWrite(buffer, offset, count);
             if (!CanSubmit()) return;
-            WriteBodyAsync(buffer, offset, count, true, default).GetAwaiter().GetResult();
+            WriteBodyAsync(buffer, offset, count, true, false, default).GetAwaiter().GetResult();
         }
 
         public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken token)
@@ -114,7 +118,36 @@ namespace EmbedIO.Net.Internal
             using var writer = await _writers.EnterAsync(token).ConfigureAwait(false);
             CheckWrite(buffer, offset, count);
             if (!CanSubmit()) return;
-            await WriteBodyAsync(buffer, offset, count, false, token).ConfigureAwait(false);
+            await WriteBodyAsync(buffer, offset, count, false, false, token).ConfigureAwait(false);
+        }
+
+        // The body's last bytes with its ending in the same transport write: for a chunked
+        // response the terminator, or the trailer section once set, follows the last chunk in
+        // one segment and disposal then only closes the response. With a declared length the
+        // write is ordinary. Equivalent on the wire to the write followed by disposal.
+        public void WriteEnding(byte[] buffer, int offset, int count)
+        {
+            CheckWrite(buffer, offset, count);
+            if (_response.IsHeadResponse) return;
+            using var writer = _writers.Enter();
+            CheckWrite(buffer, offset, count);
+            if (!CanSubmit()) return;
+            WriteBodyAsync(buffer, offset, count, true, true, default).GetAwaiter().GetResult();
+        }
+
+        public Task WriteEndingAsync(byte[] buffer, int offset, int count, CancellationToken token)
+        {
+            CheckWrite(buffer, offset, count);
+            if (token.IsCancellationRequested) return Task.FromCanceled(token);
+            return _response.IsHeadResponse ? Task.CompletedTask : WriteEndingCoreAsync(buffer, offset, count, token);
+        }
+
+        private async Task WriteEndingCoreAsync(byte[] buffer, int offset, int count, CancellationToken token)
+        {
+            using var writer = await _writers.EnterAsync(token).ConfigureAwait(false);
+            CheckWrite(buffer, offset, count);
+            if (!CanSubmit()) return;
+            await WriteBodyAsync(buffer, offset, count, false, true, token).ConfigureAwait(false);
         }
 
         internal async Task WriteInformationalAsync(byte[] bytes, CancellationToken token)
@@ -151,9 +184,9 @@ namespace EmbedIO.Net.Internal
 
         // The head is encoded with room for the first body segment of bodyCount bytes, so
         // the first write appends behind it instead of copying the head into a new segment.
-        private Http1Head PrepareHead(bool completing, int bodyCount)
+        private Http1Head PrepareHead(bool completing, int bodyCount, bool ending = false)
         {
-            var headers = _response.HeadersSent ? default : _response.SendHeaders(completing, bodyCount);
+            var headers = _response.HeadersSent ? default : _response.SendHeaders(completing, bodyCount, ending);
             if (!_headCaptured)
             {
                 _bodyLimit = DeclaredBodyLimit();
@@ -162,14 +195,14 @@ namespace EmbedIO.Net.Internal
             return headers;
         }
 
-        private async ValueTask WriteBodyAsync(byte[] buffer, int offset, int count, bool synchronous, CancellationToken token)
+        private async ValueTask WriteBodyAsync(byte[] buffer, int offset, int count, bool synchronous, bool ending, CancellationToken token)
         {
             if (_response.SuppressesBody) count = 0;
             var limit = _headCaptured ? _bodyLimit : DeclaredBodyLimit();
             if (limit.HasValue && count > limit.Value - _committedBody)
                 throw new ProtocolViolationException("The response body exceeds its declared Content-Length.");
 
-            using var head = PrepareHead(false, count);
+            using var head = PrepareHead(false, count, ending);
 
             // Framing is final only once the head is prepared: HTTP/1.0 drops chunking but keeps a
             // declared Content-Length. Nothing has been submitted yet, so excess bytes never leave.
@@ -177,6 +210,9 @@ namespace EmbedIO.Net.Internal
                 throw new ProtocolViolationException("The response body exceeds its declared Content-Length.");
 
             var chunked = _response.SendChunked && !_response.SuppressesBody;
+            // An ending write carries the terminator behind its last chunk; a declared length
+            // needs no ending and an empty ending write leaves the terminator to disposal.
+            var tail = ending && chunked && count != 0 ? _response.EndingChunk ?? EndOfChunks : null;
             if (!head.IsEmpty)
             {
                 var length = head.Length;
@@ -188,15 +224,15 @@ namespace EmbedIO.Net.Internal
                 if (length <= BatchedBodyBound)
                 {
                     var segment = head.Buffer;
-                    var segmentLength = AppendFirstSegment(segment, length, buffer, offset, count, chunked, out var prefix);
+                    var segmentLength = AppendFirstSegment(segment, length, buffer, offset, count, chunked, tail, out var prefix);
                     try { await SubmitAsync(segment, 0, segmentLength, synchronous, token).ConfigureAwait(false); }
                     finally { Array.Clear(segment, length, segmentLength - length); }
                     if (prefix != count)
                     {
                         await SubmitAsync(buffer, offset + prefix, count - prefix, synchronous, token).ConfigureAwait(false);
-                        if (chunked) await SubmitAsync(CrLf, 0, CrLf.Length, synchronous, token).ConfigureAwait(false);
+                        if (chunked) await SubmitChunkEndAsync(tail, synchronous, token).ConfigureAwait(false);
                     }
-                    CommitBody(count);
+                    CommitBody(count, tail);
                     return;
                 }
                 await SubmitAsync(head.Buffer, 0, length, synchronous, token).ConfigureAwait(false);
@@ -206,7 +242,7 @@ namespace EmbedIO.Net.Internal
                 await SubmitAsync(buffer, offset, count, synchronous, token).ConfigureAwait(false);
             else if (count <= BatchedBodyBound)
             {
-                var segment = RentChunkSegment(buffer, offset, count, out var length);
+                var segment = RentChunkSegment(buffer, offset, count, tail, out var length);
                 try { await SubmitAsync(segment, 0, length, synchronous, token).ConfigureAwait(false); }
                 finally { ReturnCleared(segment, length); }
             }
@@ -215,16 +251,30 @@ namespace EmbedIO.Net.Internal
                 var size = GetChunkSizeBytes(count, false);
                 await SubmitAsync(size, 0, size.Length, synchronous, token).ConfigureAwait(false);
                 await SubmitAsync(buffer, offset, count, synchronous, token).ConfigureAwait(false);
-                await SubmitAsync(CrLf, 0, CrLf.Length, synchronous, token).ConfigureAwait(false);
+                await SubmitChunkEndAsync(tail, synchronous, token).ConfigureAwait(false);
             }
-            CommitBody(count);
+            CommitBody(count, tail);
         }
 
-        private void CommitBody(int count)
+        // The CRLF that ends a chunk whose bytes went out directly, with the terminator
+        // behind it when the write ends the body.
+        private ValueTask SubmitChunkEndAsync(byte[]? tail, bool synchronous, CancellationToken token)
+        {
+            if (tail == null) return SubmitAsync(CrLf, 0, CrLf.Length, synchronous, token);
+            if (ReferenceEquals(tail, EndOfChunks)) return SubmitAsync(CrLfEndOfChunks, 0, CrLfEndOfChunks.Length, synchronous, token);
+            var combined = new byte[CrLf.Length + tail.Length];
+            combined[0] = 13;
+            combined[1] = 10;
+            Buffer.BlockCopy(tail, 0, combined, CrLf.Length, tail.Length);
+            return SubmitAsync(combined, 0, combined.Length, synchronous, token);
+        }
+
+        private void CommitBody(int count, byte[]? tail = null)
         {
             if (Volatile.Read(ref _failed) != 0) return;
             if (_bodyLimit.HasValue) _committedBody += count;
             Volatile.Write(ref _sentBody, _sentBody + count);
+            if (tail != null) _endingSent = true;
         }
 
         private async ValueTask SubmitAsync(byte[] bytes, int offset, int count, bool synchronous, CancellationToken token)
@@ -264,9 +314,9 @@ namespace EmbedIO.Net.Internal
                             using var head = PrepareHead(true, 0);
                             if (!head.IsEmpty)
                                 SubmitAsync(head.Buffer, 0, head.Length, true, default).GetAwaiter().GetResult();
-                            if (_response.SendChunked && !_response.SuppressesBody)
+                            if (_response.SendChunked && !_response.SuppressesBody && !_endingSent)
                             {
-                                var ending = _response.EndingChunk ?? GetChunkSizeBytes(0, true);
+                                var ending = _response.EndingChunk ?? EndOfChunks;
                                 SubmitAsync(ending, 0, ending.Length, true, default).GetAwaiter().GetResult();
                             }
                         }
@@ -295,22 +345,26 @@ namespace EmbedIO.Net.Internal
         }
         // Room the head encoder leaves behind a head of headLength bytes for the first
         // write of count body bytes: the chunk-size line, the whole body with its chunk
-        // CRLF when it fits the bound, otherwise a 16 KiB prefix. Zero when the head alone
-        // exceeds the bound, which keeps its own transport write.
-        internal static int FirstSegmentReserve(int headLength, int count, bool chunked)
+        // CRLF and, for an ending write, the terminator of endingLength bytes when it fits
+        // the bound, otherwise a 16 KiB prefix. Zero when the head alone exceeds the bound,
+        // which keeps its own transport write.
+        internal static int FirstSegmentReserve(int headLength, int count, bool chunked, int endingLength)
         {
             if (count == 0 || headLength > BatchedBodyBound) return 0;
             var complete = count <= BatchedBodyBound;
             var prefix = complete ? count : FirstSegmentPrefix;
-            return prefix + (chunked ? GetChunkPrefixLength(count) + (complete ? CrLf.Length : 0) : 0);
+            return prefix + (chunked ? GetChunkPrefixLength(count) + (complete ? CrLf.Length + endingLength : 0) : 0);
         }
 
+        // The bytes an ending write appends behind a chunked body's last chunk.
+        internal static int EndingLength(HttpListenerResponse response) => (response.EndingChunk ?? EndOfChunks).Length;
+
         // One transport segment for the first write, appended behind the encoded head in
-        // its own array: chunk-size line, the whole body with its chunk CRLF when it fits
-        // the bound, otherwise a 16 KiB prefix. The caller sends any remaining body bytes
-        // directly and ends the chunk. Returns the segment length.
+        // its own array: chunk-size line, the whole body with its chunk CRLF and the tail
+        // when it fits the bound, otherwise a 16 KiB prefix. The caller sends any remaining
+        // body bytes directly and ends the chunk. Returns the segment length.
         private static int AppendFirstSegment(byte[] segment, int headLength,
-            byte[] buffer, int offset, int count, bool chunked, out int prefix)
+            byte[] buffer, int offset, int count, bool chunked, byte[]? tail, out int prefix)
         {
             var complete = count <= BatchedBodyBound;
             prefix = complete ? count : FirstSegmentPrefix;
@@ -323,20 +377,27 @@ namespace EmbedIO.Net.Internal
                 segment[position] = 13;
                 segment[position + 1] = 10;
                 position += CrLf.Length;
+                if (tail != null)
+                {
+                    Buffer.BlockCopy(tail, 0, segment, position, tail.Length);
+                    position += tail.Length;
+                }
             }
             return position;
         }
 
-        // One transport segment for a subsequent chunk of at most BatchedBodyBound bytes.
-        private static byte[] RentChunkSegment(byte[] buffer, int offset, int count, out int length)
+        // One transport segment for a subsequent chunk of at most BatchedBodyBound bytes,
+        // with the tail behind it when the write ends the body.
+        private static byte[] RentChunkSegment(byte[] buffer, int offset, int count, byte[]? tail, out int length)
         {
-            length = GetChunkPrefixLength(count) + count + CrLf.Length;
+            length = GetChunkPrefixLength(count) + count + CrLf.Length + (tail?.Length ?? 0);
             var segment = ArrayPool<byte>.Shared.Rent(length);
             var position = WriteChunkPrefix(segment, 0, count);
             Buffer.BlockCopy(buffer, offset, segment, position, count);
             position += count;
             segment[position] = 13;
             segment[position + 1] = 10;
+            if (tail != null) Buffer.BlockCopy(tail, 0, segment, position + CrLf.Length, tail.Length);
             return segment;
         }
 
