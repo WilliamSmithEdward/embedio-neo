@@ -10,8 +10,8 @@ on:
       - 'test/EmbedIO.Tests/Http1OrderlyIdleClosureTest.cs'
       - 'test/EmbedIO.Tests/Http1IdleTlsWriteOwnershipTest.cs'
       - 'test/EmbedIO.Tests/TcpSessionLifetimeTest.cs'
-      - 'src/EmbedIO/Net/Internal/HttpConnection*.cs'
-      - 'src/EmbedIO/Net/Internal/TcpSessionLifetime.cs'
+      - 'src/EmbedIO/Net/Internal/Transport/HttpConnection*.cs'
+      - 'src/EmbedIO/Net/Internal/Transport/TcpSessionLifetime.cs'
       - 'docs/project/http1-idle-closure.md'
   workflow_dispatch:
 

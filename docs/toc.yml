@@ -354,3 +354,6 @@
 
 - name: WebTransport upstream readiness
   href: project/webtransport-upstream-readiness.md
+
+- name: Source layout
+  href: project/source-layout.md

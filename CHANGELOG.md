@@ -36,6 +36,10 @@
 
 ### Changed
 
+- Group source files by hosting, HTTP, modules and transport responsibilities;
+  standardize partial-file names and collect linked sources under src/Shared.
+  Existing namespaces, public APIs, assemblies and runtime behavior are preserved.
+
 - Consolidate duplicate Web API result casting and remove unreachable CIDR logic
   and duplicate HTTP-date formats. The production maintenance audit records all
   434 reviewed source files and the compatibility-preserving cleanup.
