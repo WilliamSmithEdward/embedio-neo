@@ -40,12 +40,32 @@ def payload(index, size):
 
 
 class Peer(QuicConnectionProtocol):
-    def __init__(self, *args, http3=False, **kwargs):
+    def __init__(self, *args, http3=False, defer_http_settings=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.datagrams = asyncio.Queue()
         # aioquic's public capability flag also emits SETTINGS_H3_DATAGRAM=1.
         # The test uses generic CONNECT; no WebTransport session is negotiated.
-        self.http = H3Connection(self._quic, enable_webtransport=True) if http3 else None
+        self.deferred_stream_data = []
+        send_stream_data = self._quic.send_stream_data
+        if defer_http_settings:
+            # Hold control frames after the stream-type preface, including SETTINGS.
+            # QPACK prefaces must remain ordered before later decoder instructions.
+            control_stream = None
+
+            def defer_control(stream_id, data, end_stream=False):
+                nonlocal control_stream
+                if control_stream is None and data == b"\x00":
+                    control_stream = stream_id
+                elif stream_id == control_stream:
+                    self.deferred_stream_data.append((stream_id, data, end_stream))
+                    return
+                send_stream_data(stream_id, data, end_stream=end_stream)
+
+            self._quic.send_stream_data = defer_control
+        try:
+            self.http = H3Connection(self._quic, enable_webtransport=True) if http3 else None
+        finally:
+            self._quic.send_stream_data = send_stream_data
         self.headers = asyncio.Queue()
 
     def quic_event_received(self, event):
@@ -105,6 +125,7 @@ async def unsupported(peer):
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("echo", "unsupported", "http-echo"))
+    parser.add_argument("--defer-http-settings", action="store_true")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--cafile", required=True)
@@ -121,7 +142,7 @@ async def main():
     configuration.load_verify_locations(args.cafile)
     report(event="peer", aioquic=importlib.metadata.version("aioquic"), python=sys.version.split()[0])
     def protocol(*values, **options):
-        return Peer(*values, http3=args.mode == "http-echo", **options)
+        return Peer(*values, http3=args.mode == "http-echo", defer_http_settings=args.defer_http_settings, **options)
 
     async with connect(args.host, args.port, configuration=configuration, create_protocol=protocol) as peer:
         await peer.wait_connected()
@@ -159,6 +180,15 @@ async def http_echo(peer, port):
     response = await asyncio.wait_for(peer.headers.get(), 10)
     if response.stream_id != stream or dict(response.headers).get(b":status") != b"200":
         raise AssertionError("extension CONNECT was not accepted")
+    if peer.deferred_stream_data:
+        command = await asyncio.wait_for(asyncio.to_thread(sys.stdin.readline), 10)
+        if command != "settings\n":
+            raise AssertionError("expected explicit SETTINGS release from test host")
+        for stream_id, data, end_stream in peer.deferred_stream_data:
+            peer._quic.send_stream_data(stream_id, data, end_stream=end_stream)
+        peer.deferred_stream_data.clear()
+        peer.transmit()
+        report(event="http-settings-released")
     if peer.http.received_settings.get(0x33) != 1:
         raise AssertionError("server did not negotiate HTTP datagrams")
     for index, size in enumerate(SIZES):

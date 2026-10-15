@@ -35,8 +35,8 @@ namespace EmbedIO.Tests
             {
                 await File.WriteAllTextAsync(certificatePath, certificate.ExportCertificatePem(), deadline.Token);
                 var start = new ProcessStartInfo(python ?? throw new AssertionException("Missing independent peer."))
-                { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
-                foreach (var argument in new[] { "-I", DriverPath(), "http-echo", "--port", port.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                { RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, UseShellExecute = false };
+                foreach (var argument in new[] { "-I", DriverPath(), "http-echo", "--defer-http-settings", "--port", port.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     "--cafile", certificatePath, "--sha256", certificate.GetCertHashString(HashAlgorithmName.SHA256) })
                     start.ArgumentList.Add(argument);
                 peer = Process.Start(start) ?? throw new AssertionException("The independent application peer did not start.");
@@ -51,6 +51,14 @@ namespace EmbedIO.Tests
                 Assert.That(context.Request.Headers["capsule-protocol"], Is.EqualTo("?1"));
                 using var tunnel = await ((IHttpTunnelContext)context).AcceptTunnelAsync("neo-datagram-test", true, deadline.Token);
                 var channel = tunnel.Datagrams ?? throw new AssertionException("Missing public datagram channel.");
+                Assert.That(channel.CanSend, Is.False, "The peer has not sent HTTP/3 SETTINGS yet.");
+                await peer.StandardInput.WriteLineAsync("settings");
+                await peer.StandardInput.FlushAsync(deadline.Token);
+                while (!channel.CanSend)
+                {
+                    if (exited.IsCompleted) Assert.Fail("Independent peer ended before datagram negotiation: " + await output + await errors);
+                    await Task.Delay(1, deadline.Token);
+                }
                 Assert.That(channel.CanSend, Is.True);
                 Assert.That(channel.MaximumPayloadLength, Is.GreaterThanOrEqualTo(1000));
                 var distinct = new HashSet<string>(StringComparer.Ordinal);
@@ -68,6 +76,7 @@ namespace EmbedIO.Tests
                 TestContext.Out.WriteLine(lines);
                 TestContext.Out.WriteLine(await errors);
                 Assert.That(peer.ExitCode, Is.Zero, lines);
+                Assert.That(lines, Does.Contain("\"event\": \"http-settings-released\""));
                 Assert.That(lines, Does.Contain("\"event\": \"http-echo-complete\""));
                 Assert.That(distinct.Count, Is.EqualTo(7));
                 context.Close();
