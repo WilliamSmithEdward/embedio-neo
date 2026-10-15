@@ -225,10 +225,12 @@ namespace EmbedIO.Tests
         private static Dictionary<string, (int Weight, int Ordinal)> ReferenceQuality(IEnumerable<string?> headers)
         {
             var result = new Dictionary<string, (int Weight, int Ordinal)>();
+            // Keep the recorded quality grammar, but use the corrected cumulative
+            // header-list position so split fields preserve the client-order tie break.
+            var ordinal = 0;
             foreach (var text in headers)
             {
                 if (string.IsNullOrEmpty(text)) continue;
-                var ordinal = 0;
                 for (var start = 0; start < text.Length; ordinal++)
                 {
                     var end = text.IndexOf(',', start);
