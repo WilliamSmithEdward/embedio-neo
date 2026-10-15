@@ -1,0 +1,42 @@
+name: Coverage-guided fuzzing
+on:
+  push:
+    branches: [main]
+    paths: ['src/EmbedIO/**', 'test/EmbedIO.SharpFuzz/**', 'scripts/run-sharpfuzz.ps1', '.github/workflows/sharpfuzz.yml', 'Directory.*.props', 'global.json']
+  pull_request:
+    paths: ['src/EmbedIO/**', 'test/EmbedIO.SharpFuzz/**', 'scripts/run-sharpfuzz.ps1', '.github/workflows/sharpfuzz.yml', 'Directory.*.props', 'global.json']
+  schedule:
+    - cron: '47 5 * * 2'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sharpfuzz:
+    name: Instrumented URL parser campaign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Replay seeds and run coverage-guided mutations
+        shell: pwsh
+        env:
+          CAMPAIGN_SECONDS: ${{ github.event_name == 'schedule' && '600' || '60' }}
+        run: |
+          $seed = [int]([long]$env:GITHUB_RUN_ID % 2147483646) + 1
+          ./scripts/run-sharpfuzz.ps1 -Seconds ([int]$env:CAMPAIGN_SECONDS) -Seed $seed
+      - name: Retain coverage log, corpus and crash reproducers
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sharpfuzz-${{ github.sha }}
+          path: |
+            TestResults/sharpfuzz/**/campaign.json
+            TestResults/sharpfuzz/**/*.log
+            TestResults/sharpfuzz/**/corpus/**
+            TestResults/sharpfuzz/**/crashes/**
+          if-no-files-found: error

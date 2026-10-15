@@ -241,3 +241,5 @@ points for existing links.
 - [Standalone native QUIC module lifetime](project/native-quic-module-lifetime.md): Linux unload crash reproduction, retained mapping, collectible contexts and fresh-process acceptance.
 
 - [WebTransport upstream readiness](project/webtransport-upstream-readiness.md): decision to await a current-wire provider, test-only evidence and resumption gates.
+
+- [Coverage-guided URL fuzzing](guides/coverage-guided-fuzzing.md): instrumented parser campaigns, seed replay and crash artifacts.

@@ -354,3 +354,5 @@
 
 - name: WebTransport upstream readiness
   href: project/webtransport-upstream-readiness.md
+- name: Coverage-guided URL fuzzing
+  href: guides/coverage-guided-fuzzing.md
