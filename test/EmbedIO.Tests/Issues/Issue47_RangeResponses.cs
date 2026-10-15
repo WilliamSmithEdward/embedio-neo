@@ -179,6 +179,8 @@ namespace EmbedIO.Tests.Issues
             Assert.That(received, Is.EqualTo(end - start + 1));
             Assert.That(source.LargestRead, Is.LessThanOrEqualTo(65536), "Reads stay within the copy buffer; the range is never materialized.");
             Assert.That(source.BytesRead, Is.EqualTo(end - start + 1), "Only the selected range is read.");
+            // The server releases the source after its last write completes, which can follow the client reading the final byte.
+            await source.DisposedSignal.Task.WaitAsync(Deadline);
             Assert.That(source.Disposed, Is.True);
         }
 
