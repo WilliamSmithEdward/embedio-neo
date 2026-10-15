@@ -13,12 +13,8 @@ namespace EmbedIO.Tests
     {
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task FailedStartupReleasesPortBeforeServerIsDisposed(HttpListenerMode mode, bool failInEvent)
         {
-            if (mode == HttpListenerMode.Microsoft && !OperatingSystem.IsWindows())
-                Assert.Ignore("HTTP.sys listener cases require Windows.");
             var url = Resources.GetServerAddress();
             using var failed = new WebServer(mode, url);
             var expected = new InvalidOperationException("startup failed");
@@ -44,11 +40,8 @@ namespace EmbedIO.Tests
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task AlreadyCanceledStartupDoesNotOpenListener(HttpListenerMode mode)
         {
-            if (mode == HttpListenerMode.Microsoft && !OperatingSystem.IsWindows())
-                Assert.Ignore("HTTP.sys listener cases require Windows.");
             using var server = new WebServer(mode, Resources.GetServerAddress());
             using var stop = new CancellationTokenSource();
             stop.Cancel();

@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.WebSockets;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,10 +20,6 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.EmbedIO, 1)]
         [TestCase(HttpListenerMode.EmbedIO, 2)]
         [TestCase(HttpListenerMode.EmbedIO, 3)]
-        [TestCase(HttpListenerMode.Microsoft, 0)]
-        [TestCase(HttpListenerMode.Microsoft, 1)]
-        [TestCase(HttpListenerMode.Microsoft, 2)]
-        [TestCase(HttpListenerMode.Microsoft, 3)]
         public async Task CompleteMessagesPreserveEmptyBinaryAndSplitUnicode(HttpListenerMode mode, int shape)
         {
             using var fixture = new Fixture(mode);
@@ -46,44 +40,21 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, "unsupported", 1003)]
-        [TestCase(HttpListenerMode.Microsoft, "unsupported", 1003)]
         [TestCase(HttpListenerMode.EmbedIO, "invalid", 1007)]
-        [TestCase(HttpListenerMode.Microsoft, "invalid", 1007)]
         [TestCase(HttpListenerMode.EmbedIO, "oversize", 1009)]
-        [TestCase(HttpListenerMode.Microsoft, "oversize", 1009)]
         [TestCase(HttpListenerMode.EmbedIO, "failure", 1011)]
-        [TestCase(HttpListenerMode.Microsoft, "failure", 1011)]
         [TestCase(HttpListenerMode.EmbedIO, "away", 1001)]
-        [TestCase(HttpListenerMode.Microsoft, "away", 1001)]
         public async Task RejectionCodesAreObservableAndAnotherClientStaysHealthy(HttpListenerMode mode, string scenario, int expected)
         {
             using var fixture = new Fixture(mode, scenario);
             using var client = await fixture.Connect();
-            using var trace = new CapturingTraceListener();
-            EmbedIO.Diagnostics.Log.Source.Listeners.Add(trace);
             var data = scenario == "invalid" ? new byte[] { 0xc0, 0xaf }
                 : Encoding.UTF8.GetBytes(scenario == "oversize" ? "12345" : scenario == "failure" ? "fail" : scenario == "away" ? "away" : "binary");
-            try
-            {
-                await client.SendAsync(new ArraySegment<byte>(data), scenario == "unsupported" ? WebSocketMessageType.Binary : WebSocketMessageType.Text, true, fixture.Timeout.Token);
-                try
-                {
-                    var result = await client.ReceiveAsync(new ArraySegment<byte>(new byte[256]), fixture.Timeout.Token);
-                    Assert.That(result.MessageType, Is.EqualTo(WebSocketMessageType.Close));
-                    Assert.That((int?)result.CloseStatus, Is.EqualTo(expected));
-                    await client.CloseOutputAsync(result.CloseStatus ?? throw new AssertionException("Expected a close status."), "ack", fixture.Timeout.Token);
-                }
-                catch (System.Net.WebSockets.WebSocketException error) when (scenario == "invalid"
-                    && mode == HttpListenerMode.Microsoft && RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                    && error.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
-                {
-                    Assert.That(fixture.Module.Messages, Is.Empty, "The native runtime rejects invalid text before application dispatch.");
-                    await fixture.Module.Disconnected.Task.WaitAsync(fixture.Timeout.Token);
-                    var diagnostics = trace.Snapshot();
-                    TestContext.Out.WriteLine("Native invalid UTF-8 diagnostics: " + diagnostics);
-                }
-            }
-            finally { EmbedIO.Diagnostics.Log.Source.Listeners.Remove(trace); }
+            await client.SendAsync(new ArraySegment<byte>(data), scenario == "unsupported" ? WebSocketMessageType.Binary : WebSocketMessageType.Text, true, fixture.Timeout.Token);
+            var result = await client.ReceiveAsync(new ArraySegment<byte>(new byte[256]), fixture.Timeout.Token);
+            Assert.That(result.MessageType, Is.EqualTo(WebSocketMessageType.Close));
+            Assert.That((int?)result.CloseStatus, Is.EqualTo(expected));
+            await client.CloseOutputAsync(result.CloseStatus ?? throw new AssertionException("Expected a close status."), "ack", fixture.Timeout.Token);
             using var healthy = await fixture.Connect();
             await healthy.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("ok")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
             Assert.That(Encoding.UTF8.GetString((await Read(healthy, fixture.Timeout.Token)).Data), Is.EqualTo("ok"));
@@ -91,7 +62,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task BinaryOnlyEndpointsRejectTextUsingTheDefaultCallback(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -113,7 +83,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ExistingSubclassAndFrameCallbacksKeepTheirBehavior(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -130,14 +99,13 @@ namespace EmbedIO.Tests.Issues
                 await client.SendAsync(new ArraySegment<byte>(payload), WebSocketMessageType.Binary, true, timeout.Token);
                 Assert.That((await Read(client, timeout.Token)).Data, Is.EqualTo(payload));
                 Assert.That(module.Messages, Is.EqualTo(1));
-                Assert.That(module.Frames > 0, Is.EqualTo(mode == HttpListenerMode.Microsoft));
+                Assert.That(module.Frames, Is.Zero);
                 await client.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
             }
             finally { stop.Cancel(); await running.WaitAsync(timeout.Token); }
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task BurstsProduceOrderedCompleteEchoes(HttpListenerMode mode)
         {
             using var fixture = new Fixture(mode);
@@ -170,25 +138,6 @@ namespace EmbedIO.Tests.Issues
                 Messages++;
                 return SendAsync(context, buffer);
             }
-        }
-
-        [TestCase(CloseStatusCode.Normal, 1000)]
-        [TestCase(CloseStatusCode.Away, 1001)]
-        [TestCase(CloseStatusCode.ProtocolError, 1002)]
-        [TestCase(CloseStatusCode.UnsupportedData, 1003)]
-        [TestCase(CloseStatusCode.InvalidData, 1007)]
-        [TestCase(CloseStatusCode.PolicyViolation, 1008)]
-        [TestCase(CloseStatusCode.TooBig, 1009)]
-        [TestCase(CloseStatusCode.MandatoryExtension, 1010)]
-        [TestCase(CloseStatusCode.ServerError, 1011)]
-        public void NativeCloseMappingsMatchTheirWireValues(CloseStatusCode code, int expected)
-        {
-            var type = typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.SystemWebSocket", true);
-            using var client = new ClientWebSocket();
-            var wrapper = Activator.CreateInstance((type ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), new object[] { client });
-            var mapped = ((type).GetMethod("MapCloseStatus", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(wrapper, new object[] { code });
-            Assert.That((int)(WebSocketCloseStatus)(mapped ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), Is.EqualTo(expected));
-            ((IDisposable)(wrapper ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))).Dispose();
         }
 
         [TestCase(new byte[] { 0xc0, 0xaf })]
@@ -252,7 +201,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task AsyncCallbacksAreSequentialPerConnectionButIndependentAcrossConnections(HttpListenerMode mode)
         {
             using var fixture = new Fixture(mode, "gate");
@@ -272,7 +220,7 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
+        [Repeat(32)]
         public async Task CancellationReleasesTheActiveCallbackAndServer(HttpListenerMode mode)
         {
             using var fixture = new Fixture(mode, "gate");
@@ -287,9 +235,14 @@ namespace EmbedIO.Tests.Issues
                 phase = "send next";
                 await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("next")), WebSocketMessageType.Text, true, fixture.Timeout.Token);
                 phase = "cancel server";
+                // The stop sends the open socket a 1001 close and waits up to a second for the answer;
+                // this client answers, as clients do, so the stop does not wait out that budget.
+                var answering = ClientWebSocketClose.AnswerAsync(client, fixture.Timeout.Token);
                 fixture.Stop.Cancel();
                 phase = "wait server completion";
                 await fixture.Running.WaitAsync(fixture.Timeout.Token);
+                phase = "wait close answer";
+                await answering;
                 phase = "wait callback completion";
                 await fixture.Module.CallbackFinished.Task.WaitAsync(fixture.Timeout.Token);
                 Assert.That(fixture.Module.Messages.ToArray(), Does.Not.Contain("next"));
@@ -313,27 +266,6 @@ namespace EmbedIO.Tests.Issues
                 output.Write(buffer, 0, result.Count);
             } while (!result.EndOfMessage);
             return (result.MessageType, output.ToArray());
-        }
-
-        private sealed class CapturingTraceListener : TraceListener
-        {
-            private readonly object _sync = new();
-            private readonly StringBuilder _messages = new();
-
-            public override void Write(string? message)
-            {
-                lock (_sync) _messages.Append(message);
-            }
-
-            public override void WriteLine(string? message)
-            {
-                lock (_sync) _messages.AppendLine(message);
-            }
-
-            internal string Snapshot()
-            {
-                lock (_sync) return _messages.ToString();
-            }
         }
 
         private sealed class Fixture : IDisposable
@@ -377,13 +309,7 @@ namespace EmbedIO.Tests.Issues
             public TaskCompletionSource<bool> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public TaskCompletionSource<bool> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public TaskCompletionSource<bool> CallbackFinished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            public TaskCompletionSource<bool> Disconnected { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public Task Dispatch(IWebSocketContext context, byte[] bytes) => base.OnMessageReceivedAsync(context, bytes, new Result(bytes.Length));
-            protected override Task OnClientDisconnectedAsync(IWebSocketContext context)
-            {
-                Disconnected.TrySetResult(true);
-                return Task.CompletedTask;
-            }
             protected override async Task OnTextMessageReceivedAsync(IWebSocketContext context, string text)
             {
                 if (_scenario == "failure" && text == "fail") throw new InvalidOperationException("deliberate callback failure");

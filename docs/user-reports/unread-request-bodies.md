@@ -1,6 +1,11 @@
 # Returning a response without reading the request body
 
-[Upstream #558](https://github.com/unosquare/embedio/issues/558), reported by bdurrer, described the fourth request in a .NET Framework HttpClient sequence failing with EmbedIO 3.4.3 when a POST controller ignored its body. Current source completes that sequence with both listeners. Applications do not need to read a fixed-length body merely to make the response work.
+The unreleased [modern engine increment](../project/http-engine.md) supersedes
+this report's managed chunked-input and synchronous-read limitations, and tightens
+ambiguous framing. Measurements below describe the earlier source; see the
+[migration notes](../compatibility/migration.md#managed-http-framing-unreleased).
+
+[Upstream #558](https://github.com/unosquare/embedio/issues/558), reported by bdurrer, described the fourth request in a .NET Framework HttpClient sequence failing with EmbedIO 3.4.3 when a POST controller ignored its body. The source tested for that v1 investigation completed the sequence with both listeners. Applications do not need to read a fixed-length body merely to make the response work.
 
 ## Read when the application needs the data
 
@@ -66,12 +71,20 @@ Expect HTTP 200 and JSON strings `"response2"`, `"response1"`, `"response1"`, `"
 
 ## Chunked uploads and framing limits
 
-This fixed-length report must not be confused with chunked request support. The managed listener currently recognizes request bodies through a positive Content-Length and does not decode chunked request input. For chunked uploads, use `HttpListenerMode.Microsoft` or send a known Content-Length. The native listener's chunked-body reading and ignored-body response cases are covered separately. This guide does not claim managed chunked input has been implemented.
+The earlier v1 investigation covered a managed listener that recognized a body
+through positive Content-Length and did not decode chunked input. Its historical
+Microsoft-backend comparison is not a v2 deployment option. The replacement
+engine now decodes chunked uploads and rejects ambiguous framing; read input to
+completion when the application needs it rather than treating an unknown length
+as an empty body. See the [v1-to-v2 request-framing guide](../compatibility/neo-v1-to-v2.md#request-framing-and-client-behavior)
+and [request-body limits](../guides/request-body-limits.md). The investigation
+results below remain evidence for their earlier source and do not establish final
+v2 conformance or resource acceptance.
 
 When reading data is necessary, use the declared body framing and the appropriate helper; do not assume every POST has data or every GET is bodyless. A successful response does not prove the application consumed or validated the upload. Do not read the underlying connection directly, and do not dispose a request stream to force protocol behavior.
 
 ## Investigation and validation
 
-The [supplied proof of concept](https://github.com/bdurrer/embedio_post_test/tree/445088d571328b55aba822b8daa86e4310c761ae) was inspected at its pinned commit. Its controller and four-request HttpClient sequence passed against current source with both listeners. The legacy client was compiled against installed Windows .NET Framework assemblies, with diagnostic output redirected to Console, a shorter client timeout and fail-fast exceptions. The available runtime reports registry Version `4.8.09221`, Release `533509`; this is not a reproduction on the reporter's exact 4.7.2 runtime. The original 3.4.3 failure was not reproduced or attributed to a specific historical commit.
+The [supplied proof of concept](https://github.com/bdurrer/embedio_post_test/tree/445088d571328b55aba822b8daa86e4310c761ae) was inspected at its pinned commit. Its controller and four-request HttpClient sequence passed against the then-current v1 source with both listeners. The legacy client was compiled against installed Windows .NET Framework assemblies, with diagnostic output redirected to Console, a shorter client timeout and fail-fast exceptions. The available runtime reports registry Version `4.8.09221`, Release `533509`; this is not a reproduction on the reporter's exact 4.7.2 runtime. The original 3.4.3 failure was not reproduced or attributed to a specific historical commit.
 
 Twenty-six real-listener cases cover the original sequence with and without Expect: 100-continue, unread/partial/full fixed-length consumption, successful and early 403 responses, multiple requests, raw same-connection delayed uploads, independent healthy requests while an upload is incomplete, disconnect/stop, and native chunked uploads. Production code, defaults, public APIs and package dependencies are unchanged. Cross-platform CI verifies the cases before merge. If a maintained version still fails, provide the complete exception, package/runtime version, listener mode, request framing and a minimal client/server example so the investigation can be reopened.

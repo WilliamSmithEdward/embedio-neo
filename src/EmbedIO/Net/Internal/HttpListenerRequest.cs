@@ -1,525 +1,378 @@
 ﻿using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Collections.Specialized;
-using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Net;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using EmbedIO.Internal;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
 {
-    /// <summary>
-    /// Represents an HTTP Listener Request.
-    /// </summary>
-    internal sealed partial class HttpListenerRequest : IHttpRequest
+    // Application view of one parsed HTTP/1 head. Framing facts belong to the
+    // head owner; body access borrows the existing session's request transport.
+    internal sealed class HttpListenerRequest : IHttpRequestTrailers, IRequestPolicyTarget, IClientCertificateCarrier
     {
-        private static readonly byte[] HttpStatus100 = WebServer.DefaultEncoding.GetBytes("HTTP/1.1 100 Continue\r\n\r\n");
-        private static readonly char[] Separators = { ' ' };
-
         private readonly HttpConnection _connection;
+        private readonly HttpListenerContext _context;
+        private readonly Http1RequestHead _head = new();
         private CookieList? _cookies;
+        private NameValueCollection? _queryString;
         private Stream? _inputStream;
-        private bool _kaSet;
-        private bool _keepAlive;
+        private Stream? _applicationInput;
+        private int _continueStarted;
+        private Func<CancellationToken, Task>? _sendContinue;
+        private int _headerFieldCount;
+        private long _headerFieldBytes;
+        private RequestBodyPolicy? _bodyPolicy;
+        private RawRequestBodyLimitException? _knownBodyRefusal;
+        private RawRequestBodyStream? _limitedInput;
+        private Stream? _rawApplicationInput;
+        private int _bodyLimitRetired;
+        private object? _bodyCleanupSync;
+        private Task? _bodyCleanup;
+        private CancellationToken _bodyCleanupToken;
+        private bool? _keepAlive;
 
         internal HttpListenerRequest(HttpListenerContext context)
-        {
-            _connection = context.Connection;
-        }
-
-        /// <summary>
-        /// Gets the MIME accept types.
-        /// </summary>
-        /// <value>
-        /// The accept types.
-        /// </value>
-        public string[] AcceptTypes { get; private set; } = Array.Empty<string>();
-
-        /// <inheritdoc />
-        public Encoding ContentEncoding
-        {
-            get
-            {
-                if (!HasEntityBody || ContentType == null)
-                {
-                    return WebServer.DefaultEncoding;
-                }
-
-                var charSet = HeaderUtility.GetCharset(ContentType);
-                if (string.IsNullOrEmpty(charSet))
-                {
-                    return WebServer.DefaultEncoding;
-                }
-
-                try
-                {
-                    return Encoding.GetEncoding(charSet);
-                }
-                catch (ArgumentException)
-                {
-                    return WebServer.DefaultEncoding;
-                }
-            }
-        }
-
-        /// <inheritdoc />
-        public long ContentLength64 => long.TryParse(Headers[HttpHeaderNames.ContentLength], out var val) ? val : 0;
-
-        /// <inheritdoc />
-        public string? ContentType => Headers[HttpHeaderNames.ContentType];
-
-        /// <inheritdoc />
-        public ICookieCollection Cookies => _cookies ??= new CookieList();
-
-        /// <inheritdoc />
-        public bool HasEntityBody => ContentLength64 > 0;
-
-        /// <inheritdoc />
-        public NameValueCollection Headers { get; } = new();
-
-        /// <inheritdoc />
-        public string HttpMethod { get; private set; } = string.Empty;
-
-        /// <inheritdoc />
+        { _context = context; _connection = context.Connection; }
+        public NameValueCollection Headers => _head.Fields;
+        public string HttpMethod => _head.Method;
         public HttpVerbs HttpVerb { get; private set; }
-
-        /// <inheritdoc />
-        public Stream InputStream => _inputStream ??= ContentLength64 > 0 ? _connection.GetRequestStream(ContentLength64) : Stream.Null;
-
-        /// <inheritdoc />
-        public bool IsAuthenticated => false;
-
-        /// <inheritdoc />
-        public bool IsLocal => LocalEndPoint.Address?.Equals(RemoteEndPoint.Address) ?? true;
-
-        /// <inheritdoc />
+        public string RawTarget => _head.Target;
+        public Uri Url => _head.Address;
+        public Version ProtocolVersion => _head.Version;
+        public IPEndPoint LocalEndPoint => _connection.LocalEndPoint;
+        public IPEndPoint RemoteEndPoint => _connection.RemoteEndPoint;
         public bool IsSecureConnection => _connection.IsSecure;
-
-        /// <inheritdoc />
-        public bool KeepAlive
+        public System.Security.Cryptography.X509Certificates.X509Certificate2? ClientCertificate => _connection.ClientCertificate;
+        public bool IsLocal => LocalEndPoint.Address.Equals(RemoteEndPoint.Address);
+        public bool IsAuthenticated => false;
+        public string? ContentType => Headers[HttpHeaderNames.ContentType];
+        public string? UserAgent => Headers[HttpHeaderNames.UserAgent];
+        public Uri? UrlReferrer { get; private set; }
+        public ICookieCollection Cookies => _cookies ??= new CookieList();
+        public long ContentLength64 => _head.Framed ? _head.Length
+            : long.TryParse(Headers[HttpHeaderNames.ContentLength], out var length) ? length : 0;
+        public bool HasEntityBody => _head.Chunked || ContentLength64 > 0;
+        internal Stream RawInputStream => FramingInput;
+        private Stream FramingInput => _inputStream ??= HasEntityBody
+            ? _connection.GetRequestStream(ContentLength64, _head.Chunked) : Stream.Null;
+        private TimeSpan? _readTimeout;
+        private Action? _onReadTimeout;
+        private ReadTimeoutStream? _timedInput;
+        private object? _applicationInputSync;
+        private long _legacyBodyLimit = -1;
+        private Action? _onLegacyLimitExceeded;
+        private Stream ApplicationInput
         {
             get
             {
-                if (!_kaSet)
+                if (!HasEntityBody || (_sendContinue == null && _readTimeout == null && _countBody == null && _legacyBodyLimit < 0)) return FramingInput;
+                var current = Volatile.Read(ref _applicationInput);
+                if (current != null)
                 {
-                    var cnc = Headers.GetValues(HttpHeaderNames.Connection);
-                    _keepAlive = ProtocolVersion < HttpVersion.Version11
-                        ? cnc != null && cnc.Length == 1 && string.Compare(cnc[0], "keep-alive", StringComparison.OrdinalIgnoreCase) == 0
-                        : cnc == null || cnc.All(s => string.Compare(s, "close", StringComparison.OrdinalIgnoreCase) != 0);
-
-                    _kaSet = true;
+                    if (Volatile.Read(ref _bodyLimitRetired) != 0) Volatile.Read(ref _timedInput)?.Retire();
+                    return current;
                 }
-
-                return _keepAlive;
+                // Resolve the physical framing owner before taking the publication
+                // gate, so request publication cannot invert the connection lock.
+                var framing = FramingInput;
+                ReadTimeoutStream? timed;
+                lock (LazyInitializer.EnsureInitialized(ref _applicationInputSync)
+                    ?? throw new InvalidOperationException("Missing application input publication."))
+                {
+                    if (_applicationInput == null)
+                    {
+                        var input = framing;
+                        if (_countBody != null && _bodyPolicy == null) input = new CountingReadStream(input, _countBody);
+                        timed = _readTimeout is TimeSpan timeout ? new ReadTimeoutStream(input, timeout, _onReadTimeout) : null;
+                        if (timed != null) input = timed;
+                        if (_sendContinue != null) input = new DeferredContinueStream(input, StartContinue);
+                        if (_legacyBodyLimit >= 0) input = new LimitedRequestStream(input, _legacyBodyLimit,
+                            LimitedRequestStream.TransferredLimitMessage, _onLegacyLimitExceeded);
+                        Volatile.Write(ref _timedInput, timed);
+                        Volatile.Write(ref _applicationInput, input);
+                    }
+                    timed = _timedInput;
+                    current = _applicationInput ?? throw new InvalidOperationException("Missing published application input.");
+                }
+                // Retirement never takes the publication gate or disposes a
+                // borrowed source. This recheck covers publication after retire.
+                if (Volatile.Read(ref _bodyLimitRetired) != 0) timed?.Retire();
+                return current;
             }
         }
-
-        /// <inheritdoc />
-        public IPEndPoint LocalEndPoint => _connection.LocalEndPoint;
-
-        /// <inheritdoc />
-        public Version ProtocolVersion { get; private set; } = HttpVersion.Version11;
-
-        /// <inheritdoc />
-        public NameValueCollection QueryString { get; } = new();
-
-        /// <inheritdoc />
-        public string RawTarget { get; private set; } = string.Empty;
-
-        /// <inheritdoc />
-        public IPEndPoint RemoteEndPoint => _connection.RemoteEndPoint;
-
-        /// <inheritdoc />
-        public Uri Url { get; private set; } = WebServer.NullUri;
-
-        /// <inheritdoc />
-        public Uri? UrlReferrer { get; private set; }
-
-        /// <inheritdoc />
-        public string? UserAgent => Headers[HttpHeaderNames.UserAgent];
-
-        public string UserHostAddress => LocalEndPoint.ToString();
-
-        public string? UserHostName => Headers[HttpHeaderNames.Host];
-
-        public string[] UserLanguages { get; private set; } = Array.Empty<string>();
-
-        /// <inheritdoc />
-        public bool IsWebSocketRequest
-            => HttpVerb == HttpVerbs.Get
-            && ProtocolVersion >= HttpVersion.Version11
+        private RequestTelemetry? _countBody;
+        void IRequestPolicyTarget.LimitBody(long maximumBytes, Action? onExceeded)
+        {
+            if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
+                throw new InvalidOperationException("The request body was already opened.");
+            _legacyBodyLimit = maximumBytes;
+            _onLegacyLimitExceeded = onExceeded;
+        }
+        void IRequestPolicyTarget.CountBody(RequestTelemetry scope)
+        {
+            if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
+                throw new InvalidOperationException("The request body was already opened.");
+            _countBody = scope;
+        }
+        void IRequestPolicyTarget.TimeBodyReads(TimeSpan timeout, Action? onTimeout)
+        {
+            if (_applicationInput != null || Volatile.Read(ref _limitedInput) != null)
+                throw new InvalidOperationException("The request body was already opened.");
+            _readTimeout = timeout;
+            _onReadTimeout = onTimeout;
+        }
+        internal void DeferContinue(Func<CancellationToken, Task> send) => _sendContinue = send;
+        internal bool IsContinueOwed => _sendContinue != null && Volatile.Read(ref _continueStarted) == 0;
+        private Task StartContinue(CancellationToken token)
+        {
+            Volatile.Write(ref _continueStarted, 1);
+            return (_sendContinue ?? throw new InvalidOperationException("No 100 Continue is owed."))(token);
+        }
+        int IRequestPolicyTarget.HeaderFieldCount => _headerFieldCount;
+        long IRequestPolicyTarget.HeaderFieldBytes => _headerFieldBytes;
+        public Stream InputStream
+        {
+            get
+            {
+                if (_bodyPolicy == null) return ApplicationInput;
+                var application = Volatile.Read(ref _rawApplicationInput);
+                if (application != null) return application;
+                var view = Volatile.Read(ref _limitedInput);
+                if (view == null)
+                {
+                    var created = new RawRequestBodyStream(ApplicationInput, _bodyPolicy.MaximumBytes, KnownBodyRefusal,
+                        FramingInput as IRequestTrailerSource);
+                    view = Interlocked.CompareExchange(ref _limitedInput, created, null) ?? created;
+                    if (!ReferenceEquals(created, view)) created.Retire();
+                }
+                if (Volatile.Read(ref _bodyLimitRetired) != 0) view.Retire();
+                // Only public reads are application bytes. Cleanup and the
+                // private EOF/excess probe use the raw view without this counter.
+                application = _countBody != null ? new CountingReadStream(view, _countBody) : view;
+                return Interlocked.CompareExchange(ref _rawApplicationInput, application, null) ?? application;
+            }
+        }
+        internal bool IsBodyReadTimeoutFailure(Exception error) => Volatile.Read(ref _timedInput)?.IsTimeoutFailure(error) == true;
+        internal RequestPolicySnapshot? CapturedRequestPolicy { get; private set; }
+        internal void CaptureRequestPolicy(RequestPolicySnapshot policy) => CapturedRequestPolicy = policy;
+        internal void SetBodyPolicy(RequestBodyPolicy policy) => _bodyPolicy = policy;
+        internal RawRequestBodyLimitException? KnownBodyRefusal => Volatile.Read(ref _knownBodyRefusal);
+        internal void MarkKnownBodyRefusal(RawRequestBodyLimitException failure)
+            => Interlocked.CompareExchange(ref _knownBodyRefusal, failure, null);
+        internal bool IsBodyConsumed => !HasEntityBody || FramingInput is RequestStream body && body.IsBodyConsumed;
+        internal bool HasBodyLimitFailure => Volatile.Read(ref _limitedInput)?.HasLimitFailure == true;
+        internal void RetireBodyLimit()
+        {
+            if (_bodyPolicy == null && _readTimeout == null) return;
+            Interlocked.Exchange(ref _bodyLimitRetired, 1);
+            Volatile.Read(ref _limitedInput)?.Retire();
+            Volatile.Read(ref _timedInput)?.Retire();
+        }
+        // Request cleanup runs before the response ends. A body the handler never opened is left
+        // to the connection, which discards it after the response under its drain deadline and
+        // this body limit (FlushInputAsync), so a slow client holds neither the response nor the
+        // request here. A body the handler opened is still validated now.
+        internal Task CompleteOpenedBodyInputAsync(CancellationToken token)
+            => Volatile.Read(ref _limitedInput) == null ? Task.CompletedTask : CompleteBodyInputAsync(token);
+        internal Task CompleteBodyInputAsync(CancellationToken token)
+        {
+            if (_bodyPolicy == null || KnownBodyRefusal != null || IsContinueOwed) return Task.CompletedTask;
+            // A handler that read the body to its validated end leaves nothing to drain or check.
+            if (Volatile.Read(ref _bodyLimitRetired) == 0 && Volatile.Read(ref _limitedInput) is { IsValidatedEnd: true })
+                return Task.CompletedTask;
+            TaskCompletionSource<bool> completion;
+            CancellationToken readToken;
+            lock (LazyInitializer.EnsureInitialized(ref _bodyCleanupSync)
+                ?? throw new InvalidOperationException("Missing raw body cleanup gate."))
+            {
+                if (_bodyCleanup != null) return _bodyCleanup;
+                completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                readToken = token.CanBeCanceled ? token : _context.CancellationToken;
+                _bodyCleanupToken = readToken;
+                _bodyCleanup = completion.Task;
+            }
+            // Publication precedes the first read, and the borrowed reader is
+            // never invoked under the publication gate. The actor and pipeline
+            // retain this request's exact outcome even after transport retirement.
+            var cleanup = CompleteBodyInputCoreAsync(readToken);
+            _ = cleanup.ContinueWith(static (finished, state) =>
+            {
+                var result = state is ValueTuple<TaskCompletionSource<bool>, CancellationToken> captured
+                    ? captured : throw new InvalidOperationException("Missing cleanup publication.");
+                if (finished.IsCanceled) result.Item1.TrySetCanceled(result.Item2);
+                else if (finished.IsFaulted)
+                    result.Item1.TrySetException((finished.Exception
+                        ?? throw new InvalidOperationException("Missing cleanup failure.")).InnerExceptions);
+                else result.Item1.TrySetResult(finished.Result);
+            }, (completion, readToken), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            return completion.Task;
+        }
+        internal bool IsBodyCleanupCancellation(OperationCanceledException error)
+        {
+            var gate = Volatile.Read(ref _bodyCleanupSync);
+            if (gate == null) return false;
+            lock (gate)
+                return _bodyCleanup?.IsCanceled == true && _bodyCleanupToken.IsCancellationRequested
+                    && error.CancellationToken == _bodyCleanupToken;
+        }
+        private async Task<bool> CompleteBodyInputCoreAsync(CancellationToken token)
+        {
+            // Nonpersistent response completion may have already retired this
+            // exact request. Its discarded input is not a validated EOF, and a
+            // sticky limit failure remains the original failure after retirement.
+            if (Volatile.Read(ref _bodyLimitRetired) != 0) return DiscardRetiredInput();
+            try
+            {
+                _ = InputStream;
+                await (_limitedInput ?? throw new InvalidOperationException("Missing raw body view."))
+                    .CompleteInputAsync(token).ConfigureAwait(false);
+                return true;
+            }
+            catch (ObjectDisposedException) when (Volatile.Read(ref _bodyLimitRetired) != 0)
+            { return DiscardRetiredInput(); }
+        }
+        private bool DiscardRetiredInput()
+        {
+            var failure = Volatile.Read(ref _limitedInput)?.LimitFailure;
+            if (failure != null) throw failure;
+            return false;
+        }
+        public bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
+        {
+            trailers = RequestTrailerSnapshot.Empty;
+            var available = _inputStream is IRequestTrailerSource source
+                ? source.TryGetTrailers(out trailers) : !HasEntityBody;
+            // Check the monotonic raw outcome after the physical snapshot, so
+            // overlapping disposal cannot publish metadata from a later EOF.
+            if (Volatile.Read(ref _limitedInput) is { } raw && (raw.ReadInProgress || raw.HasLimitFailure || raw.TrailerInputAbandoned))
+            {
+                trailers = RequestTrailerSnapshot.Empty;
+                return false;
+            }
+            return available;
+        }
+        internal bool HasBodyFramingFailure => _inputStream is RequestStream body && body.HasBodyFramingFailure;
+        internal bool IsBodyFramingError(Exception error) => _inputStream is RequestStream body && body.IsFramingError(error);
+        internal bool RequiresContinue => ProtocolVersion >= HttpVersion.Version11 && HasEntityBody
+            && HttpExpectations.ContainsContinue(Headers["Expect"]);
+        public bool IsWebSocketRequest => HttpVerb == HttpVerbs.Get && ProtocolVersion >= HttpVersion.Version11
             && Headers.Contains(HttpHeaderNames.Upgrade, "websocket", StringComparison.OrdinalIgnoreCase)
             && Headers.Contains(HttpHeaderNames.Connection, "Upgrade", StringComparison.OrdinalIgnoreCase);
-
-        internal void SetRequestLine(string req)
+        public bool KeepAlive => _keepAlive ??= !Headers.Contains(HttpHeaderNames.Connection, "close", StringComparison.OrdinalIgnoreCase)
+            && (ProtocolVersion >= HttpVersion.Version11 || Headers.Contains(HttpHeaderNames.Connection, "keep-alive", StringComparison.OrdinalIgnoreCase));
+        public Encoding ContentEncoding
+            => HasEntityBody ? HeaderUtility.GetEncoding(ContentType) : WebServer.DefaultEncoding;
+        public NameValueCollection QueryString
         {
-            const string forbiddenMethodChars = "\"(),/:;<=>?@[\\]{}";
-
-            var parts = req.Split(Separators, 3);
-            if (parts.Length != 3)
+            get
             {
-                _connection.SetError("Invalid request line (parts).");
-                return;
-            }
-
-            HttpMethod = parts[0];
-            foreach (var c in HttpMethod)
-            {
-                // See https://tools.ietf.org/html/rfc7230#section-3.2.6
-                // for the list of allowed characters
-                if (c < 32 || c >= 127 || EmbedIO.Internal.StringOperations.IndexOfOrdinal(forbiddenMethodChars, c) >= 0)
-                {
-                    _connection.SetError("(Invalid verb)");
-                    return;
-                }
-            }
-
-            HttpVerb = IsKnownHttpMethod(HttpMethod, out var verb) ? verb : HttpVerbs.Any;
-
-            RawTarget = parts[1];
-            if (parts[2].Length != 8 || !parts[2].StartsWith("HTTP/", StringComparison.Ordinal))
-            {
-                _connection.SetError("Invalid request line (missing HTTP version).");
-                return;
-            }
-
-            try
-            {
-                ProtocolVersion = new Version(parts[2].Substring(5));
-
-                if (ProtocolVersion.Major < 1)
-                {
-                    throw new InvalidOperationException();
-                }
-            }
-            catch (Exception error) when (error is ArgumentException or FormatException or OverflowException or InvalidOperationException)
-            {
-                _connection.SetError("Invalid request line (could not parse HTTP version).");
+                var current = Volatile.Read(ref _queryString);
+                if (current != null) return current;
+                var created = new NameValueCollection();
+                return Interlocked.CompareExchange(ref _queryString, created, null) ?? created;
             }
         }
-
+        internal void SetRequestLine(string line)
+        {
+            var error = _head.ReadLine(line);
+            if (error != null) { _connection.SetError(error); return; }
+            HttpVerb = IsKnownHttpMethod(HttpMethod, out var method) ? method : HttpVerbs.Any;
+        }
+        internal void AddHeader(string line)
+        {
+            var error = _head.ReadField(line, out var name, out var value);
+            if (error != null) { _connection.SetError(error); return; }
+            _headerFieldCount++;
+            _headerFieldBytes += name.Length + value.Length;
+            // The field combines repeated lines; parse it whole, as HTTP/2 parses its joined cookie field.
+            if (name.Equals("Cookie", StringComparison.OrdinalIgnoreCase)) _cookies = ParseCookies(_head.Fields[name] ?? value);
+            else if (name.Equals("Referer", StringComparison.OrdinalIgnoreCase))
+            {
+                try { UrlReferrer = new Uri(value); }
+                catch (UriFormatException) { UrlReferrer = null; }
+            }
+        }
         internal void FinishInitialization()
         {
-            var host = UserHostName;
-            if (ProtocolVersion > HttpVersion.Version10 && string.IsNullOrEmpty(host))
-            {
-                _connection.SetError("Invalid host name");
-                return;
-            }
-
-            var rawUri = UriUtility.StringToAbsoluteUri(RawTarget);
-            var path = rawUri?.PathAndQuery ?? RawTarget;
-
-            if (string.IsNullOrEmpty(host))
-            {
-                host = rawUri?.Host ?? UserHostAddress;
-            }
-
-            host ??= UserHostAddress;
-            var colon = host.LastIndexOf(':');
-            if (colon >= 0 && colon > host.LastIndexOf(']'))
-            {
-                host = host.Substring(0, colon);
-            }
-
-            var baseUri = $"{(IsSecureConnection ? "https" : "http")}://{host}:{LocalEndPoint.Port}";
-
-            if (!Uri.TryCreate(baseUri + path, UriKind.Absolute, out var url))
-            {
-                _connection.SetError(WebUtility.HtmlEncode($"Invalid url: {baseUri}{path}"));
-                return;
-            }
-
-            Url = url;
-            InitializeQueryString(Url.Query);
-
-            if (ContentLength64 == 0 && (HttpVerb == HttpVerbs.Post || HttpVerb == HttpVerbs.Put))
-            {
-                return;
-            }
-
-            if (string.Compare(Headers["Expect"], "100-continue", StringComparison.OrdinalIgnoreCase) == 0)
-            {
-                _connection.GetResponseStream().InternalWrite(HttpStatus100, 0, HttpStatus100.Length);
-            }
+            var error = _head.Complete(LocalEndPoint, IsSecureConnection);
+            if (error != null) { _connection.SetError(error); return; }
+            var query = Url.Query;
+            if (query.Length == 0) return;
+            QueryStringFields.AddTo(query, QueryString);
         }
-
-        internal void AddHeader(string header)
-        {
-            var colon = header.IndexOf(":", System.StringComparison.Ordinal);
-            if (colon == -1 || colon == 0)
-            {
-                _connection.SetError("Bad Request");
-                return;
-            }
-
-            var name = header.Substring(0, colon).Trim();
-            var val = header.Substring(colon + 1).Trim();
-
-            Headers.Set(name, val);
-
-            switch (name.ToUpperInvariant())
-            {
-                case "ACCEPT-LANGUAGE":
-                    UserLanguages = val.SplitByComma(); // yes, only split with a ','
-                    break;
-                case "ACCEPT":
-                    AcceptTypes = val.SplitByComma(); // yes, only split with a ','
-                    break;
-                case "CONTENT-LENGTH":
-                    Headers[HttpHeaderNames.ContentLength] = val.Trim();
-
-                    if (ContentLength64 < 0)
-                    {
-                        _connection.SetError("Invalid Content-Length.");
-                    }
-
-                    break;
-                case "REFERER":
-                    try
-                    {
-                        UrlReferrer = new Uri(val);
-                    }
-                    catch (UriFormatException)
-                    {
-                        UrlReferrer = null;
-                    }
-
-                    break;
-                case "COOKIE":
-                    _cookies = ParseCookies(val);
-
-                    break;
-            }
-        }
-
-        // returns true is the stream could be reused.
         internal bool FlushInput()
         {
-            if (!HasEntityBody)
-            {
-                return true;
-            }
-
+            if (!HasEntityBody) return true;
+            if (KnownBodyRefusal != null || IsContinueOwed) return false;
+            if (_bodyPolicy != null) return FlushInputAsync().GetAwaiter().GetResult();
             Stream input;
             try { input = InputStream; }
-            catch (ObjectDisposedException)
-            {
-                _inputStream = null;
-                return true;
-            }
-            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { return false; }
-            if (input is RequestStream body && body.IsBodyConsumed)
-                return true;
-
-            var length = 2048;
-            if (ContentLength64 > 0)
-            {
-                length = (int)Math.Min(ContentLength64, length);
-            }
-
-            var bytes = ArrayPool<byte>.Shared.Rent(length);
+            catch (ObjectDisposedException) { _inputStream = null; return true; }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { return false; }
+            if (input is RequestStream body && body.IsBodyConsumed) return true;
+            var count = ContentLength64 > 0 ? (int)Math.Min(ContentLength64, 2048) : 2048;
+            var buffer = ArrayPool<byte>.Shared.Rent(count);
             try
             {
-                while (true)
-                {
-                    try
-                    {
-                        if (input.Read(bytes, 0, length) <= 0)
-                            return true;
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                        _inputStream = null;
-                        return true;
-                    }
-                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-                    {
-                        return false;
-                    }
-                }
+                while (input.Read(buffer, 0, count) != 0) { }
+                return true;
             }
-            finally
-            {
-                // Request data must not survive in a buffer shared with another caller.
-                ArrayPool<byte>.Shared.Return(bytes, clearArray: true);
-            }
+            catch (ObjectDisposedException) { _inputStream = null; return true; }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { return false; }
+            finally { ArrayPool<byte>.Shared.Return(buffer, true); }
         }
-
-        // Optimized for the following list of methods:
-        // "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"
-        // ***NOTE***: The verb parameter is NOT VALID upon exit if false is returned.
-        private static bool IsKnownHttpMethod(string method, out HttpVerbs verb)
+        internal async Task<bool> FlushInputAsync()
         {
-            switch (method.Length)
+            if (!HasEntityBody) return true;
+            if (IsContinueOwed) return false;
+            if (_bodyPolicy != null)
             {
-                case 3:
-                    switch (method[0])
-                    {
-                        case 'G':
-                            verb = HttpVerbs.Get;
-                            return method[1] == 'E' && method[2] == 'T';
-
-                        case 'P':
-                            verb = HttpVerbs.Put;
-                            return method[1] == 'U' && method[2] == 'T';
-
-                        default:
-                            verb = HttpVerbs.Any;
-                            return false;
-                    }
-
-                case 4:
-                    switch (method[0])
-                    {
-                        case 'H':
-                            verb = HttpVerbs.Head;
-                            return method[1] == 'E' && method[2] == 'A' && method[3] == 'D';
-
-                        case 'P':
-                            verb = HttpVerbs.Post;
-                            return method[1] == 'O' && method[2] == 'S' && method[3] == 'T';
-
-                        default:
-                            verb = HttpVerbs.Any;
-                            return false;
-                    }
-
-                case 5:
-                    verb = HttpVerbs.Patch;
-                    return method[0] == 'P'
-                        && method[1] == 'A'
-                        && method[2] == 'T'
-                        && method[3] == 'C'
-                        && method[4] == 'H';
-
-                case 6:
-                    verb = HttpVerbs.Delete;
-                    return method[0] == 'D'
-                        && method[1] == 'E'
-                        && method[2] == 'L'
-                        && method[3] == 'E'
-                        && method[4] == 'T'
-                        && method[5] == 'E';
-
-                case 7:
-                    verb = HttpVerbs.Options;
-                    return method[0] == 'O'
-                        && method[1] == 'P'
-                        && method[2] == 'T'
-                        && method[3] == 'I'
-                        && method[4] == 'O'
-                        && method[5] == 'N'
-                        && method[6] == 'S';
-
-                default:
-                    verb = HttpVerbs.Any;
-                    return false;
+                try
+                {
+                    await CompleteBodyInputAsync(CancellationToken.None).ConfigureAwait(false);
+                    return Volatile.Read(ref _bodyLimitRetired) == 0 && IsBodyConsumed;
+                }
+                catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { return false; }
             }
+            // This drain only lets the connection carry the next request, and the keep-alive
+            // deadline bounds it. It reads the framing input, not the application's view: the
+            // handler may have disposed that view, and its read deadline and byte count belong
+            // to application reads. A read the deadline abandoned may still be pending on the
+            // transport, so that body is not drained and the connection closes.
+            if (Volatile.Read(ref _timedInput)?.HasUnsettledRead == true) return false;
+            var input = FramingInput;
+            if (input is RequestStream body && body.IsBodyConsumed) return true;
+            var buffer = ArrayPool<byte>.Shared.Rent(2048);
+            try
+            {
+                while (await input.ReadAsync(buffer, 0, 2048, CancellationToken.None).ConfigureAwait(false) != 0) { }
+                return input is not RequestStream remaining || remaining.IsBodyConsumed;
+            }
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error)) { return false; }
+            finally { ArrayPool<byte>.Shared.Return(buffer, true); }
         }
-
-        private static CookieList ParseCookies(string val)
+        internal static CookieList ParseCookies(string value) => RequestCookieFields.Read(value);
+        internal static bool IsKnownHttpMethod(string method, out HttpVerbs verb)
         {
-            var cookies = new CookieList();
-
-            var cookieStrings = val.SplitByAny(';')
-                .Where(x => !string.IsNullOrEmpty(x));
-            Cookie? current = null;
-            var version = 0;
-
-            foreach (var cookieString in cookieStrings)
+            verb = method switch
             {
-                var str = cookieString.Trim();
-                if (str.StartsWith("$Version", StringComparison.Ordinal))
-                {
-                    version = int.Parse(str.Substring(str.IndexOf("=", System.StringComparison.Ordinal) + 1).Unquote(), CultureInfo.InvariantCulture);
-                }
-                else if (str.StartsWith("$Path", StringComparison.Ordinal) && current != null)
-                {
-                    current.Path = str.Substring(str.IndexOf("=", System.StringComparison.Ordinal) + 1).Trim();
-                }
-                else if (str.StartsWith("$Domain", StringComparison.Ordinal) && current != null)
-                {
-                    current.Domain = str.Substring(str.IndexOf("=", System.StringComparison.Ordinal) + 1).Trim();
-                }
-                else if (str.StartsWith("$Port", StringComparison.Ordinal) && current != null)
-                {
-                    current.Port = $"\"{str.Substring(str.IndexOf("=", System.StringComparison.Ordinal) + 1).Trim()}\"";
-                }
-                else
-                {
-                    if (current != null)
-                    {
-                        cookies.Add(current);
-                    }
-
-                    try
-                    {
-                        var ck = new Cookie();
-                        var idx = str.IndexOf("=", System.StringComparison.Ordinal);
-                        if (idx > 0)
-                        {
-                            ck.Name = str.Substring(0, idx).Trim();
-                            ck.Value = str.Substring(idx + 1).Trim();
-                        }
-                        else
-                        {
-                            ck.Name = str.Trim();
-                            ck.Value = string.Empty;
-                        }
-
-                        ck.Version = version;
-
-                        current = ck;
-                    }
-                    catch (Exception error) when (error is CookieException or ArgumentException)
-                    {
-                        current = null;
-                    }
-                }
-            }
-
-            if (current != null)
-            {
-                cookies.Add(current);
-            }
-
-            return cookies;
-        }
-
-        private void InitializeQueryString(string query)
-        {
-            if (string.IsNullOrEmpty(query))
-            {
-                return;
-            }
-
-            if (query[0] == '?')
-            {
-                query = query.Substring(1);
-            }
-
-            var components = query.Split('&');
-
-            foreach (var kv in components)
-            {
-                var pos = kv.IndexOf("=", System.StringComparison.Ordinal);
-                if (pos == -1)
-                {
-                    QueryString.Add(null, WebUtility.UrlDecode(kv));
-                }
-                else
-                {
-                    var key = WebUtility.UrlDecode(kv.Substring(0, pos));
-                    var val = WebUtility.UrlDecode(kv.Substring(pos + 1));
-
-                    QueryString.Add(key, val);
-                }
-            }
+                "GET" => HttpVerbs.Get,
+                "HEAD" => HttpVerbs.Head,
+                "POST" => HttpVerbs.Post,
+                "PUT" => HttpVerbs.Put,
+                "DELETE" => HttpVerbs.Delete,
+                "PATCH" => HttpVerbs.Patch,
+                "OPTIONS" => HttpVerbs.Options,
+                "QUERY" => HttpVerbs.Query,
+                _ => HttpVerbs.Any,
+            };
+            return verb != HttpVerbs.Any;
         }
     }
 }

@@ -26,20 +26,46 @@ Python guard rejects compiler/analyzer directives and build configuration opt-ou
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
 The tests target .NET 10.
 
-The required `MAUI HTTPS` CI jobs also run a test-only native app on Windows,
+CI requires the Android and Mac Catalyst smoke jobs and all four MAUI HTTPS
+platform jobs to succeed. Their reusable workflows and standalone manual
+workflows are enabled at William's request. Skipped jobs do not supply platform
+validation evidence.
+
+The HTTPS jobs run a test-only native app on Windows,
 iOS, Mac Catalyst and Android. They exercise platform client trust, HTTPS WebView
 rendering and a separate strict HTTPS client. The app and certificate generator
 remain outside the solution and shipped packages. See
 [MAUI HTTPS validation](docs/platforms/maui-https-validation.md) for pinned
 toolchains, per-platform dependency locks, artifacts and physical-device steps.
 
-Install the .NET 10 SDK selected by `global.json` (10.0.400 is the floor;
-`latestFeature` allows later feature bands), then run:
+Install the .NET SDK version that `global.json` pins exactly (`rollForward`
+`disable`, so a newer SDK on the machine or runner is never picked up
+silently). The pin is exact because the lock files record the SDK's implicit
+packages, so every machine must restore with the same SDK. The trade-off is a
+local one: you need that SDK installed, from the
+[.NET downloads](https://dotnet.microsoft.com/download/dotnet/10.0) or with the
+`dotnet-install` script and `--version <pin>`, and after the pin moves `dotnet`
+refuses to work in the checkout until you install the new one.
+
+SDK moves are deliberate and automated. Each Monday `update-dotnet-sdk.yml`
+proposes the newest SDK patch in the pinned feature band as a pull request that
+moves `global.json`, the workflows' `dotnet-version` pins, the test probes'
+`RuntimeFrameworkVersion` pins and the lock files together. It waits out a
+one-week cooldown unless Microsoft marks the release as a security release. In
+separate pull requests it moves the MAUI workload `--version` to the newest
+workload set for the pinned SDK patch (the set decides the mobile apps' Mono
+runtime and their Apple and Android packs, which can need a newer Xcode), and
+the conformance runner's SDK image once MCR publishes it. Workload-set pull
+requests open as drafts labelled `needs owner decision` and wait for the owner.
+It never changes feature band; that is left to a person.
+`dotnet-sdk-canary.yml` builds and tests with the newest SDK each Monday,
+without the pins, as an early warning; it gates nothing. A move by hand follows
+the same rules. Then run:
 
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 5m --minimum-expected-tests 2118
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 6289
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -53,11 +79,24 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 2118 executed/reported test cases to catch accidental discovery loss; update
-that baseline deliberately when adding or removing tests. The five-minute suite
-budget allows the full coverage-enabled Windows run to finish; the discovery
-minimum remains enforced. NUnit 5 async assertions
-must be awaited.
+least 6289 executed/reported test cases to catch accidental discovery loss; update
+that baseline deliberately when adding or removing tests. The full coverage
+suite budget is eight minutes on Windows/Linux and twelve minutes for macOS CI
+coverage. William approved the macOS increase on 2026-10-13 after CI
+38421579986 stopped at eight minutes with 5,408 of 5,943 cases reported (zero
+reported case failures), leaving incomplete validation. The new discovery floor
+is 6,000. The original failure remains retained; all cases must finish and pass.
+William approved the earlier Unix
+allowance on 2026-10-10 and requested loosening the Windows allowance on
+2026-10-11 after a coverage run reported all 4,976 cases with zero failures but
+its host ended at the five-minute boundary. A longer budget does not classify
+that host exit as resolved; the changed-source CI run must finish successfully.
+Per-case deadlines, assertions, iterations, coverage and the discovery minimum
+remain enforced; this is a whole-run allowance, not a failure exemption. NUnit 5
+async assertions must be awaited.
+The Test job allows 20 minutes on macOS and 15 elsewhere, so the macOS suite
+budget plus setup fits: CI 38479185526 finished all 6,056 macOS cases one
+second before a 15-minute job limit cancelled it (approved 2026-10-13).
 
 CI also runs test-only MAUI Mac Catalyst and Android apps outside the ordinary
 solution and shipped packages. The Android fixture uses the pinned .NET 10 SDK,
@@ -95,14 +134,26 @@ dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes --include 
 ```
 
 Ordinary fixes should format only changed files; repository-wide formatting belongs
-to an explicit cleanup task. All testing and analyzer packages remain development-only.
-Library targets are unchanged.
+to an explicit cleanup task. CI also checks the projects outside `EmbedIO.sln`, the MAUI
+apps included, in folder mode, which loads no project and needs no restore or workload:
+
+```sh
+dotnet format whitespace test --folder --verify-no-changes
+dotnet format whitespace tools --folder --verify-no-changes
+```
+
+All testing and analyzer packages remain development-only. Library targets are
+unchanged.
 
 Builds treat compiler and analyzer warnings as errors. CI also verifies formatting
 and runs `python scripts/check_analyzer_suppressions.py`, which rejects diagnostic
 pragmas, suppression attributes, disabled rule severities, nullable-disable directives,
 warning exemptions and analyzer-off build settings. Fix the diagnostic rather than
-adding an exemption. SDK analyzers and NUnit.Analyzers provide the lint checks;
+adding an exemption. `python scripts/analyzer_inventory.py` builds the solution and
+every project outside it with analyzers forced on and records per-project warning
+counts under the ignored `TestResults/analyzer-inventory` folder; the recorded
+baseline is in [the analyzer warning inventory](docs/project/analyzer-warning-inventory.md).
+SDK analyzers and NUnit.Analyzers provide the lint checks;
 no additional runtime dependency is needed. Owner-approved API changes for this
 cleanup are documented in [the migration guide](docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved).
 
@@ -133,7 +184,7 @@ tools separate from shipped runtime dependencies. Do not replace dependencies
 by copying their public types into a different assembly and claiming binary
 compatibility.
 
-SWAN has been fully removed with William's explicit approval. Built-in .NET APIs and local helpers replace its services. The .NET 10 core has no runtime package dependencies; .NET Standard 2.0 requires Microsoft System.Text.Json and its support packages. See [MIGRATION.md](docs/compatibility/migration.md) for the approved breaking changes.
+SWAN has been fully removed with William's explicit approval. Built-in .NET APIs and local helpers replace its services. The core references the pinned System.Threading.RateLimiting package for the optional limiter integration. The .NET Standard 2.0 asset additionally requires System.Text.Json and its support packages; inspect each package dependency group when upgrading. See [MIGRATION.md](docs/compatibility/migration.md) for the approved breaking changes.
 
 The unused Nullable polyfill and legacy FxCop package have been removed. SDK
 analyzers and EditorConfig-based style checks replace StyleCop. Builds treat warnings
@@ -204,3 +255,31 @@ outside the ordinary solution and shipped packages; its pinned reference-assembl
 package is development-only. See [the report guide](docs/user-reports/basic-authentication-native-listener.md).
 
 The Windows job also runs `test/EmbedIO.LegacyRouteValidationSmoke` outside the ordinary solution and shipped packages. Its pinned `net472` compile target exercises the actual .NET Standard core on the installed Framework CLR, including the BCL numeric exception wrapper and preserved application/query/configuration errors; its 34-check JSON report is uploaded with the test artifacts.
+
+
+### HTTP/3 transport tests
+
+The modern .NET target uses System.Net.Quic. Local hosts without its native
+prerequisites explicitly skip direct QUIC cases while still running the portable
+framing/QPACK tests. Desktop CI installs version/hash-pinned MsQuic 2.6.2 packages
+on Linux and macOS, and uses the runtime-bundled Windows library. It sets
+`EMBEDIO_REQUIRE_QUIC=1` to reject absent capability rather than silently lose
+coverage. After preparing the native library, use that environment variable with
+`dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --filter FullyQualifiedName~Http3QuicTest`.
+See [the engine validation record](docs/project/http-engine.md#required-native-quic-coverage-in-desktop-ci)
+for package sources, platform limitations and actual test evidence.
+
+The QUIC lifetime retirement gate is opt-in. Its four owned restart cases are
+skipped unless `EMBEDIO_QUIC_RETIREMENT_GATE=1`; select them with the raw
+runtime rebind cases using
+`--filter "TestCategory=QuicLifetimeRetirementGate|FullyQualifiedName~QuicRuntimeRebindTest"`,
+or dispatch CI with the `quic-retirement-gate` input. The gate tolerates no
+retry and applies no quarantine, so a runtime whose MsQuic still keeps a
+disposed listener's port bound fails it by design. See
+[QUIC lifetime and rebind](docs/project/quic-lifetime.md#retirement-gates).
+
+Native QUIC module lifetime is also checked in three fresh processes on every
+desktop CI runner, before coverage. The seven-case subset avoids initializing
+System.Net.Quic and requires normal test-process exit; Linux additionally checks
+stable mappings across 513 API lifecycles. See
+[standalone module lifetime](docs/project/native-quic-module-lifetime.md).

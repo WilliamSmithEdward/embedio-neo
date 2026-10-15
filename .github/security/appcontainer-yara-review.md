@@ -43,3 +43,17 @@ if the fixture accepts user-supplied commands or identities, loses its CI guard,
 changes its permission scope, or the pinned rules/tool change. The raw archives,
 matched-string output and reviewed source snapshot remain under ignored
 `TestResults/upstream-554/yara-tools`.
+
+## Audit cleanup review
+
+The current fixture cleanup change was reviewed in full as source. It retains the
+repository/disposable-runner guard, unique profile SID, fixed loopback port and
+same ACL, outbound exemption, inbound session and firewall operations. Output is
+read once per redirected stream; tool timeouts now terminate and join only their
+owned child, and independent cleanup attempts continue after a recoverable failure.
+Any cleanup failure is retained and makes the report fail. No command or identity
+is accepted from network input and permission scope is unchanged.
+
+Canonical LF source SHA-256 (including its UTF-8 BOM): `bba4361c5995ebc2e23f74eca58e94bc54e361fa28eac158399e6f92d1710646`.
+This is source re-review, not a new scanner run or platform validation. Fresh full
+scans and the existing exact rule/path acceptance boundary still apply.

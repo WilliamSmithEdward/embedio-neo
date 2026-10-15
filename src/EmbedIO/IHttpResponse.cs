@@ -16,7 +16,7 @@ namespace EmbedIO
         WebHeaderCollection Headers { get; }
 
         /// <summary>
-        /// Gets or sets the status code.
+        /// Gets or sets the final response status code (200 through 599).
         /// </summary>
         int StatusCode { get; set; }
 

@@ -1,0 +1,6 @@
+# Container inputs must keep LF endings on every checkout and git archive.
+*.sh text eol=lf
+*.py text eol=lf
+Dockerfile text eol=lf
+requirements*.txt text eol=lf
+requirements*.in text eol=lf

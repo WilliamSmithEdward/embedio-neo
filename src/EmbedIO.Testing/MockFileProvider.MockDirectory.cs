@@ -31,8 +31,6 @@ namespace EmbedIO.Testing
 
             public void Add(string key, byte[] data) => _entries.Add(key, new MockFile(data));
 
-            public void Add(string key, string data) => _entries.Add(key, new MockFile(data));
-
             public bool ContainsKey(string key) => _entries.ContainsKey(key);
 
             public bool Remove(string key) => _entries.Remove(key);

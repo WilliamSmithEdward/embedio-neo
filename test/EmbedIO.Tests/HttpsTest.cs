@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Net;
 using System.Net.Http;
-using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,7 +13,6 @@ namespace EmbedIO.Tests
     [TestFixture]
     public class HttpsTest
     {
-        private const string DefaultMessage = "HOLA";
         private const string HttpsUrl = "https://localhost:5555";
 
         [Test]
@@ -65,11 +63,6 @@ namespace EmbedIO.Tests
             Assert.Throws<System.Security.Cryptography.CryptographicException>(() => _ = new WebServer(options));
         }
 
-        // Bypass certificate validation.
-        private static bool ValidateCertificate(object sender,
-                                                X509Certificate certificate,
-                                                X509Chain chain,
-                                                SslPolicyErrors sslPolicyErrors)
-            => true;
+
     }
 }

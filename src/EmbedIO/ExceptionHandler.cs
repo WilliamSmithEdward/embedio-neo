@@ -39,9 +39,9 @@ namespace EmbedIO
 
         /// <summary>
         /// <para>Gets the default handler used by <see cref="WebServerBase{TOptions}"/>.</para>
-        /// <para>This is the same as <see cref="HtmlResponse"/>.</para>
+        /// <para>This is the same as <see cref="EmptyResponse"/>; diagnostic details are not sent to the client.</para>
         /// </summary>
-        public static ExceptionHandlerCallback Default { get; } = HtmlResponse;
+        public static ExceptionHandlerCallback Default { get; } = EmptyResponse;
 
         /// <summary>
         /// Sends an empty <c>500 Internal Server Error</c> response.
@@ -134,9 +134,18 @@ namespace EmbedIO
 
             exception.Log(logSource, $"[{context.Id}] Unhandled exception.");
 
+            if (EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
+            {
+                // The status and body already reached the client. Ending the response
+                // visibly is the only honest outcome; no handler can replace it.
+                $"[{context.Id}] The response was already committed; aborting it instead of running the exception handler.".Warn(logSource);
+                await EmbedIO.Internal.ResponseCommitment.AbortAsync(context, exception).ConfigureAwait(false);
+                return;
+            }
+
             try
             {
-                context.Response.SetEmptyResponse((int)HttpStatusCode.InternalServerError);
+                context.Response.PrepareReplacement((int)HttpStatusCode.InternalServerError);
                 context.Response.DisableCaching();
                 await handler(context, exception)
                     .ConfigureAwait(false);
@@ -154,7 +163,8 @@ namespace EmbedIO
                 if (httpHandler == null)
                     throw;
 
-                await httpHandler(context, httpException1).ConfigureAwait(false);
+                // The same path as any HTTP exception, so its status and headers (a redirect's Location) are applied.
+                await HttpExceptionHandler.Handle(logSource, context, httpException, httpHandler).ConfigureAwait(false);
             }
             catch (Exception exception2) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception2))
             {

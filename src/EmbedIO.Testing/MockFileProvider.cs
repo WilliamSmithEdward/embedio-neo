@@ -193,7 +193,7 @@ namespace EmbedIO.Testing
         private MappedResourceInfo? GetResourceInfo(string path, string name, MockDirectoryEntry entry, IMimeTypeProvider mimeTypeProvider) => entry switch
         {
             MockFile file => MappedResourceInfo.ForFile(path, name, file.LastModifiedUtc, file.Data.Length, mimeTypeProvider.GetMimeType(Path.GetExtension(name))),
-            MockDirectory _ => MappedResourceInfo.ForDirectory(string.Empty, name, _root.LastModifiedUtc),
+            MockDirectory directory => MappedResourceInfo.ForDirectory(path, name, directory.LastModifiedUtc),
             _ => null
         };
 

@@ -1,0 +1,501 @@
+# byte_ranges: 500 cases, 6 input columns, seed 17669278124714564434
+HEAD	9223372036854775806	8	""	<null>	bytes=\t\t,-00,,-, , 00-100-9223372036854775808	select=null single=false
+GET	0	1	<null>	"abc"	bytes=65535-4294967296,10-500-9223372036854775808, , 9223372036854775807 - 007,	select=null single=false
+GET	9	8	<null>	<null>	bytes==4294967296,,a - 500, , 10-1a\t,0-1a	select=null single=false
+GET	1	2	<null>	Sat, 29 Oct 1994 19:43:31 GMT	octets=-99,,-0 ,9223372036854775807- ,a-1000	select=null single=false
+GET	65536	1	W/"abc"	W/"abc"	bytes=\t99999999999999999999-,,\t00-1000\t, 99999999999999999999 - 100 ,1000-	select=null single=false
+GET	9	8	"open	<null>	bytes=-a,  4294967296-9223372036854775808\t	select=ArgumentException:tag single=ArgumentException:entityTag
+QUERY	100	8	abc	"other"	Bytes=1-007	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	9	1	<null>	<null>	bytes=, , 1a - \t,007-0\t,1.5-2	select=null single=false
+HEAD	9	8	"open	<null>	  bytes=-	select=null single=ArgumentException:entityTag
+GET	10	8	<null>	W/"abc"	bytes = 1-1a	select=null single=false
+GET	9	8	W/"abc"	<null>	bytes= ,\t, 4294967296-	select=HttpRangeNotSatisfiableException:416 single=false
+QUERY	10737418240	8	"abc"	garbage	bytes=	select=null single=false
+GET	65536	8	""	Sat, 29 Oct 1994 19:43:31 GMT	bytes=-, , 1.5-2	select=null single=false
+GET	10737418240	2	"abc"	"other"	bytes4294967296-4294967296,,1 - 007, -	select=null single=false
+GET	10737418240	1	<null>	<null>	bytes=-,,-9,,10-1000-99999999999999999999	select=null single=false
+QUERY	100	2	""	<null>	 bytes=1a-99999999999999999999-\t,-1\t	select=null single=false
+GET	65536	1	""	<null>	octets=\t1-9223372036854775808, , 0-9223372036854775808\t,5-	select=null single=false
+GET	9223372036854775806	8	<null>	"other"	bytes= +1-5, 4095\t,99 ,1-	select=null single=false
+GET	9	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	  bytes =-	select=null single=false
+POST	0	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	octets=00-65535\t	select=null single=false
+GET	10737418240	2	<null>	<null>	bytes=, , -	select=null single=false
+GET	9223372036854775806	8	""	<null>	BYTES=\t100-a\t,500- ,5-00-500x	select=null single=false
+GET	10	1	"abc"	<null>	bytes=99-65535,9223372036854775807-99999999999999999999\t, , -99	select=null single=false
+HEAD	0	8	abc	<null>	bytes=,-, , -007,-=	select=null single=ArgumentException:entityTag
+GET	10	1	"open	Sat, 29 Oct 1994 19:43:31 GMT	bytes=-,,1a, , 4294967296-999	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	9	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	BYTES=-1, , \t-500, , 9-99	select=null single=false
+GET	9223372036854775806	8	"open	garbage	  bytes=999-500	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	9	8	"abc"	<null>	bytes==65535-9, , -99,,x-y,9223372036854775808-0	select=null single=false
+POST	1000	1	"open	W/"abc"	 bytes=a-100	select=null single=ArgumentException:entityTag
+GET	1000	8	"open	<null>	bytes=*, , -9223372036854775807\t,-65535  ,4294967296- =	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	10	8	<null>	"abc"	 BYTES=-00, \t-9223372036854775807 , , -	select=null single=false
+GET	10	2	<null>	<null>	Bytes=a-00,,-\t,007-100, , -100	select=null single=false
+GET	65536	2	abc	"abc"	byte=-100-99999999999999999999 \t,999 - a,,9223372036854775808-	select=ArgumentException:tag single=ArgumentException:entityTag
+QUERY	1000	2	""	<null>	bytes =a-9223372036854775808,4095-9	select=null single=false
+GET	65536	2	""	<null>	 bytes=\t,1-4095-007	select=null single=false
+QUERY	1000	8	<null>	<null>	bytes=9-007, 0--5,99999999999999999999-999	select=null single=false
+GET	9223372036854775806	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes =x-y,,1000-99999999999999999999	select=null single=false
+GET	1000	8	"open	<null>	 bytes=9223372036854775808, -a, 0-9223372036854775807	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	65536	2	"open	<null>	  bytes=a-5,,99-500,,999-\t ,\t65535-5	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	10737418240	8	<null>	<null>	\tbytes=1-500\t,999-99999999999999999999-1 ,4095,1a-0	select=null single=false
+GET	1000	8	W/"abc"	<null>	\tbytes=1000-	select=HttpRangeNotSatisfiableException:416 single=HttpRangeNotSatisfiableException:416
+HEAD	1000	8	<null>	<null>	 bytes=4095 - 1a,,500 - 0 ,-1	select=null single=false
+POST	9	8	<null>	<null>	bytes=9223372036854775807-9223372036854775807, ,  1000-9	select=null single=false
+POST	9223372036854775806	8	<null>	W/"abc"	bytes	select=null single=false
+GET	10737418240	2	<null>	garbage		select=null single=false
+GET	1000	8	<null>	"other"	Bytes=9223372036854775807-4095, , 007-	select=null single=false
+GET	9	2	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes=-	select=null single=false
+QUERY	65536	8	W/"abc"	"other"	byte=-500, , +1-5, \t1-007	select=null single=false
+GET	1000	1	"open	garbage	bytes=-1000	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	65536	8	<null>	<null>	bytes=, 9-10-65535\t,-007,,-	select=null single=false
+GET	10737418240	8	"abc"	W/"abc"	bytes=99999999999999999999-007\t,9223372036854775807-,,500- 	select=null single=false
+GET	1000	8	W/"abc"	"other"	bytes 4294967296-65535-,999- ,100-99	select=null single=false
+GET	9223372036854775806	8	abc	Sat, 29 Oct 1994 19:43:31 GMT	BYTES=1-+5,,65535-007-4294967296,5-999-1\t\t,999-	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	0	8	W/"abc"	Sat, 29 Oct 1994 19:43:31 GMT	 bytes=, 1-10 ,500-00	select=null single=false
+GET	0	8	W/"abc"	W/"abc"	bytes= 007-100-	select=null single=false
+POST	10	1	<null>	<null>	  bytes =-5	select=null single=false
+GET	1000	8	W/"abc"	garbage	 bytes=9--	select=null single=false
+GET	9	8	"abc"	W/"abc"	bytes=	select=null single=false
+GET	65536	8	<null>	"abc"	bytes=- ,9 - 9223372036854775807	select=null single=false
+POST	9	8	"open	"other"	bytes=\t999-00\t, , 65535-  ,9223372036854775808-1000-5	select=null single=ArgumentException:entityTag
+GET	65536	8	W/"abc"	garbage	octets=-	select=null single=false
+POST	10737418240	8	"open	"abc"	byte=99999999999999999999-007\t,-65535, \t00 - 00 ,4095-1000 	select=null single=ArgumentException:entityTag
+POST	9	8	<null>	<null>	\tbytes =-\t;	select=null single=false
+HEAD	1000	1	<null>	<null>	bytes=-999	select=null single=false
+POST	65536	8	"abc"	"abc"	bytes=1-9223372036854775808,,9-0-1, -a , , 1a-4294967296	select=null single=false
+POST	0	8	<null>	<null>	bytes=	select=null single=false
+GET	9	8	<null>	<null>	bytes =-0, , a	select=null single=false
+HEAD	65536	1	W/"abc"	<null>	Bytes=,-1000\t,	select=null single=false
+GET	100	8	""	Sat, 29 Oct 1994 19:43:31 GMT	BYTES=-\t,0-500	select=null single=false
+HEAD	1	1	<null>	garbage	bytes=-\t\t,9223372036854775808-4095, \t1.5-2,99999999999999999999-99	select=null single=false
+GET	65536	8	""	<null>	bytes=	select=null single=false
+HEAD	0	8	""	"other"	bytes=-0,-00, x-y\t, 65535-10	select=null single=false
+HEAD	65536	8	<null>	garbage	bytes=5-9223372036854775807-9 ,-1, 9223372036854775808-99	select=null single=false
+GET	0	8	abc	garbage	Bytes=-1000,0-,,5-a	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	1	1	<null>	garbage	\tbytes=- ,5-100, , 007 - 9223372036854775807	select=null single=false
+HEAD	0	2	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes==4095- ,,5-1a-500\t,65535	select=null single=false
+GET	10	8	W/"abc"	garbage	Bytes=,,-	select=null single=false
+QUERY	1	2	<null>	<null>	bytes=9223372036854775807, 99999999999999999999-999,0-500,	select=null single=false
+HEAD	10	8	"open	<null>	\tbytes=00-0-4095\t,500-10,-65535	select=null single=ArgumentException:entityTag
+GET	1	1	<null>	garbage	\tbytes=\t,-1a\t,-99, 4095	select=null single=false
+HEAD	10	8	<null>	<null>	bytes==+1-5	select=null single=false
+GET	9	8	W/"abc"	Sat, 29 Oct 1994 19:43:31 GMT	bytes=9223372036854775807-9223372036854775808\t,4095-65535 	select=null single=false
+GET	10737418240	8	""	W/"abc"	bytes=1a-\t,5\t,9223372036854775807\t, 4095 - 100	select=null single=false
+GET	65536	8	abc	<null>	bytes9223372036854775808-4095\t,-007\t,-,,-5	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	100	8	"abc"	<null>	bytes=-999,-1	select=ranges:0+100 single=false
+POST	65536	1	"abc"	Sat, 29 Oct 1994 19:43:31 GMT	 bytes=0-	select=null single=false
+GET	10	8	<null>	W/"abc"	bytes=9 ,99999999999999999999-1, 1000-4095,\t1-+5 ,	select=null single=false
+GET	65536	1	"abc"	garbage	Bytes=-, 4294967296-	select=null single=false
+GET	100	8	abc	garbage	bytes=+1-5\t,65535-9223372036854775807,5 - 0\t	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	100	8	""	garbage	bytes=, 100 - a ,00-0	select=null single=false
+GET	65536	1	<null>	<null>	bytes=4095 - 9223372036854775808,-500	select=null single=false
+QUERY	1000	8	<null>	<null>	bytes=a-1, , ,9223372036854775808-4095,, 1	select=null single=false
+GET	65536	1	abc	<null>	\tbytes=5-500, , x-y, , - ,-4294967296	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	9223372036854775806	8	abc	<null>	bytes==00-1000-9, -9\t	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	9	8	""	<null>	  byte=10-007, -5, 9223372036854775807-007-500,1-500\t	select=null single=false
+GET	9223372036854775806	8	"abc"	"abc"	Bytes=00-100 ,100-99999999999999999999,\t4294967296-007-5, 100 	select=null single=false
+GET	65536	8	<null>	<null>	 bytes=	select=null single=false
+GET	1000	1	<null>	<null>	bytes =1a-1-9223372036854775808\t,500-, , 1.5-2\t,1--5\t	select=null single=false
+GET	0	8	"abc"	<null>	bytes=\t1-, 99999999999999999999-99 ,100-0,1-2-	select=null single=false
+GET	1000	1	"abc"	"other"	bytes=9223372036854775807-,-10 ,500-0	select=null single=false
+POST	9	2	abc	<null>	bytes=, , -0, 4095-1,\t9-99, , a-9223372036854775807	select=null single=ArgumentException:entityTag
+QUERY	0	8	<null>	<null>	a-0,,-500 , 9-99999999999999999999, , 9-9223372036854775808-9223372036854775808	select=null single=false
+HEAD	1000	2	abc	garbage	bytes=1 - 65535,-10	select=null single=ArgumentException:entityTag
+GET	9223372036854775806	8	abc	"abc"	bytes=007-1000-99999999999999999999\t,a-00	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	0	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes =500-1\t\t,500-9223372036854775808,,0- ,99-	select=null single=false
+POST	1000	2	<null>	<null>	\tbytes=-\t,007-007	select=null single=false
+GET	9	8	<null>	garbage	bytes=9223372036854775807-99999999999999999999-99\t,-4095	select=null single=false
+GET	1000	8	<null>	garbage	byte=10-9223372036854775807, 1-00,,99-9223372036854775807-10	select=null single=false
+GET	10737418240	2	<null>	"abc"	bytes99999999999999999999\t, 007	select=null single=false
+GET	65536	8	<null>	<null>	bytes=99 - 1000\t,99-9223372036854775808,,007-9223372036854775808, , -	select=null single=false
+GET	65536	8	W/"abc"	<null>	bytes=999-100	select=null single=false
+GET	0	8	<null>	"abc"	bytes=\t99-99999999999999999999\t,-	select=null single=false
+GET	1	2	<null>	<null>	bytes=\t9-a\t,65535-ax	select=null single=false
+QUERY	1000	8	""	<null>	BYTES=-99999999999999999999, , 9-4095	select=ranges:0+1000 single=false
+POST	1000	1	"open	<null>	bytes=	select=null single=ArgumentException:entityTag
+GET	9	1	<null>	<null>	 \t,4095-10, , 1a - 9223372036854775807, -\t ,65535-9223372036854775807	select=null single=false
+GET	65536	8	<null>	"other"	byte=0-a,-9\t,-999, , 4294967296-1000	select=null single=false
+HEAD	1000	8	"abc"	<null>	bytes=99999999999999999999-,1a - 4294967296	select=null single=false
+GET	1000	8	<null>	<null>	bytes=99 - 9,-0, , 5-9223372036854775807, 	select=null single=false
+GET	65536	8	<null>	<null>	octets=9223372036854775807-9, -65535 ,-007,,9-9223372036854775808	select=null single=false
+HEAD	9	2	"open	<null>	bytes=100-\t, , a-1, 999-4095\t	select=null single=ArgumentException:entityTag
+HEAD	1000	1	W/"abc"	Sat, 29 Oct 1994 19:43:31 GMT	bytes=99999999999999999999-4294967296\t,1000-9223372036854775808,,1-+5, , 007-999\t	select=null single=false
+GET	10	1	<null>	<null>	,500-500,,-0, -65535	select=null single=false
+GET	65536	1	<null>	"other"	byte=\t+1-5,,5 - 0, , 1-2-, 	select=null single=false
+GET	1000	1	<null>	Sat, 29 Oct 1994 19:43:31 GMT	-99	select=null single=false
+GET	65536	8	abc	"abc"	bytes=	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	0	8	"abc"	<null>	bytes=	select=null single=false
+GET	1000	1	W/"abc"	"other"	bytes=007, , -, , --5	select=null single=false
+HEAD	65536	8	""	Sat, 29 Oct 1994 19:43:31 GMT	bytes1-a,999- ,1a-00,,-10	select=null single=false
+POST	9223372036854775806	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	\tbytes=10-9223372036854775807	select=null single=false
+GET	65536	8	<null>	W/"abc"	 bytes=4294967296-999-10\t,-100	select=null single=false
+GET	100	8	W/"abc"	W/"abc"	bytes-5,10 - 99,5-9223372036854775807	select=null single=false
+HEAD	10737418240	2	<null>	<null>	BYTES=-5, 1--5, -	select=null single=false
+POST	9	8	""	<null>	bytes-4095\t,-00, , 1-2- 	select=null single=false
+GET	1000	2	"abc"	<null>	bytes=, , -	select=null single=false
+HEAD	9223372036854775806	2	"abc"	<null>	bytes=-, 65535 - 4294967296 ,a-=	select=null single=false
+GET	1	8	abc	<null>	bytes=1a-0\t, , -1a	select=ArgumentException:tag single=ArgumentException:entityTag
+QUERY	100	8	<null>	"abc"	  byte=a-1a, , a-9	select=null single=false
+GET	9	8	W/"abc"	<null>	bytes=1000-9 ,-10, , 1a - 999	select=null single=false
+GET	1000	8	"open	garbage	bytes=4294967296-4095, , 10	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	10	8	"open	<null>	octets=- 	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	65536	8	<null>	<null>	bytes100-10, 1000-	select=null single=false
+GET	65536	8	W/"abc"	<null>	bytes=-500, , -0 ,,999 - 4095\t,9--	select=null single=false
+POST	9	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	 bytes= -,-007, \t9-0,,9 - 500	select=null single=false
+POST	9223372036854775806	8	<null>	<null>	bytes==-1000	select=null single=false
+POST	100	1	<null>	W/"abc"	bytes==-, , 9223372036854775808-1, -4294967296,,0 - 9223372036854775807=	select=null single=false
+GET	1000	8	<null>	<null>	bytes=00, -007\t,1-00,,5-5-\t	select=null single=false
+HEAD	65536	8	"abc"	<null>	bytes=-00\t,9- 	select=null single=false
+POST	0	2	<null>	<null>	octets=00-00 	select=null single=false
+QUERY	9	8	"open	"other"	  bytes=-5\t,1-500	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	10737418240	8	abc	W/"abc"	bytes=-1a-a	select=null single=ArgumentException:entityTag
+GET	1000	8	W/"abc"	<null>	bytes=100-	select=ranges:100+900 single=true:100+900
+GET	1000	8	"abc"	<null>	bytes=-007, , -999	select=ranges:1+999 single=false
+GET	9223372036854775806	8	"abc"	<null>	bytes=- ,999-999,9223372036854775808 - 9223372036854775808	select=null single=false
+GET	1	8	<null>	garbage	bytes=\t,\t1 - 4095	select=null single=false
+POST	1	2	""	"abc"	bytes=9-99, -999 ,a-9223372036854775808, 1000-00	select=null single=false
+GET	1000	8	""	"abc"	1a-	select=null single=false
+GET	65536	8	<null>	<null>	bytes=99999999999999999999-00\t, -65535, -	select=null single=false
+GET	0	8	<null>	<null>	bytes= 9223372036854775807 - 1, -10,,4095\t,, 1-00	select=null single=false
+HEAD	9223372036854775806	8	abc	garbage	\tbytes=-999,,1-00,-	select=null single=ArgumentException:entityTag
+HEAD	1000	8	abc	<null>	bytes=,007 - 999 ,99999999999999999999\t,4095-, 1-007	select=null single=ArgumentException:entityTag
+GET	100	8	<null>	<null>	bytes =\t1-+5,,-	select=null single=false
+GET	0	8	""	garbage	bytes=-, -9, , -, -999	select=null single=false
+POST	1	8	<null>	<null>	bytes -1000,,+1-5\t,10-	select=null single=false
+HEAD	9	8	<null>	<null>	bytes=-9, , -0 ,007-9223372036854775808	select=null single=false
+HEAD	65536	2	abc	<null>	Bytes=1a-,,+1-5	select=null single=ArgumentException:entityTag
+QUERY	10	8	<null>	<null>	 bytes100-0 ,-500	select=null single=false
+GET	9	8	<null>	<null>	bytes=\t99-1000-a ,-,--	select=null single=false
+GET	1000	8	<null>	<null>	bytes=	select=null single=false
+GET	0	8	"abc"	W/"abc"	bytes=-,9223372036854775808-9223372036854775807 , -,,10-a	select=null single=false
+GET	9	1	<null>	<null>	byte= a - 10	select=null single=false
+GET	10	8	<null>	"abc"	bytes=9223372036854775807-, ,  a-5 ,\t9223372036854775808-4095-1a, , -5=	select=null single=false
+GET	9	2	abc	garbage	bytes=	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	10	8	abc	<null>	bytes=10-\t, -	select=ArgumentException:tag single=ArgumentException:entityTag
+POST	9223372036854775806	8	<null>	garbage	bytes=10-10,-	select=null single=false
+GET	1000	8	"abc"	<null>	bytes=-\t,-0 , , -1000,5-1a-99999999999999999999	select=null single=false
+GET	9	2	""	"other"	bytes =-, , 9 - 4294967296 ,-4294967296	select=null single=false
+HEAD	10	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes=4095-5 =	select=null single=false
+GET	9223372036854775806	8	<null>	garbage	bytes=, , 9223372036854775808 - 007, , -007, -10,,4095-4294967296-99	select=null single=false
+QUERY	10	1	"abc"	W/"abc"	bytes=	select=null single=false
+GET	9	2	<null>	<null>	bytes= -999\t,1.5-2 ,-	select=null single=false
+GET	100	2	<null>	<null>	 bytes=10-99,500-4294967296\t,-500	select=null single=false
+QUERY	1000	1	<null>	"abc"	 bytes=1--5,00-500	select=null single=false
+GET	100	8	"abc"	<null>	BYTES=9223372036854775808- ,9223372036854775808-99	select=null single=false
+GET	100	8	<null>	garbage	bytes=1.5-2,,65535-500 \t,4294967296-007\t,-1	select=null single=false
+GET	1000	8	<null>	<null>	bytes =1--5\t,+1-5\t,-9 	select=null single=false
+POST	1000	8	<null>	"abc"	 bytes=-9223372036854775808, 10-	select=null single=false
+GET	10	8	<null>	<null>	bytes= -, , 9223372036854775807-4294967296	select=null single=false
+QUERY	1000	2	<null>	garbage	\tbyte=	select=null single=false
+GET	9223372036854775806	1	abc	"other"	bytes=9-1-1000,,9-0-99, 1\t,65535-	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	100	2	"abc"	Sat, 29 Oct 1994 19:43:31 GMT	bytes=0-500\t,-, , -\t,0-999	select=null single=false
+GET	0	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes==-, -\t,1-10, ,  999-999;	select=null single=false
+GET	0	8	<null>	garbage	bytes=	select=null single=false
+GET	1	8	<null>	<null>	  bytes =00-5	select=null single=false
+GET	0	2	abc	garbage	bytes=100-a,00-\t,9-9223372036854775807-007, , 4294967296-99999999999999999999	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	1000	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes==00-007,10-9	select=null single=false
+GET	1000	1	<null>	<null>	bytes==-999\t,*\t ,10-007-9\t,1000-5	select=null single=false
+GET	100	1	<null>	<null>	bytes= 9223372036854775808-,4294967296,,1000 - 99999999999999999999\t,-a 	select=null single=false
+GET	1	8	<null>	garbage	  bytes=	select=null single=false
+GET	100	8	""	Sat, 29 Oct 1994 19:43:31 GMT	bytes=10-99999999999999999999\t,-1000 , -00	select=null single=false
+HEAD	65536	2	W/"abc"	<null>	bytes=65535 - 007 	select=null single=false
+GET	65536	8	<null>	"other"	-a,,999-4095,,500-999 	select=null single=false
+POST	1000	2	W/"abc"	W/"abc"	bytes=00, -4294967296 \t,\t1-,007-9223372036854775808-1 	select=null single=false
+QUERY	100	2	"abc"	garbage	bytes=1000 - 0,,1--5\t,9-00\t,a-500	select=null single=false
+HEAD	100	1	<null>	<null>	byte=	select=null single=false
+POST	10737418240	2	"abc"	<null>	bytes=	select=null single=false
+GET	9223372036854775806	8	abc	<null>	  bytes=	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	1000	2	abc	<null>	bytes=	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	65536	2	abc	<null>	bytes=99 - \t,4095-999, -, , 10-99=	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	65536	8	<null>	<null>	bytes=-, , 4095, \t10-	select=null single=false
+GET	9223372036854775806	2	<null>	<null>	 bytes=- , 65535-99999999999999999999, , \t4294967296 - 9223372036854775808,,a-10	select=null single=false
+GET	10	8	<null>	<null>	bytes=00-500	select=ranges:0+10 single=true:0+10
+GET	1000	1	<null>	<null>	Bytes=10,99-99999999999999999999, 00-	select=null single=false
+HEAD	1	8	<null>	"abc"	 bytes=-1a\t,100-500 ,x-y	select=null single=false
+GET	1000	8	<null>	garbage	\t100-500,10-1a	select=null single=false
+HEAD	1	8	<null>	<null>	\t ,10-100	select=null single=false
+GET	1	8	"abc"	<null>	bytes= 99,,9223372036854775807 - 4095 ,9 - 4294967296, 500	select=null single=false
+GET	10	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes=5-65535	select=null single=false
+GET	9	8	W/"abc"	<null>	bytes	select=null single=false
+GET	9	1	"open	Sat, 29 Oct 1994 19:43:31 GMT	 bytes=4294967296-4095,,10 - 65535,,10-a	select=ArgumentException:tag single=ArgumentException:entityTag
+QUERY	1000	2	"abc"	"abc"	bytes=500-99 ,9223372036854775808-99999999999999999999 ,65535 - 1a,,4095-500=	select=null single=false
+GET	100	1	"abc"	garbage	  bytes=	select=null single=false
+POST	1000	8	<null>	<null>	bytes=10-99, -\t	select=null single=false
+GET	1	8	"abc"	<null>	bytes=-9\t,0-1	select=ranges:0+1 single=false
+HEAD	65536	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes==*,,1a-007,,10-4294967296, , 99999999999999999999-1000\t	select=null single=false
+POST	1	8	"open	<null>	bytes=500-0	select=null single=ArgumentException:entityTag
+GET	10	8	"abc"	"other"	bytes =007-5	select=null single=false
+GET	9	8	<null>	<null>	bytes==-	select=null single=false
+GET	1000	2	"abc"	<null>	bytes=9223372036854775808-99  ,1-\t,007-9223372036854775807,, 1a-0	select=null single=false
+GET	100	8	<null>	"abc"	bytes=, -99, 1a-, , 4095-99-00\t,-	select=null single=false
+HEAD	1000	8	""	"other"	Bytes=99999999999999999999 ,-4095	select=null single=false
+GET	10	1	""	<null>	bytes=1-65535, , 100-5, ,  99-4095-4095	select=null single=false
+HEAD	65536	8	<null>	W/"abc"	1a-5\t, 500,-9223372036854775807\t,10 - 10	select=null single=false
+HEAD	9	1	<null>	<null>	bytes=-9223372036854775808 	select=null single=false
+QUERY	10	8	"open	"other"	bytes= ,0-007,	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	100	8	<null>	"abc"	byte= -, +1-5 ,-500 ,1 - 	select=null single=false
+GET	10	1	"abc"	garbage	 octets= - x	select=null single=false
+GET	65536	8	"open	<null>	bytes=100-00, 4095-99	select=ArgumentException:tag single=ArgumentException:entityTag
+QUERY	9223372036854775806	8	W/"abc"	"abc"	bytes=	select=null single=false
+GET	0	8	<null>	W/"abc"	byte=-1000,5-0	select=null single=false
+POST	1	2	<null>	"abc"	1, 99-9223372036854775807,-5,,99999999999999999999 - 5	select=null single=false
+GET	65536	1	abc	<null>	bytes=999-9	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	1000	1	abc	W/"abc"	bytes=999-1	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	1	8	W/"abc"	"abc"	Bytes=-99999999999999999999, , \t1a-0 ,100-9223372036854775807 ,99999999999999999999-1000-999	select=null single=false
+HEAD	10737418240	8	<null>	<null>	bytes= ,-	select=null single=false
+POST	1000	8	<null>	<null>	1000-4294967296,9223372036854775808-500, -99999999999999999999, -	select=null single=false
+GET	10	8	W/"abc"	W/"abc"	bytes=1-+5\t,00--0,+1-5 ;	select=null single=false
+POST	10737418240	8	abc	<null>	\tbytes=100-500, \t65535 - 9,,-\t, a-1a	select=null single=ArgumentException:entityTag
+GET	1000	2	<null>	<null>		select=null single=false
+GET	65536	1	<null>	"other"	bytes= 4095,,+1-5 ,100 - 1 	select=null single=false
+GET	9223372036854775806	8	<null>	<null>	bytes=99999999999999999999-007 ,-1000\t,a, , 1000	select=null single=false
+GET	10737418240	2	"abc"	<null>	bytes9-,,- ,,10,99999999999999999999 - 100	select=null single=false
+HEAD	10737418240	8	<null>	<null>	bytes-99	select=null single=false
+GET	100	1	abc	W/"abc"	bytes=4294967296-1, 1a-,99-99	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	10	8	<null>	<null>	bytes=99999999999999999999-99999999999999999999 , 00 - 65535 ,-9223372036854775807	select=null single=false
+GET	100	8	<null>	<null>	\t100-65535	select=null single=false
+GET	10	1	"abc"	<null>	bytes=-999, 9223372036854775808, -\t,1-+5	select=null single=false
+GET	1	1	<null>	<null>	bytes=, -,007 - 007,-	select=null single=false
+HEAD	100	8	<null>	garbage	  bytes=-4095\t,a-99	select=null single=false
+GET	1000	2	<null>	<null>	bytes =100-9 ,-a	select=null single=false
+GET	9	1	abc	<null>	bytes=-,,100-9223372036854775807\t,1000-a ,1000 - 00	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	0	2	abc	<null>	bytes=-500\t,500-1a-007\t, 999 - 00	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	1000	8	<null>	<null>	bytes=1a-10, +1-5, , 99-\t ,--5	select=null single=false
+QUERY	1000	8	W/"abc"	<null>	BYTES=1a-99999999999999999999-007,,00	select=null single=false
+GET	65536	2	"abc"	<null>	BYTES=,,-	select=null single=false
+HEAD	65536	8	<null>	"other"	 Bytes=1 - 007\t	select=null single=false
+GET	1000	8	"abc"	<null>	bytes=\t9-10-9223372036854775807, -	select=null single=false
+GET	1	2	<null>	<null>	byte=\t,--5\t,00-9223372036854775808-999, 1--5,100-	select=null single=false
+GET	10	8	<null>	<null>	  bytes=10-0 ,99999999999999999999-00 ,00-1a-5	select=null single=false
+POST	0	1	<null>	"abc"	  bytes =5-00	select=null single=false
+GET	1000	1	<null>	<null>	bytes=00	select=null single=false
+GET	0	2	""	Sat, 29 Oct 1994 19:43:31 GMT	bytes=0-65535, , -1000 ,65535-100 \t,-1a	select=null single=false
+GET	10737418240	8	abc	<null>	 bytes=-4294967296 ,,0 - 4095 	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	65536	8	<null>	garbage	-99 ,--	select=null single=false
+POST	1000	8	W/"abc"	<null>	BYTES=1--5, , 007-4294967296,, -a, , -1000 	select=null single=false
+POST	1	8	"open	<null>	 bytes=0 - 9223372036854775808,,00-\t,1000 - 65535 	select=null single=ArgumentException:entityTag
+POST	65536	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes=-	select=null single=false
+GET	9223372036854775806	8	"abc"	<null>	65535-9223372036854775807\t,\t0-0,1000	select=null single=false
+GET	1000	8	W/"abc"	<null>	  bytes=0-99-10,,1-1a	select=null single=false
+GET	9	8	"abc"	<null>	bytes=	select=null single=false
+GET	10	2	<null>	garbage	\tbytes==00-\t,-5, , 10-	select=null single=false
+GET	65536	8	"abc"	W/"abc"	  , -9	select=null single=false
+GET	10737418240	2	<null>	garbage	byte=-4095, \t4095-4095-9,,1000 - 007	select=null single=false
+GET	9223372036854775806	8	"abc"	<null>	bytes=	select=null single=false
+GET	1	2	abc	<null>	\t,4095\t,0-9223372036854775808\t,9223372036854775807, 9223372036854775808-	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	9223372036854775806	8	""	Sat, 29 Oct 1994 19:43:31 GMT	bytes=, , 65535-007,-, , -500	select=null single=false
+GET	100	8	<null>	<null>	octets=4294967296-10-1\t,1, , a - 9223372036854775808,,500-9-9223372036854775807	select=null single=false
+GET	1000	8	<null>	<null>	\tbytes=1-2-, -	select=null single=false
+GET	1	8	<null>	<null>	bytes=-,,1--5\t,007 - 65535, 99999999999999999999-a-	select=null single=false
+POST	9	8	"open	<null>	-0 ,007 - 5\t, , \t007- \t,1a - 10	select=null single=ArgumentException:entityTag
+POST	1000	1	""	"other"	bytes=99-9223372036854775807, 1--5	select=null single=false
+POST	100	8	<null>	<null>	octets=-9223372036854775808,9223372036854775808-a	select=null single=false
+GET	100	8	<null>	<null>	bytes=00 - 999 ,-10,,-1 	select=null single=false
+POST	100	2	""	<null>	byte=007-00	select=null single=false
+GET	100	8	<null>	W/"abc"	 bytes=9223372036854775807-100	select=null single=false
+GET	100	8	abc	garbage	bytes=10-9223372036854775808,007-007	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	0	2	"abc"	garbage	bytes=	select=null single=false
+GET	65536	2	"abc"	<null>	bytes=4294967296-99, , - ,a-,,\t4095-00	select=null single=false
+GET	65536	8	<null>	<null>	  bytes=\t,9223372036854775808-00, \t500-100, , 1-+5	select=null single=false
+GET	1000	8	abc	"abc"	1000-00-,-4294967296,,1a-, 0	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	10737418240	1	abc	<null>	bytes=10-10	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	1	1	<null>	garbage	 bytes=999-9223372036854775807,  ,9223372036854775808-007	select=null single=false
+HEAD	65536	1	"open	"other"	bytes=\t,4095\t, 100-9-1000 ,9223372036854775807-a, 500 - 100	select=null single=ArgumentException:entityTag
+GET	100	2	"open	<null>	bytes=00-a, -9223372036854775808, 9223372036854775807-99\t,-0	select=ArgumentException:tag single=ArgumentException:entityTag
+POST	10737418240	8	<null>	"other"	Bytes=-9 ,-0, , 4095-9223372036854775807	select=null single=false
+GET	9	1	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes= -1,,-1, 1--5, ,  -0	select=null single=false
+QUERY	1000	8	"abc"	<null>	bytes=a-9223372036854775808	select=null single=false
+QUERY	65536	8	<null>	"other"	bytes=007-00 ,-99,,1--5,,9223372036854775807-1000	select=null single=false
+GET	10	8	<null>	<null>	bytes=1a\t,-,,1-1000,-	select=null single=false
+POST	10	2	"abc"	<null>	bytes=100-1a\t,1-2--	select=null single=false
+GET	0	8	"abc"	<null>	octets=65535-00, , 00-0\t,-, -	select=null single=false
+GET	1000	8	W/"abc"	<null>	  Bytes=	select=null single=false
+GET	65536	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes=1-	select=null single=false
+HEAD	100	1	<null>	W/"abc"	bytes=	select=null single=false
+GET	1	2	W/"abc"	<null>	bytes=10 - 4294967296\t,9223372036854775808-, -,0-	select=null single=false
+GET	1000	8	W/"abc"	<null>	bytes	select=null single=false
+GET	1000	8	<null>	W/"abc"	bytes=,,-007	select=null single=false
+GET	1000	8	<null>	<null>	bytes=4095-\t ,65535-0	select=null single=false
+GET	0	8	W/"abc"	<null>	octets=	select=null single=false
+HEAD	9	1	""	<null>	bytes=10-1a-007, 65535	select=null single=false
+HEAD	9223372036854775806	1	W/"abc"	"other"	\tbytes,,99999999999999999999-\t,500-4294967296, , 4294967296	select=null single=false
+GET	9	8	"open	<null>	Bytes=	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	9223372036854775806	1	<null>	<null>	 bytes=	select=null single=false
+GET	1	2	<null>	"other"	bytes=100, , 4294967296-, , 007-4095	select=null single=false
+GET	100	2	""	<null>	bytes=99-;	select=null single=false
+GET	10	8	W/"abc"	<null>	bytes=65535 - 007,  1-,99999999999999999999-5,-99	select=null single=false
+GET	9	8	W/"abc"	<null>	octets=999-4095,,-	select=null single=false
+GET	1000	2	"abc"	Sat, 29 Oct 1994 19:43:31 GMT	bytes==-a-1000, -1000 	select=null single=false
+HEAD	1	2	"open	<null>	Bytes=999-10,	select=null single=ArgumentException:entityTag
+GET	10	1	<null>	<null>	Bytes=007	select=null single=false
+POST	65536	8	""	W/"abc"	bytes=00-00, , 99999999999999999999-10-1, -4095	select=null single=false
+HEAD	10	2	<null>	"abc"	bytes=, , 007\t,-00	select=null single=false
+GET	100	8	<null>	"other"	bytes=\t4294967296-1,,\t0-1\t,-a, 65535-65535\t	select=null single=false
+HEAD	10737418240	1	<null>	<null>	bytes65535-500	select=null single=false
+GET	10737418240	8	""	"other"	bytes=, , 65535-1\t,-99999999999999999999	select=null single=false
+GET	65536	8	"abc"	<null>	 bytes=99,,a\t,--5\t, 4095-0	select=null single=false
+GET	1000	1	<null>	<null>	bytes=-500\t,4095-999,-0	select=null single=false
+GET	10737418240	8	W/"abc"	<null>	bytes=4294967296-007, 999-1a ,-100	select=null single=false
+GET	9223372036854775806	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes=1-100\t, 65535-007	select=null single=false
+GET	0	8	"abc"	<null>	bytes=-,100-100 ,--5	select=null single=false
+QUERY	65536	2	""	"other"	  bytes=9223372036854775807-65535,,1-007, 4095-0	select=null single=false
+GET	9	8	<null>	garbage	bytes=1a- 	select=null single=false
+GET	10	8	"open	<null>	bytes=, , 1000- \t,+1-5	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	65536	8	<null>	W/"abc"	bytes=-	select=null single=false
+QUERY	65536	8	<null>	<null>	bytes=a-1000 ,,\t4294967296,,1000-007-500	select=null single=false
+HEAD	9	8	<null>	"other"	bytes=-	select=null single=false
+GET	65536	2	"abc"	"other"	bytes=007-9223372036854775808-00\t,-, , 1000 ,1-00-	select=null single=false
+GET	100	8	"open	<null>	byte=-1,\t-00 ,1-1a	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	0	8	<null>	"other"	  bytes=00-500-4294967296	select=null single=false
+GET	9	8	"open	<null>	bytes=-0,1-1a-1000,,-1000\t	select=ArgumentException:tag single=ArgumentException:entityTag
+POST	65536	1	"abc"	"other"	bytes=- ,99,\t1.5-2	select=null single=false
+GET	65536	1	<null>	garbage	\tbytes=500-4095-9223372036854775807 ,1-2-, , 1-+5	select=null single=false
+QUERY	1000	2	"open	<null>	bytes=-,9223372036854775808-1000, , 5-\t,4294967296 - 1x	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	9	8	<null>	"abc"	  bytes==65535-99, 9 - 4095 , 65535-100	select=null single=false
+POST	10737418240	2	W/"abc"	<null>	bytes=	select=null single=false
+GET	100	1	abc	garbage	bytes= 1a-999 ,,1a - 100, , -10	select=ArgumentException:tag single=ArgumentException:entityTag
+QUERY	1	8	<null>	W/"abc"	   bytes=500-9223372036854775808-500,,\t00-1a ,-,, 1a - 1a	select=null single=false
+QUERY	1000	8	<null>	<null>	bytes=4294967296-65535, , \t-4095,99999999999999999999-999 ,1--5	select=null single=false
+POST	65536	8	<null>	<null>	bytes=-5,,007,+1-5	select=null single=false
+HEAD	10737418240	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	 octets=500-99	select=null single=false
+QUERY	9	8	<null>	<null>	bytes =0-a,0-500,,a-4294967296-a,\t0-00	select=null single=false
+QUERY	65536	2	<null>	"abc"	bytes=00 - 0	select=null single=false
+POST	9223372036854775806	8	<null>	garbage	bytes=1-	select=null single=false
+GET	1000	1	""	garbage	  BYTES=a-, , 9223372036854775807\t,1-+5 ,1000-1	select=null single=false
+POST	65536	8	W/"abc"	<null>	Bytes=\t10-999-100, , 1-\t,*, 5 - 9223372036854775808	select=null single=false
+POST	1000	2	<null>	<null>	bytes=, , \t99999999999999999999-10, , 1000-4095 \t,, ,  10-1a	select=null single=false
+QUERY	1000	2	"abc"	<null>	bytes=-\t,00, , \t-\t,,x-y	select=null single=false
+HEAD	9	1	abc	Sat, 29 Oct 1994 19:43:31 GMT	bytes=-9, 99-	select=null single=ArgumentException:entityTag
+GET	100	8	<null>	"abc"	bytes =1-2-,99 \t,1-9	select=null single=false
+HEAD	10	8	<null>	<null>	bytes=65535-1a\t,9223372036854775808-9223372036854775807, a-9223372036854775807	select=null single=false
+GET	1	8	<null>	"other"	byte=-1ax	select=null single=false
+POST	65536	1	<null>	"other"	bytes= ,00 - 99999999999999999999	select=null single=false
+GET	65536	1	<null>	<null>	octets=-4294967296,-999,,5-9	select=null single=false
+GET	1	8	<null>	W/"abc"	 bytes=4095 	select=null single=false
+POST	10	1	"abc"	garbage	byte=\t,a-9223372036854775808	select=null single=false
+GET	9	8	<null>	<null>	bytes=5-9,,500 - 9223372036854775807, , -1, ,  10-65535	select=null single=false
+GET	9	8	W/"abc"	<null>	bytes= a-4294967296 , 1a - 5\t,4095 - 4294967296	select=null single=false
+QUERY	65536	8	abc	garbage	bytes=00-1a	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	1000	8	"open	<null>	bytes=1- ,-0	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	0	2	"open	"abc"	bytes=007\t\t,500 - 0x	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	9223372036854775806	1	<null>	<null>	bytes=-  ,9223372036854775807, , 1a - 65535	select=null single=false
+POST	0	8	"abc"	"abc"	 bytes=10,-5	select=null single=false
+GET	65536	8	"open	<null>	byte=00-0	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	100	8	"open	Sat, 29 Oct 1994 19:43:31 GMT	bytes==5-1-4095 ,65535-9223372036854775808-1\t,500-99	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	1000	8	<null>	<null>	bytes=999- ,-999;	select=null single=false
+GET	1000	8	<null>	W/"abc"	bytes=99 - 99\t,, 1a-00,99-99	select=null single=false
+GET	9223372036854775806	8	abc	"other"	bytes00 - ,,999	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	10	8	<null>	<null>	bytes=-	select=null single=false
+GET	0	8	<null>	<null>	bytes=\t,1--5\t,,10-4294967296 ,99 - 99999999999999999999	select=null single=false
+POST	0	2	""	<null>	  Bytes=*,,\t,65535 - 9, 4095-9 	select=null single=false
+GET	0	8	<null>	<null>	bytes=-, \t,,1a- , , 100- 	select=null single=false
+GET	100	1	"abc"	<null>	bytes=	select=null single=false
+GET	65536	2	<null>	garbage	 bytes= -99,,1a-4294967296,,-999,  1-2-	select=null single=false
+GET	1	1	W/"abc"	"other"	bytes=\t-1a	select=null single=false
+GET	100	8	abc	<null>	bytes=\t100-	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	9223372036854775806	8	W/"abc"	<null>	bytes=-, , - ,-1	select=null single=false
+GET	1000	2	W/"abc"	"other"	bytes=* \t,10-100-1a ,500-99-99999999999999999999, , 1000	select=null single=false
+GET	100	8	<null>	<null>	bytes=1-007-10	select=null single=false
+POST	65536	8	<null>	"abc"	bytes=10-a-1a,,9223372036854775808-500, , 9 - 99, , -a	select=null single=false
+QUERY	9	8	"abc"	<null>	Bytes=0-9223372036854775808  , -9223372036854775808	select=ranges:0+9 single=false
+GET	10737418240	8	<null>	W/"abc"	bytes=00-, 0-99,,500 - 100	select=null single=false
+HEAD	0	8	abc	"abc"	bytes=, , 00-9223372036854775807 , a-99999999999999999999	select=null single=ArgumentException:entityTag
+GET	9	8	<null>	garbage	bytes=9223372036854775807-\t,--5\t	select=null single=false
+GET	100	8	<null>	<null>	octets=9223372036854775808-,,007-65535,-007	select=null single=false
+POST	9	8	"abc"	<null>	bytes=9223372036854775808-500\t, , 1-100 ,-1	select=null single=false
+GET	0	8	<null>	<null>	BYTES=-9, 100-, ,  - 9,a-9223372036854775807	select=null single=false
+GET	1	8	"abc"	W/"abc"	bytes=99-1a , 1-9223372036854775807	select=null single=false
+POST	9223372036854775806	8	<null>	<null>	  bytes=--	select=null single=false
+GET	10737418240	8	<null>	<null>	bytes==9-00-5, -1a,-1000 ,-1000	select=null single=false
+GET	65536	8	<null>	<null>	bytes=, , -1000\t,9223372036854775808-4294967296	select=null single=false
+GET	65536	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes==1-007	select=null single=false
+GET	10737418240	1	"open	<null>	bytes=-\t,-1a, , 99-\t,10-4095 	select=ArgumentException:tag single=ArgumentException:entityTag
+QUERY	10	8	<null>	"abc"	BYTES=00-4294967296, ,  a-0-9223372036854775808	select=null single=false
+GET	10737418240	2	<null>	garbage	bytes=1-1a,,-a	select=null single=false
+HEAD	9	8	<null>	W/"abc"	bytes=5-5 ,4294967296-007 ,100	select=null single=false
+GET	100	1	<null>	<null>	octets=-4294967296, , -\t,4095,	select=null single=false
+GET	10737418240	8	""	<null>	\tbytes=-4294967296,-a	select=null single=false
+GET	1000	8	W/"abc"	<null>	 bytes=-99999999999999999999	select=ranges:0+1000 single=true:0+1000
+QUERY	65536	8	<null>	<null>	octets=-0-1000 ,500 - 4294967296 ,-	select=null single=false
+GET	65536	8	<null>	<null>	bytes= 9223372036854775808-	select=HttpRangeNotSatisfiableException:416 single=HttpRangeNotSatisfiableException:416
+GET	1000	8	<null>	<null>	bytes=1--5	select=null single=false
+GET	10737418240	8	<null>	<null>	bytes=, 00-007-5,+1-5,,1-500	select=null single=false
+GET	1000	8	abc	"other"	bytes=999-0	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	10737418240	8	<null>	"other"	bytes=9223372036854775807-	select=null single=false
+HEAD	1000	8	<null>	<null>	bytes== 9223372036854775807-99	select=null single=false
+GET	10737418240	8	W/"abc"	<null>	bytes=-1,,-	select=null single=false
+HEAD	1000	2	<null>	<null>	bytes=100-999 ,1000-	select=null single=false
+POST	9223372036854775806	8	"open	Sat, 29 Oct 1994 19:43:31 GMT	bytes =	select=null single=ArgumentException:entityTag
+GET	65536	1	"abc"	<null>	 	select=null single=false
+GET	1000	8	<null>	W/"abc"	BYTES=a - 100,*\t,100--00	select=null single=false
+QUERY	10	8	<null>	<null>	BYTES=1a - 0, 9223372036854775807-, 1-2-\t,-4294967296 	select=null single=false
+GET	1	8	"open	<null>	\tbyte=,,1-10	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	10737418240	8	"abc"	<null>	 bytes=10-65535, 1a	select=null single=false
+GET	65536	1	"abc"	<null>	  bytes =	select=null single=false
+POST	1000	1	"open	Sat, 29 Oct 1994 19:43:31 GMT	bytes=99-	select=null single=ArgumentException:entityTag
+GET	0	2	"open	W/"abc"	bytes=1000-9223372036854775807-	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	10737418240	8	<null>	<null>	BYTES=500-	select=ranges:500+10737417740 single=true:500+10737417740
+HEAD	1000	8	""	"abc"	 bytes=-100,500-500\t	select=null single=false
+GET	9	8	abc	<null>	bytes=99-500-1a ,4294967296 - a	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	100	2	<null>	"other"	BYTES=1-2-	select=null single=false
+QUERY	9	1	abc	<null>	bytes=\t1-2-,100-,,1a-10, , 0-100	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	1000	2	W/"abc"	Sat, 29 Oct 1994 19:43:31 GMT	Bytes=10- ,\t65535	select=null single=false
+QUERY	0	8	"abc"	<null>	bytes=007-,,\t- ,65535-99	select=null single=false
+QUERY	65536	8	W/"abc"	<null>	bytes =99-10	select=null single=false
+GET	9223372036854775806	2	""	garbage	bytes=10-a-99 ,4294967296-99999999999999999999\t,1-+5\t,-1a	select=null single=false
+HEAD	65536	1	"abc"	<null>	bytes=	select=null single=false
+QUERY	9223372036854775806	8	"abc"	"other"	bytes=100-a	select=null single=false
+GET	65536	8	"open	<null>	bytes==	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	9	1	<null>	"other"	bytes=	select=null single=false
+GET	9	1	<null>	"other"	bytes=65535-9,,99-4095 	select=null single=false
+POST	1000	8	<null>	W/"abc"	 bytes=	select=null single=false
+QUERY	100	2	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes=1-+5,100- ,1a- ;	select=null single=false
+GET	100	8	<null>	<null>	bytes =1a-1, 4095-00 ,00 - a	select=null single=false
+HEAD	65536	8	"abc"	garbage	bytes=\t-65535 ,1a ,10-1000,,-	select=null single=false
+GET	9	8	abc	<null>	bytes=999-1000	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	9223372036854775806	8	<null>	"abc"	bytes=-65535,00 - 4294967296  	select=null single=false
+GET	10737418240	1	abc	garbage	  bytes=5 - a,1000-1000	select=ArgumentException:tag single=ArgumentException:entityTag
+POST	9	8	"abc"	"abc"	bytes=	select=null single=false
+POST	9	8	""	Sat, 29 Oct 1994 19:43:31 GMT	bytes=99999999999999999999-65535-4294967296, , 4294967296-99999999999999999999,	select=null single=false
+GET	10	1	<null>	<null>	BYTES=9-a, 9223372036854775808-00 , -a, 	select=null single=false
+HEAD	65536	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes =-9, , 4095-1a-10,,-	select=null single=false
+GET	65536	1	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes= 	select=null single=false
+QUERY	100	8	<null>	W/"abc"	BYTES=-a, , --5	select=null single=false
+GET	1000	8	<null>	garbage	bytes=9223372036854775808-9	select=null single=false
+HEAD	65536	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	,,1-100,4095-999-4095,  9223372036854775807 - 9223372036854775808,\t4095 - 00x	select=null single=false
+GET	65536	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	bytes=	select=null single=false
+QUERY	10737418240	8	<null>	<null>	bytes=	select=null single=false
+GET	65536	2	"abc"	garbage	bytes=99	select=null single=false
+HEAD	100	2	"abc"	<null>	 bytes99999999999999999999-4294967296\t,99999999999999999999-5,1-9223372036854775808,0-1	select=null single=false
+QUERY	9	8	"open	"abc"	-500 , 00-1, 0,999--9223372036854775807	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	0	8	<null>	<null>	bytes=-9 ,\t-	select=null single=false
+GET	1000	8	<null>	Sat, 29 Oct 1994 19:43:31 GMT	\t99-1000-100\t\t,\t-4095-00	select=null single=false
+GET	9223372036854775806	2	<null>	<null>	1, , 1a-999	select=null single=false
+QUERY	9223372036854775806	2	abc	Sat, 29 Oct 1994 19:43:31 GMT	\tbytes=	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	10	1	<null>	<null>	bytes=* ,99-500	select=null single=false
+GET	0	8	<null>	<null>	bytes=, , 100-4095, , 0 - a;	select=null single=false
+GET	0	8	"abc"	garbage	BYTES=	select=null single=false
+GET	9	8	<null>	<null>	bytes=-00	select=HttpRangeNotSatisfiableException:416 single=HttpRangeNotSatisfiableException:416
+POST	9	8	<null>	<null>	bytes=-10,,9-, , *	select=null single=false
+GET	10	8	<null>	"other"	 bytes=-100,-1,,a-a	select=null single=false
+GET	1000	8	"abc"	<null>	Bytes=9223372036854775807-99-65535	select=null single=false
+GET	1000	8	"abc"	garbage	bytes=-9223372036854775807\t,-007	select=null single=false
+GET	1000	8	<null>	"other"	bytes =00 - 4294967296	select=null single=false
+GET	0	1	<null>	"abc"	bytes=,,a- , , -00	select=null single=false
+QUERY	0	1	<null>	<null>	bytes =-9223372036854775808 ,\t-1000,,1000-9223372036854775807-	select=null single=false
+QUERY	1000	8	abc	Sat, 29 Oct 1994 19:43:31 GMT	bytes0-100\t	select=ArgumentException:tag single=ArgumentException:entityTag
+GET	9223372036854775806	8	"open	garbage	bytes=00, , 1a-00-	select=ArgumentException:tag single=ArgumentException:entityTag
+HEAD	10737418240	8	""	"other"	 bytes=9223372036854775807-, 0 - 99 ,,-a	select=null single=false
+GET	1000	8	abc	<null>	bytes =100 - 99, , 100-1000-65535,a-, 5	select=ArgumentException:tag single=ArgumentException:entityTag
+POST	1000	1	W/"abc"	"abc"	byte=007-, -	select=null single=false
+GET	9223372036854775806	1	<null>	<null>	bytes=9223372036854775807-,,1a-100\t,\t4095-00 ,-100-10	select=null single=false
+HEAD	9223372036854775806	8	<null>	<null>	bytes=4294967296-99\t	select=null single=false
+GET	1000	8	abc	<null>	bytes=1-2-, , 9223372036854775807-9-1000	select=ArgumentException:tag single=ArgumentException:entityTag
+POST	9	2	""	Sat, 29 Oct 1994 19:43:31 GMT	bytes=1a	select=null single=false
+GET	0	8	""	Sat, 29 Oct 1994 19:43:31 GMT	  bytes=-	select=null single=false
+HEAD	10	8	""	<null>	bytes=999-10-5,,-0, +1-5	select=null single=false
+GET	10737418240	8	<null>	"other"	bytes==00-0\t,1-00 	select=null single=false
+POST	1000	1	abc	W/"abc"	bytes=100-1a-1000	select=null single=ArgumentException:entityTag
+GET	10737418240	8	<null>	<null>	bytes=00-9	select=ranges:0+10 single=true:0+10
+HEAD	65536	1	"open	Sat, 29 Oct 1994 19:43:31 GMT	bytes =-100\t,\t1000	select=null single=ArgumentException:entityTag

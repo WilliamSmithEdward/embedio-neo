@@ -37,6 +37,7 @@
           "CHANGELOG.md",
           "CLI.md",
           "MIGRATION.md",
+          "AGENT_PRIMER.md",
           "docs/**/*.md",
           "docs/**/toc.yml"
         ]
@@ -52,6 +53,7 @@
         "files": [
           "LICENSE",
           "licenses/**",
+          "docs/project/evidence/*.json",
           "images/**"
         ]
       }

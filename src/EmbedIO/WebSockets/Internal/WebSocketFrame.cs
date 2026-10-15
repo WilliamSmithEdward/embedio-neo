@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Globalization;
 using EmbedIO.Net.Internal;
 using EmbedIO.Internal;
@@ -114,8 +113,6 @@ namespace EmbedIO.WebSockets.Internal
             }
         }
 
-        public IEnumerator<byte> GetEnumerator() => ((IEnumerable<byte>)ToArray()).GetEnumerator();
-
         public string PrintToString()
         {
             // Payload Length
@@ -188,6 +185,9 @@ Extended Payload Length: {extPayloadLen}
                 throw new WebSocketException(CloseStatusCode.ProtocolError, "A frame from a client isn't masked.");
             }
 
+            if (!webSocket.InContinuation && Opcode == Opcode.Cont)
+                throw new WebSocketException(CloseStatusCode.ProtocolError, "A continuation frame has no preceding fragmented message.");
+
             if (webSocket.InContinuation && (Opcode == Opcode.Text || Opcode == Opcode.Binary))
             {
                 throw new WebSocketException(CloseStatusCode.ProtocolError,
@@ -211,18 +211,6 @@ Extended Payload Length: {extPayloadLen}
                 throw new WebSocketException(CloseStatusCode.ProtocolError,
                     "The RSV3 of a frame is non-zero without any negotiation for it.");
             }
-        }
-
-        internal void Unmask()
-        {
-            if (Mask == Mask.Off)
-            {
-                return;
-            }
-
-            Mask = Mask.Off;
-            PayloadData.Mask(MaskingKey);
-            MaskingKey = Array.Empty<byte>();
         }
 
         private static bool IsOpcodeData(Opcode opcode) => opcode == Opcode.Text || opcode == Opcode.Binary;

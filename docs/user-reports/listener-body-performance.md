@@ -1,4 +1,9 @@
-# HTTP listener body and header allocations
+﻿# HTTP listener body and header allocations
+
+The unreleased [modern engine increment](../project/http-engine.md) supersedes
+this report's managed chunked-input and synchronous-read limitations, and tightens
+ambiguous framing. Measurements below describe the earlier source; see the
+[migration notes](../compatibility/migration.md#managed-http-framing-unreleased).
 
 Measurements start at main commit `e82d10f`. The change was subsequently rebased
 onto `e23ee0d`, preserving the independently merged charset/static-file work and

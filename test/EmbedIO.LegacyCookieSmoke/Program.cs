@@ -33,7 +33,7 @@ public static class Program
 
     private static async Task RunAsync()
     {
-        foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+        foreach (var mode in new[] { HttpListenerMode.EmbedIO })
         {
             var port = new TcpListener(IPAddress.Loopback, 0);
             port.Start();

@@ -45,7 +45,7 @@ public static class Program
             ("u", 404), ("throws/7", 500), ("required-optional", 500), ("custom/generic-wrapper", 500),
             ("custom/bad-format", 400), ("custom/not-supported", 500), ("query?value=oops", 500),
         };
-        foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+        foreach (var mode in new[] { HttpListenerMode.EmbedIO })
         {
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
@@ -62,9 +62,7 @@ public static class Program
                 foreach (var test in cases)
                 {
                     using var response = await client.GetAsync(url + "api/" + test.Path);
-                    // Framework native URL normalization leaves this whitespace-only
-                    // segment unmatched; managed conversion sees it. Keep both policies.
-                    var expected = test.Path == "u/%20" && mode == HttpListenerMode.Microsoft ? 404 : test.Status;
+                    var expected = test.Status;
                     if ((int)response.StatusCode != expected)
                         throw new InvalidOperationException(mode + " " + test.Path + ": expected " + expected
                             + ", received " + (int)response.StatusCode + ".");
@@ -79,7 +77,7 @@ public static class Program
                 await running;
             }
         }
-        if (_checks != 34) throw new InvalidOperationException("Legacy route check count changed.");
+        if (_checks != 17) throw new InvalidOperationException("Legacy route check count changed.");
     }
 
     public enum Choice { One = 1 }

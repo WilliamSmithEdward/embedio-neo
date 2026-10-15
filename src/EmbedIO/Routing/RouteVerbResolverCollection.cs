@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -63,6 +64,7 @@ namespace EmbedIO.Routing
         /// will count as one for each attribute.</para>
         /// </returns>
         /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
+        [RequiresUnreferencedCode(RouteVerbResolverCollection.ScanMessage)]
         public int AddFrom(object target) => Validate.NotNull(nameof(target), target) switch
         {
             Type type => AddFrom(null, type),
@@ -98,7 +100,11 @@ namespace EmbedIO.Routing
                 && parameters[1].ParameterType.IsAssignableFrom(typeof(RouteMatch));
         }
 
+        internal const string ScanMessage = "Handlers are discovered by reflecting over methods and exported types, which trimming may remove. "
+            + "Trimmed and Native AOT applications should register handlers with explicit routes and delegates.";
+
         // Call Add with all suitable methods of a Type, return sum of results.
+        [RequiresUnreferencedCode(RouteVerbResolverCollection.ScanMessage)]
         private int AddFrom(object? target, Type type)
             => type.GetMethods(target == null
                     ? BindingFlags.Public | BindingFlags.Static
@@ -122,7 +128,7 @@ namespace EmbedIO.Routing
                 Expression.Parameter(typeof(RouteMatch), "route"),
             };
 
-            Expression body = Expression.Call(Expression.Constant(target), method, parameters.Cast<Expression>());
+            Expression body = Expression.Call(method.IsStatic ? null : Expression.Constant(target), method, parameters.Cast<Expression>());
             if (isSynchronous)
             {
                 // Convert void to Task by evaluating Task.CompletedTask

@@ -1,0 +1,259 @@
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
+using EmbedIO.Internal;
+using EmbedIO.Net.Internal.Http2;
+
+namespace EmbedIO.Net.Internal
+{
+    internal sealed partial class HttpConnection
+    {
+        // The caller must stop this owner's admission before taking the snapshot.
+        // Shared HTTP/2 streams cannot use connection-wide GOAWAY or socket drain.
+        internal Task DrainForListenerAsync(HttpListener owner)
+        {
+            lock (_connectionSync)
+            {
+                if (_http2 && !_epl.AdmissionStopped)
+                {
+                    if (_http2Listeners == null || !_http2Listeners.TryGetValue(owner, out var exchanges))
+                        return Task.CompletedTask;
+                    return WaitForOwnerContextsAsync(exchanges.Values.Select(context => context.Completion).ToArray());
+                }
+            }
+            return DrainCoreAsync(owner);
+        }
+
+        private static async Task WaitForOwnerContextsAsync(Task[] completions)
+        {
+            try { await Task.WhenAll(completions).ConfigureAwait(false); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                // A reset/aborted response is terminal too. Its failure is already
+                // observed by request dispatch; drain only waits for owned cleanup.
+            }
+        }
+
+        internal void CloseForListener(HttpListener owner)
+        {
+            List<Http2Exchange>? canceled = null;
+            lock (_connectionSync)
+            {
+                // A snapshot can outlive an HTTP/1 keep-alive ownership transfer.
+                // Decide ownership and block a later transfer under the same lock.
+                if (!_http2)
+                {
+                    if (!_epl.AdmissionStopped)
+                    {
+                        if (_lastListener != owner) return;
+                        if (ReleaseIdleOwner(owner)) return;
+                    }
+                    Volatile.Write(ref _forceClosing, 1);
+                }
+                // A shared endpoint remains open after this owner removes its routes.
+                // Other owners can still have streams on this same HTTP/2 connection.
+                if (_http2 && !_epl.AdmissionStopped)
+                {
+                    canceled = new List<Http2Exchange>();
+                    if (_http2Listeners != null && _http2Listeners.TryGetValue(owner, out var exchanges))
+                    {
+                        canceled.AddRange(exchanges.Keys);
+                        _http2Listeners.Remove(owner);
+                    }
+                }
+            }
+            if (canceled == null) { ForceClose(); return; }
+            foreach (var exchange in canceled)
+            {
+                try { exchange.Cancel(new IOException("The owning listener stopped.")); }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                {
+                    // An exchange can finish while Stop snapshots its owner. One
+                    // callback failure must not prevent cancellation of other streams.
+                    if (error is not ObjectDisposedException) error.Log("HTTP/2 listener shutdown");
+                }
+            }
+        }
+
+        private async Task RunHttp2Async(Stream transport)
+        {
+            using var stop = new CancellationTokenSource();
+            lock (_connectionSync)
+            {
+                if (_protocolSocket == null || _protocolEnded != 0) return;
+                _http2 = true;
+                _http2Stop = new EmbedIO.Internal.BorrowedResource<CancellationTokenSource>(stop);
+                _http2Listeners = new Dictionary<HttpListener, Dictionary<Http2Exchange, MultiplexedContext>>();
+            }
+            try
+            {
+                using var connection = await Http2Connection.AcceptAsync(transport, stop.Token).ConfigureAwait(false);
+                StopRequestTimer();
+                using var dispatcher = new Http2Dispatcher(connection);
+                lock (_connectionSync)
+                {
+                    if (_protocolSocket == null || _protocolEnded != 0) return;
+                    _http2Dispatcher = new EmbedIO.Internal.BorrowedResource<Http2Dispatcher>(dispatcher);
+                }
+                using var idle = _http2IdleTimeout is int timeout ? new Http2IdleWatch(this, dispatcher, timeout) : null;
+                try { await dispatcher.RunAsync(DispatchHttp2Async, stop.Token).ConfigureAwait(false); }
+                finally { lock (_connectionSync) _http2Dispatcher = null; }
+                // Before the connection disposes its transport, which would close both directions.
+                if (dispatcher.EndedGracefully) await CloseHttp2InStagesAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                CloseTransport(true);
+                lock (_connectionSync) _http2Stop = null;
+            }
+        }
+
+        private const int StagedCloseLingerMilliseconds = 2000;
+
+        // A graceful HTTP/2 end (drain or idle GOAWAY) leaves the peer free to keep
+        // sending: WINDOW_UPDATE for the final DATA, or HEADERS it sent before reading
+        // GOAWAY. Closing both directions with such bytes unread, or arriving afterwards,
+        // resets the connection, and the reset discards response bytes the peer has not
+        // read yet. As RFC 9112 section 9.6 describes, close in stages instead: half-close
+        // after the final frames, then read and discard until the peer closes. The
+        // connection deadline bounds the wait; its expiry retires the transport, which
+        // ends the read, and the ordinary close then takes over.
+        private async Task CloseHttp2InStagesAsync()
+        {
+            Socket? socket;
+            lock (_connectionSync) socket = _protocolEnded == 0 ? _protocolSocket : null;
+            if (socket == null || !_lifetime.ShortenDeadline(StagedCloseLingerMilliseconds)) return;
+            try
+            {
+                await CompleteOutputAsync(CancellationToken.None, false).ConfigureAwait(false);
+                var discard = new byte[4096];
+                while (await socket.ReceiveAsync(new ArraySegment<byte>(discard), SocketFlags.None).ConfigureAwait(false) != 0) { }
+            }
+            catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException)
+            {
+                // The deadline or a stop retired the transport, or the peer reset it.
+            }
+        }
+
+        // KeepAliveTimeout on HTTP/2: once no stream has been open for that long, the
+        // connection drains with GOAWAY. Streams the peer opened before it are completed.
+        private sealed class Http2IdleWatch : IDisposable
+        {
+            private readonly HttpConnection _connection;
+            private readonly Http2Dispatcher _dispatcher;
+            private readonly int _timeout;
+            private readonly Timer _timer;
+
+            internal Http2IdleWatch(HttpConnection connection, Http2Dispatcher dispatcher, int timeout)
+            {
+                _connection = connection;
+                _dispatcher = dispatcher;
+                _timeout = timeout;
+                _timer = new Timer(static state => ((Http2IdleWatch)(state ?? throw new InvalidOperationException("Missing idle watch."))).Check(),
+                    this, timeout, Timeout.Infinite);
+            }
+
+            private void Check()
+            {
+                lock (_connection._connectionSync)
+                {
+                    if (_connection._protocolEnded != 0 || _connection._draining
+                        || !ReferenceEquals(_connection._http2Dispatcher?.Value, _dispatcher)) return;
+                }
+                var since = _dispatcher.IdleSince;
+                var remaining = since is long idle
+                    ? _timeout - (long)((System.Diagnostics.Stopwatch.GetTimestamp() - idle) * 1000.0 / System.Diagnostics.Stopwatch.Frequency)
+                    : _timeout;
+                if (since != null && remaining <= 0) { _ = _connection.DrainAsync(); return; }
+                try { _ = _timer.Change(Math.Max(1, remaining), Timeout.Infinite); }
+                catch (ObjectDisposedException) { }
+            }
+
+            public void Dispose() => _timer.Dispose();
+        }
+
+        private async Task DispatchHttp2Async(Http2Exchange exchange)
+        {
+            var context = new MultiplexedContext(exchange, LocalEndPoint, RemoteEndPoint, IsSecure, ClientCertificate);
+            HttpListener? listener = null;
+            var registered = false;
+            try
+            {
+                listener = _epl.SearchListener(context.Request.Url, out _);
+                if (listener == null)
+                {
+                    if (_epl.AdmissionStopped) throw new IOException("Endpoint stopped before request routing.");
+                    context.Response.StatusCode = 404;
+                    await context.CloseAsync().ConfigureAwait(false);
+                    return;
+                }
+                listener.BodyPolicy?.Apply(context);
+                if (context.Request.IsWebSocketRequest
+                    && context.Request.Headers[HttpHeaderNames.SecWebSocketVersion] != "13")
+                {
+                    context.Response.StatusCode = 400;
+                    context.Response.Headers[HttpHeaderNames.SecWebSocketVersion] = "13";
+                    await context.CloseAsync().ConfigureAwait(false);
+                    return;
+                }
+                lock (_connectionSync)
+                {
+                    if (_protocolSocket == null || _protocolEnded != 0) throw new IOException("Connection closed before routing.");
+                    var owners = _http2Listeners ?? throw new InvalidOperationException("HTTP/2 routing has not started.");
+                    if (!owners.TryGetValue(listener, out var exchanges))
+                        owners.Add(listener, exchanges = new Dictionary<Http2Exchange, MultiplexedContext>());
+                    exchanges.Add(exchange, context);
+                }
+                // Do not hold a connection lock while entering listener lifecycle
+                // synchronization: listener shutdown closes its connections.
+                await context.SendContinueAsync(listener.DeferContinue || RequestBodyPolicy.KnownRefusal(context.Request) != null).ConfigureAwait(false);
+                // This exchange runs on its own work item, so a directly dispatched
+                // handler runs here without blocking the connection's frame loop. The
+                // server owns the handler's task, including failures, and the handler
+                // may keep running after the response completes.
+                exchange.Handler = listener.RegisterMultiplexedContext(context, this);
+                registered = true;
+                var closed = false;
+                lock (_connectionSync) closed = _protocolSocket == null || _protocolEnded != 0;
+                if (closed)
+                {
+                    listener.RemoveConnection(this);
+                    throw new IOException("Connection closed while routing or handling the request.");
+                }
+                var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                using var registration = exchange.CancellationToken.Register(state => ((TaskCompletionSource<bool>)(state ?? throw new InvalidOperationException("Missing cancellation signal."))).TrySetResult(true), canceled);
+                var completed = await Task.WhenAny(context.Completion, canceled.Task).ConfigureAwait(false);
+                if (completed == canceled.Task) exchange.CancellationToken.ThrowIfCancellationRequested();
+                await context.Completion.ConfigureAwait(false);
+            }
+            finally
+            {
+                // Cleanup runs on application dispatch, never synchronously inside
+                // a cancellation callback holding a listener/connection lock.
+                try
+                {
+                    if (registered) await context.CloseAsync().ConfigureAwait(false);
+                    else await context.AbortAsync().ConfigureAwait(false);
+                }
+                catch (Exception error) when ((!registered || context.CancellationToken.IsCancellationRequested)
+                    && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                { }
+                finally
+                {
+                    // Keep reset responses visible to a concurrent owner drain until
+                    // their response and close callbacks have actually finished.
+                    lock (_connectionSync)
+                        if (listener != null && _http2Listeners != null && _http2Listeners.TryGetValue(listener, out var exchanges))
+                            exchanges.Remove(exchange);
+                    listener?.UnregisterContext(context);
+                    if (context.Completion.IsFaulted) _ = context.Completion.Exception;
+                }
+            }
+        }
+    }
+}

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -76,19 +77,17 @@ namespace EmbedIO.Tests
         {
             // Initialize parser state without opening a listener or a socket.
             var connection = NewConnection(Stream.Null);
-            var buffered = (MemoryStream)(Field("_ms").GetValue(connection) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            (buffered).Capacity = 8192;
-            Array.Fill(buffered.GetBuffer(), (byte)'X');
             var bytes = Encoding.ASCII.GetBytes("POST /items?q=42 HTTP/1.1\r\nHost: localhost\r\nContent-Length: 6\r\n\r\nabcdef");
+            var storage = Enumerable.Repeat((byte)'X', 17).Concat(bytes).Concat(new byte[13]).ToArray();
             var process = ConnectionType.GetMethod("ProcessInput", BindingFlags.Instance | BindingFlags.NonPublic);
             var position = 0;
             var complete = false;
             while (position < bytes.Length && !complete)
             {
                 var count = Math.Min(chunkSize, bytes.Length - position);
-                buffered.Write(bytes, position, count);
+                var segment = new ArraySegment<byte>(storage, 17 + position, count);
                 position += count;
-                complete = (bool)((process ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, new object[] { buffered }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                complete = (bool)((process ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, new object[] { segment }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
             Assert.That(complete, Is.True);
             using var remainder = new MemoryStream(bytes, position, bytes.Length - position);
@@ -121,7 +120,7 @@ namespace EmbedIO.Tests
             Assert.That(wire, Does.StartWith("HTTP/1.1 200 OK\r\n"));
             var body = wire.Substring(wire.IndexOf("\r\n\r\n", StringComparison.Ordinal) + 4);
             var expected = chunked && length > 0
-                ? (length == 0 ? "" : $"{length:x}\r\n{new string('a', length)}\r\n") + "0\r\n\r\n"
+                ? $"{length:x}\r\n{new string('a', length)}\r\n0\r\n\r\n"
                 : new string('a', length);
             Assert.That(body, Is.EqualTo(expected));
         }
@@ -138,15 +137,26 @@ namespace EmbedIO.Tests
         {
             var data = new byte[length];
             new Random(42).NextBytes(data);
-            var opcode = Core.GetType("EmbedIO.WebSockets.Opcode", true);
-            var streamType = Core.GetType("EmbedIO.WebSockets.Internal.WebSocketStream", true);
-            using var stream = (IDisposable)(Activator.CreateInstance((streamType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), new[] { (object)data, Enum.Parse((opcode ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), "Binary") }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            var opcode = Core.GetType("EmbedIO.WebSockets.Opcode", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
+            var fin = Core.GetType("EmbedIO.WebSockets.Internal.Fin", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.");
+            // Fragment at 1016 bytes, the historical send size, so the boundary cases
+            // still produce one, two and three frame messages.
+            const int FragmentLength = 1016;
+            var frames = new System.Collections.Generic.List<object>();
+            for (var offset = 0; offset < length || frames.Count == 0; offset += FragmentLength)
+            {
+                var chunk = data.Skip(offset).Take(FragmentLength).ToArray();
+                var final = offset + FragmentLength >= length;
+                frames.Add(Activator.CreateInstance((Core.GetType("EmbedIO.WebSockets.Internal.WebSocketFrame", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
+                    BindingFlags.Instance | BindingFlags.NonPublic, null,
+                    new[] { Enum.Parse(fin, final ? "Final" : "More"), Enum.Parse(opcode, offset == 0 ? "Binary" : "Cont"), (object)chunk, false }, null)
+                    ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+            }
             var socketType = Core.GetType("EmbedIO.WebSockets.Internal.WebSocket", true);
             var socket = RuntimeHelpers.GetUninitializedObject((socketType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
             var queueField = socketType.GetField("_messageEventQueue", BindingFlags.Instance | BindingFlags.NonPublic);
             var queue = Activator.CreateInstance((queueField ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).FieldType);
             queueField.SetValue(socket, queue);
-            var frames = (System.Collections.IEnumerable)((((streamType).GetMethod("GetFrames") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(stream, null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var count = 0;
             foreach (var frame in frames)
             {
@@ -157,7 +167,7 @@ namespace EmbedIO.Tests
                 var fragmented = (bool)((((frameType).GetProperty("IsFragment") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(frame)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
                 var handler = socketType.GetMethod(fragmented ? "ProcessFragmentFrame" : "ProcessDataFrame",
                     BindingFlags.Instance | BindingFlags.NonPublic);
-                await (Task)((handler ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, new[] { frame }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
+                await (Task)((handler ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, new object?[] { frame, null }) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
             var args = new object?[] { null };
             Assert.That(((queue ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetType().GetMethod("TryDequeue") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(queue, args), Is.EqualTo(true));
@@ -192,6 +202,36 @@ namespace EmbedIO.Tests
             Assert.That(raw, Is.EqualTo(new byte[] { 1, 2, 3 }));
             raw[1] = 8;
             Assert.That(data[1], Is.EqualTo(2));
+        }
+
+        [TestCase("Text")]
+        [TestCase("Binary")]
+        [TestCase("Ping")]
+        public void WebSocketRawMessageAccessPreservesBytesWithoutDecoding(string opcodeName)
+        {
+            var eventType = Core.GetType("EmbedIO.WebSockets.Internal.MessageEventArgs", true)
+                ?? throw new AssertionException("Expected message event type.");
+            var opcodeType = Core.GetType("EmbedIO.WebSockets.Opcode", true)
+                ?? throw new AssertionException("Expected opcode type.");
+            var opcode = Enum.Parse(opcodeType, opcodeName);
+            var parameter = Expression.Parameter(typeof(object));
+            var readRawData = Expression.Lambda<Func<object, byte[]>>(
+                Expression.Property(Expression.Convert(parameter, eventType), "RawData"), parameter).Compile();
+            // Include malformed UTF-8: raw callbacks must preserve the supplied bytes.
+            var data = new byte[] { 0x61, 0xC3, 0xA9, 0xF0, 0x9F, 0x98, 0x80, 0xFF };
+            object CreateMessage() => Activator.CreateInstance(eventType, BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new[] { opcode, data }, null) ?? throw new AssertionException("Expected message event.");
+            using var warmup = (IDisposable)CreateMessage();
+            for (var i = 0; i < 100; i++)
+                readRawData(warmup);
+            using var message = (IDisposable)CreateMessage();
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            var raw = readRawData(message);
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.That(raw, Is.SameAs(data));
+            Assert.That(eventType.GetProperty("Opcode", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(message), Is.EqualTo(opcode));
+            Assert.That(allocated, Is.Zero, "Accessing raw bytes must not allocate a discarded decoded string.");
         }
 
         [TestCase(false)]

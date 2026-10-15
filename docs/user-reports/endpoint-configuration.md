@@ -8,9 +8,17 @@ fatcerberus required localhost-only access. bufferUnderrun described separate
 application ports with module-level routes. The attributed discussion is
 preserved in [Neo #48](https://github.com/WilliamSmithEdward/embedio-neo/issues/48).
 
-## Decision
+<a id="decision"></a>
 
-Neo retains URL prefixes and both listener modes. Removing them would change
+## Historical v1 decision
+
+The example and two-backend comparisons below describe published v1.0.3 and the
+source reviewed for that investigation. Neo v2 retains URL prefixes but removes
+the Microsoft backend; its binding and deployment rules are documented in the
+[v1-to-v2 migration guide](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
+Historical HTTP.sys guidance is not a v2 listener configuration.
+
+At the time of this investigation, Neo retained URL prefixes and both listener modes. Removing them would change
 public configuration, host/path selection and Windows HTTP.sys integration.
 No new endpoint API, wildcard default or backend replacement is introduced.
 Use the [Getting started programs](../guides/getting-started/README.md) for

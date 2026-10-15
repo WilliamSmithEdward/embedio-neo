@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Files.Internal;
@@ -21,9 +22,17 @@ namespace EmbedIO.Files
         /// </summary>
         public const string DefaultDocumentName = "index.html";
 
+        // A successful mapping is remembered so a repeated request skips the provider. The key is
+        // the requested path as the client sent it, and a case-insensitive file system maps many
+        // spellings of one resource (/index.html, /INDEX.HTML), so an unbounded cache would grow
+        // with the spellings clients choose rather than with the resources served. Past this many
+        // entries a mapping still succeeds, uncached: the bound costs a provider lookup, never a
+        // wrong answer, and it is far above the number of paths an ordinary site serves.
+        private const int MappingCacheLimit = 1024;
+
         private readonly string _cacheSectionName = UniqueIdGenerator.GetNext();
         private readonly MimeTypeCustomizer _mimeTypeCustomizer = new MimeTypeCustomizer();
-        private readonly ConcurrentDictionary<string, MappedResourceInfo>? _mappingCache;
+        private readonly ConcurrentDictionary<string, (MappedResourceInfo Info, string UrlPath)>? _mappingCache;
 
         private BorrowedResource<FileCache> _cacheReference = new(FileCache.Default);
         private FileCache _cache
@@ -40,6 +49,7 @@ namespace EmbedIO.Files
         private FileRequestHandlerCallback _onMethodNotAllowed = FileRequestHandler.ThrowMethodNotAllowed;
         private Action<IHttpContext, MappedResourceInfo>? _onPrepareResponse;
         private IMimeTypeProvider? _mimeTypeProvider;
+        private PrecompressedVariants _precompressedVariants;
 
         private FileCache.Section? _cacheSection;
 
@@ -56,7 +66,7 @@ namespace EmbedIO.Files
         {
             Provider = Validate.NotNull(nameof(provider), provider);
             _mappingCache = Provider.IsImmutable
-                ? new ConcurrentDictionary<string, MappedResourceInfo>()
+                ? new ConcurrentDictionary<string, (MappedResourceInfo Info, string UrlPath)>()
                 : null;
         }
 
@@ -134,6 +144,31 @@ namespace EmbedIO.Files
             {
                 EnsureConfigurationNotLocked();
                 _contentCaching = value;
+            }
+        }
+
+        /// <summary>
+        /// <para>Gets or sets the precompressed files this module serves. With <see cref="PrecompressedVariants.Brotli"/>,
+        /// a request for <c>app.js</c> from a client that accepts <c>br</c> is answered with <c>app.js.br</c>, if it exists
+        /// and is not older than <c>app.js</c>; <see cref="PrecompressedVariants.Gzip"/> does the same with <c>.gz</c>.
+        /// The default is <see cref="PrecompressedVariants.None"/>.</para>
+        /// <para>A precompressed file is served only where this module would compress the file itself: for MIME types it
+        /// prefers to compress, and not for range requests. It is sent with the original file's content type, its own
+        /// entity tag, <c>Content-Encoding</c> and <c>Vary: Accept-Encoding</c>. Its content must be the original file,
+        /// compressed; nothing checks that.</para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The module's configuration is locked.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The value contains undefined flags.</exception>
+        public PrecompressedVariants PrecompressedVariants
+        {
+            get => _precompressedVariants;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                if ((value & ~PrecompressedVariants.All) != 0)
+                    throw new ArgumentOutOfRangeException(nameof(value), value, "Undefined precompressed variants.");
+
+                _precompressedVariants = value;
             }
         }
 
@@ -355,6 +390,7 @@ namespace EmbedIO.Files
         {
             if (context is null) throw new System.NullReferenceException();
             MappedResourceInfo? info;
+            string urlPath;
 
             var path = context.RequestedPath;
 
@@ -363,13 +399,17 @@ namespace EmbedIO.Files
             // Use the mapping cache if it exists.
             if (_mappingCache == null)
             {
-                info = MapUrlPath(path, context);
+                info = MapUrlPath(path, context, out urlPath);
             }
-            else if (!_mappingCache.TryGetValue(path, out info))
+            else if (_mappingCache.TryGetValue(path, out var cached))
             {
-                info = MapUrlPath(path, context);
-                if (info != null)
-                    _mappingCache[path] = info;
+                (info, urlPath) = cached;
+            }
+            else
+            {
+                info = MapUrlPath(path, context, out urlPath);
+                if (info != null && _mappingCache.Count < MappingCacheLimit)
+                    _mappingCache[path] = (info, urlPath);
             }
 
             if (info == null)
@@ -394,7 +434,7 @@ namespace EmbedIO.Files
             }
             else
             {
-                await HandleResource(context, info, sendResponseBody).ConfigureAwait(false);
+                await HandleResource(context, info, urlPath, sendResponseBody).ConfigureAwait(false);
             }
         }
 
@@ -432,8 +472,9 @@ namespace EmbedIO.Files
         // handling DefaultDocument and DefaultExtension.
         // Returns null if not found.
         // Directories mus be returned regardless of directory listing being enabled.
-        private MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider)
+        private MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider, out string resolvedUrlPath)
         {
+            resolvedUrlPath = requestPath;
             var result = Provider.MapUrlPath(requestPath, mimeTypeProvider);
 
             // If requestPath maps to a file, no further searching is needed.
@@ -448,7 +489,10 @@ namespace EmbedIO.Files
                 var defaultDocumentPath = requestPath + (requestPath.Length > 1 ? "/" : string.Empty) + DefaultDocument;
                 var defaultDocumentResult = Provider.MapUrlPath(defaultDocumentPath, mimeTypeProvider);
                 if (defaultDocumentResult?.IsFile ?? false)
+                {
+                    resolvedUrlPath = defaultDocumentPath;
                     return defaultDocumentResult;
+                }
             }
 
             // Try to apply default extension (but not if the URL path is "/",
@@ -458,34 +502,21 @@ namespace EmbedIO.Files
             {
                 var defaultExtensionResult = Provider.MapUrlPath(requestPath + DefaultExtension, mimeTypeProvider);
                 if (defaultExtensionResult?.IsFile ?? false)
+                {
+                    resolvedUrlPath = requestPath + DefaultExtension;
                     return defaultExtensionResult;
+                }
             }
 
             return result;
         }
 
-        private async Task HandleResource(IHttpContext context, MappedResourceInfo info, bool sendResponseBody)
+        // Decides how a mapped resource is answered: with a precompressed variant, a negotiation
+        // failure, a "304 Not Modified" reply, or the representation itself.
+        private Task HandleResource(IHttpContext context, MappedResourceInfo info, string urlPath, bool sendResponseBody)
         {
-            var section = _cacheSection ?? throw new InvalidOperationException("The file cache section has not been initialized.");
-            // Try to extract resource information from cache.
+            var cacheItem = ResolveCacheItem(info);
             var cachingThreshold = 1024L * Cache.MaxFileSizeKb;
-            if (!section.TryGet(info.Path, out var cacheItem))
-            {
-                // Resource information not yet cached
-                cacheItem = new FileCacheItem(section, info.LastModifiedUtc, info.Length);
-                section.Add(info.Path, cacheItem);
-            }
-            else if (!Provider.IsImmutable)
-            {
-                // Check whether the resource has changed.
-                // If so, discard the cache item and create a new one.
-                if (cacheItem.LastModifiedUtc != info.LastModifiedUtc || cacheItem.Length != info.Length)
-                {
-                    _cacheSection.Remove(info.Path);
-                    cacheItem = new FileCacheItem(_cacheSection, info.LastModifiedUtc, info.Length);
-                    _cacheSection.Add(info.Path, cacheItem);
-                }
-            }
 
             /*
              * Now we have a cacheItem for the resource.
@@ -495,45 +526,114 @@ namespace EmbedIO.Files
              * MaxFileSizeKb of our Cache.
              */
 
-            // If the content type is not a valid MIME type, assume the default.
-            var contentType = info.ContentType ?? DirectoryLister?.ContentType ?? MimeType.Default;
-            var mimeType = MimeType.StripParameters(contentType);
-            if (!MimeType.IsMimeType(mimeType, false))
-                contentType = mimeType = MimeType.Default;
+            var contentType = ResolveContentType(info, out var mimeType);
 
             // Next we're going to apply proactive negotiation
             // to determine whether we agree with the client upon the compression
             // (or lack of it) to use for the resource.
-            //
-            // The combination of partial responses and entity compression
-            // is not really standardized and could lead to a world of pain.
-            // Thus, if there is a Range header in the request, try to negotiate for no compression.
-            // Later, if there is compression anyway, we will ignore the Range header.
-            if (!context.TryDetermineCompression(mimeType, out var preferCompression))
-                preferCompression = true;
-            preferCompression &= context.Request.Headers.Get(HttpHeaderNames.Range) == null;
+            var preferCompression = PrefersCompression(context, mimeType);
             if (!context.Request.TryNegotiateContentEncoding(preferCompression, out var compressionMethod, out var setCompressionInResponse))
             {
+                // The client refuses every coding this module can produce. A precompressed file may still be one it accepts.
+                if (TrySelectPrecompressedVariant(context, info, urlPath, CompressionMethod.None, out var acceptedVariant, out var acceptedMethod))
+                    return HandleVariant(context, info, acceptedVariant, acceptedMethod, contentType, sendResponseBody, cachingThreshold);
+
                 // If negotiation failed, the returned callback will do the right thing.
                 setCompressionInResponse(context.Response);
-                return;
+                return Task.CompletedTask;
             }
+
+            // A precompressed file replaces compressing the file here, so it is considered only where this
+            // module would compress: a MIME type it prefers to compress, and no Range header.
+            if (preferCompression && TrySelectPrecompressedVariant(context, info, urlPath, compressionMethod, out var variant, out var variantMethod))
+                return HandleVariant(context, info, variant, variantMethod, contentType, sendResponseBody, cachingThreshold);
 
             var entityTag = info.GetEntityTag(compressionMethod);
 
             // Send a "304 Not Modified" response if applicable.
-            //
-            // RFC7232, Section 3.3: "A recipient MUST ignore If-Modified-Since
-            //                       if the request contains an If-None-Match header field."
-            if (context.Request.CheckIfNoneMatch(entityTag, out var ifNoneMatchExists)
-             || (!ifNoneMatchExists && context.Request.CheckIfModifiedSince(info.LastModifiedUtc, out _)))
+            if (IsUnmodified(context.Request, entityTag, info.LastModifiedUtc))
             {
                 context.Response.StatusCode = (int)HttpStatusCode.NotModified;
                 PreparePositiveResponse(context.Response, info, contentType, entityTag, setCompressionInResponse);
                 _onPrepareResponse?.Invoke(context, info);
-                return;
+                return Task.CompletedTask;
             }
 
+            return SendRepresentationAsync(context, info, cacheItem, cachingThreshold, compressionMethod, contentType, entityTag, setCompressionInResponse, sendResponseBody);
+        }
+
+        // The cache item of a resource. A mutable provider's item is replaced when the resource changed.
+        private FileCacheItem ResolveCacheItem(MappedResourceInfo info)
+        {
+            var section = _cacheSection ?? throw new InvalidOperationException("The file cache section has not been initialized.");
+            if (!section.TryGet(info.Path, out var cacheItem))
+            {
+                // Resource information not yet cached
+                cacheItem = new FileCacheItem(section, info.LastModifiedUtc, info.Length);
+                section.Add(info.Path, cacheItem);
+            }
+            else if (!Provider.IsImmutable && (cacheItem.LastModifiedUtc != info.LastModifiedUtc || cacheItem.Length != info.Length))
+            {
+                // The resource has changed: discard the cache item and create a new one.
+                section.Remove(info.Path);
+                cacheItem = new FileCacheItem(section, info.LastModifiedUtc, info.Length);
+                section.Add(info.Path, cacheItem);
+            }
+
+            return cacheItem;
+        }
+
+        // The content type sent for a resource, with its parameters; mimeType is the type alone.
+        // A resource without a type takes the directory lister's or the default; a type that is
+        // not a valid MIME type becomes the default.
+        private string ResolveContentType(MappedResourceInfo info, out string mimeType)
+        {
+            var contentType = info.ContentType ?? DirectoryLister?.ContentType ?? MimeType.Default;
+            mimeType = MimeType.StripParameters(contentType);
+            if (MimeType.IsMimeType(mimeType, false))
+                return contentType;
+
+            mimeType = MimeType.Default;
+            return MimeType.Default;
+        }
+
+        // Compression is preferred where the MIME type (or the absence of a policy) says so, but
+        // never for a range request: the combination of partial responses and entity compression
+        // is not really standardized, so a Range header negotiates for no compression and is
+        // ignored later if there is compression anyway.
+        private static bool PrefersCompression(IHttpContext context, string mimeType)
+        {
+            if (!context.TryDetermineCompression(mimeType, out var preferCompression))
+                preferCompression = true;
+
+            return preferCompression && context.Request.Headers.Get(HttpHeaderNames.Range) == null;
+        }
+
+        // A precompressed file is considered only for files, and only when variants are enabled.
+        private bool TrySelectPrecompressedVariant(IHttpContext context, MappedResourceInfo info, string urlPath, CompressionMethod negotiated, out MappedResourceInfo variant, out CompressionMethod method)
+        {
+            if (info.IsFile && _precompressedVariants != PrecompressedVariants.None)
+                return TrySelectVariant(context, info, urlPath, negotiated, out variant, out method);
+
+            variant = info;
+            method = CompressionMethod.None;
+            return false;
+        }
+
+        // RFC7232, Section 3.3: "A recipient MUST ignore If-Modified-Since
+        //                       if the request contains an If-None-Match header field."
+        private static bool IsUnmodified(IHttpRequest request, string entityTag, DateTime lastModifiedUtc)
+            => request.CheckIfNoneMatch(entityTag, out var ifNoneMatchExists)
+            || (!ifNoneMatchExists && request.CheckIfModifiedSince(lastModifiedUtc, out _));
+
+        // Sends the representation: a directory listing or a file, whole or as one byte range,
+        // from the cache when it is cached, cached first when it fits, streamed otherwise. Each
+        // path awaits inside one method, so a request still runs through a single state machine.
+        private Task SendRepresentationAsync(
+            IHttpContext context, MappedResourceInfo info, FileCacheItem cacheItem, long cachingThreshold,
+            CompressionMethod compressionMethod, string contentType, string entityTag,
+            Action<IHttpResponse> setCompressionInResponse, bool sendResponseBody)
+        {
             /*
              * At this point we know the response is "200 OK",
              * unless the request is a range request.
@@ -550,142 +650,318 @@ namespace EmbedIO.Files
             // Directories always have info.Length == 0; therefore,
             // unless the directory listing is cached, we must generate it now
             // (and cache it while we're there, if applicable).
-            var content = cacheItem.GetContent(compressionMethod);
+            // A listing's relative links depend on whether the URL ends in '/', but /dir and /dir/
+            // map to the same directory; only the slash form is cached.
+            var cacheListing = !info.IsDirectory || context.Request.Url.AbsolutePath.EndsWith("/", StringComparison.Ordinal);
+            var content = cacheListing ? cacheItem.GetContent(compressionMethod) : null;
             if (info.IsDirectory && content == null)
-            {
-                long uncompressedLength;
-                (content, uncompressedLength) = await GenerateDirectoryListingAsync(context, info, compressionMethod)
-                    .ConfigureAwait(false);
-                if (ContentCaching && uncompressedLength <= cachingThreshold)
-                    _ = cacheItem.SetContent(compressionMethod, content);
-            }
+                return SendListingAsync(context, info, cacheItem, cachingThreshold, compressionMethod, contentType, entityTag, setCompressionInResponse, sendResponseBody, cacheListing);
 
             var contentLength = content?.Length ?? info.Length;
+            var frame = FrameResponse(context, info, contentLength, compressionMethod, contentType, entityTag, setCompressionInResponse);
 
+            // If it's a HEAD request, we're done.
+            if (!sendResponseBody)
+            {
+                DescribeBodyForHead(context.Response, compressionMethod == CompressionMethod.None || content != null, frame.Length);
+                return Task.CompletedTask;
+            }
+
+            // Transfer cached content if present.
+            if (content != null)
+                return WriteContentAsync(context, content, frame);
+
+            // If content must be sent AND cached, first read it and store it.
+            // The resource is a file here: a directory would have been listed by now.
+            if (ContentCaching && contentLength <= cachingThreshold)
+                return CacheAndSendAsync(context, info, cacheItem, compressionMethod, frame);
+
+            // Read and transfer content without caching.
+            return StreamAsync(context, info, compressionMethod, frame);
+        }
+
+        // Generates a directory listing, caches it when it fits and the URL is the slash form,
+        // and sends it like cached content.
+        private async Task SendListingAsync(
+            IHttpContext context, MappedResourceInfo info, FileCacheItem cacheItem, long cachingThreshold,
+            CompressionMethod compressionMethod, string contentType, string entityTag,
+            Action<IHttpResponse> setCompressionInResponse, bool sendResponseBody, bool cacheListing)
+        {
+            var (content, uncompressedLength) = await GenerateDirectoryListingAsync(context, info, compressionMethod)
+                .ConfigureAwait(false);
+            if (cacheListing && ContentCaching && uncompressedLength <= cachingThreshold)
+                _ = cacheItem.SetContent(compressionMethod, content);
+
+            var frame = FrameResponse(context, info, content.Length, compressionMethod, contentType, entityTag, setCompressionInResponse);
+
+            // If it's a HEAD request, we're done; the listing's length is known.
+            if (!sendResponseBody)
+            {
+                DescribeBodyForHead(context.Response, true, frame.Length);
+                return;
+            }
+
+            await WriteContentAsync(context, content, frame).ConfigureAwait(false);
+        }
+
+        // Frames the response around content of a known length: the range selection (ignored when
+        // compression is in force), the status and headers, and the prepare callback.
+        private ContentFrame FrameResponse(IHttpContext context, MappedResourceInfo info, long contentLength, CompressionMethod compressionMethod, string contentType, string entityTag, Action<IHttpResponse> setCompressionInResponse)
+        {
             // Ignore range request is compression is enabled
             // (or should I say forced, since negotiation has tried not to use it).
             var partialStart = 0L;
             var partialUpperBound = contentLength - 1;
             var isPartial = compressionMethod == CompressionMethod.None
                          && context.Request.IsRangeRequest(contentLength, entityTag, info.LastModifiedUtc, out partialStart, out partialUpperBound);
-            var responseContentLength = contentLength;
-
-            if (isPartial)
-            {
-                // Prepare a "206 Partial Content" response.
-                responseContentLength = partialUpperBound - partialStart + 1;
-                context.Response.StatusCode = (int)HttpStatusCode.PartialContent;
-                PreparePositiveResponse(context.Response, info, contentType, entityTag, setCompressionInResponse);
-                context.Response.Headers.Set(HttpHeaderNames.ContentRange, $"bytes {partialStart}-{partialUpperBound}/{contentLength}");
-            }
-            else
-            {
-                // Prepare a "200 OK" response.
-                PreparePositiveResponse(context.Response, info, contentType, entityTag, setCompressionInResponse);
-            }
+            var responseContentLength = PrepareContentResponse(context.Response, info, contentType, entityTag, setCompressionInResponse, isPartial, partialStart, partialUpperBound, contentLength);
 
             // Invoke before choosing transport framing: a callback failure can still use
             // the ordinary exception response without retaining a file's content length.
             _onPrepareResponse?.Invoke(context, info);
+            return new ContentFrame(isPartial, partialStart, responseContentLength);
+        }
 
-            // If it's a HEAD request, we're done.
-            if (!sendResponseBody)
+        // Prepares a "200 OK" or "206 Partial Content" response and returns the number of body
+        // bytes it describes: the whole content, or the selected range.
+        private static long PrepareContentResponse(IHttpResponse response, MappedResourceInfo info, string contentType, string entityTag, Action<IHttpResponse> setCompression,
+            bool isPartial, long partialStart, long partialUpperBound, long contentLength)
+        {
+            if (!isPartial)
             {
-                if (compressionMethod == CompressionMethod.None || content != null)
-                    context.Response.ContentLength64 = responseContentLength;
-                else
-                    context.Response.SendChunked = true;
-
-                return;
+                PreparePositiveResponse(response, info, contentType, entityTag, setCompression);
+                return contentLength;
             }
 
-            // If content must be sent AND cached, first read it and store it.
-            // If the requested resource is a directory, we have already listed it by now,
-            // so it must be a file for content to be null.
-            if (content == null && ContentCaching && contentLength <= cachingThreshold)
+            response.StatusCode = (int)HttpStatusCode.PartialContent;
+            PreparePositiveResponse(response, info, contentType, entityTag, setCompression);
+            response.Headers.Set(HttpHeaderNames.ContentRange, $"bytes {partialStart}-{partialUpperBound}/{contentLength}");
+            return partialUpperBound - partialStart + 1;
+        }
+
+        // A HEAD response declares the body length a GET would send when that length is known
+        // (identity content, or content already in the cache); otherwise the GET would be chunked.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void DescribeBodyForHead(IHttpResponse response, bool lengthKnown, long length)
+        {
+            if (lengthKnown)
+                response.ContentLength64 = length;
+            else
+                response.SendChunked = true;
+        }
+
+        // Writes the framed part of in-memory content with its exact length.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Task WriteContentAsync(IHttpContext context, byte[] content, ContentFrame frame)
+        {
+            context.Response.ContentLength64 = frame.Length;
+            return context.Response.OutputStream.WriteAsync(content, frame.IsPartial ? (int)frame.Start : 0, (int)frame.Length, context.CancellationToken);
+        }
+
+        // Reads a file that fits the cache through the negotiated coding into memory, publishes
+        // the bytes to the cache and sends the framed part of them.
+        private async Task CacheAndSendAsync(IHttpContext context, MappedResourceInfo info, FileCacheItem cacheItem, CompressionMethod compressionMethod, ContentFrame frame)
+        {
+            byte[] content;
+            using (var memoryStream = new MemoryStream())
             {
-                using (var memoryStream = new MemoryStream())
+                using (var compressor = new CompressionStream(memoryStream, compressionMethod))
                 {
-                    using (var compressor = new CompressionStream(memoryStream, compressionMethod))
-                    {
-                        using var source = Provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path);
-                        await source.CopyToAsync(compressor, WebServer.StreamCopyBufferSize, context.CancellationToken)
-                            .ConfigureAwait(false);
-                    }
-
-                    content = memoryStream.ToArray();
-                    // Caching reads the entire file; a range response still sends only
-                    // the selected slice. Compression and ranges are mutually exclusive.
-                    if (!isPartial)
-                        responseContentLength = content.Length;
-                }
-
-                _ = cacheItem.SetContent(compressionMethod, content);
-            }
-
-            // Transfer cached content if present.
-            if (content != null)
-            {
-                context.Response.ContentLength64 = responseContentLength;
-                var offset = isPartial ? (int)partialStart : 0;
-                await context.Response.OutputStream.WriteAsync(content, offset, (int)responseContentLength, context.CancellationToken)
-                    .ConfigureAwait(false);
-
-                return;
-            }
-
-            // Read and transfer content without caching.
-            using (var source = Provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path))
-            {
-                context.Response.SendChunked = true;
-
-                if (isPartial)
-                {
-                    var buffer = new byte[WebServer.StreamCopyBufferSize];
-                    if (source.CanSeek)
-                    {
-                        source.Position = partialStart;
-                    }
-                    else
-                    {
-                        var skipLength = partialStart;
-                        while (skipLength > 0)
-                        {
-                            var read = await source.ReadAsync(buffer, 0, (int)Math.Min(skipLength, buffer.Length), context.CancellationToken)
-                                .ConfigureAwait(false);
-
-                            skipLength -= read;
-                        }
-                    }
-
-                    var transferSize = responseContentLength;
-                    while (transferSize >= WebServer.StreamCopyBufferSize)
-                    {
-                        var read = await source.ReadAsync(buffer, 0, WebServer.StreamCopyBufferSize, context.CancellationToken)
-                            .ConfigureAwait(false);
-
-                        await context.Response.OutputStream.WriteAsync(buffer, 0, read, context.CancellationToken)
-                            .ConfigureAwait(false);
-
-                        transferSize -= read;
-                    }
-
-                    if (transferSize > 0)
-                    {
-                        var read = await source.ReadAsync(buffer, 0, (int)transferSize, context.CancellationToken)
-                            .ConfigureAwait(false);
-
-                        await context.Response.OutputStream.WriteAsync(buffer, 0, read, context.CancellationToken)
-                            .ConfigureAwait(false);
-                    }
-                }
-                else
-                {
-                    using var compressor = new CompressionStream(context.Response.OutputStream, compressionMethod);
+                    using var source = Provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path);
                     await source.CopyToAsync(compressor, WebServer.StreamCopyBufferSize, context.CancellationToken)
                         .ConfigureAwait(false);
                 }
+
+                // The provider sees only CompressionStream; dispose this private buffer before publishing it.
+                var buffer = memoryStream.GetBuffer();
+                content = buffer.Length == memoryStream.Length ? buffer : memoryStream.ToArray();
             }
+
+            _ = cacheItem.SetContent(compressionMethod, content);
+
+            // Caching reads the entire file; a range response still sends only
+            // the selected slice. Compression and ranges are mutually exclusive.
+            if (!frame.IsPartial)
+                frame = new ContentFrame(false, 0, content.Length);
+
+            await WriteContentAsync(context, content, frame).ConfigureAwait(false);
+        }
+
+        // Streams a file from the provider without caching: the whole file through the negotiated
+        // coding, or the selected range by seeking (or skipping) to its start.
+        private async Task StreamAsync(IHttpContext context, MappedResourceInfo info, CompressionMethod compressionMethod, ContentFrame frame)
+        {
+            using var source = Provider.OpenFile(info.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", info.Path);
+            context.Response.SendChunked = true;
+
+            if (!frame.IsPartial)
+            {
+                using var compressor = new CompressionStream(context.Response.OutputStream, compressionMethod);
+                await source.CopyToAsync(compressor, WebServer.StreamCopyBufferSize, context.CancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            var buffer = new byte[WebServer.StreamCopyBufferSize];
+            if (source.CanSeek)
+            {
+                source.Position = frame.Start;
+            }
+            else
+            {
+                var skipLength = frame.Start;
+                while (skipLength > 0)
+                {
+                    var read = await source.ReadAsync(buffer, 0, (int)Math.Min(skipLength, buffer.Length), context.CancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (read == 0) throw new EndOfStreamException("The file ended before the requested range.");
+                    skipLength -= read;
+                }
+            }
+
+            var transferSize = frame.Length;
+            while (transferSize > 0)
+            {
+                var read = await source.ReadAsync(buffer, 0, (int)Math.Min(transferSize, buffer.Length), context.CancellationToken)
+                    .ConfigureAwait(false);
+                if (read == 0) throw new EndOfStreamException("The file ended before the requested range was complete.");
+                await context.Response.OutputStream.WriteAsync(buffer, 0, read, context.CancellationToken)
+                    .ConfigureAwait(false);
+                transferSize -= read;
+            }
+        }
+
+        // The part of the content a response sends: everything, or the selected byte range.
+        private readonly struct ContentFrame
+        {
+            internal ContentFrame(bool isPartial, long start, long length)
+            {
+                IsPartial = isPartial;
+                Start = start;
+                Length = length;
+            }
+
+            internal bool IsPartial { get; }
+
+            internal long Start { get; }
+
+            internal long Length { get; }
+        }
+
+        // Chooses a fresh precompressed file the client accepts at least as much as the negotiated coding.
+        // Among equally acceptable files, Brotli is preferred for its size.
+        private bool TrySelectVariant(IHttpContext context, MappedResourceInfo info, string urlPath, CompressionMethod negotiated, out MappedResourceInfo variant, out CompressionMethod method)
+        {
+            variant = info;
+            method = CompressionMethod.None;
+            var accepted = new QValueList(true, context.Request.Headers.GetValues(HttpHeaderNames.AcceptEncoding));
+            var floor = Weight(accepted, negotiated);
+            var best = 0;
+            foreach (var (flag, candidate, extension) in new[]
+            {
+                (PrecompressedVariants.Brotli, CompressionMethod.Brotli, ".br"),
+                (PrecompressedVariants.Gzip, CompressionMethod.Gzip, ".gz"),
+            })
+            {
+                if ((_precompressedVariants & flag) == 0)
+                    continue;
+
+                var weight = Weight(accepted, candidate);
+                if (weight <= 0 || weight < floor || weight <= best)
+                    continue;
+
+                var found = Provider.MapUrlPath(urlPath + extension, context);
+                if (found == null || !found.IsFile || found.LastModifiedUtc < info.LastModifiedUtc)
+                    continue;
+
+                variant = found;
+                method = candidate;
+                best = weight;
+            }
+
+            return method != CompressionMethod.None;
+        }
+
+        private static int Weight(QValueList accepted, CompressionMethod method)
+        {
+            var name = method switch
+            {
+                CompressionMethod.Gzip => CompressionMethodNames.Gzip,
+                CompressionMethod.Deflate => CompressionMethodNames.Deflate,
+                CompressionMethod.Brotli => CompressionMethodNames.Brotli,
+                _ => CompressionMethodNames.None,
+            };
+
+            // Without Accept-Encoding, EmbedIO sends the file as is; precompressed files go only to clients
+            // that name their coding.
+            if (accepted.QValues.Count == 0)
+                return method == CompressionMethod.None ? 1000 : 0;
+
+            return accepted.TryGetWeight(name, out var weight) ? weight : 0;
+        }
+
+        // Sends a precompressed file: the original's content type, the file's own bytes and an entity tag that
+        // identifies both, so it can never match the original's, a dynamically compressed one, or the file's own.
+        private async Task HandleVariant(IHttpContext context, MappedResourceInfo info, MappedResourceInfo variant, CompressionMethod method, string contentType, bool sendResponseBody, long cachingThreshold)
+        {
+            var codingName = method == CompressionMethod.Brotli ? CompressionMethodNames.Brotli : CompressionMethodNames.Gzip;
+            var entityTag = EntityTag.ComputeVariant(info.LastModifiedUtc, info.Length, variant.LastModifiedUtc, variant.Length, method);
+            void SetCoding(IHttpResponse response)
+            {
+                response.Headers.Add(HttpHeaderNames.Vary, HttpHeaderNames.AcceptEncoding);
+                response.Headers.Set(HttpHeaderNames.ContentEncoding, codingName);
+            }
+
+            if (context.Request.CheckIfNoneMatch(entityTag, out var ifNoneMatchExists)
+             || (!ifNoneMatchExists && context.Request.CheckIfModifiedSince(variant.LastModifiedUtc, out _)))
+            {
+                context.Response.StatusCode = (int)HttpStatusCode.NotModified;
+                PreparePositiveResponse(context.Response, variant, contentType, entityTag, SetCoding);
+                _onPrepareResponse?.Invoke(context, info);
+                return;
+            }
+
+            PreparePositiveResponse(context.Response, variant, contentType, entityTag, SetCoding);
+            _onPrepareResponse?.Invoke(context, info);
+            context.Response.ContentLength64 = variant.Length;
+            if (!sendResponseBody)
+                return;
+
+            // The file's bytes, cached like any file. A direct request for the file caches the same bytes.
+            // The variant was just mapped, so the cached bytes are checked against it even for an immutable provider:
+            // the headers above already describe this file, and the body must match them.
+            var section = _cacheSection ?? throw new InvalidOperationException("The file cache section has not been initialized.");
+            if (!section.TryGet(variant.Path, out var cacheItem)
+             || cacheItem.LastModifiedUtc != variant.LastModifiedUtc || cacheItem.Length != variant.Length)
+            {
+                section.Remove(variant.Path);
+                cacheItem = new FileCacheItem(section, variant.LastModifiedUtc, variant.Length);
+                section.Add(variant.Path, cacheItem);
+            }
+
+            var content = cacheItem.GetContent(CompressionMethod.None);
+            if (content == null)
+            {
+                using var source = Provider.OpenFile(variant.Path) ?? throw new FileNotFoundException("The mapped file is no longer available.", variant.Path);
+                if (ContentCaching && variant.Length <= cachingThreshold)
+                {
+                    using var memory = new MemoryStream();
+                    await source.CopyToAsync(memory, WebServer.StreamCopyBufferSize, context.CancellationToken).ConfigureAwait(false);
+                    content = memory.ToArray();
+                    if (content.Length != variant.Length)
+                        throw new IOException("The precompressed file changed while it was read.");
+
+                    _ = cacheItem.SetContent(CompressionMethod.None, content);
+                }
+                else
+                {
+                    await source.CopyToAsync(context.Response.OutputStream, WebServer.StreamCopyBufferSize, context.CancellationToken).ConfigureAwait(false);
+                    return;
+                }
+            }
+
+            await context.Response.OutputStream.WriteAsync(content, 0, content.Length, context.CancellationToken).ConfigureAwait(false);
         }
 
         // Uses DirectoryLister to generate a directory listing asynchronously.
@@ -697,16 +973,21 @@ namespace EmbedIO.Files
             CompressionMethod compressionMethod)
         {
             using var memoryStream = new MemoryStream();
-            using var stream = new CompressionStream(memoryStream, compressionMethod);
+            long uncompressedLength;
+            using (var stream = new CompressionStream(memoryStream, compressionMethod))
+            {
+                await (DirectoryLister ?? throw new InvalidOperationException("No directory lister is configured.")).ListDirectoryAsync(
+                    info,
+                    context.Request.Url.AbsolutePath,
+                    Provider.GetDirectoryEntries(info.Path, context),
+                    stream,
+                    context.CancellationToken).ConfigureAwait(false);
 
-            await (DirectoryLister ?? throw new InvalidOperationException("No directory lister is configured.")).ListDirectoryAsync(
-                info,
-                context.Request.Url.AbsolutePath,
-                Provider.GetDirectoryEntries(info.Path, context),
-                stream,
-                context.CancellationToken).ConfigureAwait(false);
+                uncompressedLength = stream.UncompressedLength;
+            }
 
-            return (memoryStream.ToArray(), stream.UncompressedLength);
+            // The compressor flushes its final block on disposal; a lister need not close the stream.
+            return (memoryStream.ToArray(), uncompressedLength);
         }
     }
 }

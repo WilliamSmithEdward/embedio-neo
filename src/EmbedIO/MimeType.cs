@@ -37,12 +37,6 @@ namespace EmbedIO
         public const string TextXml = "text/xml";
 
         /// <summary>
-        /// The MIME type for URL-encoded HTML forms,
-        /// i.e. <c>application/x-www-form-urlencoded</c>.
-        /// </summary>
-        internal const string UrlEncodedForm = "application/x-www-form-urlencoded";
-
-        /// <summary>
         /// <para>Strips parameters, if present (e.g. <c>; encoding=UTF-8</c>), from a MIME type.</para>
         /// </summary>
         /// <param name="value">The MIME type.</param>
@@ -145,8 +139,8 @@ namespace EmbedIO
 
         internal static bool UnsafeIsInRange(string mimeType, string mediaRange)
         {
-            // A validated media range that starts with '*' can only be '*/*'
-            if (mediaRange[0] == '*')
+            // Only the complete wildcard token matches every type.
+            if (mediaRange == "*/*")
                 return true;
 
             var typeSlashPos = mimeType.IndexOf("/", System.StringComparison.Ordinal);
@@ -163,7 +157,7 @@ namespace EmbedIO
 
             // A validated token has at least 1 character,
             // thus there must be at least 1 character after a slash.
-            if (mediaRange[rangeSlashPos + 1] == '*')
+            if (mediaRange.Length == rangeSlashPos + 2 && mediaRange[rangeSlashPos + 1] == '*')
                 return true;
 
             if (mimeType.Length != mediaRange.Length)

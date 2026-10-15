@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using EmbedIO.Utilities;
@@ -42,8 +41,16 @@ namespace EmbedIO
                 @this.Response.ContentEncoding = encoding;
             }
 
-            using var text = @this.OpenResponseText(encoding);
-            await text.WriteAsync(content).ConfigureAwait(false);
+            var text = @this.OpenResponseText(encoding);
+#if NET10_0_OR_GREATER
+            await using (text.ConfigureAwait(false))
+#else
+            using (text)
+#endif
+            {
+                await text.WriteAsync(content).ConfigureAwait(false);
+                await text.FlushAsync().ConfigureAwait(false);
+            }
         }
 
         /// <summary>
@@ -122,5 +129,25 @@ namespace EmbedIO
         /// <seealso cref="ResponseSerializer.Default"/>
         public static Task SendDataAsync(this IHttpContext @this, ResponseSerializerCallback serializer, object? data)
             => Validate.NotNull(nameof(serializer), serializer)(@this, data);
+
+        /// <summary>
+        /// Asynchronously sends data as a JSON response, using source-generated or otherwise explicit metadata.
+        /// </summary>
+        /// <typeparam name="TData">The type of the data.</typeparam>
+        /// <param name="this">The <see cref="IHttpContext"/> interface on which this method is called.</param>
+        /// <param name="data">The data to serialize.</param>
+        /// <param name="typeInfo">Metadata for <typeparamref name="TData"/>, for example from a
+        /// <see cref="System.Text.Json.Serialization.JsonSerializerContext"/>.</param>
+        /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="typeInfo"/> is <see langword="null"/>.</exception>
+        /// <remarks>The response is UTF-8 <c>application/json</c>, as with the default serializer. This overload
+        /// uses no reflection, so it works in trimmed and Native AOT applications.</remarks>
+        public static Task SendDataWithMetadataAsync<TData>(this IHttpContext @this, TData data, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TData> typeInfo)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            Validate.NotNull(nameof(typeInfo), typeInfo);
+            return ResponseSerializer.WriteJsonBytesAsync(@this, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, typeInfo), false);
+        }
     }
 }

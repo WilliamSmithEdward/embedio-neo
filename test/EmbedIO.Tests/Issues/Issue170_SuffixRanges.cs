@@ -19,7 +19,7 @@ namespace EmbedIO.Tests.Issues
     {
         public static IEnumerable SuffixCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var cached in new[] { false, true })
                     foreach (var zip in new[] { false, true })
                         foreach (var item in new (long Suffix, int Length, int Start, int Status)[]
@@ -34,7 +34,7 @@ namespace EmbedIO.Tests.Issues
 
         public static IEnumerable ProviderCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var cached in new[] { false, true })
                     foreach (var zip in new[] { false, true })
                         yield return new object[] { mode, cached, zip };
@@ -95,7 +95,8 @@ namespace EmbedIO.Tests.Issues
                     (Range: "bytes=7-", Validator: (string?)null, Status: 206, Body: "789"),
                     (Range: "bytes=0-1,7-9", Validator: (string?)null, Status: 200, Body: "0123456789"),
                     (Range: "not-a-range", Validator: (string?)null, Status: 200, Body: "0123456789"),
-                    (Range: "bytes=0-10", Validator: (string?)null, Status: 416, Body: (string?)null),
+                    (Range: "bytes=0-10", Validator: (string?)null, Status: 206, Body: "0123456789"),
+                    (Range: "bytes=10-12", Validator: (string?)null, Status: 416, Body: (string?)null),
                 })
                 {
                     using var request = new HttpRequestMessage(HttpMethod.Get, "file.txt");
@@ -141,7 +142,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task NonSeekableLargeResourceSkipsUsingInt64Offsets(HttpListenerMode mode)
         {
             const long length = (long)int.MaxValue + 4;

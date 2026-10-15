@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 using System.Threading.Tasks;
 using EmbedIO.Utilities;
 
@@ -48,6 +49,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="RegisterController{TController}(Func{TController})"/>
         /// <seealso cref="RegisterController(Type)"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType{TController}()"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public void RegisterController<TController>()
             where TController : WebApiController, new()
             => RegisterControllerType(typeof(TController));
@@ -62,6 +65,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="RegisterController{TController}()"/>
         /// <seealso cref="RegisterController(Type,Func{WebApiController})"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType{TController}(Func{TController})"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public void RegisterController<TController>(Func<TController> factory)
             where TController : WebApiController
             => RegisterControllerType(typeof(TController), factory);
@@ -75,6 +80,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="RegisterController(Type,Func{WebApiController})"/>
         /// <seealso cref="RegisterController{TController}()"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type)"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public void RegisterController(Type controllerType)
             => RegisterControllerType(controllerType);
 
@@ -88,6 +95,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="RegisterController(Type)"/>
         /// <seealso cref="RegisterController{TController}(Func{TController})"/>
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type,Func{WebApiController})"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public void RegisterController(Type controllerType, Func<WebApiController> factory)
             => RegisterControllerType(controllerType, factory);
 
@@ -99,10 +108,57 @@ namespace EmbedIO.WebApi
         /// <param name="controllerType">The controller type.</param>
         /// <param name="factory">Creates a fresh instance for each request.</param>
         /// <param name="release">Releases the instance; use a completed task when its container owns it.</param>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         public void RegisterControllerWithContext(
             Type controllerType,
             Func<IHttpContext, WebApiController?> factory,
             Func<IHttpContext, WebApiController, Task> release)
             => RegisterControllerTypeWithContext(controllerType, factory, release);
+
+        /// <summary>
+        /// <para>Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
+        /// constructing a new instance for each request.</para>
+        /// <para>See <see cref="WebApiModuleBase.RegisterControllerType{TController}(WebApiControllerBinding{TController})"/>
+        /// for further information. This method uses no reflection, so it works in trimmed and Native AOT applications.</para>
+        /// </summary>
+        /// <typeparam name="TController">The type of the controller.</typeparam>
+        /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
+        /// <seealso cref="GeneratedControllerBindingAttribute"/>
+        public void RegisterController<TController>(WebApiControllerBinding<TController> binding)
+            where TController : WebApiController, new()
+            => RegisterControllerType(binding);
+
+        /// <summary>
+        /// <para>Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
+        /// using a factory method.</para>
+        /// <para>See <see cref="WebApiModuleBase.RegisterControllerType{TController}(WebApiControllerBinding{TController}, Func{TController})"/>
+        /// for further information. This method uses no reflection, so it works in trimmed and Native AOT applications.</para>
+        /// </summary>
+        /// <typeparam name="TController">The type of the controller.</typeparam>
+        /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
+        /// <param name="factory">The factory method used to construct instances of <typeparamref name="TController"/>.</param>
+        /// <seealso cref="GeneratedControllerBindingAttribute"/>
+        public void RegisterController<TController>(WebApiControllerBinding<TController> binding, Func<TController> factory)
+            where TController : WebApiController
+            => RegisterControllerType(binding, factory);
+
+        /// <summary>
+        /// Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
+        /// with a context-aware factory and an explicit asynchronous release callback.
+        /// The callback is awaited after binding, invocation and serialization, including failures.
+        /// This method uses no reflection, so it works in trimmed and Native AOT applications.
+        /// </summary>
+        /// <typeparam name="TController">The type of the controller.</typeparam>
+        /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
+        /// <param name="factory">Creates a fresh instance for each request.</param>
+        /// <param name="release">Releases the instance; use a completed task when its container owns it.</param>
+        /// <seealso cref="GeneratedControllerBindingAttribute"/>
+        public void RegisterControllerWithContext<TController>(
+            WebApiControllerBinding<TController> binding,
+            Func<IHttpContext, TController?> factory,
+            Func<IHttpContext, TController, Task> release)
+            where TController : WebApiController
+            => RegisterControllerTypeWithContext(binding, factory, release);
     }
 }

@@ -109,21 +109,6 @@ namespace EmbedIO
         }
 
         /// <summary>
-        /// Sets the type of HTTP listener to <see cref="HttpListenerMode.Microsoft"/>.
-        /// </summary>
-        /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
-        /// <returns><paramref name="this"/> with its <see cref="WebServerOptions.Mode">Mode</see> property
-        /// set to <see cref="HttpListenerMode.Microsoft"/>.</returns>
-        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
-        /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
-        public static WebServerOptions WithMicrosoftHttpListener(this WebServerOptions @this)
-        {
-            if (@this is null) throw new System.NullReferenceException();
-            @this.Mode = HttpListenerMode.Microsoft;
-            return @this;
-        }
-
-        /// <summary>
         /// Sets the X.509 certificate to use for SSL connections.
         /// </summary>
         /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
@@ -136,6 +121,39 @@ namespace EmbedIO
         {
             if (@this is null) throw new System.NullReferenceException();
             @this.Certificate = value;
+            return @this;
+        }
+
+        /// <summary>
+        /// Sets a source of the server certificate that the application can update while the server runs.
+        /// </summary>
+        /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
+        /// <param name="value">The certificate source.</param>
+        /// <returns><paramref name="this"/> with its <see cref="WebServerOptions.CertificateSource">CertificateSource</see> property
+        /// set to <paramref name="value"/>.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
+        public static WebServerOptions WithCertificateSource(this WebServerOptions @this, Net.ServerCertificateSource? value)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.CertificateSource = value;
+            return @this;
+        }
+
+        /// <summary>
+        /// Sets the TLS settings of HTTPS listeners: client certificates, TLS protocol versions and certificate
+        /// selection by server name.
+        /// </summary>
+        /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
+        /// <param name="value">The TLS policy, which is locked with the options.</param>
+        /// <returns><paramref name="this"/> with its <see cref="WebServerOptions.TlsPolicy">TlsPolicy</see> property
+        /// set to <paramref name="value"/>.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
+        public static WebServerOptions WithTlsPolicy(this WebServerOptions @this, Net.ServerTlsPolicy? value)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.TlsPolicy = value;
             return @this;
         }
 
@@ -308,6 +326,29 @@ namespace EmbedIO
             if (@this is null) throw new System.NullReferenceException();
             @this.StoreName = name;
             @this.StoreLocation = location;
+            return @this;
+        }
+
+        /// <summary>
+        /// Sets the TCP connection limits of the managed listener.
+        /// </summary>
+        /// <param name="this">The options instance.</param>
+        /// <param name="maximumConnections">The maximum open connections, or null for no limit.</param>
+        /// <param name="requestHeadersTimeout">The deadline for a new connection's first request head,
+        /// or null for the default of 30 seconds.</param>
+        /// <param name="keepAliveTimeout">The idle deadline between requests, or null for the existing
+        /// behavior.</param>
+        /// <returns>The options instance.</returns>
+        /// <exception cref="NullReferenceException">The options instance is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">A limit is out of range.</exception>
+        /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
+        public static WebServerOptions WithConnectionLimits(this WebServerOptions @this, int? maximumConnections,
+            TimeSpan? requestHeadersTimeout = null, TimeSpan? keepAliveTimeout = null)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+            @this.MaximumConnections = maximumConnections;
+            @this.RequestHeadersTimeout = requestHeadersTimeout;
+            @this.KeepAliveTimeout = keepAliveTimeout;
             return @this;
         }
     }

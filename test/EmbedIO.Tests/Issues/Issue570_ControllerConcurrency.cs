@@ -17,13 +17,9 @@ namespace EmbedIO.Tests.Issues
     public class Issue570_ControllerConcurrency
     {
         [TestCase(HttpListenerMode.EmbedIO, "returned")]
-        [TestCase(HttpListenerMode.Microsoft, "returned")]
         [TestCase(HttpListenerMode.EmbedIO, "manual")]
-        [TestCase(HttpListenerMode.Microsoft, "manual")]
         [TestCase(HttpListenerMode.EmbedIO, "raw-returned")]
-        [TestCase(HttpListenerMode.Microsoft, "raw-returned")]
         [TestCase(HttpListenerMode.EmbedIO, "raw-manual")]
-        [TestCase(HttpListenerMode.Microsoft, "raw-manual")]
         public async Task OverlappingAwaitedRequestsKeepDistinctContextsAndExactResponses(HttpListenerMode mode, string shape)
         {
             var probe = new Batch(12);
@@ -66,7 +62,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ManualWritePlusReturnedValueAttemptsASecondResponseButKeepsOtherRequestsUsable(HttpListenerMode mode)
         {
             var attempted = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -96,7 +91,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task RequestAwareActivationKeepsDisposableResourcesAliveUntilAsyncSerializationCompletes(HttpListenerMode mode)
         {
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

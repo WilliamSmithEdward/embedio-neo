@@ -38,8 +38,40 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: WebSocket handshake status
+      href: guides/websocket-handshake-status.md
+    - name: Outstanding WebSocket deliveries (Neo v2, unreleased)
+      href: guides/websocket-receive-limits.md
+    - name: WebSockets during a graceful drain (unreleased)
+      href: guides/graceful-drain-websockets.md
+    - name: Controller base routes and fallback
+      href: guides/controller-base-routes.md
+    - name: Request trailers (Neo v2, unreleased)
+      href: guides/request-trailers.md
     - name: HTTPS
       href: guides/https.md
+    - name: Rotating the server certificate (unreleased)
+      href: guides/certificate-rotation.md
+    - name: TLS policy (unreleased)
+      href: guides/tls-policy.md
+    - name: Request limits, admission and deadlines
+      href: guides/request-limits.md
+    - name: Request-body byte limits
+      href: guides/request-body-limits.md
+    - name: Rate limiting (unreleased)
+      href: guides/rate-limiting.md
+    - name: Behind a reverse proxy (unreleased)
+      href: guides/forwarded-headers.md
+    - name: Problem details for API errors (unreleased)
+      href: guides/problem-details.md
+    - name: Metrics and tracing
+      href: guides/telemetry.md
+    - name: Trimming and Native AOT
+      href: guides/trimming-and-native-aot.md
+    - name: OpenAPI documents (unreleased)
+      href: guides/openapi.md
+    - name: HTTP/3 listener (unreleased)
+      href: guides/http3.md
     - name: Command-line server
       href: guides/cli.md
     - name: Static folders
@@ -182,6 +214,21 @@
     - name: Streaming write errors
       href: user-reports/streaming-write-errors.md
 
+    - name: Deferred responses
+      href: user-reports/deferred-responses.md
+
+    - name: Server lifetime
+      href: user-reports/server-lifetime.md
+
+    - name: Byte ranges from any module
+      href: user-reports/range-responses.md
+
+    - name: Configuration locking
+      href: user-reports/configuration-locking.md
+
+    - name: Object initialization and fluent setup
+      href: user-reports/object-initialization.md
+
     - name: Fluent Basic authentication
       href: user-reports/fluent-basic-authentication.md
 
@@ -194,20 +241,112 @@
       href: architecture/dependency-injection.md
 - name: Compatibility
   items:
+    - name: Neo v1 to v2
+      href: compatibility/neo-v1-to-v2.md
     - name: Migration
       href: compatibility/migration.md
 - name: Platforms
   items:
+    - name: iOS listener recovery
+      href: platforms/ios-listener-recovery.md
     - name: MAUI HTTPS validation
       href: platforms/maui-https-validation.md
     - name: MAUI Android
       href: platforms/maui-android.md
     - name: MAUI Mac Catalyst
       href: platforms/maui-mac-catalyst.md
+    - name: Native QUIC datagrams on macOS
+      href: platforms/quic-datagrams-macos-validation.md
 - name: Project
   items:
+    - name: Performance and cleanup audit
+      href: project/performance-cleanup-audit.md
     - name: Baseline and direction
       href: project/embed_io_neo.md
+    - name: Modern HTTP engine program
+      href: project/http-engine.md
+    - name: Completed response cleanup
+      href: project/http-completed-response-cleanup.md
+    - name: HTTP/1 idle closure investigation
+      href: project/http1-idle-closure.md
+    - name: Capsule transport development
+      href: project/http-capsule-transport.md
+    - name: Capsule and tunnel lifetime validation
+      href: project/http-capsule-lifetime.md
+    - name: WebTransport session core development
+      href: project/http-webtransport-core.md
+    - name: QUIC lifetime and rebind
+      href: project/quic-lifetime.md
+    - name: Upstream QUIC lifetime report
+      href: project/quic-upstream-report-draft.md
+    - name: Native QUIC abort disposal
+      href: project/native-quic-abort-disposal.md
+    - name: Linux test-host terminations
+      href: project/linux-test-host-terminations.md
+    - name: Native HTTP/3 provider ownership audit
+      href: project/http3-native-provider-audit.md
+    - name: Native QUIC lifetime campaigns
+      href: project/http3-native-lifetime-campaigns.md
+    - name: Managed engine load comparison
+      href: project/http-engine-load-comparison.md
+    - name: Direct request dispatch from connections
+      href: project/http1-direct-dispatch.md
+    - name: HTTP teardown exception attribution
+      href: project/http-teardown-exceptions.md
+    - name: Managed engine load baseline on a second host
+      href: project/http-engine-load-baseline-evo-x1.md
+    - name: Listener retirement test accounting
+      href: project/listener-retirement-test-accounting.md
+    - name: Managed TCP write latency
+      href: project/http-tcp-latency.md
+    - name: Apple Silicon load evidence
+      href: project/macos-performance.md
+    - name: Managed engine endurance campaign
+      href: project/http-engine-endurance.md
+    - name: HTTP/2 graceful output lifetime
+      href: project/http2-drain-output-lifetime.md
+    - name: HTTP/2 output and dispatch performance
+      href: project/http2-performance.md
+    - name: HTTP/3 request path performance
+      href: project/http3-performance.md
+    - name: Multiplexed request-model allocation
+      href: project/http-request-model-allocations.md
+    - name: HTTP/3 handshake and latency on a less loaded host
+      href: project/http3-quiet-host-validation.md
+    - name: HTTP/3 transport abstraction cost
+      href: project/http3-abstraction-cost.md
+    - name: HTTP conformance audit
+      href: project/http-conformance.md
+    - name: HTTP standards applicability audit
+      href: project/http-standards-applicability.md
+    - name: Linux glibc heap aborts
+      href: project/linux-glibc-heap-aborts.md
+    - name: Analyzer warning inventory
+      href: project/analyzer-warning-inventory.md
 
 - name: Suffix byte ranges
   href: user-reports/suffix-range-responses.md
+
+- name: Capsule and tunnel carriers
+  href: guides/capsule-tunnels.md
+
+- name: Informational responses and response trailers
+  href: guides/response-field-sections.md
+
+- name: Shared HTTP/1 listener shutdown
+  href: project/shared-http1-owner-shutdown.md
+
+- name: Response-time diagnostics
+  href: guides/response-timing.md
+
+- name: Controller compression and response length
+  href: guides/controller-compression.md
+
+- name: Precompressed static files
+  href: guides/precompressed-files.md
+
+- name: Standalone native QUIC module lifetime
+  href: project/native-quic-module-lifetime.md
+
+- name: WebTransport upstream readiness
+  href: project/webtransport-upstream-readiness.md

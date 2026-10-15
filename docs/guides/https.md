@@ -21,15 +21,26 @@ Keep the certificate alive until the server stops and is disposed. Protect the
 PFX/password using platform-appropriate secure storage; do not ship a shared
 production private key inside an APK or source repository.
 
+To install a renewed certificate without restarting the server, configure a
+`ServerCertificateSource` instead; see
+[rotating the server certificate](certificate-rotation.md). To require client
+certificates, limit protocol versions or choose the certificate by server name,
+see [TLS policy](tls-policy.md).
+
 The client must trust the issuer and connect using a DNS name or IP address
 present in the certificate's Subject Alternative Name. A self-signed certificate
 needs explicit client trust. Do not use an accept-all validation callback in a
 production client. HTTPS encrypts traffic; configure application authentication
 and authorization separately before exposing privileged routes.
 
-TLS protocol selection is delegated to the runtime/OS using `SslProtocols.None`.
-It does not mean plaintext or enable every protocol. Actual availability depends
-on the OS security provider and its policy. The listener performs authentication
+Neo v2 requires TLS 1.2 or later for HTTPS. The modern asset allows TLS 1.2 and
+TLS 1.3; the retained Standard asset includes TLS 1.3 when the executing runtime
+defines its public protocol flag. Runtime/OS policy still determines availability,
+cipher suites and certificate support. Clients limited to TLS 1.0 or TLS 1.1
+cannot connect; update their TLS stack or the HTTPS backend configuration of any
+intermediary. See the [v1-to-v2 migration guide](../compatibility/neo-v1-to-v2.md#minimum-https-tls-version).
+This change does not establish support on an otherwise unvalidated platform.
+The listener performs authentication
 asynchronously, within the existing 90-second first-request timeout; clients that
 stall the TLS handshake do not hold the socket accept callback. Stopping the
 listener closes pending connections.
@@ -38,7 +49,10 @@ listener closes pending connections.
 
 The initial implementation and tests are tracked by
 [feature #26](https://github.com/WilliamSmithEdward/embedio-neo/issues/26).
-Until CI results are recorded, configured coverage is not a verified support claim.
+Configured coverage is not a verified support claim until its exact-source run
+and results have been checked. MAUI jobs are enabled and required; the rows below
+describe fixture coverage, while each verified result applies to its tested source
+and platform. See the [CI status and retained evidence](../platforms/maui-https-validation.md#ci-status-and-retained-evidence).
 
 | Platform/app model | Coverage and current limits |
 | --- | --- |
@@ -65,10 +79,11 @@ prefix only after testing network access and client trust on the target device.
 ## Windows certificate helpers
 
 `AutoLoadCertificate` and `AutoRegisterCertificate` remain Windows-only helpers
-for certificate stores and `netsh` HTTP.sys bindings. The Microsoft listener uses
-OS configuration; supplying a certificate does not configure HTTP.sys by itself.
-Portable managed-listener hosting uses `WithCertificate` and leaves those helpers
-disabled. Existing default listener selection and HTTP configuration are unchanged.
+for certificate stores and `netsh` HTTP.sys bindings. Neo v2 has removed the
+Microsoft listener backend; an HTTP.sys binding does not configure the replacement
+engine's HTTPS transport. Use `WithCertificate` for portable hosting and leave
+those helpers disabled unless your application deliberately needs their Windows
+configuration side effects. See the [listener migration guide](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
 
 Report deployment problems with the OS/API level, .NET/MAUI runtime, listener
 mode, key-import flags and the complete exception. Omit passwords and private keys.

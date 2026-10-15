@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Net.WebSockets;
@@ -7,7 +9,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Net.Internal;
-using EmbedIO.Internal;
 using EmbedIO.Diagnostics;
 
 namespace EmbedIO.WebSockets.Internal
@@ -23,6 +24,22 @@ namespace EmbedIO.WebSockets.Internal
     {
         public const string SupportedVersion = "13";
 
+        // Outgoing data messages are split into frames of at most this many payload
+        // bytes. Each frame is one transport write, and control frames can be sent
+        // between the frames of a long message.
+        internal const int SendFragmentLength = 65536;
+
+        // The longest due time and period System.Threading.Timer accepts.
+        private const double MaxTimerMilliseconds = uint.MaxValue - 1.0;
+
+        // The accepting module's MaxMessageSize, flowed to the socket constructor so
+        // the limit applies before the receive loop reads its first frame. The
+        // public IHttpContextImpl.AcceptWebSocketAsync contract has no parameter for it.
+        private static readonly AsyncLocal<int> AcceptedMaxMessageSize = new();
+        private static readonly AsyncLocal<bool> AcceptedMessageConsumerPending = new();
+        private static readonly AsyncLocal<WebSocketDeliveryBudget.Connection?> AcceptedDeliveryBudget = new();
+        private readonly WebSocketDeliveryBudget.Connection? _deliveryBudget;
+
         private readonly object _stateSyncRoot = new();
         private readonly object _messageSyncRoot = new();
         private readonly ConcurrentQueue<MessageEventArgs> _messageEventQueue = new();
@@ -33,20 +50,73 @@ namespace EmbedIO.WebSockets.Internal
         private int _sendOperations;
         private int _resourcesReleased;
         private bool _sendGatesDisposed;
+        private bool _closeCompleted;
+        private TaskCompletionSource<bool>? _closedSignal;
+        // Completed when the connection is released; closes that must end in time wait for it.
+        private readonly TaskCompletionSource<bool> _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private Timer? _keepAlive;
+        // 1 while a keep-alive ping waits for an answer. Only pong frames clear it.
+        private int _keepAlivePending;
 
         private volatile WebSocketState _readyState;
         private TaskCompletionSource<bool>? _exitReceiving;
         private FragmentBuffer? _fragmentsBuffer;
         private bool _inMessage;
+        private bool _closeDeferred;
+        private bool _messageConsumerPending;
         private EventHandler<MessageEventArgs>? _onMessage;
         private AutoResetEvent? _receivePong;
-        private Stream? _stream;
+        // The connection-close callback owns the underlying transport lifetime.
+        private EmbedIO.Internal.BorrowedResource<Stream>? _stream;
+        private readonly int _maxMessageSize;
 
-        private WebSocket(HttpConnection connection)
+        private WebSocket(HttpConnection connection) : this(connection.TakeUpgradeStream(), connection.ForceClose) { }
+
+        private WebSocket(Stream stream, Action close)
         {
-            _closeConnection = connection.ForceClose;
-            _stream = connection.Stream;
+            _closeConnection = close;
+            _stream = new EmbedIO.Internal.BorrowedResource<Stream>(stream);
             _readyState = WebSocketState.Open;
+            _maxMessageSize = AcceptedMaxMessageSize.Value;
+            _messageConsumerPending = AcceptedMessageConsumerPending.Value;
+            _deliveryBudget = AcceptedDeliveryBudget.Value;
+            if (_deliveryBudget != null) AcceptedDeliveryBudget.Value = null;
+            // The reservation belongs to this accepted socket, not callbacks or
+            // unrelated sockets created later in the receive loop's async flow.
+            AcceptedMessageConsumerPending.Value = false;
+        }
+
+        // Sets the incoming message size limit for sockets accepted later in the
+        // current asynchronous flow. Zero disables the check.
+        internal static void SetAcceptedMaxMessageSize(int value) => AcceptedMaxMessageSize.Value = value;
+        internal static void SetAcceptedMessageConsumerPending(bool value) => AcceptedMessageConsumerPending.Value = value;
+        internal static void SetAcceptedDeliveryBudget(WebSocketDeliveryBudget.Connection? value)
+            => AcceptedDeliveryBudget.Value = value;
+
+        // Failed/canceled module initialization has no consumer to receive queued
+        // messages. Release its reservation without retaining a deferred close.
+        internal void AbandonPendingMessageConsumer()
+        {
+            bool finish;
+            lock (_messageSyncRoot)
+            {
+                if (!_messageConsumerPending) return;
+                _messageConsumerPending = false;
+                finish = _closeDeferred && !_inMessage && _onMessage == null;
+                if (finish)
+                {
+                    _closeDeferred = false;
+                    DiscardQueuedMessages();
+                }
+            }
+            if (finish) CompleteClose();
+        }
+
+        internal static WebSocket FromStream(Stream stream, Action close)
+        {
+            var socket = new WebSocket(stream, close);
+            socket.Open();
+            return socket;
         }
 
         ~WebSocket()
@@ -61,16 +131,57 @@ namespace EmbedIO.WebSockets.Internal
         {
             add
             {
-                lock (_messageSyncRoot) _onMessage += value;
+                lock (_messageSyncRoot)
+                {
+                    _onMessage += value;
+                    _messageConsumerPending = false;
+                }
                 // Frames can arrive before the module finishes connection initialization.
                 // Registering the consumer must also wake a previously idle queue.
-                _ = Task.Run(Message);
+                ScheduleMessages();
             }
-            remove { lock (_messageSyncRoot) _onMessage -= value; }
+            remove
+            {
+                bool wake;
+                lock (_messageSyncRoot)
+                {
+                    _onMessage -= value;
+                    wake = _closeDeferred && !_inMessage;
+                }
+                // A close deferred for this consumer must still complete.
+                if (wake) _ = Task.Run(Message);
+            }
         }
 
         /// <inheritdoc />
         public WebSocketState State => _readyState;
+
+        internal bool IsApplicationCloseCompleted
+        {
+            get { lock (_stateSyncRoot) return _closeCompleted; }
+        }
+
+        // Completes once the transport has been released, however the socket closed.
+        internal Task Released => _released.Task;
+
+        internal Task WaitForCloseAsync(CancellationToken cancellationToken)
+        {
+            Task closed;
+            lock (_stateSyncRoot)
+            {
+                if (_closeCompleted) return Task.CompletedTask;
+                if (cancellationToken.IsCancellationRequested) return Task.FromCanceled(cancellationToken);
+                closed = (_closedSignal ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            }
+            return cancellationToken.CanBeCanceled ? WaitForCloseOrCancellationAsync(closed, cancellationToken) : closed;
+        }
+
+        private static async Task WaitForCloseOrCancellationAsync(Task closed, CancellationToken token)
+        {
+            var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (token.Register(() => canceled.TrySetCanceled(token)))
+                await (await Task.WhenAny(closed, canceled.Task).ConfigureAwait(false)).ConfigureAwait(false);
+        }
 
         internal bool EmitOnPing { get; set; }
 
@@ -85,38 +196,14 @@ namespace EmbedIO.WebSockets.Internal
         /// <inheritdoc />
         public Task CloseAsync(
             CloseStatusCode code = CloseStatusCode.Undefined,
-            string? reason = null,
+            string? comment = null,
             CancellationToken cancellationToken = default)
         {
-            bool CheckParametersForClose()
-            {
-                if (code == CloseStatusCode.NoStatus && !string.IsNullOrEmpty(reason))
-                {
-                    "'code' cannot have a reason.".Trace(nameof(WebSocket));
-                    return false;
-                }
-
-                if (code == CloseStatusCode.MandatoryExtension)
-                {
-                    "'code' cannot be used by a server.".Trace(nameof(WebSocket));
-                    return false;
-                }
-
-                if (!string.IsNullOrEmpty(reason) && Encoding.UTF8.GetBytes(reason).Length > 123)
-                {
-                    "The size of 'reason' is greater than the allowable max size.".Trace(nameof(WebSocket));
-                    return false;
-                }
-
-                return true;
-            }
+            // Undefined (1004) is this method's default and closes without a status frame.
+            if (code != CloseStatusCode.Undefined)
+                ValidateCloseArguments(code, comment);
 
             if (_readyState != WebSocketState.Open)
-            {
-                return Task.CompletedTask;
-            }
-
-            if (code != CloseStatusCode.Undefined && !CheckParametersForClose())
             {
                 return Task.CompletedTask;
             }
@@ -127,7 +214,24 @@ namespace EmbedIO.WebSockets.Internal
             }
 
             var send = !IsOpcodeReserved(code);
-            return InternalCloseAsync(new PayloadData((ushort)code, reason), send, send, cancellationToken);
+            return InternalCloseAsync(new PayloadData((ushort)code, comment), send, send, cancellationToken);
+        }
+
+        // Rejects, as System.Net.WebSockets does, what a server must not send: a status
+        // outside RFC 6455 7.4 (below 1000, 1006, 1015-2999 and from 5000; 1004 and 1005
+        // are handled by the caller), the client-only MandatoryExtension (1010), a comment
+        // without a status, and a comment beyond the 123 bytes a close frame can carry.
+        private static void ValidateCloseArguments(CloseStatusCode code, string? comment)
+        {
+            var value = (int)code;
+            if (value < 1000 || value >= 5000 || code == CloseStatusCode.Abnormal || (value >= 1015 && value < 3000))
+                throw new ArgumentException($"A close status of {value} cannot be sent.", nameof(code));
+            if (code == CloseStatusCode.MandatoryExtension)
+                throw new ArgumentException("Only a client can close with MandatoryExtension (1010).", nameof(code));
+            if (code == CloseStatusCode.NoStatus && !string.IsNullOrEmpty(comment))
+                throw new ArgumentException("A close without a status cannot have a comment.", nameof(comment));
+            if (!string.IsNullOrEmpty(comment) && Encoding.UTF8.GetByteCount(comment) > 123)
+                throw new ArgumentException("A close comment cannot exceed 123 UTF-8 bytes.", nameof(comment));
         }
 
         /// <summary>
@@ -185,22 +289,32 @@ namespace EmbedIO.WebSockets.Internal
                 throw new WebSocketException(CloseStatusCode.Normal, $"This operation isn\'t available in: {_readyState}");
             }
 
-            using var stream = new WebSocketStream(data, opcode);
+            if (data == null) throw new ArgumentNullException(nameof(data));
             if (!BeginSendOperation())
                 throw new WebSocketException(CloseStatusCode.Normal, "The connection has been closed.");
             var entered = false;
             var started = false;
+            var refused = false;
             try
             {
                 await _messageSendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
                 entered = true;
-                foreach (var frame in stream.GetFrames())
+                var offset = 0;
+                do
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (!await WriteFrameBytesAsync(frame.ToArray(), cancellationToken).ConfigureAwait(false))
-                        return;
+                    var count = Math.Min(data.Length - offset, SendFragmentLength);
+                    var final = offset + count == data.Length;
+                    // A closing socket refuses the frame, so the message was not sent in full.
+                    if (!await WriteDataFrameAsync(offset == 0 ? opcode : Opcode.Cont, final, data, offset, count, cancellationToken).ConfigureAwait(false))
+                    {
+                        refused = true;
+                        break;
+                    }
                     started = true;
+                    offset += count;
                 }
+                while (offset < data.Length);
             }
             catch
             {
@@ -213,6 +327,14 @@ namespace EmbedIO.WebSockets.Internal
                 if (entered) _messageSendGate.Release();
                 EndSendOperation();
             }
+
+            // Thrown outside the handler above: the close that refused the frame owns the connection.
+            if (refused)
+            {
+                throw new WebSocketException(CloseStatusCode.Normal, started
+                    ? "The connection closed before the whole message was sent."
+                    : "The connection closed before the message was sent.");
+            }
         }
 
         /// <inheritdoc />
@@ -220,6 +342,20 @@ namespace EmbedIO.WebSockets.Internal
         {
             Dispose(true);
             GC.SuppressFinalize(this);
+        }
+
+        private static bool IsHandshakeKey(string? value)
+        {
+            // Exactly 16 decoded bytes require 22 alphabet characters and two
+            // padding characters. OWS has already been removed by HTTP parsing.
+            if (value == null || value.Length != 24 || value[22] != '=' || value[23] != '=') return false;
+            for (var i = 0; i < 22; ++i)
+            {
+                var c = value[i];
+                if (!(c >= 'A' && c <= 'Z') && !(c >= 'a' && c <= 'z')
+                    && !(c >= '0' && c <= '9') && c != '+' && c != '/') return false;
+            }
+            return true;
         }
 
         internal static async Task<WebSocket> AcceptAsync(HttpListenerContext httpContext, string acceptedProtocol)
@@ -233,25 +369,21 @@ namespace EmbedIO.WebSockets.Internal
                 return Convert.ToBase64String(sha1.ComputeHash(Encoding.UTF8.GetBytes(buff.ToString())));
             }
 
+            if (!httpContext.Request.IsWebSocketRequest)
+                throw new HttpException(System.Net.HttpStatusCode.BadRequest, "A WebSocket upgrade requires HTTP/1.1 GET, Upgrade and Connection tokens.");
             var requestHeaders = httpContext.Request.Headers;
-
             var webSocketKey = requestHeaders[HttpHeaderNames.SecWebSocketKey];
-
-            if (string.IsNullOrEmpty(webSocketKey))
+            if (!IsHandshakeKey(webSocketKey))
+                throw new HttpException(System.Net.HttpStatusCode.BadRequest, "Sec-WebSocket-Key must encode a 16-byte nonce.");
+            if (requestHeaders[HttpHeaderNames.SecWebSocketVersion] != SupportedVersion)
             {
-                throw new WebSocketException(CloseStatusCode.ProtocolError, $"Includes no {HttpHeaderNames.SecWebSocketKey} header, or it has an invalid value.");
-            }
-
-            var webSocketVersion = requestHeaders[HttpHeaderNames.SecWebSocketVersion];
-
-            if (webSocketVersion == null || webSocketVersion != SupportedVersion)
-            {
-                throw new WebSocketException(CloseStatusCode.ProtocolError, $"Includes no {HttpHeaderNames.SecWebSocketVersion} header, or it has an invalid value.");
+                httpContext.Response.Headers[HttpHeaderNames.SecWebSocketVersion] = SupportedVersion;
+                throw new HttpException(System.Net.HttpStatusCode.BadRequest, "Unsupported WebSocket version.");
             }
 
             var handshakeResponse = new WebSocketHandshakeResponse(httpContext);
 
-            handshakeResponse.Headers[HttpHeaderNames.SecWebSocketAccept] = CreateResponseKey(webSocketKey);
+            handshakeResponse.Headers[HttpHeaderNames.SecWebSocketAccept] = CreateResponseKey(webSocketKey ?? throw new InvalidOperationException("Missing validated WebSocket key."));
 
             if (acceptedProtocol.Length > 0)
             {
@@ -261,8 +393,8 @@ namespace EmbedIO.WebSockets.Internal
             var bytes = Encoding.UTF8.GetBytes(handshakeResponse.ToString());
             await httpContext.Connection.Stream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
 
-            // Signal the original response that headers have been sent.
-            httpContext.HttpListenerResponse.HeadersSent = true;
+            // Publish the committed HTTP/1 wire status to the response model.
+            httpContext.HttpListenerResponse.CommitWebSocketHandshake();
 
             var socket = new WebSocket(httpContext.Connection);
             socket.Open();
@@ -292,7 +424,11 @@ namespace EmbedIO.WebSockets.Internal
         {
             try
             {
-                InternalCloseAsync(new PayloadData((ushort)CloseStatusCode.Away)).ConfigureAwait(false).GetAwaiter().GetResult();
+                // The finalizer must neither write nor wait: it releases without a close handshake.
+                if (disposing)
+                    CloseWithinWaitTimeAsync(new PayloadData((ushort)CloseStatusCode.Away), true, true, true).ConfigureAwait(false).GetAwaiter().GetResult();
+                else
+                    AbortSend();
             }
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
@@ -300,32 +436,73 @@ namespace EmbedIO.WebSockets.Internal
             }
         }
 
-        private async Task InternalCloseAsync(
+        // Closes within _waitTime. A close frame can wait behind another frame, or in a
+        // transport whose peer stopped reading, without limit; its caller must not. When
+        // the time is up the handshake is abandoned and the connection released, which
+        // ends a stalled write too. With boundExistingClose, a close already under way on
+        // another path is bounded the same way. The receive loop passes false: such a close
+        // waits for the loop to end, so the loop must not wait for it.
+        private async Task CloseWithinWaitTimeAsync(PayloadData? payloadData, bool send, bool receive, bool boundExistingClose)
+        {
+            var started = TryBeginClose(ref send, ref receive);
+            if (!started && !boundExistingClose)
+                return;
+
+            using var deadline = new CancellationTokenSource();
+            var closing = started ? CompleteCloseAsync(payloadData, send, receive, deadline.Token) : Task.CompletedTask;
+            var released = _released.Task;
+            if (await Task.WhenAny(released, Task.Delay(_waitTime, deadline.Token)).ConfigureAwait(false) != released)
+                AbortSend();
+
+            // Ends the timer, or a gate wait or write the release has not ended yet.
+            deadline.Cancel();
+            if (!closing.IsCompleted)
+            {
+                _ = closing.ContinueWith(static task => _ = task.Exception, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                return;
+            }
+
+            try { await closing.ConfigureAwait(false); }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
+        }
+
+        private Task InternalCloseAsync(
             PayloadData? payloadData = null,
             bool send = true,
             bool receive = true,
             CancellationToken cancellationToken = default)
+            => TryBeginClose(ref send, ref receive)
+                ? CompleteCloseAsync(payloadData, send, receive, cancellationToken)
+                : Task.CompletedTask;
+
+        // Moves an open socket to CloseSent. False when a close is already under way or done.
+        private bool TryBeginClose(ref bool send, ref bool receive)
         {
             lock (_stateSyncRoot)
             {
                 if (_readyState == WebSocketState.CloseReceived || _readyState == WebSocketState.CloseSent)
                 {
                     "The closing is already in progress.".Trace(nameof(InternalCloseAsync));
-                    return;
+                    return false;
                 }
 
                 if (_readyState == WebSocketState.Closed)
                 {
                     "The connection has been closed.".Trace(nameof(InternalCloseAsync));
-                    return;
+                    return false;
                 }
 
                 send = send && _readyState == WebSocketState.Open;
                 receive = receive && send;
 
                 _readyState = WebSocketState.CloseSent;
+                return true;
             }
+        }
 
+        private async Task CompleteCloseAsync(PayloadData? payloadData, bool send, bool receive, CancellationToken cancellationToken)
+        {
             "Begin closing the connection.".Trace(nameof(InternalCloseAsync));
 
             var bytes = send ? WebSocketFrame.CreateCloseFrame(payloadData).ToArray() : null;
@@ -366,53 +543,159 @@ namespace EmbedIO.WebSockets.Internal
             }
         }
 
-        private void Fatal(string message, Exception? exception = null)
-            => Fatal(message, (exception as WebSocketException)?.Code ?? CloseStatusCode.Abnormal);
+        // Sends the failure status and completes as a server-initiated close: wait for
+        // the peer's close (or the close timeout) while the receive loop drains input.
+        private async Task FailWithCloseHandshakeAsync(WebSocketException error)
+        {
+            var reason = Encoding.UTF8.GetByteCount(error.Message) <= 123 ? error.Message : null;
+            try
+            {
+                await CloseWithinWaitTimeAsync(new PayloadData((ushort)error.Code, reason), true, true, false).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                ex.Log(nameof(WebSocket));
+            }
+        }
 
-        private void Fatal(string message, CloseStatusCode code)
-            => InternalCloseAsync(new PayloadData((ushort)code, message), !IsOpcodeReserved(code), false).ConfigureAwait(false).GetAwaiter().GetResult();
+        private Task FatalAsync(string message, Exception? exception = null)
+            => FatalAsync(message, (exception as WebSocketException)?.Code ?? CloseStatusCode.Abnormal);
 
-        private void Message()
+        private Task FatalAsync(string message, CloseStatusCode code)
+            => CloseWithinWaitTimeAsync(new PayloadData((ushort)code, message), !IsOpcodeReserved(code), false, false);
+
+        // Pings the peer every interval, and releases a connection whose peer has not
+        // answered the previous ping by the next one. Zero or infinite disables it, as
+        // does an interval beyond the timer's range. Only pong frames touch this state,
+        // so messages cost nothing.
+        internal void StartKeepAlive(TimeSpan interval)
+        {
+            if (interval <= TimeSpan.Zero || interval.TotalMilliseconds > MaxTimerMilliseconds)
+                return;
+
+            lock (_stateSyncRoot)
+            {
+                if (_resourcesReleased != 0 || _keepAlive != null)
+                    return;
+                _keepAlive = new Timer(static state => (state as WebSocket)?.KeepAlive(), this, interval, interval);
+            }
+        }
+
+        private void KeepAlive()
+        {
+            if (_readyState != WebSocketState.Open)
+                return;
+
+            if (Interlocked.Exchange(ref _keepAlivePending, 1) != 0)
+            {
+                "The peer did not answer a keep-alive ping; releasing the connection.".Debug(nameof(WebSocket));
+                AbortSend();
+                return;
+            }
+
+            _ = SendKeepAlivePingAsync();
+        }
+
+        private async Task SendKeepAlivePingAsync()
+        {
+            try
+            {
+                _ = await WriteFrameBytesAsync(WebSocketFrame.EmptyPingBytes, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                // A failed write has already released the connection.
+                $"A keep-alive ping could not be sent: {ex.Message}".Debug(nameof(WebSocket));
+            }
+        }
+
+        // Starts a consumer only when one is needed. A frame that queued nothing, or
+        // a queue already being drained, costs no thread-pool work item.
+        private void ScheduleMessages()
         {
             lock (_messageSyncRoot)
             {
-                if (_inMessage || _onMessage == null || _readyState != WebSocketState.Open)
+                if (_inMessage || _onMessage == null || (_messageEventQueue.IsEmpty && !_closeDeferred))
                     return;
-                _inMessage = true;
+            }
+            _ = Task.Run(Message);
+        }
+
+        // Messages are queued only while the connection is open, so everything in the
+        // queue was completed on the wire before any close. A subscribed consumer keeps
+        // draining after the state changes; the close completes once it is idle.
+        private void Message()
+        {
+            bool closed;
+            lock (_messageSyncRoot)
+            {
+                if (_inMessage) return;
+                if (_onMessage != null)
+                {
+                    _inMessage = true;
+                    closed = false;
+                }
+                // Without a consumer only a deferred close remains to be completed.
+                else if (TakeDeferredClose()) closed = true;
+                else return;
             }
 
-            while (true)
+            while (!closed)
             {
                 EventHandler<MessageEventArgs> handler;
                 MessageEventArgs? message;
                 lock (_messageSyncRoot)
                 {
-                    if (_onMessage == null || _readyState != WebSocketState.Open
-                        || !_messageEventQueue.TryDequeue(out message))
+                    var current = _onMessage;
+                    if (current == null || !_messageEventQueue.TryDequeue(out message))
                     {
                         // Publish the idle state atomically with the empty-queue check.
                         // An enqueue or subscription can then start the next consumer.
                         _inMessage = false;
-                        return;
+                        if (!TakeDeferredClose()) return;
+                        break;
                     }
-                    handler = _onMessage;
+                    handler = current;
                 }
                 try { handler(this, message); }
                 catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { ex.Log(nameof(WebSocket)); }
+                finally { if (_deliveryBudget != null) message.Dispose(); }
             }
+            CompleteClose();
+        }
+
+        // Called under _messageSyncRoot. After a close nothing more can be queued, and
+        // whatever an unsubscribed consumer left behind will never be delivered.
+        private bool TakeDeferredClose()
+        {
+            if (!_closeDeferred || _messageConsumerPending) return false;
+            _closeDeferred = false;
+            DiscardQueuedMessages();
+            return true;
         }
 
         private void Open() => StartReceiving();
 
         private Task ProcessCloseFrame(WebSocketFrame frame) => InternalCloseAsync(frame.PayloadData, !frame.PayloadData.HasReservedCode, false);
 
-        private Task ProcessDataFrame(WebSocketFrame frame)
+        private Task ProcessDataFrame(WebSocketFrame frame, WebSocketDeliveryBudget.Lease? delivery)
         {
-            _messageEventQueue.Enqueue(new MessageEventArgs(frame));
+            // The reader allocated this payload for the frame alone; the message takes
+            // ownership instead of copying it.
+            _messageEventQueue.Enqueue(new MessageEventArgs(frame.Opcode, frame.PayloadData.ToArray()) { DeliveryLease = delivery });
             return Task.CompletedTask;
         }
 
-        private Task ProcessFragmentFrame(WebSocketFrame frame)
+        // After a local close, data is discarded but fragment state must still follow
+        // the wire so the peer's continuation frames remain valid until its close.
+        private void DiscardFragmentFrame(WebSocketFrame frame)
+        {
+            _fragmentsBuffer?.Dispose();
+            _fragmentsBuffer = null;
+            InContinuation = frame.Fin == Fin.More;
+        }
+
+        private Task ProcessFragmentFrame(WebSocketFrame frame, WebSocketDeliveryBudget.Lease? delivery)
         {
             if (!InContinuation)
             {
@@ -433,7 +716,9 @@ namespace EmbedIO.WebSockets.Internal
             {
                 using (fragments)
                 {
-                    _messageEventQueue.Enqueue(fragments.GetMessage());
+                    var message = fragments.GetMessage();
+                    message.DeliveryLease = delivery;
+                    _messageEventQueue.Enqueue(message);
                 }
 
                 _fragmentsBuffer = null;
@@ -455,15 +740,16 @@ namespace EmbedIO.WebSockets.Internal
 
         private void ProcessPongFrame()
         {
+            Volatile.Write(ref _keepAlivePending, 0);
             _ = _receivePong?.Set();
             "Received a pong.".Trace(nameof(ProcessPongFrame));
         }
 
-        private async Task<bool> ProcessReceivedFrame(WebSocketFrame frame)
+        private async Task<bool> ProcessReceivedFrame(WebSocketFrame frame, WebSocketDeliveryBudget.Lease? delivery)
         {
             if (frame.IsFragment)
             {
-                await ProcessFragmentFrame(frame).ConfigureAwait(false);
+                await ProcessFragmentFrame(frame, delivery).ConfigureAwait(false);
             }
             else
             {
@@ -471,7 +757,7 @@ namespace EmbedIO.WebSockets.Internal
                 {
                     case Opcode.Text:
                     case Opcode.Binary:
-                        await ProcessDataFrame(frame).ConfigureAwait(false);
+                        await ProcessDataFrame(frame, delivery).ConfigureAwait(false);
                         break;
                     case Opcode.Ping:
                         await ProcessPingFrame(frame).ConfigureAwait(false);
@@ -483,7 +769,7 @@ namespace EmbedIO.WebSockets.Internal
                         await ProcessCloseFrame(frame).ConfigureAwait(false);
                         break;
                     default:
-                        Fatal($"Unsupported frame received: {frame.PrintToString()}", CloseStatusCode.PolicyViolation);
+                        await FatalAsync($"Unsupported frame received: {frame.PrintToString()}", CloseStatusCode.PolicyViolation).ConfigureAwait(false);
                         return false;
                 }
             }
@@ -495,35 +781,126 @@ namespace EmbedIO.WebSockets.Internal
         {
             if (Interlocked.Exchange(ref _resourcesReleased, 1) != 0)
                 return;
-            DisposeSendGatesIfIdle();
-            _closeConnection();
-            _stream = null;
-            while (_messageEventQueue.TryDequeue(out _)) { }
-
-            if (_fragmentsBuffer != null)
+            _deliveryBudget?.StopAdmission();
+            Timer? keepAlive;
+            lock (_stateSyncRoot)
             {
-                _fragmentsBuffer.Dispose();
-                _fragmentsBuffer = null;
-                InContinuation = false;
+                keepAlive = _keepAlive;
+                _keepAlive = null;
             }
-
-            if (_receivePong != null)
+            keepAlive?.Dispose();
+            try
             {
-                _receivePong.Dispose();
-                _receivePong = null;
-            }
+                DisposeSendGatesIfIdle();
+                try { _closeConnection(); }
+                finally
+                {
+                    _stream = null;
 
-            if (_exitReceiving == null)
+                    if (_fragmentsBuffer != null)
+                    {
+                        _fragmentsBuffer.Dispose();
+                        _fragmentsBuffer = null;
+                        InContinuation = false;
+                    }
+
+                    if (_receivePong != null)
+                    {
+                        _receivePong.Dispose();
+                        _receivePong = null;
+                    }
+
+                    _exitReceiving?.TrySetResult(true);
+                    _exitReceiving = null;
+                }
+            }
+            finally
             {
-                return;
+                // A subscribed consumer delivers what was received before the close,
+                // then completes it; observers such as WebSocketModule therefore see
+                // the close after the last message was handed to the application.
+                // Without a consumer the queued data is discarded.
+                bool drain;
+                bool pending;
+                lock (_messageSyncRoot)
+                {
+                    pending = _messageConsumerPending;
+                    drain = _onMessage != null && (_inMessage || !_messageEventQueue.IsEmpty);
+                    _closeDeferred = pending || drain;
+                    if (!pending && !drain) DiscardQueuedMessages();
+                }
+                if (drain) _ = Task.Run(Message);
+                else if (!pending) CompleteClose();
+                _released.TrySetResult(true);
             }
+        }
 
-            _exitReceiving.TrySetResult(true);
-            _exitReceiving = null;
+        private void CompleteClose()
+        {
+            TaskCompletionSource<bool>? closed;
+            lock (_stateSyncRoot)
+            {
+                _closeCompleted = true;
+                closed = _closedSignal;
+                _closedSignal = null;
+            }
+            closed?.TrySetResult(true);
         }
 
         private Task Send(WebSocketFrame frame)
             => WriteFrameBytesAsync(frame.ToArray(), CancellationToken.None);
+
+        // Serializes one unmasked data frame into a pooled buffer so header and
+        // payload leave in a single transport write.
+        private async Task<bool> WriteDataFrameAsync(Opcode opcode, bool final, byte[] data, int offset, int count, CancellationToken cancellationToken)
+        {
+            var header = count < 126 ? 2 : count <= ushort.MaxValue ? 4 : 10;
+            var length = header + count;
+            var buffer = ArrayPool<byte>.Shared.Rent(length);
+            try
+            {
+                buffer[0] = (byte)((final ? 0x80 : 0) | (int)opcode);
+                if (header == 2) buffer[1] = (byte)count;
+                else if (header == 4)
+                {
+                    buffer[1] = 126;
+                    BinaryPrimitives.WriteUInt16BigEndian(buffer.AsSpan(2), (ushort)count);
+                }
+                else
+                {
+                    buffer[1] = 127;
+                    BinaryPrimitives.WriteUInt64BigEndian(buffer.AsSpan(2), (ulong)count);
+                }
+                Buffer.BlockCopy(data, offset, buffer, header, count);
+                return await WriteFrameBytesAsync(buffer, length, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                // Application data must not linger in a shared pool.
+                Array.Clear(buffer, 0, length);
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+
+        // Closes once a message being sent has gone out, so the close does not cut it short; used by drain.
+        // Holding the message gate keeps a new message from starting before the close frame.
+        internal async Task CloseAfterPendingSendAsync(CloseStatusCode code, string reason)
+        {
+            if (!BeginSendOperation())
+                return;
+            var entered = false;
+            try
+            {
+                await _messageSendGate.WaitAsync().ConfigureAwait(false);
+                entered = true;
+                await CloseAsync(code, reason).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (entered) _messageSendGate.Release();
+                EndSendOperation();
+            }
+        }
 
         private bool BeginSendOperation()
         {
@@ -560,7 +937,10 @@ namespace EmbedIO.WebSockets.Internal
             ReleaseResources();
         }
 
-        private async Task<bool> WriteFrameBytesAsync(byte[] bytes, CancellationToken cancellationToken, bool allowClosing = false)
+        private Task<bool> WriteFrameBytesAsync(byte[] bytes, CancellationToken cancellationToken, bool allowClosing = false)
+            => WriteFrameBytesAsync(bytes, bytes.Length, cancellationToken, allowClosing);
+
+        private async Task<bool> WriteFrameBytesAsync(byte[] bytes, int count, CancellationToken cancellationToken, bool allowClosing = false)
         {
             if (!BeginSendOperation())
                 return false;
@@ -576,12 +956,12 @@ namespace EmbedIO.WebSockets.Internal
                     if (_resourcesReleased != 0 || (_readyState != WebSocketState.Open &&
                         !(allowClosing && (_readyState == WebSocketState.CloseSent || _readyState == WebSocketState.CloseReceived))))
                         return false;
-                    transport = _stream;
+                    transport = _stream?.Value;
                 }
                 if (transport == null) return false;
                 cancellationToken.ThrowIfCancellationRequested();
                 writing = true;
-                await transport.WriteAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false);
+                await transport.WriteAsync(bytes, 0, count, cancellationToken).ConfigureAwait(false);
                 return true;
             }
             catch
@@ -599,16 +979,13 @@ namespace EmbedIO.WebSockets.Internal
 
         private void StartReceiving()
         {
-            while (_messageEventQueue.TryDequeue(out _))
-            {
-                // do nothing
-            }
+            DiscardQueuedMessages();
 
             var receivingStopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _exitReceiving = receivingStopped;
             _receivePong = new AutoResetEvent(false);
 
-            var frameStream = new WebSocketFrameStream(_stream);
+            var frameStream = new WebSocketFrameStream(_stream?.Value, false, _deliveryBudget) { MaxMessageSize = _maxMessageSize };
 
             _ = Task.Run(async () =>
             {
@@ -624,25 +1001,55 @@ namespace EmbedIO.WebSockets.Internal
 
                             // Keep reading the close acknowledgement without dispatching
                             // new application messages once local closing has started.
-                            if (_readyState == WebSocketState.CloseSent && frame.Opcode != Opcode.Close)
+                            if (_readyState != WebSocketState.Open && frame.Opcode != Opcode.Close)
+                            {
+                                frameStream.TakeCompletedDelivery()?.Dispose();
+                                if (frame.IsFragment) DiscardFragmentFrame(frame);
                                 continue;
+                            }
 
-                            var result = await ProcessReceivedFrame(frame).ConfigureAwait(false);
+                            var delivery = frameStream.TakeCompletedDelivery();
+                            bool result;
+                            try { result = await ProcessReceivedFrame(frame, delivery).ConfigureAwait(false); }
+                            catch { delivery?.Dispose(); throw; }
 
                             if (!result || frame.Opcode == Opcode.Close || _readyState == WebSocketState.Closed)
                                 return;
 
-                            _ = Task.Run(Message);
+                            ScheduleMessages();
+                        }
+                        catch (WebSocketException ex) when (frameStream.Rejected is { } rejected
+                            && (_readyState == WebSocketState.Open || _readyState == WebSocketState.CloseSent))
+                        {
+                            // Frame boundaries are intact, so keep reading (and discarding)
+                            // until the peer acknowledges the close. Closing the transport
+                            // with its bytes unread would reset the connection, and the
+                            // peer could lose the close frame and its status code.
+                            if (rejected.IsFragment) DiscardFragmentFrame(rejected);
+                            if (_readyState == WebSocketState.Open) _ = FailWithCloseHandshakeAsync(ex);
                         }
                         catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
                         {
-                            Fatal("An exception has occurred while receiving.", ex);
+                            // Sending the failure status can itself fail on a broken
+                            // transport. Resources are released either way; nothing
+                            // observes this task, so the error must not escape it.
+                            try { await FatalAsync("An exception has occurred while receiving.", ex).ConfigureAwait(false); }
+                            catch (Exception closeError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(closeError))
+                            {
+                                closeError.Log(nameof(WebSocket));
+                            }
                             return;
                         }
                     }
                 }
-                finally { receivingStopped.TrySetResult(true); }
+                finally { frameStream.Dispose(); receivingStopped.TrySetResult(true); }
             });
+        }
+
+        private void DiscardQueuedMessages()
+        {
+            while (_messageEventQueue.TryDequeue(out var message))
+                if (_deliveryBudget != null) message.Dispose();
         }
     }
 }

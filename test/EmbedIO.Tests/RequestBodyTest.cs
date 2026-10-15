@@ -3,6 +3,8 @@ using System.IO;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Threading.Tasks;
 using EmbedIO.Testing;
@@ -51,10 +53,20 @@ namespace EmbedIO.Tests
         [TestCase("deflate", true, HttpStatusCode.OK)]
         [TestCase("gzip", false, HttpStatusCode.BadRequest)]
         [TestCase("deflate", false, HttpStatusCode.BadRequest)]
-        [TestCase("br", true, HttpStatusCode.BadRequest)]
+        [TestCase("br", true, HttpStatusCode.OK)]
+        [TestCase("BR", true, HttpStatusCode.OK)]
+        [TestCase("br", false, HttpStatusCode.BadRequest)]
+        [TestCase("GZip", true, HttpStatusCode.OK)]
+        [TestCase("DEFLATE", true, HttpStatusCode.OK)]
+        [TestCase("unknown", true, HttpStatusCode.BadRequest)]
         public async Task CompressedRequestsRequireExplicitSupport(string encoding, bool supported, HttpStatusCode expected)
         {
             const string payload = "decompressed Zürich €";
+            var target = typeof(WebServer).Assembly.GetCustomAttribute<TargetFrameworkAttribute>()?.FrameworkName
+                ?? throw new AssertionException("Missing core target framework.");
+            if (string.Equals(encoding, "br", StringComparison.OrdinalIgnoreCase)
+                && target.StartsWith(".NETStandard,", StringComparison.Ordinal))
+                expected = HttpStatusCode.BadRequest;
             var url = Resources.GetServerAddress();
             using var server = new WebServer(options =>
             {
@@ -68,9 +80,11 @@ namespace EmbedIO.Tests
             try
             {
                 using var bytes = new MemoryStream();
-                using (Stream compressor = encoding == "deflate"
+                using (Stream compressor = string.Equals(encoding, "deflate", StringComparison.OrdinalIgnoreCase)
                     ? new DeflateStream(bytes, CompressionMode.Compress, true)
-                    : new GZipStream(bytes, CompressionMode.Compress, true))
+                    : string.Equals(encoding, "br", StringComparison.OrdinalIgnoreCase)
+                        ? new BrotliStream(bytes, CompressionMode.Compress, true)
+                        : new GZipStream(bytes, CompressionMode.Compress, true))
                 {
                     var data = Encoding.UTF8.GetBytes(payload);
                     compressor.Write(data, 0, data.Length);

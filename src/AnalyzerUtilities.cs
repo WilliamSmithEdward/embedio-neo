@@ -39,5 +39,19 @@ namespace EmbedIO.Internal
             return text.Replace(oldValue, newValue, StringComparison.Ordinal);
 #endif
         }
+
+        // Lowercases only A-Z, independent of culture; returns the same instance when nothing changes.
+        internal static string ToLowerAscii(string text)
+        {
+            char[]? result = null;
+            for (var index = 0; index < text.Length; index++)
+            {
+                var character = text[index];
+                if (character is < 'A' or > 'Z') continue;
+                result ??= text.ToCharArray();
+                result[index] = (char)(character + 32);
+            }
+            return result is null ? text : new string(result);
+        }
     }
 }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -16,6 +17,9 @@ namespace EmbedIO.WebApi
     /// </summary>
     public abstract class WebApiModuleBase : RoutingModuleBase
     {
+        internal const string ReflectionMessage = "Controllers are discovered, bound and invoked through reflection and runtime code generation, "
+            + "which trimming and Native AOT do not support. Register routes with RoutingModule or ActionModule delegates instead.";
+
         private const string GetRequestDataAsyncMethodName = nameof(IRequestDataAttribute<WebApiController>.GetRequestDataAsync);
 
         private static readonly MethodInfo PreProcessRequestMethod = typeof(WebApiController).GetMethod(nameof(WebApiController.PreProcessRequest)) ?? throw new MissingMemberException("PreProcessRequestMethod");
@@ -24,10 +28,13 @@ namespace EmbedIO.WebApi
         private static readonly MethodInfo AwaitResultMethod = typeof(WebApiModuleBase).GetMethod(nameof(AwaitResult), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("AwaitResultMethod");
         private static readonly MethodInfo AwaitAndCastResultMethod = typeof(WebApiModuleBase).GetMethod(nameof(AwaitAndCastResult), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("AwaitAndCastResultMethod");
         private static readonly MethodInfo DisposeMethod = typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose)) ?? throw new MissingMemberException("DisposeMethod");
+        private static readonly MethodInfo CastControllerMethod = typeof(WebApiModuleBase).GetMethod(nameof(CastController), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("CastControllerMethod");
         private static readonly MethodInfo SerializeResultAsyncMethod = typeof(WebApiModuleBase).GetMethod(nameof(SerializeResultAsync), BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new MissingMemberException("SerializeResultAsyncMethod");
 
         private readonly HashSet<Type> _controllerTypes = new HashSet<Type>();
-        private List<(HttpVerbs Verb, RouteMatcher Matcher, MethodInfo Method, Type ControllerType)>? _caseInsensitiveDeclarations;
+        // Method identifies the handler: a MethodInfo for reflection registration,
+        // a generated handler ID string for a WebApiControllerBinding.
+        private List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, Type ControllerType)>? _caseInsensitiveDeclarations;
         private bool _caseInsensitiveRoutes;
 
         /// <summary>
@@ -124,6 +131,8 @@ namespace EmbedIO.WebApi
         /// </remarks>
         /// <seealso cref="RegisterControllerType{TController}(Func{TController})"/>
         /// <seealso cref="RegisterControllerType(Type)"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerType<TController>()
             where TController : WebApiController, new()
             => RegisterControllerType(typeof(TController));
@@ -170,6 +179,8 @@ namespace EmbedIO.WebApi
         /// </remarks>
         /// <seealso cref="RegisterControllerType{TController}()"/>
         /// <seealso cref="RegisterControllerType(Type,Func{WebApiController})"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerType<TController>(Func<TController> factory)
             where TController : WebApiController
             => RegisterControllerType(typeof(TController), factory);
@@ -208,6 +219,8 @@ namespace EmbedIO.WebApi
         /// </remarks>
         /// <seealso cref="RegisterControllerType(Type,Func{WebApiController})"/>
         /// <seealso cref="RegisterControllerType{TController}()"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerType(Type controllerType)
         {
             EnsureConfigurationNotLocked();
@@ -232,8 +245,10 @@ namespace EmbedIO.WebApi
         /// <list type="bullet">
         /// <item><description><paramref name="controllerType"/> must be a subclass of <see cref="WebApiController"/>;</description></item>
         /// <item><description><paramref name="controllerType"/> must not be a generic type definition;</description></item>
-        /// <item><description><paramref name="factory"/>'s return type must be either <paramref name="controllerType"/>
-        /// or a subclass of <paramref name="controllerType"/>.</description></item>
+        /// <item><description><paramref name="factory"/>'s declared return type must be related to <paramref name="controllerType"/>:
+        /// <paramref name="controllerType"/>, a subclass of it, or a base class such as <see cref="WebApiController"/>.
+        /// A factory declared with a base class is checked when it creates a controller, and throws
+        /// <see cref="InvalidOperationException"/> if the instance is not a <paramref name="controllerType"/>.</description></item>
         /// </list>
         /// </summary>
         /// <param name="controllerType">The type of the controller.</param>
@@ -272,18 +287,26 @@ namespace EmbedIO.WebApi
         /// </remarks>
         /// <seealso cref="RegisterControllerType(Type)"/>
         /// <seealso cref="RegisterControllerType{TController}(Func{TController})"/>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerType(Type controllerType, Func<WebApiController> factory)
         {
             EnsureConfigurationNotLocked();
 
             controllerType = ValidateControllerType(nameof(controllerType), controllerType, true);
             factory = Validate.NotNull(nameof(factory), factory);
-            if (!controllerType.IsAssignableFrom(factory.Method.ReturnType))
+
+            // A lambda converted to Func<WebApiController> is compiled with that return type, so only
+            // a return type unrelated to the controller is rejected here; the instance is checked when created.
+            var returnType = factory.Method.ReturnType;
+            if (!controllerType.IsAssignableFrom(returnType) && !returnType.IsAssignableFrom(controllerType))
                 throw new ArgumentException("Factory method has an incorrect return type.", nameof(factory));
 
-            var expression = Expression.Call(
+            Expression expression = Expression.Call(
                 factory.Target == null ? null : Expression.Constant(factory.Target),
                 factory.Method);
+            if (!controllerType.IsAssignableFrom(returnType))
+                expression = Expression.Call(CastControllerMethod.MakeGenericMethod(controllerType), expression);
 
             if (!TryRegisterControllerTypeCore(controllerType, expression))
                 throw new ArgumentException($"Type {controllerType.Name} contains no controller methods.");
@@ -296,6 +319,8 @@ namespace EmbedIO.WebApi
         /// <param name="controllerType">The concrete controller type.</param>
         /// <param name="factory">Creates a fresh controller for the request.</param>
         /// <param name="release">Releases the controller, or does nothing for container-owned instances.</param>
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerTypeWithContext(
             Type controllerType,
             Func<IHttpContext, WebApiController?> factory,
@@ -322,6 +347,22 @@ namespace EmbedIO.WebApi
         }
 
         private static T AwaitResult<T>(Task<T> task) => task.ConfigureAwait(false).GetAwaiter().GetResult();
+
+        // The constructed request data interfaces of one generic definition that a parameter's
+        // attributes implement, in attribute and interface order.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        private static List<(Attribute Attr, Type Intf)> RequestDataInterfaces(ParameterInfo parameter, Type definition)
+            => parameter.GetCustomAttributes<Attribute>()
+                .SelectMany(attr => attr.GetType().GetInterfaces()
+                    .Where(x => x.IsConstructedGenericType && x.GetGenericTypeDefinition() == definition)
+                    .Select(x => (attr, x)))
+                .ToList();
+
+        // Checks what a factory declared with a base return type actually created.
+        private static TController CastController<TController>(WebApiController? controller)
+            where TController : WebApiController
+            => controller as TController ?? throw new InvalidOperationException(
+                $"The controller factory for {typeof(TController).FullName} returned {controller?.GetType().FullName ?? "null"}.");
 
         private static T? AwaitAndCastResult<T>(string parameterName, Task<object> task)
         {
@@ -364,6 +405,8 @@ namespace EmbedIO.WebApi
         // - serializes the returned object (or the result of the returned task),
         //   unless the return type of the controller method is void or Task;
         // - if the controller implements IDisposable, disposes it.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
         private RouteHandlerCallback CompileHandler(
             Expression factoryExpression, MethodInfo method, RouteMatcher matcher,
             Func<IHttpContext, WebApiController?>? contextFactory,
@@ -373,216 +416,225 @@ namespace EmbedIO.WebApi
             var contextInLambda = Expression.Parameter(typeof(IHttpContext), "context");
             var routeInLambda = Expression.Parameter(typeof(RouteMatch), "route");
 
-            // Local variables
-            var locals = new List<ParameterExpression>();
-
             // Local variable for controller
             var controllerType = method.ReflectedType ?? throw new InvalidOperationException("The handler has no reflected controller type.");
             var controller = Expression.Variable(controllerType, "controller");
-            locals.Add(controller);
 
-            // Label for return statement
-            var returnTarget = Expression.Label(typeof(Task));
+            // Build the handler method call, then wrap its result in a Task that serializes it when needed.
+            var handlerArguments = BindHandlerArguments(method, controllerType, matcher, controller, routeInLambda);
+            var callMethod = WrapHandlerResult(Expression.Call(controller, method, handlerArguments), method.ReturnType, contextInLambda);
 
-            // Contents of lambda body
-            var bodyContents = new List<Expression>();
+            return contextFactory != null
+                ? CompileActivatedHandler(controllerType, controller, callMethod, contextInLambda, routeInLambda, contextFactory, release)
+                : CompileOwnedHandler(controllerType, controller, factoryExpression, callMethod, contextInLambda, routeInLambda);
+        }
 
-            // Build lambda arguments
-            var parameters = method.GetParameters();
-            var parameterCount = parameters.Length;
+        // One argument expression per handler parameter: request data provided by an attribute,
+        // the converted route parameter with the same name, or the parameter's default.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static List<Expression> BindHandlerArguments(MethodInfo method, Type controllerType, RouteMatcher matcher, ParameterExpression controller, ParameterExpression routeInLambda)
+        {
             var handlerArguments = new List<Expression>();
-            for (var i = 0; i < parameterCount; i++)
+            foreach (var parameter in method.GetParameters())
+                handlerArguments.Add(BindHandlerArgument(parameter, method, controllerType, matcher, controller, routeInLambda));
+
+            return handlerArguments;
+        }
+
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static Expression BindHandlerArgument(ParameterInfo parameter, MethodInfo method, Type controllerType, RouteMatcher matcher, ParameterExpression controller, ParameterExpression routeInLambda)
+        {
+            // First, check for generic request data interfaces in attributes, then for non-generic ones.
+            var requestData = TypedRequestData(parameter, controllerType, controller, out var typedAttributes);
+            var untypedAttributes = false;
+            if (requestData == null)
+                requestData = UntypedRequestData(parameter, controllerType, controller, out untypedAttributes);
+            if (requestData != null)
+                return requestData;
+
+            // There are request data attributes, but none is suitable for the type of the parameter:
+            // the user expects data to be injected but provided no way of injecting the right data type.
+            if (typedAttributes || untypedAttributes)
+                throw new InvalidOperationException($"No request data attribute for parameter {parameter.Name} of method {controllerType.Name}.{method.Name} can provide the expected data type.");
+
+            // Check whether the name of the handler parameter matches the name of a route parameter.
+            var parameterType = parameter.ParameterType;
+            var index = IndexOfRouteParameter(matcher, parameter.Name ?? throw new InvalidOperationException("The handler parameter has no name."));
+            if (index >= 0)
             {
-                var parameter = parameters[i];
-                var parameterType = parameter.ParameterType;
-                var failedToUseRequestDataAttributes = false;
+                // Convert the parameter to the handler's parameter type.
+                var convertFromRoute = FromString.ConvertExpressionTo(
+                    parameterType,
+                    Expression.Property(routeInLambda, "Item", Expression.Constant(index)));
 
-                // First, check for generic request data interfaces in attributes
-                var requestDataInterfaces = parameter.GetCustomAttributes<Attribute>()
-                        .Aggregate(new List<(Attribute Attr, Type Intf)>(), (list, attr) =>
-                        {
-                            list.AddRange(attr.GetType().GetInterfaces()
-                                .Where(x => x.IsConstructedGenericType
-                                         && x.GetGenericTypeDefinition() == typeof(IRequestDataAttribute<,>))
-                                .Select(x => (attr, x)));
-
-                            return list;
-                        });
-
-                // If there are any...
-                if (requestDataInterfaces.Count > 0)
-                {
-                    // Take the first that applies to both controller and parameter type
-                    var (attr, intf) = requestDataInterfaces.FirstOrDefault(
-                        x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType)
-                          && parameterType.IsAssignableFrom(x.Intf.GenericTypeArguments[1]));
-
-                    if (attr != null)
-                    {
-                        // Use the request data interface to get a value for the parameter.
-                        Expression useRequestDataInterface = Expression.Call(
-                            Expression.Constant(attr),
-                            intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
-                            controller,
-                            Expression.Constant(parameter.Name));
-
-                        // We should await the call to GetRequestDataAsync.
-                        // For lack of a better way, call AwaitResult with an appropriate type argument.
-                        useRequestDataInterface = Expression.Call(
-                            AwaitResultMethod.MakeGenericMethod(intf.GenericTypeArguments[1]),
-                            useRequestDataInterface);
-
-                        handlerArguments.Add(useRequestDataInterface);
-                        continue;
-                    }
-
-                    // If there is no interface to use, the user expects data to be injected
-                    // but provided no way of injecting the right data type.
-                    failedToUseRequestDataAttributes = true;
-                }
-
-                // Check for non-generic request data interfaces in attributes
-                requestDataInterfaces = parameter.GetCustomAttributes<Attribute>()
-                        .Aggregate(new List<(Attribute Attr, Type Intf)>(), (list, attr) =>
-                        {
-                            list.AddRange(attr.GetType().GetInterfaces()
-                                .Where(x => x.IsConstructedGenericType
-                                         && x.GetGenericTypeDefinition() == typeof(IRequestDataAttribute<>))
-                                .Select(x => (attr, x)));
-
-                            return list;
-                        });
-
-                // If there are any...
-                if (requestDataInterfaces.Count > 0)
-                {
-                    // Take the first that applies to the controller
-                    var (attr, intf) = requestDataInterfaces.FirstOrDefault(
-                        x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType));
-
-                    if (attr != null)
-                    {
-                        // Use the request data interface to get a value for the parameter.
-                        Expression useRequestDataInterface = Expression.Call(
-                            Expression.Constant(attr),
-                            intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
-                            controller,
-                            Expression.Constant(parameterType),
-                            Expression.Constant(parameter.Name));
-
-                        // We should await the call to GetRequestDataAsync,
-                        // then cast the result to the parameter type.
-                        // For lack of a better way to do the former,
-                        // and to save one function call,
-                        // just call AwaitAndCastResult with an appropriate type argument.
-                        useRequestDataInterface = Expression.Call(
-                            AwaitAndCastResultMethod.MakeGenericMethod(parameterType),
-                            Expression.Constant(parameter.Name),
-                            useRequestDataInterface);
-
-                        handlerArguments.Add(useRequestDataInterface);
-                        continue;
-                    }
-
-                    // If there is no interface to use, the user expects data to be injected
-                    // but provided no way of injecting the right data type.
-                    failedToUseRequestDataAttributes = true;
-                }
-
-                // There are request data attributes, but none is suitable
-                // for the type of the parameter.
-                if (failedToUseRequestDataAttributes)
-                    throw new InvalidOperationException($"No request data attribute for parameter {parameter.Name} of method {controllerType.Name}.{method.Name} can provide the expected data type.");
-
-                // Check whether the name of the handler parameter matches the name of a route parameter.
-                var index = IndexOfRouteParameter(matcher, parameter.Name ?? throw new InvalidOperationException("The handler parameter has no name."));
-                if (index >= 0)
-                {
-                    // Convert the parameter to the handler's parameter type.
-                    var convertFromRoute = FromString.ConvertExpressionTo(
-                        parameterType,
-                        Expression.Property(routeInLambda, "Item", Expression.Constant(index)));
-
-                    handlerArguments.Add(convertFromRoute ?? throw SelfCheck.Failure($"{nameof(convertFromRoute)} is null."));
-                    continue;
-                }
-
-                // No route parameter has the same name as a handler parameter.
-                // Pass the default for the parameter type.
-                handlerArguments.Add(parameter.HasDefaultValue
-                    ? (Expression)Expression.Constant(parameter.DefaultValue)
-                    : Expression.Default(parameterType));
+                return convertFromRoute ?? throw SelfCheck.Failure($"{nameof(convertFromRoute)} is null.");
             }
 
-            // Create the controller and initialize its properties
-            bodyContents.Add(Expression.Assign(controller, factoryExpression));
-            bodyContents.Add(Expression.Call(controller, HttpContextSetter, contextInLambda));
-            bodyContents.Add(Expression.Call(controller, RouteSetter, routeInLambda));
+            // No route parameter has the same name as a handler parameter.
+            // Pass the default for the parameter type.
+            return parameter.HasDefaultValue
+                ? (Expression)Expression.Constant(parameter.DefaultValue)
+                : Expression.Default(parameterType);
+        }
 
-            // Build the handler method call
-            Expression callMethod = Expression.Call(controller, method, handlerArguments);
-            var methodReturnType = method.ReturnType;
+        // Request data from the first IRequestDataAttribute<TController, TData> attribute that applies
+        // to both the controller and the parameter type; null when none applies. declared reports
+        // whether the parameter carries any attribute of that kind.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static Expression? TypedRequestData(ParameterInfo parameter, Type controllerType, ParameterExpression controller, out bool declared)
+        {
+            var requestDataInterfaces = RequestDataInterfaces(parameter, typeof(IRequestDataAttribute<,>));
+            declared = requestDataInterfaces.Count > 0;
+            if (!declared)
+                return null;
+
+            // Take the first that applies to both controller and parameter type
+            var parameterType = parameter.ParameterType;
+            var (attr, intf) = requestDataInterfaces.FirstOrDefault(
+                x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType)
+                  && parameterType.IsAssignableFrom(x.Intf.GenericTypeArguments[1]));
+            if (attr == null)
+                return null;
+
+            // Use the request data interface to get a value for the parameter.
+            Expression useRequestDataInterface = Expression.Call(
+                Expression.Constant(attr),
+                intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
+                controller,
+                Expression.Constant(parameter.Name));
+
+            // We should await the call to GetRequestDataAsync.
+            // For lack of a better way, call AwaitResult with an appropriate type argument.
+            return Expression.Call(
+                AwaitResultMethod.MakeGenericMethod(intf.GenericTypeArguments[1]),
+                useRequestDataInterface);
+        }
+
+        // Request data from the first IRequestDataAttribute<TController> attribute that applies to the
+        // controller, cast to the parameter type; null when none applies. declared reports whether
+        // the parameter carries any attribute of that kind.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static Expression? UntypedRequestData(ParameterInfo parameter, Type controllerType, ParameterExpression controller, out bool declared)
+        {
+            var requestDataInterfaces = RequestDataInterfaces(parameter, typeof(IRequestDataAttribute<>));
+            declared = requestDataInterfaces.Count > 0;
+            if (!declared)
+                return null;
+
+            // Take the first that applies to the controller
+            var (attr, intf) = requestDataInterfaces.FirstOrDefault(
+                x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType));
+            if (attr == null)
+                return null;
+
+            // Use the request data interface to get a value for the parameter.
+            var parameterType = parameter.ParameterType;
+            Expression useRequestDataInterface = Expression.Call(
+                Expression.Constant(attr),
+                intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
+                controller,
+                Expression.Constant(parameterType),
+                Expression.Constant(parameter.Name));
+
+            // We should await the call to GetRequestDataAsync,
+            // then cast the result to the parameter type.
+            // For lack of a better way to do the former,
+            // and to save one function call,
+            // just call AwaitAndCastResult with an appropriate type argument.
+            return Expression.Call(
+                AwaitAndCastResultMethod.MakeGenericMethod(parameterType),
+                Expression.Constant(parameter.Name),
+                useRequestDataInterface);
+        }
+
+        // Wraps the handler call in a Task: a Task passes through, void completes immediately,
+        // and a Task<TResult> or a synchronous result is serialized.
+        [RequiresUnreferencedCode(ReflectionMessage)]
+        [RequiresDynamicCode(ReflectionMessage)]
+        private Expression WrapHandlerResult(Expression callMethod, Type methodReturnType, ParameterExpression contextInLambda)
+        {
             if (methodReturnType == typeof(Task))
             {
                 // Nothing to do
+                return callMethod;
             }
-            else if (methodReturnType == typeof(void))
+
+            if (methodReturnType == typeof(void))
             {
                 // Convert void to Task by evaluating Task.CompletedTask
-                callMethod = Expression.Block(typeof(Task), callMethod, Expression.Constant(Task.CompletedTask));
+                return Expression.Block(typeof(Task), callMethod, Expression.Constant(Task.CompletedTask));
             }
-            else if (IsGenericTaskType(methodReturnType, out var resultType))
+
+            if (IsGenericTaskType(methodReturnType, out var resultType))
             {
                 // Return a Task that serializes the result of a Task<TResult>
-                callMethod = Expression.Call(
+                return Expression.Call(
                     Expression.Constant(this),
                     SerializeResultAsyncMethod.MakeGenericMethod(resultType),
                     contextInLambda,
                     callMethod);
             }
-            else
-            {
-                // Return a Task that serializes a result obtained synchronously
-                callMethod = Expression.Call(
-                    Serializer.Target == null ? null : Expression.Constant(Serializer.Target),
-                    Serializer.Method,
-                    contextInLambda,
-                    Expression.Convert(callMethod, typeof(object)));
-            }
 
-            if (contextFactory != null)
-            {
-                // Compile binding/invocation once, with activation and awaited release
-                // outside the expression tree. The legacy path below is unchanged.
-                var instance = Expression.Parameter(typeof(WebApiController), "instance");
-                var invoke = Expression.Lambda<Func<WebApiController, IHttpContext, RouteMatch, Task>>(
-                    Expression.Block(locals,
-                        Expression.Assign(controller, Expression.Convert(instance, controllerType)),
-                        Expression.Call(controller, PreProcessRequestMethod),
-                        callMethod),
-                    instance, contextInLambda, routeInLambda).Compile();
+            // Return a Task that serializes a result obtained synchronously
+            return Expression.Call(
+                Serializer.Target == null ? null : Expression.Constant(Serializer.Target),
+                Serializer.Method,
+                contextInLambda,
+                Expression.Convert(callMethod, typeof(object)));
+        }
 
-                return async (context, route) =>
+        // Compiles binding and invocation once, with activation and the awaited release
+        // outside the expression tree.
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static RouteHandlerCallback CompileActivatedHandler(
+            Type controllerType, ParameterExpression controller, Expression callMethod,
+            ParameterExpression contextInLambda, ParameterExpression routeInLambda,
+            Func<IHttpContext, WebApiController?> contextFactory,
+            Func<IHttpContext, WebApiController, Task>? release)
+        {
+            var instance = Expression.Parameter(typeof(WebApiController), "instance");
+            var invoke = Expression.Lambda<Func<WebApiController, IHttpContext, RouteMatch, Task>>(
+                Expression.Block(new[] { controller },
+                    Expression.Assign(controller, Expression.Convert(instance, controllerType)),
+                    Expression.Call(controller, PreProcessRequestMethod),
+                    callMethod),
+                instance, contextInLambda, routeInLambda).Compile();
+
+            return async (context, route) =>
+            {
+                var created = contextFactory(context);
+                if (created == null)
+                    throw new InvalidOperationException($"The factory for {controllerType.FullName} returned null.");
+
+                try
                 {
-                    var created = contextFactory(context);
-                    if (created == null)
-                        throw new InvalidOperationException($"The factory for {controllerType.FullName} returned null.");
+                    if (!controllerType.IsInstanceOfType(created))
+                        throw new InvalidOperationException($"The factory for {controllerType.FullName} returned {created.GetType().FullName}.");
 
-                    try
-                    {
-                        if (!controllerType.IsInstanceOfType(created))
-                            throw new InvalidOperationException($"The factory for {controllerType.FullName} returned {created.GetType().FullName}.");
+                    created.HttpContext = context;
+                    created.Route = route;
+                    await invoke(created, context, route).ConfigureAwait(false);
+                }
+                finally
+                {
+                    await (release ?? throw new InvalidOperationException("No controller release callback is configured."))(context, created).ConfigureAwait(false);
+                }
+            };
+        }
 
-                        created.HttpContext = context;
-                        created.Route = route;
-                        await invoke(created, context, route).ConfigureAwait(false);
-                    }
-                    finally
-                    {
-                        await (release ?? throw new InvalidOperationException("No controller release callback is configured."))(context, created).ConfigureAwait(false);
-                    }
-                };
-            }
+        // The legacy path: the compiled handler creates the controller from the factory expression,
+        // initializes its properties, calls the method and disposes a disposable controller.
+        [RequiresDynamicCode(ReflectionMessage)]
+        private static RouteHandlerCallback CompileOwnedHandler(
+            Type controllerType, ParameterExpression controller, Expression factoryExpression, Expression callMethod,
+            ParameterExpression contextInLambda, ParameterExpression routeInLambda)
+        {
+            // Label for return statement
+            var returnTarget = Expression.Label(typeof(Task));
 
             // Operations to perform on the controller.
             // Pseudocode:
@@ -610,14 +662,15 @@ namespace EmbedIO.WebApi
                     Expression.Call(Expression.TypeAs(controller, typeof(IDisposable)), DisposeMethod));
             }
 
-            bodyContents.Add(workWithController);
-
-            // At the end of the lambda body is the target of return statements.
-            bodyContents.Add(Expression.Label(returnTarget, Expression.Constant(Task.FromResult(false))));
-
-            // Build and compile the lambda.
+            // Create the controller and initialize its properties, work with it, and end the body
+            // at the target of return statements. Then build and compile the lambda.
             return Expression.Lambda<RouteHandlerCallback>(
-                Expression.Block(locals, bodyContents),
+                Expression.Block(new[] { controller },
+                    Expression.Assign(controller, factoryExpression),
+                    Expression.Call(controller, HttpContextSetter, contextInLambda),
+                    Expression.Call(controller, RouteSetter, routeInLambda),
+                    workWithController,
+                    Expression.Label(returnTarget, Expression.Constant(Task.FromResult(false)))),
                 contextInLambda,
                 routeInLambda)
                 .Compile();
@@ -653,6 +706,8 @@ namespace EmbedIO.WebApi
             return value;
         }
 
+        [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
+        [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         private bool TryRegisterControllerTypeCore(
             Type controllerType, Expression factoryExpression,
             Func<IHttpContext, WebApiController?>? contextFactory = null,
@@ -660,7 +715,7 @@ namespace EmbedIO.WebApi
         {
             var handlerCount = 0;
             var caseInsensitive = _caseInsensitiveRoutes;
-            var pending = caseInsensitive ? new List<(HttpVerbs Verb, RouteMatcher Matcher, MethodInfo Method, RouteHandlerCallback Handler)>() : null;
+            var pending = caseInsensitive ? new List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, RouteHandlerCallback Handler)>() : null;
             var methods = controllerType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
                 .Where(m => !m.ContainsGenericParameters);
 
@@ -677,18 +732,10 @@ namespace EmbedIO.WebApi
                     if (caseInsensitive)
                     {
                         var matcher = attribute.Matcher.WithCaseInsensitiveLiterals();
-                        _caseInsensitiveDeclarations ??= new List<(HttpVerbs, RouteMatcher, MethodInfo, Type)>();
-                        var declarations = _caseInsensitiveDeclarations.Concat((pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Select(p => (p.Verb, p.Matcher, p.Method, ControllerType: controllerType)));
-                        var overlapping = declarations.Where(d => (d.Verb == attribute.Verb || d.Verb == HttpVerbs.Any || attribute.Verb == HttpVerbs.Any)
-                            && matcher.HasCaseEquivalentTemplate(d.Matcher)).ToArray();
-                        if (overlapping.Any(d => d.Method != method || d.ControllerType != controllerType))
-                            throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' has conflicting handlers for overlapping HTTP verbs.");
-                        // Existing case-only aliases on one method need no duplicate handler.
-                        if (overlapping.Any(d => !d.Matcher.ParameterNames.SequenceEqual(matcher.ParameterNames)))
-                            throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' must retain the same parameter names.");
-                        if (overlapping.Any(d => d.Verb == attribute.Verb && d.Method == method))
+                        var staged = pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.");
+                        if (!AcceptCaseInsensitiveDeclaration(attribute.Verb, matcher, method, controllerType, staged.Select(p => (p.Verb, p.Matcher, p.Method))))
                             continue;
-                        (pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Add((attribute.Verb, matcher, method, CompileHandler(factoryExpression, method, matcher, contextFactory, release)));
+                        staged.Add((attribute.Verb, matcher, method, CompileHandler(factoryExpression, method, matcher, contextFactory, release)));
                     }
                     else
                     {
@@ -712,6 +759,211 @@ namespace EmbedIO.WebApi
 
             _controllerTypes.Add(controllerType);
             return true;
+        }
+
+        /// <summary>
+        /// <para>Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
+        /// constructing a new instance for each request.</para>
+        /// <para>The routes, parameter binding, result serialization and disposal behave as in
+        /// <see cref="RegisterControllerType{TController}()"/>, without reflection or runtime code generation.</para>
+        /// </summary>
+        /// <typeparam name="TController">The type of the controller.</typeparam>
+        /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
+        /// <exception cref="InvalidOperationException">The module's configuration is locked.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException">
+        /// <para><typeparamref name="TController"/> is already registered in this module.</para>
+        /// <para>- or -</para>
+        /// <para><paramref name="binding"/> contains no routes.</para>
+        /// </exception>
+        /// <seealso cref="GeneratedControllerBindingAttribute"/>
+        protected void RegisterControllerType<TController>(WebApiControllerBinding<TController> binding)
+            where TController : WebApiController, new()
+            => RegisterBinding(binding, static () => new TController());
+
+        /// <summary>
+        /// <para>Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
+        /// using a factory method.</para>
+        /// <para>The routes, parameter binding, result serialization and disposal behave as in
+        /// <see cref="RegisterControllerType{TController}(Func{TController})"/>, without reflection or runtime code generation.</para>
+        /// </summary>
+        /// <typeparam name="TController">The type of the controller.</typeparam>
+        /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
+        /// <param name="factory">The factory method used to construct instances of <typeparamref name="TController"/>.</param>
+        /// <exception cref="InvalidOperationException">The module's configuration is locked.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/> or <paramref name="factory"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException">
+        /// <para><typeparamref name="TController"/> is already registered in this module.</para>
+        /// <para>- or -</para>
+        /// <para><paramref name="binding"/> contains no routes.</para>
+        /// </exception>
+        /// <seealso cref="GeneratedControllerBindingAttribute"/>
+        protected void RegisterControllerType<TController>(WebApiControllerBinding<TController> binding, Func<TController> factory)
+            where TController : WebApiController
+            => RegisterBinding(binding, Validate.NotNull(nameof(factory), factory));
+
+        /// <summary>
+        /// Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
+        /// with request-aware activation and explicit ownership, as in
+        /// <see cref="RegisterControllerTypeWithContext(Type, Func{IHttpContext, WebApiController}, Func{IHttpContext, WebApiController, Task})"/>.
+        /// Release is awaited after the handler and serializer, including when either throws.
+        /// </summary>
+        /// <typeparam name="TController">The type of the controller.</typeparam>
+        /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
+        /// <param name="factory">Creates a fresh controller for the request.</param>
+        /// <param name="release">Releases the controller, or does nothing for container-owned instances.</param>
+        /// <exception cref="InvalidOperationException">The module's configuration is locked.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/>, <paramref name="factory"/>
+        /// or <paramref name="release"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException">
+        /// <para><typeparamref name="TController"/> is already registered in this module.</para>
+        /// <para>- or -</para>
+        /// <para><paramref name="binding"/> contains no routes.</para>
+        /// </exception>
+        /// <seealso cref="GeneratedControllerBindingAttribute"/>
+        protected void RegisterControllerTypeWithContext<TController>(
+            WebApiControllerBinding<TController> binding,
+            Func<IHttpContext, TController?> factory,
+            Func<IHttpContext, TController, Task> release)
+            where TController : WebApiController
+        {
+            Validate.NotNull(nameof(factory), factory);
+            Validate.NotNull(nameof(release), release);
+            RegisterBinding(binding, invoker => CreateBoundHandler(invoker, Serializer, factory, release));
+        }
+
+        private void RegisterBinding<TController>(WebApiControllerBinding<TController> binding, Func<TController> factory)
+            where TController : WebApiController
+            => RegisterBinding(binding, invoker => CreateBoundHandler(invoker, Serializer, factory));
+
+        private void RegisterBinding<TController>(
+            WebApiControllerBinding<TController> binding,
+            Func<WebApiRouteInvoker<TController>, RouteHandlerCallback> createHandler)
+            where TController : WebApiController
+        {
+            EnsureConfigurationNotLocked();
+            binding = Validate.NotNull(nameof(binding), binding);
+            var controllerType = ValidateControllerType(nameof(binding), typeof(TController), true);
+
+            // Parse every route before adding any handler, so an invalid route leaves the module unchanged.
+            var routes = binding.Routes;
+            if (routes.Count < 1)
+                throw new ArgumentException($"Type {controllerType.Name} contains no controller methods.", nameof(binding));
+
+            var matchers = new RouteMatcher[routes.Count];
+            for (var i = 0; i < routes.Count; i++)
+                matchers[i] = RouteMatcher.Parse(routes[i].Route, routes[i].IsBaseRoute);
+
+            if (!_caseInsensitiveRoutes)
+            {
+                for (var i = 0; i < routes.Count; i++)
+                    AddHandler(routes[i].Verb, matchers[i], createHandler(routes[i].CreateInvoker()));
+            }
+            else
+            {
+                var pending = new List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, RouteHandlerCallback Handler)>();
+                for (var i = 0; i < routes.Count; i++)
+                {
+                    var route = routes[i];
+                    var matcher = matchers[i].WithCaseInsensitiveLiterals();
+                    if (!AcceptCaseInsensitiveDeclaration(route.Verb, matcher, route.HandlerId, controllerType, pending.Select(p => (p.Verb, p.Matcher, p.Method))))
+                        continue;
+
+                    pending.Add((route.Verb, matcher, route.HandlerId, createHandler(route.CreateInvoker())));
+                }
+
+                foreach (var entry in pending)
+                {
+                    AddHandler(entry.Verb, entry.Matcher, entry.Handler);
+                    (_caseInsensitiveDeclarations ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Add((entry.Verb, entry.Matcher, entry.Method, controllerType));
+                }
+            }
+
+            _controllerTypes.Add(controllerType);
+        }
+
+        // Returns false for a case-only alias of a declaration of the same method and verb,
+        // which needs no handler of its own; throws for a conflicting declaration.
+        private bool AcceptCaseInsensitiveDeclaration(
+            HttpVerbs verb,
+            RouteMatcher matcher,
+            object method,
+            Type controllerType,
+            IEnumerable<(HttpVerbs Verb, RouteMatcher Matcher, object Method)> pending)
+        {
+            _caseInsensitiveDeclarations ??= new List<(HttpVerbs, RouteMatcher, object, Type)>();
+            var declarations = _caseInsensitiveDeclarations.Concat(pending.Select(p => (p.Verb, p.Matcher, p.Method, ControllerType: controllerType)));
+            var overlapping = declarations.Where(d => (d.Verb == verb || d.Verb == HttpVerbs.Any || verb == HttpVerbs.Any)
+                && matcher.HasCaseEquivalentTemplate(d.Matcher)).ToArray();
+            if (overlapping.Any(d => !Equals(d.Method, method) || d.ControllerType != controllerType))
+                throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' has conflicting handlers for overlapping HTTP verbs.");
+            if (overlapping.Any(d => !d.Matcher.ParameterNames.SequenceEqual(matcher.ParameterNames)))
+                throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' must retain the same parameter names.");
+
+            // Existing case-only aliases on one method need no duplicate handler.
+            return !overlapping.Any(d => d.Verb == verb && Equals(d.Method, method));
+        }
+
+        // The per-request sequence of a compiled reflection handler: create the controller,
+        // initialize it, call OnBeforeHandler, bind and call the method, then dispose a
+        // disposable controller as soon as the method has returned its task, before awaiting it.
+        private static RouteHandlerCallback CreateBoundHandler<TController>(
+            WebApiRouteInvoker<TController> invoker,
+            ResponseSerializerCallback serializer,
+            Func<TController> factory)
+            where TController : WebApiController
+        {
+            invoker = Validate.NotNull(nameof(invoker), invoker);
+            var disposable = typeof(IDisposable).IsAssignableFrom(typeof(TController));
+            return async (context, route) =>
+            {
+                var controller = factory();
+                controller.HttpContext = context;
+                controller.Route = route;
+                Task work;
+                try
+                {
+                    controller.PreProcessRequest();
+                    work = await invoker(controller, context, route, serializer).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (disposable)
+                        ((IDisposable)controller).Dispose();
+                }
+
+                await work.ConfigureAwait(false);
+            };
+        }
+
+        // The request-aware sequence of RegisterControllerTypeWithContext: release is awaited
+        // after binding, invocation and serialization, including failures.
+        private static RouteHandlerCallback CreateBoundHandler<TController>(
+            WebApiRouteInvoker<TController> invoker,
+            ResponseSerializerCallback serializer,
+            Func<IHttpContext, TController?> factory,
+            Func<IHttpContext, TController, Task> release)
+            where TController : WebApiController
+        {
+            invoker = Validate.NotNull(nameof(invoker), invoker);
+            return async (context, route) =>
+            {
+                var controller = factory(context)
+                    ?? throw new InvalidOperationException($"The factory for {typeof(TController).FullName} returned null.");
+
+                try
+                {
+                    controller.HttpContext = context;
+                    controller.Route = route;
+                    controller.PreProcessRequest();
+                    var work = await invoker(controller, context, route, serializer).ConfigureAwait(false);
+                    await work.ConfigureAwait(false);
+                }
+                finally
+                {
+                    await release(context, controller).ConfigureAwait(false);
+                }
+            };
         }
     }
 }

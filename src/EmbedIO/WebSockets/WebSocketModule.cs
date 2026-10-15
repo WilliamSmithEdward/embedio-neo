@@ -8,7 +8,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Utilities;
-using EmbedIO.WebSockets.Internal;
 using EmbedIO.Internal;
 using EmbedIO.Diagnostics;
 
@@ -36,15 +35,46 @@ namespace EmbedIO.WebSockets
     /// contains one or more <c>SecWebSocketProtocol</c> headers that specify
     /// the list of accepted subprotocols (if any).
     /// </remarks>
-    public abstract class WebSocketModule : WebModuleBase, IDisposable
+    public abstract class WebSocketModule : WebModuleBase, IDisposable, IDrainAwareModule
     {
+        private const string DrainCloseReason = "Server is draining";
+
         private const int ReceiveBufferSize = 2048;
+
+        // A finite default bounds what one client can make the server buffer per message.
+        private const int DefaultMaxMessageSize = 4 * 1024 * 1024;
 
         private readonly bool _enableConnectionWatchdog;
         private readonly List<string> _protocols = new List<string>();
         private readonly ConcurrentDictionary<string, IWebSocketContext> _contexts = new ConcurrentDictionary<string, IWebSocketContext>();
         private bool _isDisposing;
+        private bool _closeOnDrain;
+        private int _draining;
+        // Contexts already sent the drain close; each is closed once.
+        private readonly ConcurrentDictionary<string, byte> _drainClosed = new ConcurrentDictionary<string, byte>();
         private int _maxMessageSize;
+        private Internal.WebSocketDeliveryBudget? _deliveryBudget;
+        private WebSocketReceiveLimits? _receiveLimits;
+        internal Internal.WebSocketDeliveryBudget? DeliveryBudget => _deliveryBudget;
+        /// <summary>Gets or sets optional outstanding-delivery limits; null preserves existing behavior.</summary>
+        /// <remarks>
+        /// Configure before the module starts. Exhaustion rejects a new message with close status 1008.
+        /// This does not change MaxMessageSize, callback overlap, initialization deadlines or drain behavior.
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">Module configuration is locked.</exception>
+        protected WebSocketReceiveLimits? ReceiveLimits
+        {
+            get => _receiveLimits;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                var limits = value?.Limits;
+                var budget = limits != null && (limits.ConnectionMessages.HasValue || limits.ConnectionBytes.HasValue
+                    || limits.ModuleMessages.HasValue || limits.ModuleBytes.HasValue) ? new Internal.WebSocketDeliveryBudget(limits) : null;
+                _receiveLimits = value;
+                _deliveryBudget = budget;
+            }
+        }
         private TimeSpan _keepAliveInterval;
         private Encoding _encoding;
         private PeriodicTask? _connectionWatchdog;
@@ -60,7 +90,7 @@ namespace EmbedIO.WebSockets
             : base(requestPath)
         {
             _enableConnectionWatchdog = enableConnectionWatchdog;
-            _maxMessageSize = 0;
+            _maxMessageSize = DefaultMaxMessageSize;
             _keepAliveInterval = TimeSpan.FromSeconds(30);
             _encoding = Encoding.UTF8;
         }
@@ -71,8 +101,8 @@ namespace EmbedIO.WebSockets
         /// <summary>
         /// <para>Gets or sets the maximum size of a received message.
         /// If a message exceeding the maximum size is received from a client,
-        /// the connection is closed automatically.</para>
-        /// <para>The default value is 0, which disables message size checking.</para>
+        /// the connection is closed automatically with status 1009 (message too big).</para>
+        /// <para>The default value is 4 MiB (4,194,304 bytes). Zero disables message size checking.</para>
         /// </summary>
         protected int MaxMessageSize
         {
@@ -85,9 +115,42 @@ namespace EmbedIO.WebSockets
         }
 
         /// <summary>
-        /// Gets or sets the keep-alive interval for the WebSocket connection.
-        /// The default is 30 seconds.
+        /// <para>Gets or sets whether a graceful drain closes this module's WebSockets. The default is
+        /// <see langword="false"/>: drain waits for them until its deadline, then cuts their connections.</para>
+        /// <para>When <see langword="true"/>, <see cref="WebServer.DrainAsync"/> sends each open WebSocket a close
+        /// with status 1001 (<see cref="CloseStatusCode.Away"/>) as the drain starts, and closes the same way any
+        /// WebSocket the module accepts after that. The drain can then finish once clients complete the closing
+        /// handshake, still bounded by its deadline.</para>
         /// </summary>
+        /// <remarks>
+        /// <para>Applies to WebSockets over HTTP/1.1, HTTP/2 and HTTP/3. Messages already being sent are sent
+        /// before the close. <see cref="OnClientDisconnectedAsync"/> runs once per connection, as for any close.</para>
+        /// <para>Set this before the module starts. Stopping the server through <c>RunAsync</c> cancellation or
+        /// disposal is not a drain and does not depend on this setting: the server then sends each open WebSocket
+        /// a 1001 close without a reason, and waits at most one second for the closes before it stops the
+        /// listener.</para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">This property is being set, and the module's
+        /// configuration is locked.</exception>
+        public bool CloseOnDrain
+        {
+            get => _closeOnDrain;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _closeOnDrain = value;
+            }
+        }
+
+        /// <summary>
+        /// <para>Gets or sets how often the server pings each WebSocket client. The default is 30 seconds.</para>
+        /// <para>A connection whose client has not answered the previous ping when the next one is due is closed.
+        /// <see cref="TimeSpan.Zero"/> or <see cref="Timeout.InfiniteTimeSpan"/> disables keep-alive.</para>
+        /// </summary>
+        /// <remarks>
+        /// <para>Set this before the module starts. Any pong from the client counts as an answer, and messages do
+        /// not delay the pings.</para>
+        /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException">This property is being set to a value
         /// that is too small to be acceptable.</exception>
         protected TimeSpan KeepAliveInterval
@@ -153,8 +216,13 @@ namespace EmbedIO.WebSockets
             // The WebSocket endpoint must match exactly, giving a RequestedPath of "/".
             // In all other cases the path is longer, so there's no need to compare strings here.
             if (context.RequestedPath.Length > 1)
-                return;
+                throw RequestHandler.PassThrough();
 
+            // A generic CONNECT carrier routed here is not a WebSocket handshake.
+            // Reject it as an unsupported route before attempting socket acceptance.
+            if (context is IHttpTunnelContext && context.Request.HttpMethod == "CONNECT"
+                && !context.Request.IsWebSocketRequest)
+                throw HttpException.NotFound("This endpoint serves WebSocket connections only.");
             var requestedProtocols = context.Request.Headers.GetValues(HttpHeaderNames.SecWebSocketProtocol)
                                          ?.SelectMany(s => s.SplitByComma(StringSplitOptions.RemoveEmptyEntries))
                                          .Select(s => s.Trim())
@@ -188,15 +256,39 @@ namespace EmbedIO.WebSockets
 
             var contextImpl = context.GetImplementation();
             $"{BaseRoute} - Accepting WebSocket connection with subprotocol \"{acceptedProtocol}\"".Debug(nameof(WebSocketModule));
-            var webSocketContext = await contextImpl.AcceptWebSocketAsync(
+            // The managed socket enforces the limit from its first frame.
+            Internal.WebSocket.SetAcceptedMaxMessageSize(_maxMessageSize);
+            Internal.WebSocket.SetAcceptedMessageConsumerPending(true);
+            var delivery = _deliveryBudget?.CreateConnection();
+            // Every acceptance has its own policy, including an unlimited one.
+            Internal.WebSocket.SetAcceptedDeliveryBudget(delivery);
+            IWebSocketContext webSocketContext;
+            try
+            {
+                webSocketContext = await contextImpl.AcceptWebSocketAsync(
                     requestedProtocols,
                     acceptedProtocol,
                     ReceiveBufferSize,
                     KeepAliveInterval,
                     context.CancellationToken).ConfigureAwait(false);
+            }
+            catch { delivery?.StopAdmission(); throw; }
+            finally
+            {
+                // Keep this async method's initialization callbacks outside the
+                // acceptance scope. Its caller retains its own execution context.
+                Internal.WebSocket.SetAcceptedDeliveryBudget(null);
+                Internal.WebSocket.SetAcceptedMessageConsumerPending(false);
+            }
 
             PurgeDisconnectedContexts();
             _ = _contexts.TryAdd(webSocketContext.Id, webSocketContext);
+
+            // Accepted while a drain was starting: the drain's close may have missed this one.
+            if (_closeOnDrain && Volatile.Read(ref _draining) != 0)
+                CloseForDrain(webSocketContext);
+            var request = EmbedIO.Internal.RequestTelemetry.Of(context);
+            var session = request?.Owner?.WebSocketStarted(request);
 
             $"{BaseRoute} - WebSocket connection accepted - There are now {_contexts.Count} sockets connected."
                 .Debug(nameof(WebSocketModule));
@@ -204,18 +296,8 @@ namespace EmbedIO.WebSockets
             try
             {
                 await OnClientConnectedAsync(webSocketContext).ConfigureAwait(false);
-                if (webSocketContext.WebSocket is SystemWebSocket systemWebSocket)
-                {
-                    await ProcessSystemContext(
-                            webSocketContext,
-                            systemWebSocket,
-                            context.CancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    await ProcessEmbedIOContext(webSocketContext, context.CancellationToken)
-                        .ConfigureAwait(false);
-                }
+                await ProcessEmbedIOContext(webSocketContext, context.CancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (TaskCanceledException)
             {
@@ -227,8 +309,71 @@ namespace EmbedIO.WebSockets
             }
             finally
             {
+                session?.Stop();
+                ((Internal.WebSocket)webSocketContext.WebSocket).AbandonPendingMessageConsumer();
                 // once the loop is completed or connection aborted, remove the WebSocket
                 RemoveWebSocket(webSocketContext);
+            }
+        }
+
+        void IDrainAwareModule.OnDrainStarted()
+        {
+            if (Interlocked.Exchange(ref _draining, 1) != 0 || !_closeOnDrain)
+                return;
+
+            foreach (var context in _contexts.Values)
+                CloseForDrain(context);
+        }
+
+        // RunAsync cancellation or disposal: every open WebSocket gets a 1001 close while its
+        // transport is alive, and the task completes when every listed socket is released: its
+        // client answered the close, its own close timeout expired, or its transport failed. The
+        // server bounds the wait, once for all sockets. A socket already closing is waited for
+        // the same way, for example because its request handler saw the canceled token first and
+        // disposed it. A written close frame is not enough: when the stop then ends an HTTP/2
+        // connection, the client aborts the stream and drops a close frame it has received but
+        // not read. The close carries no reason, so it matches the one WebSocket disposal sends.
+        Task IDrainAwareModule.CloseForStopAsync()
+        {
+            var closing = new List<Task>();
+            foreach (var context in _contexts.Values)
+            {
+                if (context.WebSocket is Internal.WebSocket managed)
+                {
+                    if (managed.State == WebSocketState.Open)
+                        _ = CloseGoingAwayAsync(context, string.Empty);
+                    closing.Add(managed.Released);
+                }
+                else if (context.WebSocket?.State == WebSocketState.Open)
+                {
+                    closing.Add(CloseGoingAwayAsync(context, string.Empty));
+                }
+            }
+
+            return Task.WhenAll(closing);
+        }
+
+        private void CloseForDrain(IWebSocketContext context)
+        {
+            if (!_drainClosed.TryAdd(context.Id, 0))
+                return;
+
+            _ = CloseGoingAwayAsync(context, DrainCloseReason);
+        }
+
+        private async Task CloseGoingAwayAsync(IWebSocketContext context, string reason)
+        {
+            try
+            {
+                if (context.WebSocket is Internal.WebSocket managed)
+                    await managed.CloseAfterPendingSendAsync(CloseStatusCode.Away, reason).ConfigureAwait(false);
+                else if (context.WebSocket.State == WebSocketState.Open)
+                    await context.WebSocket.CloseAsync(CloseStatusCode.Away, reason, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            {
+                // The connection may already be closing or gone; the drain deadline or the stop budget still bounds it.
+                $"{BaseRoute} - Could not send the going-away close: {ex.Message}".Debug(nameof(WebSocketModule));
             }
         }
 
@@ -347,7 +492,8 @@ namespace EmbedIO.WebSockets
         {
             protocols = Validate.NotNull(nameof(protocols), protocols);
 
-            if (protocols.Select(p => Validate.Rfc2616Token(nameof(protocols), p)).Any(protocol => _protocols.Contains(protocol)))
+            var names = new HashSet<string>(_protocols, StringComparer.Ordinal);
+            if (protocols.Select(p => Validate.Rfc2616Token(nameof(protocols), p)).Any(protocol => !names.Add(protocol)))
                 throw new ArgumentException("Duplicate WebSocket protocol name.", nameof(protocols));
 
             EnsureConfigurationNotLocked();
@@ -513,9 +659,13 @@ namespace EmbedIO.WebSockets
 
         private void RemoveWebSocket(IWebSocketContext context)
         {
-            if (!_contexts.TryRemove(context.Id, out _))
+            // Disposed while still listed: a server stop that runs meanwhile waits for its release.
+            if (!_contexts.ContainsKey(context.Id))
                 return;
             context.WebSocket?.Dispose();
+            if (!_contexts.TryRemove(context.Id, out _))
+                return;
+            _ = _drainClosed.TryRemove(context.Id, out _);
 
             // OnClientDisconnectedAsync is better called in its own task,
             // so it may call methods that require a lock on _contextsAccess.
@@ -546,6 +696,10 @@ namespace EmbedIO.WebSockets
             {
                 if (context.WebSocket == null || context.WebSocket.State == WebSocketState.Open)
                     continue;
+                // Transport closure can precede initialization and the delivery of
+                // already received messages. Leave that context to its handler.
+                if (context.WebSocket is Internal.WebSocket managed && !managed.IsApplicationCloseCompleted)
+                    continue;
 
                 RemoveWebSocket(context);
                 purgedCount++;
@@ -567,84 +721,26 @@ namespace EmbedIO.WebSockets
                     }
                     else
                     {
-                        await OnMessageReceivedAsync(
+                        if (e.DeliveryLease == null) await OnMessageReceivedAsync(
                                 context,
                                 e.RawData,
                                 new Internal.WebSocketReceiveResult(e.RawData.Length, e.Opcode))
                             .ConfigureAwait(false);
+                        else await DeliverLimitedMessageAsync(context, e).ConfigureAwait(false);
                     }
                 }
                 catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested) { }
                 catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { ex.Log(nameof(WebSocketModule)); }
             };
 
-            while (context.WebSocket.State == WebSocketState.Open
-                || context.WebSocket.State == WebSocketState.CloseReceived
-                || context.WebSocket.State == WebSocketState.CloseSent)
-            {
-                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
-            }
+            await ((Internal.WebSocket)context.WebSocket).WaitForCloseAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        private async Task ProcessSystemContext(IWebSocketContext context, SystemWebSocket webSocket, CancellationToken cancellationToken)
+        private Task DeliverLimitedMessageAsync(IWebSocketContext context, Internal.MessageEventArgs message)
         {
-            // define a receive buffer
-            var receiveBuffer = new byte[ReceiveBufferSize];
-
-            // define a dynamic buffer that holds multi-part receptions
-            var receivedMessage = new List<byte>(receiveBuffer.Length * 2);
-
-            // poll the WebSocket connections for reception
-            while (webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseSent)
-            {
-                // retrieve the result (blocking)
-                var receiveResult = new SystemWebSocketReceiveResult(
-                    await webSocket.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), cancellationToken)
-                        .ConfigureAwait(false));
-
-                if (receiveResult.MessageType == (int)WebSocketMessageType.Close)
-                {
-                    // close the connection if requested by the client
-                    await webSocket
-                        .CloseAsync(CloseStatusCode.Normal, string.Empty, cancellationToken)
-                        .ConfigureAwait(false);
-                    return;
-                }
-
-                // Keep receiving the closing handshake, but no longer dispatch application data.
-                if (webSocket.IsCloseRequested)
-                {
-                    receivedMessage.Clear();
-                    continue;
-                }
-
-                var frameBytes = new byte[receiveResult.Count];
-                Array.Copy(receiveBuffer, frameBytes, frameBytes.Length);
-                await OnFrameReceivedAsync(context, frameBytes, receiveResult).ConfigureAwait(false);
-
-                // add the response to the multi-part response
-                receivedMessage.AddRange(frameBytes);
-
-                if (_maxMessageSize > 0 && receivedMessage.Count > _maxMessageSize)
-                {
-                    // close the connection if message exceeds max length
-                    await webSocket.CloseAsync(
-                        CloseStatusCode.TooBig,
-                        $"Message too big. Maximum is {_maxMessageSize} bytes.",
-                        cancellationToken).ConfigureAwait(false);
-
-                    // exit the loop; we're done
-                    return;
-                }
-
-                // if we're at the end of the message, process the message
-                if (!receiveResult.EndOfMessage) continue;
-
-                if (!webSocket.IsCloseRequested)
-                    await OnMessageReceivedAsync(context, receivedMessage.ToArray(), receiveResult)
-                        .ConfigureAwait(false);
-                receivedMessage.Clear();
-            }
+            var lease = message.DeliveryLease ?? throw new InvalidOperationException("Missing message delivery reservation.");
+            return lease.DeliverAsync(() => OnMessageReceivedAsync(context, message.RawData,
+                new Internal.WebSocketReceiveResult(message.RawData.Length, message.Opcode)));
         }
     }
 }

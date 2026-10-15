@@ -129,3 +129,88 @@ Only the two exact package-version paths change from 1.0.2 to 1.0.3. The
 rule, target frameworks and evidence-file scope are unchanged. Other findings,
 errors and stale entries still fail. Raw packages, pin checks, scanner output
 and PE metadata are retained under ignored `TestResults/release-1.0.3`.
+
+## 2.0.0 local candidate revalidation
+
+The local five-package 2.0.0 candidate was scanned with YARA-X 1.21.0 and
+YARA Forge 20261011. The pinned scanner archive SHA-256 is
+`01585181e8979e36ac10ab123fcf8921cf8ba879bf942916413e091e18d64852`;
+the rules archive SHA-256 is
+`ae03df5577c64909fd3bac58d5b45986f11689bee538eee6872049eebf47e312`.
+The complete God Mode rule was reread and is byte-identical to the previously
+reviewed rule, SHA-256
+`d4e3b0cbf8559ab1a1520db60f6c529104e3e8f1a2e8e24f85222420388d05ac`.
+Its filename pattern and `1 of them` condition are unchanged.
+
+The full five-package scan completed without scanner errors and reported only
+the two DI assembly paths below. A separate printed-string scan reported only
+`Injection.pdb` in each assembly. Independent PE debug-directory/RSDS parsing
+placed both matches inside compiler-generated CodeView paths ending in
+`src/EmbedIO.DependencyInjection/obj/Release/{target}/EmbedIO.DependencyInjection.pdb`.
+These are local Windows build paths; the matching suffix remains symbol-file
+metadata. Both extracted DLLs were verified byte-for-byte against the package.
+
+| Target | Offset | Assembly SHA-256 |
+| --- | --- | --- |
+| net10.0 | `0x6bce` | `b7a0aad636079c34bba8a2c13d113349c30384ebba8b0cb57035c5f8b6d7b837` |
+| netstandard2.0 | `0x74bd` | `493292858a1aaf51e5bf4d0b14af028b5b7d79e0b6104da6029c447d7e555c81` |
+
+The DI package SHA-256 is
+`967704d9ce43c6fc020a3379697a7a2fdf636c5a18b6356a6be0a422fe0499e1`.
+These bytes describe checkout `f1d4d75ade6c04d8a7eb65b93dec1f1b67775235`
+plus the dirty v2 packaging overlay, recorded in
+`TestResults/audit/v2-package-scan-input-manifest.json`. The nuspec commit is
+the checkout checkpoint, not proof that the overlay was committed. The different
+hashes and offsets do not replace the historical 1.0.3 CI evidence above.
+
+This is a source-qualified review, not an acceptance change. Any approved
+version-path update must be limited to
+`dist/EmbedIO-Neo.DependencyInjection.2.0.0-unpacked/lib/net10.0/EmbedIO.DependencyInjection.dll`
+and
+`dist/EmbedIO-Neo.DependencyInjection.2.0.0-unpacked/lib/netstandard2.0/EmbedIO.DependencyInjection.dll`
+for this exact rule. Preserve the separate two text-evidence path scopes and
+failures for other findings, scanner errors, missing scans and stale entries.
+ClamAV 1.5.4 with daily database 28152 (dated 2026-10-13 06:26:14)
+scanned all five local package archives and their extracted assets: 70 files,
+zero infected files, and successful completion. The fresh database update and
+standalone scan used bounded commands with read-only source access. This local
+result applies to the same dirty-overlay package inputs; it does not establish
+final hosted CI or published-artifact results. No matching GitHub alert dismissal
+or owner exception is claimed. Approval remains pending; final exact-source CI
+and release artifact scans remain required.
+
+Raw scan output is retained under ignored
+`TestResults/audit/scan-v2-packages-current-pins` and
+`TestResults/audit/scan-v2-di-printed`; the ClamAV log and terminal receipt are
+under `TestResults/audit/scan-v2-packages-clamav`. Package and CodeView receipts are under
+`TestResults/audit/v2-local-package-inspection`. Independent comparison hashes
+are retained under `TestResults/audit/v2-di-yara-proposal`.
+
+## Hosted v2 artifact follow-up
+
+Malware run 38421579803 at PR #182's a7aa1365 head reports the same rule on
+both 2.0.0 DI assemblies, with zero YARA tool errors. The separately downloaded
+scanned package has SHA-256
+`6cf76e8de8a89602a318b66865cc08f232f6de9551f84c85065c03c5bd2241e4`.
+The net10.0 assembly hash is
+`0aea1b9556daee42b95cfb332087df9df336f71ce5d981fe440b811008ec8994`;
+the netstandard2.0 hash is
+`9086fc6306ce434e591cc15049ac847758f28a7b49b43a48a66b1b0266e4145e`.
+Independent RSDS metadata inspection finds the compiler-generated
+EmbedIO.DependencyInjection.pdb path in each, at offsets 27436 and 29716.
+These are different artifacts from the earlier local overlay. The original
+failed policy report is preserved, including stale 1.0.3 acceptance paths and
+the two binding source/review matches. The exact narrow acceptance and matching
+alert-dismissal exceptions remain pending owner approval; no scanner success
+is claimed. Downloaded assets, raw YARA result and metadata receipt are under
+ignored TestResults/audit/pr182-packages-38421579803 and
+TestResults/audit/pr182-yara-38421579803.
+
+## Owner acceptance decision
+
+On 2026-10-13 William explicitly approved the exact God Mode rule on both
+2.0.0 DI assembly paths and on this review document and malware-accepted.toml,
+waiving only their unavailable matching-alert dismissal. Earlier pending
+statements are historical; this decision supersedes them for these four paths.
+Full scans, other findings, tool errors, stale entries and every green-check
+requirement remain enforced. No matching GitHub alert dismissal is claimed.

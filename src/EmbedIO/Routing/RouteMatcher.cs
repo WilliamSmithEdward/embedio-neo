@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Net;
 using System.Text.RegularExpressions;
 using EmbedIO.Utilities;
-using EmbedIO.Internal;
 
 namespace EmbedIO.Routing
 {
@@ -175,7 +174,7 @@ namespace EmbedIO.Routing
 
             var values = new string[match.Groups.Count - 1];
             for (var i = 0; i < values.Length; i++)
-                values[i] = WebUtility.UrlDecode(match.Groups[i + 1].Value);
+                values[i] = DecodeSegment(match.Groups[i + 1].Value);
 
             return new RouteMatch(
                 path,
@@ -183,6 +182,11 @@ namespace EmbedIO.Routing
                 values,
                 IsBaseRoute ? "/" + path.Substring(match.Groups[0].Length) : null);
         }
+
+        // A path segment is percent-decoded only: '+' is a literal there, not form encoding of a space.
+        // Every other result, malformed escapes included, stays what WebUtility.UrlDecode produces.
+        private static string DecodeSegment(string value)
+            => WebUtility.UrlDecode(value.IndexOf("+", StringComparison.Ordinal) < 0 ? value : string.Join("%2B", value.Split('+')));
 
         private static Exception? TryParseInternal(string? route, bool isBaseRoute, out RouteMatcher? result)
         {

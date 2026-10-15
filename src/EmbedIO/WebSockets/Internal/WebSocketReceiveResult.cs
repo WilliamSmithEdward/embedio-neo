@@ -13,7 +13,8 @@ namespace EmbedIO.WebSockets.Internal
                 throw new ArgumentOutOfRangeException(nameof(count));
 
             Count = count;
-            EndOfMessage = code == Opcode.Close;
+            // Only complete, reassembled messages are delivered through this result.
+            EndOfMessage = true;
             MessageType = code == Opcode.Text ? 0 : 1;
         }
 

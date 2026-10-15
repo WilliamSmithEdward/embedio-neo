@@ -16,9 +16,7 @@ namespace EmbedIO.Tests.Issues
     public class Issue521_RouteCase
     {
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task LiteralCaseIsOptionalAndDataAndMountStayUnchanged(HttpListenerMode mode, bool enabled)
         {
             var url = Resources.GetServerAddress();
@@ -130,7 +128,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task SameHandlerAliasesDeduplicateAndDifferentVerbsRemainUsable(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -154,7 +151,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task OriginalOptionalIntegerRouteWorksWithUnchangedBinding(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -180,7 +176,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task BodyAndQueryBindingAndBaseScopedAuthenticationArePreserved(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();

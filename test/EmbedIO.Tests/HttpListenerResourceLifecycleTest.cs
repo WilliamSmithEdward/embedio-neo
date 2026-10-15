@@ -59,7 +59,8 @@ namespace EmbedIO.Tests
         public async Task DisposingConnectionWhileReadFailsCompletesCleanupTask()
         {
             using var source = new ControlledFailingReadStream();
-            var connection = NewConnection(source);
+            using var listener = new Net.HttpListener();
+            var connection = NewConnection(source, listener);
             var reading = (Task)((((ConnectionType).GetMethod("BeginReadRequest") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null)) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             Assert.That(source.ReadStarted, Is.True);
             ((IDisposable)connection).Dispose();
@@ -74,8 +75,7 @@ namespace EmbedIO.Tests
             using var owner = new Net.HttpListener();
             owner.Start(); // No prefixes are needed for this isolated ownership check.
             using var source = new MemoryStream();
-            var connection = NewConnection(source);
-            Field("_lastListener").SetValue(connection, owner);
+            var connection = NewConnection(source, owner);
             ((IDisposable)connection).Dispose();
             Assert.That(owner.IsListening, Is.True);
         }
@@ -132,16 +132,66 @@ namespace EmbedIO.Tests
             Assert.That(source.ReadCalls, Is.Zero);
         }
 
+        [TestCase("sync")]
+        [TestCase("array")]
+        [TestCase("memory")]
+        public async Task TruncationIsTerminalButEmptyReadsAndCancellationRetainTheirSemantics(string path)
+        {
+            using var source = new DataAfterEofStream();
+            using var input = NewRequestStream(source, Array.Empty<byte>(), 0, 0, 1);
+            var destination = new byte[1];
+            Task<int> Read()
+            {
+                if (path == "sync") return Task.FromResult(input.Read(destination, 0, 1));
+                if (path == "array") return input.ReadAsync(destination, 0, 1);
+                return input.ReadAsync(destination.AsMemory()).AsTask();
+            }
+            var first = await Assert.ThrowsAsync<EndOfStreamException>(async () => await Read());
+            Assert.That(input.Read(Array.Empty<byte>(), 0, 0), Is.Zero);
+            Assert.That(await input.ReadAsync(Array.Empty<byte>(), 0, 0), Is.Zero);
+            Assert.That(await input.ReadAsync(Memory<byte>.Empty), Is.Zero);
+            using var stop = new CancellationTokenSource();
+            stop.Cancel();
+            await Assert.ThatAsync(async () => await input.ReadAsync(destination, 0, 1, stop.Token), Throws.InstanceOf<OperationCanceledException>());
+            await Assert.ThatAsync(async () => await input.ReadAsync(destination.AsMemory(), stop.Token), Throws.InstanceOf<OperationCanceledException>());
+            var repeated = await Assert.ThrowsAsync<EndOfStreamException>(async () => await Read());
+            Assert.That(repeated, Is.SameAs(first));
+            Assert.That(source.ReadCalls, Is.EqualTo(1), "A truncated body must not read subsequent transport data.");
+        }
+
+        private sealed class DataAfterEofStream : MemoryStream
+        {
+            internal int ReadCalls { get; private set; }
+            private int Next(Span<byte> buffer)
+            {
+                if (++ReadCalls == 1) return 0;
+                buffer[0] = 42;
+                return 1;
+            }
+            public override int Read(byte[] buffer, int offset, int count) => Next(buffer.AsSpan(offset, count));
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken token)
+                => Task.FromResult(Next(buffer.AsSpan(offset, count)));
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken token = default)
+                => new(Next(buffer.Span));
+        }
+
         private static Stream NewRequestStream(Stream source, byte[] buffer, int offset, int length, long contentLength)
             => (Stream)(Activator.CreateInstance((Core.GetType("EmbedIO.Net.Internal.RequestStream", true) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
                 PrivateInstance, null, new object[] { source, buffer, offset, length, contentLength }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
 
-        private static object NewConnection(Stream source)
+        private static object NewConnection(Stream source, Net.HttpListener listener)
         {
             var connection = RuntimeHelpers.GetUninitializedObject(ConnectionType);
             ((ConnectionType).GetField("_connectionSync", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, new object());
             Field("<Stream>k__BackingField").SetValue(connection, source);
-            Field("_timer").SetValue(connection, new Timer(_ => { }, null, Timeout.Infinite, Timeout.Infinite));
+            var gate = Field("_connectionSync").GetValue(connection) ?? throw new AssertionException("Missing session gate.");
+            var lifetimeType = Core.GetType("EmbedIO.Net.Internal.TcpSessionLifetime", true) ?? throw new AssertionException("Missing lifetime type.");
+            var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork,
+                System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+            var lifetime = Activator.CreateInstance(lifetimeType, PrivateInstance, null,
+                new object[] { gate, socket, source, (Action)(() => { }) }, null) ?? throw new AssertionException("Missing lifetime instance.");
+            Field("_lifetime").SetValue(connection, lifetime);
+            Field("_lastListener").SetValue(connection, listener);
             Field("_sTimeout").SetValue(connection, 90000);
             ((ConnectionType).GetMethod("Init", PrivateInstance) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(connection, null);
             return connection;

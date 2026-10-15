@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
-using EmbedIO.Internal;
 
 namespace EmbedIO.WebSockets.Internal
 {
@@ -60,10 +60,21 @@ namespace EmbedIO.WebSockets.Internal
             return result;
         }
 
-        internal void Mask(byte[] key)
+        // XORs data in place with the repeating four-byte key, eight bytes at a time.
+        internal static void Mask(byte[] data, byte[] key)
         {
-            for (long i = 0; i < _data.Length; i++)
-                _data[i] = (byte)(_data[i] ^ key[i % 4]);
+            var bytes = data.AsSpan();
+            var words = MemoryMarshal.Cast<byte, ulong>(bytes);
+            if (words.Length > 0)
+            {
+                Span<byte> pattern = stackalloc byte[8];
+                for (var i = 0; i < 8; i++) pattern[i] = key[i & 3];
+                var mask = MemoryMarshal.Read<ulong>(pattern);
+                for (var i = 0; i < words.Length; i++) words[i] ^= mask;
+            }
+            // Whole words cover a multiple of four bytes, so the key phase restarts at zero.
+            for (var i = words.Length * 8; i < bytes.Length; i++)
+                bytes[i] = (byte)(bytes[i] ^ key[i & 3]);
         }
 
         internal byte[] ToArray() => _data;

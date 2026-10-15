@@ -1,5 +1,11 @@
 # HEAD responses: metadata without a body
 
+The native Microsoft listener comparisons and validation below describe the v1
+implementation at the time of this report. Neo v2 uses the replacement engine
+and has removed that backend; see [listener migration](../compatibility/neo-v1-to-v2.md#listener-selection-and-deployment).
+Historical test counts and native runtime workarounds are not current-engine
+validation.
+
 [Upstream #564](https://github.com/unosquare/embedio/issues/564), reported by Warpten, showed a void HEAD controller assigning Content-Length but the managed listener sending zero. The earlier [static-file HEAD correction](https://github.com/WilliamSmithEdward/embedio-neo/issues/60) already corrected the original managed metadata-only reproduction in current source. Additional investigation found HEAD stream writes leaking body/chunk bytes into subsequent responses, native fixed-length writes throwing a protocol exception, and native header-only length assignments resetting a connection.
 
 ## Current source behavior

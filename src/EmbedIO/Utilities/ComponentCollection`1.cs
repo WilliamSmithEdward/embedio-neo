@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using EmbedIO.Configuration;
 
 namespace EmbedIO.Utilities
@@ -23,10 +24,19 @@ namespace EmbedIO.Utilities
         public int Count => _components.Count;
 
         /// <inheritdoc />
-        public IReadOnlyDictionary<string, T> Named => _namedComponents;
+        // A wrapper, not the dictionary itself: a caller could otherwise cast the view
+        // back and add components after the collection is locked.
+        public IReadOnlyDictionary<string, T> Named => _namedView ??= new ReadOnlyDictionary<string, T>(_namedComponents);
+
+        private ReadOnlyDictionary<string, T>? _namedView;
 
         /// <inheritdoc />
-        public IReadOnlyList<(string SafeName, T Component)> WithSafeNames => _componentsWithSafeNames;
+        public IReadOnlyList<(string SafeName, T Component)> WithSafeNames => _safeNamesView ??= _componentsWithSafeNames.AsReadOnly();
+
+        private ReadOnlyCollection<(string, T)>? _safeNamesView;
+
+        // Internal dispatch enumerates the list directly: no wrapper, no boxed enumerator.
+        internal List<(string SafeName, T Component)> SafeNamedComponents => _componentsWithSafeNames;
 
         /// <inheritdoc />
         public T this[int index] => _components[index];

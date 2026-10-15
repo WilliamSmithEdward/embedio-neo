@@ -1,6 +1,10 @@
 ﻿using System;
 using System.Net;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Reflection;
+using EmbedIO.PlatformTests;
 using EmbedIO.Tests.TestObjects;
 using NUnit.Framework;
 
@@ -16,21 +20,37 @@ namespace EmbedIO.Tests
             var url = Resources.GetServerAddress();
             if (secure)
                 url = url.Replace("http://", "https://", StringComparison.Ordinal);
-            using var retiring = new Net.HttpListener();
+            // A secure prefix needs a certificate to start, and every owner of a shared
+            // endpoint must present the same one; the ownership rules under test are unchanged.
+            using var certificate = secure ? HttpsSmoke.CreateCertificate() : null;
+            using var retiring = new Net.HttpListener(certificate);
             retiring.AddPrefix(url);
             retiring.AddPrefix(url.Replace("localhost", "LOCALHOST", StringComparison.Ordinal));
             retiring.Start();
 
-            // Stop removes prefixes one at a time. Model a replacement starting after
-            // removal of the first alias, before the old listener removes its second alias.
-            var remove = typeof(Net.EndPointManager).GetMethod("RemovePrefix", BindingFlags.Static | BindingFlags.NonPublic);
-            (remove ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(null, new object[] { url, retiring });
-            using var replacement = new Net.HttpListener();
+            // Removal now detaches all alias leases atomically. Retain the old
+            // physical endpoints to model a delayed retirement after replacement.
+            var endpoints = TcpRegistrationInventory.Owned(retiring);
+            Assert.That(endpoints, Is.Not.Empty);
+            retiring.Stop();
+            using var replacement = new Net.HttpListener(certificate);
             replacement.AddPrefix(url);
             replacement.Start();
+            var registry = typeof(Net.HttpListener).Assembly.GetType("EmbedIO.Net.Internal.TcpEndpointRegistry")
+                ?? throw new AssertionException("Missing registration owner.");
+            var gate = registry.GetField("Gate", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
+                ?? throw new AssertionException("Missing registration publication gate.");
+            var detach = registry.GetMethod("DetachBinding", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new AssertionException("Missing binding retirement operation.");
+            foreach (var endpoint in endpoints)
+            {
+                var retired = Activator.CreateInstance(typeof(HashSet<>).MakeGenericType(endpoint.GetType()))
+                    ?? throw new AssertionException("Missing retirement set.");
+                lock (gate) detach.Invoke(null, new[] { endpoint, retired });
+            }
             retiring.Stop();
 
-            using var additional = new Net.HttpListener();
+            using var additional = new Net.HttpListener(certificate);
             additional.AddPrefix(url + "another/");
             Assert.DoesNotThrow(additional.Start,
                 "A stale endpoint must not remove the replacement from the shared endpoint map.");
@@ -86,6 +106,75 @@ namespace EmbedIO.Tests
             Assert.That(endpoint.Find("http://example.test:9999/another/file"), Is.SameAs(plus));
         }
 
+        private static System.Collections.Generic.IEnumerable<TestCaseData> NamedPathCases()
+        {
+            yield return new TestCaseData(new Uri("http://localhost:9999/case/file"), true);
+            yield return new TestCaseData(new Uri("http://LOCALHOST:9999/case/file"), true);
+            yield return new TestCaseData(new Uri("http://localhost:9999/Case/file"), false);
+            yield return new TestCaseData(new Uri("http://localhost:9999/case"), true);
+            yield return new TestCaseData(new Uri("http://localhost:9999/cases"), false);
+            yield return new TestCaseData(new Uri("http://localhost:9999/%63ase/file"), true);
+            yield return new TestCaseData(new Uri("http://localhost:9999/case%2Ffile"), true);
+            yield return new TestCaseData(new Uri("http://localhost:9999/case/file?ignored=/other/"), true);
+            yield return new TestCaseData(new Uri("http://localhost:9998/case/file"), false);
+            yield return new TestCaseData(new Uri("http://other.test:9999/case/file"), false);
+        }
+
+        [TestCaseSource(nameof(NamedPathCases))]
+        public void NamedPathsPreserveDecodingCaseBoundaryAndAuthority(Uri url, bool matches)
+        {
+            using var owner = new Net.HttpListener();
+            using var endpoint = new RoutingEndpoint(owner);
+            endpoint.Add("http://localhost:9999/case/", owner);
+            Assert.That(endpoint.Find(url), matches ? Is.SameAs(owner) : Is.Null);
+        }
+
+        [TestCase("localhost")]
+        [TestCase("*")]
+        [TestCase("+")]
+        public async Task ConcurrentRoutePublicationAndRemovalPreserveEveryOwner(string host)
+        {
+            using var anchor = new Net.HttpListener();
+            using var first = new Net.HttpListener();
+            using var second = new Net.HttpListener();
+            using var endpoint = new RoutingEndpoint(anchor);
+            endpoint.Add("http://localhost:9999/anchor/", anchor);
+            var owners = new[] { first, second };
+            // Keep one stable named route while independent writers publish/remove
+            // disjoint registrations. Readers must not see missing or partial entries.
+            var writing = Enumerable.Range(0, 8).Select(worker => Task.Run(() =>
+            {
+                for (var index = 0; index < 32; index++)
+                {
+                    var owner = owners[worker % 2];
+                    var registration = $"http://{host}:9999/worker{worker}/item{index}/";
+                    endpoint.Add(registration, owner);
+                    Assert.That(endpoint.Find($"http://localhost:9999/worker{worker}/item{index}/file"), Is.SameAs(owner));
+                    Assert.That(endpoint.Find("http://localhost:9999/anchor/file"), Is.SameAs(anchor));
+                }
+            })).ToArray();
+            await Task.WhenAll(writing).WaitAsync(TimeSpan.FromSeconds(10));
+            for (var worker = 0; worker < 8; worker++)
+                for (var index = 0; index < 32; index++)
+                    Assert.That(endpoint.Find($"http://localhost:9999/worker{worker}/item{index}/file"), Is.SameAs(owners[worker % 2]));
+            var removing = Enumerable.Range(0, 8).Select(worker => Task.Run(() =>
+            {
+                for (var index = 0; index < 32; index++)
+                {
+                    var owner = owners[worker % 2];
+                    var registration = $"http://{host}:9999/worker{worker}/item{index}/";
+                    // A stale/wrong owner cannot remove another registration.
+                    endpoint.Remove(registration, owners[1 - worker % 2]);
+                    Assert.That(endpoint.Find($"http://localhost:9999/worker{worker}/item{index}/file"), Is.SameAs(owner));
+                    endpoint.Remove(registration, owner);
+                    Assert.That(endpoint.Find($"http://localhost:9999/worker{worker}/item{index}/file"), Is.Null);
+                    Assert.That(endpoint.Find("http://localhost:9999/anchor/file"), Is.SameAs(anchor));
+                }
+            })).ToArray();
+            await Task.WhenAll(removing).WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.That(endpoint.Find("http://localhost:9999/anchor/file"), Is.SameAs(anchor));
+        }
+
         private sealed class RoutingEndpoint : IDisposable
         {
             private static readonly Type EndpointType = (typeof(Net.HttpListener).Assembly
@@ -106,12 +195,14 @@ namespace EmbedIO.Tests
                     new[] { Activator.CreateInstance(PrefixType, prefix), listener });
 
             public void Remove(string prefix, Net.HttpListener listener)
-                => ((EndpointType).GetMethod("RemovePrefix") ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(_endpoint,
+                => ((EndpointType).GetMethod("DetachRoute", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(_endpoint,
                     new[] { Activator.CreateInstance(PrefixType, prefix), listener });
 
-            public object? Find(string url)
+            public object? Find(string url) => Find(new Uri(url));
+
+            public object? Find(Uri url)
                 => ((EndpointType).GetMethod("SearchListener", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."))
-                    .Invoke(_endpoint, new object?[] { new Uri(url), null });
+                    .Invoke(_endpoint, new object?[] { url, null });
 
             public void Dispose() => ((IDisposable)_endpoint).Dispose();
         }

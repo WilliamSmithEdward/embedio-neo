@@ -52,6 +52,11 @@ the JSON response for you. Add more attributed methods to add endpoints.
 Keep `OnGet` for a small callback. Use controllers when you want explicit route
 matching or a group of API operations. Both use the same server.
 
+`WithController<StatusController>()` finds and binds the controller's methods
+through reflection at startup. Trimmed and Native AOT applications register a
+binding that the package's source generator writes at build time instead; see
+[trimming and Native AOT](../trimming-and-native-aot.md#web-api-controllers).
+
 When an endpoint needs asynchronous work, return `Task<T>` and await the work
 before returning your response. See [asynchronous outbound requests](../async-outbound-requests.md)
 for a complete controller method and error handling.

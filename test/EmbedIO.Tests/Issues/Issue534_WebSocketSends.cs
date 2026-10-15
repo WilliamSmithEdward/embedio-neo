@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Net.WebSockets;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,14 +17,21 @@ namespace EmbedIO.Tests.Issues
     {
         private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
+        // Payload bytes per outgoing data frame. Sizes below are whole multiples plus
+        // one, so each message spans a known number of frames.
+        private static readonly int Fragment = (int)((typeof(WebServer).Assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true)
+            ?.GetField("SendFragmentLength", BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new NUnit.Framework.AssertionException("Missing send fragment length.")).GetValue(null)
+            ?? throw new NUnit.Framework.AssertionException("Missing send fragment length."));
+
         [Test]
         public async Task CancelledCloseDrainsPendingSendsAndDisposesGatesAfterTheirRelease()
         {
             using var transport = new ControlledStream();
             var socket = CreateSocket(transport);
-            var data = socket.SendAsync(new byte[2033], false);
+            var data = socket.SendAsync(new byte[2 * Fragment + 1], false);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var queued = socket.SendAsync(new byte[1017], true);
+            var queued = socket.SendAsync(new byte[Fragment + 1], true);
             using var cancelled = new CancellationTokenSource();
             var closing = socket.CloseAsync(cancelled.Token);
             cancelled.Cancel();
@@ -36,7 +42,9 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(((socket).GetType().GetField("_sendGatesDisposed", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket), Is.False);
             }
             finally { transport.Release.TrySetResult(true); }
-            await Task.WhenAll(data, queued).WaitAsync(TimeSpan.FromSeconds(5));
+            // The close ended the connection before either message was sent in full, so neither send reports success.
+            await Assert.ThatAsync(async () => await data.WaitAsync(TimeSpan.FromSeconds(5)), Throws.TypeOf<EmbedIO.WebSockets.WebSocketException>());
+            await Assert.ThatAsync(async () => await queued.WaitAsync(TimeSpan.FromSeconds(5)), Throws.TypeOf<EmbedIO.WebSockets.WebSocketException>());
             Assert.That(transport.FrameHeaders.ToArray(), Is.EqualTo(new byte[] { 2 }));
             Assert.That(transport.CloseCount, Is.EqualTo(1));
             Assert.That(((socket).GetType().GetField("_sendGatesDisposed", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).GetValue(socket), Is.True);
@@ -47,7 +55,7 @@ namespace EmbedIO.Tests.Issues
         {
             using var transport = new ControlledStream();
             var socket = CreateSocket(transport);
-            var data = socket.SendAsync(new byte[2033], false);
+            var data = socket.SendAsync(new byte[2 * Fragment + 1], false);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var disposing = Task.Run(socket.Dispose);
             try
@@ -56,7 +64,9 @@ namespace EmbedIO.Tests.Issues
                 while (socket.State == WebSocketState.Open) await Task.Delay(1, wait.Token);
             }
             finally { transport.Release.TrySetResult(true); }
-            await Task.WhenAll(data, disposing).WaitAsync(TimeSpan.FromSeconds(5));
+            // The close went out after the message's first frame, so the send fails rather than report a whole message.
+            await Assert.ThatAsync(async () => await data.WaitAsync(TimeSpan.FromSeconds(5)), Throws.TypeOf<EmbedIO.WebSockets.WebSocketException>());
+            await disposing.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(transport.FrameHeaders.ToArray(), Is.EqualTo(new byte[] { 2, 136 }));
             Assert.That(transport.MaximumConcurrentWrites, Is.EqualTo(1));
             Assert.That(transport.CloseCount, Is.EqualTo(1));
@@ -70,7 +80,7 @@ namespace EmbedIO.Tests.Issues
             using var transport = new ControlledStream { AfterFirstWrite = cancelled.Cancel };
             transport.Release.TrySetResult(true);
             var socket = CreateSocket(transport);
-            await Assert.ThatAsync(async () => await socket.SendAsync(new byte[2033], false, cancelled.Token),
+            await Assert.ThatAsync(async () => await socket.SendAsync(new byte[2 * Fragment + 1], false, cancelled.Token),
                 Throws.InstanceOf<OperationCanceledException>());
             Assert.That(socket.State, Is.EqualTo(WebSocketState.Closed));
             Assert.That(transport.FrameHeaders.ToArray(), Is.EqualTo(new byte[] { 2 }));
@@ -78,7 +88,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task RepeatedCloseReconnectAndServerShutdownNotifyEachDisconnectOnce(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -111,7 +120,7 @@ namespace EmbedIO.Tests.Issues
         {
             using var transport = new ControlledStream();
             var socket = CreateSocket(transport);
-            var data = socket.SendAsync(new byte[2033], false);
+            var data = socket.SendAsync(new byte[2 * Fragment + 1], false);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var type = socket.GetType();
             Task control;
@@ -129,7 +138,12 @@ namespace EmbedIO.Tests.Issues
                 control = (Task)((((type).GetMethod("Send", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).Invoke(socket, new[] { frame })) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             }
             transport.Release.TrySetResult(true);
-            await Task.WhenAll(data, (control)).WaitAsync(TimeSpan.FromSeconds(5));
+            await control.WaitAsync(TimeSpan.FromSeconds(5));
+            // A close sent between the message's frames ends it, so that send fails; ping and pong frames do not.
+            if (kind == "close")
+                await Assert.ThatAsync(async () => await data.WaitAsync(TimeSpan.FromSeconds(5)), Throws.TypeOf<EmbedIO.WebSockets.WebSocketException>());
+            else
+                await data.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(transport.MaximumConcurrentWrites, Is.EqualTo(1));
             var headers = transport.FrameHeaders.ToArray();
             Assert.That(headers.Count(h => (h & 15) == (kind == "pong" ? 10 : kind == "ping" ? 9 : 8)), Is.EqualTo(1));
@@ -144,14 +158,15 @@ namespace EmbedIO.Tests.Issues
             using var transport = new ControlledStream { FailWrite = failWrite };
             var socket = CreateSocket(transport);
             using var cancelled = new CancellationTokenSource();
-            var active = socket.SendAsync(new byte[2033], false, cancelled.Token);
+            var active = socket.SendAsync(new byte[2 * Fragment + 1], false, cancelled.Token);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var queued = socket.SendAsync(new byte[1017], true);
+            var queued = socket.SendAsync(new byte[Fragment + 1], true);
             if (failWrite) transport.Release.TrySetResult(true);
             else cancelled.Cancel();
             if (failWrite) await Assert.ThatAsync(async () => await active, Throws.TypeOf<IOException>());
             else await Assert.ThatAsync(async () => await active, Throws.InstanceOf<OperationCanceledException>());
-            await queued.WaitAsync(TimeSpan.FromSeconds(5));
+            // The interrupted transport ended the connection before the queued message started, so its send fails.
+            await Assert.ThatAsync(async () => await queued.WaitAsync(TimeSpan.FromSeconds(5)), Throws.TypeOf<EmbedIO.WebSockets.WebSocketException>());
             Assert.That(socket.State, Is.EqualTo(WebSocketState.Closed));
             Assert.That(transport.CloseCount, Is.EqualTo(1));
             Assert.That(transport.FrameHeaders.Count, Is.EqualTo(1));
@@ -161,7 +176,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ConcurrentRealMessagesRemainCompleteAndConnectionStaysUsable(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -207,9 +221,9 @@ namespace EmbedIO.Tests.Issues
         {
             using var transport = new ControlledStream();
             var socket = CreateSocket(transport);
-            var first = socket.SendAsync(new byte[3049], false);
+            var first = socket.SendAsync(new byte[3 * Fragment + 1], false);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var second = socket.SendAsync(new byte[2033], true);
+            var second = socket.SendAsync(new byte[2 * Fragment + 1], true);
             transport.Release.TrySetResult(true);
             await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(transport.MaximumConcurrentWrites, Is.EqualTo(1));
@@ -226,7 +240,7 @@ namespace EmbedIO.Tests.Issues
             var socket = CreateSocket(transport);
             using var cancelled = new CancellationTokenSource();
             cancelled.Cancel();
-            await Assert.ThatAsync(async () => await socket.SendAsync(new byte[2033], false, cancelled.Token),
+            await Assert.ThatAsync(async () => await socket.SendAsync(new byte[2 * Fragment + 1], false, cancelled.Token),
                 Throws.InstanceOf<OperationCanceledException>());
             Assert.That(transport.FrameHeaders, Is.Empty);
         }
@@ -236,10 +250,10 @@ namespace EmbedIO.Tests.Issues
         {
             using var transport = new ControlledStream();
             var socket = CreateSocket(transport);
-            var first = socket.SendAsync(new byte[2033], false);
+            var first = socket.SendAsync(new byte[2 * Fragment + 1], false);
             await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
             using var cancelled = new CancellationTokenSource();
-            var queued = socket.SendAsync(new byte[1017], true, cancelled.Token);
+            var queued = socket.SendAsync(new byte[Fragment + 1], true, cancelled.Token);
             cancelled.Cancel();
             try
             {
@@ -260,15 +274,11 @@ namespace EmbedIO.Tests.Issues
         private static IWebSocket CreateSocket(Stream stream)
         {
             var assembly = typeof(WebServer).Assembly;
-            var connectionType = assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true);
-            var connection = RuntimeHelpers.GetUninitializedObject((connectionType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
-            GC.SuppressFinalize(connection);
-            ((connectionType).GetField("<Stream>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, stream);
             var socketType = assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true);
-            var socket = (IWebSocket)(Activator.CreateInstance((socketType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), BindingFlags.Instance | BindingFlags.NonPublic,
-                null, new[] { connection }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
-            ((socketType).GetField("_closeConnection", Private) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket,
-                new Action(() => ((ControlledStream)stream).RecordClose()));
+            var socket = (IWebSocket)(Activator.CreateInstance((socketType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
+                BindingFlags.Instance | BindingFlags.NonPublic, null,
+                new object[] { stream, (Action)(() => ((ControlledStream)stream).RecordClose()) }, null)
+                ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             return (socket);
         }
 

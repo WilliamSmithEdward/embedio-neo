@@ -1,0 +1,75 @@
+diff --git a/src/platform/unittest/DataPathTest.cpp b/src/platform/unittest/DataPathTest.cpp
+index 830075d..35ab36c 100644
+--- a/src/platform/unittest/DataPathTest.cpp
++++ b/src/platform/unittest/DataPathTest.cpp
+@@ -1422,42 +1422,38 @@ TEST_F(DataPathTest, XdpRuleAddOomCleanup)
+ 
+ TEST_F(DataPathTest, XdpMapMode_ZeroConfigUsesNormalPath)
+ {
+-    //
+-    // XdpMapConfigCount == 0 falls through to the normal initialization path.
+-    //
+-    CXPLAT_WORKER_POOL* WorkerPool =
+-        CxPlatWorkerPoolCreate(nullptr, CXPLAT_WORKER_POOL_REF_TOOL);
+-    ASSERT_NE(nullptr, WorkerPool);
++    struct Resources {
++        CXPLAT_WORKER_POOL* WorkerPool{nullptr};
++        CXPLAT_DATAPATH* Datapath{nullptr};
++        CXPLAT_SOCKET* Socket{nullptr};
++        ~Resources() {
++            if (Socket) CxPlatSocketDelete(Socket);
++            if (Datapath) CxPlatDataPathUninitialize(Datapath);
++            if (WorkerPool) CxPlatWorkerPoolDelete(WorkerPool, CXPLAT_WORKER_POOL_REF_TOOL);
++        }
++    } Resources;
++    Resources.WorkerPool = CxPlatWorkerPoolCreate(nullptr, CXPLAT_WORKER_POOL_REF_TOOL);
++    ASSERT_NE(nullptr, Resources.WorkerPool);
+ 
+     CXPLAT_DATAPATH_INIT_CONFIG InitConfig = {0};
+-    InitConfig.XdpMapConfigs = nullptr;
+-    InitConfig.XdpMapConfigCount = 0;
+-
+-    CXPLAT_DATAPATH* Datapath = nullptr;
+-    QUIC_STATUS Status =
+-        CxPlatDataPathInitialize(
+-            0,
+-            &EmptyUdpCallbacks,
+-            nullptr,
+-            WorkerPool,
+-            &InitConfig,
+-            &Datapath);
+-    VERIFY_QUIC_SUCCESS(Status);
+-    ASSERT_NE(nullptr, Datapath);
+-
+-    //
+-    // Normal path initializes the platform datapath, which reports features.
+-    // Raw-only mode skips platform init and features remain NONE.
+-    //
+-    CXPLAT_DATAPATH_FEATURES Features =
+-        CxPlatDataPathGetSupportedFeatures(Datapath, CXPLAT_SOCKET_FLAG_NONE);
+-    ASSERT_NE(CXPLAT_DATAPATH_FEATURE_NONE, Features);
+-
+-    CxPlatDataPathUninitialize(Datapath);
+-    CxPlatWorkerPoolDelete(WorkerPool, CXPLAT_WORKER_POOL_REF_TOOL);
++    VERIFY_QUIC_SUCCESS(CxPlatDataPathInitialize(
++        0, &EmptyUdpCallbacks, nullptr, Resources.WorkerPool, &InitConfig, &Resources.Datapath));
++    ASSERT_NE(nullptr, Resources.Datapath);
++
++    // Optional feature bits do not identify the normal UDP path: Darwin can
++    // provide ordinary sockets while advertising no optional acceleration.
++    // Verify a usable ordinary UDP binding instead of assuming a feature bit.
++    auto Local = GetNewLocalIPv4(false);
++    CXPLAT_UDP_CONFIG SocketConfig = {0};
++    SocketConfig.LocalAddress = &Local.SockAddr;
++    VERIFY_QUIC_SUCCESS(CxPlatSocketCreateUdp(Resources.Datapath, &SocketConfig, &Resources.Socket));
++    ASSERT_NE(nullptr, Resources.Socket);
++    QUIC_ADDR Bound = {0};
++    CxPlatSocketGetLocalAddress(Resources.Socket, &Bound);
++    ASSERT_EQ(QUIC_ADDRESS_FAMILY_INET, QuicAddrGetFamily(&Bound));
++    ASSERT_NE(0, Bound.Ipv4.sin_port);
+ }
+ 
+-
+ TEST_F(DataPathTest, XdpMapMode_InitFailsWithoutRawDatapath)
+ {
+     //

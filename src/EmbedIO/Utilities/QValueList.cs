@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace EmbedIO.Utilities
 {
@@ -140,14 +141,14 @@ namespace EmbedIO.Utilities
 
         private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(string? headerValues)
         {
-            var result = new Dictionary<string, (int Weight, int Ordinal)>();
+            var result = new Dictionary<string, (int Weight, int Ordinal)>(StringComparer.OrdinalIgnoreCase);
             ParseCore(headerValues, result);
             return result;
         }
 
         private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(IEnumerable<string?>? headerValues)
         {
-            var result = new Dictionary<string, (int Weight, int Ordinal)>();
+            var result = new Dictionary<string, (int Weight, int Ordinal)>(StringComparer.OrdinalIgnoreCase);
 
             if (headerValues == null) return result;
 
@@ -186,50 +187,79 @@ namespace EmbedIO.Utilities
         // Find the first quality field accepted by the legacy grammar.
         private static void FindQuality(string text, int start, int end, out int nameEnd, out int weight)
         {
-            nameEnd = end;
-            weight = 1000;
             for (var separator = text.IndexOf(';', start, end - start); separator >= 0;
                 separator = text.IndexOf(';', separator + 1, end - separator - 1))
             {
-                var position = separator + 1;
-                while (position < end && (text[position] == ' ' || text[position] == '\t'))
-                    position++;
-                if (position + 2 >= end || text[position] != 'q' || text[position + 1] != '=')
-                    continue;
-                position += 2;
-                var one = text[position] == '1';
-                if (!one && text[position] != '0')
-                    continue;
-                position++;
-                var candidate = one ? 1000 : 0;
-                if (position < end && text[position] == '.')
+                if (TryParseQuality(text, separator + 1, end, out weight))
                 {
-                    position++;
-                    var digits = 0;
-                    candidate = 0;
-                    while (position < end && digits < 3
-                        && (one ? text[position] == '0' : char.IsDigit(text[position])))
-                    {
-                        candidate = 10 * candidate + text[position++] - '0';
-                        digits++;
-                    }
-                    if (digits == 0)
-                        continue;
-                    if (one)
-                        candidate = 1000;
-                    else
-                        while (digits++ < 3) candidate *= 10;
+                    nameEnd = separator;
+                    return;
                 }
-                while (position < end && (text[position] == ' ' || text[position] == '\t'))
-                    position++;
-                // The original regex's end anchor also accepted a single final LF.
-                if (position < end && text[position] != ';'
-                    && !(position == end - 1 && text[position] == '\n'))
-                    continue;
-                nameEnd = separator;
-                weight = candidate;
-                return;
             }
+
+            nameEnd = end;
+            weight = 1000;
+        }
+
+        // One parameter after a ';': "q=" and 0 or 1 with up to three decimals, followed by
+        // nothing but blanks before the next ';' or the end of the element.
+        private static bool TryParseQuality(string text, int position, int end, out int weight)
+        {
+            weight = 1000;
+            position = SkipBlanks(text, position, end);
+            // RFC 9110, Section 12.4.2: the weight's name "q" is case-insensitive.
+            if (position + 2 >= end || text[position] is not ('q' or 'Q') || text[position + 1] != '=')
+                return false;
+
+            position += 2;
+            var one = text[position] == '1';
+            if (!one && text[position] != '0')
+                return false;
+
+            position++;
+            var candidate = one ? 1000 : 0;
+            if (position < end && text[position] == '.' && !TryParseFraction(text, ref position, end, one, out candidate))
+                return false;
+
+            position = SkipBlanks(text, position, end);
+            // The original regex's end anchor also accepted a single final LF.
+            if (position < end && text[position] != ';' && !(position == end - 1 && text[position] == '\n'))
+                return false;
+
+            weight = candidate;
+            return true;
+        }
+
+        // The digits after the point, at most three: "1." allows only zeros and keeps 1000,
+        // "0." scales fewer than three digits up to thousandths.
+        private static bool TryParseFraction(string text, ref int position, int end, bool one, out int weight)
+        {
+            weight = 0;
+            var digits = 0;
+            position++;
+            while (position < end && digits < 3 && (one ? text[position] == '0' : char.IsDigit(text[position])))
+            {
+                weight = 10 * weight + text[position++] - '0';
+                digits++;
+            }
+
+            if (digits == 0)
+                return false;
+
+            if (one)
+                weight = 1000;
+            else
+                while (digits++ < 3) weight *= 10;
+
+            return true;
+        }
+
+        private static int SkipBlanks(string text, int position, int end)
+        {
+            while (position < end && (text[position] == ' ' || text[position] == '\t'))
+                position++;
+
+            return position;
         }
 
         private static int CompareQualities((int Weight, int Ordinal) a, (int Weight, int Ordinal) b)
@@ -262,7 +292,10 @@ namespace EmbedIO.Utilities
             foreach (var value in values)
             {
                 if (value == null)
+                {
+                    i++;
                     continue;
+                }
 
                 if (TryGetCandidateValue(value, out var candidateValue) && CompareQualities(candidateValue, bestValue) > 0)
                 {

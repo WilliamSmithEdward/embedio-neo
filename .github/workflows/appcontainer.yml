@@ -18,7 +18,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.401
+          dotnet-version: 10.0.402
       - name: Build the pinned test-only host
         shell: pwsh
         run: ./scripts/run_appcontainer_smoke.ps1 build

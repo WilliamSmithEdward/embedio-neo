@@ -23,6 +23,12 @@ namespace EmbedIO.WebApi
         {
             if (controller is null) throw new System.NullReferenceException();
             if (type is null) throw new System.NullReferenceException();
+
+            // EmbedIO's default JSON options need reflection; generated bindings with a
+            // JsonSerializerContext do not call this.
+            if (!EmbedIO.Serialization.ReflectionSerialization.IsSupported)
+                throw EmbedIO.Serialization.ReflectionSerialization.Disabled();
+
             string body;
             using (var reader = controller.HttpContext.OpenRequestText())
             {

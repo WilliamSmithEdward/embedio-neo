@@ -27,7 +27,7 @@ namespace EmbedIO.Tests.Issues
 
         public static IEnumerable<object[]> InvalidRoutes()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var path in InvalidPaths) yield return new object[] { mode, path };
         }
 
@@ -47,8 +47,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task OriginalUshortInputsKeepBinarySerializerAndRecoveryHealthy(HttpListenerMode mode, bool buffered)
         {
             await using var fixture = new Fixture(mode, raw: true, buffered: buffered);
@@ -63,7 +61,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task SuccessfulConversionsDefaultsNullableAndMissingRoutesKeepTheirBehavior(HttpListenerMode mode)
         {
             await using var fixture = new Fixture(mode);
@@ -85,7 +82,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         [SetCulture("fr-FR")]
         public async Task RouteNumbersKeepInvariantConversionDespiteHostCulture(HttpListenerMode mode)
         {
@@ -98,15 +94,10 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, "format")]
-        [TestCase(HttpListenerMode.Microsoft, "format")]
         [TestCase(HttpListenerMode.EmbedIO, "overflow")]
-        [TestCase(HttpListenerMode.Microsoft, "overflow")]
         [TestCase(HttpListenerMode.EmbedIO, "argument")]
-        [TestCase(HttpListenerMode.Microsoft, "argument")]
         [TestCase(HttpListenerMode.EmbedIO, "unsupported")]
-        [TestCase(HttpListenerMode.Microsoft, "unsupported")]
         [TestCase(HttpListenerMode.EmbedIO, "internal")]
-        [TestCase(HttpListenerMode.Microsoft, "internal")]
         public async Task ControllerExceptionsRemain500AfterAValidConversion(HttpListenerMode mode, string error)
         {
             await using var fixture = new Fixture(mode);
@@ -117,17 +108,11 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, "unsupported/value")]
-        [TestCase(HttpListenerMode.Microsoft, "unsupported/value")]
         [TestCase(HttpListenerMode.EmbedIO, "custom/not-supported")]
-        [TestCase(HttpListenerMode.Microsoft, "custom/not-supported")]
         [TestCase(HttpListenerMode.EmbedIO, "custom/internal")]
-        [TestCase(HttpListenerMode.Microsoft, "custom/internal")]
         [TestCase(HttpListenerMode.EmbedIO, "custom/generic-wrapper")]
-        [TestCase(HttpListenerMode.Microsoft, "custom/generic-wrapper")]
         [TestCase(HttpListenerMode.EmbedIO, "custom/wrong-type")]
-        [TestCase(HttpListenerMode.Microsoft, "custom/wrong-type")]
         [TestCase(HttpListenerMode.EmbedIO, "required-optional")]
-        [TestCase(HttpListenerMode.Microsoft, "required-optional")]
         public async Task UnsupportedConversionAndOptionalRouteMisconfigurationRemain500(HttpListenerMode mode, string path)
         {
             await using var fixture = new Fixture(mode);
@@ -138,7 +123,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task RequestAwareReleaseIsAwaitedOnInvalidRouteBinding(HttpListenerMode mode)
         {
             await using var fixture = new Fixture(mode, scoped: true);
@@ -149,7 +133,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task QueryBodyAndExplicitBindingPriorityKeepTheirExistingStatus(HttpListenerMode mode)
         {
             await using var fixture = new Fixture(mode);
@@ -166,7 +149,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task EarlyBindingRejectionAnswersAPartialPostAndServesAFreshRequest(HttpListenerMode mode)
         {
             await using var fixture = new Fixture(mode);

@@ -137,6 +137,7 @@ namespace EmbedIO.Routing
 
         private TResolver GetResolver(RouteMatcher matcher)
         {
+            EnsureConfigurationNotLocked();
             var resolver = _resolvers.FirstOrDefault(r => r.Matcher.Equals(matcher));
             if (resolver != null)
                 return resolver;

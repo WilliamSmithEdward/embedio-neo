@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics.CodeAnalysis;
+using System;
 
 namespace EmbedIO.Routing
 {
@@ -17,6 +18,7 @@ namespace EmbedIO.Routing
         /// <returns><paramref name="this"/> with handlers added.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
+        [RequiresUnreferencedCode(RouteVerbResolverCollection.ScanMessage)]
         public static RoutingModule WithHandlersFrom(this RoutingModule @this, object target)
         {
             if (@this is null) throw new System.NullReferenceException();

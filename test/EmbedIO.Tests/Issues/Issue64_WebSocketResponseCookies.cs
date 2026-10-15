@@ -18,10 +18,6 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.EmbedIO, false, true)]
         [TestCase(HttpListenerMode.EmbedIO, true, false)]
         [TestCase(HttpListenerMode.EmbedIO, true, true)]
-        [TestCase(HttpListenerMode.Microsoft, false, false)]
-        [TestCase(HttpListenerMode.Microsoft, false, true)]
-        [TestCase(HttpListenerMode.Microsoft, true, false)]
-        [TestCase(HttpListenerMode.Microsoft, true, true)]
         public Task ConfiguredCookiesSurviveUpgrade(HttpListenerMode mode, bool add, bool collision)
             => UseServerAsync(mode, context =>
             {
@@ -71,7 +67,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task SameNameCookiesRetainSeparateExplicitScopes(HttpListenerMode mode)
             => UseServerAsync(mode, context =>
             {
@@ -90,7 +85,6 @@ namespace EmbedIO.Tests.Issues
             });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task RejectedUpgradeKeepsOrdinaryResponseCookies(HttpListenerMode mode)
             => UseServerAsync(mode, context => context.Response.SetCookie(new Cookie("rejected", "yes", "/") { HttpOnly = true, Secure = true }),
                 async (socket, http, url) =>

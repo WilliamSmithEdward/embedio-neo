@@ -1,0 +1,11 @@
+<Project>
+  <!-- EmbedIO's default JSON options use reflection. When an application turns reflection-based
+       System.Text.Json off, as trimmed and Native AOT publishing do by default, EmbedIO's matching
+       feature switch follows it, so trimming removes the reflection paths and they fail with an
+       explicit NotSupportedException instead of an incomplete trimmed type. -->
+  <ItemGroup Condition="'$(JsonSerializerIsReflectionEnabledByDefault)' != ''">
+    <RuntimeHostConfigurationOption Include="EmbedIO.Serialization.IsReflectionEnabled"
+                                    Value="$(JsonSerializerIsReflectionEnabledByDefault)"
+                                    Trim="true" />
+  </ItemGroup>
+</Project>

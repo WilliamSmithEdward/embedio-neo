@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Linq;
 using System.Threading.Tasks;
 using EmbedIO.Utilities;
-using EmbedIO.Internal;
 
 namespace EmbedIO.WebApi
 {
@@ -111,59 +109,26 @@ namespace EmbedIO.WebApi
         Task<string?> IRequestDataAttribute<WebApiController, string>.GetRequestDataAsync(
             WebApiController controller,
             string parameterName)
-        {
-            var data = controller.HttpContext.GetRequestQueryData();
-
-            var fieldName = FieldName ?? parameterName;
-            if (!data.ContainsKey(fieldName) && BadRequestIfMissing)
-                throw HttpException.BadRequest($"Missing query field {fieldName}.");
-
-            return Task.FromResult(data.GetValues(fieldName)?.LastOrDefault());
-        }
+            => Task.FromResult(RequestFieldBinding.GetString(
+                controller.HttpContext.GetRequestQueryData(), FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Query));
 
         Task<string[]?> IRequestDataAttribute<WebApiController, string[]>.GetRequestDataAsync(
             WebApiController controller,
             string parameterName)
-        {
-            var data = controller.HttpContext.GetRequestQueryData();
-
-            var fieldName = FieldName ?? parameterName;
-            if (!data.ContainsKey(fieldName) && BadRequestIfMissing)
-                throw HttpException.BadRequest($"Missing query field {fieldName}.");
-
-            return Task.FromResult<string[]?>(data.GetValues(fieldName) ?? Array.Empty<string>());
-        }
+            => Task.FromResult<string[]?>(RequestFieldBinding.GetStrings(
+                controller.HttpContext.GetRequestQueryData(), FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Query));
 
         Task<object?> IRequestDataAttribute<WebApiController>.GetRequestDataAsync(
             WebApiController controller,
             Type type,
             string parameterName)
         {
-            var data = controller.HttpContext.GetRequestQueryData();
+            // Only the reflection-based binder converts to a runtime type; generated bindings do not call this.
+            if (!ReflectionBinding.IsSupported)
+                throw ReflectionBinding.Disabled();
 
-            var fieldName = FieldName ?? parameterName;
-            if (!data.ContainsKey(fieldName) && BadRequestIfMissing)
-                throw HttpException.BadRequest($"Missing query field {fieldName}.");
-
-            if (type.IsArray)
-            {
-                var fieldValues = data.GetValues(fieldName) ?? Array.Empty<string>();
-                if (!FromString.TryConvertTo(type, fieldValues, out var result))
-                    throw HttpException.BadRequest($"Cannot convert field {fieldName} to an array of {type.GetElementType()?.Name}.");
-
-                return Task.FromResult(result);
-            }
-            else
-            {
-                var fieldValue = data.GetValues(fieldName)?.LastOrDefault();
-                if (fieldValue == null)
-                    return Task.FromResult(type.IsValueType ? Activator.CreateInstance(type) : null);
-
-                if (!FromString.TryConvertTo(type, fieldValue, out var result))
-                    throw HttpException.BadRequest($"Cannot convert field {fieldName} to {type.Name}.");
-
-                return Task.FromResult(result);
-            }
+            return Task.FromResult(RequestFieldBinding.GetUntyped(
+                controller.HttpContext.GetRequestQueryData(), FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Query, type));
         }
     }
 }

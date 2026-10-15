@@ -35,6 +35,9 @@ def violations(text, csharp=False):
     ]
     if csharp:
         code = CS_LITERALS.sub(lambda match: re.sub(r'[^\n]', ' ', match.group()), text)
+        # Conditional directive expressions use logical negation, never nullable suppression.
+        code = re.sub(r"(?m)^\s*#(?:if|elif)\b[^\n]*",
+                      lambda match: re.sub(r'[^\n]', ' ', match.group()), code)
         for match in NULL_FORGIVING.finditer(code):
             if match.group('previous') in {'return', 'throw', 'await', 'yield', 'case'}:
                 continue

@@ -1,8 +1,8 @@
 """Propose the newest YARA pins the malware scan may take.
 
-This file is the same in every repository; the canonical copy lives in
-WilliamSmithEdward/repo-standards (templates/yara/yara_update.py) and the
-rescan checks each copy against it.
+Based on WilliamSmithEdward/repo-standards (templates/yara/yara_update.py).
+This repository deliberately adds a local merge-review policy: automated PRs
+stay open until every exact-head check and scanner acceptance is reviewed.
 
 The pins live in .github/security/yara.json:
 
@@ -38,9 +38,8 @@ nothing in DIR it cannot check: the proposal may change only the pin file,
 only in the fields a move allows, from the commit the workflow ran on. It
 commits through the GitHub API (no git credentials on disk), opens the pull
 request with a GitHub App token, which triggers normal pull-request checks
-without manual workflow approval. It turns
-on auto-merge, so the pull request merges itself once those pass and stays
-open if any fails. It never reopens a pull request someone closed, and never
+without manual workflow approval. It leaves the PR open for exact-head review
+and disables previously armed auto-merge. It never reopens a pull request someone closed, and never
 overwrites a branch it did not just create.
 """
 from __future__ import annotations
@@ -56,6 +55,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+from merge_review import defer_merge
 
 PIN_PATH = ".github/security/yara.json"
 SOURCES = {
@@ -177,8 +178,9 @@ def body(moved: list[str], new: dict[str, Any]) -> str:
               for k, p in new.items()]
     lines += ["",
               "CI, Security and Malware scan run on this branch. If a new rule matches a file, the "
-              "Malware scan fails until the match is fixed or accepted with a reason. Auto-merge "
-              "is enabled only subject to the repository's required checks and review rules."]
+              "Malware scan fails until the match is fixed or reviewed under repository policy. "
+              "This PR remains open for review of every exact-head check, including supplemental "
+              "checks and scanner acceptance/alert-dismissal evidence; future auto-merge is not armed."]
     return "\n".join(lines) + "\n"
 
 
@@ -198,15 +200,8 @@ def prepare(root: Path, out: Path, base_sha: str, api: Api = gh_api,
     return True
 
 
-def gh_auto_merge(url: str) -> None:
-    result = subprocess.run(["gh", "pr", "merge", "--auto", "--squash", url],
-                            capture_output=True, text=True, encoding="utf-8", timeout=120)
-    if result.returncode != 0:
-        raise ApiError(f"auto-merge for {url}: {(result.stdout + result.stderr).strip()}")
-
-
 def propose(root: Path, inp: Path, repository: str, base_sha: str, api: Api = gh_api,
-            auto_merge: Callable[[str], None] = gh_auto_merge) -> str | None:
+            review_merge: Callable[[str], None] = defer_merge) -> str | None:
     proposal = json.loads((inp / "proposal.json").read_text(encoding="utf-8"))
     if proposal["base_sha"] != base_sha or not re.fullmatch(r"[0-9a-f]{40}", base_sha):
         raise ValueError("the proposal was prepared from a different commit")
@@ -243,13 +238,9 @@ def propose(root: Path, inp: Path, repository: str, base_sha: str, api: Api = gh
             "body": (inp / "body.md").read_text(encoding="utf-8")})
     # The App-created PR triggers checks normally. Do not dispatch duplicate
     # branch runs or restart the checks on a PR already awaiting review.
-    # It merges itself once CI, Security and Malware scan pass; a failing scan
-    # leaves it open. Without the "Allow auto-merge" setting it simply stays
-    # open for review, which is not a failure of this run.
-    try:
-        auto_merge(pull["html_url"])
-    except ApiError as exc:
-        print(f"Auto-merge not turned on, so the pull request waits for review: {exc}")
+    # Local policy: do not arm a future merge that could ignore red supplemental
+    # checks. Failure to inspect/disable an existing arm fails this job visibly.
+    review_merge(pull["html_url"])
     return pull["html_url"]
 
 

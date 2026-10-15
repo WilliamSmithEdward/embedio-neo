@@ -85,8 +85,8 @@ namespace EmbedIO.Tests.Issues
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO)).WithModule(module)
                 .OnGet("/health", c => c.SendStringAsync("healthy", "text/plain", WebServer.Utf8NoBomEncoding));
             using var stop = new CancellationTokenSource();
-            // Message-originated closes are observed by the existing 500ms module poll.
-            // 64 sequential disconnect notifications alone can require 32 seconds.
+            // Keep all 64 sequential close/disconnect rounds within one overall deadline.
+            // Managed disconnection now follows the terminal close signal without polling.
             using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(60));
             var running = server.RunAsync(stop.Token);
             try

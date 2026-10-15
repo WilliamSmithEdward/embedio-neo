@@ -1,0 +1,232 @@
+﻿using System;
+using System.Diagnostics;
+using System.IO;
+using System.Net.Sockets;
+using System.Runtime.ExceptionServices;
+using System.Threading;
+using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
+
+namespace EmbedIO.Net.Internal
+{
+    // Transport retirement has one claimant. Protocol actors relinquish their
+    // borrowed resources before this owner publishes completed cleanup to drain.
+    internal sealed class TcpSessionLifetime
+    {
+        private readonly object _gate;
+        private readonly Socket _socket;
+        private readonly Stream _stream;
+        private int _state;
+        private long _deadline;
+        private bool _deadlineArmed;
+        private ExceptionDispatchInfo? _failure;
+        private TaskCompletionSource<bool>? _completion;
+
+        internal TcpSessionLifetime(object gate, Socket socket, Stream stream, Action expired)
+        {
+            _gate = gate;
+            _socket = socket;
+            _stream = stream;
+            DeadlineTimer = new Timer(InvokeExpiry, expired, Timeout.Infinite, Timeout.Infinite);
+        }
+
+        private static void InvokeExpiry(object? state)
+        {
+            if (state is not Action expired) return;
+            try { expired(); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            {
+                // Retirement has already recorded its failure for drain. A
+                // callback has no synchronous caller to receive that exception.
+                try { error.Log("TCP deadline cleanup"); }
+                catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError))
+                {
+                    // A failing application trace observer cannot turn an
+                    // already-observable teardown fault into an unhandled timer.
+                }
+            }
+        }
+
+        internal Timer DeadlineTimer { get; }
+        internal bool CloseFinished => Volatile.Read(ref _state) == 2;
+
+        internal Task Completion
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    if (_state == 2) return _failure == null ? Task.CompletedTask : Task.FromException(_failure.SourceException);
+                    _completion ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    return _completion.Task;
+                }
+            }
+        }
+
+        internal void ArmDeadline(int milliseconds)
+        {
+            lock (_gate)
+            {
+                if (_state != 0) return;
+                _deadline = Stopwatch.GetTimestamp() + (long)(milliseconds * (double)Stopwatch.Frequency / 1000);
+                _deadlineArmed = true;
+                DeadlineTimer.Change(milliseconds, Timeout.Infinite);
+            }
+        }
+
+        internal void StopDeadline()
+        {
+            lock (_gate)
+            {
+                _deadlineArmed = false;
+                if (_state == 0) DeadlineTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            }
+        }
+
+        // Rejection work keeps the existing lifetime owner and can only shorten
+        // its deadline. An earlier configured head deadline is never rearmed.
+        internal bool ShortenDeadline(int milliseconds)
+        {
+            if (milliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(milliseconds));
+            lock (_gate)
+            {
+                if (_state != 0) return false;
+                var now = Stopwatch.GetTimestamp();
+                if (_deadlineArmed && _deadline <= now) return false;
+                var limit = now + (long)(milliseconds * (double)Stopwatch.Frequency / 1000);
+                if (_deadlineArmed && _deadline <= limit) return true;
+                _deadline = limit;
+                _deadlineArmed = true;
+                DeadlineTimer.Change(milliseconds, Timeout.Infinite);
+                return true;
+            }
+        }
+
+        internal bool TryRetire(bool deadlineOnly = false)
+        {
+            lock (_gate)
+            {
+                if (_state != 0) return false;
+                // A timer callback already queued before Stop/Arm cannot retire
+                // a request whose deadline was stopped or moved into the future.
+                if (deadlineOnly)
+                {
+                    if (!_deadlineArmed) return false;
+                    var remaining = _deadline - Stopwatch.GetTimestamp();
+                    if (remaining > 0)
+                    {
+                        // Timer queues may wake before the monotonic deadline.
+                        // Keep a one-shot expiry live instead of losing it.
+                        var milliseconds = Math.Max(1, (int)Math.Ceiling(remaining * 1000.0 / Stopwatch.Frequency));
+                        DeadlineTimer.Change(milliseconds, Timeout.Infinite);
+                        return false;
+                    }
+                }
+                _deadlineArmed = false;
+                Volatile.Write(ref _state, 1);
+                return true;
+            }
+        }
+
+        // Called only by the successful retirement claimant, outside the gate.
+        // Every owned resource is attempted even after a recoverable release fault.
+        internal void FinishRetirement(bool shutdown, IDisposable? input, Action detachProtocol)
+        {
+            var first = ReleaseResources(shutdown, input, detachProtocol);
+            PublishRetirement(first);
+            first?.Throw();
+        }
+
+        // The socket is disposed immediately, without a TLS grace period. Any
+        // interrupted write remains owned until its actual completion is observed.
+        internal async Task FinishRetirementAfterWriteAsync(Task pendingWrite, IDisposable? input, Action detachProtocol)
+        {
+            ExceptionDispatchInfo? first = null;
+            try
+            {
+                try { first = ReleaseResources(true, input, static () => { }); }
+                catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
+                { Capture(error); }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                { Capture(error); }
+                try { await pendingWrite.ConfigureAwait(false); }
+                catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException or OperationCanceledException)
+                {
+                    try { error.Log("Idle TLS shutdown interrupted by transport retirement"); }
+                    catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError)) { }
+                }
+            }
+            catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
+            { Capture(error); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            { Capture(error); }
+            finally
+            {
+                try { detachProtocol(); }
+                catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
+                { Capture(error); }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                { Capture(error); }
+                // This is an actual terminal failure, including a critical one,
+                // rather than a successful close or an indefinitely pending drain.
+                PublishRetirement(first);
+            }
+            first?.Throw();
+
+            void Capture(Exception error)
+            {
+                // A critical fault must not be hidden behind an earlier
+                // recoverable release failure. Preserve its exact identity.
+                if (first == null || !EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                    first = ExceptionDispatchInfo.Capture(error);
+            }
+        }
+
+        private ExceptionDispatchInfo? ReleaseResources(bool shutdown, IDisposable? input, Action detachProtocol)
+        {
+            ExceptionDispatchInfo? first = null;
+            try
+            {
+                if (shutdown)
+                {
+                    try { _socket.Shutdown(SocketShutdown.Both); }
+                    catch (Exception error) when (error is SocketException or ObjectDisposedException) { }
+                }
+            }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            { first = ExceptionDispatchInfo.Capture(error); }
+            Release(_socket);
+            Release(DeadlineTimer);
+            Release(input);
+            Release(_stream);
+            try { detachProtocol(); }
+            catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+            { first ??= ExceptionDispatchInfo.Capture(error); }
+            return first;
+
+            void Release(IDisposable? resource)
+            {
+                try { resource?.Dispose(); }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                { first ??= ExceptionDispatchInfo.Capture(error); }
+            }
+        }
+
+        internal void RecordRetirementFailure(Exception error)
+        {
+            lock (_gate) { _failure ??= ExceptionDispatchInfo.Capture(error); }
+        }
+
+        private void PublishRetirement(ExceptionDispatchInfo? first)
+        {
+            lock (_gate)
+            {
+                first = _failure ?? first;
+                _failure = first;
+                Volatile.Write(ref _state, 2);
+                if (first == null) _completion?.TrySetResult(true);
+                else _completion?.TrySetException(first.SourceException);
+            }
+        }
+    }
+}

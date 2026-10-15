@@ -154,6 +154,42 @@ namespace EmbedIO.Tests
             Assert.That(Decode((converted), targetMethod), Is.EqualTo(payload));
         }
 
+        [TestCase("remove")]
+        [TestCase("clear")]
+        [TestCase("replace")]
+        [TestCase("evict")]
+        public void BrotliContentAccountingDoesNotSurviveDetachment(string detach)
+        {
+            var section = NewSection();
+            var item = NewItem(section);
+            Add(section, "file", item);
+            var supports = typeof(FileCache).Assembly.GetCustomAttribute<System.Runtime.Versioning.TargetFrameworkAttribute>()?.FrameworkName.StartsWith(".NETCoreApp", StringComparison.Ordinal) == true;
+            if (!supports)
+            {
+                var beforeUnsupported = Size(section);
+                var error = Assert.Throws<TargetInvocationException>(() => Call(item, "SetContent", CompressionMethod.Brotli, new byte[257]));
+                Assert.That(error?.InnerException, Is.TypeOf<NotSupportedException>());
+                Assert.That(Size(section), Is.EqualTo(beforeUnsupported));
+                Evict(section);
+                Assert.That(Size(section), Is.Zero);
+                return;
+            }
+            var baseline = Size(section);
+            Call(item, "SetContent", CompressionMethod.Brotli, new byte[257]);
+            Assert.That(Size(section), Is.GreaterThan(baseline + 257));
+            Call(item, "SetContent", CompressionMethod.Brotli, null);
+            Assert.That(Size(section), Is.EqualTo(baseline));
+            Call(item, "SetContent", CompressionMethod.Brotli, new byte[257]);
+            if (detach == "clear") Call(section, "Clear");
+            else if (detach == "replace") Add(section, "file", NewItem(section));
+            else if (detach == "evict") Evict(section);
+            else Call(section, "Remove", "file");
+            var afterDetach = Size(section);
+            Call(item, "SetContent", CompressionMethod.Brotli, new byte[1024]);
+            Assert.That(Size(section), Is.EqualTo(afterDetach));
+            if (detach == "replace") Evict(section);
+            Assert.That(Size(section), Is.Zero);
+        }
         private static byte[] Encode(byte[] bytes, CompressionMethod method)
         {
             if (method == CompressionMethod.None) return bytes;

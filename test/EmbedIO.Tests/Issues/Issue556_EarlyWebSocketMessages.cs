@@ -116,12 +116,6 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.EmbedIO, 3)]
         [TestCase(HttpListenerMode.EmbedIO, 4)]
         [TestCase(HttpListenerMode.EmbedIO, 5)]
-        [TestCase(HttpListenerMode.Microsoft, 0)]
-        [TestCase(HttpListenerMode.Microsoft, 1)]
-        [TestCase(HttpListenerMode.Microsoft, 2)]
-        [TestCase(HttpListenerMode.Microsoft, 3)]
-        [TestCase(HttpListenerMode.Microsoft, 4)]
-        [TestCase(HttpListenerMode.Microsoft, 5)]
         public async Task ClientCanSendWhileTheConnectionCallbackIsPending(HttpListenerMode mode, int shape)
         {
             var url = Resources.GetServerAddress();
@@ -209,8 +203,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task FailedConnectionCallbackRemovesItsAcceptedContext(HttpListenerMode mode, bool canceled)
         {
             var url = Resources.GetServerAddress();
@@ -259,8 +251,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task CloseOrStopDuringInitializationCleansUpOnce(HttpListenerMode mode, bool shutdown)
         {
             var url = Resources.GetServerAddress();
@@ -276,8 +266,11 @@ namespace EmbedIO.Tests.Issues
                 await module.Connected.Task.WaitAsync(timeout.Token);
                 if (shutdown)
                 {
+                    // The client answers the stop's 1001 close, so the stop does not wait out its budget.
+                    var answering = ClientWebSocketClose.AnswerAsync(client, timeout.Token);
                     stop.Cancel();
                     await running.WaitAsync(timeout.Token);
+                    await answering;
                 }
                 else
                 {
@@ -294,7 +287,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ImmediateMessagesFromIndependentClientsRemainIsolated(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();

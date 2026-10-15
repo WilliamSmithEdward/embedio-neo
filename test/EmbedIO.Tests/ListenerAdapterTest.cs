@@ -16,7 +16,6 @@ namespace EmbedIO.Tests
     public class ListenerAdapterTest
     {
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task PostBodyQueryAndResponseHeadersSurviveAdapter(HttpListenerMode mode)
             => UseServerAsync(mode,
                 server => server.OnAny(async context =>
@@ -44,7 +43,6 @@ namespace EmbedIO.Tests
                 });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task SessionCookieRetainsDataAcrossRequests(HttpListenerMode mode)
             => UseServerAsync(mode,
                 server => server.WithSessionManager(new LocalSessionManager()).OnAny(context =>
@@ -66,8 +64,6 @@ namespace EmbedIO.Tests
 
         [TestCase(HttpListenerMode.EmbedIO, WebSocketMessageType.Text)]
         [TestCase(HttpListenerMode.EmbedIO, WebSocketMessageType.Binary)]
-        [TestCase(HttpListenerMode.Microsoft, WebSocketMessageType.Text)]
-        [TestCase(HttpListenerMode.Microsoft, WebSocketMessageType.Binary)]
         public Task FragmentedWebSocketMessagesAreReassembledAndMessageBoundariesPreserved(HttpListenerMode mode, WebSocketMessageType type)
             => UseServerAsync(mode,
                 server => server.WithModule(new EchoSocket()),
@@ -91,7 +87,6 @@ namespace EmbedIO.Tests
                 });
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public Task WebSocketNegotiatesSupportedSubprotocol(HttpListenerMode mode)
             => UseServerAsync(mode,
                 server => server.WithModule(new EchoSocket("echo.v1")),
@@ -107,11 +102,8 @@ namespace EmbedIO.Tests
                 });
 
         [TestCase(HttpListenerMode.EmbedIO, true, "other.v1")]
-        [TestCase(HttpListenerMode.Microsoft, true, "other.v1")]
         [TestCase(HttpListenerMode.EmbedIO, true, null)]
-        [TestCase(HttpListenerMode.Microsoft, true, null)]
         [TestCase(HttpListenerMode.EmbedIO, false, "echo.v1")]
-        [TestCase(HttpListenerMode.Microsoft, false, "echo.v1")]
         public Task WebSocketRejectsOffersWithoutAnAcceptedProtocol(HttpListenerMode mode, bool configured, string? offered)
             => UseServerAsync(mode,
                 server => server.WithModule(new EchoSocket(configured ? "echo.v1" : null)),
@@ -127,7 +119,6 @@ namespace EmbedIO.Tests
                     Assert.That(socket.HttpStatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
                 });
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task WebSocketCompletionRunsCallbacksAndLeavesHttpListenerAvailable(HttpListenerMode mode)
         {
             var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

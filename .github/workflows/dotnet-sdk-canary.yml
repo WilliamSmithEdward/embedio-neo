@@ -1,0 +1,99 @@
+name: .NET SDK canary
+
+# Informational: it gates nothing. Each Monday, and on demand, builds and tests
+# the branch with the newest .NET 10 SDK and runtime instead of the pinned ones:
+# global.json may roll forward to that SDK, and restore re-evaluates without the
+# lock files. A failure here is an early warning of what the next SDK move
+# (update-dotnet-sdk.yml) will run into, and the job summary lists the SDK, the
+# runtimes and the lock-file changes that move would bring.
+
+on:
+  schedule:
+    - cron: "47 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dotnet-sdk-canary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  canary:
+    name: Newest SDK (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Deliberately unpinned: the newest SDK in the 10.0 channel is the point of
+      # this job. Nothing it builds is published or reused.
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Install pinned Linux QUIC prerequisite
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$RUNNER_TEMP/libmsquic_2.6.2_amd64.deb"
+          curl --fail --location --retry 3 --output "$package" https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/libm/libmsquic/libmsquic_2.6.2_amd64.deb
+          printf '%s  %s\n' 9ac90841ad45d99c1ff85b427d6dc7f0849291d596f0049d13db779a5a66ba4e "$package" | sha256sum --check
+          sudo apt-get update
+          sudo apt-get install --yes "$package"
+      - name: Let global.json roll forward to the newest SDK
+        shell: pwsh
+        run: |
+          $json = Get-Content global.json -Raw | ConvertFrom-Json
+          $json.sdk.rollForward = 'latestFeature'
+          $json | ConvertTo-Json -Depth 5 | Set-Content global.json
+      - name: Record the toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "### Newest SDK on ${RUNNER_OS}"
+            echo
+            echo "Pinned: $(git show HEAD:global.json | grep -o '"version": *"[^"]*"')"
+            echo
+            echo '```'
+            dotnet --version
+            dotnet --list-runtimes
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Restore without the lock files
+        run: dotnet restore EmbedIO.sln --force-evaluate
+      - name: Record the lock-file changes a move would bring
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '```'
+            git diff --stat -- '*.lock.json' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Build with the analyzers
+        run: dotnet build EmbedIO.sln -c Release --no-restore -p:RunAnalyzers=true -p:EnforceCodeStyleInBuild=true
+      - name: Run the regression suite
+        shell: bash
+        env:
+          EMBEDIO_REQUIRE_QUIC: '1'
+        # The raw MsQuic rebind case tests MsQuic, not the SDK; CI quarantines it
+        # (docs/project/http-engine.md), so it is left out here.
+        run: >-
+          dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build
+          --report-trx --results-directory TestResults --timeout 8m
+          --filter "FullyQualifiedName!~DisposedRuntimeListenerRebindsSameEndpoint"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: canary-results-${{ matrix.os }}
+          path: TestResults/
+          if-no-files-found: ignore
+          retention-days: 14

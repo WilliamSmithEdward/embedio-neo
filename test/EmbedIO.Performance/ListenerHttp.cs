@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -40,6 +41,8 @@ internal static class ListenerHttp
         if (bodySize > 0 && consumption != "full" && (policy != "keep-alive" || 8L + (long)requests * rounds >= 100))
             throw new ArgumentException("Partial/unread POST workloads need keep-alive and fewer than 100 requests per worker including eight warmups; the existing forced-close lifetime can reset a request body still being sent.");
         var churnModes = policy == "keep-alive" ? new[] { false } : policy == "close" ? new[] { true } : new[] { false, true };
+        if (verify && OperatingSystem.IsWindows() && churnModes.Contains(true))
+            await ExclusiveLoopbackPorts.VerifyAsync().ConfigureAwait(false);
         var retain = verify || args.Contains("--retain-connections", StringComparer.Ordinal);
         EmbedIO.Diagnostics.Log.Source.Switch.Level = SourceLevels.Off;
         var results = new List<object>();
@@ -95,11 +98,18 @@ internal static class ListenerHttp
                         }));
                     using var stop = new CancellationTokenSource();
                     var running = server.RunAsync(stop.Token);
-                    using var client = secure ? HttpsSmoke.CreateClient(((certificate) ?? throw new System.InvalidOperationException("Expected a non-null test value."))) : new HttpClient();
+                    var handler = new SocketsHttpHandler();
+                    var exclusiveBinding = churn && OperatingSystem.IsWindows();
+                    using var clientPorts = exclusiveBinding ? new ExclusiveLoopbackPorts(new IPEndPoint(IPAddress.Parse(new Uri(url).Host), new Uri(url).Port)) : null;
+                    if (exclusiveBinding)
+                        handler.ConnectCallback = (context, token) => ConnectExclusiveLoopbackAsync(context, token,
+                            clientPorts ?? throw new InvalidOperationException("Missing client port owner."));
+                    using var client = secure ? HttpsSmoke.CreateClient(((certificate) ?? throw new System.InvalidOperationException("Expected a non-null test value.")), handler) : new HttpClient(handler);
                     client.DefaultRequestVersion = HttpVersion.Version11;
                     client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
                     client.Timeout = TimeSpan.FromSeconds(20);
                     var rows = new List<object>();
+                    var phase = "warmup";
                     try
                     {
                         async Task Request()
@@ -123,6 +133,7 @@ internal static class ListenerHttp
                         var retainedBefore = GC.GetTotalMemory(false);
                         for (var round = 0; round < rounds; round++)
                         {
+                            phase = $"measurement round {round}";
                             var samples = new double[workers * requests];
                             var gcBefore = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
                             var allocatedBefore = GC.GetTotalAllocatedBytes(true);
@@ -152,9 +163,15 @@ internal static class ListenerHttp
                                 collections = Enumerable.Range(0, 3).Select(index => GC.CollectionCount(index) - gcBefore[index]).ToArray()
                             });
                         }
+                        if (verify && exclusiveBinding && ports.Count != workers * requests * rounds)
+                            throw new InvalidOperationException("Exclusive churn connections reused a measured client port.");
+                        if (verify && clientPorts != null && clientPorts.SelectedCount != workers * (8 + requests * rounds))
+                            throw new InvalidOperationException("Exclusive churn connections reused a warmup client port.");
+                        phase = "shutdown verification";
                         stop.Cancel();
                         await running.WaitAsync(TimeSpan.FromSeconds(10));
                         client.Dispose();
+                        clientPorts?.Dispose();
                         server.Dispose();
                         await Task.Delay(100);
                         var openStreams = 0;
@@ -163,7 +180,10 @@ internal static class ListenerHttp
                         {
                             var type = connection.GetType();
                             if (((Stream)((((type.GetProperty("Stream")) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).GetValue(connection)) ?? throw new System.InvalidOperationException("Expected a non-null test value."))).CanRead) openStreams++;
-                            var timer = (Timer)((((type.GetField("_timer", BindingFlags.Instance | BindingFlags.NonPublic)) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).GetValue(connection)) ?? throw new System.InvalidOperationException("Expected a non-null test value."));
+                            var lifetime = type.GetField("_lifetime", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(connection)
+                                ?? throw new InvalidOperationException("Missing transport lifetime owner.");
+                            var timer = lifetime.GetType().GetProperty("DeadlineTimer", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(lifetime) as Timer
+                                ?? throw new InvalidOperationException("Missing owned deadline timer.");
                             try { if (((timer) ?? throw new System.InvalidOperationException("Expected a non-null test value.")).Change(Timeout.Infinite, Timeout.Infinite)) activeTimers++; }
                             catch (ObjectDisposedException) { }
                         }
@@ -174,6 +194,10 @@ internal static class ListenerHttp
                         {
                             protocol = secure ? "https" : "http",
                             connectionPolicy = churn ? "close-per-request" : "keep-alive",
+                            clientSocketBinding = exclusiveBinding ? "exclusive-loopback" : "runtime-default",
+                            rejectedClientPortCandidates = clientPorts?.ReservationCount,
+                            preexistingClientTuplePorts = clientPorts?.PreexistingCount,
+                            openClientPortReservationsAfterShutdown = clientPorts?.OpenReservations,
                             workers,
                             payloadBytes = payload.Length,
                             responseChunkBytes = chunkSize,
@@ -190,8 +214,16 @@ internal static class ListenerHttp
                             processWorkingSetBytesAfterShutdown = process.WorkingSet64,
                             rows
                         });
-                        if (verify && (openStreams != 0 || activeTimers != 0))
-                            throw new InvalidOperationException($"Shutdown retained {openStreams} transport wrappers and {activeTimers} timers.");
+                        if (verify && (openStreams != 0 || activeTimers != 0 || clientPorts?.OpenReservations > 0))
+                            throw new InvalidOperationException($"Shutdown retained {openStreams} transport wrappers, {activeTimers} timers and {clientPorts?.OpenReservations ?? 0} client port reservations.");
+                    }
+                    catch (Exception error)
+                    {
+                        throw new InvalidOperationException(
+                            $"HTTP workload failed: url={url}, phase={phase}, closePerRequest={churn}, workers={workers}, "
+                            + $"requestBodyBytes={bodySize}, bodyConsumption={consumption}, responseBytes={payloadSize}, "
+                            + $"responseChunkBytes={chunkSize}, observedPeerPorts={ports.Count}, retainedConnections={connections.Count}, "
+                            + $"serverState={server.State}, serverTask={running.Status}, diagnostics={CaptureFailureState(connections)}, tcp={CaptureConnectingTcpState(new Uri(url).Port)}.", error);
                     }
                     finally
                     {
@@ -211,8 +243,134 @@ internal static class ListenerHttp
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 
+    private static string CaptureFailureState(ConcurrentDictionary<object, byte> retained)
+    {
+        // Run only after failure. Never read payloads, alter timers or hold a registry
+        // lock indefinitely while diagnosing a possible stalled transport.
+        try
+        {
+            static object? Field(object value, string name)
+                => value.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(value);
+            var connections = new HashSet<object>(retained.Take(32).Select(pair => pair.Key));
+            var endpoints = new List<object>();
+            object?[] registryArguments = { null };
+            var registryMethod = typeof(EmbedIO.Net.EndPointManager).GetMethod("TryEndpoints", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Missing endpoint registration diagnostics.");
+            var registryBusy = registryMethod.Invoke(null, registryArguments) is not true;
+            if (!registryBusy && registryArguments[0] is Array registry)
+                foreach (var endpoint in registry)
+                {
+                    if (endpoint == null || endpoints.Count == 32) continue;
+                    int? registeredCount = null, pendingCount = null;
+                    bool? listenerReadable = null;
+                    string? listenerSocketError = null;
+                    try
+                    {
+                        if (endpoint.GetType().GetProperty("ListeningSocket", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint)
+                            is System.Net.Sockets.Socket socket)
+                            listenerReadable = socket.Poll(0, System.Net.Sockets.SelectMode.SelectRead);
+                    }
+                    catch (Exception error) when (error is System.Net.Sockets.SocketException or ObjectDisposedException)
+                    { listenerSocketError = error.GetType().Name; }
+                    var owner = endpoint.GetType().GetProperty("Listener", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint);
+                    if (owner != null && ListenerInventory.Sessions(owner) is System.Collections.IEnumerable registered)
+                    {
+                        registeredCount = (int?)registered.GetType().GetProperty("Count")?.GetValue(registered);
+                        var sampled = 0;
+                        foreach (var entry in registered)
+                        {
+                            var connection = entry?.GetType().GetProperty("Key")?.GetValue(entry);
+                            if (connection != null) connections.Add(connection);
+                            if (++sampled == 32) break;
+                        }
+                    }
+                    object?[] snapshotArguments = { null };
+                    var snapshot = endpoint.GetType().GetMethod("TryPendingConnections", BindingFlags.Instance | BindingFlags.NonPublic)
+                        ?? throw new InvalidOperationException("Missing endpoint pending-session diagnostics.");
+                    var busy = snapshot.Invoke(endpoint, snapshotArguments) is not true;
+                    if (!busy && snapshotArguments[0] is Array items)
+                    {
+                        pendingCount = items.Length;
+                        foreach (var connection in items.Cast<object>().Take(32)) connections.Add(connection);
+                    }
+                    endpoints.Add(new
+                    {
+                        worker = (Field(endpoint, "_acceptWorker") as Task)?.Status.ToString(),
+                        admissionStopped = endpoint.GetType().GetProperty("AdmissionStopped", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(endpoint),
+                        pendingRegistryBusy = busy,
+                        registeredConnections = registeredCount,
+                        pendingConnections = pendingCount,
+                        listenerReadable,
+                        listenerSocketError
+                    });
+                }
+            var live = connections.Where(connection => Field(connection, "_protocolEnded") is not 1).Take(32)
+                .Select(connection =>
+                {
+                    var stream = connection.GetType().GetProperty("Stream")?.GetValue(connection) as Stream;
+                    var input = Field(connection, "_iStream");
+                    return new
+                    {
+                        resourcesDisposed = Field(connection, "_protocolEnded"),
+                        contextBound = Field(connection, "_contextBound"),
+                        readBufferAllocated = Field(connection, "_buffer") is byte[],
+                        reuses = connection.GetType().GetProperty("Reuses")?.GetValue(connection),
+                        tlsAuthenticated = (stream as System.Net.Security.SslStream)?.IsAuthenticated,
+                        remainingBody = input == null ? null : Field(input, "_bytesLeft"),
+                        responseFinishing = Field(connection, "_responseFinishing")
+                    };
+                }).ToArray();
+            return JsonSerializer.Serialize(new
+            {
+                threadPoolThreads = ThreadPool.ThreadCount,
+                pendingWorkItems = ThreadPool.PendingWorkItemCount,
+                completedWorkItems = ThreadPool.CompletedWorkItemCount,
+                retainedConnections = retained.Count,
+                sampledConnections = connections.Count,
+                liveConnectionSample = live,
+                registryBusy,
+                endpoints
+            });
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or TargetInvocationException or InvalidCastException)
+        { return $"Snapshot unavailable: {error.GetType().FullName}"; }
+    }
+
     private static double Percentile(double[] values, double percentile)
         => values[Math.Clamp((int)Math.Ceiling(values.Length * percentile) - 1, 0, values.Length - 1)];
+
+    private static string CaptureConnectingTcpState(int port)
+    {
+        try
+        {
+            var table = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections();
+            return JsonSerializer.Serialize(table.Where(row => row.RemoteEndPoint.Port == port
+                    && row.State == System.Net.NetworkInformation.TcpState.SynSent).Take(32)
+                .Select(row => new
+                {
+                    local = row.LocalEndPoint.ToString(),
+                    remote = row.RemoteEndPoint.ToString(),
+                    reverseTimeWait = table.Any(peer => peer.State == System.Net.NetworkInformation.TcpState.TimeWait
+                        && peer.LocalEndPoint.Equals(row.RemoteEndPoint) && peer.RemoteEndPoint.Equals(row.LocalEndPoint))
+                }));
+        }
+        catch (Exception error) when (error is System.Net.NetworkInformation.NetworkInformationException or PlatformNotSupportedException)
+        { return $"Snapshot unavailable: {error.GetType().FullName}"; }
+    }
+
+    private static async ValueTask<Stream> ConnectExclusiveLoopbackAsync(SocketsHttpConnectionContext context, CancellationToken token, ExclusiveLoopbackPorts ports)
+    {
+        var address = IPAddress.Parse(context.DnsEndPoint.Host);
+        if (!IPAddress.IsLoopback(address)) throw new InvalidOperationException("The workload requires a loopback endpoint.");
+        var socket = ports.Bind(address, token);
+        try
+        {
+            socket.NoDelay = true;
+            await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), token).ConfigureAwait(false);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch { socket.Dispose(); throw; }
+    }
 
     private static int Integer(string[] args, string option, int fallback)
     {

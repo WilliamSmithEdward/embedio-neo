@@ -10,73 +10,38 @@ namespace EmbedIO.Internal
             if (source == null)
                 return null;
 
-            if (sourceMethod == targetMethod)
+#if !NET10_0_OR_GREATER
+            if (sourceMethod == CompressionMethod.Brotli || targetMethod == CompressionMethod.Brotli)
+                throw new System.NotSupportedException("Brotli conversion requires the .NET 10 asset.");
+#endif
+            // Preserve identity, including unknown values historically treated as None.
+            if (sourceMethod == targetMethod || !IsCompressed(sourceMethod) && !IsCompressed(targetMethod))
                 return source;
 
-            switch (sourceMethod)
+            using var input = new MemoryStream(source, false);
+            using var decoded = sourceMethod switch
             {
-                case CompressionMethod.Deflate:
-                    using (var sourceStream = new MemoryStream(source, false))
-                    {
-                        using var decompressionStream = new DeflateStream(sourceStream, CompressionMode.Decompress, true);
-                        using var targetStream = new MemoryStream();
-                        if (targetMethod == CompressionMethod.Gzip)
-                        {
-                            using var compressionStream = new GZipStream(targetStream, CompressionMode.Compress, true);
-                            decompressionStream.CopyTo(compressionStream);
-                        }
-                        else
-                        {
-                            decompressionStream.CopyTo(targetStream);
-                        }
-
-                        return targetStream.ToArray();
-                    }
-
-                case CompressionMethod.Gzip:
-                    using (var sourceStream = new MemoryStream(source, false))
-                    {
-                        using var decompressionStream = new GZipStream(sourceStream, CompressionMode.Decompress, true);
-                        using var targetStream = new MemoryStream();
-                        if (targetMethod == CompressionMethod.Deflate)
-                        {
-                            using var compressionStream = new DeflateStream(targetStream, CompressionMode.Compress, true);
-                            decompressionStream.CopyTo(compressionStream);
-                        }
-                        else
-                        {
-                            decompressionStream.CopyTo(targetStream);
-                        }
-
-                        return targetStream.ToArray();
-                    }
-
-                default:
-                    using (var sourceStream = new MemoryStream(source, false))
-                    {
-                        using var targetStream = new MemoryStream();
-                        switch (targetMethod)
-                        {
-                            case CompressionMethod.Deflate:
-                                using (var compressionStream = new DeflateStream(targetStream, CompressionMode.Compress, true))
-                                    sourceStream.CopyTo(compressionStream);
-
-                                break;
-
-                            case CompressionMethod.Gzip:
-                                using (var compressionStream = new GZipStream(targetStream, CompressionMode.Compress, true))
-                                    sourceStream.CopyTo(compressionStream);
-
-                                break;
-
-                            default:
-                                // Just in case. Consider all other values as None.
-                                return source;
-                        }
-
-                        return targetStream.ToArray();
-                    }
-            }
+#if NET10_0_OR_GREATER
+                CompressionMethod.Brotli => (Stream)new BrotliStream(input, CompressionMode.Decompress, true),
+#endif
+                CompressionMethod.Gzip => (Stream)new GZipStream(input, CompressionMode.Decompress, true),
+                CompressionMethod.Deflate => new DeflateStream(input, CompressionMode.Decompress, true),
+                _ => input
+            };
+            using var output = new MemoryStream();
+            using (Stream encoded = targetMethod switch
+            {
+#if NET10_0_OR_GREATER
+                CompressionMethod.Brotli => new BrotliStream(output, CompressionMode.Compress, true),
+#endif
+                CompressionMethod.Gzip => new GZipStream(output, CompressionMode.Compress, true),
+                CompressionMethod.Deflate => new DeflateStream(output, CompressionMode.Compress, true),
+                _ => output
+            }) decoded.CopyTo(encoded);
+            return output.ToArray();
         }
+
+        private static bool IsCompressed(CompressionMethod method)
+            => method is CompressionMethod.Deflate or CompressionMethod.Gzip or CompressionMethod.Brotli;
     }
 }

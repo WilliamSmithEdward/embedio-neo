@@ -1,0 +1,26 @@
+diff --git a/src/platform/datapath_kqueue.c b/src/platform/datapath_kqueue.c
+index 9803493..9f4ac46 100644
+--- a/src/platform/datapath_kqueue.c
++++ b/src/platform/datapath_kqueue.c
+@@ -439,7 +439,6 @@ CxPlatDataPathInitialize(
+     )
+ {
+     UNREFERENCED_PARAMETER(TcpCallbacks);
+-    UNREFERENCED_PARAMETER(InitConfig);
+ 
+     if (NewDataPath == NULL) {
+         return QUIC_STATUS_INVALID_PARAMETER;
+@@ -453,6 +452,13 @@ CxPlatDataPathInitialize(
+         return QUIC_STATUS_INVALID_PARAMETER;
+     }
+ 
++    // Kqueue has no raw datapath. Do not silently turn an explicitly requested
++    // XDP map-mode datapath into an ordinary UDP datapath.
++    if (InitConfig->XdpMapConfigCount != 0) {
++        *NewDataPath = NULL;
++        return QUIC_STATUS_NOT_SUPPORTED;
++    }
++
+     const size_t DatapathLength =
+         sizeof(CXPLAT_DATAPATH) +
+         CxPlatWorkerPoolGetCount(WorkerPool) * sizeof(CXPLAT_DATAPATH_PARTITION);

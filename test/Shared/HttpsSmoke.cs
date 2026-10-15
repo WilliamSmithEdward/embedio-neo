@@ -14,7 +14,7 @@ namespace EmbedIO.PlatformTests
     // Test-only certificate and trust pin; never used by production packages.
     internal static class HttpsSmoke
     {
-        internal static X509Certificate2 CreateCertificate()
+        internal static X509Certificate2 CreateCertificate(X509KeyStorageFlags keyStorageFlags = X509KeyStorageFlags.DefaultKeySet)
         {
             using var key = RSA.Create(2048);
             var request = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -29,7 +29,7 @@ namespace EmbedIO.PlatformTests
             using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
             // Exercise private-key provisioning via PKCS#12 as a deployed app would.
             // Windows Schannel requires a key container for server authentication.
-            return X509CertificateLoader.LoadPkcs12(generated.Export(X509ContentType.Pfx), null, X509KeyStorageFlags.DefaultKeySet);
+            return X509CertificateLoader.LoadPkcs12(generated.Export(X509ContentType.Pfx), null, keyStorageFlags);
         }
 
         internal static string GetUrl()
@@ -39,19 +39,18 @@ namespace EmbedIO.PlatformTests
             return $"https://127.0.0.1:{((IPEndPoint)port.LocalEndpoint).Port}/";
         }
 
-        internal static HttpClient CreateClient(X509Certificate2 certificate)
+        internal static HttpClient CreateClient(X509Certificate2 certificate, SocketsHttpHandler? handler = null)
         {
             var expected = certificate.GetCertHashString(HashAlgorithmName.SHA256);
-            return new HttpClient(new SocketsHttpHandler
+            handler ??= new SocketsHttpHandler();
+            handler.SslOptions = new SslClientAuthenticationOptions
             {
-                SslOptions = new SslClientAuthenticationOptions
-                {
-                    // Trust exactly the generated leaf, retaining hostname validation.
-                    RemoteCertificateValidationCallback = (_, peer, _, errors) => peer != null
-                        && (errors & ~SslPolicyErrors.RemoteCertificateChainErrors) == SslPolicyErrors.None
-                        && peer.GetCertHashString(HashAlgorithmName.SHA256) == expected,
-                },
-            })
+                // Trust exactly the generated leaf, retaining hostname validation.
+                RemoteCertificateValidationCallback = (_, peer, _, errors) => peer != null
+                    && (errors & ~SslPolicyErrors.RemoteCertificateChainErrors) == SslPolicyErrors.None
+                    && peer.GetCertHashString(HashAlgorithmName.SHA256) == expected,
+            };
+            return new HttpClient(handler)
             { Timeout = TimeSpan.FromSeconds(10) };
         }
 

@@ -1,7 +1,6 @@
 ﻿using System;
 using System.IO;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.WebSockets;
@@ -15,16 +14,13 @@ namespace EmbedIO.Tests.Issues
         public async Task CallerCancellationInterruptsTheSilentPeerAcknowledgementWait()
         {
             var assembly = typeof(WebServer).Assembly;
-            var connectionType = assembly.GetType("EmbedIO.Net.Internal.HttpConnection", true);
-            var connection = RuntimeHelpers.GetUninitializedObject((connectionType ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")));
-            GC.SuppressFinalize(connection);
             using var transport = new ProbeStream();
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            ((connectionType).GetField("<Stream>k__BackingField", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(connection, transport);
             var type = assembly.GetType("EmbedIO.WebSockets.Internal.WebSocket", true);
-            var socket = (IWebSocket)(Activator.CreateInstance((type ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), flags, null, new[] { connection }, null) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             var closed = 0;
-            ((type).GetField("_closeConnection", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket, new Action(() => Interlocked.Increment(ref closed)));
+            var socket = (IWebSocket)(Activator.CreateInstance((type ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")),
+                flags, null, new object[] { transport, (Action)(() => Interlocked.Increment(ref closed)) }, null)
+                ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value."));
             ((type).GetField("_exitReceiving", flags) ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")).SetValue(socket, new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
             using var cancel = new CancellationTokenSource();
             var closing = Task.Run(() => (socket).CloseAsync(cancel.Token));

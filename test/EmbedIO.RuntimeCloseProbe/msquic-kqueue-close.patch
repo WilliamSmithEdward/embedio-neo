@@ -1,0 +1,19 @@
+diff --git a/src/platform/datapath_kqueue.c b/src/platform/datapath_kqueue.c
+index 9803493..71c5087 100644
+--- a/src/platform/datapath_kqueue.c
++++ b/src/platform/datapath_kqueue.c
+@@ -1022,6 +1022,14 @@ CxPlatSocketContextUninitialize(
+             &SocketContext->IoSqe,
+             EVFILT_READ,
+             EV_DELETE);
++
++        //
++        // Release the bound endpoint before returning to the caller. Keep
++        // context reclamation queued until previously returned events drain.
++        //
++        close(SocketContext->SocketFd);
++        SocketContext->SocketFd = INVALID_SOCKET;
++
+         CxPlatEventQEnqueue(
+             SocketContext->DatapathPartition->EventQ,
+             &SocketContext->ShutdownSqe);

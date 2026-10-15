@@ -87,7 +87,10 @@ namespace EmbedIO.Files
             if (requestPath.Length == 1)
                 return null;
 
-            requestPath = Uri.UnescapeDataString(requestPath);
+            // One segment at a time, for the reason Internal.RequestPathDecoder records: an
+            // encoded separator must not become a boundary that module routing never matched.
+            if (!Internal.RequestPathDecoder.TryDecodeSegments(requestPath, out requestPath))
+                return null;
 
             string fullName;
             string name;
@@ -99,7 +102,8 @@ namespace EmbedIO.Files
                 if (entry == null) return null;
                 fullName = entry.FullName;
                 name = entry.Name;
-                lastWriteTime = entry.LastWriteTime.DateTime;
+                // Resource validators compare in UTC; the entry's local clock time would skew them.
+                lastWriteTime = entry.LastWriteTime.UtcDateTime;
                 length = entry.Length;
             }
 

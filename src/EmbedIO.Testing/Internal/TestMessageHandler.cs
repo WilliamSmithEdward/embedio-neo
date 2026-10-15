@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Routing;
@@ -21,10 +22,9 @@ namespace EmbedIO.Testing.Internal
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var serverRequest = new TestRequest(Validate.NotNull(nameof(request), request));
-            var cookiesFromContainer = CookieContainer.GetCookieHeader(serverRequest.Url);
-            if (!string.IsNullOrEmpty(cookiesFromContainer))
-                serverRequest.Headers.Add(HttpHeaderNames.Cookie, cookiesFromContainer);
+            request = Validate.NotNull(nameof(request), request);
+            var uri = request.RequestUri ?? throw new System.ArgumentException("The request must have a URL.", nameof(request));
+            var serverRequest = new TestRequest(request, CookieContainer.GetCookieHeader(uri));
 
             var context = new TestContext(serverRequest)
             {
@@ -38,9 +38,8 @@ namespace EmbedIO.Testing.Internal
             // Preserve the client's cancellation contract after cleanup completes.
             cancellationToken.ThrowIfCancellationRequested();
             var serverResponse = context.TestResponse;
-            var responseCookies = serverResponse.Headers.Get(HttpHeaderNames.SetCookie);
-            if (!string.IsNullOrEmpty(responseCookies))
-                CookieContainer.SetCookies(serverRequest.Url, responseCookies);
+            foreach (var cookie in serverResponse.Headers.GetValues(HttpHeaderNames.SetCookie) ?? System.Array.Empty<string>())
+                CookieContainer.SetCookies(serverRequest.Url, cookie);
 
             var response = new HttpResponseMessage((HttpStatusCode)serverResponse.StatusCode)
             {
@@ -60,6 +59,22 @@ namespace EmbedIO.Testing.Internal
                         response.Headers.Add(key, serverResponse.Headers.GetValues(key) ?? System.Array.Empty<string>());
                         break;
                 }
+            }
+
+            foreach (var cookie in serverResponse.Cookies)
+            {
+                if (cookie.Name.Length == 0) continue;
+                var value = new System.Text.StringBuilder();
+                EmbedIO.Internal.ResponseCookieFormatter.Append(value, cookie);
+                response.Headers.Add(HttpHeaderNames.SetCookie, value.ToString());
+                CookieContainer.Add(serverRequest.Url, cookie);
+            }
+            if (response.Content != null && response.Content.Headers.ContentType == null && serverResponse.ContentType != null)
+            {
+                var contentType = MediaTypeHeaderValue.Parse(serverResponse.ContentType);
+                if (contentType.CharSet == null && serverResponse.ContentEncoding != null)
+                    contentType.CharSet = serverResponse.ContentEncoding.WebName;
+                response.Content.Headers.ContentType = contentType;
             }
 
             return response;

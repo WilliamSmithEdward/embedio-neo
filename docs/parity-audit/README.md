@@ -2,7 +2,12 @@
 
 This audit compares the same consumer program against published
 [EmbedIO 3.5.2](https://www.nuget.org/packages/EmbedIO/3.5.2), pinned SWAN 3.1.0,
-and both current Neo library assets. It measures specific compatibility behavior;
+and both Neo library assets at the revisions recorded below. The area reports
+retain that historical snapshot, including its v1 native-listener comparisons;
+they are not an inventory or acceptance receipt for the current v2 engine. See the
+[v1-to-v2 migration guide](../compatibility/neo-v1-to-v2.md) for backend retirement
+and later API changes. The current runner must produce its own exact-source
+report when validating a new revision. This audit measures specific compatibility behavior;
 it does not establish that Neo has no bugs or that every upstream application is
 binary compatible. Findings are kept in one file per major functional area.
 
@@ -67,6 +72,18 @@ from Windows's full native comparison; neither production code nor a test timeou
 was changed to obtain parity. Initial failures are retained under ignored
 `TestResults/ci-initial-linux` and `TestResults/ci-initial-macos`. The revised
 macOS profile must pass CI; completion is recorded in the PR results and artifacts.
+
+Current profiles (October 13, 2026): Windows and Linux each compare 142 cases
+(284 upstream-to-Neo comparisons), and macOS compares 138 (276). The `macos`
+profile derives from `unix` in `reviewed-differences.json` and skips the four
+`websocket/` message cases for every build, so the case lists stay aligned
+instead of recording a one-sided mismatch. On macOS the original EmbedIO 3.5.2
+managed WebSocket can leave the echo unanswered. In run 38449281895
+(artifact `compatibility-results-macos-15/parity-audit/Upstream-run.log`) the
+harness's 10-second receive deadline fired with `SocketException` 89, and the
+upstream process aborted. EmbedIO.Tests still covers Neo's WebSocket behavior on
+macOS: 339 WebSocket test results passed in the macOS job of run 38445119448.
+Eleven negative checks run on every profile.
 
 ## Run and interpretation
 

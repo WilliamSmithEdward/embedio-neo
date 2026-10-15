@@ -17,7 +17,6 @@ namespace EmbedIO.Tests.Issues
     public class Issue129_Customization
     {
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task MimeProviderKeepsLocalServerBuiltinAndUnknownFallbacks(HttpListenerMode mode)
         {
             var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -51,11 +50,8 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, true, false)]
-        [TestCase(HttpListenerMode.Microsoft, true, false)]
         [TestCase(HttpListenerMode.EmbedIO, false, false)]
-        [TestCase(HttpListenerMode.Microsoft, false, false)]
         [TestCase(HttpListenerMode.EmbedIO, true, true)]
-        [TestCase(HttpListenerMode.Microsoft, true, true)]
         public async Task ProviderCompressionAndExplicitOverridesAreNegotiated(HttpListenerMode mode, bool preferred, bool localOverride)
         {
             var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -87,7 +83,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task WarmMappingAndContentCachesRemainModuleLocal(HttpListenerMode mode)
         {
             var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -130,7 +125,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task UnknownExtensionDefaultsAreApplicationPolicyAndDoNotChangeOtherModules(HttpListenerMode mode)
         {
             var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -154,7 +148,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task CallbackCancellationIsObservedWithoutDispatchingDownstream(HttpListenerMode mode)
         {
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -188,7 +181,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task PreRequestCallbacksAreAwaitedInOrderAndPreserveRequestData(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();
@@ -218,11 +210,8 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, "handled", HttpStatusCode.Accepted)]
-        [TestCase(HttpListenerMode.Microsoft, "handled", HttpStatusCode.Accepted)]
         [TestCase(HttpListenerMode.EmbedIO, "denied", HttpStatusCode.Forbidden)]
-        [TestCase(HttpListenerMode.Microsoft, "denied", HttpStatusCode.Forbidden)]
         [TestCase(HttpListenerMode.EmbedIO, "error", HttpStatusCode.InternalServerError)]
-        [TestCase(HttpListenerMode.Microsoft, "error", HttpStatusCode.InternalServerError)]
         public async Task HandledRejectedOrFaultedCallbacksStopDispatchAndNextRequestStaysHealthy(HttpListenerMode mode, string action, HttpStatusCode expected)
         {
             var url = Resources.GetServerAddress();
@@ -257,7 +246,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task ConcurrentCallbacksPreserveBodiesAndRequestItemsAndFinalHandlersStopLaterCallbacks(HttpListenerMode mode)
         {
             var url = Resources.GetServerAddress();

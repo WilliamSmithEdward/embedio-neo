@@ -17,6 +17,12 @@
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
+  <!-- The .NET 10 asset is analyzed for trimming and Native AOT. Reflection-based APIs
+       carry RequiresUnreferencedCode/RequiresDynamicCode so applications see them. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)' == 'Release' And Exists('NugetSigning.pfx')">
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>NugetSigning.pfx</AssemblyOriginatorKeyFile>
@@ -25,10 +31,26 @@
 
   <ItemGroup>
     <None Include="..\..\LICENSE" Link="LICENSE" Pack="true" PackagePath="" />
+    <!-- Ties EmbedIO's reflection feature switch to the application's System.Text.Json setting. -->
+    <None Include="Packaging/EmbedIO-Neo.targets" Pack="true" PackagePath="build/;buildTransitive/" />
+  </ItemGroup>
+
+  <!-- The controller-binding source generator ships in this package as an analyzer.
+       It is built with this project but is neither referenced nor a package dependency. -->
+  <ItemGroup>
+    <ProjectReference Include="../EmbedIO.Generators/EmbedIO.Generators.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="../EmbedIO.Generators/bin/$(Configuration)/netstandard2.0/EmbedIO.Generators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+    <!-- RateLimitingModule's algorithms. Not part of the base .NET runtime, so both targets reference it. -->
+    <PackageReference Include="System.Threading.RateLimiting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../ResponseCookieFormatter.cs" Link="Internal/ResponseCookieFormatter.cs" />
+    <Compile Include="../TrimmingAttributes.cs" Link="Internal/TrimmingAttributes.cs" />
   </ItemGroup>
 
 </Project>

@@ -7,7 +7,6 @@ using System.Net.Http;
 using System.Text;
 using EmbedIO.Net;
 using EmbedIO.Utilities;
-using EmbedIO.Internal;
 
 namespace EmbedIO.Testing.Internal
 {
@@ -15,12 +14,13 @@ namespace EmbedIO.Testing.Internal
     {
         private readonly HttpContent? _content;
 
-        public TestRequest(HttpRequestMessage clientRequest)
+        public TestRequest(HttpRequestMessage clientRequest, string? containerCookies = null)
         {
             _content = Validate.NotNull(nameof(clientRequest), clientRequest).Content;
 
+            ContentLength64 = _content == null ? 0 : _content.Headers.ContentLength ?? -1;
             var headers = new NameValueCollection();
-            foreach (var pair in clientRequest.Headers)
+            foreach (var pair in clientRequest.Content == null ? clientRequest.Headers : clientRequest.Headers.Concat(clientRequest.Content.Headers))
             {
                 var values = pair.Value.ToArray();
                 switch (values.Length)
@@ -38,12 +38,15 @@ namespace EmbedIO.Testing.Internal
                         break;
                 }
 
-                if (pair.Key == HttpHeaderNames.Cookie) Cookies = CookieList.Parse(string.Join(",", values));
+
             }
 
             Headers = headers;
-            if (Cookies == null)
-                Cookies = new CookieList();
+            var cookieHeader = headers[HttpHeaderNames.Cookie];
+            if (!string.IsNullOrEmpty(containerCookies))
+                cookieHeader = string.IsNullOrEmpty(cookieHeader) ? containerCookies : cookieHeader + "; " + containerCookies;
+            if (cookieHeader != null) headers[HttpHeaderNames.Cookie] = cookieHeader;
+            Cookies = cookieHeader == null ? new CookieList() : CookieList.Parse(cookieHeader);
 
             ProtocolVersion = clientRequest.Version;
             KeepAlive = !(clientRequest.Headers.ConnectionClose ?? true);
@@ -58,7 +61,7 @@ namespace EmbedIO.Testing.Internal
             RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999);
             UserAgent = clientRequest.Headers.UserAgent?.ToString();
             LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 8080);
-            ContentType = _content?.Headers.ContentType?.MediaType;
+            ContentType = _content?.Headers.ContentType?.ToString();
         }
 
         public ICookieCollection Cookies { get; }
@@ -99,7 +102,7 @@ namespace EmbedIO.Testing.Internal
 
         public string? ContentType { get; }
 
-        public long ContentLength64 => 0;
+        public long ContentLength64 { get; }
 
         public bool IsAuthenticated => false;
 
@@ -131,6 +134,9 @@ namespace EmbedIO.Testing.Internal
 
             if (method == System.Net.Http.HttpMethod.Put)
                 return HttpVerbs.Put;
+
+            if (string.Equals(method.Method, "QUERY", StringComparison.Ordinal))
+                return HttpVerbs.Query;
 
             return HttpVerbs.Any;
         }

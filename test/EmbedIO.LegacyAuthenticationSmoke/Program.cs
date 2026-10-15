@@ -14,7 +14,7 @@ internal static class Program
             if (target != ".NETStandard,Version=v2.0") throw new InvalidOperationException("Expected the legacy-compatible core asset.");
             var requests = 0;
             foreach (var layered in new[] { false, true })
-                requests += EmbedIO.PlatformTests.BasicAuthenticationSmoke.RunAsync(HttpListenerMode.Microsoft, "http://localhost:21087/", layered).GetAwaiter().GetResult();
+                requests += EmbedIO.PlatformTests.BasicAuthenticationSmoke.RunAsync(HttpListenerMode.EmbedIO, "http://localhost:21087/", layered).GetAwaiter().GetResult();
             if (requests != 20) throw new InvalidOperationException("Incomplete authentication checks.");
             Directory.CreateDirectory("TestResults");
             var result = EmbedIO.Serialization.Json.Serialize(new

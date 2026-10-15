@@ -30,7 +30,7 @@ internal static class Program
         var checks = new Dictionary<string, object>();
         var passed = false;
         string? failure = null;
-        using var profile = new ContainerProfile();
+        var profile = new ContainerProfile();
         Process? child = null, inbound = null;
         Task<string>? inboundOutput = null, inboundError = null;
         var outboundAdded = false;
@@ -55,11 +55,10 @@ internal static class Program
             inbound = StartTool("CheckNetIsolation.exe", "LoopbackExempt", "-is", "-p=" + profile.Sid);
             inboundOutput = inbound.StandardOutput.ReadToEndAsync();
             inboundError = inbound.StandardError.ReadToEndAsync();
-            await WaitReachableAsync(inbound);
+            await WaitReachableAsync(inbound, inboundOutput, inboundError);
             await VerifyHttpAsync();
             checks["inbound_session_html_api_sessions"] = true;
-            Stop(inbound);
-            await inbound.WaitForExitAsync();
+            await StopAndJoinAsync(inbound);
             await RequireBlockedAsync();
             checks["ending_inbound_session_restores_isolation"] = true;
             passed = true;
@@ -67,23 +66,43 @@ internal static class Program
         catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { failure = error.ToString(); }
         finally
         {
-            Stop(inbound);
-            Stop(child);
-            if (child != null) { await child.WaitForExitAsync(); child.Dispose(); }
-            if (inbound != null)
+            var cleanupFailures = new List<string>();
+            async Task Cleanup(Func<Task> action)
             {
-                await inbound.WaitForExitAsync();
-                File.WriteAllText(Path.Combine(results, "inbound-session.txt"),
-                    await (inboundOutput ?? throw new InvalidOperationException("The inbound output capture is missing."))
-                    + await (inboundError ?? throw new InvalidOperationException("The inbound error capture is missing.")));
+                try { await action(); }
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                { cleanupFailures.Add(error.ToString()); }
             }
+            await Cleanup(() => StopAndJoinAsync(inbound));
+            await Cleanup(() => StopAndJoinAsync(child));
+            await Cleanup(async () =>
+            {
+                if (inbound != null)
+                {
+                    var output = inboundOutput ?? throw new InvalidOperationException("The inbound output capture is missing.");
+                    var error = inboundError ?? throw new InvalidOperationException("The inbound error capture is missing.");
+                    await Task.WhenAll(output, error).WaitAsync(TimeSpan.FromSeconds(10));
+                    File.WriteAllText(Path.Combine(results, "inbound-session.txt"), await output + await error);
+                }
+            });
             if (firewallAdded)
-                await RunToolAsync("WindowsPowerShell/v1.0/powershell.exe", "-NoProfile", "-NonInteractive", "-Command", $"Remove-NetFirewallRule -Name '{profile.Name}' -ErrorAction SilentlyContinue");
-            if (outboundAdded) await RunToolAsync("CheckNetIsolation.exe", "LoopbackExempt", "-d", "-p=" + profile.Sid);
+                await Cleanup(() => RunToolAsync("WindowsPowerShell/v1.0/powershell.exe", "-NoProfile", "-NonInteractive", "-Command", $"Remove-NetFirewallRule -Name '{profile.Name}' -ErrorAction SilentlyContinue"));
+            if (outboundAdded) await Cleanup(() => RunToolAsync("CheckNetIsolation.exe", "LoopbackExempt", "-d", "-p=" + profile.Sid));
             foreach (var name in new[] { "listener.log", "ready.json", "failure.txt" })
-                if (File.Exists(Path.Combine(profile.Folder, name))) File.Copy(Path.Combine(profile.Folder, name), Path.Combine(results, name), true);
-            await RunToolAsync("icacls.exe", AppContext.BaseDirectory, "/remove:g", "*" + profile.Sid, "/T", "/Q");
-            inbound?.Dispose();
+                await Cleanup(() =>
+                {
+                    if (File.Exists(Path.Combine(profile.Folder, name))) File.Copy(Path.Combine(profile.Folder, name), Path.Combine(results, name), true);
+                    return Task.CompletedTask;
+                });
+            await Cleanup(() => RunToolAsync("icacls.exe", AppContext.BaseDirectory, "/remove:g", "*" + profile.Sid, "/T", "/Q"));
+            await Cleanup(() => { inbound?.Dispose(); return Task.CompletedTask; });
+            await Cleanup(() => { child?.Dispose(); return Task.CompletedTask; });
+            await Cleanup(() => { profile.Dispose(); return Task.CompletedTask; });
+            if (cleanupFailures.Count != 0)
+            {
+                passed = false;
+                failure = (failure == null ? string.Empty : failure + "\n") + "Cleanup failures:\n" + string.Join("\n", cleanupFailures);
+            }
             var report = new { passed, failure, checks, profile = profile.Name, sid = profile.Sid, os = Environment.OSVersion.ToString(), runtime = Environment.Version.ToString(), port = Port, appModel = "Win32 .NET 10 process in real AppContainer; not Xamarin/UWP or a WebView" };
             File.WriteAllText(Path.Combine(results, "result.json"), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         }
@@ -138,11 +157,15 @@ internal static class Program
         catch (TaskCanceledException) { }
     }
 
-    private static async Task WaitReachableAsync(Process allowance)
+    private static async Task WaitReachableAsync(Process allowance, Task<string> output, Task<string> error)
     {
         for (var i = 0; i < 30; i++)
         {
-            if (allowance.HasExited) throw new InvalidOperationException("Inbound allowance exited: " + await allowance.StandardOutput.ReadToEndAsync() + await allowance.StandardError.ReadToEndAsync());
+            if (allowance.HasExited)
+            {
+                await Task.WhenAll(output, error).WaitAsync(TimeSpan.FromSeconds(10));
+                throw new InvalidOperationException("Inbound allowance exited: " + await output + await error);
+            }
             using var client = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(1) };
             try { if ((await client.GetStringAsync($"http://127.0.0.1:{Port}/")).Contains("appcontainer-554", StringComparison.Ordinal)) return; }
             catch (HttpRequestException) { }
@@ -175,11 +198,26 @@ internal static class Program
         using var process = StartTool(name, args);
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        try
+        {
+            await Task.WhenAll(process.WaitForExitAsync(), output, error).WaitAsync(TimeSpan.FromSeconds(30));
+        }
+        catch (Exception failure) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(failure))
+        {
+            try { await StopAndJoinAsync(process); }
+            catch (Exception cleanupError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(cleanupError))
+            { failure.Data["OwnedProcessCleanup"] = cleanupError.ToString(); }
+            throw;
+        }
         var text = await output + await error;
         if (process.ExitCode != 0) throw new InvalidOperationException(name + ": " + text);
     }
-    private static void Stop(Process? process) { if (process != null && !process.HasExited) process.Kill(true); }
+    private static async Task StopAndJoinAsync(Process? process)
+    {
+        if (process == null) return;
+        if (!process.HasExited) process.Kill(true);
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+    }
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 }
 

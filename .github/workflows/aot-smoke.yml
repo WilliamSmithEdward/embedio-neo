@@ -1,0 +1,72 @@
+name: Native AOT
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  aot:
+    name: Native AOT smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            rid: win-x64
+            executable: EmbedIO.AotSmoke.exe
+          - os: ubuntu-24.04
+            rid: linux-x64
+            executable: EmbedIO.AotSmoke
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.402
+      # Native AOT links with the platform toolchain. The Ubuntu archive packages are not
+      # version-pinned here: the runner image's release stream provides them.
+      - name: Install the Linux native toolchain
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev
+      # The host serves HTTP/3, which needs native MsQuic on Linux; the same pinned package as CI.
+      - name: Install pinned Linux QUIC prerequisite
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$RUNNER_TEMP/libmsquic_2.6.2_amd64.deb"
+          curl --fail --location --retry 3 --output "$package" https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/libm/libmsquic/libmsquic_2.6.2_amd64.deb
+          printf '%s  %s\n' 9ac90841ad45d99c1ff85b427d6dc7f0849291d596f0049d13db779a5a66ba4e "$package" | sha256sum --check
+          sudo apt-get install --yes "$package"
+          dpkg-query --show libmsquic
+      - name: Restore the test-only AOT host
+        shell: bash
+        run: dotnet restore test/EmbedIO.AotSmoke/EmbedIO.AotSmoke.csproj --locked-mode
+      # Warnings are errors: any trim or AOT warning reachable from the host fails the job.
+      - name: Publish with Native AOT
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+        run: >-
+          dotnet publish test/EmbedIO.AotSmoke/EmbedIO.AotSmoke.csproj -c Release -r "$RID"
+          --no-restore -o "$RUNNER_TEMP/aot" -p:TreatWarningsAsErrors=true
+      - name: Serve and check real HTTP from the native executable
+        shell: bash
+        env:
+          EXECUTABLE: ${{ matrix.executable }}
+        run: |
+          size=$(wc -c < "$RUNNER_TEMP/aot/$EXECUTABLE")
+          echo "Native executable: $size bytes"
+          "$RUNNER_TEMP/aot/$EXECUTABLE" TestResults/aot
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: aot-smoke-${{ matrix.rid }}
+          path: TestResults/aot/
+          if-no-files-found: error

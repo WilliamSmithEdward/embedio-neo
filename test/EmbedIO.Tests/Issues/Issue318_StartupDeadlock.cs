@@ -5,7 +5,6 @@ namespace EmbedIO.Tests.Issues
     public class Issue318_StartupDeadlock
     {
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public void WebServer_Start_OnListenerStartFailure_Returns(HttpListenerMode listenerMode)
         {
             void ConfigureServerOptions(WebServerOptions options) => options

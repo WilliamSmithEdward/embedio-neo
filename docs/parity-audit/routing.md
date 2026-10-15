@@ -19,3 +19,11 @@ route resolver, registration conflict or route-cache concurrency scenario. The
 independent Neo suite covers additional cases without establishing full upstream
 equivalence. Evidence: named `http/<listener>/` route/verb cases in the reports;
 see the [audit method](README.md).
+
+## Controller factories registered by type
+
+Upstream EmbedIO 3.5.2 rejects `RegisterController(typeof(TController), () => new TController())`
+because the lambda's compiled return type is `WebApiController`; only method groups declared with
+the concrete type worked. Neo accepts a factory whose declared return type is related to the
+controller type and checks each created instance, naming both types when it does not match.
+A previously rejected registration now succeeds; no previously accepted registration changes.

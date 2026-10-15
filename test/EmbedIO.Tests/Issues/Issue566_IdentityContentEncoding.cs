@@ -21,7 +21,7 @@ namespace EmbedIO.Tests.Issues
     {
         public static IEnumerable VideoCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var cached in new[] { false, true })
                     foreach (var zip in new[] { false, true })
                         foreach (var accept in new string?[] { null, "", "identity" })
@@ -84,7 +84,7 @@ namespace EmbedIO.Tests.Issues
 
         public static IEnumerable DynamicCases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var buffered in new[] { false, true })
                     foreach (var accept in new[] { "identity", "gzip", "deflate" })
                         yield return new object[] { mode, buffered, accept };
@@ -124,12 +124,8 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false, "gzip")]
         [TestCase(HttpListenerMode.EmbedIO, true, "gzip")]
-        [TestCase(HttpListenerMode.Microsoft, false, "gzip")]
-        [TestCase(HttpListenerMode.Microsoft, true, "gzip")]
         [TestCase(HttpListenerMode.EmbedIO, false, "deflate")]
         [TestCase(HttpListenerMode.EmbedIO, true, "deflate")]
-        [TestCase(HttpListenerMode.Microsoft, false, "deflate")]
-        [TestCase(HttpListenerMode.Microsoft, true, "deflate")]
         public async Task ForcedFileCompressionKeepsItsHeaderAndSeparateIdentityRepresentation(HttpListenerMode mode, bool cached, string encoding)
         {
             var directory = Path.Combine(Path.GetTempPath(), "embedio-566-compress-" + Guid.NewGuid().ToString("N"));
@@ -167,9 +163,7 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, "identity;q=1, *;q=0")]
-        [TestCase(HttpListenerMode.Microsoft, "identity;q=1, *;q=0")]
         [TestCase(HttpListenerMode.EmbedIO, "gzip;q=0, deflate;q=0, identity")]
-        [TestCase(HttpListenerMode.Microsoft, "gzip;q=0, deflate;q=0, identity")]
         public async Task NegotiationClearsAStaleHeaderWhenNoTransformationIsSelected(HttpListenerMode mode, string accept)
         {
             var url = Resources.GetServerAddress();

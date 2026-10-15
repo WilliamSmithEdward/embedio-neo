@@ -11,11 +11,13 @@ bookkeeping; it is not a notification that a browser disconnected. Use `finally`
 or `using` for resources owned by the handler, and let the handler return when
 its work ends, a write fails, or its cancellation token is canceled.
 
-`HttpContext.CancellationToken` is the token passed to `WebServer.RunAsync`.
-Passing it to delays and writes makes server cancellation cooperative. A remote
-client reset does not cancel it. Calling `Listener.Stop` or `Dispose` alone is
-also not a substitute for canceling the application-owned token used by a
-long-running handler.
+In the published 1.0.1 example below, `HttpContext.CancellationToken` is the
+token passed to `WebServer.RunAsync`; a remote reset or listener disposal does
+not cancel that application-owned token. Current source uses a server-owned
+lifetime, optionally combined with request deadlines and multiplexed-stream
+cancellation. See [server lifetime](server-lifetime.md) for current stop/dispose
+semantics. Pass the context token to delays and writes and observe write failures;
+`OnClose` is still a completion callback, not a browser-disconnect signal.
 
 ## Runnable SSE controller
 

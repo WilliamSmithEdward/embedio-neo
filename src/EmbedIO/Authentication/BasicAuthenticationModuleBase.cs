@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using EmbedIO.Net.Internal;
 
 namespace EmbedIO.Authentication
 {
@@ -28,7 +26,9 @@ namespace EmbedIO.Authentication
         {
             Realm = string.IsNullOrEmpty(realm) ? BaseRoute : realm ?? BaseRoute;
 
-            _wwwAuthenticateHeaderValue = $"Basic realm=\"{Realm}\" charset=UTF-8";
+            // RFC 7617, Section 2.1: auth-params are comma-separated, and the realm is a
+            // quoted-string, so a quote or backslash in it is escaped (RFC 9110, Section 5.6.4).
+            _wwwAuthenticateHeaderValue = $"Basic realm=\"{QuoteRealm(Realm)}\", charset=\"UTF-8\"";
         }
 
         /// <inheritdoc />
@@ -38,6 +38,15 @@ namespace EmbedIO.Authentication
         /// Gets the authentication realm.
         /// </summary>
         public string Realm { get; }
+
+        // Escapes the two characters a quoted-string cannot carry literally. A realm is
+        // ordinarily a plain label, so the common case allocates nothing.
+        private static string QuoteRealm(string realm)
+            => EmbedIO.Internal.StringOperations.IndexOfOrdinal(realm, '"') < 0
+                && EmbedIO.Internal.StringOperations.IndexOfOrdinal(realm, '\\') < 0
+                ? realm
+                : EmbedIO.Internal.StringOperations.ReplaceOrdinal(
+                    EmbedIO.Internal.StringOperations.ReplaceOrdinal(realm, "\\", "\\\\"), "\"", "\\\"");
 
         /// <inheritdoc />
         protected sealed override async Task OnRequestAsync(IHttpContext context)
@@ -58,12 +67,7 @@ namespace EmbedIO.Authentication
                 }
             }
 
-            // Framework HttpListener responses restrict this header through Headers.Set.
-            // The public native response method retains replacement and validation semantics.
-            if (context.Response is SystemHttpResponse nativeResponse)
-                nativeResponse.SetAuthenticationChallenge(_wwwAuthenticateHeaderValue);
-            else
-                context.Response.Headers.Set(HttpHeaderNames.WWWAuthenticate, _wwwAuthenticateHeaderValue);
+            context.Response.Headers.Set(HttpHeaderNames.WWWAuthenticate, _wwwAuthenticateHeaderValue);
 
             if (!await IsAuthenticatedAsync().ConfigureAwait(false))
                 throw HttpException.Unauthorized();

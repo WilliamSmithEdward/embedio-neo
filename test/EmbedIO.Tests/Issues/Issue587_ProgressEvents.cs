@@ -159,9 +159,7 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task ProgressArrivesBeforeCompletionAndObservesServerCancellation(HttpListenerMode mode, bool cancelServer)
         {
             var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

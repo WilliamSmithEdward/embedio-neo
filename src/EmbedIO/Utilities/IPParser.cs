@@ -99,7 +99,7 @@ namespace EmbedIO.Utilities
             }
 
             var shiftBits = (byte)(32 - prefixLen);
-            var ip1 = (ip >> shiftBits) << shiftBits;
+            var ip1 = prefixLen == 0 ? 0u : (ip >> shiftBits) << shiftBits;
 
             if ((ip1 & ip) != ip1) // Check correct subnet address
                 return Enumerable.Empty<IPAddress>();
@@ -184,11 +184,12 @@ namespace EmbedIO.Utilities
                     return Enumerable.Empty<IPAddress>();
             }
 
-            var capacity = 1;
-            for (var i = 0; i < 4; i++)
-                capacity *= endIP[i] - beginIP[i] + 1;
+            return EnumerateIPAddresses(beginIP, endIP);
+        }
 
-            var ips = new List<IPAddress>(capacity);
+        // Validation stays eager; addresses are produced only as callers consume them.
+        private static IEnumerable<IPAddress> EnumerateIPAddresses(byte[] beginIP, byte[] endIP)
+        {
             for (int i0 = beginIP[0]; i0 <= endIP[0]; i0++)
             {
                 for (int i1 = beginIP[1]; i1 <= endIP[1]; i1++)
@@ -197,13 +198,11 @@ namespace EmbedIO.Utilities
                     {
                         for (int i3 = beginIP[3]; i3 <= endIP[3]; i3++)
                         {
-                            ips.Add(new IPAddress(new[] { (byte)i0, (byte)i1, (byte)i2, (byte)i3 }));
+                            yield return new IPAddress(new[] { (byte)i0, (byte)i1, (byte)i2, (byte)i3 });
                         }
                     }
                 }
             }
-
-            return ips;
         }
     }
 }

@@ -41,8 +41,9 @@ retain their behavior; this host is a separate opt-in command. Its shared
 endpoint fixture and regression tests are outside every production package.
 There are no new runtime packages.
 
-To select the native listener, add `--microsoft`. Platform support and Windows
-HTTP.sys permissions still apply. To select another prefix, add
+Neo v2 removes the Microsoft listener. The host rejects the retired `--microsoft`
+selector; omit it to use the retained engine. Historical native results below
+describe their recorded revisions, not current v2 support. To select another prefix, add
 `--url http://127.0.0.1:8081/`. Binding beyond loopback is an explicit deployment
 choice; plan network access controls rather than copying a wildcard by default.
 
@@ -80,6 +81,10 @@ dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-bu
 ```
 
 ## Native Unix runtime limitation
+
+This section records the v1 investigation and its former CI policy. The native
+backend and its probes are retired in v2. The command below applies only to the
+v1 source revision containing those tests, not the current checkout.
 
 Linux and macOS CI on .NET 10.0.12 found six native `System.Net.HttpListener`
 pipeline/body-boundary failures. A standalone reproduction without EmbedIO on

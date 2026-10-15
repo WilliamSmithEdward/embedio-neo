@@ -29,7 +29,7 @@ namespace EmbedIO.Tests
         {
             var websocketUrl = new UriBuilder(new Uri(WebServerUrl, "test")) { Scheme = "ws" }.Uri;
 
-            var clientSocket = new System.Net.WebSockets.ClientWebSocket();
+            using var clientSocket = new System.Net.WebSockets.ClientWebSocket();
             await clientSocket.ConnectAsync(websocketUrl, default);
 
             Assert.AreEqual(
@@ -48,7 +48,7 @@ namespace EmbedIO.Tests
         {
             var webSocketUrl = new UriBuilder(new Uri(WebServerUrl, "bigdata")) { Scheme = "ws" }.Uri;
 
-            var clientSocket = new System.Net.WebSockets.ClientWebSocket();
+            using var clientSocket = new System.Net.WebSockets.ClientWebSocket();
             await clientSocket.ConnectAsync(webSocketUrl, default).ConfigureAwait(false);
 
             var buffer = new ArraySegment<byte>(Encoding.UTF8.GetBytes("HOLA"));
@@ -63,7 +63,7 @@ namespace EmbedIO.Tests
         {
             var webSocketUrl = new UriBuilder(new Uri(WebServerUrl, "close")) { Scheme = "ws" }.Uri;
 
-            var clientSocket = new System.Net.WebSockets.ClientWebSocket();
+            using var clientSocket = new System.Net.WebSockets.ClientWebSocket();
             await clientSocket.ConnectAsync(webSocketUrl, default).ConfigureAwait(false);
 
             var buffer = new ArraySegment<byte>(new byte[8192]);

@@ -63,9 +63,7 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task FluentRegistrationPreservesChallengesCredentialsAndRouteScope(HttpListenerMode mode, bool nested)
         {
             var root = Resources.GetServerAddress().Replace("localhost", "127.0.0.1", StringComparison.Ordinal);
@@ -97,7 +95,7 @@ namespace EmbedIO.Tests.Issues
                     if (authorization != null) request.Headers.TryAddWithoutValidation("Authorization", authorization);
                     using var response = await client.SendAsync(request);
                     Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
-                    Assert.That(response.Headers.WwwAuthenticate.ToString(), Is.EqualTo("Basic realm=\"Example\" charset=UTF-8"));
+                    Assert.That(response.Headers.WwwAuthenticate.ToString(), Is.EqualTo("Basic realm=\"Example\", charset=\"UTF-8\""));
                     Assert.That(hits, Is.Zero);
                 }
                 using var valid = new HttpRequestMessage(HttpMethod.Get, path);

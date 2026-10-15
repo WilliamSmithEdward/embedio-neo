@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -18,7 +19,9 @@ namespace EmbedIO.Tests
     public class SecondPassPerformanceRegressionTest
     {
         private static readonly Assembly Core = typeof(WebServer).Assembly;
-        private static readonly Regex Quality = new Regex(@";[ \t]*q=(?:(?:1(?:\.(?:0{1,3}))?)|(?:(0)(?:\.(\d{1,3}))?))[ \t]*(?:;|,|$)",
+        // The weight's name is case-insensitive (RFC 9110, Section 12.4.2), so the reference
+        // accepts "Q=" as the parser now does; the rest of the expression is unchanged.
+        private static readonly Regex Quality = new Regex(@";[ \t]*[qQ]=(?:(?:1(?:\.(?:0{1,3}))?)|(?:(0)(?:\.(\d{1,3}))?))[ \t]*(?:;|,|$)",
             RegexOptions.CultureInvariant | RegexOptions.Singleline);
 
         [Test]
@@ -74,16 +77,19 @@ namespace EmbedIO.Tests
             Assert.That(method, Is.EqualTo(CompressionMethod.None));
         }
 
-        [TestCase("gzip,deflate", true, CompressionMethod.Gzip)]
-        [TestCase("deflate,gzip", true, CompressionMethod.Deflate)]
-        [TestCase("gzip;q=0.5,deflate;q=0.5", true, CompressionMethod.Gzip)]
-        [TestCase("gzip,deflate", false, CompressionMethod.None)]
-        [TestCase("identity;q=0,*;q=0.5", true, CompressionMethod.Gzip)]
-        [TestCase("identity;q=0,*;q=0.5", false, CompressionMethod.Gzip)]
-        public void NegotiationPreservesWeightsWildcardsAndTieOrder(string header, bool preferCompression, CompressionMethod expected)
+        // Expected coding on the .NET 10 asset, then on the .NET Standard 2.0 asset. A wildcard leaves the
+        // choice to the server, which prefers Brotli where the asset has it (gzip, before Brotli preference).
+        [TestCase("gzip,deflate", true, CompressionMethod.Gzip, CompressionMethod.Gzip)]
+        [TestCase("deflate,gzip", true, CompressionMethod.Deflate, CompressionMethod.Deflate)]
+        [TestCase("gzip;q=0.5,deflate;q=0.5", true, CompressionMethod.Gzip, CompressionMethod.Gzip)]
+        [TestCase("gzip,deflate", false, CompressionMethod.None, CompressionMethod.None)]
+        [TestCase("identity;q=0,*;q=0.5", true, CompressionMethod.Brotli, CompressionMethod.Gzip)]
+        [TestCase("identity;q=0,*;q=0.5", false, CompressionMethod.Brotli, CompressionMethod.Gzip)]
+        public void NegotiationPreservesWeightsWildcardsAndTieOrder(string header, bool preferCompression, CompressionMethod modern, CompressionMethod standard)
         {
+            var supportsBrotli = Core.GetCustomAttribute<TargetFrameworkAttribute>()?.FrameworkName.StartsWith(".NETCoreApp", StringComparison.Ordinal) == true;
             Assert.That(new QValueList(true, header).TryNegotiateContentEncoding(preferCompression, out var actual, out _), Is.True);
-            Assert.That(actual, Is.EqualTo(expected));
+            Assert.That(actual, Is.EqualTo(supportsBrotli ? modern : standard));
         }
 
         [Test]

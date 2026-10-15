@@ -172,7 +172,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task LiveBanAndUnbanPreserveServerAndHealthyClients(HttpListenerMode mode)
         {
             using var module = Create();
@@ -189,9 +188,7 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task ContextCriterionPersistsKeysAcrossDifferentRequestsAndNestedRoutes(HttpListenerMode mode, bool nested)
         {
             using var module = Create().WithCriterion(c => Task.FromResult(c.Request.Headers["User-Agent"] == "blocked-agent"));
@@ -206,9 +203,7 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task PermanentNetworkPoliciesHaveExplicitPrecedenceAndDoNotBecomeTemporaryBans(HttpListenerMode mode, bool allow)
         {
             var callbacks = 0;
@@ -251,7 +246,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task FailedNetworkBatchDoesNotPartiallyAddADenyRule(HttpListenerMode mode)
         {
             using var module = Create();
@@ -261,7 +255,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task CapacityIsFailClosedAndUnbanRestoresAvailability(HttpListenerMode mode)
         {
             using var module = Create(capacity: 1);
@@ -275,7 +268,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task CallbackFailureRejectsOnlyItsRequestAndHealthyFollowUpWorks(HttpListenerMode mode)
         {
             using var module = Create().WithCriterion(c => c.Request.Headers["X-Client"] == "failure"
@@ -288,13 +280,9 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO, 0)]
-        [TestCase(HttpListenerMode.Microsoft, 0)]
         [TestCase(HttpListenerMode.EmbedIO, 1)]
-        [TestCase(HttpListenerMode.Microsoft, 1)]
         [TestCase(HttpListenerMode.EmbedIO, 2)]
-        [TestCase(HttpListenerMode.Microsoft, 2)]
         [TestCase(HttpListenerMode.EmbedIO, 3)]
-        [TestCase(HttpListenerMode.Microsoft, 3)]
         public async Task BanOrDisposeDuringCallbackCannotAllowThePendingRequest(HttpListenerMode mode, int action)
         {
             var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -316,7 +304,6 @@ namespace EmbedIO.Tests.Issues
         }
 
         [TestCase(HttpListenerMode.EmbedIO)]
-        [TestCase(HttpListenerMode.Microsoft)]
         public async Task CancellationAfterCriterionCannotRecordABanOrRunTheHandler(HttpListenerMode mode)
         {
             var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

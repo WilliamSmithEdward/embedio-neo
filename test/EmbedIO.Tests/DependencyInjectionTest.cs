@@ -18,30 +18,50 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    public class DependencyInjectionTest
+    public partial class DependencyInjectionTest
     {
+        // Registers through the reflection overload, or through the generated binding, which
+        // trimmed and Native AOT applications use; every scenario below runs both ways.
+        private static WebApiModule Services<TController>(WebApiModule module, bool generated, WebApiControllerBinding<TController> binding)
+            where TController : WebApiController
+            => generated ? module.WithControllerServices(binding) : module.WithControllerServices<TController>();
+
+        [GeneratedControllerBinding(typeof(InjectedController))]
+        [GeneratedControllerBinding(typeof(AsyncController))]
+        [GeneratedControllerBinding(typeof(ThrowingConstructorController))]
+        [GeneratedControllerBinding(typeof(MissingDependencyController))]
+        [GeneratedControllerBinding(typeof(DualDisposableController))]
+        internal static partial class Bindings
+        {
+        }
+
         private static ServiceProvider Build(Probe probe)
             => new ServiceCollection().AddSingleton(probe).AddScoped<RequestService>()
                 .AddSingleton<SharedService>().AddEmbedIORequestContext()
                 .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
 
-        [Test]
-        public async Task ConcurrentRequestsShareServicesWithinRequestAndKeepSeparateContexts()
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task ConcurrentRequestsShareServicesWithinRequestAndKeepSeparateContexts(bool generated)
         {
             var probe = new Probe();
             await using var provider = Build(probe);
             await TestWebServer.UseAsync(server => server.WithDependencyInjection(provider)
                 .WithModule(new CaptureModule())
-                .WithWebApi("/api", module => module.WithControllerServices<InjectedController>()), async client =>
+                .WithWebApi("/api", module => Services(module, generated, Bindings.InjectedController)), async client =>
                 {
                     var first = client.GetStringAsync("/api/wait?name=first");
                     var second = client.GetStringAsync("/api/wait?name=second");
-                    await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                    var requests = probe.Requests.ToArray();
-                    Assert.That(requests.Length, Is.EqualTo(2));
-                    Assert.That(requests[0].Id, Is.Not.EqualTo(requests[1].Id));
-                    Assert.That(requests.All(service => service.DisposeCount == 0), Is.True);
-                    probe.Release.TrySetResult(true);
+                    RequestService[] requests;
+                    try
+                    {
+                        await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                        requests = probe.Requests.ToArray();
+                        Assert.That(requests.Length, Is.EqualTo(2));
+                        Assert.That(requests[0].Id, Is.Not.EqualTo(requests[1].Id));
+                        Assert.That(requests.All(service => service.DisposeCount == 0), Is.True);
+                    }
+                    finally { probe.Release.TrySetResult(true); }
                     var replies = await Task.WhenAll(first, second);
                     Assert.That(replies, Is.EquivalentTo(new[] { "\"first\"", "\"second\"" }));
                     Assert.That(probe.SharedInstances.Distinct().Count(), Is.EqualTo(1));
@@ -51,16 +71,19 @@ namespace EmbedIO.Tests
             Assert.That(provider.GetRequiredService<SharedService>().Disposed, Is.False);
         }
 
-        [TestCase("sync-failure")]
-        [TestCase("async-failure")]
-        [TestCase("binding-failure")]
-        public async Task FailedRequestsKeepScopeForErrorHandlerAndDisposeOnce(string route)
+        [TestCase("sync-failure", false)]
+        [TestCase("sync-failure", true)]
+        [TestCase("async-failure", false)]
+        [TestCase("async-failure", true)]
+        [TestCase("binding-failure", false)]
+        [TestCase("binding-failure", true)]
+        public async Task FailedRequestsKeepScopeForErrorHandlerAndDisposeOnce(string route, bool generated)
         {
             var probe = new Probe();
             await using var provider = Build(probe);
             await TestWebServer.UseAsync(server =>
             {
-                server.WithDependencyInjection(provider).WithWebApi("/api", module => module.WithControllerServices<InjectedController>());
+                server.WithDependencyInjection(provider).WithWebApi("/api", module => Services(module, generated, Bindings.InjectedController));
                 server.OnUnhandledException = async (context, _) =>
                 {
                     var scoped = context.GetRequestServices().GetRequiredService<RequestService>();
@@ -76,8 +99,9 @@ namespace EmbedIO.Tests
             });
         }
 
-        [Test]
-        public async Task SerializerCanAwaitAndReadLiveControllerDependencies()
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task SerializerCanAwaitAndReadLiveControllerDependencies(bool generated)
         {
             var probe = new Probe();
             await using var provider = Build(probe);
@@ -89,7 +113,7 @@ namespace EmbedIO.Tests
                     Assert.That(scoped.DisposeCount, Is.Zero);
                     Assert.That(probe.ControllerDisposeCount, Is.Zero);
                     await context.SendStringAsync((string)(value ?? throw new NUnit.Framework.AssertionException("Expected a non-null test value.")), "text/plain", WebServer.DefaultEncoding);
-                }, module => module.WithControllerServices<InjectedController>()), async client =>
+                }, module => Services(module, generated, Bindings.InjectedController)), async client =>
                 {
                     Assert.That(await client.GetStringAsync("/api/value"), Is.EqualTo("value"));
                     Assert.That(probe.ControllerDisposeCount, Is.EqualTo(1));
@@ -97,14 +121,15 @@ namespace EmbedIO.Tests
                 });
         }
 
-        [Test]
-        public async Task SerializerFailureStillReleasesControllerAndScope()
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task SerializerFailureStillReleasesControllerAndScope(bool generated)
         {
             var probe = new Probe();
             await using var provider = Build(probe);
             await TestWebServer.UseAsync(server => server.WithDependencyInjection(provider)
                 .WithWebApi("/api", (_, _) => Task.FromException(new InvalidOperationException("serializer")),
-                    module => module.WithControllerServices<InjectedController>()), async client =>
+                    module => Services(module, generated, Bindings.InjectedController)), async client =>
                     {
                         Assert.That((await client.GetAsync("/api/value")).StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
                         Assert.That(probe.ControllerDisposeCount, Is.EqualTo(1));
@@ -112,14 +137,16 @@ namespace EmbedIO.Tests
                     });
         }
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task AsyncCleanupFinishesBeforeResponseCompletesAndRunsInOwnershipOrder(bool throwOnDispose)
+        [TestCase(false, false)]
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        public async Task AsyncCleanupFinishesBeforeResponseCompletesAndRunsInOwnershipOrder(bool throwOnDispose, bool generated)
         {
             var probe = new Probe { ThrowOnDispose = throwOnDispose };
             await using var provider = Build(probe);
             await TestWebServer.UseAsync(server => server.WithDependencyInjection(provider)
-                .WithWebApi("/api", module => module.WithControllerServices<AsyncController>()), async client =>
+                .WithWebApi("/api", module => Services(module, generated, Bindings.AsyncController)), async client =>
                 {
                     var response = await client.GetAsync("/api/async");
                     Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -127,6 +154,51 @@ namespace EmbedIO.Tests
                     Assert.That(probe.Requests.Single().DisposeCount, Is.EqualTo(1));
                 });
         }
+
+        [Test]
+        public async Task GeneratedBindingInjectsServiceArgumentsFromTheRequestProvider()
+        {
+            var probe = new Probe();
+            await using var provider = Build(probe);
+            await TestWebServer.UseAsync(server => server.WithDependencyInjection(provider)
+                .WithWebApi("/api", module => module.WithControllerServices(Bindings.InjectedController)), async client =>
+                {
+                    Assert.That(await client.GetStringAsync("/api/argument"), Is.EqualTo("true"));
+                });
+        }
+
+        [Test]
+        public void GeneratedBindingRegistrationValidatesArguments()
+        {
+            var module = new WebApiModule("/");
+            Assert.Throws<ArgumentNullException>(() => DependencyInjectionExtensions.WithControllerServices(Missing<WebApiModule>(), Bindings.InjectedController));
+            Assert.Throws<ArgumentNullException>(() => module.WithControllerServices(Missing<WebApiControllerBinding<InjectedController>>()));
+            module.WithControllerServices(Bindings.InjectedController);
+            Assert.Throws<ArgumentException>(() => module.WithControllerServices(Bindings.InjectedController));
+            Assert.Throws<ArgumentException>(() => module.WithControllerServices<InjectedController>());
+            Assert.That(module.ControllerCount, Is.EqualTo(1));
+        }
+
+        // Registration by type is reflection-based and annotated; registration through a
+        // generated binding is not, so trimmed and Native AOT applications can use it.
+        [Test]
+        public void ReflectionRegistrationIsAnnotatedAndBindingRegistrationIsNot()
+        {
+            var methods = typeof(DependencyInjectionExtensions).GetMethods()
+                .Where(m => m.Name == nameof(DependencyInjectionExtensions.WithControllerServices)).ToList();
+            Assert.That(methods, Has.Count.EqualTo(3));
+            foreach (var method in methods)
+            {
+                var binding = method.GetParameters().Any(p => p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition() == typeof(WebApiControllerBinding<>));
+                Assert.That(method.GetCustomAttributes(typeof(System.Diagnostics.CodeAnalysis.RequiresUnreferencedCodeAttribute), false), binding ? Is.Empty : Is.Not.Empty, method.ToString());
+                Assert.That(method.GetCustomAttributes(typeof(System.Diagnostics.CodeAnalysis.RequiresDynamicCodeAttribute), false), binding ? Is.Empty : Is.Not.Empty, method.ToString());
+            }
+        }
+
+        // A null of a non-nullable reference type, for argument checks: array elements start as null.
+        private static T Missing<T>()
+            where T : class
+            => (new T[1])[0];
 
         [Test]
         public async Task RuntimeRegistrationAndExplicitServiceArgumentsUseRequestProvider()
@@ -140,8 +212,9 @@ namespace EmbedIO.Tests
                 });
         }
 
-        [Test]
-        public async Task ControllerRegistrationsAreNotResolvedOrDoubleDisposed()
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task ControllerRegistrationsAreNotResolvedOrDoubleDisposed(bool generated)
         {
             var probe = new Probe();
             var services = new ServiceCollection().AddSingleton(probe).AddScoped<RequestService>()
@@ -149,7 +222,7 @@ namespace EmbedIO.Tests
             services.AddSingleton<InjectedController>(_ => throw new Exception("Must not resolve registered controller"));
             var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
             await TestWebServer.UseAsync(server => server.WithDependencyInjection(provider)
-                .WithWebApi("/api", module => module.WithControllerServices<InjectedController>()), async client =>
+                .WithWebApi("/api", module => Services(module, generated, Bindings.InjectedController)), async client =>
                 {
                     await client.GetAsync("/api/value");
                     Assert.That(probe.ControllerDisposeCount, Is.EqualTo(1));
@@ -158,27 +231,28 @@ namespace EmbedIO.Tests
             Assert.That(probe.ControllerDisposeCount, Is.EqualTo(1));
         }
 
-        [Test]
-        public async Task ConstructorFailureDisposesDependenciesAlreadyResolved()
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task ConstructorFailureDisposesDependenciesAlreadyResolved(bool generated)
         {
             var probe = new Probe();
             await using var provider = Build(probe);
             await TestWebServer.UseAsync(server => server.WithDependencyInjection(provider)
-                .WithWebApi("/api", module => module.WithControllerServices<ThrowingConstructorController>()), async client =>
+                .WithWebApi("/api", module => Services(module, generated, Bindings.ThrowingConstructorController)), async client =>
                 {
                     Assert.That((await client.GetAsync("/api/value")).StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
                     Assert.That(probe.Requests.Single().DisposeCount, Is.EqualTo(1));
                 });
         }
 
-        [Test]
-        public async Task MissingDependencyReturnsErrorAndDoesNotPoisonLaterRequests()
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task MissingDependencyReturnsErrorAndDoesNotPoisonLaterRequests(bool generated)
         {
             var probe = new Probe();
             await using var provider = Build(probe);
             await TestWebServer.UseAsync(server => server.WithDependencyInjection(provider)
-                .WithWebApi("/api", module => module.WithControllerServices<MissingDependencyController>()
-                    .WithControllerServices<InjectedController>()), async client =>
+                .WithWebApi("/api", module => Services(Services(module, generated, Bindings.MissingDependencyController), generated, Bindings.InjectedController)), async client =>
                     {
                         Assert.That((await client.GetAsync("/api/missing")).StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
                         Assert.That((await client.GetAsync("/api/value")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -237,9 +311,12 @@ namespace EmbedIO.Tests
                 })), async client =>
                 {
                     var request = client.GetAsync("/api/manual");
-                    await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                    Assert.That(probe.Events, Is.Empty);
-                    probe.Release.TrySetResult(true);
+                    try
+                    {
+                        await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                        Assert.That(probe.Events, Is.Empty);
+                    }
+                    finally { probe.Release.TrySetResult(true); }
                     await request;
                     Assert.That(probe.Events.ToArray(), Is.EqualTo(new[] { "action", "release" }));
                 });
@@ -262,19 +339,23 @@ namespace EmbedIO.Tests
             });
         }
 
-        [Test]
-        public async Task CancelledRequestStillReleasesControllerAndScope()
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task CancelledRequestStillReleasesControllerAndScope(bool generated)
         {
             var probe = new Probe();
             await using var provider = Build(probe);
             await TestWebServer.UseAsync(server => server.WithDependencyInjection(provider)
-                .WithWebApi("/api", module => module.WithControllerServices<InjectedController>()), async client =>
+                .WithWebApi("/api", module => Services(module, generated, Bindings.InjectedController)), async client =>
                 {
                     using var cancel = new CancellationTokenSource();
                     var request = client.GetAsync("/api/wait?name=cancelled", cancel.Token);
-                    await probe.FirstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                    cancel.Cancel();
-                    probe.Release.TrySetResult(true);
+                    try
+                    {
+                        await probe.FirstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                        cancel.Cancel();
+                    }
+                    finally { probe.Release.TrySetResult(true); }
                     await Assert.ThatAsync(async () => await request, Throws.InstanceOf<OperationCanceledException>());
                     Assert.That(probe.ControllerDisposeCount, Is.EqualTo(1));
                     Assert.That(probe.Requests.Single().DisposeCount, Is.EqualTo(1));
@@ -299,13 +380,14 @@ namespace EmbedIO.Tests
                 });
         }
 
-        [Test]
-        public async Task AsyncDisposalWinsWhenControllerImplementsBothInterfaces()
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task AsyncDisposalWinsWhenControllerImplementsBothInterfaces(bool generated)
         {
             var probe = new Probe();
             await using var provider = Build(probe);
             await TestWebServer.UseAsync(server => server.WithDependencyInjection(provider)
-                .WithWebApi("/api", module => module.WithControllerServices<DualDisposableController>()), async client =>
+                .WithWebApi("/api", module => Services(module, generated, Bindings.DualDisposableController)), async client =>
                 {
                     await client.GetAsync("/api/dual");
                     Assert.That(probe.Events.ToArray(), Is.EqualTo(new[] { "async" }));
@@ -340,9 +422,12 @@ namespace EmbedIO.Tests
             await TestWebServer.UseAsync(server => server.WithWebApi("/api", module => module.WithController(() => controller)), async client =>
             {
                 var request = client.GetAsync("/api/legacy");
-                await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-                Assert.That(controller.Disposed, Is.True);
-                probe.Release.TrySetResult(true);
+                try
+                {
+                    await probe.BothEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                    Assert.That(controller.Disposed, Is.True);
+                }
+                finally { probe.Release.TrySetResult(true); }
                 await request;
             });
         }

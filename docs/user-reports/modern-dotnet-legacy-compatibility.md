@@ -14,7 +14,11 @@ Neo already uses a .NET 10 SDK and C# 14. Modernization can continue without
 removing the legacy asset. This answers the target-policy question; it does not
 adopt every API or architecture idea in the original proposal.
 
-| Package | Shipped targets | Relevant runtime package dependencies |
+The following table records the published 1.0.2 package snapshot used by this
+evaluation. Current source additionally references `System.Threading.RateLimiting`
+on both core targets for the opt-in [rate limiter](../guides/rate-limiting.md).
+
+| Package | Shipped targets | Relevant runtime package dependencies in 1.0.2 |
 | --- | --- | --- |
 | `EmbedIO-Neo` | `netstandard2.0`, `net10.0` | Standard: Microsoft System.Text.Json and its supporting packages. .NET 10: none. |
 | `EmbedIO-Neo.JsonServer` | `netstandard2.0`, `net10.0` | Core package. |
@@ -54,8 +58,8 @@ and validation plan; this report does not justify adding one.
 
 ## SDK, language features and behavior
 
-Contributors use the SDK selected by `global.json` (10.0.400 floor, stable later
-feature bands allowed), C# 14 and the existing analyzers. Library compilation
+Contributors use the exact SDK pinned by `global.json` (no roll-forward),
+C# 14 and the existing analyzers. Library compilation
 still checks each target's available references. Ordinary consumers install a
 NuGet package; they do not need Neo's contributor SDK to compile their own older
 application target.

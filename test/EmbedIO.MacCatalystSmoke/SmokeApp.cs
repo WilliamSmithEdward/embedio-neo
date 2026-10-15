@@ -44,8 +44,13 @@ public sealed class SmokeApp : Application
                 if (!(await client.GetStringAsync(url)).Contains(marker, StringComparison.Ordinal))
                     throw new InvalidOperationException("HTTP response did not contain the test page.");
 
-                var navigation = new TaskCompletionSource<WebNavigationResult>();
-                view.Navigated += (_, e) => navigation.TrySetResult(e.Result);
+                var navigation = new TaskCompletionSource<WebNavigationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var expectedUrl = new Uri(url);
+                view.Navigated += (_, e) =>
+                {
+                    if (Uri.TryCreate(e.Url, UriKind.Absolute, out var actualUrl) && actualUrl == expectedUrl)
+                        navigation.TrySetResult(e.Result);
+                };
                 view.Source = url;
                 if (await navigation.Task.WaitAsync(TimeSpan.FromSeconds(30)) != WebNavigationResult.Success)
                     throw new InvalidOperationException("WebView navigation failed.");

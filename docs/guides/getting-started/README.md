@@ -1,14 +1,17 @@
 # Your first JSON endpoint
 
-Run a small .NET server and get a JSON response in your browser. You only need
-the .NET 10 SDK and a terminal.
+Run a small .NET server and get a JSON response in your browser. You need the
+.NET 10 SDK and a terminal. Neo v2 is not yet published: the package command below
+installs the published v1 package. To try the v2 engine, follow the
+[source-checkout instructions](../../../README.md#installation) and reference
+`src/EmbedIO/EmbedIO.csproj` instead. The program uses APIs shared by both versions.
 
 ## Create the app
 
 ```sh
 dotnet new console --framework net10.0 --name HelloEmbedIO
 cd HelloEmbedIO
-dotnet add package EmbedIO-Neo --version 1.0.0
+dotnet add package EmbedIO-Neo --version 1.0.3
 ```
 
 The package is called `EmbedIO-Neo`; the C# namespace is `EmbedIO`.

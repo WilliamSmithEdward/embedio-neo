@@ -13,6 +13,7 @@ namespace EmbedIO.Internal
     {
         private readonly IHttpResponse _response;
         private readonly MemoryStream _buffer;
+        private int _disposed;
 
         public BufferingResponseStream(IHttpResponse response)
         {
@@ -70,13 +71,19 @@ namespace EmbedIO.Internal
 
         protected override void Dispose(bool disposing)
         {
-            _response.ContentLength64 = _buffer.Length;
-            _buffer.Position = 0;
-            _buffer.CopyTo(_response.OutputStream);
+            if (!disposing || Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
 
-            if (disposing)
+            try
+            {
+                _response.ContentLength64 = _buffer.Length;
+                _buffer.Position = 0;
+                _buffer.CopyTo(_response.OutputStream);
+            }
+            finally
             {
                 _buffer.Dispose();
+                base.Dispose(disposing);
             }
         }
 

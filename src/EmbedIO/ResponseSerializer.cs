@@ -13,10 +13,14 @@ namespace EmbedIO
         private static readonly ResponseSerializerCallback BufferingBaseSerializer = GetBaseSerializer(true);
 
         /// <summary>Serializes a response using EmbedIO's .NET JSON defaults.</summary>
+        /// <remarks>The defaults resolve metadata by reflection. Where that is disabled, as in trimmed
+        /// and Native AOT applications, this throws <see cref="NotSupportedException"/>; use
+        /// <see cref="Json(JsonSerializerOptions)"/> with source-generated options instead.</remarks>
         public static Task Json(IHttpContext context, object? data)
         {
             if (context is null) throw new System.NullReferenceException();
-            return WriteJsonAsync(context, data, false, null);
+            if (!Serialization.ReflectionSerialization.IsSupported) throw Serialization.ReflectionSerialization.Disabled();
+            return WriteJsonAsync(context, data, false, Serialization.Json.DefaultOptions());
         }
 
         /// <summary>Creates a JSON serializer with custom .NET options.</summary>
@@ -24,7 +28,11 @@ namespace EmbedIO
 
         /// <summary>Creates a JSON serializer with optional response buffering.</summary>
         public static ResponseSerializerCallback Json(bool bufferResponse)
-            => (context, data) => WriteJsonAsync(context, data, bufferResponse, null);
+            => (context, data) =>
+            {
+                if (!Serialization.ReflectionSerialization.IsSupported) throw Serialization.ReflectionSerialization.Disabled();
+                return WriteJsonAsync(context, data, bufferResponse, Serialization.Json.DefaultOptions());
+            };
 
         /// <summary>Creates a JSON serializer with custom options and optional buffering.</summary>
         public static ResponseSerializerCallback Json(bool bufferResponse, JsonSerializerOptions options)
@@ -34,11 +42,13 @@ namespace EmbedIO
             return (context, data) => WriteJsonAsync(context, data, bufferResponse, snapshot);
         }
 
-        private static Task WriteJsonAsync(IHttpContext context, object? data, bool bufferResponse, JsonSerializerOptions? options)
+        private static Task WriteJsonAsync(IHttpContext context, object? data, bool bufferResponse, JsonSerializerOptions options)
+            => WriteJsonBytesAsync(context, Serialization.Json.SerializeUtf8(data, options), bufferResponse);
+
+        internal static Task WriteJsonBytesAsync(IHttpContext context, byte[] json, bool bufferResponse)
         {
             context.Response.ContentType = MimeType.Json;
             context.Response.ContentEncoding = WebServer.Utf8NoBomEncoding;
-            var json = options == null ? Serialization.Json.Serialize(data) : Serialization.Json.Serialize(data, options);
             return None(bufferResponse)(context, json);
         }
 
@@ -56,7 +66,8 @@ namespace EmbedIO
 
                 var isBinaryResponse = data is byte[];
 
-                if (!context.TryDetermineCompression(context.Response.ContentType ?? MimeType.Default, out var preferCompression))
+                // Compression preferences are keyed by media type; parameters such as charset are not part of it.
+                if (!context.TryDetermineCompression(MimeType.StripParameters(context.Response.ContentType) ?? MimeType.Default, out var preferCompression))
                 {
                     preferCompression = true;
                 }

@@ -1,418 +1,263 @@
-﻿using EmbedIO.Internal;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.Net.Internal
 {
-    /// <summary>
-    /// Represents an HTTP Listener's response.
-    /// </summary>
-    /// <seealso cref="IDisposable" />
-    internal sealed class HttpListenerResponse : IHttpResponse, IDisposable
+    // Independently authored response state. The output owner orders wire commits;
+    // this application view owns mutable metadata and its once-only close claim.
+    internal sealed class HttpListenerResponse : IHttpResponseSections, IDisposable
     {
-        private readonly HttpConnection _connection;
+        private static readonly string[] HandoffFramingFields = { HttpHeaderNames.ContentLength, HttpHeaderNames.TransferEncoding, HttpHeaderNames.KeepAlive, HttpHeaderNames.Connection, HttpHeaderNames.Upgrade };
+        private readonly HttpConnection _transport;
         private readonly HttpListenerRequest _request;
-        private readonly string _id;
-        private int _disposed;
-        private string _contentType = MimeType.Html; // Same default value as Microsoft's implementation
+        private readonly string _identity;
+        private int _closed;
+        private int _status = 200;
+        private string _mediaType = MimeType.Html;
+        private bool _mediaTypeAssigned;
+        private bool? _persistent;
+        private bool _chunks;
+        private bool _handoff;
+        private bool _capsules;
         private CookieList? _cookies;
-        private bool? _keepAlive;
-        private ResponseStream? _outputStream;
-        private int _statusCode = 200;
-        private bool _chunked;
+        private ResponseStream? _output;
+        private HashSet<string>? _reservedTrailers;
+        private byte[]? _trailerEnding;
 
         internal HttpListenerResponse(HttpListenerContext context)
         {
+            _transport = context.Connection;
             _request = context.HttpListenerRequest;
-            _connection = context.Connection;
-            _id = context.Id;
+            _identity = context.Id;
         }
-
-        /// <inheritdoc />
+        public WebHeaderCollection Headers { get; } = new();
         public Encoding? ContentEncoding { get; set; } = WebServer.DefaultEncoding;
-
-        /// <inheritdoc />
-        /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
-        /// <exception cref="InvalidOperationException">This property is being set and headers were already sent.</exception>
+        private string _statusDescription = "OK";
+        // Refused where it is assigned, as System.Net.HttpListenerResponse does: this text goes
+        // straight into the status line, so a control character would start a field of its own.
+        public string StatusDescription
+        {
+            get => _statusDescription;
+            set => _statusDescription = EmbedIO.Internal.HttpTokenSyntax.ValidatedReasonPhrase(value, nameof(value));
+        }
+        public Version ProtocolVersion => _request.ProtocolVersion.Minor == 0 ? HttpVersion.Version10 : HttpVersion.Version11;
+        public Stream OutputStream => _output ??= _transport.GetResponseStream();
+        // Body bytes sent so far; zero when no body was written.
+        internal long SentBodyBytes => _output?.SentBodyBytes ?? 0;
+        public ICookieCollection Cookies => CookieCollection;
+        internal CookieList? ExistingCookies => _cookies;
+        internal CookieList CookieCollection { get => _cookies ??= new CookieList(); set => _cookies = value; }
+        internal bool HeadersSent { get; set; }
+        internal bool IsHeadResponse => _request.HttpVerb == HttpVerbs.Head;
+        internal bool IsTunnelResponse => _handoff;
+        internal bool SuppressesBody => IsHeadResponse || _status < 200 || _status is 204 or 205 or 304;
+        internal byte[]? EndingChunk => Volatile.Read(ref _trailerEnding);
         public long ContentLength64
         {
-            get => Headers.ContainsKey(HttpHeaderNames.ContentLength) && long.TryParse(Headers[HttpHeaderNames.ContentLength], out var val) ? val : 0;
-
+            get => long.TryParse(Headers[HttpHeaderNames.ContentLength], out var count) ? count : 0;
             set
             {
-                EnsureCanChangeHeaders();
-                if (value < 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value), "Must be >= 0");
-                }
-
+                RequireMutableHead();
+                if (value < 0) throw new ArgumentOutOfRangeException(nameof(value), "Must be >= 0");
+                if (_reservedTrailers != null) throw new InvalidOperationException("Reserved HTTP/1 trailers require chunked framing without Content-Length.");
                 Headers[HttpHeaderNames.ContentLength] = value.ToString(CultureInfo.InvariantCulture);
             }
         }
-
-        /// <inheritdoc />
-        /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
-        /// <exception cref="InvalidOperationException">This property is being set and headers were already sent.</exception>
-        /// <exception cref="ArgumentNullException">This property is being set to <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException">This property is being set to the empty string.</exception>
         public string ContentType
         {
-            get => _contentType;
-
-            set
-            {
-                EnsureCanChangeHeaders();
-                _contentType = Validate.NotNullOrEmpty(nameof(value), value);
-            }
+            get => _mediaType;
+            set { RequireMutableHead(); _mediaType = Validate.NotNullOrEmpty(nameof(value), value); _mediaTypeAssigned = true; }
         }
-
-        /// <inheritdoc />
-        public ICookieCollection Cookies => CookieCollection;
-
-        /// <inheritdoc />
-        public WebHeaderCollection Headers { get; } = new WebHeaderCollection();
-
-        /// <inheritdoc />
         public bool KeepAlive
         {
-            // The context is constructed before request parsing. Reading the default
-            // here avoids caching a premature request policy; an explicit override wins.
-            get => _keepAlive ?? _request.KeepAlive;
-
-            set
-            {
-                EnsureCanChangeHeaders();
-                _keepAlive = value;
-            }
+            get => _persistent ?? _request.KeepAlive;
+            set { RequireMutableHead(); _persistent = value; }
         }
-
-        /// <inheritdoc />
-        public Stream OutputStream => _outputStream ??= _connection.GetResponseStream();
-
-        /// <inheritdoc />
-        public Version ProtocolVersion => _request.ProtocolVersion;
-
-        /// <inheritdoc />
-        /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
-        /// <exception cref="InvalidOperationException">This property is being set and headers were already sent.</exception>
         public bool SendChunked
         {
-            get => _chunked;
-
+            get => _chunks;
             set
             {
-                EnsureCanChangeHeaders();
-                _chunked = value;
+                RequireMutableHead();
+                if (_reservedTrailers != null && !value) throw new InvalidOperationException("Reserved HTTP/1 trailers require chunked framing.");
+                _chunks = value;
             }
         }
-
-        /// <inheritdoc />
-        /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
-        /// <exception cref="InvalidOperationException">This property is being set and headers were already sent.</exception>
         public int StatusCode
         {
-            get => _statusCode;
-
+            get => _status;
             set
             {
-                EnsureCanChangeHeaders();
-                if (value < 100 || value > 999)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(StatusCode), "StatusCode must be between 100 and 999.");
-                }
-
-                _statusCode = value;
+                RequireMutableHead();
+                HttpResponseFieldSections.ValidateFinalStatus(value);
+                if (_reservedTrailers != null && value is 204 or 205 or 304)
+                    throw new InvalidOperationException("Reserved trailers require a body-capable final response.");
+                _status = value;
                 StatusDescription = HttpListenerResponseHelper.GetStatusDescription(value);
             }
         }
-
-        /// <inheritdoc />
-        public string StatusDescription { get; set; } = "OK";
-
-        internal CookieList CookieCollection
+        internal void CommitWebSocketHandshake()
         {
-            get => _cookies ??= new CookieList();
-            set => _cookies = value;
+            // The separate HTTP/1 handshake writer has committed a bodyless 101.
+            // Publish that wire result without accepting 1xx through the public setter.
+            _status = (int)HttpStatusCode.SwitchingProtocols;
+            StatusDescription = HttpListenerResponseHelper.GetStatusDescription(_status);
+            _chunks = false;
+            HeadersSent = true;
+            // The connection now carries the upgraded protocol, not further HTTP/1
+            // messages (RFC 9110, Section 7.8). PrepareFraming never runs for this head,
+            // so without this the request cycle would treat the connection as reusable
+            // and read the upgraded protocol's bytes as a request head.
+            _persistent = false;
         }
-
-        internal bool HeadersSent { get; set; }
-
-        internal bool IsHeadResponse => _request.HttpVerb == HttpVerbs.Head;
-
-        void IDisposable.Dispose() => Close(true);
-
-        public void Close() => Close(false);
-
-        /// <inheritdoc />
+        private void RequireMutableHead()
+        {
+            if (Volatile.Read(ref _closed) != 0) throw new ObjectDisposedException(_identity);
+            if (HeadersSent) throw new InvalidOperationException("Header values cannot be changed after headers are sent.");
+        }
+        void IDisposable.Dispose() => Finish(true, false);
+        public void Close() => Finish(false, false);
+        internal void Abort() => Finish(true, true);
+        private void Finish(bool force, bool abort)
+        {
+            if (Interlocked.Exchange(ref _closed, 1) != 0) return;
+            if (abort) _transport.ForceClose();
+            else _transport.Close(force);
+        }
         public void SetCookie(Cookie cookie)
         {
-            if (cookie == null)
-            {
-                throw new ArgumentNullException(nameof(cookie));
-            }
-
+            if (cookie == null) throw new ArgumentNullException(nameof(cookie));
             if (_cookies != null)
-            {
-                if (_cookies.Any(c => cookie.Name == c.Name && cookie.Domain == c.Domain && cookie.Path == c.Path))
-                {
-                    throw new ArgumentException("The cookie already exists.");
-                }
-            }
-            else
-            {
-                _cookies = new CookieList();
-            }
-
-            _cookies.Add(cookie);
+                foreach (var present in _cookies)
+                    if (present.Name == cookie.Name && present.Domain == cookie.Domain && present.Path == cookie.Path)
+                        throw new ArgumentException("The cookie already exists.");
+            CookieCollection.Add(cookie);
         }
-
-        internal MemoryStream SendHeaders(bool closing)
+        public Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken cancellationToken = default)
         {
-            if (_contentType != null)
+            RequireMutableHead();
+            if (ProtocolVersion < HttpVersion.Version11 || _handoff) throw new InvalidOperationException("This response cannot carry informational sections.");
+            var fields = HttpResponseFieldSections.Informational(statusCode, headers);
+            return ((ResponseStream)OutputStream).WriteInformationalAsync(HttpResponseFieldSections.Http1Informational(statusCode, fields), cancellationToken);
+        }
+        public void DeclareTrailers(params string[] fieldNames) => PrepareTrailers(fieldNames);
+        internal void PrepareTrailers(string[] names)
+        {
+            RequireMutableHead();
+            if (names == null) throw new ArgumentNullException(nameof(names));
+            if (ProtocolVersion < HttpVersion.Version11 || SuppressesBody || _handoff
+                || (_request.HttpMethod == "CONNECT" && _status is >= 200 and < 300))
+                throw new InvalidOperationException("This response cannot carry trailers.");
+            if (Headers[HttpHeaderNames.ContentLength] != null) throw new InvalidOperationException("HTTP/1 trailers require chunked framing without Content-Length.");
+            var reserved = HttpResponseTrailerFields.Declaration(names);
+            Headers["Trailer"] = string.Join(", ", reserved);
+            _reservedTrailers = reserved;
+            _chunks = true;
+        }
+        public void SetTrailers(WebHeaderCollection trailers)
+        {
+            if (trailers == null) throw new ArgumentNullException(nameof(trailers));
+            if (_closed != 0 || _handoff || _reservedTrailers == null || !_chunks || SuppressesBody)
+                throw new InvalidOperationException("Trailers were not reserved for an open response.");
+            var snapshot = HttpResponseTrailerFields.Snapshot(trailers, _reservedTrailers);
+            Volatile.Write(ref _trailerEnding, HttpResponseTrailerFields.ChunkEnd(snapshot));
+        }
+        internal void BeginTunnel(string? protocol, bool capsules)
+        {
+            RequireMutableHead();
+            if (_reservedTrailers != null) throw new InvalidOperationException("A trailer response cannot become a tunnel.");
+            _status = protocol == null ? 200 : 101;
+            StatusDescription = HttpListenerResponseHelper.GetStatusDescription(_status);
+            if (capsules)
             {
-                var encoding = ContentEncoding;
-                var hasCharset = _contentType.IndexOf(";", System.StringComparison.Ordinal) >= 0
-                    && MediaTypeHeaderValue.TryParse(_contentType, out var parsedType)
-                    && parsedType.CharSet != null;
-                var contentTypeValue = encoding != null && !hasCharset
-                    ? $"{_contentType}; charset={encoding.WebName}"
-                    : _contentType;
-
-                Headers.Add(HttpHeaderNames.ContentType, contentTypeValue);
+                HttpCapsuleProtocol.ValidateCarrierHeaders(_request.Headers);
+                HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _status);
+                if (_mediaTypeAssigned || _chunks) throw new InvalidOperationException("Capsule carriers cannot configure representation type or chunked framing.");
+                Headers[HttpCapsuleProtocol.HeaderName] = "?1";
             }
-
-            if (Headers[HttpHeaderNames.Server] == null)
+            foreach (var field in HandoffFramingFields)
+                Headers.Remove(field);
+            if (protocol != null) { Headers[HttpHeaderNames.Connection] = "Upgrade"; Headers[HttpHeaderNames.Upgrade] = protocol; }
+            _chunks = false;
+            _handoff = true;
+            _capsules = capsules;
+        }
+        internal MemoryStream SendHeaders(bool closing, int bodyCount)
+        {
+            if (_reservedTrailers != null && (!_chunks || SuppressesBody || _handoff || Headers[HttpHeaderNames.ContentLength] != null))
+                throw new InvalidOperationException("Reserved trailers require a body-capable chunked response.");
+            if (_capsules) HttpCapsuleProtocol.ValidateCarrierHeaders(Headers, _status);
+            PrepareRepresentation();
+            if (!_handoff) PrepareFraming(closing);
+            return WriteHeaders(bodyCount);
+        }
+        private void PrepareRepresentation()
+        {
+            if (!_handoff || (_mediaTypeAssigned && !_capsules))
             {
-                Headers.Add(HttpHeaderNames.Server, WebServer.Signature);
+                Headers.Add(HttpHeaderNames.ContentType, ContentEncoding != null
+                    ? HttpResponseFieldSections.WithCharset(_mediaType, ContentEncoding.WebName) : _mediaType);
             }
-
-            if (Headers[HttpHeaderNames.Date] == null)
+            if (Headers[HttpHeaderNames.Server] == null) Headers.Add(HttpHeaderNames.Server, WebServer.Signature);
+            if (Headers[HttpHeaderNames.Date] == null) Headers.Add(HttpHeaderNames.Date, HttpResponseFieldSections.CurrentDate());
+        }
+        private bool HasDeclaredLength => long.TryParse(Headers[HttpHeaderNames.ContentLength], NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) && count >= 0;
+        private void PrepareFraming(bool closing)
+        {
+            if (_status < 200 || _status is 204 or 304)
             {
-                Headers.Add(HttpHeaderNames.Date, HttpDate.Format(DateTime.UtcNow));
+                if (_status != 304) { Headers.Remove(HttpHeaderNames.ContentLength); Headers.Remove(HttpHeaderNames.TransferEncoding); }
+                _chunks = false;
             }
-
-            if (closing)
+            else if (_status == 205)
             {
-                if (_request.HttpVerb != HttpVerbs.Head)
-                    Headers[HttpHeaderNames.ContentLength] = "0";
-                _chunked = false;
+                // Reset Content has no representation content on any HTTP version.
+                Headers[HttpHeaderNames.ContentLength] = "0";
+                Headers.Remove(HttpHeaderNames.TransferEncoding);
+                _chunks = false;
+            }
+            else if (closing && _reservedTrailers == null)
+            {
+                if (!IsHeadResponse && !HasDeclaredLength) Headers[HttpHeaderNames.ContentLength] = "0";
+                _chunks = false;
             }
             else
             {
-                if (ProtocolVersion < HttpVersion.Version11)
-                {
-                    _chunked = false;
-                }
-
-                var haveContentLength = !_chunked
-                                     && Headers.ContainsKey(HttpHeaderNames.ContentLength)
-                                     && long.TryParse(Headers[HttpHeaderNames.ContentLength], out var contentLength)
-                                     && contentLength >= 0L;
-
-                if (!haveContentLength)
+                if (ProtocolVersion < HttpVersion.Version11) _chunks = false;
+                if (_chunks || !HasDeclaredLength)
                 {
                     Headers.Remove(HttpHeaderNames.ContentLength);
-                    if (ProtocolVersion >= HttpVersion.Version11)
-                    {
-                        _chunked = true;
-                    }
+                    if (ProtocolVersion >= HttpVersion.Version11) _chunks = true;
                 }
             }
-
-            if (_chunked)
-            {
-                Headers.Add(HttpHeaderNames.TransferEncoding, "chunked");
-            }
-
-            //// Apache forces closing the connection for these status codes:
-            //// HttpStatusCode.BadRequest            400
-            //// HttpStatusCode.RequestTimeout        408
-            //// HttpStatusCode.LengthRequired        411
-            //// HttpStatusCode.RequestEntityTooLarge 413
-            //// HttpStatusCode.RequestUriTooLong     414
-            //// HttpStatusCode.InternalServerError   500
-            //// HttpStatusCode.ServiceUnavailable    503
-            var reuses = _connection.Reuses;
-            var keepAlive = _statusCode switch
-            {
-                400 => false,
-                408 => false,
-                411 => false,
-                413 => false,
-                414 => false,
-                500 => false,
-                503 => false,
-                _ => KeepAlive && reuses < 100
-            };
-
-            _keepAlive = keepAlive;
-            if (keepAlive)
-            {
-                Headers.Add(HttpHeaderNames.Connection, "keep-alive");
-                if (ProtocolVersion >= HttpVersion.Version11)
-                {
-                    Headers.Add(HttpHeaderNames.KeepAlive, $"timeout=15,max={100 - reuses}");
-                }
-            }
-            else
-            {
-                Headers.Add(HttpHeaderNames.Connection, "close");
-            }
-
-            return WriteHeaders();
+            if (_chunks) Headers.Add(HttpHeaderNames.TransferEncoding, "chunked");
+            var persistent = _status is not 400 and not 408 and not 411 and not 413 and not 414 and not 500 and not 503
+                && !_transport.IsDraining && KeepAlive;
+            if (ProtocolVersion < HttpVersion.Version11 && !SuppressesBody && !HasDeclaredLength) persistent = false;
+            if (ProtocolVersion == HttpVersion.Version11 && _request.HttpMethod == "CONNECT" && _status >= 300) persistent = false;
+            // A body the server never invited with 100 Continue may still be on its way; the
+            // connection closes after this response instead of waiting to drain it.
+            if (_request.IsContinueOwed) persistent = false;
+            _persistent = persistent;
+            Headers.Add(HttpHeaderNames.Connection, persistent ? "keep-alive" : "close");
+            if (persistent && ProtocolVersion >= HttpVersion.Version11)
+                Headers.Add(HttpHeaderNames.KeepAlive, _transport.KeepAliveHeader);
         }
-
-        private void AppendSetCookieHeader(StringBuilder sb, Cookie cookie)
+        private MemoryStream WriteHeaders(int bodyCount)
         {
-            if (cookie.Name.Length == 0)
-            {
-                return;
-            }
-
-            _ = sb.Append("Set-Cookie: ");
-            AppendCookieHeaderValue(sb, cookie, this);
-            _ = sb.Append("\r\n");
-        }
-
-        internal static void AppendCookieHeaderValue(StringBuilder sb, Cookie cookie, IHttpResponse? response = null)
-        {
-            if (cookie.Version > 0)
-            {
-                _ = sb.Append("Version=").Append(cookie.Version).Append("; ");
-            }
-
-            _ = sb
-                .Append(cookie.Name)
-                .Append('=')
-                .Append(cookie.Value);
-
-            if (cookie.Expires != DateTime.MinValue)
-            {
-                _ = sb
-                    .Append("; Expires=")
-                    .Append(HttpDate.Format(cookie.Expires));
-            }
-
-            if (!string.IsNullOrEmpty(cookie.Path))
-            {
-                _ = sb.Append("; Path=").Append(QuotedString(cookie, cookie.Path));
-            }
-
-            if (!string.IsNullOrEmpty(cookie.Domain))
-            {
-                _ = sb.Append("; Domain=").Append(QuotedString(cookie, cookie.Domain));
-            }
-
-            if (!string.IsNullOrEmpty(cookie.Port))
-            {
-                _ = sb.Append("; Port=").Append(cookie.Port);
-            }
-
-            if (cookie.Secure)
-            {
-                _ = sb.Append("; Secure");
-            }
-
-            if (cookie.HttpOnly)
-            {
-                _ = sb.Append("; HttpOnly");
-            }
-
-            if (response != null) CookieSameSiteStore.Append(sb, response, cookie);
-
-        }
-
-        private static string QuotedString(Cookie cookie, string value)
-            => cookie.Version == 0 || value.IsToken() ? value : "\"" + EmbedIO.Internal.StringOperations.ReplaceOrdinal(value, "\"", "\\\"") + "\"";
-
-        private void Close(bool force)
-        {
-            // A completed response may outlive its TCP connection's current request.
-            // Its repeated close/dispose must never close that newer request.
-            if (Interlocked.Exchange(ref _disposed, 1) != 0)
-                return;
-
-            _connection.Close(force);
-        }
-
-        private string GetHeaderData()
-        {
-            var sb = new StringBuilder()
-                .Append("HTTP/")
-                .Append(ProtocolVersion)
-                .Append(' ')
-                .Append(_statusCode)
-                .Append(' ')
-                .Append(StatusDescription)
-                .Append("\r\n");
-
-            foreach (var key in Headers.AllKeys)
-            {
-                if (string.Equals(key, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase)) continue;
-                _ = sb
-                    .Append(key)
-                    .Append(": ")
-                    .Append(Headers[key])
-                    .Append("\r\n");
-            }
-
-            if (_cookies != null)
-            {
-                foreach (var cookie in _cookies)
-                {
-                    AppendSetCookieHeader(sb, cookie);
-                }
-            }
-
-            if (Headers.GetValues(HttpHeaderNames.SetCookie) is { } rawCookieValues)
-            {
-                // Set-Cookie fields are independent; preserve attributes not represented by Cookie.
-                foreach (var value in rawCookieValues)
-                    sb.Append("Set-Cookie: ").Append(value).Append("\r\n");
-            }
-
-            return sb.Append("\r\n").ToString();
-        }
-
-        private MemoryStream WriteHeaders()
-        {
-            var encoding = WebServer.DefaultEncoding;
-            var text = GetHeaderData();
-            var preamble = encoding.GetPreamble();
-            var size = preamble.Length + encoding.GetByteCount(text);
-            var stream = new MemoryStream(size);
-            stream.SetLength(size);
-            var buffer = stream.GetBuffer();
-            Buffer.BlockCopy(preamble, 0, buffer, 0, preamble.Length);
-            encoding.GetBytes(text, 0, text.Length, buffer, preamble.Length);
-
-            _outputStream ??= _connection.GetResponseStream();
-
-            // Assumes that the ms was at position 0
-            stream.Position = preamble.Length;
+            var encoded = Http1HeaderEncoding.Encode(this, bodyCount);
+            _output ??= _transport.GetResponseStream();
             HeadersSent = true;
-
-            return stream;
+            return encoded;
         }
-
-        private void EnsureCanChangeHeaders()
-        {
-            if (Volatile.Read(ref _disposed) != 0)
-            {
-                throw new ObjectDisposedException(_id);
-            }
-
-            if (HeadersSent)
-            {
-                throw new InvalidOperationException("Header values cannot be changed after headers are sent.");
-            }
-        }
+        internal static void AppendCookieHeaderValue(StringBuilder target, Cookie cookie, IHttpResponse? response = null)
+            => ResponseCookieFields.Append(target, cookie, response);
     }
 }

@@ -45,6 +45,16 @@ class SuppressionGuardTests(unittest.TestCase):
             with self.subTest(source=source):
                 self.assertFalse(violations(source, csharp=True))
 
+    def test_conditional_directives_accept_logical_negation(self):
+        for source in ('#if !NET10_0_OR_GREATER', '#elif !TARGET',
+                       '#if !(FIRST || SECOND)', '#if FIRST && !SECOND'):
+            with self.subTest(source=source):
+                self.assertFalse(violations(source, csharp=True))
+
+    def test_conditional_branch_still_rejects_nullable_suppression(self):
+        source = '#if !NET10_0_OR_GREATER\nvar x = value!;\n#endif'
+        self.assertEqual(violations(source, csharp=True), [(2, 'var x = value!;')])
+
     def test_preserves_line_numbers_after_comments(self):
         self.assertEqual(violations('/* ignored!\ntext */\nreturn value!;', csharp=True),
                          [(3, 'return value!;')])

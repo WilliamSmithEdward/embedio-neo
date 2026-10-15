@@ -48,12 +48,25 @@ namespace EmbedIO.Security
         /// <inheritdoc />
         public override bool IsFinalHandler => false;
 
+        // The most recent requests this module handled, so a message written just after a
+        // request ends can still name its client. Retiring oldest first bounds the map; a
+        // retired or never-tracked id is charged to nobody rather than to the wrong client.
+        private const int MaximumTrackedRequests = 4096;
+
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IPAddress> _requestAddresses = new();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _trackedRequests = new();
+
         /// <summary>
         /// Gets the client address.
         /// </summary>
         /// <value>
-        /// The client address.
+        /// The client address of whichever request most recently passed through this module.
         /// </value>
+        /// <remarks>
+        /// This is not request-scoped. Concurrent requests overwrite it, so it reports the last
+        /// client seen rather than the client of any particular request, and nothing in this
+        /// module decides anything by reading it.
+        /// </remarks>
         public IPAddress? ClientAddress { get; private set; }
 
         internal IPBanningConfiguration Configuration { get; }
@@ -187,8 +200,41 @@ namespace EmbedIO.Security
         protected override Task OnRequestAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
-            ClientAddress = context.Request.RemoteEndPoint.Address;
-            return Configuration.CheckClient(ClientAddress);
+            var address = context.Request.RemoteEndPoint.Address;
+            ClientAddress = address;
+            Track(context, address);
+            return Configuration.CheckClient(address);
+        }
+
+        // Diagnostic messages name their request as "[id] ...", and that id is the only thing
+        // tying a message to the client that caused it. A criterion that reads ClientAddress
+        // instead would charge the message to whichever request passed through this module
+        // last, from any thread, which is not the same client.
+        //
+        // An entry outlives its request deliberately. A request's completion message, the one
+        // carrying its status, is written after the context has closed, so releasing the entry
+        // on close would leave exactly the message the criteria care about unattributable.
+        // The oldest entries retire instead, which bounds the map without a timer.
+        private void Track(IHttpContext context, IPAddress address)
+        {
+            if (!_requestAddresses.TryAdd(context.Id, address))
+                return;
+
+            _trackedRequests.Enqueue(context.Id);
+            while (_trackedRequests.Count > MaximumTrackedRequests && _trackedRequests.TryDequeue(out var oldest))
+                _requestAddresses.TryRemove(oldest, out _);
+        }
+
+        // The client a diagnostic message belongs to, or null when the message names no request
+        // this module handled. Refusing to guess is the point: a message from a route this
+        // module does not guard must not be charged to one of its own clients.
+        internal IPAddress? ResolveMessageClient(string message)
+        {
+            if (message == null || message.Length < 3 || message[0] != '[') return null;
+            var end = EmbedIO.Internal.StringOperations.IndexOfOrdinal(message, ']');
+            if (end < 2) return null;
+
+            return _requestAddresses.TryGetValue(message.Substring(1, end - 1), out var address) ? address : null;
         }
 
         /// <summary>

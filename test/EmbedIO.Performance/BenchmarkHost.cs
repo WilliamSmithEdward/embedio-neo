@@ -1,4 +1,6 @@
-﻿using EmbedIO;
+﻿using System.Diagnostics;
+using System.Text.Json;
+using EmbedIO;
 using EmbedIO.PlatformTests;
 
 internal static class BenchmarkHost
@@ -15,8 +17,9 @@ internal static class BenchmarkHost
         var index = Array.IndexOf(args, "--url");
         var url = index < 0 ? "http://127.0.0.1:8080/" : index + 1 < args.Length
             ? args[index + 1] : throw new ArgumentException("--url requires a listener prefix.");
-        var mode = args.Contains("--microsoft", StringComparer.Ordinal)
-            ? HttpListenerMode.Microsoft : HttpListenerMode.EmbedIO;
+        if (args.Contains("--microsoft", StringComparer.Ordinal))
+            throw new NotSupportedException("Neo v2 no longer benchmarks the removed Microsoft listener. Omit --microsoft to use the retained engine.");
+        var mode = HttpListenerMode.EmbedIO;
         EmbedIO.Diagnostics.Log.Source.Switch.Level = System.Diagnostics.SourceLevels.Off;
         using var stop = new CancellationTokenSource();
         using var server = BenchmarkEndpoints.CreateServer(url, mode);
@@ -27,7 +30,29 @@ internal static class BenchmarkHost
         try
         {
             Console.WriteLine($"Benchmark endpoints: {url}json and {url}plaintext; {mode}. Ctrl+C stops the host.");
-            await server.RunAsync(stop.Token).ConfigureAwait(false);
+            var running = server.RunAsync(stop.Token);
+            if (args.Contains("--measure", StringComparer.Ordinal))
+            {
+                if (await Console.In.ReadLineAsync(stop.Token) != "start") throw new InvalidOperationException("Expected start.");
+                using var process = Process.GetCurrentProcess();
+                var cpu = process.TotalProcessorTime;
+                var bytes = GC.GetTotalAllocatedBytes(true);
+                var collections = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
+                var clock = Stopwatch.StartNew();
+                BenchmarkControl.Write("MEASURING");
+                if (await Console.In.ReadLineAsync(stop.Token) != "stop") throw new InvalidOperationException("Expected stop.");
+                clock.Stop();
+                Console.WriteLine(JsonSerializer.Serialize(new
+                {
+                    elapsedSeconds = clock.Elapsed.TotalSeconds,
+                    cpuSeconds = (process.TotalProcessorTime - cpu).TotalSeconds,
+                    allocatedBytes = GC.GetTotalAllocatedBytes(true) - bytes,
+                    collections = Enumerable.Range(0, 3).Select(i => GC.CollectionCount(i) - collections[i]).ToArray(),
+                    note = "Server process only; synchronized stdin control after client warmup. Includes all managed process allocations within the window."
+                }));
+                stop.Cancel();
+            }
+            await running.ConfigureAwait(false);
         }
         finally
         {

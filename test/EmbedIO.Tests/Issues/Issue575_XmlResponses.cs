@@ -17,7 +17,7 @@ namespace EmbedIO.Tests.Issues
     {
         public static IEnumerable Cases()
         {
-            foreach (var mode in new[] { HttpListenerMode.EmbedIO, HttpListenerMode.Microsoft })
+            foreach (var mode in new[] { HttpListenerMode.EmbedIO })
                 foreach (var buffer in new[] { false, true })
                     foreach (var mime in new[] { "application/xml", "text/xml" })
                         foreach (var route in new[] { "text", "element", "document" })

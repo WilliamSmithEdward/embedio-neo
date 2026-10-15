@@ -35,93 +35,84 @@ namespace EmbedIO.Utilities
         {
             var result = new LockableNameValueCollection();
 
-            // Verify there is data to parse; otherwise, return an empty collection.
-            if (string.IsNullOrEmpty(source))
+            // An empty source yields an empty collection.
+            if (!string.IsNullOrEmpty(source))
             {
-                if (!mutableResult)
-                    result.MakeReadOnly();
-
-                return result;
-            }
-
-            void AddKeyValuePair(string? key, string value)
-            {
-                if (key != null)
-                {
-                    // Decode the key.
-                    key = WebUtility.UrlDecode(key);
-
-                    // Discard bracketed index (used e.g. by PHP)
-                    var bracketPos = key.IndexOf("[", StringComparison.Ordinal);
-                    if (bracketPos > 0)
-                        key = key.Substring(0, bracketPos);
-                }
-
-                // Decode the value.
-                value = WebUtility.UrlDecode(value);
-
-                // Add the KVP to the collection.
-                result.Add(key, value);
-            }
-
-            // Skip the initial question mark,
-            // in case source is the Query property of a Uri.
-            var kvpPos = source[0] == '?' ? 1 : 0;
-            var length = source.Length;
-            while (kvpPos < length)
-            {
-                var separatorPos = kvpPos;
-                var equalPos = -1;
-
-                while (separatorPos < length)
-                {
-                    var c = source[separatorPos];
-                    if (c == '&')
-                        break;
-
-                    if (c == '=' && equalPos < 0)
-                        equalPos = separatorPos;
-
-                    separatorPos++;
-                }
-
-                // Split by the equals char into key and value.
-                // Some KVPS will have only their key, some will have both key and value
-                // Some other might be repeated which really means an array
-                if (equalPos < 0)
-                {
-                    if (groupFlags)
-                    {
-                        AddKeyValuePair(null, source.Substring(kvpPos, separatorPos - kvpPos));
-                    }
-                    else
-                    {
-                        AddKeyValuePair(source.Substring(kvpPos, separatorPos - kvpPos), string.Empty);
-                    }
-                }
-                else
-                {
-                    AddKeyValuePair(
-                        source.Substring(kvpPos, equalPos - kvpPos),
-                        source.Substring(equalPos + 1, separatorPos - equalPos - 1));
-                }
-
-                // Edge case: if the last character in source is '&',
-                // there's an empty KVP that we would otherwise skip.
-                if (separatorPos == length - 1)
-                {
-                    AddKeyValuePair(groupFlags ? null : string.Empty, string.Empty);
-                    break;
-                }
-
-                // On to next KVP
-                kvpPos = separatorPos + 1;
+                // Skip the initial question mark,
+                // in case source is the Query property of a Uri.
+                var position = source[0] == '?' ? 1 : 0;
+                while (position < source.Length)
+                    position = ParsePair(source, position, groupFlags, result);
             }
 
             if (!mutableResult)
                 result.MakeReadOnly();
 
             return result;
+        }
+
+        // Parses the key-value pair starting at position and returns the position of the
+        // next pair, or a position past the end of source once the last pair is parsed.
+        // Some pairs have only a key, some have both key and value,
+        // and a repeated key really means an array.
+        private static int ParsePair(string source, int position, bool groupFlags, NameValueCollection result)
+        {
+            var separatorPos = position;
+            var equalPos = -1;
+            while (separatorPos < source.Length)
+            {
+                var c = source[separatorPos];
+                if (c == '&')
+                    break;
+
+                if (c == '=' && equalPos < 0)
+                    equalPos = separatorPos;
+
+                separatorPos++;
+            }
+
+            if (equalPos < 0)
+            {
+                // A token without an equal sign is either a value of the null key
+                // (grouped flags) or a key with an empty value.
+                var token = source.Substring(position, separatorPos - position);
+                AddKeyValuePair(result, groupFlags ? null : token, groupFlags ? token : string.Empty);
+            }
+            else
+            {
+                AddKeyValuePair(
+                    result,
+                    source.Substring(position, equalPos - position),
+                    source.Substring(equalPos + 1, separatorPos - equalPos - 1));
+            }
+
+            // Edge case: if the last character in source is '&',
+            // there's an empty KVP that we would otherwise skip.
+            if (separatorPos == source.Length - 1)
+            {
+                AddKeyValuePair(result, groupFlags ? null : string.Empty, string.Empty);
+                return source.Length;
+            }
+
+            // On to next KVP
+            return separatorPos + 1;
+        }
+
+        private static void AddKeyValuePair(NameValueCollection result, string? key, string value)
+        {
+            if (key != null)
+            {
+                // Decode the key.
+                key = WebUtility.UrlDecode(key);
+
+                // Discard bracketed index (used e.g. by PHP)
+                var bracketPos = key.IndexOf("[", StringComparison.Ordinal);
+                if (bracketPos > 0)
+                    key = key.Substring(0, bracketPos);
+            }
+
+            // Decode the value and add the KVP to the collection.
+            result.Add(key, WebUtility.UrlDecode(value));
         }
     }
 }

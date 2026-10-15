@@ -105,5 +105,38 @@ Registration order matters. Keep API handlers before the root static folder:
 the folder handles unmatched paths too, returning 404 when a file is missing.
 An API handler registered after it would not get that request.
 
+## Brotli responses in the modern-engine development branch
+
+The unreleased .NET 10 asset can negotiate `br` for `OpenResponseStream`,
+`OpenResponseText`, and compressible static files. An absent `Accept-Encoding`
+header still produces an uncompressed response. Quality weights decide first. At
+equal weight Brotli wins over gzip and deflate wherever the client lists it, so a
+browser's `Accept-Encoding: gzip, deflate, br` gets Brotli, as with ASP.NET Core,
+and so does a wildcard. A client that prefers gzip says so with weights, for example
+`gzip;q=1, br;q=0.5`. Between gzip and deflate the coding the client lists first
+still wins, and a tie with `identity` keeps the existing rules.
+`preferCompression: false` continues to prefer an acceptable identity response.
+
+Dynamic responses (`OpenResponseStream`, `OpenResponseText`, and helpers built on
+them such as `SendDataAsync` and `SendStringAsync`) compress Brotli at quality 1,
+`CompressionLevel.Fastest`, ASP.NET Core's default. Measured on a JSON document
+it takes a quarter to half the CPU of gzip's default level and is 6 to 17% larger.
+Static files keep `BrotliStream`'s default, quality 4, for cached and streamed
+files alike, about the size of gzip's default level; precompressed files go further
+(see below). File caching retains distinct identity, gzip, deflate and Brotli
+variants, and their ETags differ. A cached HEAD response describes the selected representation;
+when its compressed size is unknown, HEAD omits Content-Length. Conditional
+requests use the ETag for the negotiated variant.
+
+The .NET Standard 2.0 asset continues to negotiate gzip/deflate/identity only.
+A request that accepts Brotli and refuses identity (`br, identity;q=0`) gets
+HTTP 406; `Accept-Encoding: br` alone gets the uncompressed response, since
+identity stays acceptable unless refused. Explicit Brotli
+cache/conversion operations on that asset throw NotSupportedException instead
+of returning bytes under an incorrect coding name. No production package or
+native runtime dependency is added. Shared-dictionary Brotli is separate work.
+
+To send `.br` and `.gz` files compressed ahead of time, on either asset, see
+[precompressed static files](../precompressed-files.md).
 Next: [Use a controller](controllers.md), or see
 [multiple static folders](../multiple-static-folders.md) for more than one directory.

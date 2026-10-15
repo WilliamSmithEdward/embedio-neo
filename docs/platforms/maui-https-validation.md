@@ -3,9 +3,25 @@
 Feature [#26](https://github.com/WilliamSmithEdward/embedio-neo/issues/26) tracks
 TLS hosting on desktop and in MAUI apps. The test-only
 `test/EmbedIO.MauiHttpsSmoke` app runs on Windows, iOS, Mac Catalyst and Android;
-it is outside the solution and all production packages. CI requires its four
-jobs through `CI passed`. A configured job is supported evidence only after its
+it is outside the solution and all production packages. CI requires
+its four jobs through `CI passed`. A configured job is supported evidence only after its
 actual run and artifact have been verified.
+
+<a id="temporary-owner-requested-pause"></a>
+
+## CI status and retained evidence
+
+William has requested that all MAUI CI jobs run again. CI requires the standalone
+Android and Mac Catalyst smoke jobs and all four HTTPS platform jobs to succeed.
+Their reusable workflows and manual dispatch entry points are enabled. A failed
+or skipped MAUI job cannot satisfy `CI passed`.
+
+The temporary pause that began on 2026-10-10 is historical. Its skipped jobs
+provide no new platform validation evidence; previously verified runs and their
+artifacts retain their original source and platform scope. Re-enabling the jobs
+preserves their applications, assertions, certificate validation, pinned
+dependencies and existing budgets. Acceptance requires actual successful runs
+and artifact verification on the changed head, not merely removing the pause.
 
 ## What runs
 
@@ -39,11 +55,13 @@ The fixture uses port 59626. Results retain the exact OS/runtime, native platfor
 individual check statuses and host URL. Failures retain app/logcat reports where
 available. Generated private keys and app binaries are excluded from uploaded
 test artifacts. The existing Android HTTP lifecycle and Mac Catalyst HTTP/WebView
-smokes continue to run independently.
+smokes run as separate required jobs.
 
 ## Reproduce CI
 
-The SDK and workload set are pinned to 10.0.401 and MAUI Controls to 10.0.110;
+The SDK follows `global.json`, the workload set is pinned to 10.0.401 (a
+workload set belongs to a feature band, and an SDK patch keeps its band's set)
+and MAUI Controls to 10.0.110;
 every target has its own committed dependency lock. Runners are Windows 2025,
 Ubuntu 24.04 and macOS 26. Apple uses Xcode 26.6 and the iOS 26.5 simulator;
 Android uses Android 10/API 29.
@@ -101,8 +119,9 @@ required alongside this native HTTPS fixture.
 The HTTPS Windows job installs its pinned SDK into a private runner-temporary
 directory. This keeps workload installation separate from the runner's Visual
 Studio installation, whose other workloads otherwise get updated as well. The
-SDK and workload versions remain 10.0.401. Each platform still performs its own
-locked restore, build, native trust checks, WebView checks and external probes.
+SDK and workload versions are the pinned ones above. Each platform still performs
+its own locked restore, build, native trust checks, WebView checks and external
+probes.
 
 CI caches only downloaded NuGet packages, keyed by committed dependency locks;
 it does not reuse compiled applications, generated certificates, simulator state

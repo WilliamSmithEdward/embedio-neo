@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Net;
 using EmbedIO.Internal;
-using EmbedIO.Net.Internal;
 using EmbedIO.Utilities;
 
 namespace EmbedIO
@@ -26,7 +25,7 @@ namespace EmbedIO
             if (cookie == null) throw new ArgumentNullException(nameof(cookie));
             CookieSameSiteStore.ValidateMode(sameSite, nameof(sameSite));
             CookieSameSiteStore.ValidateCookie(cookie, sameSite);
-            if (@this is not EmbedIO.Net.Internal.HttpListenerResponse && @this is not SystemHttpResponse)
+            if (@this is not EmbedIO.Net.Internal.HttpListenerResponse)
                 throw new NotSupportedException("SameSite cookie metadata requires a built-in listener response.");
             @this.SetCookie(cookie);
             CookieSameSiteStore.Attach(@this, cookie, sameSite);
@@ -64,6 +63,44 @@ namespace EmbedIO
             @this.StatusDescription = statusDescription;
             @this.ContentType = MimeType.Default;
             @this.ContentEncoding = null;
+        }
+
+        // Representation fields describing the body a failed handler was about to send.
+        // They would otherwise frame or label the replacement body incorrectly.
+        private static readonly string[] ReplacedRepresentationHeaders =
+        {
+            HttpHeaderNames.ContentLength,
+            HttpHeaderNames.ContentEncoding,
+            HttpHeaderNames.ContentRange,
+            HttpHeaderNames.ContentLanguage,
+            HttpHeaderNames.ContentLocation,
+            HttpHeaderNames.ContentDisposition,
+            HttpHeaderNames.ETag,
+            HttpHeaderNames.TransferEncoding,
+        };
+
+        // Prepares an uncommitted response to be replaced by an exception handler:
+        // an empty response for the status plus removal of stale representation and
+        // framing fields. Headers unrelated to the body, such as CORS or custom
+        // diagnostics, are kept.
+        internal static void PrepareReplacement(this IHttpResponse @this, int statusCode)
+        {
+            if (HttpStatusDescription.TryGet(statusCode, out _))
+            {
+                @this.SetEmptyResponse(statusCode);
+            }
+            else
+            {
+                // An HttpException may carry any valid status the standard table lacks (418, 499...).
+                // The response supplies its own reason phrase; failing here would leave a 200.
+                @this.StatusCode = statusCode;
+                @this.ContentType = MimeType.Default;
+                @this.ContentEncoding = null;
+            }
+
+            foreach (var name in ReplacedRepresentationHeaders)
+                @this.Headers.Remove(name);
+            @this.SendChunked = false;
         }
     }
 }

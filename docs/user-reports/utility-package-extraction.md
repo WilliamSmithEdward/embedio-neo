@@ -93,11 +93,14 @@ release notes and migration documentation.
 ## Package and support cost
 
 The existing core package defines the utility API on .NET 10 and .NET Standard
-2.0. Its .NET 10 runtime package graph has no external package dependencies;
+2.0. In the published 1.0.2 snapshot evaluated here, its .NET 10 runtime package
+graph has no external package dependencies;
 .NET Standard 2.0 retains Microsoft's JSON/support dependencies, even for a
 consumer that only uses a utility. A proposed smaller package's actual dependency
 closure would have to be measured after selecting its types; this audit does not
-promise a dependency-free extracted package.
+promise a dependency-free extracted package. Current source also references
+`System.Threading.RateLimiting` on both core targets for the opt-in rate limiter;
+the historical dependency snapshot is not the current package graph.
 
 An additional first-party package is still another package/assembly and dependency
 edge, even within one repository. It needs an approved identity, coordinated

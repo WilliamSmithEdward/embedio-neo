@@ -20,8 +20,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task ClearingHeadersDoesNotDisableTheDefaultJsonSerializer(HttpListenerMode mode, bool append)
         {
             var probe = new Probe();
@@ -40,10 +38,6 @@ namespace EmbedIO.Tests.Issues
         [TestCase(HttpListenerMode.EmbedIO, false, true)]
         [TestCase(HttpListenerMode.EmbedIO, true, false)]
         [TestCase(HttpListenerMode.EmbedIO, true, true)]
-        [TestCase(HttpListenerMode.Microsoft, false, false)]
-        [TestCase(HttpListenerMode.Microsoft, false, true)]
-        [TestCase(HttpListenerMode.Microsoft, true, false)]
-        [TestCase(HttpListenerMode.Microsoft, true, true)]
         public async Task PassthroughPreservesExactBinaryBytesAndOneMediaType(HttpListenerMode mode, bool buffered, bool requestGzip)
         {
             using var fixture = new Fixture(mode, buffered);
@@ -83,8 +77,6 @@ namespace EmbedIO.Tests.Issues
 
         [TestCase(HttpListenerMode.EmbedIO, false)]
         [TestCase(HttpListenerMode.EmbedIO, true)]
-        [TestCase(HttpListenerMode.Microsoft, false)]
-        [TestCase(HttpListenerMode.Microsoft, true)]
         public async Task MissingRoutesAndFilesReturn404AndAValidImageStillWorks(HttpListenerMode mode, bool buffered)
         {
             using var fixture = new Fixture(mode, buffered);

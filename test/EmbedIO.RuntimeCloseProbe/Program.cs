@@ -4,18 +4,21 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+
+var quicResult = await QuicRebindProbe.Run(args);
+if (quicResult.HasValue) return quicResult.Value;
 
 var iterations = args.Length > 0 ? int.Parse(args[0], CultureInfo.InvariantCulture) : 1024;
 var parallelism = args.Length > 1 ? int.Parse(args[1], CultureInfo.InvariantCulture) : 16;
 var output = args.Length > 2 ? args[2] : "TestResults/runtime-close-probe/result.json";
 if (iterations is < 1 or > 4096 || parallelism is < 1 or > 32)
     throw new ArgumentOutOfRangeException(nameof(args), "Use 1-4096 connections and 1-32 concurrent independent clients.");
-if (Environment.Version.ToString() != "10.0.12")
-    throw new InvalidOperationException("This reproduction requires the exact .NET 10.0.12 runtime.");
+RequiredRuntime.Check();
 
 var reports = new List<object>();
 var failures = new ConcurrentBag<object>();
@@ -175,3 +178,16 @@ static async Task Serve(TcpClient tcp, bool nearDeadline, CancellationToken toke
 
 static bool IsRecoverable(Exception error)
     => error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException;
+
+// Both probes need the exact runtime the project pins with RuntimeFrameworkVersion and no
+// roll-forward. The build records that pin as assembly metadata, so the pin has one source.
+internal static class RequiredRuntime
+{
+    internal static void Check()
+    {
+        var required = typeof(RequiredRuntime).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+            .Single(attribute => attribute.Key == nameof(RequiredRuntime)).Value;
+        if (Environment.Version.ToString() != required)
+            throw new InvalidOperationException($"This probe requires the exact .NET {required} runtime.");
+    }
+}

@@ -14,7 +14,7 @@ The integration was requested in [feature #32](https://github.com/WilliamSmithEd
 ## Availability and prerequisites
 
 The adapter builds for .NET Standard 2.0 and .NET 10, matching the core library.
-It references Microsoft DI and Hosting.Abstractions 10.0.12. Those dependencies,
+It references Microsoft DI and Hosting.Abstractions 10.0.13. Those dependencies,
 including the async-interface compatibility packages needed by .NET Standard,
 belong to the optional adapter. Installing only the core adds none of them.
 
@@ -132,6 +132,22 @@ For a controller discovered at runtime, use:
 ```csharp
 api.WithControllerServices(typeof(GreetingController));
 ```
+
+Both forms bind the controller through reflection. Trimmed and Native AOT
+applications register a binding from the package's source generator instead;
+activation from request services, disposal and `[FromServices]` parameters work
+the same way:
+
+```csharp
+[GeneratedControllerBinding(typeof(GreetingController))]
+internal static partial class ApiControllers
+{
+}
+
+api.WithControllerServices(ApiControllers.GreetingController);
+```
+
+See [trimming and Native AOT](../guides/trimming-and-native-aot.md#web-api-controllers).
 
 Controllers need a concrete, closed type and a public constructor that Microsoft
 DI can select. An ambiguous constructor selection can fail during route

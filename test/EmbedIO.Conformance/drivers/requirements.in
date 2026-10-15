@@ -1,0 +1,5 @@
+# Development-only independent HTTP/2 and HTTP/3 peers for the conformance drivers.
+h2
+hyperframe
+hpack
+aioquic
