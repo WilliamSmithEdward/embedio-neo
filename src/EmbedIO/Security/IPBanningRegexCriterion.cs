@@ -26,6 +26,7 @@ namespace EmbedIO.Security
         public const int DefaultMaxMatchCount = 10;
 
         private readonly ConcurrentDictionary<IPAddress, ConcurrentBag<long>> _failRegexMatches = new ConcurrentDictionary<IPAddress, ConcurrentBag<long>>();
+        private readonly object _matchesSync = new object();
         private readonly ConcurrentDictionary<string, Regex> _failRegex = new ConcurrentDictionary<string, Regex>();
         private readonly IPBanningModule _parent;
         private readonly int _secondsMatchingPeriod;
@@ -72,23 +73,30 @@ namespace EmbedIO.Security
         }
 
         /// <inheritdoc />
-        public void ClearIPAddress(IPAddress address) =>
-            _failRegexMatches.TryRemove(address, out _);
+        public void ClearIPAddress(IPAddress address)
+        {
+            lock (_matchesSync) _failRegexMatches.TryRemove(address, out _);
+        }
 
         /// <inheritdoc />
         public void PurgeData()
         {
             var minTime = DateTime.Now.AddSeconds(-1 * _secondsMatchingPeriod).Ticks;
 
-            foreach (var k in _failRegexMatches.Keys)
+            // The snapshot and replacement share ownership with appends and clears,
+            // so no match can be added to a bag after purge has replaced it.
+            lock (_matchesSync)
             {
-                if (!_failRegexMatches.TryGetValue(k, out var failRegexMatches)) continue;
+                foreach (var k in _failRegexMatches.Keys)
+                {
+                    if (!_failRegexMatches.TryGetValue(k, out var failRegexMatches)) continue;
 
-                var recentMatches = new ConcurrentBag<long>(failRegexMatches.Where(x => x >= minTime));
-                if (!recentMatches.Any())
-                    _failRegexMatches.TryRemove(k, out _);
-                else
-                    _failRegexMatches.AddOrUpdate(k, recentMatches, (x, y) => recentMatches);
+                    var recentMatches = new ConcurrentBag<long>(failRegexMatches.Where(x => x >= minTime));
+                    if (!recentMatches.Any())
+                        _failRegexMatches.TryRemove(k, out _);
+                    else
+                        _failRegexMatches.AddOrUpdate(k, recentMatches, (x, y) => recentMatches);
+                }
             }
         }
 
@@ -108,7 +116,7 @@ namespace EmbedIO.Security
 
             if (disposing)
             {
-                _failRegexMatches.Clear();
+                lock (_matchesSync) _failRegexMatches.Clear();
                 _failRegex.Clear();
                 if (_innerLogger != null)
                 {
@@ -130,7 +138,8 @@ namespace EmbedIO.Security
                 {
                     if (!regex.IsMatch(message)) continue;
 
-                    _failRegexMatches.GetOrAdd(address, _ => new ConcurrentBag<long>()).Add(DateTime.Now.Ticks);
+                    lock (_matchesSync)
+                        _failRegexMatches.GetOrAdd(address, _ => new ConcurrentBag<long>()).Add(DateTime.Now.Ticks);
                     break;
                 }
                 catch (RegexMatchTimeoutException ex)

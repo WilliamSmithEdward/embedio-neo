@@ -142,7 +142,8 @@ namespace EmbedIO.Utilities
         private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(string? headerValues)
         {
             var result = new Dictionary<string, (int Weight, int Ordinal)>(StringComparer.OrdinalIgnoreCase);
-            ParseCore(headerValues, result);
+            var ordinal = 0;
+            ParseCore(headerValues, result, ref ordinal);
             return result;
         }
 
@@ -152,29 +153,32 @@ namespace EmbedIO.Utilities
 
             if (headerValues == null) return result;
 
+            // Header field values form one ordered list. Equal-weight candidates must
+            // keep their relative positions when a sender splits that list across fields.
+            var ordinal = 0;
+
             // Header values usually arrive as an array; walk it without an enumerator.
             if (headerValues is string?[] array)
             {
                 foreach (var headerValue in array)
-                    ParseCore(headerValue, result);
+                    ParseCore(headerValue, result, ref ordinal);
             }
             else
             {
                 foreach (var headerValue in headerValues)
-                    ParseCore(headerValue, result);
+                    ParseCore(headerValue, result, ref ordinal);
             }
 
             return result;
         }
 
-        private static void ParseCore(string? text, IDictionary<string, (int Weight, int Ordinal)> dictionary)
+        private static void ParseCore(string? text, IDictionary<string, (int Weight, int Ordinal)> dictionary, ref int ordinal)
         {
             if (text == null || text.Length == 0)
                 return;
 
             var length = text.Length;
             var position = 0;
-            var ordinal = 0;
             while (position < length)
             {
                 var stop = text.IndexOf(',', position);
