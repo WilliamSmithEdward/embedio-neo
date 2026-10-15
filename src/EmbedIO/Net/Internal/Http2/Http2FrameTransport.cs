@@ -234,7 +234,7 @@ namespace EmbedIO.Net.Internal.Http2
                 foreach (var write in _batch) write.Unregister();
 
                 var writeToken = ConnectionToken;
-                CancellationTokenSource? linked = null;
+                List<CancellationTokenSource>? links = null;
                 var started = false;
                 try
                 {
@@ -247,8 +247,10 @@ namespace EmbedIO.Net.Internal.Http2
                             if (write.WriteToken != writeToken && write.WriteToken.CanBeCanceled)
                             {
                                 // Rare: a write with its own deadline interrupts the shared batch.
-                                linked?.Dispose();
-                                linked = CancellationTokenSource.CreateLinkedTokenSource(writeToken, write.WriteToken);
+                                // Every link must remain registered until the transport write ends.
+                                // Disposing an earlier link disconnects its cancellation sources.
+                                var linked = CancellationTokenSource.CreateLinkedTokenSource(writeToken, write.WriteToken);
+                                (links ??= new List<CancellationTokenSource>()).Add(linked);
                                 writeToken = linked.Token;
                             }
                         }
@@ -272,7 +274,8 @@ namespace EmbedIO.Net.Internal.Http2
                 }
                 finally
                 {
-                    linked?.Dispose();
+                    if (links != null)
+                        foreach (var link in links) link.Dispose();
                     _output.Clear();
                 }
                 foreach (var write in _batch)
