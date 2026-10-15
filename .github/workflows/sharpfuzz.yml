@@ -2,9 +2,9 @@ name: Coverage-guided fuzzing
 on:
   push:
     branches: [main]
-    paths: ['src/EmbedIO/**', 'test/EmbedIO.SharpFuzz/**', 'scripts/run-sharpfuzz.ps1', '.github/workflows/sharpfuzz.yml', 'Directory.*.props', 'global.json']
+    paths: ['src/EmbedIO/**', 'src/*.cs', 'src/Shared/**', 'test/EmbedIO.SharpFuzz/**', 'scripts/run-sharpfuzz.ps1', '.github/workflows/sharpfuzz.yml', 'Directory.*.props', 'global.json']
   pull_request:
-    paths: ['src/EmbedIO/**', 'test/EmbedIO.SharpFuzz/**', 'scripts/run-sharpfuzz.ps1', '.github/workflows/sharpfuzz.yml', 'Directory.*.props', 'global.json']
+    paths: ['src/EmbedIO/**', 'src/*.cs', 'src/Shared/**', 'test/EmbedIO.SharpFuzz/**', 'scripts/run-sharpfuzz.ps1', '.github/workflows/sharpfuzz.yml', 'Directory.*.props', 'global.json']
   schedule:
     - cron: '47 5 * * 2'
   workflow_dispatch:
