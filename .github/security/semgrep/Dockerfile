@@ -6,5 +6,5 @@ RUN python -m venv /opt/semgrep \
     && /opt/semgrep/bin/python -m pip install --require-hashes --only-binary=:all: -r /tmp/semgrep-requirements.txt \
     && /opt/semgrep/bin/python -m pip check \
     && git --version \
-    && test "$(/opt/semgrep/bin/semgrep --version)" = "1.178.0"
+    && test "$(/opt/semgrep/bin/semgrep --version)" = "1.180.0"
 ENV PATH="/opt/semgrep/bin:${PATH}"
