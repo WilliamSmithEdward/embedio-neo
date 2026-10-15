@@ -4,9 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    # TEMPORARY, reverted before merge: lets the docs-only probe pull request
-    # target this branch so the gate can be observed before the merge.
-    branches: [main, codex/ci-cleanup]
+    branches: [main]
   workflow_dispatch:
     inputs:
       update-https-locks:
