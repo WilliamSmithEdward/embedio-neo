@@ -150,10 +150,6 @@ namespace EmbedIO.Internal
 
         internal bool IsRateFailure(Exception error) => ReferenceEquals(Volatile.Read(ref _failure), error);
 
-        // Bytes read and ticks waited so far; read by tests through reflection.
-        internal long BytesRead => Volatile.Read(ref _bytes);
-        internal long WaitedTicks => Volatile.Read(ref _waitedTicks);
-
         // Called by the heartbeat under its lock. A snapshot torn by a read that completed
         // meanwhile is rejected rather than charged to the client.
         internal bool IsStarved(long now)
@@ -203,7 +199,13 @@ namespace EmbedIO.Internal
             if (Interlocked.CompareExchange(ref _registered, 1, 0) != 0) return;
             RequestBodyRateHeartbeat.Add(this);
             // A retirement or suspension that raced this registration found nothing to remove.
-            if (Volatile.Read(ref _retired) != 0 || Volatile.Read(ref _suspended) != 0) Unregister();
+            if (Volatile.Read(ref _retired) != 0 || Volatile.Read(ref _suspended) != 0)
+            {
+                Unregister();
+                // Unregister may have already changed the state before Add published its
+                // slot. Remove is idempotent and now observes that published slot.
+                RequestBodyRateHeartbeat.Remove(this);
+            }
         }
 
         private void Unregister()
@@ -230,6 +232,11 @@ namespace EmbedIO.Internal
             if (Interlocked.CompareExchange(ref _reading, 1, 0) != 0) throw new InvalidOperationException("Concurrent request body reads.");
             try
             {
+                // Detach an earlier caller before inspecting the reusable source. Disposal
+                // waits for its cancellation callback, which may have canceled that source;
+                // the check below then replaces it before the new caller begins reading.
+                var previousLink = _link;
+                if (previousLink != null && previousLink.Token != token) Unlink();
                 // One source serves every read of the body until something cancels it: a
                 // canceled caller token ends only that read, and the next read gets a new one.
                 var source = _readSource;
