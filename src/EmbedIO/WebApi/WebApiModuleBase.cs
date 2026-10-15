@@ -365,17 +365,7 @@ namespace EmbedIO.WebApi
                 $"The controller factory for {typeof(TController).FullName} returned {controller?.GetType().FullName ?? "null"}.");
 
         private static T? AwaitAndCastResult<T>(string parameterName, Task<object> task)
-        {
-            var result = task.ConfigureAwait(false).GetAwaiter().GetResult();
-
-            return result switch
-            {
-                null when typeof(T).IsValueType && Nullable.GetUnderlyingType(typeof(T)) == null => throw new InvalidCastException($"Cannot cast null to {typeof(T).FullName} for parameter \"{parameterName}\"."),
-                null => default,
-                T castResult => castResult,
-                _ => throw new InvalidCastException($"Cannot cast {result.GetType().FullName} to {typeof(T).FullName} for parameter \"{parameterName}\".")
-            };
-        }
+            => RequestFieldBinding.CastResult<T>(parameterName, task.ConfigureAwait(false).GetAwaiter().GetResult());
 
         private static bool IsGenericTaskType(Type type, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Type? resultType)
         {
@@ -542,9 +532,8 @@ namespace EmbedIO.WebApi
 
             // We should await the call to GetRequestDataAsync,
             // then cast the result to the parameter type.
-            // For lack of a better way to do the former,
-            // and to save one function call,
-            // just call AwaitAndCastResult with an appropriate type argument.
+            // AwaitAndCastResult preserves synchronous binding and shares the cast
+            // rules with generated handlers.
             return Expression.Call(
                 AwaitAndCastResultMethod.MakeGenericMethod(parameterType),
                 Expression.Constant(parameter.Name),
