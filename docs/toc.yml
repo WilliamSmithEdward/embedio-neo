@@ -40,37 +40,37 @@
   items:
     - name: WebSocket handshake status
       href: guides/websocket-handshake-status.md
-    - name: Outstanding WebSocket deliveries (Neo v2, unreleased)
+    - name: Outstanding WebSocket deliveries (Neo v2)
       href: guides/websocket-receive-limits.md
-    - name: WebSockets during a graceful drain (unreleased)
+    - name: WebSockets during a graceful drain (Neo v2)
       href: guides/graceful-drain-websockets.md
     - name: Controller base routes and fallback
       href: guides/controller-base-routes.md
-    - name: Request trailers (Neo v2, unreleased)
+    - name: Request trailers (Neo v2)
       href: guides/request-trailers.md
     - name: HTTPS
       href: guides/https.md
-    - name: Rotating the server certificate (unreleased)
+    - name: Rotating the server certificate (Neo v2)
       href: guides/certificate-rotation.md
-    - name: TLS policy (unreleased)
+    - name: TLS policy (Neo v2)
       href: guides/tls-policy.md
     - name: Request limits, admission and deadlines
       href: guides/request-limits.md
     - name: Request-body byte limits
       href: guides/request-body-limits.md
-    - name: Rate limiting (unreleased)
+    - name: Rate limiting (Neo v2)
       href: guides/rate-limiting.md
-    - name: Behind a reverse proxy (unreleased)
+    - name: Behind a reverse proxy (Neo v2)
       href: guides/forwarded-headers.md
-    - name: Problem details for API errors (unreleased)
+    - name: Problem details for API errors (Neo v2)
       href: guides/problem-details.md
     - name: Metrics and tracing
       href: guides/telemetry.md
     - name: Trimming and Native AOT
       href: guides/trimming-and-native-aot.md
-    - name: OpenAPI documents (unreleased)
+    - name: OpenAPI documents (Neo v2)
       href: guides/openapi.md
-    - name: HTTP/3 listener (unreleased)
+    - name: HTTP/3 listener (Neo v2)
       href: guides/http3.md
     - name: Command-line server
       href: guides/cli.md
@@ -241,6 +241,8 @@
       href: architecture/dependency-injection.md
 - name: Compatibility
   items:
+    - name: Upgrading from EmbedIO 3.x
+      href: compatibility/upgrading-from-embedio-3.md
     - name: Neo v1 to v2
       href: compatibility/neo-v1-to-v2.md
     - name: Migration

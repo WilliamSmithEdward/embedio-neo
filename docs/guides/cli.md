@@ -95,7 +95,7 @@ dotnet tool install EmbedIO-Neo.Cli --add-source ./artifacts --tool-path ./tools
 ```
 
 These commands use an explicit local prerelease version so installation selects the package just built, independently of the checkout version. For the released tool, use
-`dotnet tool install --global EmbedIO-Neo.Cli --version 1.0.0` instead. The standards Publish
+`dotnet tool install --global EmbedIO-Neo.Cli` instead. The standards Publish
 workflow prepares GitHub assets and NuGet publication through trusted publishing.
 The package identities and 1.0.0 release were approved by William. Use an
 isolated tool path if the old tool is installed globally.

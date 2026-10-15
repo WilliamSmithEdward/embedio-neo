@@ -1774,7 +1774,7 @@ wire order, while a later value change fails the connection with PROTOCOL_ERROR.
 Deprecated PRIORITY and HEADERS dependency/weight semantics are ignored, including
 self-dependency, while their framing checks and HPACK synchronization remain.
 This follows [RFC 9218 section 2.1](https://www.rfc-editor.org/rfc/rfc9218.html#section-2.1);
-[the migration guide](../compatibility/migration.md#http2-extensible-priority-settings-unreleased)
+[the migration guide](../compatibility/migration.md#http2-extensible-priority-settings-neo-v2)
 records the change from the development engine's previous unknown-setting behavior.
 
 Fifteen cases were added, including independent TCP startup/settings and GOAWAY
@@ -6733,7 +6733,7 @@ passes 4,469 cases: 4,464 passed, five expected local skips, zero failures. The
 ordinary CI and independent quarantine discovery floors are reconciled to 4,469,
 as are the native experiment's two full-suite guards. This increment does not
 establish complete protocol or shipping readiness; exact-head hosted gates remain
-required. See the [migration note](../compatibility/migration.md#higher-http1-minor-versions-unreleased).
+required. See the [migration note](../compatibility/migration.md#higher-http1-minor-versions-neo-v2).
 
 ### Integrated engine status after PR #210, PR #211 and PR #212
 

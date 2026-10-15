@@ -8,8 +8,8 @@ A trailing slash and a query string remain supported.
 ## A minimal server
 
 Create a console application referencing EmbedIO-Neo. These examples use the
-existing `EmbedIO` namespaces and APIs; the corrections below are currently
-unreleased integration changes.
+existing `EmbedIO` namespaces and APIs; the corrections below are new in
+Neo v2 and are not in the published 1.0.x packages.
 
 ```csharp
 using System.Text;

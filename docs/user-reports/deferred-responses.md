@@ -33,9 +33,8 @@ Previously the engine terminated a failed chunked body with a clean final chunk
 and ended a failed HTTP/2 stream normally. A client received a truncated body
 that looked complete. The exception handler also inherited the failed handler's
 `Content-Length`, so an `HttpException` thrown after `ContentLength64` was set
-produced a short error body that clients rejected. Both corrections live on the
-Neo v2 engine development branch and are unreleased; published 1.0.3 retains the
-earlier behavior.
+produced a short error body that clients rejected. Both corrections are new in
+Neo v2; published 1.0.3 retains the earlier behavior.
 
 ## Where commitment happens
 

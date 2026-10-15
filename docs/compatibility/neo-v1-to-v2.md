@@ -1,8 +1,7 @@
 # Migrating from EmbedIO-Neo v1 to v2
 
 This guide explains the API and behavior changes to consider when upgrading from
-EmbedIO-Neo v1 to v2. Neo v2 is unreleased; these changes are not available in
-the published v1 package.
+EmbedIO-Neo v1 to v2. None of these changes are in the 1.0.x packages.
 
 The comparison baseline is the published source tag
 [v1.0.3](https://github.com/WilliamSmithEdward/embedio-neo/tree/v1.0.3).
@@ -58,7 +57,7 @@ The two-argument `HttpListener(source, tlsPolicy)` constructor and
 `new EmbedIO.Net.HttpListener(null)` and `new EmbedIO.Net.HttpListener(default)`
 keep selecting the optional certificate constructor, avoiding ambiguous overloads.
 
-Review the [API migration notes](migration.md#warning-free-api-cleanup-unreleased-owner-approved)
+Review the [API migration notes](migration.md#warning-free-api-cleanup-neo-v2-owner-approved)
 for named-argument changes, URI overloads, nullability annotations, error parameter
 names, cache ownership and exception-recovery boundaries. Specify the intended
 argument type when passing null to overloaded string/Uri entry points.
@@ -195,8 +194,8 @@ a response that has already started is aborted instead of receiving a second
 status or a clean terminator. Independent clients and requests remain isolated.
 Request-head budget failures use 414 for an oversized target and 431 for oversized
 fields. Update tests that assert the old permissive input or generic error status.
-See [framing details](migration.md#managed-http-framing-unreleased) and
-[body-failure handling](migration.md#incomplete-and-malformed-http1-request-bodies-unreleased).
+See [framing details](migration.md#managed-http-framing-neo-v2) and
+[body-failure handling](migration.md#incomplete-and-malformed-http1-request-bodies-neo-v2).
 
 The inherited 100-request keep-alive cap is removed. The idle timeout remains
 15 seconds, and explicit Connection: close, cancellation and drain still apply.
@@ -257,7 +256,7 @@ closure without blocking a worker on network completion. Await application write
 and keep the handler alive until its work finishes; context completion awaits
 closure. Use awaited tunnel completion/disposal when you need to observe errors.
 Do not start detached writes and assume synchronous Dispose waits for them.
-See [multiplexed disposal](migration.md#multiplexed-response-stream-disposal-unreleased).
+See [multiplexed disposal](migration.md#multiplexed-response-stream-disposal-neo-v2).
 
 HTTP/3 preserves response output after an application cancels its own pending body
 or tunnel read. Input remains unusable after that
@@ -324,7 +323,7 @@ the existing one-second timeout; this is not an overall transport-write deadline
 Messages accepted before a peer close are delivered before disconnection. Outgoing
 frame sizes can differ
 from v1; clients must process WebSocket messages independently of frame boundaries.
-See [WebSocket migration details](migration.md#managed-websocket-framing-unreleased).
+See [WebSocket migration details](migration.md#managed-websocket-framing-neo-v2).
 
 Keep asynchronous handler lifetime and application readiness explicit. Do not
 broadcast merely because a client handshake completed if your application needs
@@ -409,8 +408,7 @@ stream's documented synchronization.
    host. Verify payload bytes, latency, errors and resource release after drain.
    Use results from your deployment; benchmarks do not guarantee performance for
    every application.
-5. Check the final release notes and supported capabilities before rollout.
-   Wait for the published v2 package and its support policy.
+5. Check the release notes and supported capabilities before rollout.
 
 ## Additive HTTP datagram API
 
@@ -654,9 +652,9 @@ client seen and is no longer consulted for any decision.
 
 ## Before deployment
 
-Neo v2 has not been released. Confirm the final package, release notes and platform
-support before deployment. Features described as unavailable above must not be
-assumed available merely because their API types exist.
+Confirm the package version, release notes and platform support before deployment.
+Features described as unavailable above must not be assumed available merely
+because their API types exist.
 
 ## HTTP/1 idle closure
 
@@ -774,7 +772,7 @@ of gzip's default level, and 6 to 17% larger on a JSON document. Static files ke
 quality 4, about the size of the previous gzip responses. Tests or caches that expect
 `Content-Encoding: gzip` for these clients, or a gzip entity tag from `FileModule`,
 see `br` instead. See
-[Brotli responses](../guides/getting-started/files.md#brotli-responses-in-the-modern-engine-development-branch).
+[Brotli responses](../guides/getting-started/files.md#brotli-responses-neo-v2).
 - An HTTP/1 client that declares a request body, receives its response and then stops
   sending loses its connection once the keep-alive timeout elapses. The server discards
   a body no handler read before reusing the connection, and that discard is now bounded

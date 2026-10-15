@@ -9,7 +9,7 @@ connection comes from a proxy you trust.
 `ForwardedHeadersModule` reads them from trusted proxies only, and reports the result as a
 `ForwardedRequest` next to the connection's own values, which it does not change.
 
-This is unreleased and available only from source.
+This is new in Neo v2; the published 1.0.x packages do not include it.
 
 ## A complete program
 

@@ -105,9 +105,9 @@ Registration order matters. Keep API handlers before the root static folder:
 the folder handles unmatched paths too, returning 404 when a file is missing.
 An API handler registered after it would not get that request.
 
-## Brotli responses in the modern-engine development branch
+## Brotli responses (Neo v2)
 
-The unreleased .NET 10 asset can negotiate `br` for `OpenResponseStream`,
+The Neo v2 .NET 10 asset can negotiate `br` for `OpenResponseStream`,
 `OpenResponseText`, and compressible static files. An absent `Accept-Encoding`
 header still produces an uncompressed response. Quality weights decide first. At
 equal weight Brotli wins over gzip and deflate wherever the client lists it, so a

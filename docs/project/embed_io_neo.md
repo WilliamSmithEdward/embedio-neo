@@ -169,7 +169,7 @@ Removing the sample applications does not remove the library's legacy target.
   .NET 10. This does not substitute for tests on older runtimes.
 
 Build warnings had not yet been eliminated at this historical baseline. See the
-[warning cleanup migration](../compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved)
+[warning cleanup migration](../compatibility/migration.md#warning-free-api-cleanup-neo-v2-owner-approved)
 for subsequent changes. .NET 8 runtime testing and legacy runtime
 coverage remain follow-up work. The pre-push source-notice review confirmed the
 known inherited components and restored their notices; its pinned references and

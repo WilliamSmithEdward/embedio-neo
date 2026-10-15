@@ -4,7 +4,7 @@
 the inherited defect found by the [parity audit](../parity-audit/static-files.md).
 Before this correction, `Range: bytes=-3` selected offsets 0 through 3: a ten-byte
 `0123456789` file returned `0123`. William requested this focused correction using
-existing APIs. It is unreleased; published Neo 1.0.3 still has the old behavior.
+existing APIs. It is new in Neo v2; published Neo 1.0.3 still has the old behavior.
 
 ## Corrected behavior
 
@@ -52,4 +52,4 @@ cross-platform checks apply before merge.
 The differential audit holds the old wrong body/range and Neo's exact corrected
 values as an explained difference. Clients using explicit-offset workarounds may
 continue doing so; clients relying on wrong leading bytes must adopt correct
-suffix semantics. See the [migration notes](../compatibility/migration.md#suffix-byte-ranges-unreleased).
+suffix semantics. See the [migration notes](../compatibility/migration.md#suffix-byte-ranges-neo-v2).

@@ -7,7 +7,7 @@ JSON object sent as `application/problem+json`, which API clients and tools unde
 
 It is opt-in. Without it, nothing changes.
 
-This is unreleased and available only from source.
+This is new in Neo v2; the published 1.0.x packages do not include it.
 
 ## A complete program
 

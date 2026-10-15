@@ -23,16 +23,15 @@ adapter package.
 
 ## Optional factory forwarding helper
 
-The new source implementation in `EmbedIO-Neo.DependencyInjection` provides
+The Neo v2 implementation in `EmbedIO-Neo.DependencyInjection` provides
 `factory.ForwardEmbedIODiagnostics()`. William approved this additive helper
 for #475. It uses logging abstractions already present in that optional package;
 core APIs, dependencies and defaults remain unchanged. The helper is
-**unreleased** and is not in published 1.0.3. Use a checkout containing this
-change until a release is announced:
+new in Neo v2 and is not in 1.0.x:
 
 ```sh
 dotnet new console --framework net10.0 --name NeoLogging --output TestResults/NeoLogging
-dotnet add TestResults/NeoLogging/NeoLogging.csproj reference src/EmbedIO.DependencyInjection/EmbedIO.DependencyInjection.csproj
+dotnet add TestResults/NeoLogging/NeoLogging.csproj package EmbedIO-Neo.DependencyInjection --version 2.0.0
 dotnet add TestResults/NeoLogging/NeoLogging.csproj package Microsoft.Extensions.Logging.Console --version 10.0.12
 ```
 

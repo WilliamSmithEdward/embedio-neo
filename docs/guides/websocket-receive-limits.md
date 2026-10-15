@@ -1,4 +1,4 @@
-# Outstanding WebSocket deliveries (Neo v2, unreleased)
+# Outstanding WebSocket deliveries (Neo v2)
 
 `WebSocketModule` subclasses can configure `ReceiveLimits` in their constructor,
 before the module starts. The default is `null`, preserving unlimited outstanding

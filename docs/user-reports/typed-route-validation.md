@@ -12,9 +12,9 @@ The separate binding change is tracked in
 [#163](https://github.com/WilliamSmithEdward/embedio-neo/issues/163).
 
 William explicitly approved changing malformed supported route values from
-HTTP 500 to **400 Bad Request**. This is an approved compatibility change,
-**unreleased**; published EmbedIO-Neo 1.0.3 retains the old automatic-binding
-status. No new release version or date is promised.
+HTTP 500 to **400 Bad Request**. This is an approved compatibility change
+in Neo v2; published EmbedIO-Neo 1.0.3 retains the old automatic-binding
+status.
 
 ## Resulting behavior
 

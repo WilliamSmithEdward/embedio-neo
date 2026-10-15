@@ -36,8 +36,7 @@ without canceling that token left the session purge loop running, left modules
 that started background work unaware the server had ended, and left an HTTP/1.1
 handler awaiting its context token running after its connection was aborted.
 Multiplexed HTTP/2 and HTTP/3 contexts already observed their stream ending.
-This correction lives on the Neo v2 engine development branch and is unreleased;
-published 1.0.3 retains the earlier behavior.
+This correction is new in Neo v2; published 1.0.3 retains the earlier behavior.
 
 Applications that run work past the end of a request should still link their own
 token when that work must outlive the server, for example a final flush to a

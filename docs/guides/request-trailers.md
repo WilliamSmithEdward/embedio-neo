@@ -1,4 +1,4 @@
-# Request trailers (Neo v2, unreleased)
+# Request trailers (Neo v2)
 
 The built-in HTTP/1, HTTP/2 and HTTP/3 request adapters implement the optional
 `IHttpRequestTrailers` interface. Existing `IHttpRequest` implementations are

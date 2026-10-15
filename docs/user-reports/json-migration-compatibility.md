@@ -4,7 +4,7 @@
 VBA macro that used literal `vbCrLf` inside JSON strings. William requested
 transparent alignment with upstream EmbedIO, within reason. Ordinary consumers
 use the restored defaults through their existing APIs; no compatibility switch,
-new attribute or package is required. This fix is not yet released.
+new attribute or package is required. This fix is in Neo v2.
 
 ## Transparent behavior
 

@@ -1,4 +1,4 @@
-# HTTP/3 listener (unreleased)
+# HTTP/3 listener (Neo v2)
 
 The modern engine branch adds `HttpListenerMode.EmbedIOHttp3`. This opt-in mode
 serves the normal WebServer modules over QUIC, including request bodies, routing,
@@ -46,7 +46,7 @@ Any network permission must allow the intended UDP endpoint.
 
 ## Combined TCP and QUIC hosting
 
-The unreleased `HttpListenerMode.EmbedIOCombined` mode serves HTTP/1.1 and
+The Neo v2 `HttpListenerMode.EmbedIOCombined` mode serves HTTP/1.1 and
 HTTP/2 over TCP and HTTP/3 over UDP from one `WebServer`, using the same HTTPS
 prefixes, certificate and application modules. In the server example below,
 replace `WithMode(HttpListenerMode.EmbedIOHttp3)` with
@@ -96,7 +96,7 @@ and [tracking issue278](https://github.com/WilliamSmithEdward/embedio-neo/issues
 
 This complete .NET 10 program expects a PFX path and optional password in the
 process environment. Use a certificate valid for `localhost` and trusted by the
-client. Reference the unreleased source project when trying this branch.
+client. Reference Neo v2; the published 1.0.x packages do not include HTTP/3.
 
 ```csharp
 using System;
@@ -185,7 +185,7 @@ disposal returns (a deferred socket close on macOS, and recently accepted
 connections on every platform), so a bind that fails with `AddressAlreadyInUse`
 for an endpoint released within the last second is retried every millisecond
 until that second ends. Other errors, endpoints this process did not release and
-conflicts that persist beyond the window fail as before. This is an unreleased
+conflicts that persist beyond the window fail as before. This is a Neo v2
 workaround for a native dependency limit, tracked for retirement in
 [QUIC listener disposal, rebind and workaround retirement](../project/quic-lifetime.md).
 Application response `KeepAlive=false` initiates the connection driver's bounded

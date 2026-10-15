@@ -49,7 +49,7 @@ new WebServer(options => options
 
 This is a partial configuration, with `EmbedIO`, `EmbedIO.Authentication` and
 `EmbedIO.WebApi` imports; use your actual controller, route and app-owned lifetime.
-Neo v2 is not yet published. This configuration does not use HTTP.sys URL
+Neo v2 removes the HTTP.sys backend. This configuration does not use HTTP.sys URL
 reservations or its certificate binding; supply the replacement engine's HTTPS
 certificate as described in [HTTPS guidance](../guides/https.md). Applications
 remaining on v1 should read the native-backend evidence below as applying to its

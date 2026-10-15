@@ -8,12 +8,12 @@ criterion interface, static/instance controls and defaults remain available.
 
 ## Availability and runnable demonstration
 
-This API is unreleased. Use a checkout containing this change; published 1.0.3
-does not contain this module. From the repository root:
+This API is new in Neo v2; 1.0.x does not contain this module. To run the
+demonstration:
 
 ```sh
 dotnet new console --framework net10.0 -n ClientBansDemo -o TestResults/ClientBansDemo
-dotnet add TestResults/ClientBansDemo/ClientBansDemo.csproj reference src/EmbedIO/EmbedIO.csproj
+dotnet add TestResults/ClientBansDemo/ClientBansDemo.csproj package EmbedIO-Neo --version 2.0.0
 ```
 
 Replace `TestResults/ClientBansDemo/Program.cs` with this complete program:

@@ -155,7 +155,7 @@ counts under the ignored `TestResults/analyzer-inventory` folder; the recorded
 baseline is in [the analyzer warning inventory](docs/project/analyzer-warning-inventory.md).
 SDK analyzers and NUnit.Analyzers provide the lint checks;
 no additional runtime dependency is needed. Owner-approved API changes for this
-cleanup are documented in [the migration guide](docs/compatibility/migration.md#warning-free-api-cleanup-unreleased-owner-approved).
+cleanup are documented in [the migration guide](docs/compatibility/migration.md#warning-free-api-cleanup-neo-v2-owner-approved).
 
 ## Pull requests
 

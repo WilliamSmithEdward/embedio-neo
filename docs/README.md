@@ -17,25 +17,25 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [WebSocket handshake status](guides/websocket-handshake-status.md): exact endpoints, module order, and HTTP/1 versus extended CONNECT.
 - [Outstanding WebSocket deliveries](guides/websocket-receive-limits.md): opt-in connection and module limits covering assembly, queues and unfinished callbacks.
-- [WebSockets during a graceful drain](guides/graceful-drain-websockets.md): unreleased opt-in 1001 close on drain and the `DrainStarted` signal, over HTTP/1.1, HTTP/2 and HTTP/3.
+- [WebSockets during a graceful drain](guides/graceful-drain-websockets.md): new in Neo v2, an opt-in 1001 close on drain and the `DrainStarted` signal, over HTTP/1.1, HTTP/2 and HTTP/3.
 
 - [Response-time diagnostics](guides/response-timing.md): server handling duration, preserved context age and the difference from client latency.
 - [Request trailers](guides/request-trailers.md): optional completion-aware immutable snapshots separate from initial headers.
 
-- [Capsule and tunnel carriers](guides/capsule-tunnels.md): unreleased optional APIs, authorization, streamed values, native datagram packet ownership and carrier lifetime.
+- [Capsule and tunnel carriers](guides/capsule-tunnels.md): optional Neo v2 APIs, still under validation, authorization, streamed values, native datagram packet ownership and carrier lifetime.
 
 - [Request limits, admission and deadlines](guides/request-limits.md): opt-in header and body byte limits, body read and connection deadlines, connection count, bounded concurrent requests and queue, cooperative request deadlines, deferred `100 Continue` and per-route policies.
 - [Request-body byte limits](guides/request-body-limits.md): encoded versus decoded budgets, immutable routed ownership, configured error callbacks, unread-input validation and borrowed stream ownership.
-- [Rate limiting](guides/rate-limiting.md): unreleased opt-in request admission through System.Threading.RateLimiting, with client and identity keys, 429 and Retry-After, queues, cancellation, memory bounds and limits.
-- [Behind a reverse proxy](guides/forwarded-headers.md): unreleased trusted-proxy handling of Forwarded and X-Forwarded-* headers, with proxy allow-lists, hop limits, an allowed-host policy and what is rejected.
-- [Problem details for API errors](guides/problem-details.md): unreleased opt-in RFC 9457 `application/problem+json` error responses, with safe defaults, request IDs, content negotiation and migration notes.
+- [Rate limiting](guides/rate-limiting.md): new in Neo v2, opt-in request admission through System.Threading.RateLimiting, with client and identity keys, 429 and Retry-After, queues, cancellation, memory bounds and limits.
+- [Behind a reverse proxy](guides/forwarded-headers.md): new in Neo v2, trusted-proxy handling of Forwarded and X-Forwarded-* headers, with proxy allow-lists, hop limits, an allowed-host policy and what is rejected.
+- [Problem details for API errors](guides/problem-details.md): new in Neo v2, opt-in RFC 9457 `application/problem+json` error responses, with safe defaults, request IDs, content negotiation and migration notes.
 - [Metrics and tracing](guides/telemetry.md): opt-in HTTP server metrics and spans with W3C trace context, route templates and server identity.
 - [Trimming and Native AOT](guides/trimming-and-native-aot.md): AOT-safe JSON with source-generated metadata, Web API controllers through generated bindings and their build-time diagnostics, annotated reflection APIs and what a Native AOT host supports.
-- [OpenAPI documents](guides/openapi.md): unreleased OpenAPI 3.1 documents written from generated controller bindings, with operation attributes, security requirements from authentication modules, declared routes for other modules, routes the document cannot describe and its limits.
-- [HTTP/3 listener](guides/http3.md): unreleased QUIC mode, certificates, usage and current limits.
+- [OpenAPI documents](guides/openapi.md): new in Neo v2, OpenAPI 3.1 documents written from generated controller bindings, with operation attributes, security requirements from authentication modules, declared routes for other modules, routes the document cannot describe and its limits.
+- [HTTP/3 listener](guides/http3.md): new in Neo v2, QUIC mode, certificates, usage and current limits.
 - [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
-- [Rotating the server certificate](guides/certificate-rotation.md): unreleased `ServerCertificateSource`, replacing certificates while TCP and QUIC listeners run.
-- [TLS policy](guides/tls-policy.md): unreleased client certificates, protocol versions and SNI certificate selection, with per-listener support.
+- [Rotating the server certificate](guides/certificate-rotation.md): new in Neo v2, `ServerCertificateSource`, replacing certificates while TCP and QUIC listeners run.
+- [TLS policy](guides/tls-policy.md): new in Neo v2, client certificates, protocol versions and SNI certificate selection, with per-listener support.
 - [Command-line server](guides/cli.md): options, static serving, plugins, and CLI provenance.
 - [Multiple static folders](guides/multiple-static-folders.md): mount order and explicit fallback.
 - [Asynchronous outbound requests](guides/async-outbound-requests.md): controller return types,
@@ -190,7 +190,9 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Compatibility
 
-- [Neo v1 to v2](compatibility/neo-v1-to-v2.md): living migration guide for the v2 engine release scope, approved behavior changes and remaining integration.
+- [Upgrading from EmbedIO 3.x](compatibility/upgrading-from-embedio-3.md): one-page checklist for applications moving from the archived upstream library, linking into both detailed guides.
+
+- [Neo v1 to v2](compatibility/neo-v1-to-v2.md): migration guide for applications moving from Neo v1 to v2: listener, API, limit and behavior changes.
 
 - [Migration](compatibility/migration.md): approved SWAN/JSON changes and consumer migration.
 
