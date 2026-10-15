@@ -5,6 +5,9 @@ seed=${CAMPAIGN_SEED:-1729}
 [[ $seconds =~ ^[0-9]+$ && $seed =~ ^[0-9]+$ ]]
 (( seconds >= 1 && seconds <= 1800 && seed >= 1 && seed <= 2147483647 ))
 mkdir -p /work /results/maps
+# AFL creates private files as container root; preserve readable evidence for
+# the host runner on successful and failed campaigns alike.
+trap 'result=$?; chmod -R a+rX /results; exit "$result"' EXIT
 tar -C /input --exclude=bin --exclude=obj -cf - src test/EmbedIO.SharpFuzz .editorconfig Directory.Build.props Directory.Packages.props global.json README.md LICENSE images | tar -xf - -C /work
 cd /work
 # Match a Linux Git checkout when the read-only source comes from Windows.

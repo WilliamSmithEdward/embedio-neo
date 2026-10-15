@@ -88,6 +88,12 @@ The source is mounted read-only and copied into the disposable container; only
 the published library copy is instrumented. Production outputs are unchanged.
 Keep this Dockerfile's SDK tag and digest aligned with `global.json` when moving
 the SDK; the container obeys the same exact-version requirement as other builds.
+The hosted workflow temporarily sets file-based core-dump delivery on its
+disposable runner and restores the previous value afterward, so AFL's normal
+crash-delivery check remains enabled. The local runner does not change host
+settings; a local host with piped core-dump delivery will fail that check.
+Container-created result files are made readable for host artifact collection
+even when the campaign fails.
 
 Before mutation, `afl-showmap` must report nonempty, distinct coverage maps for
 two seed inputs. The dotnet executable has no native AFL signature, so the

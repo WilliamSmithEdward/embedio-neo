@@ -19,6 +19,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Configure crash delivery on the disposable runner
+        shell: bash
+        run: |
+          sysctl -n kernel.core_pattern > "$RUNNER_TEMP/afl-core-pattern"
+          sudo sysctl -w kernel.core_pattern=core
       - name: Validate managed coverage and run AFL++
         shell: pwsh
         env:
@@ -31,3 +36,10 @@ jobs:
           name: afl-${{ github.sha }}
           path: TestResults/afl
           if-no-files-found: error
+      - name: Restore the runner crash configuration
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/afl-core-pattern"; then
+            sudo sysctl -w "kernel.core_pattern=$(cat "$RUNNER_TEMP/afl-core-pattern")"
+          fi
