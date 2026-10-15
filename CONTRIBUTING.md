@@ -23,6 +23,9 @@ Python guard rejects compiler/analyzer directives and build configuration opt-ou
 
 ## Development
 
+See [Source layout](docs/project/source-layout.md) for source folder responsibilities
+and partial-file naming conventions.
+
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
 The tests target .NET 10.
 

@@ -210,6 +210,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
+- [Source layout](project/source-layout.md): responsibilities, partial-file naming and shared-source links.
+
 - [Performance and cleanup audit](project/performance-cleanup-audit.md): allocation measurements, compatibility-preserving simplifications and TLS callback regression coverage.
 
 - [Shared HTTP/1 listener shutdown](project/shared-http1-owner-shutdown.md): logical-owner retirement, idle transport handoff and final-endpoint cleanup.
