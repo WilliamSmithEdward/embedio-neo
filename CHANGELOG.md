@@ -17,6 +17,11 @@
 
 ### Fixed
 
+- Ignore unsupported Range units and preserve equal-quality preference order across
+  separate header values. Return acquired rate-limiter permits when close-callback
+  registration fails; IP-ban cleanup preserves renewed bans and concurrent regex
+  matches.
+
 - HTTP/2 batched writes retain every contributing cancellation source until the
   transport write finishes. Multiplexed contexts finish cleanup even when a
   recoverable diagnostic listener throws, and explicit SameSite cookie metadata
