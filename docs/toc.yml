@@ -355,5 +355,8 @@
 - name: WebTransport upstream readiness
   href: project/webtransport-upstream-readiness.md
 
+- name: Production source maintenance audit
+  href: project/source-maintenance-audit.md
+
 - name: Source layout
   href: project/source-layout.md
