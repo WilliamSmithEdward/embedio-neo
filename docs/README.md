@@ -241,3 +241,5 @@ points for existing links.
 - [Standalone native QUIC module lifetime](project/native-quic-module-lifetime.md): Linux unload crash reproduction, retained mapping, collectible contexts and fresh-process acceptance.
 
 - [WebTransport upstream readiness](project/webtransport-upstream-readiness.md): decision to await a current-wire provider, test-only evidence and resumption gates.
+
+Probe note (2026-10-15): a documentation-only change used to verify the CI docs-only gate; this line is never merged.
