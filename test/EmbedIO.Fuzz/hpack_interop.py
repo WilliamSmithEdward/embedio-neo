@@ -3,7 +3,8 @@ import json, random, sys
 from pathlib import Path
 import hpack
 
-assert hpack.__version__ == "4.1.0"
+_pinned = Path(__file__).with_name("hpack-requirements.txt").read_text(encoding="utf-8").split()[0]
+assert _pinned == "hpack==" + hpack.__version__, (_pinned, hpack.__version__)
 mode, source, destination = sys.argv[1:]
 if mode == "generate":
     randomizer = random.Random(7541)
