@@ -15,6 +15,12 @@
   `MinimumDataRate.None` lifts it for a route. The request-limits guide and the v1 to v2
   notes describe the default; v2.0.0 bounded neither stalled nor trickled bodies.
 
+### Fixed
+
+- Request-body rate monitoring detaches the previous read's cancellation token when
+  the next read uses a different token or none. Retiring or suspending a monitor
+  during heartbeat registration also removes the registration reliably.
+
 ### Changed
 
 - A compressed HTTP/1 response sends the compressor's final block and the chunked

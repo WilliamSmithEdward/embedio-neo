@@ -116,7 +116,9 @@ namespace EmbedIO.Tests.Issues
         {
             using var fast = new FastHeartbeat();
             await using var host = await MultiHost.StartAsync(protocol, o => o.WithMinimumRequestBodyDataRate(Tight), Host.EchoLength, HttpVerbs.Any);
-            using var content = new SlowContent(1, TimeSpan.FromMilliseconds(50), 200, swallowErrors: true);
+            // Refusal can stop serialization early. Do not promise a full fixed-length body:
+            // HttpClient's HTTP/3 sender otherwise replaces the response with a length error.
+            using var content = new SlowContent(1, TimeSpan.FromMilliseconds(50), 200, swallowErrors: true, advertiseLength: false);
             var clock = Stopwatch.StartNew();
             using var response = await host.SendAsync(HttpMethod.Post, content);
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.RequestTimeout));
@@ -124,6 +126,39 @@ namespace EmbedIO.Tests.Issues
             Assert.That(clock.Elapsed, Is.LessThan(TimeSpan.FromSeconds(3)));
             using var healthy = await host.SendAsync(HttpMethod.Post, new ByteArrayContent(new byte[10]));
             Assert.That(await healthy.Content.ReadAsStringAsync(), Is.EqualTo("10"), "The connection carries on after the refused stream.");
+        }
+
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task UnknownLengthMultiplexedBodyCompletes(int protocol)
+        {
+            await using var host = await MultiHost.StartAsync(protocol, _ => { }, Host.EchoLength, HttpVerbs.Any);
+            using var content = new SlowContent(50, TimeSpan.FromMilliseconds(10), 3, advertiseLength: false);
+            Assert.That(content.Headers.ContentLength, Is.Null);
+            using var response = await host.SendAsync(HttpMethod.Post, content);
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("150"));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task SlowContentAdvertisesOnlyItsConfiguredLength(bool advertiseLength)
+        {
+            using var content = new SlowContent(2, TimeSpan.Zero, 3, advertiseLength: advertiseLength);
+            Assert.That(content.Headers.ContentLength, Is.EqualTo(advertiseLength ? (long?)6 : null));
+            using var destination = new MemoryStream();
+            await content.CopyToAsync(destination);
+            Assert.That(destination.Length, Is.EqualTo(6));
+        }
+
+        [Test]
+        public async Task RefusedSlowContentDoesNotPromiseUnsentBytes()
+        {
+            using var content = new SlowContent(2, TimeSpan.Zero, 3, swallowErrors: true, advertiseLength: false);
+            using var destination = new RefusingUploadStream();
+            await content.CopyToAsync(destination);
+            Assert.That(destination.Length, Is.EqualTo(2), "The peer refused the second write.");
+            Assert.That(content.Headers.ContentLength, Is.Null, "An interrupted upload must not claim all six bytes were sent.");
         }
 
         // ---------------------------------------------------------------- acceptances
@@ -383,8 +418,9 @@ namespace EmbedIO.Tests.Issues
             private readonly TimeSpan _pause;
             private readonly int _writes;
             private readonly bool _swallowErrors;
-            public SlowContent(int bytes, TimeSpan pause, int writes, bool swallowErrors = false)
-            { _bytes = bytes; _pause = pause; _writes = writes; _swallowErrors = swallowErrors; }
+            private readonly bool _advertiseLength;
+            public SlowContent(int bytes, TimeSpan pause, int writes, bool swallowErrors = false, bool advertiseLength = true)
+            { _bytes = bytes; _pause = pause; _writes = writes; _swallowErrors = swallowErrors; _advertiseLength = advertiseLength; }
             protected override async Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context)
             {
                 try
@@ -400,7 +436,14 @@ namespace EmbedIO.Tests.Issues
                 {
                 }
             }
-            protected override bool TryComputeLength(out long length) { length = (long)_bytes * _writes; return true; }
+            protected override bool TryComputeLength(out long length) { length = _advertiseLength ? (long)_bytes * _writes : 0; return _advertiseLength; }
+        }
+
+        private sealed class RefusingUploadStream : MemoryStream
+        {
+            public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+                => Length == 0 ? base.WriteAsync(buffer, offset, count, cancellationToken)
+                    : Task.FromException(new IOException("The peer refused further upload bytes."));
         }
 
         // A body source that completes a read only when supplied, honoring cancellation.
