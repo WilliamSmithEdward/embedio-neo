@@ -52,8 +52,14 @@ namespace EmbedIO.Net.Internal.Http3
     internal sealed class SystemQuicTransportStream : Http3TransportStream
     {
         private readonly QuicStream _stream;
+        private bool _applicationBody;
+        private CancellationToken _requestCancellation;
         internal SystemQuicTransportStream(QuicStream stream)
         { _stream = stream ?? throw new ArgumentNullException(nameof(stream)); }
+        // Enabled only after an ordinary request has been admitted. Initial fields,
+        // control streams and tunnels retain the provider's normal cancellation behavior.
+        internal void EnableApplicationBodyCancellation(CancellationToken requestCancellation)
+        { _requestCancellation = requestCancellation; _applicationBody = true; }
         internal override long Id => _stream.Id;
         internal override QuicStreamType Type => _stream.Type;
         internal override Task ReadsClosed => _stream.ReadsClosed;
@@ -71,9 +77,37 @@ namespace EmbedIO.Net.Internal.Http3
         public override Task FlushAsync(CancellationToken token) => _stream.FlushAsync(token);
         public override int Read(byte[] buffer, int offset, int count) => _stream.Read(buffer, offset, count);
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken token)
-            => _stream.ReadAsync(buffer, offset, count, token);
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+            return _applicationBody ? ReadAsync(buffer.AsMemory(offset, count), token).AsTask() : _stream.ReadAsync(buffer, offset, count, token);
+        }
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken token = default)
-            => _stream.ReadAsync(buffer, token);
+        {
+            if (!_applicationBody || !token.CanBeCanceled) return _stream.ReadAsync(buffer, token);
+            token.ThrowIfCancellationRequested();
+            // Passing the caller token to QuicStream would send its default 0x10c
+            // before the application can send an early response. Own that abort here.
+            var pending = _stream.ReadAsync(buffer, CancellationToken.None);
+            return pending.IsCompletedSuccessfully ? pending : ReadApplicationBodyAsync(pending, token);
+        }
+        private async ValueTask<int> ReadApplicationBodyAsync(ValueTask<int> pending, CancellationToken token)
+        {
+            var registration = token.UnsafeRegister(static state => (state as SystemQuicTransportStream)?.CancelApplicationBodyRead(), this);
+            int count;
+            try { count = await pending.ConfigureAwait(false); }
+            catch (Exception error) when (token.IsCancellationRequested && error is QuicException or OperationCanceledException)
+            { throw new OperationCanceledException("The HTTP/3 body read was canceled.", error, token); }
+            finally { registration.Dispose(); }
+            // The borrowed buffer is no longer in use, even when cancellation won
+            // just as the provider supplied data. Never resume a partly read frame.
+            token.ThrowIfCancellationRequested();
+            return count;
+        }
+        private void CancelApplicationBodyRead()
+        {
+            try { _stream.Abort(QuicAbortDirection.Read, _requestCancellation.IsCancellationRequested ? 0x10c : 0x100); }
+            catch (ObjectDisposedException) { }
+        }
         public override void Write(byte[] buffer, int offset, int count) => _stream.Write(buffer, offset, count);
         public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken token)
             => _stream.WriteAsync(buffer, offset, count, token);

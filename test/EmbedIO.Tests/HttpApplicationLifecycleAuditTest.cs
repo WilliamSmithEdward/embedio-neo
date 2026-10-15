@@ -1040,7 +1040,7 @@ namespace EmbedIO.Tests
             internal CancellationToken Token => _stop.Token;
 
             internal static async Task<Host> StartAsync(HttpListenerMode mode, X509Certificate2? certificate, RequestHandlerCallback handler,
-                Action<WebServerOptions>? configure = null, Action<WebServer>? configureServer = null)
+                Action<WebServerOptions>? configure = null, Action<WebServer>? configureServer = null, bool native = false)
             {
                 var quic = mode == HttpListenerMode.EmbedIOHttp3;
                 var port = FreePort(quic);
@@ -1050,12 +1050,14 @@ namespace EmbedIO.Tests
                 Task running = Task.CompletedTask;
                 try
                 {
-                    server = new WebServer(o =>
-                    {
-                        o.WithUrlPrefix(prefix).WithMode(mode);
-                        if (certificate != null) o.WithCertificate(certificate);
-                        configure?.Invoke(o);
-                    }).WithAction("/", HttpVerbs.Any, handler);
+                    var options = new WebServerOptions().WithUrlPrefix(prefix).WithMode(mode);
+                    if (certificate != null) options.WithCertificate(certificate);
+                    configure?.Invoke(options);
+                    server = native
+                        ? (WebServer)(Activator.CreateInstance(typeof(WebServer), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+                            null, new object[] { options, true }, null) ?? throw new AssertionException("Missing native host constructor."))
+                        : new WebServer(options);
+                    server.WithAction("/", HttpVerbs.Any, handler);
                     configureServer?.Invoke(server);
                     running = server.RunAsync(stop.Token);
                     var deadline = DateTime.UtcNow + Settle;

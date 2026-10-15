@@ -31,6 +31,57 @@ namespace EmbedIO.Tests
 
         private static readonly Transport[] Transports = { Transport.Http2, Transport.Http3 };
 
+        [TestCase(Transport.Http2, CookieSameSiteMode.Lax)]
+        [TestCase(Transport.Http2, CookieSameSiteMode.Strict)]
+        [TestCase(Transport.Http2, CookieSameSiteMode.None)]
+        [TestCase(Transport.Http3, CookieSameSiteMode.Lax)]
+        [TestCase(Transport.Http3, CookieSameSiteMode.Strict)]
+        [TestCase(Transport.Http3, CookieSameSiteMode.None)]
+        public async Task ExplicitSameSiteCookiesReachMultiplexedResponses(Transport transport, CookieSameSiteMode policy)
+        {
+            await RunAsync(transport, async context =>
+            {
+                context.Response.SetCookie(new Cookie("entry", "one", "/before") { Secure = policy == CookieSameSiteMode.None }, policy);
+                var stored = context.Response.Cookies["entry"] ?? throw new AssertionException("Missing stored cookie.");
+                stored.Path = "/changed";
+                stored.Value = "two";
+                stored.HttpOnly = true;
+                await context.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding);
+            }, async (client, prefix) =>
+            {
+                using var response = await client.GetAsync(prefix);
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                Assert.That(response.Version.Major, Is.EqualTo(transport == Transport.Http2 ? 2 : 3));
+                var cookies = response.Headers.GetValues("Set-Cookie").ToArray();
+                Assert.That(cookies, Has.Length.EqualTo(1));
+                Assert.That(cookies[0], Does.StartWith("entry=two;").And.Contain("; Path=/changed")
+                    .And.Contain("; SameSite=" + policy).And.Contain("; HttpOnly"));
+                Assert.That(cookies[0].Contains("; Secure", StringComparison.Ordinal), Is.EqualTo(policy == CookieSameSiteMode.None));
+                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("ok"));
+            });
+        }
+
+        [TestCaseSource(nameof(Transports))]
+        public async Task SameSiteValidationAndUnconfiguredCookiesRemainUnchanged(Transport transport)
+        {
+            await RunAsync(transport, async context =>
+            {
+                Assert.Throws<ArgumentException>(() => context.Response.SetCookie(new Cookie("insecure", "value"), CookieSameSiteMode.None));
+                Assert.Throws<ArgumentOutOfRangeException>(() => context.Response.SetCookie(new Cookie("invalid", "value"), (CookieSameSiteMode)99));
+                Assert.That(context.Response.Cookies, Is.Empty);
+                context.Response.SetCookie(new Cookie("plain", "value", "/"));
+                await context.SendStringAsync("ok", "text/plain", WebServer.Utf8NoBomEncoding);
+            }, async (client, prefix) =>
+            {
+                using var response = await client.GetAsync(prefix);
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                Assert.That(response.Version.Major, Is.EqualTo(transport == Transport.Http2 ? 2 : 3));
+                var cookies = response.Headers.GetValues("Set-Cookie").ToArray();
+                Assert.That(cookies, Has.Length.EqualTo(1));
+                Assert.That(cookies[0], Does.StartWith("plain=value;").And.Not.Contain("SameSite"));
+            });
+        }
+
         [TestCaseSource(nameof(QueryCases))]
         public async Task QueryStringMatchesSplitParsing(Transport transport, string target)
         {

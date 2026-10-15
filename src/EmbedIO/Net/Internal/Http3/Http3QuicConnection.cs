@@ -376,6 +376,8 @@ namespace EmbedIO.Net.Internal.Http3
                     _highestRequestId = Math.Max(_highestRequestId, stream.Id);
                     _admitted.Add(stream.Id);
                 }
+                if (request.Method != "CONNECT" && stream is SystemQuicTransportStream runtimeStream)
+                    runtimeStream.EnableApplicationBodyCancellation(requestToken);
                 // Isolate even callbacks that block before returning their Task.
                 if (Interlocked.Increment(ref _applicationCount) > MaximumApplications)
                 {
