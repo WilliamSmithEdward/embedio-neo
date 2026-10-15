@@ -1,0 +1,315 @@
+name: Diagnostics
+
+# Opt-in QUIC and runtime diagnostics, run by hand only. Every job is off
+# unless its input is set, so an ordinary dispatch with the defaults does
+# nothing. They used to live in ci.yml behind the same inputs; ordinary pushes
+# and pull requests never ran them, and moving them here keeps CI shorter.
+#
+#   gh workflow run diagnostics.yml --ref <branch> -f <input>=true
+#
+# What each input runs and where its method is recorded:
+#   quic-cleanup-experiment, quic-self-contained-experiment,
+#   quic-openssl-experiment   test/EmbedIO.RuntimeCloseProbe/quic-cleanup-experiment.sh
+#                             (docs/project/http-engine.md, "Test-only native cleanup
+#                             candidate" and the self-contained/OpenSSL sections)
+#   quic-rebind-probe         the macOS dyld-interposed UDP bind/close trace around the
+#                             independent QUIC rebind probe (docs/project/http-engine.md,
+#                             "Opt-in native QUIC rebind ordering trace")
+#   runtime-close-probe       test/EmbedIO.RuntimeCloseProbe on all three desktop
+#                             platforms (docs/user-reports/managed-websocket-close-acknowledgements.md)
+#   quic-retirement-gate      the QUIC lifetime retirement gate, no retry tolerance or
+#                             quarantine (docs/project/quic-lifetime.md, "Retirement gates")
+
+on:
+  workflow_dispatch:
+    inputs:
+      quic-cleanup-experiment:
+        description: Compare pinned MsQuic source with a test-only macOS socket cleanup patch
+        type: boolean
+        default: false
+      quic-self-contained-experiment:
+        description: Validate a review-only macOS MsQuic candidate with pinned bundled crypto and relocation
+        type: boolean
+        default: false
+      quic-openssl-experiment:
+        description: Validate the self-contained macOS candidate with pinned OpenSSL 3.5.9 LTS
+        type: boolean
+        default: false
+      quic-rebind-probe:
+        description: Trace native macOS UDP bind/close ordering in the independent QUIC rebind probe
+        type: boolean
+        default: false
+      runtime-close-probe:
+        description: Run the independent exact-runtime close diagnostic on all three desktop platforms
+        type: boolean
+        default: false
+      quic-retirement-gate:
+        description: Run the QUIC lifetime retirement gate (raw rebind and owned restart cases, no retry tolerance or quarantine) on all three desktop platforms
+        type: boolean
+        default: false
+      quic-retirement-gate-repetitions:
+        description: Test processes the retirement gate runs per platform
+        type: number
+        default: 10
+
+permissions:
+  contents: read
+
+env:
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  DisableImplicitNuGetFallbackFolder: true
+
+jobs:
+  quic-cleanup-experiment:
+    name: Compare macOS native socket cleanup (${{ matrix.rid }})
+    if: inputs.quic-cleanup-experiment == true || inputs.quic-self-contained-experiment == true || inputs.quic-openssl-experiment == true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      EMBEDIO_EXPECT_NATIVE_RID: ${{ matrix.rid }}
+      EMBEDIO_QUIC_SELF_CONTAINED: ${{ (inputs.quic-self-contained-experiment || inputs.quic-openssl-experiment) && '1' || '0' }}
+      EMBEDIO_QUIC_TLS_BACKEND: ${{ inputs.quic-openssl-experiment && 'openssl' || 'quictls' }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Prepare native build tools
+        run: brew install cmake openssl@3 gnupg
+      - name: Compare pinned source with the test-only cleanup patch
+        run: bash test/EmbedIO.RuntimeCloseProbe/quic-cleanup-experiment.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: quic-cleanup-experiment-${{ matrix.rid }}
+          path: TestResults/quic-cleanup-experiment/
+          if-no-files-found: error
+
+  quic-rebind-probe:
+    name: Native macOS QUIC dispose and rebind trace
+    # The trace step ran inside the macOS regression job; it needs that job's
+    # checkout, SDK and pinned native library, copied here unchanged, and the
+    # same 20-minute limit the macOS regression job has.
+    if: inputs.quic-rebind-probe == true
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Install pinned macOS QUIC prerequisite
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_INSTALL_CLEANUP: '1'
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          bottle="$RUNNER_TEMP/libmsquic--2.6.2.arm64_sequoia.bottle.tar.gz"
+          curl --fail --location --retry 3 --header 'Authorization: Bearer QQ==' --output "$bottle" https://ghcr.io/v2/homebrew/core/libmsquic/blobs/sha256:c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55
+          printf '%s  %s\n' c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55 "$bottle" | shasum -a 256 --check
+          # Keep the pinned bottle isolated; current brew does not accept this
+          # local bottle path as an install target. Relocate only its dylib.
+          brew install openssl@3
+          quic_root="$RUNNER_TEMP/embedio-msquic"
+          mkdir -p "$quic_root" TestResults
+          tar -xzf "$bottle" -C "$quic_root"
+          quic_lib="$quic_root/libmsquic/2.6.2/lib"
+          install_name_tool -id "$quic_lib/libmsquic.2.dylib" -change '@@HOMEBREW_PREFIX@@/opt/openssl@3/lib/libcrypto.3.dylib' "$(brew --prefix openssl@3)/lib/libcrypto.3.dylib" "$quic_lib/libmsquic.2.6.2.dylib"
+          codesign --force --sign - "$quic_lib/libmsquic.2.6.2.dylib"
+          otool -L "$quic_lib/libmsquic.2.6.2.dylib" | tee TestResults/quic-native-macos.log
+          shasum -a 256 "$quic_lib/libmsquic.2.6.2.dylib" >> TestResults/quic-native-macos.log
+          printf 'DYLD_FALLBACK_LIBRARY_PATH=%s\n' "$quic_lib" >> "$GITHUB_ENV"
+      - name: Trace native macOS QUIC dispose and rebind ordering
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p TestResults/quic-rebind-probe
+          dotnet restore test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj --locked-mode
+          dotnet build test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj -c Release --no-restore
+          trace_library="$RUNNER_TEMP/libembedio_quic_trace.dylib"
+          clang -std=c11 -O2 -Wall -Wextra -Werror -dynamiclib \
+            test/EmbedIO.RuntimeCloseProbe/quic_trace.c -o "$trace_library"
+          codesign --force --sign - "$trace_library"
+          clang --version > TestResults/quic-rebind-probe/compiler.txt
+          shasum -a 256 "$trace_library" > TestResults/quic-rebind-probe/tracer.sha256
+          nm -u "$RUNNER_TEMP/embedio-msquic/libmsquic/2.6.2/lib/libmsquic.2.6.2.dylib" > TestResults/quic-rebind-probe/native-imports.txt
+          DYLD_PRINT_LIBRARIES=1 \
+          DYLD_INSERT_LIBRARIES="$trace_library" \
+          EMBEDIO_QUIC_TRACE_LIBRARY="$trace_library" \
+          EMBEDIO_QUIC_TRACE_OUTPUT="$PWD/TestResults/quic-rebind-probe/native.jsonl" \
+            test/EmbedIO.RuntimeCloseProbe/bin/Release/net10.0/EmbedIO.RuntimeCloseProbe \
+              --quic-rebind 2048 TestResults/quic-rebind-probe \
+              2> TestResults/quic-rebind-probe/loader.log
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: quic-rebind-probe-macos-15
+          path: TestResults/
+          if-no-files-found: error
+
+  runtime-close-probe:
+    name: Runtime close probe (${{ matrix.os }})
+    if: inputs.runtime-close-probe == true
+    env:
+      DOTNET_PROCESSOR_COUNT: 2
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.402
+      - name: Restore the independent runtime probe
+        run: dotnet restore test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj --locked-mode
+      - name: Build with the SDK analyzers
+        run: dotnet build test/EmbedIO.RuntimeCloseProbe/EmbedIO.RuntimeCloseProbe.csproj -c Release --no-restore -p:RunAnalyzers=true
+      - name: Exercise sequential client calls across the TCP EOF deadline
+        run: dotnet test/EmbedIO.RuntimeCloseProbe/bin/Release/net10.0/EmbedIO.RuntimeCloseProbe.dll 1024 16 TestResults/runtime-close-probe/result.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: runtime-close-probe-${{ matrix.os }}
+          path: TestResults/runtime-close-probe/
+          if-no-files-found: error
+
+  quic-retirement-gate:
+    name: QUIC lifetime retirement gate (${{ matrix.os }})
+    # Retirement evidence for issue #202: the raw runtime rebind cases and EmbedIO's
+    # own idle, served, drained and contended restart cases, repeated in separate
+    # processes, with no retry tolerance and no quarantine. A stock runtime that
+    # still keeps a disposed listener's port bound fails here by design; the
+    # retry and the quarantine may be removed only once every platform passes.
+    if: inputs.quic-retirement-gate == true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      EMBEDIO_REQUIRE_QUIC: '1'
+      EMBEDIO_QUIC_RETIREMENT_GATE: '1'
+      EMBEDIO_QUIC_RETIREMENT_GATE_OUTPUT: ${{ github.workspace }}/TestResults/quic-retirement-gate
+      EMBEDIO_SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Install pinned Linux QUIC prerequisite
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$RUNNER_TEMP/libmsquic_2.6.2_amd64.deb"
+          curl --fail --location --retry 3 --output "$package" https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/libm/libmsquic/libmsquic_2.6.2_amd64.deb
+          printf '%s  %s\n' 9ac90841ad45d99c1ff85b427d6dc7f0849291d596f0049d13db779a5a66ba4e "$package" | sha256sum --check
+          sudo apt-get update
+          sudo apt-get install --yes "$package"
+          dpkg-query --show libmsquic
+      - name: Install pinned macOS QUIC prerequisite
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_INSTALL_CLEANUP: '1'
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          bottle="$RUNNER_TEMP/libmsquic--2.6.2.arm64_sequoia.bottle.tar.gz"
+          curl --fail --location --retry 3 --header 'Authorization: Bearer QQ==' --output "$bottle" https://ghcr.io/v2/homebrew/core/libmsquic/blobs/sha256:c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55
+          printf '%s  %s\n' c7d7fbdaec216ced0ed5b9b7b58d3d6b251e96dc4d666409e3fb211cf8c3bf55 "$bottle" | shasum -a 256 --check
+          # Keep the pinned bottle isolated, exactly as the regression job does.
+          brew install openssl@3
+          quic_root="$RUNNER_TEMP/embedio-msquic"
+          mkdir -p "$quic_root" TestResults/quic-retirement-gate
+          tar -xzf "$bottle" -C "$quic_root"
+          quic_lib="$quic_root/libmsquic/2.6.2/lib"
+          install_name_tool -id "$quic_lib/libmsquic.2.dylib" -change '@@HOMEBREW_PREFIX@@/opt/openssl@3/lib/libcrypto.3.dylib' "$(brew --prefix openssl@3)/lib/libcrypto.3.dylib" "$quic_lib/libmsquic.2.6.2.dylib"
+          codesign --force --sign - "$quic_lib/libmsquic.2.6.2.dylib"
+          otool -L "$quic_lib/libmsquic.2.6.2.dylib" | tee TestResults/quic-retirement-gate/quic-native-macos.log
+          shasum -a 256 "$quic_lib/libmsquic.2.6.2.dylib" >> TestResults/quic-retirement-gate/quic-native-macos.log
+          printf 'DYLD_FALLBACK_LIBRARY_PATH=%s\n' "$quic_lib" >> "$GITHUB_ENV"
+      - name: Restore from the lock files
+        run: dotnet restore EmbedIO.sln --locked-mode
+      - name: Build the tests
+        run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=true
+      - name: Record the runtime and the native QUIC dependency
+        shell: bash
+        env:
+          MATRIX_OS: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          results=TestResults/quic-retirement-gate
+          mkdir -p "$results"
+          {
+            echo "source $GITHUB_SHA"
+            echo "runner $RUNNER_OS $MATRIX_OS"
+            uname -a
+            dotnet --version
+            dotnet --list-runtimes
+          } > "$results/environment.txt"
+          case "$RUNNER_OS" in
+            Linux) dpkg-query --show libmsquic >> "$results/environment.txt" ;;
+            macOS) shasum -a 256 "$DYLD_FALLBACK_LIBRARY_PATH/libmsquic.2.6.2.dylib" >> "$results/environment.txt" ;;
+            Windows)
+              # The Windows runtime bundles msquic.dll; record every copy the SDK installed.
+              pwsh -NoProfile -Command 'Get-ChildItem -Path (Join-Path (Split-Path (Get-Command dotnet).Source) "shared/Microsoft.NETCore.App") -Recurse -Filter msquic.dll | ForEach-Object { "{0} {1}" -f $_.FullName, $_.VersionInfo.ProductVersion }' >> "$results/environment.txt" ;;
+          esac
+          cat "$results/environment.txt"
+      - name: Run the retirement gate without retry tolerance or quarantine
+        shell: bash
+        env:
+          GATE_REPETITIONS: ${{ inputs.quic-retirement-gate-repetitions }}
+        run: |
+          set -euo pipefail
+          results=TestResults/quic-retirement-gate
+          printf 'repetition\texit\n' > "$results/repetitions.tsv"
+          [[ "$GATE_REPETITIONS" =~ ^[1-9][0-9]*$ ]] || { echo 'Gate repetitions must be a positive integer.' >&2; exit 2; }
+          failed=0
+          for repetition in $(seq 1 "$GATE_REPETITIONS"); do
+            status=0
+            # Four owned gate cases plus the two raw runtime cases must all be discovered.
+            dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build \
+              --filter 'TestCategory=QuicLifetimeRetirementGate|FullyQualifiedName~QuicRuntimeRebindTest' \
+              --minimum-expected-tests 6 --timeout 15m --report-trx --results-directory "$results/repetition-$repetition" \
+              > "$results/repetition-$repetition.log" 2>&1 || status=$?
+            printf '%s\t%s\n' "$repetition" "$status" >> "$results/repetitions.tsv"
+            if test "$status" -ne 0; then failed=1; fi
+          done
+          cat "$results/repetitions.tsv"
+          # Every repetition must pass. No exit code is tolerated and no failure is classified away.
+          test "$failed" = 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: quic-retirement-gate-${{ matrix.os }}
+          path: TestResults/quic-retirement-gate/
+          if-no-files-found: error

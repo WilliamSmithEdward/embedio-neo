@@ -321,7 +321,7 @@ checked, in this order: `datapath_kqueue.c` and `datapath_epoll.c` close the
 descriptor inside `CxPlatSocketContextUninitialize` or `CxPlatSocketDelete`
 waits for it; `library.c` and `binding.c` no longer leave the unlink-before-close
 window; dotnet/runtime's `eng/Versions.props` and release notes name the bundled
-Windows version; the pins in `ci.yml` and `quic-cleanup-experiment.sh` are
+Windows version; the pins in `ci.yml`, `diagnostics.yml` and `quic-cleanup-experiment.sh` are
 raised with new hashes; and the retirement gate below passes on every platform.
 A major version number or a prerelease label is not evidence.
 
@@ -343,7 +343,8 @@ The gate is executable and lives in the repository:
   the ordinary suite counts them in the 4,743 floor without running them.
   `--filter "TestCategory=QuicLifetimeRetirementGate|FullyQualifiedName~QuicRuntimeRebindTest"`
   with `--minimum-expected-tests 6` selects the six gate cases.
-- Platforms and repetitions: the `quic-retirement-gate` CI dispatch input runs
+- Platforms and repetitions: the `quic-retirement-gate` input of the manual
+  `Diagnostics` workflow (`.github/workflows/diagnostics.yml`) runs
   the selection on ubuntu-24.04, windows-2025 and macos-15 in separate test
   processes (`quic-retirement-gate-repetitions`, default 10), with
   `EMBEDIO_REQUIRE_QUIC=1`, no quarantine and no tolerated exit code. Its
@@ -351,7 +352,8 @@ The gate is executable and lives in the repository:
   `dpkg` version, dylib hash or `msquic.dll` product version),
   `repetitions.tsv`, every TRX and log, and `gate-ledger.jsonl` with one record
   per case (cycles, retries before and after, bridged count, outcome, timing,
-  runtime, OS). `ci-passed` requires the job only when it was requested.
+  runtime, OS). The job is not part of `CI passed`; the dispatched run's own
+  status is the verdict.
 - Pass criterion: every repetition exits zero on every platform, twice, on
   identical source: once as the control with the current pins and once with the
   candidate dependency. A control that fails on the stock runtime is the
@@ -373,7 +375,7 @@ The gate is executable and lives in the repository:
   does not retire the other.
 
 Run it on a branch with
-`gh workflow run ci.yml --ref <branch> -f quic-retirement-gate=true -f quic-retirement-gate-repetitions=10`,
+`gh workflow run diagnostics.yml --ref <branch> -f quic-retirement-gate=true -f quic-retirement-gate-repetitions=10`,
 or locally with the same filter and environment variables after installing the
 pinned native library.
 
