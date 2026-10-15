@@ -52,5 +52,45 @@ namespace EmbedIO.Tests
             }
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
         }
+
+        // A compressor's final block and the trailer section leave in one write: the
+        // decoded body and the declared trailers must both arrive, for every coding.
+        [TestCase("br", 3)]
+        [TestCase("br", 65537)]
+        [TestCase("gzip", 65537)]
+        public async Task CompressedResponsesKeepDeclaredTrailers(string coding, int size)
+        {
+            var expected = Enumerable.Range(0, size).Select(i => (byte)(i % 251)).ToArray();
+            var url = HttpsSmoke.GetUrl().Replace("https:", "http:", StringComparison.Ordinal);
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            using var server = new WebServer(HttpListenerMode.EmbedIO, url).WithAction("/", HttpVerbs.Get, async context =>
+            {
+                var sections = context.Response as IHttpResponseSections ?? throw new AssertionException("Missing optional response capability.");
+                sections.DeclareTrailers("X-Finished");
+                context.Response.ContentType = "application/octet-stream";
+                sections.SetTrailers(new WebHeaderCollection { ["X-Finished"] = "yes" });
+                using var output = context.OpenResponseStream(preferCompression: true);
+                await output.WriteAsync(expected, stop.Token);
+            });
+            var running = server.RunAsync(stop.Token);
+            try
+            {
+                using var handler = new SocketsHttpHandler { UseProxy = false, MaxConnectionsPerServer = 1, AutomaticDecompression = System.Net.DecompressionMethods.All };
+                using var client = new HttpClient(handler);
+                for (var i = 0; i < 2; i++)
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Get, url)
+                    { Version = HttpVersion.Version11, VersionPolicy = HttpVersionPolicy.RequestVersionExact };
+                    request.Headers.AcceptEncoding.ParseAdd(coding);
+                    request.Headers.TE.ParseAdd("trailers");
+                    using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, stop.Token);
+                    Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                    Assert.That(response.Headers.TransferEncodingChunked, Is.True);
+                    Assert.That(await response.Content.ReadAsByteArrayAsync(stop.Token), Is.EqualTo(expected));
+                    Assert.That(response.TrailingHeaders.GetValues("x-finished"), Is.EqualTo(new[] { "yes" }));
+                }
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+        }
     }
 }

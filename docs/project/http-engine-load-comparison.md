@@ -866,3 +866,64 @@ and `trace1-a`), as the starting point for the rest of this round:
   2.1%, three quarters of it disposing the per-request linked source that joins the
   server token at close; the finalizer thread holds 5.8%.
 
+## Compressed HTTP/1 response ending in one write (2026-10-15)
+
+The profile above showed three transport writes per compressed 1 KiB JSON response, two
+of them synchronous during disposal. The candidate (`codex/perf-hunt-3`, core SHA-256
+`5a9ccad3...`) against main `e8befe3d` (core `0c2172dd...`, the previous section's change
+merged), both in one harness build (runner `9151cca7...`). What the candidate changes:
+
+- `OpenResponseStream` wraps the compressor in `CompressedResponseStream`. The compressor
+  writes into a sink that forwards every write to the response output, except that from
+  the compressor's disposal on, the last write is held back. When the compressor is done,
+  the held write goes to the HTTP/1 output together with the chunked terminator (or the
+  trailer section) in one transport write. An earlier write during disposal is forwarded
+  as soon as the next arrives, so each compressor write is still its own chunk: the bytes
+  on the wire, chunk boundaries included, are those of the compressor writing to the
+  output directly. `CompressedResponseWireTest` checks exactly that against a reference
+  compressor for Brotli, gzip and deflate, synchronous and asynchronous disposal, and
+  bodies whose final block spans several writes; it passes on main's core too. HTTP/2,
+  HTTP/3 and buffered outputs take the held write as an ordinary write.
+- On the .NET 10 asset `ResponseSerializer` disposes the response stream asynchronously,
+  so neither the final block nor the terminator takes a synchronous transport write.
+- `QValueList` walks header value arrays and candidate lists by index instead of through
+  interface enumerators.
+
+Method as in the previous sections: SDK 10.0.402 and runtime 10.0.13, server CPUs 0-3,
+client 4-11, benchmark lock and both heavy-work slots held, 4 s warmup, 8 s measurement,
+three rounds in each harness role, samples classified by the loaded core hash, four of 81
+samples excluded for background CPU above the scenario rule. Raw data:
+`TestResults/perf-hunt-2/results/cand3-{a,b}` in the branch worktree.
+
+| Scenario (valid samples base/candidate/Kestrel) | Requests/s | Server CPU us/req | Server B/req | p50 ms | p99 ms | p99.9 ms | Requests/s vs Kestrel |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 KiB JSON compressed, 64 conn (6/6/3) | 82,245 -> 105,664 (1.285) | 46.9 -> 36.8 (0.785) | 6,311 -> 6,337 (1.004) | 0.737 -> 0.575 (0.780) | 1.344 -> 1.088 (0.810) | 4.50 -> 2.72 (0.606) | 0.62x |
+| 64 KiB JSON compressed, 16 conn (6/6/3) | 24,199 -> 25,358 (1.048) | 158.8 -> 151.3 (0.953) | 6,334 -> 6,322 (0.998) | 0.606 -> 0.568 (0.938) | 2.012 -> 2.357 (1.172) | 9.59 -> 9.05 (0.943) | 0.90x |
+| 13 B, 64 conn (5/4/3) | 217,155 -> 217,361 (1.001) | 18.0 -> 18.0 (1.002) | 4,795 -> 4,797 (1.000) | 0.278 -> 0.278 (1.000) | 0.599 -> 0.587 (0.980) | 0.87 -> 1.22 (1.405) | 0.84x |
+| 13 B, 64 conn, closed after 100 (6/5/3) | 208,966 -> 207,875 (0.995) | 18.5 -> 18.6 (1.002) | 5,019 -> 4,937 (0.984) | 0.279 -> 0.282 (1.010) | 0.789 -> 0.779 (0.988) | 2.97 -> 2.25 (0.757) | 0.83x |
+| 13 B chunked, 64 conn (6/6/3) | 137,337 -> 137,262 (0.999) | 28.3 -> 28.3 (0.998) | 4,987 -> 4,962 (0.995) | 0.443 -> 0.443 (1.000) | 0.847 -> 0.853 (1.008) | 1.91 -> 1.64 (0.860) | 0.54x |
+| 1 MiB chunked flushed 16 KiB, 16 conn (6/6/3) | 4,667 -> 4,633 (0.993) | 848.4 -> 851.6 (1.004) | 5,013 -> 4,983 (0.994) | 3.379 -> 3.388 (1.003) | 7.808 -> 10.044 (1.286) | 27.41 -> 29.32 (1.070) | 0.54x |
+
+The 1 KiB compressed response gains 28% throughput and 22% CPU per request, the same in
+both harness roles (1.280 and 1.289); the gap to Kestrel narrows from 0.48x to 0.62x.
+The 64 KiB compressed response gains about 5% (1.049 and 1.047). Allocation is unchanged:
+the sink's held-write buffer is pooled. The uncompressed scenarios do not run the new
+code and stay inside the sample spread, except the p99 of the 1 MiB streamed response
+(both roles higher, 1.398 and 1.181, at unchanged throughput and p50), which takes no
+new branch beyond a null check per write and is rechecked below. The remaining gap at
+1 KiB is mostly the header collections and content-coding negotiation listed in the
+profile above.
+
+Recheck of the 1 MiB streamed response in a separate window, same runners and method,
+four rounds in each role (`TestResults/perf-hunt-2/results/cand3s-{a,b}`, three of 16
+samples excluded for background CPU):
+
+| Scenario (valid samples base/candidate) | Requests/s | Server CPU us/req | Server B/req | p50 ms | p99 ms | p99.9 ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 MiB chunked flushed 16 KiB, 16 conn (7/6) | 4,626 -> 4,620 (0.999) | 853.0 -> 856.6 (1.004) | 5,012 -> 4,984 (0.994) | 3.423 -> 3.422 (1.000) | 5.529 -> 5.828 (1.054) | 14.12 -> 19.19 (1.359) |
+
+The p99 ratio per role is 1.015 and 1.005, so the earlier 1.29 did not reproduce; the
+same core's p99 moved from 7.8 ms in the first window to 5.5 ms in this one, which is the
+size of this scenario's tail noise between windows. The scenario writes an uncompressed
+chunked body and never takes the new ending path: each of its writes passes
+`ending: false`, so the only added work is a null check on the absent tail.

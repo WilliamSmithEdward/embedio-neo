@@ -39,7 +39,7 @@ namespace EmbedIO.Net.Internal
         // Status lines repeat a few codes; the code text is shared instead of formatted per response.
         private static readonly string?[] StatusTexts = new string?[600];
 
-        internal static Http1Head Encode(HttpListenerResponse response, int bodyCount)
+        internal static Http1Head Encode(HttpListenerResponse response, int bodyCount, bool ending)
         {
             var encoding = WebServer.DefaultEncoding;
             var rawCookies = response.Headers.GetValues(HttpHeaderNames.SetCookie);
@@ -55,6 +55,7 @@ namespace EmbedIO.Net.Internal
                 : response.ProtocolVersion == HttpVersion.Version10 ? "1.0" : response.ProtocolVersion.ToString();
             var status = StatusText(response.StatusCode);
             var chunked = response.SendChunked && !response.SuppressesBody;
+            var endingLength = ending && chunked && bodyCount != 0 ? ResponseStream.EndingLength(response) : 0;
             byte[] buffer;
             int size;
 #if NET10_0_OR_GREATER
@@ -67,7 +68,7 @@ namespace EmbedIO.Net.Internal
             {
                 var content = text.Slice(0, characters.Position);
                 size = encoding.GetByteCount(content);
-                buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked));
+                buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked, endingLength));
                 encoding.GetBytes(content, buffer);
             }
             else
@@ -76,7 +77,7 @@ namespace EmbedIO.Net.Internal
                 var writer = new HeaderWriter(encoding, null, 0);
                 WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
                 size = writer.Position;
-                buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked));
+                buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked, endingLength));
                 writer = new HeaderWriter(encoding, buffer, 0);
                 WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
             }

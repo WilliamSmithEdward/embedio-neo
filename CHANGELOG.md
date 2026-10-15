@@ -17,6 +17,12 @@
 
 ### Changed
 
+- A compressed HTTP/1 response sends the compressor's final block and the chunked
+  terminator in one transport write, and the response serializer disposes its stream
+  asynchronously on .NET 10. Each compressor write is still its own chunk, so the bytes on
+  the wire are unchanged. A 1 KiB compressed JSON response serves 28% more requests per
+  second at 22% less CPU each in the load harness. See the
+  [load comparison](docs/project/http-engine-load-comparison.md#compressed-http1-response-ending-in-one-write-2026-10-15).
 - HTTP/1 responses encode their head straight into the pooled array that carries the
   first body segment, instead of into a `MemoryStream` whose bytes were then copied into
   that segment, and the status code text is shared between responses. A small response

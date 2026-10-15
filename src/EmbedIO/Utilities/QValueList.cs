@@ -152,8 +152,17 @@ namespace EmbedIO.Utilities
 
             if (headerValues == null) return result;
 
-            foreach (var headerValue in headerValues)
-                ParseCore(headerValue, result);
+            // Header values usually arrive as an array; walk it without an enumerator.
+            if (headerValues is string?[] array)
+            {
+                foreach (var headerValue in array)
+                    ParseCore(headerValue, result);
+            }
+            else
+            {
+                foreach (var headerValue in headerValues)
+                    ParseCore(headerValue, result);
+            }
 
             return result;
         }
@@ -288,6 +297,24 @@ namespace EmbedIO.Utilities
 
             // Set initial values such as a weight of 0 can never win over them
             (int Weight, int Ordinal) bestValue = (0, int.MinValue);
+            // The candidate lists are arrays; index them without an enumerator.
+            if (values is IReadOnlyList<string> list)
+            {
+                for (var index = 0; index < list.Count; index++)
+                {
+                    var value = list[index];
+                    if (value == null) continue;
+                    if (TryGetCandidateValue(value, out var candidateValue) && CompareQualities(candidateValue, bestValue) > 0)
+                    {
+                        result = value;
+                        best = index;
+                        bestValue = candidateValue;
+                    }
+                }
+
+                return best;
+            }
+
             var i = 0;
             foreach (var value in values)
             {

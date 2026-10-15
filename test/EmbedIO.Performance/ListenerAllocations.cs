@@ -105,7 +105,8 @@ internal static class ListenerAllocations
         var bodyCount = Expression.Parameter(typeof(int), "bodyCount");
         var check = Expression.Parameter(typeof(HeadCheck), "check");
         // Members resolve by name inside the expression tree, non-public ones included.
-        var encode = Expression.Call(Expression.Constant(response), "WriteHeaders", null, bodyCount);
+        // The second argument says whether the write ends the body; a head-only write does not.
+        var encode = Expression.Call(Expression.Constant(response), "WriteHeaders", null, bodyCount, Expression.Constant(false));
         var head = Expression.Variable(encode.Type, "head");
         var block = Expression.Block(typeof(bool), new[] { head },
             Expression.Assign(head, encode),

@@ -72,16 +72,26 @@ namespace EmbedIO
                     preferCompression = true;
                 }
 
+                // On the .NET 10 asset the response ends asynchronously, so a compressor's final
+                // block and the terminator do not take a synchronous transport write.
                 if (isBinaryResponse)
                 {
                     var responseBytes = (byte[])data;
+#if NET10_0_OR_GREATER
+                    await using var stream = context.OpenResponseStream(bufferResponse, preferCompression);
+#else
                     using var stream = context.OpenResponseStream(bufferResponse, preferCompression);
+#endif
                     await stream.WriteAsync(responseBytes, 0, responseBytes.Length).ConfigureAwait(false);
                 }
                 else
                 {
                     var responseString = data is string stringData ? stringData : data.ToString() ?? string.Empty;
+#if NET10_0_OR_GREATER
+                    await using var text = context.OpenResponseText(context.Response.ContentEncoding, bufferResponse, preferCompression);
+#else
                     using var text = context.OpenResponseText(context.Response.ContentEncoding, bufferResponse, preferCompression);
+#endif
                     await text.WriteAsync(responseString).ConfigureAwait(false);
                 }
             };
