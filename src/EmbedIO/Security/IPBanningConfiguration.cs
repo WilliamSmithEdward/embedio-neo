@@ -190,7 +190,8 @@ namespace EmbedIO.Security
             {
                 if (_blacklistDictionary.TryGetValue(k, out var info) &&
                     DateTime.Now.Ticks > info.ExpiresAt)
-                    _blacklistDictionary.TryRemove(k, out _);
+                    // Remove only the expired entry inspected above; a new ban may have replaced it.
+                    ((ICollection<KeyValuePair<IPAddress, BanInfo>>)_blacklistDictionary).Remove(new KeyValuePair<IPAddress, BanInfo>(k, info));
             }
         }
     }
