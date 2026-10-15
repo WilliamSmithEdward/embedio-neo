@@ -189,7 +189,10 @@ namespace EmbedIO.Net.Internal
             _handoff = true;
             _capsules = capsules;
         }
-        internal MemoryStream SendHeaders(bool closing, int bodyCount)
+        // Encodes the final head into a pooled array that also has room for the first body
+        // segment of bodyCount bytes (see ResponseStream.FirstSegmentReserve); the caller owns
+        // the lease and disposes it.
+        internal Http1Head SendHeaders(bool closing, int bodyCount)
         {
             if (_reservedTrailers != null && (!_chunks || SuppressesBody || _handoff || Headers[HttpHeaderNames.ContentLength] != null))
                 throw new InvalidOperationException("Reserved trailers require a body-capable chunked response.");
@@ -250,7 +253,7 @@ namespace EmbedIO.Net.Internal
             if (persistent && ProtocolVersion >= HttpVersion.Version11)
                 Headers.Add(HttpHeaderNames.KeepAlive, _transport.KeepAliveHeader);
         }
-        private MemoryStream WriteHeaders(int bodyCount)
+        private Http1Head WriteHeaders(int bodyCount)
         {
             var encoded = Http1HeaderEncoding.Encode(this, bodyCount);
             _output ??= _transport.GetResponseStream();
