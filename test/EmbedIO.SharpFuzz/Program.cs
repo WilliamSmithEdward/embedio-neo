@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Text;
 using EmbedIO.Utilities;
@@ -6,7 +7,21 @@ using SharpFuzz;
 
 // The driver supplies arbitrary bytes. UTF-8 replacement decoding is intentional:
 // these public APIs accept strings, including malformed URL escapes.
-Fuzzer.LibFuzzer.Run(data =>
+if (args.Length == 1 && args[0] == "--afl")
+{
+    Fuzzer.OutOfProcess.Run((Stream stream) =>
+    {
+        using var bytes = new MemoryStream();
+        stream.CopyTo(bytes);
+        CheckInput(bytes.ToArray());
+    });
+}
+else
+{
+    Fuzzer.LibFuzzer.Run(CheckInput);
+}
+
+static void CheckInput(ReadOnlySpan<byte> data)
 {
     var input = Encoding.UTF8.GetString(data);
     foreach (var groupFlags in new[] { false, true })
@@ -41,4 +56,4 @@ Fuzzer.LibFuzzer.Run(data =>
         if (actual != expected.ToString() || UrlPath.Normalize(actual, isBasePath) != actual)
             throw new InvalidOperationException("Path normalization differs from the slash-collapse oracle.");
     }
-});
+}

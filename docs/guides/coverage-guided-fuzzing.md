@@ -73,6 +73,42 @@ and invariant failures, and does not claim native memory-sanitizer coverage.
 The production APIs, defaults, dependencies and packages are unchanged. Passing a
 bounded campaign does not establish exhaustive parser correctness.
 
+## AFL++ campaigns
+
+The same parser callback also runs through SharpFuzz's out-of-process AFL
+forkserver. With Docker's Linux engine and PowerShell 7 available, run:
+
+```powershell
+./scripts/run-afl.ps1 -Seconds 60 -Seed 1729
+```
+
+The runner builds AFL++ 5.03c from a fixed source commit and checks its archive
+hash, on a digest-pinned .NET SDK image. One CPU and 4 GiB bound the container.
+The source is mounted read-only and copied into the disposable container; only
+the published library copy is instrumented. Production outputs are unchanged.
+
+Before mutation, `afl-showmap` must report nonempty, distinct coverage maps for
+two seed inputs. The dotnet executable has no native AFL signature, so the
+official SharpFuzz bridge requires `AFL_SKIP_BIN_CHECK`; this does not disable
+managed instrumentation or the forkserver. Non-instrumented mode is not used.
+
+CI runs one worker for sixty seconds per affected change and ten minutes weekly.
+The result must report executed cases, and any saved crash or hang fails the job
+even if the fuzzer exits zero. Artifacts retain coverage maps, run parameters,
+logs, the generated corpus and failure inputs. Replay a saved AFL input with the
+same standalone replay command shown above; it uses the shared callback.
+
+The initial five-second local Linux-container validation completed 1,696 cases,
+retained 24 new corpus entries and reported 68 edges with no crashes or hangs.
+These bounded observations verify feedback, not exhaustive correctness or a
+performance comparison with libFuzzer. The corpus-directory mode of `afl-showmap`
+is required to start the forkserver used by SharpFuzz; single-input mode does not
+supply its communication pipes.
+A temporary, uncommitted exception for a mutated `!` input was retained as a
+crash and made the runner fail. After a successful standalone build, replay of
+that saved input reproduced the same exception. The temporary predicate was
+then removed before the clean validation campaign.
+
 ## Upstream tooling
 
 - [SharpFuzz](https://github.com/Metalnem/sharpfuzz), MIT license, and its
@@ -80,3 +116,5 @@ bounded campaign does not establish exhaustive parser correctness.
 - [Pinned libfuzzer-dotnet release](https://github.com/Metalnem/libfuzzer-dotnet/releases/tag/v2025.05.02.0904), MIT-licensed bridge to LLVM libFuzzer.
 - [LLVM libFuzzer documentation](https://llvm.org/docs/LibFuzzer.html) describes
   corpus growth, crash artifacts, timeout and mutation controls.
+- [AFL++ 5.03c source](https://github.com/AFLplusplus/AFLplusplus/tree/dbaf11913c1b2702dee5b4d3dcfffd52f1defe50)
+  supplies the AFL engine and coverage-map validator used by the container.
