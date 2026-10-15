@@ -170,21 +170,21 @@ namespace EmbedIO.Internal
             // write (its own chunk), and this one is held instead.
             private async Task ForwardThenCaptureAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
-                await _output.Value.WriteAsync(_captured!, 0, _capturedLength, cancellationToken).ConfigureAwait(false);
+                if (_captured is { } held) await _output.Value.WriteAsync(held, 0, _capturedLength, cancellationToken).ConfigureAwait(false);
                 ClearCaptured();
                 Capture(buffer, offset, count);
             }
 
             private void ForwardCaptured()
             {
-                if (_capturedLength == 0) return;
-                _output.Value.Write(_captured!, 0, _capturedLength);
+                if (_capturedLength == 0 || _captured is not { } held) return;
+                _output.Value.Write(held, 0, _capturedLength);
                 ClearCaptured();
             }
 
             private void ClearCaptured()
             {
-                Array.Clear(_captured!, 0, _capturedLength);
+                if (_captured != null) Array.Clear(_captured, 0, _capturedLength);
                 _capturedLength = 0;
             }
 
@@ -213,7 +213,7 @@ namespace EmbedIO.Internal
 
             private async Task ForwardThenCaptureAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
             {
-                await _output.Value.WriteAsync(_captured!, 0, _capturedLength, cancellationToken).ConfigureAwait(false);
+                if (_captured is { } held) await _output.Value.WriteAsync(held, 0, _capturedLength, cancellationToken).ConfigureAwait(false);
                 ClearCaptured();
                 Capture(buffer.Span);
             }
