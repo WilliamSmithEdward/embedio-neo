@@ -35,8 +35,6 @@ modular request pipeline.
 - Informational responses, trailers and optional capsule/tunnel APIs.
 - Async I/O and graceful drain, with documented protocol and platform limits.
 
-<a id="support-for-ssl"></a>
-
 ## Protocols and platforms
 
 | Capability | Support |
@@ -67,8 +65,6 @@ dotnet add package EmbedIO-Neo
 
 To build from source, use the SDK selected by `global.json` and reference
 `src/EmbedIO/EmbedIO.csproj` from your application.
-
-<a id="webserver-setup"></a>
 
 ## Usage
 
@@ -104,9 +100,6 @@ catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
 parameters. To serve files, add `WithStaticFolder("/", directory, true)` after
 your API modules; [mount order](docs/guides/multiple-static-folders.md) determines
 which module handles a request.
-
-<a id="included-modules"></a>
-<a id="websockets-example"></a>
 
 ## Guides and tools
 
