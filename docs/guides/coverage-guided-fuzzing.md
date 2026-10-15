@@ -86,6 +86,8 @@ The runner builds AFL++ 5.03c from a fixed source commit and checks its archive
 hash, on a digest-pinned .NET SDK image. One CPU and 4 GiB bound the container.
 The source is mounted read-only and copied into the disposable container; only
 the published library copy is instrumented. Production outputs are unchanged.
+Keep this Dockerfile's SDK tag and digest aligned with `global.json` when moving
+the SDK; the container obeys the same exact-version requirement as other builds.
 
 Before mutation, `afl-showmap` must report nonempty, distinct coverage maps for
 two seed inputs. The dotnet executable has no native AFL signature, so the
@@ -108,6 +110,8 @@ A temporary, uncommitted exception for a mutated `!` input was retained as a
 crash and made the runner fail. After a successful standalone build, replay of
 that saved input reproduced the same exception. The temporary predicate was
 then removed before the clean validation campaign.
+The final clean sixty-second container run completed 21,393 executions, retained
+25 new corpus entries and saved no crashes or hangs.
 
 ## Upstream tooling
 

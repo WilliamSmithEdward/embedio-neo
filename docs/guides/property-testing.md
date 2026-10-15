@@ -27,8 +27,8 @@ same command on the same source and dependency versions to reproduce a campaign.
 The Fuzz workflow uses its run ID to choose a seed and retains the output in
 the `http-transport-fuzz` artifact alongside the existing campaigns.
 
-FsCheck and its locked FSharp.Core dependency belong only to the nonpackable
-fuzz executable, outside the ordinary solution. They do not enter production
+FsCheck and its locked FSharp.Core dependency belong only to the existing
+nonpackable fuzz executable in the solution. They do not enter production
 packages or change NUnit discovery. The existing mutation and protocol-oracle
 campaigns remain enabled. These properties do not provide coverage-guided
 protocol exploration, listener stress, or a complete fuzzing solution.
