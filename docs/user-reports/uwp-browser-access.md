@@ -179,7 +179,9 @@ routing, actual endpoints, independent cookie jars and shutdown. They preserve
 existing behavior rather than adding a UWP-specific library switch.
 
 The test-only [AppContainer fixture](../../test/EmbedIO.AppContainerSmoke) and
-[pinned Windows job](../../.github/workflows/appcontainer.yml) check the child
+[pinned Windows job](../../.github/workflows/appcontainer.yml) (manual only since
+2026-10-15: `gh workflow run appcontainer.yml --ref <branch>`; it is no longer
+part of the per-pull-request CI run) check the child
 process's restricted token and package SID, blocked incoming loopback before and
 after an outbound allowance, real HTML/API/session responses under an inbound
 session, restoration after that session ends, and scoped profile/ACL/exemption

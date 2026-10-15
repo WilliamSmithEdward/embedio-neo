@@ -5,12 +5,22 @@ on:
       update-locks:
         type: boolean
         default: false
+      include-ios:
+        # CI leaves iOS out of its pull-request and push runs (owner decision,
+        # 2026-10-15: about 8 minutes of macOS wall time per run). A manual
+        # dispatch includes it by default.
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       update-locks:
         description: Regenerate the test-only package locks for review
         type: boolean
         default: false
+      include-ios:
+        description: Run the iOS simulator target as well as Windows, Mac Catalyst and Android
+        type: boolean
+        default: true
 env:
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
   DisableImplicitNuGetFallbackFolder: true
@@ -22,20 +32,10 @@ jobs:
     name: MAUI HTTPS (${{ matrix.platform }})
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: windows
-            os: windows-2025
-            workload: maui-windows
-          - platform: ios
-            os: macos-26
-            workload: maui-ios
-          - platform: maccatalyst
-            os: macos-26
-            workload: maui-maccatalyst
-          - platform: android
-            os: ubuntu-24.04
-            workload: maui-android
+      # The iOS leg (macos-26, workload maui-ios) is present only when the caller
+      # sets include-ios, so an unrequested platform is absent from the job list
+      # rather than present and skipped. The other three legs never change.
+      matrix: ${{ fromJSON(inputs.include-ios && '{"include":[{"platform":"windows","os":"windows-2025","workload":"maui-windows"},{"platform":"ios","os":"macos-26","workload":"maui-ios"},{"platform":"maccatalyst","os":"macos-26","workload":"maui-maccatalyst"},{"platform":"android","os":"ubuntu-24.04","workload":"maui-android"}]}' || '{"include":[{"platform":"windows","os":"windows-2025","workload":"maui-windows"},{"platform":"maccatalyst","os":"macos-26","workload":"maui-maccatalyst"},{"platform":"android","os":"ubuntu-24.04","workload":"maui-android"}]}') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     env:

@@ -3862,8 +3862,11 @@ traffic, retry or delay between cycles. Managed events record each bind/dispose
 boundary. A 100 ms observation interval occurs only after the result, allowing
 late cleanup events to be recorded without changing that result.
 
-The CI workflow has a default-false `quic-rebind-probe` dispatch input. When
-explicitly selected, the macOS test job builds a test-only C dylib and uses the
+The manual `Diagnostics` workflow (`.github/workflows/diagnostics.yml`; the
+input lived in `ci.yml` until the diagnostics moved out of CI) has a
+default-false `quic-rebind-probe` dispatch input. When
+explicitly selected, a macOS job with the regression job's pinned native
+library builds a test-only C dylib and uses the
 [dyld interposing section ABI](https://github.com/apple-oss-distributions/dyld/blob/main/include/mach-o/dyld-interposing.h)
 to observe UDP bind/close calls in that one probe process. It records descriptor,
 port, result, errno and monotonic begin/end timestamps plus managed markers on
@@ -3957,7 +3960,8 @@ runs retain their real failed status; the PR remains draft/unmerged.
 
 ### Test-only native cleanup candidate
 
-The optional CI dispatch input `quic-cleanup-experiment` builds both an unmodified
+The optional `quic-cleanup-experiment` dispatch input (now on the manual
+`Diagnostics` workflow, `.github/workflows/diagnostics.yml`) builds both an unmodified
 control and a patched candidate from MsQuic commit
 `819ab74f851ee168504cbc392ec32e7bed1d82e9` (2.6.2), using the same compiler,
 quictls provider, pinned TLS/gtest submodules and system libcrypto. It does not
@@ -4591,7 +4595,8 @@ Fresh exact-head platform/security checks remain necessary. No broad throughput,
 whole-engine completion or native macOS cleanup resolution is claimed.
 ### Self-contained macOS native candidate experiment
 
-A separate opt-in quic-self-contained-experiment dispatch now builds both native
+A separate opt-in quic-self-contained-experiment dispatch (an input of the
+manual `Diagnostics` workflow) now builds both native
 control and candidate with QUIC_USE_SYSTEM_LIBCRYPTO=OFF. The pinned quictls
 submodule supplies static crypto; its VERSION.dat and source commit are retained.
 The existing Homebrew-linked experiment remains the default. Neither mode changes

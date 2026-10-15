@@ -120,8 +120,11 @@ with .NET 10, the EmbedIO listener, and real HTTP requests. They check caught
 worker errors, rotation, explicit activity recreation, brief Home/resume, and
 orderly listener replacement while recording process IDs and listener
 generations. CI retains JSON observations, logcat, activity state, and emulator
-logs in the `android-smoke` artifact. The Android job is enabled and required by
-the aggregate gate. A configured or skipped job is not replacement-engine
+logs in the `android-smoke` artifact. The Android job runs on pushes to `main`
+and manual dispatches (`gh workflow run android-smoke.yml --ref <branch>`) and is
+required by the aggregate gate there; pull requests skip it since 2026-10-15
+(owner decision) while the MAUI HTTPS Android leg still runs on every code pull
+request. A configured or skipped job is not replacement-engine
 validation; verify the run and artifact for the relevant source. See the
 [CI status and retained evidence](maui-https-validation.md#ci-status-and-retained-evidence).
 The [verified emulator run](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/37267444705)

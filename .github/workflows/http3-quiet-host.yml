@@ -1,14 +1,14 @@
 name: HTTP3 host controls
 
+# Manual research campaign (issue #283), about 40 to 60 minutes across its two
+# runners: paced HTTP/3 churn on a quiet Linux reference host and under bounded
+# CPU contention, repeated on Windows. It used to run on pull requests to the
+# retired codex/managed-http-engine integration branch; run it by hand with
+# `gh workflow run http3-quiet-host.yml --ref <branch>`. The method, the
+# acceptance rules and the recorded results are in
+# docs/project/http3-quiet-host-validation.md.
+
 on:
-  pull_request:
-    branches: [codex/managed-http-engine]
-    paths:
-      - '.github/workflows/http3-quiet-host.yml'
-      - 'scripts/http3_quiet_campaign.py'
-      - 'scripts/test_http3_quiet_campaign.py'
-      - 'test/EmbedIO.LoadBenchmark/**'
-      - 'docs/project/http3-quiet-host-validation.md'
   workflow_dispatch:
 
 permissions:

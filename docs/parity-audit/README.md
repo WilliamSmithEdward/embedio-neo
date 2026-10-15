@@ -62,7 +62,9 @@ The pinned NuGet lock files also record package content hashes. Raw per-implemen
 JSON, assembly/runtime metadata, build/run logs, differences and API additions
 are written under ignored `TestResults/parity-audit`. The summary records the
 Git commit and working-tree state. Required desktop CI runs the audit and uploads
-that directory with its other test results; cross-platform success must be verified
+that directory with its other test results: on Windows and Linux for every code
+pull request, and on macOS as well for pushes to `main` and manual dispatches
+(owner decision, 2026-10-15). Cross-platform success must be verified
 from those actual artifacts.
 
 Initial Linux/macOS PR jobs aborted in the upstream native workload. Linux logs

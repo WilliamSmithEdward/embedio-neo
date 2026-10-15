@@ -1,20 +1,19 @@
 name: Teardown exception cost controls
+
+# Manual research campaign (issue #282), about 40 to 60 minutes on one Linux
+# runner: the quiet teardown-exception profile and the observer-free A/A and
+# cost comparisons. It used to run on ready-for-review pull requests to the
+# retired codex/managed-http-engine integration branch; run it by hand with
+# `gh workflow run teardown-cost.yml --ref <branch>`. The method, the
+# acceptance rules and the recorded results are in
+# docs/project/http-teardown-exceptions.md.
+
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [codex/managed-http-engine]
-    paths:
-      - 'scripts/teardown_cost_campaign.py'
-      - 'scripts/test_teardown_cost_campaign.py'
-      - 'test/EmbedIO.LoadBenchmark/**'
-      - '.github/workflows/teardown-cost.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   quiet-cost:
-    # Drafts validate tooling first; ready_for_review schedules the full source campaign.
-    if: github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft
     name: Quiet exception profile and A/A cost control
     runs-on: ubuntu-24.04
     timeout-minutes: 60
