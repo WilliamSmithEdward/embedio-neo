@@ -1,0 +1,1764 @@
+{
+  "baselineCommit": "c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+  "candidateCommit": "14060ec84c5deed42549c3f2dddccab000fa91ab",
+  "method": "Windows/.NET 10.0.13; HTTP/1 loopback; 4 alternating engine rounds; actual 8 connections; paced 64 requests/sec (pipeline batches approximate 65); 5sec warmup,15sec measurement; server CPUs0-3,client4-7; isolated shared heavy/network slots. Prefix scenario selection also included close100. Component ABBA has TieredCompilation=0, counting transport, five internal rounds/sample; informational only.",
+  "decision": "Mixed warm data; no warm improvement or non-regression established. Preserve warm steady-state/tail priority and leave candidate unmerged for further validation.",
+  "summary": [
+    {
+      "scenario": "h1-plain-json1k-c64",
+      "engine": "baseline",
+      "rounds": 4,
+      "p50Milliseconds": {
+        "median": 0.2319,
+        "min": 0.2271,
+        "max": 0.2399
+      },
+      "p95Milliseconds": {
+        "median": 0.28790000000000004,
+        "min": 0.2847,
+        "max": 0.3103
+      },
+      "p99Milliseconds": {
+        "median": 0.3407,
+        "min": 0.3071,
+        "max": 0.9599
+      }
+    },
+    {
+      "scenario": "h1-plain-json1k-c64",
+      "engine": "candidate",
+      "rounds": 4,
+      "p50Milliseconds": {
+        "median": 0.2399,
+        "min": 0.2367,
+        "max": 0.2463
+      },
+      "p95Milliseconds": {
+        "median": 0.2879,
+        "min": 0.2879,
+        "max": 0.2943
+      },
+      "p99Milliseconds": {
+        "median": 0.3407,
+        "min": 0.3295,
+        "max": 0.4223
+      }
+    },
+    {
+      "scenario": "h1-plain-pipe16-c16",
+      "engine": "baseline",
+      "rounds": 4,
+      "p50Milliseconds": {
+        "median": 0.3983,
+        "min": 0.3711,
+        "max": 0.4159
+      },
+      "p95Milliseconds": {
+        "median": 0.6398999999999999,
+        "min": 0.6207,
+        "max": 0.6591
+      },
+      "p99Milliseconds": {
+        "median": 0.7295,
+        "min": 0.7103,
+        "max": 0.7743
+      }
+    },
+    {
+      "scenario": "h1-plain-pipe16-c16",
+      "engine": "candidate",
+      "rounds": 4,
+      "p50Milliseconds": {
+        "median": 0.3839,
+        "min": 0.3359,
+        "max": 0.4159
+      },
+      "p95Milliseconds": {
+        "median": 0.6271,
+        "min": 0.5823,
+        "max": 0.6783
+      },
+      "p99Milliseconds": {
+        "median": 0.7646999999999999,
+        "min": 0.7039,
+        "max": 0.7935
+      }
+    },
+    {
+      "scenario": "h1-plain-small-c64",
+      "engine": "baseline",
+      "rounds": 4,
+      "p50Milliseconds": {
+        "median": 0.18309999999999998,
+        "min": 0.1807,
+        "max": 0.1951
+      },
+      "p95Milliseconds": {
+        "median": 0.22870000000000001,
+        "min": 0.2271,
+        "max": 0.2335
+      },
+      "p99Milliseconds": {
+        "median": 0.2495,
+        "min": 0.2431,
+        "max": 0.2559
+      }
+    },
+    {
+      "scenario": "h1-plain-small-c64",
+      "engine": "candidate",
+      "rounds": 4,
+      "p50Milliseconds": {
+        "median": 0.1839,
+        "min": 0.1759,
+        "max": 0.1935
+      },
+      "p95Milliseconds": {
+        "median": 0.2271,
+        "min": 0.2207,
+        "max": 0.2463
+      },
+      "p99Milliseconds": {
+        "median": 0.2463,
+        "min": 0.2399,
+        "max": 0.5439
+      }
+    },
+    {
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "baseline",
+      "rounds": 4,
+      "p50Milliseconds": {
+        "median": 0.18309999999999998,
+        "min": 0.1743,
+        "max": 0.1919
+      },
+      "p95Milliseconds": {
+        "median": 0.2271,
+        "min": 0.2207,
+        "max": 0.2303
+      },
+      "p99Milliseconds": {
+        "median": 0.2495,
+        "min": 0.2431,
+        "max": 0.2623
+      }
+    },
+    {
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "candidate",
+      "rounds": 4,
+      "p50Milliseconds": {
+        "median": 0.18309999999999998,
+        "min": 0.1791,
+        "max": 0.1887
+      },
+      "p95Milliseconds": {
+        "median": 0.22549999999999998,
+        "min": 0.2207,
+        "max": 0.2303
+      },
+      "p99Milliseconds": {
+        "median": 0.25270000000000004,
+        "min": 0.2463,
+        "max": 0.2719
+      }
+    }
+  ],
+  "samples": [
+    {
+      "scenario": "h1-plain-json1k-c64",
+      "engine": "baseline",
+      "round": 1,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.2399,
+        "p95Milliseconds": 0.2847,
+        "p99Milliseconds": 0.3071,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-json1k-c64\\baseline-r1.json",
+      "rawSha256": "6f5c0263471f2bea881e9fe0b2812c8ebd33f5827ff5a837a221a9b74c6e238c"
+    },
+    {
+      "scenario": "h1-plain-json1k-c64",
+      "engine": "baseline",
+      "round": 2,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.2367,
+        "p95Milliseconds": 0.2847,
+        "p99Milliseconds": 0.3455,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-json1k-c64\\baseline-r2.json",
+      "rawSha256": "ec659ece283d25fc65f59b0f7d06910173a72c296ed031e4807702bf21fd9e54"
+    },
+    {
+      "scenario": "h1-plain-json1k-c64",
+      "engine": "baseline",
+      "round": 3,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.2271,
+        "p95Milliseconds": 0.3103,
+        "p99Milliseconds": 0.9599,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-json1k-c64\\baseline-r3.json",
+      "rawSha256": "65f584b85a85d3b38af03daf52a55c1ef7b64da9be8f728e917f75d39b4b9505"
+    },
+    {
+      "scenario": "h1-plain-json1k-c64",
+      "engine": "baseline",
+      "round": 4,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.2271,
+        "p95Milliseconds": 0.2911,
+        "p99Milliseconds": 0.3359,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-json1k-c64\\baseline-r4.json",
+      "rawSha256": "245a5d5337c793ece819d753486996be52f1ce6bd9a808444a5c972a75b7e44e"
+    },
+    {
+      "scenario": "h1-plain-json1k-c64",
+      "engine": "candidate",
+      "round": 1,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.2463,
+        "p95Milliseconds": 0.2943,
+        "p99Milliseconds": 0.4223,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-json1k-c64\\candidate-r1.json",
+      "rawSha256": "e0604c40a2c48f1cac2d37f5507481907c10579e35327b3047333c978cf67998"
+    },
+    {
+      "scenario": "h1-plain-json1k-c64",
+      "engine": "candidate",
+      "round": 2,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.2399,
+        "p95Milliseconds": 0.2879,
+        "p99Milliseconds": 0.3295,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-json1k-c64\\candidate-r2.json",
+      "rawSha256": "199063474743030caf946d90f46fb97bc3e0dca7300ec578003f90684b111cff"
+    },
+    {
+      "scenario": "h1-plain-json1k-c64",
+      "engine": "candidate",
+      "round": 3,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.2399,
+        "p95Milliseconds": 0.2879,
+        "p99Milliseconds": 0.3487,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-json1k-c64\\candidate-r3.json",
+      "rawSha256": "ac27de768d671126cc48fad709788f328f0139dc9242f00e767798181a51e9a8"
+    },
+    {
+      "scenario": "h1-plain-json1k-c64",
+      "engine": "candidate",
+      "round": 4,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.2367,
+        "p95Milliseconds": 0.2879,
+        "p99Milliseconds": 0.3327,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-json1k-c64\\candidate-r4.json",
+      "rawSha256": "33f3b5a1622f1593d1ba0ef2dd6650d82ed9fbf2aa252552102ef525f99d507c"
+    },
+    {
+      "scenario": "h1-plain-pipe16-c16",
+      "engine": "baseline",
+      "round": 1,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.4159,
+        "p95Milliseconds": 0.6335,
+        "p99Milliseconds": 0.7167,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-pipe16-c16\\baseline-r1.json",
+      "rawSha256": "c541ee5a40c9592fb6e784b2f6fd6231267e20b420ad2981a72d667bf150f20e"
+    },
+    {
+      "scenario": "h1-plain-pipe16-c16",
+      "engine": "baseline",
+      "round": 2,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.3871,
+        "p95Milliseconds": 0.6207,
+        "p99Milliseconds": 0.7103,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-pipe16-c16\\baseline-r2.json",
+      "rawSha256": "7ac37b14587348f5ed3eb31ece594b6c15ea58a39c2428365aa31d843eb06426"
+    },
+    {
+      "scenario": "h1-plain-pipe16-c16",
+      "engine": "baseline",
+      "round": 3,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.4095,
+        "p95Milliseconds": 0.6591,
+        "p99Milliseconds": 0.7423,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-pipe16-c16\\baseline-r3.json",
+      "rawSha256": "b7f88bc8a7d96866538628371db455e2165acb87f803fb2ac57eb2547fd6a6c7"
+    },
+    {
+      "scenario": "h1-plain-pipe16-c16",
+      "engine": "baseline",
+      "round": 4,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.3711,
+        "p95Milliseconds": 0.6463,
+        "p99Milliseconds": 0.7743,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-pipe16-c16\\baseline-r4.json",
+      "rawSha256": "517892a3af68b660c9df61e790c5f45a583336e69a98746e5da8f6ab17db04f8"
+    },
+    {
+      "scenario": "h1-plain-pipe16-c16",
+      "engine": "candidate",
+      "round": 1,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.4159,
+        "p95Milliseconds": 0.6527,
+        "p99Milliseconds": 0.7039,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-pipe16-c16\\candidate-r1.json",
+      "rawSha256": "4eeb6b338b4de70ec831b49354b64af7cc80ec276ac881caf6f0958cc8446df3"
+    },
+    {
+      "scenario": "h1-plain-pipe16-c16",
+      "engine": "candidate",
+      "round": 2,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.3359,
+        "p95Milliseconds": 0.5823,
+        "p99Milliseconds": 0.7871,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-pipe16-c16\\candidate-r2.json",
+      "rawSha256": "3978d0b26094d5b196d31b48a8cb74697de082a2fbc40f7d4fe7cbcc72f64826"
+    },
+    {
+      "scenario": "h1-plain-pipe16-c16",
+      "engine": "candidate",
+      "round": 3,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.4031,
+        "p95Milliseconds": 0.6783,
+        "p99Milliseconds": 0.7935,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-pipe16-c16\\candidate-r3.json",
+      "rawSha256": "49816b4176a74ec69797b9760901d6d14a5f6a20c3a9723fcfe1aace11c4297f"
+    },
+    {
+      "scenario": "h1-plain-pipe16-c16",
+      "engine": "candidate",
+      "round": 4,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.3647,
+        "p95Milliseconds": 0.6015,
+        "p99Milliseconds": 0.7423,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-pipe16-c16\\candidate-r4.json",
+      "rawSha256": "f8983bcc033c5e92c88e0e97539fc8922e87f1549a1365b303c26c58caf22946"
+    },
+    {
+      "scenario": "h1-plain-small-c64",
+      "engine": "baseline",
+      "round": 1,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1839,
+        "p95Milliseconds": 0.2303,
+        "p99Milliseconds": 0.2495,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64\\baseline-r1.json",
+      "rawSha256": "145108f5e0eb11f43e74c8a654a711890ff2586b0d56928a3f152cc2fbb96b15"
+    },
+    {
+      "scenario": "h1-plain-small-c64",
+      "engine": "baseline",
+      "round": 2,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1823,
+        "p95Milliseconds": 0.2271,
+        "p99Milliseconds": 0.2431,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64\\baseline-r2.json",
+      "rawSha256": "9c571bde81cb9c8f0192c31c4df5f77ec9ae32e7e82d016cd5c8977d56b435ea"
+    },
+    {
+      "scenario": "h1-plain-small-c64",
+      "engine": "baseline",
+      "round": 3,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1951,
+        "p95Milliseconds": 0.2335,
+        "p99Milliseconds": 0.2495,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64\\baseline-r3.json",
+      "rawSha256": "00c7d96b374dc73a566b6e03f7b427c3c6ad9b6f691a144032780d75931bdb63"
+    },
+    {
+      "scenario": "h1-plain-small-c64",
+      "engine": "baseline",
+      "round": 4,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1807,
+        "p95Milliseconds": 0.2271,
+        "p99Milliseconds": 0.2559,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64\\baseline-r4.json",
+      "rawSha256": "14078a831daecafaa57bf0632e8a26b03e4ba7eafa6fd8db03dbae457875f169"
+    },
+    {
+      "scenario": "h1-plain-small-c64",
+      "engine": "candidate",
+      "round": 1,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1935,
+        "p95Milliseconds": 0.2271,
+        "p99Milliseconds": 0.2463,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64\\candidate-r1.json",
+      "rawSha256": "8f45f4d835e05dc0e18fcb5d27319358bfd834360caeb921605a509d2c2a46ac"
+    },
+    {
+      "scenario": "h1-plain-small-c64",
+      "engine": "candidate",
+      "round": 2,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1759,
+        "p95Milliseconds": 0.2207,
+        "p99Milliseconds": 0.2399,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64\\candidate-r2.json",
+      "rawSha256": "2438c7f703654f48751aec175ec9fa227680782c1d6dec3e5317820c7b4c4c0b"
+    },
+    {
+      "scenario": "h1-plain-small-c64",
+      "engine": "candidate",
+      "round": 3,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1919,
+        "p95Milliseconds": 0.2271,
+        "p99Milliseconds": 0.2463,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64\\candidate-r3.json",
+      "rawSha256": "e3d016ce020540167a3927222d80aa5dec093c2fc8b4f128ce32df4f20ef6ac8"
+    },
+    {
+      "scenario": "h1-plain-small-c64",
+      "engine": "candidate",
+      "round": 4,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1759,
+        "p95Milliseconds": 0.2463,
+        "p99Milliseconds": 0.5439,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64\\candidate-r4.json",
+      "rawSha256": "7342b876a4438053929fd3037688c99c4a49d1b63cce92b61bdcf3f9904d9199"
+    },
+    {
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "baseline",
+      "round": 1,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1919,
+        "p95Milliseconds": 0.2303,
+        "p99Milliseconds": 0.2527,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64-close100\\baseline-r1.json",
+      "rawSha256": "1b56fd7eea4fbda639293df321a375b789cc73deaa9e006f7f99ce215381d9ac"
+    },
+    {
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "baseline",
+      "round": 2,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1855,
+        "p95Milliseconds": 0.2271,
+        "p99Milliseconds": 0.2623,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64-close100\\baseline-r2.json",
+      "rawSha256": "8f2984653f8b8cc8db0742dcdfed3b1c04bbb7756b4c863a5053c610d8b41783"
+    },
+    {
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "baseline",
+      "round": 3,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1807,
+        "p95Milliseconds": 0.2271,
+        "p99Milliseconds": 0.2463,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64-close100\\baseline-r3.json",
+      "rawSha256": "999b16fdeef1e6fca57de37d84f2ece5a9835d9e6a69cf640921539c6517620f"
+    },
+    {
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "baseline",
+      "round": 4,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1743,
+        "p95Milliseconds": 0.2207,
+        "p99Milliseconds": 0.2431,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-baseline\\EmbedIO.dll",
+        "sha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64-close100\\baseline-r4.json",
+      "rawSha256": "8e2c2542749a4eb0f743ad37c0c1333650017c77b0705864d91dbf9eb5b0adb1"
+    },
+    {
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "candidate",
+      "round": 1,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1887,
+        "p95Milliseconds": 0.2303,
+        "p99Milliseconds": 0.2495,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64-close100\\candidate-r1.json",
+      "rawSha256": "52cd3ceb460f43169b9b2c3e2d831e8658b5d7cb9d6b31051154cd761bdb39dd"
+    },
+    {
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "candidate",
+      "round": 2,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1839,
+        "p95Milliseconds": 0.2239,
+        "p99Milliseconds": 0.2559,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64-close100\\candidate-r2.json",
+      "rawSha256": "cadd13ad17cbd264690b1a00770cd113ad85ec382aeeb52d2db3fab13fab85e8"
+    },
+    {
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "candidate",
+      "round": 3,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1823,
+        "p95Milliseconds": 0.2271,
+        "p99Milliseconds": 0.2719,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64-close100\\candidate-r3.json",
+      "rawSha256": "8c9364af9c6613d1c1cd41cd01c747431cf64062aa5c71740af16fa6eb17af48"
+    },
+    {
+      "scenario": "h1-plain-small-c64-close100",
+      "engine": "candidate",
+      "round": 4,
+      "requestRate": 64,
+      "connections": 8,
+      "client": {
+        "requests": 960,
+        "error": null,
+        "p50Milliseconds": 0.1791,
+        "p95Milliseconds": 0.2207,
+        "p99Milliseconds": 0.2463,
+        "latencyCount": 960
+      },
+      "core": {
+        "name": "EmbedIO",
+        "version": "2.2.0+c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+        "path": "C:\\Users\\William\\.codex\\worktrees\\multi-connection-fuzz\\embedio-neo\\TestResults\\latency-next\\load-candidate\\EmbedIO.dll",
+        "sha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A"
+      },
+      "rawPath": "TestResults\\latency-next\\warm-load\\samples\\h1-plain-small-c64-close100\\candidate-r4.json",
+      "rawSha256": "db8886abd38edde4e08380cc880aed27a89e2a7eacaad9f4094c6a3d5d16fe99"
+    }
+  ],
+  "components": [
+    {
+      "sample": "warm-component-baseline-1",
+      "coreSha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D",
+      "rows": [
+        {
+          "name": "context-only",
+          "iterations": 5000,
+          "medianNanoseconds": 353.18,
+          "allocatedBytes": 1768.8256,
+          "transportWrites": 0,
+          "transportBytes": 0,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-13",
+          "iterations": 5000,
+          "medianNanoseconds": 1870.4,
+          "allocatedBytes": 4248.8256,
+          "transportWrites": 1,
+          "transportBytes": 231,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-13",
+          "iterations": 5000,
+          "medianNanoseconds": 1873.22,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 1,
+          "transportBytes": 244,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 2010.7,
+          "allocatedBytes": 4280.8256,
+          "transportWrites": 1,
+          "transportBytes": 16605,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 1986.08,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 1,
+          "transportBytes": 16618,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 2215,
+          "allocatedBytes": 4301.76,
+          "transportWrites": 2,
+          "transportBytes": 1048799,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 2326,
+          "allocatedBytes": 4357.76,
+          "transportWrites": 3,
+          "transportBytes": 1048812,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-13-dispose",
+          "iterations": 5000,
+          "medianNanoseconds": 1981.48,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 2,
+          "transportBytes": 249,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-1024",
+          "iterations": 5000,
+          "medianNanoseconds": 97.52,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1024-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 108.66,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1024-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 88.18,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 219.9,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-16384-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 229.92,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-16384-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 215.3,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-65536",
+          "iterations": 5000,
+          "medianNanoseconds": 915.98,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-65536-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 924.16,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-65536-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 918.42,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-81920",
+          "iterations": 300,
+          "medianNanoseconds": 124,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-81920-memory",
+          "iterations": 300,
+          "medianNanoseconds": 99.66666666666667,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-81920-sync",
+          "iterations": 300,
+          "medianNanoseconds": 79,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 3
+        },
+        {
+          "name": "chunk-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 89.33333333333333,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1048576-memory",
+          "iterations": 300,
+          "medianNanoseconds": 97.33333333333333,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1048576-sync",
+          "iterations": 300,
+          "medianNanoseconds": 79.33333333333333,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 3
+        }
+      ],
+      "rawSha256": "8812d312d4975c917a19382da43bf43dc7f123152f1d34c79f4f8e7f1bfc02b8"
+    },
+    {
+      "sample": "warm-component-baseline-2",
+      "coreSha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D",
+      "rows": [
+        {
+          "name": "context-only",
+          "iterations": 5000,
+          "medianNanoseconds": 305.8,
+          "allocatedBytes": 1768.8256,
+          "transportWrites": 0,
+          "transportBytes": 0,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-13",
+          "iterations": 5000,
+          "medianNanoseconds": 1830.46,
+          "allocatedBytes": 4248.8256,
+          "transportWrites": 1,
+          "transportBytes": 231,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-13",
+          "iterations": 5000,
+          "medianNanoseconds": 1888.58,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 1,
+          "transportBytes": 244,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 2055.4,
+          "allocatedBytes": 4280.8256,
+          "transportWrites": 1,
+          "transportBytes": 16605,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 1977.68,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 1,
+          "transportBytes": 16618,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 2381,
+          "allocatedBytes": 4301.76,
+          "transportWrites": 2,
+          "transportBytes": 1048799,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 2242.6666666666665,
+          "allocatedBytes": 4357.76,
+          "transportWrites": 3,
+          "transportBytes": 1048812,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-13-dispose",
+          "iterations": 5000,
+          "medianNanoseconds": 1983.96,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 2,
+          "transportBytes": 249,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-1024",
+          "iterations": 5000,
+          "medianNanoseconds": 98.74,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1024-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 105.34,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1024-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 89.48,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 225.94,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-16384-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 230.66,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-16384-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 220.2,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-65536",
+          "iterations": 5000,
+          "medianNanoseconds": 924.28,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-65536-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 928.42,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-65536-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 919.96,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-81920",
+          "iterations": 300,
+          "medianNanoseconds": 92.33333333333333,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-81920-memory",
+          "iterations": 300,
+          "medianNanoseconds": 93,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-81920-sync",
+          "iterations": 300,
+          "medianNanoseconds": 76.33333333333333,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 3
+        },
+        {
+          "name": "chunk-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 96,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1048576-memory",
+          "iterations": 300,
+          "medianNanoseconds": 98.66666666666667,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1048576-sync",
+          "iterations": 300,
+          "medianNanoseconds": 76.66666666666667,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 3
+        }
+      ],
+      "rawSha256": "6c912c21b6f80f8858b2358c592af3439c788431bf2e4131bae5ac4fc4a94df2"
+    },
+    {
+      "sample": "warm-component-candidate-1",
+      "coreSha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A",
+      "rows": [
+        {
+          "name": "context-only",
+          "iterations": 5000,
+          "medianNanoseconds": 291.54,
+          "allocatedBytes": 1768.8256,
+          "transportWrites": 0,
+          "transportBytes": 0,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-13",
+          "iterations": 5000,
+          "medianNanoseconds": 1878.28,
+          "allocatedBytes": 4248.8256,
+          "transportWrites": 1,
+          "transportBytes": 231,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-13",
+          "iterations": 5000,
+          "medianNanoseconds": 1851.12,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 1,
+          "transportBytes": 244,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 2047.56,
+          "allocatedBytes": 4280.8256,
+          "transportWrites": 1,
+          "transportBytes": 16605,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 2055.4,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 1,
+          "transportBytes": 16618,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 2221,
+          "allocatedBytes": 4301.76,
+          "transportWrites": 2,
+          "transportBytes": 1048799,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 2209,
+          "allocatedBytes": 4357.76,
+          "transportWrites": 3,
+          "transportBytes": 1048812,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-13-dispose",
+          "iterations": 5000,
+          "medianNanoseconds": 2033.52,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 2,
+          "transportBytes": 249,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-1024",
+          "iterations": 5000,
+          "medianNanoseconds": 99.72,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1024-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 104.82,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1024-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 92.36,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 224.7,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-16384-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 229.78,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-16384-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 218.76,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-65536",
+          "iterations": 5000,
+          "medianNanoseconds": 911.36,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-65536-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 937.62,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-65536-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 924.38,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-81920",
+          "iterations": 300,
+          "medianNanoseconds": 92,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-81920-memory",
+          "iterations": 300,
+          "medianNanoseconds": 101.66666666666667,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-81920-sync",
+          "iterations": 300,
+          "medianNanoseconds": 81,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 3
+        },
+        {
+          "name": "chunk-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 94.33333333333333,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1048576-memory",
+          "iterations": 300,
+          "medianNanoseconds": 94,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1048576-sync",
+          "iterations": 300,
+          "medianNanoseconds": 83.33333333333333,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 3
+        }
+      ],
+      "rawSha256": "22943c2c216df778d6ef96076b06e4335e25fba4085546248eadba3f95d157a2"
+    },
+    {
+      "sample": "warm-component-candidate-2",
+      "coreSha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A",
+      "rows": [
+        {
+          "name": "context-only",
+          "iterations": 5000,
+          "medianNanoseconds": 359.96,
+          "allocatedBytes": 1768.8256,
+          "transportWrites": 0,
+          "transportBytes": 0,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-13",
+          "iterations": 5000,
+          "medianNanoseconds": 1836.12,
+          "allocatedBytes": 4248.8256,
+          "transportWrites": 1,
+          "transportBytes": 231,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-13",
+          "iterations": 5000,
+          "medianNanoseconds": 1805.1,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 1,
+          "transportBytes": 244,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 2014.1,
+          "allocatedBytes": 4280.8256,
+          "transportWrites": 1,
+          "transportBytes": 16605,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 1986.86,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 1,
+          "transportBytes": 16618,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-fixed-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 2188,
+          "allocatedBytes": 4301.76,
+          "transportWrites": 2,
+          "transportBytes": 1048799,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 2218.6666666666665,
+          "allocatedBytes": 4357.76,
+          "transportWrites": 3,
+          "transportBytes": 1048812,
+          "syncWrites": 0
+        },
+        {
+          "name": "first-chunked-13-dispose",
+          "iterations": 5000,
+          "medianNanoseconds": 1964.58,
+          "allocatedBytes": 4344.8256,
+          "transportWrites": 2,
+          "transportBytes": 249,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-1024",
+          "iterations": 5000,
+          "medianNanoseconds": 96.34,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1024-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 106.56,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1024-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 92.06,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 1031,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-16384",
+          "iterations": 5000,
+          "medianNanoseconds": 221.54,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-16384-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 232.8,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-16384-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 218.24,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 16392,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-65536",
+          "iterations": 5000,
+          "medianNanoseconds": 917.04,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-65536-memory",
+          "iterations": 5000,
+          "medianNanoseconds": 927.96,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-65536-sync",
+          "iterations": 5000,
+          "medianNanoseconds": 909.56,
+          "allocatedBytes": 0.008,
+          "transportWrites": 1,
+          "transportBytes": 65545,
+          "syncWrites": 1
+        },
+        {
+          "name": "chunk-81920",
+          "iterations": 300,
+          "medianNanoseconds": 96.66666666666667,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-81920-memory",
+          "iterations": 300,
+          "medianNanoseconds": 94.33333333333333,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-81920-sync",
+          "iterations": 300,
+          "medianNanoseconds": 88,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 81929,
+          "syncWrites": 3
+        },
+        {
+          "name": "chunk-1048576",
+          "iterations": 300,
+          "medianNanoseconds": 93.33333333333333,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1048576-memory",
+          "iterations": 300,
+          "medianNanoseconds": 91.66666666666667,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 0
+        },
+        {
+          "name": "chunk-1048576-sync",
+          "iterations": 300,
+          "medianNanoseconds": 81.33333333333333,
+          "allocatedBytes": 32.13333333333333,
+          "transportWrites": 3,
+          "transportBytes": 1048586,
+          "syncWrites": 3
+        }
+      ],
+      "rawSha256": "4fee629e380888d7f5dcb8c4e303c7552a323d94c84a8f13c8f2e36b0981bdfc"
+    }
+  ]
+}

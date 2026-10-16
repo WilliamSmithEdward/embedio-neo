@@ -44,8 +44,10 @@ dotnet test/EmbedIO.Performance/bin/Release/net10.0/EmbedIO.Performance.dll --en
 
 This launches a fresh server process for every sample and uses a separate client
 process. Readiness uses stdout, with no HTTP probe and no JSON initialization in
-the server. Five scenarios cover literal routes, the last of 100 literal routes,
-a parameterized route, a reflection controller and JSON serialization. Each
+the server. Seven scenarios cover literal routes, the last of 100 literal routes,
+a parameterized route, a reflection controller, JSON serialization, cookies and
+a 17,000-character header. Cookie field lines and the complete large header are
+validated as well as response bodies. Each
 scenario measures both the first server request and the first target request
 after 20 requests to a distinct control endpoint. It then records 100 complete,
 validated requests and their latency percentiles. Readiness reports separate
@@ -59,6 +61,13 @@ without retry. Cold means a fresh process, with OS/filesystem caches uncontrolle
 Warm percentiles cover only 100 requests and can include tiered JIT and the
 server's normal keep-alive connection rollover; they are not load-test tail
 latencies. Default tiered compilation remains enabled unless explicitly changed.
+
+The runner defaults to tracing Off. Set `EMBEDIO_LATENCY_TRACE_LEVEL=Information`
+to measure normal informational logging, or another `SourceLevels` name for a
+specific configuration. Set `EMBEDIO_LATENCY_SCENARIOS=cookies,large-header` to
+select distinct supported scenarios; omit it to run all seven. The environment
+record includes the selected scenarios and trace level. These controls affect
+only the test runner, and child servers inherit them.
 
 For comparisons, copy the same runner output twice and replace only `EmbedIO.dll`
 in one copy. Run A/B then B/A on a quiet machine, retaining each JSONL file. Each
