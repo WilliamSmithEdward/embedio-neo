@@ -547,6 +547,7 @@ namespace EmbedIO.Generators
 
             _meta = IsBuiltIn(attribute, _types.QueryData) ? new ParameterMeta(ParameterSource.QueryCollection, Literals.String(parameter.Name), false, null)
                 : IsBuiltIn(attribute, _types.FormData) ? new ParameterMeta(ParameterSource.FormCollection, Literals.String(parameter.Name), false, null)
+                : IsBuiltIn(attribute, _types.MultipartForm) ? new ParameterMeta(ParameterSource.Multipart, Literals.String(parameter.Name), true, null)
                 : CustomMeta(attribute, parameter);
             var instance = CreateAttributeInstance(attribute, setup, argument, ref problem);
             return instance is null
@@ -1080,6 +1081,7 @@ namespace EmbedIO.Generators
             FormCollection,
             JsonBody,
             Custom,
+            Multipart,
         }
 
         private sealed class ParameterMeta

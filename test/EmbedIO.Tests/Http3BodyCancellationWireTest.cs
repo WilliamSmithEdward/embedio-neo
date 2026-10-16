@@ -103,9 +103,12 @@ namespace EmbedIO.Tests
             using var certificate = Certificate();
             var reading = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var readFailure = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var canceledBeforeExit = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             await using var host = await Host.StartAsync(HttpListenerMode.EmbedIOHttp3, certificate, async context =>
             {
                 if (await Healthy(context)) return;
+                using var cancellationObserver = context.CancellationToken.Register(() => canceled.TrySetResult(true));
                 var buffer = new byte[16];
                 try
                 {
@@ -114,7 +117,28 @@ namespace EmbedIO.Tests
                     while (await pending != 0)
                         pending = context.Request.InputStream.ReadAsync(buffer, context.CancellationToken);
                 }
-                finally { canceled.TrySetResult(context.CancellationToken.IsCancellationRequested); }
+                catch (Exception error)
+                {
+                    readFailure.TrySetResult(error);
+                    throw;
+                }
+                finally
+                {
+                    readFailure.TrySetResult(null);
+                    // Direction completion and read failure can be observed in either order.
+                    // Keep the handler active until cancellation is independently observed:
+                    // request-worker cleanup after handler completion cannot satisfy this wait.
+                    try
+                    {
+                        await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                        canceledBeforeExit.TrySetResult(true);
+                    }
+                    catch
+                    {
+                        canceledBeforeExit.TrySetResult(false);
+                        throw;
+                    }
+                }
             }, native: native);
             await using var peer = await H3Peer.ConnectAsync(host, certificate);
             await using var request = await peer.OpenRequestAsync("POST", "/upload", false);
@@ -124,6 +148,11 @@ namespace EmbedIO.Tests
             Assert.That(stopped?.QuicError, Is.EqualTo(QuicError.StreamAborted));
             Assert.That(stopped?.ApplicationErrorCode, Is.EqualTo(0x10cL), "A request-wide failure is not graceful input abandonment.");
             Assert.That(await canceled.Task.WaitAsync(host.Token), Is.True);
+            Assert.That(await canceledBeforeExit.Task.WaitAsync(host.Token), Is.True,
+                "Cancellation must reach the still-active handler before request-worker cleanup.");
+            var failure = await readFailure.Task.WaitAsync(host.Token);
+            TestContext.Out.WriteLine("HTTP/3 request-wide body failure (native=" + native + "): " + failure);
+            Assert.That(failure, Is.Not.Null, "The abandoned upload must terminate its pending body read.");
             await peer.AssertHealthyAsync(host.Token);
         }
 

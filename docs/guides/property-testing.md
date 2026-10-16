@@ -1,13 +1,17 @@
-# Generated URL and query properties
+# Generated URL, query and multipart properties
 
 `test/EmbedIO.Fuzz` includes a test-only FsCheck 3.4.0 mode. It generates strings
 of up to 128 characters containing separators, malformed percent escapes,
-controls, ordinary text and Unicode. Four properties check:
+controls, ordinary text and Unicode. Five properties check:
 
 - URL normalization returns a valid path and is idempotent, for both ordinary
   paths and base paths.
 - Mutable and immutable query parsing return the same ordered keys and value
   arrays, with flag grouping both enabled and disabled.
+- Multipart file bodies round-trip byte for byte, and arbitrary raw multipart
+  parsing has the same result under ordinary and fragmented transport reads.
+  The shared AFL++/libFuzzer driver also supplies arbitrary binary input (bounded
+  to 64 KiB per multipart iteration) and valid/malformed multipart corpus seeds.
 
 Each failing input is shrunk by deleting progressively smaller chunks, down to
 single characters. Candidates are always shorter, including the empty string,
@@ -26,6 +30,12 @@ per property (1–100,000). Defaults are seed 1729 and 10,000 cases. Repeat the
 same command on the same source and dependency versions to reproduce a campaign.
 The Fuzz workflow uses its run ID to choose a seed and retains the output in
 the `http-transport-fuzz` artifact alongside the existing campaigns.
+
+Replay the shared multipart corpus without a native fuzzer:
+
+```sh
+dotnet run --project test/EmbedIO.SharpFuzz -c Release -- --multipart-corpus test/EmbedIO.SharpFuzz/corpus
+```
 
 FsCheck and its locked FSharp.Core dependency belong only to the existing
 nonpackable fuzz executable in the solution. They do not enter production

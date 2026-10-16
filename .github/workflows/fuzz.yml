@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   fuzz:
-    name: Fuzz URL data and HTTP transport framing
+    name: Fuzz URL data, multipart and HTTP transport framing
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -79,9 +79,6 @@ jobs:
     env:
       MODEL_CASES: ${{ github.event_name == 'schedule' && '5000' || '500' }}
       CONNECTION_CASES: ${{ github.event_name == 'schedule' && '128' || '32' }}
-    defaults:
-      run:
-        shell: pwsh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -90,6 +87,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Build the locked state-machine harness
+        shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force TestResults/fuzz | Out-Null
@@ -99,10 +97,12 @@ jobs:
           dotnet build test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj -c Release --no-restore 2>&1 | Tee-Object TestResults/fuzz/build.log
           if ($LASTEXITCODE) { throw 'Harness build failed.' }
       - name: Verify replay, shrinking and cleanup
+        shell: pwsh
         run: |
           dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machine-selftest 2>&1 | Tee-Object TestResults/fuzz/selftest.log
           if ($LASTEXITCODE) { throw 'State-machine runner self-test failed.' }
       - name: Replay every checked-in state trace
+        shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $corpus = @(Get-ChildItem test/EmbedIO.Fuzz/state-corpus -Filter '*.json' -File | Sort-Object Name)
@@ -112,6 +112,7 @@ jobs:
             if ($LASTEXITCODE) { throw "Corpus replay failed: $($trace.Name)" }
           }
       - name: Exercise shared resource models
+        shell: pwsh
         run: |
           $seed = [Math]::Max(1, [long]$env:GITHUB_RUN_ID % 2147483647)
           foreach ($scenario in @('websocket-budget', 'rate-limits', 'routes', 'tunnels', 'sessions')) {
@@ -119,6 +120,7 @@ jobs:
             if ($LASTEXITCODE) { throw "Shared-state campaign failed: $scenario" }
           }
       - name: Exercise real HTTP/1 and HTTP/2 connections
+        shell: pwsh
         run: |
           $seed = [Math]::Max(1, [long]$env:GITHUB_RUN_ID % 2147483647)
           foreach ($scenario in @('http1-connections', 'http2-connections')) {

@@ -3,6 +3,8 @@
 ###############################################################################
 * text=auto
 scripts/run-afl-container.sh text eol=lf
+# Multipart seeds are exact wire bytes, including deliberate CRLF and malformed LF.
+test/EmbedIO.SharpFuzz/corpus/multipart-* binary
 
 ###############################################################################
 # Set default behavior for command prompt diff.

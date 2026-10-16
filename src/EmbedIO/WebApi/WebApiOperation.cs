@@ -144,5 +144,8 @@ namespace EmbedIO.WebApi
 
         /// <summary>Another request-data attribute, which an OpenAPI document cannot describe.</summary>
         Custom,
+
+        /// <summary>A streaming multipart form (<see cref="MultipartFormAttribute"/>).</summary>
+        Multipart,
     }
 }
