@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace EmbedIO.Security.Internal
 {
@@ -65,12 +67,30 @@ namespace EmbedIO.Security.Internal
                     writer.Flush();
                     stream.Flush(true);
                 }
-                if (File.Exists(_path)) File.Replace(temporary, _path, null);
+                if (File.Exists(_path)) ReplaceExisting(() => File.Replace(temporary, _path, null));
                 else File.Move(temporary, _path);
             }
             finally
             {
                 if (File.Exists(temporary)) File.Delete(temporary);
+            }
+        }
+
+        // Windows ERROR_UNABLE_TO_REMOVE_REPLACED (1175) leaves both filenames intact.
+        // Retry that operation only: errors 1176/1177 can have changed the namespace.
+        // Keep File.Replace's metadata/ACL handling; never delete the destination first.
+        private static void ReplaceExisting(Action replace)
+        {
+            const int unableToRemoveReplacedFile = unchecked((int)0x80070497);
+            for (var attempt = 0; ; attempt++)
+            {
+                try { replace(); return; }
+                catch (IOException error) when (attempt < 3
+                    && error.HResult == unableToRemoveReplacedFile
+                    && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    Thread.Sleep(1 << attempt);
+                }
             }
         }
 

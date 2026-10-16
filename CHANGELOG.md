@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Permanent client-ban storage retries the Windows replacement error that leaves
+  both filenames intact, preserving metadata/ACL handling and confirmation only
+  after a successful save. Retries are bounded; other and persistent I/O failures
+  still propagate without a delete-first fallback.
+
+### Performance
+
+- Case-sensitive literal endpoint routes avoid regex construction and first-match
+  compilation while preserving matching semantics. A fresh-process HTTP latency
+  harness separates startup, first server request, first endpoint use and warm
+  requests; see the [measurement report](docs/project/first-endpoint-latency.md).
+
 ## [2.2.0] - 2026-10-16
 
 ### Added

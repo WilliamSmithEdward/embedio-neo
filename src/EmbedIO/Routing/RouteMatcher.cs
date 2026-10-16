@@ -15,8 +15,9 @@ namespace EmbedIO.Routing
         private static readonly Dictionary<(bool, string), RouteMatcher> Cache = new Dictionary<(bool, string), RouteMatcher>();
 
         private readonly Regex? _regex;
-        private readonly Lazy<Regex>? _unusedBaseRegex;
+        private readonly Lazy<Regex>? _fallbackRegex;
         private readonly bool _caseInsensitive;
+        private readonly string? _literalPath;
 
         private RouteMatcher(bool isBaseRoute, string route, string pattern, IReadOnlyList<string> parameterNames, bool caseInsensitive = false)
         {
@@ -24,15 +25,18 @@ namespace EmbedIO.Routing
             Route = route;
             ParameterNames = parameterNames;
             _caseInsensitive = caseInsensitive;
-            // Parameterless base routes use path matching below, so they need no compiled regex.
+            // Case-sensitive literal routes need no regex compilation, including on their first match.
             // Retain the fallback for callers that mutate the legacy concrete parameter-name list.
-            if (isBaseRoute && parameterNames.Count == 0 && !caseInsensitive)
-                _unusedBaseRegex = CreateBaseRegexFallback(pattern);
+            if (parameterNames.Count == 0 && !caseInsensitive)
+            {
+                _fallbackRegex = CreateRegexFallback(pattern);
+                if (!isBaseRoute) _literalPath = route.IndexOf("{{", StringComparison.Ordinal) < 0 ? route : string.Join("{", route.Split(new[] { "{{" }, StringSplitOptions.None));
+            }
             else
                 _regex = new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
         }
 
-        private static Lazy<Regex> CreateBaseRegexFallback(string pattern)
+        private static Lazy<Regex> CreateRegexFallback(string pattern)
             => new Lazy<Regex>(() => new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant));
 
         // Module-local copies never modify the public parser's case-sensitive cache.
@@ -168,7 +172,17 @@ namespace EmbedIO.Routing
                     return RouteMatch.UnsafeFromBasePath(Route, path);
             }
 
-            var match = (_regex ?? _unusedBaseRegex?.Value ?? throw new InvalidOperationException("The route matcher has no regular expression.")).Match(path);
+            if (_literalPath != null && ParameterNames.Count == 0)
+            {
+                // Preserve Regex '$': one final LF may follow a complete literal match.
+                var length = _literalPath.Length;
+                return (path.Length == length || (path.Length == length + 1 && path[length] == '\n'))
+                    && string.CompareOrdinal(path, 0, _literalPath, 0, length) == 0
+                    ? new RouteMatch(path, ParameterNames, Array.Empty<string>(), null)
+                    : null;
+            }
+
+            var match = (_regex ?? _fallbackRegex?.Value ?? throw new InvalidOperationException("The route matcher has no regular expression.")).Match(path);
             if (!match.Success)
                 return null;
 

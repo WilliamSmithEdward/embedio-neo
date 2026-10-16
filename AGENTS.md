@@ -1,3 +1,8 @@
+## Primer maintenance
+
+- William's standing preference (2026-10-16): keep `AGENT_PRIMER.md` up to date as part of every relevant change. Check APIs, defaults, behavior, supported runtimes/configurations, package/version guidance, security and ownership rules, examples, pitfalls and guide links. Update the primer in the same PR when affected; release preparation must verify its version and feature availability against the actual release.
+- When asked to refresh the primer, audit all commits since its last committed update, not only the current feature. Cover each change that affects application guidance, and link testing/fuzzing or performance workflows where relevant. Clearly distinguish released features from pending work; never describe an unmerged optimization or configured validation job as shipped or passed.
+
 ## Current upstream #554 work
 
 - William authorized the next newest unhandled backlog report, upstream #554, tracked as fork #107 on codex/upstream-554. The original report is Xamarin/UWP, not Android or full-trust MAUI Windows. All ten comments and paginated issue/comment reactions are saved under ignored TestResults/upstream-554. Participants to mention once an outcome is ready: anantashrit, michael-hawker, opcodewriter, dpaulino, thanoue, anatoly-abramov and Kalyxt. Exclude former maintainer rdeago while crediting relevant discussion.

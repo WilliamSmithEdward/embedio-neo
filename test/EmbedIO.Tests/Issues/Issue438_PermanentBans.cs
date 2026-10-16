@@ -2,6 +2,8 @@
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -202,6 +204,86 @@ namespace EmbedIO.Tests.Issues
             using var reopened = Create(capacity: 32).WithPermanentBanStore(folder.File);
             Assert.That(reopened.PermanentBannedClients.Count, Is.EqualTo(16));
             Assert.That(reopened.PermanentBannedClients, Is.EquivalentTo(snapshot));
+        }
+
+        private static Action<Action> ReplacementPolicy()
+            => (typeof(ClientBanningModule).Assembly.GetType("EmbedIO.Security.Internal.PermanentClientBanStore", true)
+                ?.GetMethod("ReplaceExisting", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new MissingMethodException("Permanent-ban replacement policy is unavailable."))
+                .CreateDelegate<Action<Action>>();
+
+        [TestCase(1175)]
+        [TestCase(1176)]
+        [TestCase(1177)]
+        [TestCase(32)]
+        [TestCase(33)]
+        [TestCase(5)]
+        public void ReplacementRetriesOnlyTheSafeWindowsFailure(int nativeError)
+        {
+            var attempts = 0;
+            var error = new IOException("Injected replacement failure.", unchecked((int)0x80070000) | nativeError);
+            Action replace = () => { if (++attempts == 1) throw error; };
+            if (nativeError == 1175 && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                ReplacementPolicy()(replace);
+                Assert.That(attempts, Is.EqualTo(2));
+            }
+            else
+            {
+                Assert.That(Assert.Throws<IOException>(() => ReplacementPolicy()(replace)), Is.SameAs(error));
+                Assert.That(attempts, Is.EqualTo(1));
+            }
+        }
+
+        [Test]
+        public void PersistentReplacementFailureIsBoundedAndPropagatesTheOriginalError()
+        {
+            var attempts = 0;
+            var error = new IOException("Persistent replacement failure.", unchecked((int)0x80070497));
+            Assert.That(Assert.Throws<IOException>(() => ReplacementPolicy()(() => { attempts++; throw error; })), Is.SameAs(error));
+            Assert.That(attempts, Is.EqualTo(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? 4 : 1));
+        }
+
+        [Test]
+        public void ReplacementCanRecoverOnItsLastAllowedAttempt()
+        {
+            var attempts = 0;
+            var error = new IOException("Transient replacement failure.", unchecked((int)0x80070497));
+            Action replace = () => { if (++attempts < 4) throw error; };
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                ReplacementPolicy()(replace);
+                Assert.That(attempts, Is.EqualTo(4));
+            }
+            else
+            {
+                Assert.That(Assert.Throws<IOException>(() => ReplacementPolicy()(replace)), Is.SameAs(error));
+                Assert.That(attempts, Is.EqualTo(1));
+            }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        [Platform("Win")]
+        public void SharingFailureDoesNotPublishBanChangesOrLeaveTemporaryFiles(bool unban)
+        {
+            using var folder = new StoreFolder();
+            using var module = Create().WithPermanentBanStore(folder.File);
+            Assert.That(module.TryBanClientPermanently("Alice"), Is.True);
+            var original = File.ReadAllBytes(folder.File);
+            using (var held = new FileStream(folder.File, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                Assert.Throws<IOException>(() =>
+                {
+                    if (unban) module.TryUnbanClientPermanently("Alice");
+                    else module.TryBanClientPermanently("Bob");
+                });
+                Assert.That(module.PermanentBannedClients, Is.EqualTo(new[] { "Alice" }));
+                Assert.That(File.ReadAllBytes(folder.File), Is.EqualTo(original));
+                Assert.That(Directory.GetFiles(folder.Path, "*.tmp"), Is.Empty);
+            }
+            if (unban) Assert.That(module.TryUnbanClientPermanently("Alice"), Is.True);
+            else Assert.That(module.TryBanClientPermanently("Bob"), Is.True);
         }
 
         private sealed class StoreFolder : IDisposable

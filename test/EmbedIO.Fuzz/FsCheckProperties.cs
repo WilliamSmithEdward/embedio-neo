@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using EmbedIO.Utilities;
+using EmbedIO.Routing;
+using System.Text.RegularExpressions;
 using FsCheck;
 using FsCheck.Fluent;
 using Microsoft.FSharp.Core;
@@ -51,6 +53,23 @@ internal static class FsCheckProperties
                                 immutable.GetValues(key) ?? Array.Empty<string>()));
                 }));
         }
+
+        Check.One(config.WithName("Literal terminal route parity with legacy regex"),
+            Prop.ForAll(inputs, input =>
+            {
+                var literal = UrlPath.Normalize("/" + input, false);
+                var template = literal.Replace("{", "{{", StringComparison.Ordinal);
+                var matcher = RouteMatcher.Parse(template, false);
+                var reference = new Regex("(?sn-imx)^" + Regex.Escape(literal) + "$", RegexOptions.CultureInvariant);
+                return new[] { literal, literal + "\n", literal + "\n\n", literal + "/", literal + "x", literal.ToUpperInvariant(), string.Empty }
+                    .All(path =>
+                    {
+                        var match = matcher.Match(path);
+                        return (match != null) == reference.IsMatch(path)
+                            && (match == null || (match.Path == path && match.SubPath == null && match.Count == 0
+                                && ReferenceEquals(match.Names, matcher.ParameterNames)));
+                    });
+            }));
 
         Check.One(config.WithName("Multipart binary round trip and fragmentation"),
             Prop.ForAll(inputs, input => MultipartFuzzChecks.CheckText(input)));

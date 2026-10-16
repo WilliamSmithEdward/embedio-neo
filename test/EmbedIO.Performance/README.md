@@ -36,6 +36,37 @@ uses a socket-free server with an intentional 50 ms preparation delay.
 See [the cold-start audit](../../docs/user-reports/cold-start-audit.md) for baseline
 measurements, comparison controls and startup limits.
 
+## First-endpoint latency
+
+```sh
+dotnet test/EmbedIO.Performance/bin/Release/net10.0/EmbedIO.Performance.dll --endpoint-latency 7
+```
+
+This launches a fresh server process for every sample and uses a separate client
+process. Readiness uses stdout, with no HTTP probe and no JSON initialization in
+the server. Five scenarios cover literal routes, the last of 100 literal routes,
+a parameterized route, a reflection controller and JSON serialization. Each
+scenario measures both the first server request and the first target request
+after 20 requests to a distinct control endpoint. It then records 100 complete,
+validated requests and their latency percentiles. Readiness reports separate
+configuration and listening durations; the parent also measures launch through
+the readiness notification and, for a first-server request, complete response.
+Header timing means receipt of all response headers, not time to the first byte.
+
+The client is exercised against a disposable process before measurements. All
+samples remain in the output; a bind, timeout, status or body failure aborts
+without retry. Cold means a fresh process, with OS/filesystem caches uncontrolled.
+Warm percentiles cover only 100 requests and can include tiered JIT and the
+server's normal keep-alive connection rollover; they are not load-test tail
+latencies. Default tiered compilation remains enabled unless explicitly changed.
+
+For comparisons, copy the same runner output twice and replace only `EmbedIO.dll`
+in one copy. Run A/B then B/A on a quiet machine, retaining each JSONL file. Each
+file records core/runner SHA-256 and the runtime. CI runs one round for correctness
+only; it enforces no machine-dependent timing threshold. See the
+[first-endpoint report](../../docs/project/first-endpoint-latency.md) for the initial
+measurements, their spread and the next profiling targets.
+
 ## Listener queue checks
 
 ```sh
