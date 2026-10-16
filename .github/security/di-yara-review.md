@@ -214,3 +214,44 @@ waiving only their unavailable matching-alert dismissal. Earlier pending
 statements are historical; this decision supersedes them for these four paths.
 Full scans, other findings, tool errors, stale entries and every green-check
 requirement remain enforced. No matching GitHub alert dismissal is claimed.
+
+## 2.0.1 release revalidation
+
+The exact-head malware run
+[38831851808](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38831851808)
+for PR #460 rebuilt all five 2.0.1 packages. YARA-X 1.21.0 with the pinned full
+YARA Forge 20261011 bundle reported the same God Mode rule only on the two DI
+assemblies below. The downloaded CI package and both extracted assemblies were
+hashed independently. Each assembly contains one case-insensitive
+`Injection.pdb` occurrence and no `Dropper.pdb`, `Bypass.pdb` or `Potato.pdb`
+occurrence. The complete matching strings are the compiler-generated CodeView
+paths already reviewed above:
+
+```text
+/home/runner/work/embedio-neo/embedio-neo/src/EmbedIO.DependencyInjection/obj/Release/net10.0/EmbedIO.DependencyInjection.pdb
+/home/runner/work/embedio-neo/embedio-neo/src/EmbedIO.DependencyInjection/obj/Release/netstandard2.0/EmbedIO.DependencyInjection.pdb
+```
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.0.1.nupkg` | `2e4b0e73aa73738288063c1b4e59ae46578a9ceea1a7dcc018e43e3a86a7d541` |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `7ce814259d5aab2c97433816c530ab582868e99ac14604758979c29ff4c00f91` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `0db15e952f3360e86736c1b4053adebe83f194960f95c53f1c6d6ffad761913e` |
+| `yara-x.json` | `a09ea776c3a11613b9042c1956f7ac3dd87e7b4d6133f0f3b4fc57110799f0f9` |
+| `clamav.json` | `2da83366345adefe0511ba887edbb9166770eed59749300b23c0fffb1f19d079` |
+
+The YARA report contains eleven findings and no scanner errors: these two
+versioned assembly paths and the nine existing accepted source/evidence paths.
+ClamAV 1.5.4 with database 28154 scanned 1,506 files with no findings or errors.
+The run report identifies synthetic PR merge source
+`df1d161ce17c83ba1608cdc4b342536f901dbbd7`; PR head
+`758a7c84aebf421e2914fd115136c8799661c4d2` contains the same release inputs.
+
+Only the two package-version paths change from 2.0.0 to 2.0.1. The rule,
+matched bytes, target frameworks, build behavior and evidence-file scope are
+unchanged. GitHub does not create a code-scanning alert for this workflow's
+YARA report, so there is no matching alert to dismiss. Other findings, missing
+scans, scanner errors and stale acceptances remain fatal, and the replacement
+exact-head scan must pass before merge or publication. Downloaded artifacts and
+independent hashes are retained under ignored
+`TestResults/release-2.0.1/ci-malware-38831851808`.
