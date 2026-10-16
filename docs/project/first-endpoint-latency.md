@@ -87,6 +87,9 @@ FsCheck passed 10,000 cases for each of six properties, including new differenti
 literal-route checks. The full suite and cross-platform PR checks are reported
 separately; these Windows timing results do not establish Linux/macOS performance.
 
+See the [cold-path follow-up](cold-path-jit-latency.md) for subsequent profiling
+and first-response measurements.
+
 ## Reproduce and next targets
 
 See the [runner instructions](../../test/EmbedIO.Performance/README.md#first-endpoint-latency).

@@ -418,6 +418,9 @@ Guide: [bearer authentication and authorization](docs/guides/bearer-authenticati
 
 ## 14. Diagnostics and telemetry
 
+- Unreleased after 2.2.0: the managed listener display name is
+  `EmbedIO-Neo HTTP Listener`, including the startup log. The `EmbedIO`
+  namespace, trace-source identity, and upstream license attribution are preserved.
 - Logging goes to the `TraceSource` named `EmbedIO`
   (`EmbedIO.Diagnostics.Log.Source`). With the DI package,
   `loggerFactory.ForwardEmbedIODiagnostics()` forwards it to
@@ -489,6 +492,13 @@ The [first-endpoint report](docs/project/first-endpoint-latency.md) describes an
 unreleased literal-route optimization and its measured limits. Do not assume it
 is in the published 2.2.0 packages. Preserve existing public APIs and behavior
 when changing the library; follow [CONTRIBUTING.md](CONTRIBUTING.md).
+
+The [cold-path follow-up](docs/project/cold-path-jit-latency.md) measures internal
+HTTP/1 header and optional logging separation, including logging-enabled and
+specialized endpoints and their deferred JIT tradeoff. These changes are also unreleased after 2.2.0; they do
+not cache response data or execute application handlers during startup. Compare
+both first-request and total launch latency; no general JSON or tail-latency
+improvement is established.
 
 ## 17. Pitfalls checklist
 

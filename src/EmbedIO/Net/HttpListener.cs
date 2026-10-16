@@ -56,7 +56,7 @@ namespace EmbedIO.Net
         /// <inheritdoc />
         public bool IsListening => _coordinator.IsListening;
         /// <inheritdoc />
-        public string Name { get; } = "Unosquare HTTP Listener";
+        public string Name { get; } = "EmbedIO-Neo HTTP Listener";
         /// <inheritdoc />
         public List<string> Prefixes => _coordinator.PrefixSnapshot();
         // Read for every new connection, so a published replacement applies to the next handshake.

@@ -1,0 +1,2779 @@
+{
+  "baselineCommit": "c04e15d077a0b754234f5c9547dabc60d9bb17d7",
+  "candidateSource": {
+    "src/EmbedIO/Net/Internal/Http1/Http1HeaderEncoding.cs": {
+      "normalizedSha256": "0b340d3ba5337e998963b8fc3532330e825784eb338f3dcb23ca969132db68d8",
+      "gitBlob": "0eb97f0b4948d546891613172de549fec3a15ebe"
+    },
+    "src/EmbedIO/Hosting/WebServerBase`1.cs": {
+      "normalizedSha256": "5e7d49a0ce8e177b7f4b95a8a172bd2f0ac392a68bfba5caec858c226ae12a93",
+      "gitBlob": "f45fae383d9edae27f89263aadfeddc10020cebe"
+    },
+    "src/EmbedIO/Net/HttpListener.cs": {
+      "normalizedSha256": "a4952be354ea0383bb1d17f3272bd9adf7c32de8deaf16d717947866bf07579f",
+      "gitBlob": "0f15cb2671ff93e6e25151fd8e51c47ab2d3cb68"
+    }
+  },
+  "profiles": {
+    "off": {
+      "traceLevel": "Off",
+      "order": [
+        "baseline-0",
+        "candidate-0",
+        "candidate-1",
+        "baseline-1"
+      ],
+      "variants": {
+        "baseline": {
+          "environment": {
+            "runtime": ".NET 10.0.13",
+            "os": "Microsoft Windows 10.0.26300",
+            "architecture": "X64",
+            "coreSha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D",
+            "runnerSha256": "177D1719774C821748E3D3583B4991548CA163FCDEE05AA51E62D4EA10ECC220",
+            "tieredCompilation": null,
+            "rounds": 7,
+            "method": "Fresh server per sample; no HTTP readiness probe; HTTP/1.1 loopback; complete bodies validated; first error aborts without retry. Cold means fresh process, not cold filesystem/OS caches. Ready notification includes runtime launch and console reporting. Request timings include the separate client HTTP stack. No latency pass/fail thresholds."
+          },
+          "samples": {
+            "controller/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 91.47095,
+                  "min": 89.3319,
+                  "max": 97.4816
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 31.76115,
+                  "min": 31.3737,
+                  "max": 33.4298
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.840700000000002,
+                  "min": 15.456899999999997,
+                  "max": 16.8003
+                },
+                "CompleteMilliseconds": {
+                  "median": 32.956900000000005,
+                  "min": 32.2169,
+                  "max": 39.4045
+                },
+                "HeadersMilliseconds": {
+                  "median": 32.952,
+                  "min": 32.2126,
+                  "max": 39.4003
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 124.38595000000001,
+                  "min": 121.9446,
+                  "max": 135.9676
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.04175,
+                  "min": 0.0371,
+                  "max": 0.0488
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.11174999999999999,
+                  "min": 0.087,
+                  "max": 0.1472
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.3379,
+                  "min": 0.3006,
+                  "max": 0.4051
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.89975,
+                  "min": 3.6277,
+                  "max": 4.2961
+                }
+              }
+            },
+            "controller/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 91.80845,
+                  "min": 90.2913,
+                  "max": 101.2461
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 31.78955,
+                  "min": 31.1686,
+                  "max": 34.2666
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.88845,
+                  "min": 15.400800000000004,
+                  "max": 19.166500000000006
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.23845,
+                  "min": 0.2105,
+                  "max": 0.4182
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.23775000000000002,
+                  "min": 0.2098,
+                  "max": 0.4159
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0427,
+                  "min": 0.0337,
+                  "max": 0.0478
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.08565,
+                  "min": 0.0673,
+                  "max": 0.1197
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.10089999999999999,
+                  "min": 0.0812,
+                  "max": 0.1774
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.11135,
+                  "min": 0.0826,
+                  "max": 0.1993
+                }
+              }
+            },
+            "json/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 80.33595,
+                  "min": 79.2328,
+                  "max": 85.9631
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.1757,
+                  "min": 20.946,
+                  "max": 22.2411
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.939000000000002,
+                  "min": 15.629999999999999,
+                  "max": 17.1727
+                },
+                "CompleteMilliseconds": {
+                  "median": 46.19255,
+                  "min": 44.8635,
+                  "max": 49.644
+                },
+                "HeadersMilliseconds": {
+                  "median": 45.3274,
+                  "min": 44.291,
+                  "max": 49.0019
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 127.6813,
+                  "min": 124.6411,
+                  "max": 132.3267
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.04095,
+                  "min": 0.0373,
+                  "max": 0.1631
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.12304999999999999,
+                  "min": 0.0705,
+                  "max": 0.2025
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.38139999999999996,
+                  "min": 0.3376,
+                  "max": 0.4657
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.6349,
+                  "min": 2.4138,
+                  "max": 4.7635
+                }
+              }
+            },
+            "json/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 81.21185,
+                  "min": 79.506,
+                  "max": 85.2278
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.29135,
+                  "min": 20.8022,
+                  "max": 22.9884
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.8748,
+                  "min": 15.565000000000001,
+                  "max": 16.6626
+                },
+                "CompleteMilliseconds": {
+                  "median": 12.5267,
+                  "min": 12.201,
+                  "max": 14.0019
+                },
+                "HeadersMilliseconds": {
+                  "median": 12.4551,
+                  "min": 12.1531,
+                  "max": 13.8976
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.03955,
+                  "min": 0.0367,
+                  "max": 0.0902
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.10355,
+                  "min": 0.0787,
+                  "max": 0.1694
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1784,
+                  "min": 0.1257,
+                  "max": 0.2927
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.4334,
+                  "min": 0.3758,
+                  "max": 0.5186
+                }
+              }
+            },
+            "literal/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 80.48135,
+                  "min": 78.8048,
+                  "max": 86.1574
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.2009,
+                  "min": 20.9429,
+                  "max": 22.458
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.04365,
+                  "min": 15.642100000000003,
+                  "max": 16.767099999999996
+                },
+                "CompleteMilliseconds": {
+                  "median": 33.0996,
+                  "min": 32.3965,
+                  "max": 34.3315
+                },
+                "HeadersMilliseconds": {
+                  "median": 33.0944,
+                  "min": 32.3894,
+                  "max": 34.3237
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 113.68365,
+                  "min": 111.4774,
+                  "max": 119.9729
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.039900000000000005,
+                  "min": 0.0327,
+                  "max": 0.0685
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.1038,
+                  "min": 0.0898,
+                  "max": 0.184
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.34565,
+                  "min": 0.3252,
+                  "max": 0.4339
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.9276,
+                  "min": 3.8461,
+                  "max": 4.275
+                }
+              }
+            },
+            "literal/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 80.03649999999999,
+                  "min": 78.7171,
+                  "max": 84.7821
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.1807,
+                  "min": 20.9818,
+                  "max": 22.0422
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.94145,
+                  "min": 15.6374,
+                  "max": 17.041599999999995
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.3115,
+                  "min": 0.2655,
+                  "max": 0.3851
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.3101,
+                  "min": 0.2651,
+                  "max": 0.3828
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0387,
+                  "min": 0.0331,
+                  "max": 0.0577
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.0801,
+                  "min": 0.0485,
+                  "max": 0.1749
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1006,
+                  "min": 0.0618,
+                  "max": 0.2297
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.13545000000000001,
+                  "min": 0.0699,
+                  "max": 0.2589
+                }
+              }
+            },
+            "literal-100/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 80.72640000000001,
+                  "min": 78.9282,
+                  "max": 88.937
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.7043,
+                  "min": 21.1329,
+                  "max": 22.8722
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.763750000000003,
+                  "min": 15.3459,
+                  "max": 17.543
+                },
+                "CompleteMilliseconds": {
+                  "median": 33.124449999999996,
+                  "min": 32.1864,
+                  "max": 33.9838
+                },
+                "HeadersMilliseconds": {
+                  "median": 33.119550000000004,
+                  "min": 32.1811,
+                  "max": 33.9741
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 113.673,
+                  "min": 111.3525,
+                  "max": 122.7336
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.05315,
+                  "min": 0.0507,
+                  "max": 0.0623
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.12465000000000001,
+                  "min": 0.0704,
+                  "max": 0.1501
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.36625,
+                  "min": 0.342,
+                  "max": 0.6194
+                },
+                "warmMaxMilliseconds": {
+                  "median": 4.0148,
+                  "min": 3.883,
+                  "max": 4.3167
+                }
+              }
+            },
+            "literal-100/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 81.82785,
+                  "min": 79.5129,
+                  "max": 83.2397
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.017400000000002,
+                  "min": 21.2808,
+                  "max": 23.9203
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.815799999999998,
+                  "min": 15.5988,
+                  "max": 16.316899999999997
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.3161,
+                  "min": 0.3008,
+                  "max": 0.3767
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.31575,
+                  "min": 0.3004,
+                  "max": 0.3746
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.05555,
+                  "min": 0.0506,
+                  "max": 0.064
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.10585,
+                  "min": 0.0677,
+                  "max": 0.1215
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.14595000000000002,
+                  "min": 0.1092,
+                  "max": 0.1964
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.16285,
+                  "min": 0.1133,
+                  "max": 0.2489
+                }
+              }
+            },
+            "parameter/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.16399999999999,
+                  "min": 80.7055,
+                  "max": 86.5809
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.30225,
+                  "min": 21.8912,
+                  "max": 24.4903
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.9305,
+                  "min": 15.587500000000002,
+                  "max": 17.7422
+                },
+                "CompleteMilliseconds": {
+                  "median": 34.10355,
+                  "min": 33.6054,
+                  "max": 36.1707
+                },
+                "HeadersMilliseconds": {
+                  "median": 34.08285,
+                  "min": 33.5999,
+                  "max": 36.1629
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 116.00075,
+                  "min": 114.5687,
+                  "max": 122.4529
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0389,
+                  "min": 0.0338,
+                  "max": 0.0607
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.09895,
+                  "min": 0.0832,
+                  "max": 0.1525
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.35205,
+                  "min": 0.3389,
+                  "max": 0.3752
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.9636,
+                  "min": 3.8264,
+                  "max": 4.862
+                }
+              }
+            },
+            "parameter/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.03565,
+                  "min": 79.995,
+                  "max": 83.5511
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.37265,
+                  "min": 21.9227,
+                  "max": 22.7289
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.07815,
+                  "min": 15.484000000000002,
+                  "max": 16.9362
+                },
+                "CompleteMilliseconds": {
+                  "median": 1.40455,
+                  "min": 1.3707,
+                  "max": 1.517
+                },
+                "HeadersMilliseconds": {
+                  "median": 1.4018000000000002,
+                  "min": 1.3686,
+                  "max": 1.5147
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.038650000000000004,
+                  "min": 0.0336,
+                  "max": 0.0595
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.0874,
+                  "min": 0.0551,
+                  "max": 0.1393
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.10765,
+                  "min": 0.091,
+                  "max": 0.1842
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.14889999999999998,
+                  "min": 0.0972,
+                  "max": 0.2075
+                }
+              }
+            }
+          }
+        },
+        "candidate": {
+          "environment": {
+            "runtime": ".NET 10.0.13",
+            "os": "Microsoft Windows 10.0.26300",
+            "architecture": "X64",
+            "coreSha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A",
+            "runnerSha256": "177D1719774C821748E3D3583B4991548CA163FCDEE05AA51E62D4EA10ECC220",
+            "tieredCompilation": null,
+            "rounds": 7,
+            "method": "Fresh server per sample; no HTTP readiness probe; HTTP/1.1 loopback; complete bodies validated; first error aborts without retry. Cold means fresh process, not cold filesystem/OS caches. Ready notification includes runtime launch and console reporting. Request timings include the separate client HTTP stack. No latency pass/fail thresholds."
+          },
+          "samples": {
+            "controller/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 92.5838,
+                  "min": 90.6537,
+                  "max": 97.6348
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 31.98075,
+                  "min": 30.9743,
+                  "max": 33.4603
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.9451,
+                  "min": 15.485500000000002,
+                  "max": 17.3868
+                },
+                "CompleteMilliseconds": {
+                  "median": 31.52225,
+                  "min": 30.7412,
+                  "max": 34.7334
+                },
+                "HeadersMilliseconds": {
+                  "median": 31.51895,
+                  "min": 30.738,
+                  "max": 34.7299
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 124.39320000000001,
+                  "min": 122.0997,
+                  "max": 131.8791
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.04355,
+                  "min": 0.039,
+                  "max": 0.0624
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.1261,
+                  "min": 0.0934,
+                  "max": 0.1512
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.35655000000000003,
+                  "min": 0.3212,
+                  "max": 0.5336
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.9400500000000003,
+                  "min": 3.629,
+                  "max": 4.6018
+                }
+              }
+            },
+            "controller/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 92.44675000000001,
+                  "min": 90.8394,
+                  "max": 98.2655
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 31.764499999999998,
+                  "min": 31.2487,
+                  "max": 37.176
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.9968,
+                  "min": 15.598600000000001,
+                  "max": 17.5169
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.23820000000000002,
+                  "min": 0.2121,
+                  "max": 0.2728
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.2369,
+                  "min": 0.2118,
+                  "max": 0.2702
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.042550000000000004,
+                  "min": 0.037,
+                  "max": 0.062
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.09385,
+                  "min": 0.052,
+                  "max": 0.1388
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.11505,
+                  "min": 0.0709,
+                  "max": 0.2162
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.17535,
+                  "min": 0.0735,
+                  "max": 0.2573
+                }
+              }
+            },
+            "json/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 81.8369,
+                  "min": 79.8538,
+                  "max": 92.2955
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.1759,
+                  "min": 20.9127,
+                  "max": 26.3
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.8278,
+                  "min": 15.587100000000003,
+                  "max": 17.933500000000002
+                },
+                "CompleteMilliseconds": {
+                  "median": 44.5167,
+                  "min": 43.3903,
+                  "max": 50.0807
+                },
+                "HeadersMilliseconds": {
+                  "median": 43.82025,
+                  "min": 42.8049,
+                  "max": 49.4641
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 126.475,
+                  "min": 123.4287,
+                  "max": 142.3825
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.03955,
+                  "min": 0.0374,
+                  "max": 0.0441
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.12775,
+                  "min": 0.0667,
+                  "max": 0.1735
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.36745,
+                  "min": 0.3052,
+                  "max": 0.4353
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.60515,
+                  "min": 2.2719,
+                  "max": 4.7811
+                }
+              }
+            },
+            "json/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 81.9947,
+                  "min": 81.2515,
+                  "max": 90.8263
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.43845,
+                  "min": 20.9966,
+                  "max": 25.9675
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.089750000000002,
+                  "min": 15.6115,
+                  "max": 17.954700000000003
+                },
+                "CompleteMilliseconds": {
+                  "median": 12.6036,
+                  "min": 12.4027,
+                  "max": 15.1771
+                },
+                "HeadersMilliseconds": {
+                  "median": 12.5464,
+                  "min": 12.326,
+                  "max": 15.0895
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.039400000000000004,
+                  "min": 0.0366,
+                  "max": 0.0622
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.1121,
+                  "min": 0.0639,
+                  "max": 0.1591
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.15225,
+                  "min": 0.1214,
+                  "max": 0.2537
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.424,
+                  "min": 0.4032,
+                  "max": 0.6696
+                }
+              }
+            },
+            "literal/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.51509999999999,
+                  "min": 79.6712,
+                  "max": 102.5291
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.360599999999998,
+                  "min": 20.9453,
+                  "max": 26.6508
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.93485,
+                  "min": 15.535300000000003,
+                  "max": 17.5984
+                },
+                "CompleteMilliseconds": {
+                  "median": 31.86245,
+                  "min": 31.2995,
+                  "max": 33.9901
+                },
+                "HeadersMilliseconds": {
+                  "median": 31.8534,
+                  "min": 31.2962,
+                  "max": 33.9868
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 114.43295,
+                  "min": 111.426,
+                  "max": 136.4561
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0383,
+                  "min": 0.0343,
+                  "max": 0.0524
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.11845,
+                  "min": 0.0713,
+                  "max": 0.1619
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.34504999999999997,
+                  "min": 0.3041,
+                  "max": 0.4211
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.90845,
+                  "min": 3.8337,
+                  "max": 4.2873
+                }
+              }
+            },
+            "literal/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.0438,
+                  "min": 80.3821,
+                  "max": 89.7448
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.4409,
+                  "min": 20.9488,
+                  "max": 23.4498
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.167250000000003,
+                  "min": 15.5332,
+                  "max": 18.1745
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.3189,
+                  "min": 0.2765,
+                  "max": 0.3509
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.3177,
+                  "min": 0.2761,
+                  "max": 0.3471
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.039099999999999996,
+                  "min": 0.0327,
+                  "max": 0.0584
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.08055,
+                  "min": 0.0497,
+                  "max": 0.1287
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.10944999999999999,
+                  "min": 0.0688,
+                  "max": 0.1891
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.11925,
+                  "min": 0.0769,
+                  "max": 0.2282
+                }
+              }
+            },
+            "literal-100/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 83.33195,
+                  "min": 80.5027,
+                  "max": 89.8549
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.9028,
+                  "min": 21.3098,
+                  "max": 25.013
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.0884,
+                  "min": 15.3738,
+                  "max": 17.503399999999996
+                },
+                "CompleteMilliseconds": {
+                  "median": 32.2781,
+                  "min": 31.2534,
+                  "max": 37.125
+                },
+                "HeadersMilliseconds": {
+                  "median": 32.260850000000005,
+                  "min": 31.2498,
+                  "max": 37.1223
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 115.64265,
+                  "min": 111.7671,
+                  "max": 123.143
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.057749999999999996,
+                  "min": 0.0507,
+                  "max": 0.0632
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.1365,
+                  "min": 0.099,
+                  "max": 0.3223
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.36245,
+                  "min": 0.3364,
+                  "max": 0.5486
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.96185,
+                  "min": 3.8795,
+                  "max": 4.8513
+                }
+              }
+            },
+            "literal-100/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 81.984,
+                  "min": 80.6737,
+                  "max": 92.5231
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.9393,
+                  "min": 21.3533,
+                  "max": 23.9494
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.724300000000001,
+                  "min": 15.522900000000003,
+                  "max": 18.689700000000002
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.32075,
+                  "min": 0.3044,
+                  "max": 0.7782
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.32045,
+                  "min": 0.3041,
+                  "max": 0.7761
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0581,
+                  "min": 0.0509,
+                  "max": 0.0676
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.10785,
+                  "min": 0.0728,
+                  "max": 0.1609
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1412,
+                  "min": 0.085,
+                  "max": 0.2282
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.15875,
+                  "min": 0.0947,
+                  "max": 0.3207
+                }
+              }
+            },
+            "parameter/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 83.12555,
+                  "min": 81.8901,
+                  "max": 88.501
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.6098,
+                  "min": 21.9711,
+                  "max": 24.1121
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.064,
+                  "min": 15.531000000000002,
+                  "max": 16.9999
+                },
+                "CompleteMilliseconds": {
+                  "median": 32.76465,
+                  "min": 32.2758,
+                  "max": 36.4971
+                },
+                "HeadersMilliseconds": {
+                  "median": 32.760149999999996,
+                  "min": 32.2512,
+                  "max": 36.4927
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 115.7339,
+                  "min": 114.217,
+                  "max": 123.3178
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.04065,
+                  "min": 0.0355,
+                  "max": 0.0502
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.1149,
+                  "min": 0.096,
+                  "max": 0.1712
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.35665,
+                  "min": 0.2927,
+                  "max": 0.4115
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.95595,
+                  "min": 3.8359,
+                  "max": 4.5878
+                }
+              }
+            },
+            "parameter/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 85.17685,
+                  "min": 81.7606,
+                  "max": 89.7741
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 23.0518,
+                  "min": 22.0764,
+                  "max": 24.9645
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.425800000000002,
+                  "min": 15.747300000000003,
+                  "max": 19.2669
+                },
+                "CompleteMilliseconds": {
+                  "median": 1.3911,
+                  "min": 1.3552,
+                  "max": 1.5658
+                },
+                "HeadersMilliseconds": {
+                  "median": 1.3895499999999998,
+                  "min": 1.3548,
+                  "max": 1.5637
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.040650000000000006,
+                  "min": 0.0357,
+                  "max": 0.0512
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.0923,
+                  "min": 0.0648,
+                  "max": 0.116
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.11850000000000001,
+                  "min": 0.0919,
+                  "max": 0.1758
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.13755,
+                  "min": 0.1033,
+                  "max": 0.2329
+                }
+              }
+            }
+          }
+        }
+      },
+      "rawFiles": [
+        {
+          "file": "TestResults/latency-next/combo-baseline-0.jsonl",
+          "sha256": "7d7aad9f3d3ed722aec7271f6843c628fc5428c4bfe0a8c6d4d79c8f85fcecac",
+          "samples": 70,
+          "variant": "baseline",
+          "block": 0
+        },
+        {
+          "file": "TestResults/latency-next/combo-baseline-1.jsonl",
+          "sha256": "adebc12f2fe1c49de05d1a537b13b0e0ea8aeee791b3acc62805db5cd8ae0bd9",
+          "samples": 70,
+          "variant": "baseline",
+          "block": 1
+        },
+        {
+          "file": "TestResults/latency-next/combo-candidate-0.jsonl",
+          "sha256": "a8acd4990c7628f1a96ef35468ec6de31a2f6e5ff8ea467f4d046bf37be3c41e",
+          "samples": 70,
+          "variant": "candidate",
+          "block": 0
+        },
+        {
+          "file": "TestResults/latency-next/combo-candidate-1.jsonl",
+          "sha256": "f45505ce12c846d01d5486b64397785a391b256d20a12cf8e581b1b6a424fade",
+          "samples": 70,
+          "variant": "candidate",
+          "block": 1
+        }
+      ],
+      "measuredProcesses": 280,
+      "disposableWarmupProcesses": 4
+    },
+    "information": {
+      "traceLevel": "Information",
+      "order": [
+        "baseline-0",
+        "candidate-0",
+        "candidate-1",
+        "baseline-1"
+      ],
+      "variants": {
+        "baseline": {
+          "environment": {
+            "runtime": ".NET 10.0.13",
+            "os": "Microsoft Windows 10.0.26300",
+            "architecture": "X64",
+            "coreSha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D",
+            "runnerSha256": "E9A15301DAE955D9D78FC9EE5C14C44D87E25AABB7AED5884EDEA4D2D63B0E3B",
+            "tieredCompilation": null,
+            "rounds": 3,
+            "traceLevel": "Information",
+            "method": "Fresh server per sample; no HTTP readiness probe; HTTP/1.1 loopback; complete bodies validated; first error aborts without retry. Cold means fresh process, not cold filesystem/OS caches. Ready notification includes runtime launch and console reporting. Request timings include the separate client HTTP stack. No latency pass/fail thresholds."
+          },
+          "samples": {
+            "controller/first-server-request": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 93.78685,
+                  "min": 92.3595,
+                  "max": 95.4693
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 32.82965,
+                  "min": 32.2621,
+                  "max": 33.2281
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.15255,
+                  "min": 15.614800000000002,
+                  "max": 16.663199999999996
+                },
+                "CompleteMilliseconds": {
+                  "median": 32.9924,
+                  "min": 32.6822,
+                  "max": 33.3354
+                },
+                "HeadersMilliseconds": {
+                  "median": 32.98835,
+                  "min": 32.6706,
+                  "max": 33.3041
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 126.8347,
+                  "min": 125.0469,
+                  "max": 128.8115
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.04065,
+                  "min": 0.0357,
+                  "max": 0.0437
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.113,
+                  "min": 0.0821,
+                  "max": 0.1406
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.36035,
+                  "min": 0.3085,
+                  "max": 0.3694
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.9453,
+                  "min": 3.9058,
+                  "max": 4.025
+                }
+              }
+            },
+            "controller/first-endpoint-after-control": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 92.89824999999999,
+                  "min": 91.7436,
+                  "max": 94.4903
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 32.4041,
+                  "min": 32.2218,
+                  "max": 33.7428
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.865749999999998,
+                  "min": 15.479000000000006,
+                  "max": 16.154199999999996
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.23075,
+                  "min": 0.201,
+                  "max": 0.2577
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.2299,
+                  "min": 0.2006,
+                  "max": 0.2571
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.03695,
+                  "min": 0.0354,
+                  "max": 0.0457
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.07325000000000001,
+                  "min": 0.0563,
+                  "max": 0.1094
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1046,
+                  "min": 0.0779,
+                  "max": 0.1653
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.12495,
+                  "min": 0.1012,
+                  "max": 0.1806
+                }
+              }
+            },
+            "json/first-server-request": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 83.37620000000001,
+                  "min": 81.9237,
+                  "max": 86.7935
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.35355,
+                  "min": 22.0567,
+                  "max": 25.0504
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.4159,
+                  "min": 15.815100000000005,
+                  "max": 17.676800000000004
+                },
+                "CompleteMilliseconds": {
+                  "median": 45.091499999999996,
+                  "min": 44.581,
+                  "max": 46.6111
+                },
+                "HeadersMilliseconds": {
+                  "median": 44.20675,
+                  "min": 43.9863,
+                  "max": 44.8466
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 128.9786,
+                  "min": 126.7927,
+                  "max": 132.1449
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.039349999999999996,
+                  "min": 0.0361,
+                  "max": 0.0454
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.1115,
+                  "min": 0.1015,
+                  "max": 0.1532
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.38085,
+                  "min": 0.3661,
+                  "max": 0.4127
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.67475,
+                  "min": 2.6757,
+                  "max": 4.0124
+                }
+              }
+            },
+            "json/first-endpoint-after-control": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.6901,
+                  "min": 81.6811,
+                  "max": 84.6206
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.0163,
+                  "min": 21.7982,
+                  "max": 22.504
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.76255,
+                  "min": 15.6175,
+                  "max": 17.0573
+                },
+                "CompleteMilliseconds": {
+                  "median": 12.54545,
+                  "min": 12.4569,
+                  "max": 13.3823
+                },
+                "HeadersMilliseconds": {
+                  "median": 12.446000000000002,
+                  "min": 12.3597,
+                  "max": 13.2865
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0402,
+                  "min": 0.0346,
+                  "max": 0.057
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.10075,
+                  "min": 0.0699,
+                  "max": 0.1511
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1671,
+                  "min": 0.1054,
+                  "max": 0.2066
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.41035,
+                  "min": 0.35,
+                  "max": 0.487
+                }
+              }
+            },
+            "literal/first-server-request": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 84.2346,
+                  "min": 82.3909,
+                  "max": 91.8858
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.399,
+                  "min": 21.9744,
+                  "max": 25.5406
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.183,
+                  "min": 15.934999999999999,
+                  "max": 17.171899999999997
+                },
+                "CompleteMilliseconds": {
+                  "median": 33.1974,
+                  "min": 32.4962,
+                  "max": 40.0401
+                },
+                "HeadersMilliseconds": {
+                  "median": 33.1853,
+                  "min": 32.4925,
+                  "max": 40.0222
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 117.63640000000001,
+                  "min": 115.6216,
+                  "max": 128.0543
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.040249999999999994,
+                  "min": 0.0337,
+                  "max": 0.061
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.12975,
+                  "min": 0.0964,
+                  "max": 0.1523
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.35475,
+                  "min": 0.3211,
+                  "max": 0.4107
+                },
+                "warmMaxMilliseconds": {
+                  "median": 4.03115,
+                  "min": 3.9698,
+                  "max": 4.309
+                }
+              }
+            },
+            "literal/first-endpoint-after-control": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 84.79785,
+                  "min": 82.2817,
+                  "max": 86.7783
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.232,
+                  "min": 21.8804,
+                  "max": 23.2328
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.2496,
+                  "min": 15.610399999999998,
+                  "max": 16.9055
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.31399999999999995,
+                  "min": 0.2954,
+                  "max": 0.3307
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.31245,
+                  "min": 0.2951,
+                  "max": 0.3283
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0377,
+                  "min": 0.0335,
+                  "max": 0.0503
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.09684999999999999,
+                  "min": 0.0819,
+                  "max": 0.1086
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.12455000000000001,
+                  "min": 0.1028,
+                  "max": 0.139
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.1487,
+                  "min": 0.1083,
+                  "max": 0.262
+                }
+              }
+            },
+            "literal-100/first-server-request": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 83.5361,
+                  "min": 82.5679,
+                  "max": 85.7592
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.64685,
+                  "min": 22.391,
+                  "max": 22.7174
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.048450000000003,
+                  "min": 15.6767,
+                  "max": 16.8413
+                },
+                "CompleteMilliseconds": {
+                  "median": 32.669399999999996,
+                  "min": 32.3306,
+                  "max": 37.4582
+                },
+                "HeadersMilliseconds": {
+                  "median": 32.66515,
+                  "min": 32.319,
+                  "max": 37.4517
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 116.38775000000001,
+                  "min": 114.9518,
+                  "max": 123.2238
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.05675,
+                  "min": 0.051,
+                  "max": 0.1003
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.15375,
+                  "min": 0.0618,
+                  "max": 0.1798
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.38425,
+                  "min": 0.3096,
+                  "max": 0.4148
+                },
+                "warmMaxMilliseconds": {
+                  "median": 4.03055,
+                  "min": 3.9714,
+                  "max": 4.3157
+                }
+              }
+            },
+            "literal-100/first-endpoint-after-control": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 84.47710000000001,
+                  "min": 83.1615,
+                  "max": 87.4718
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.8707,
+                  "min": 22.7119,
+                  "max": 24.08
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.031399999999998,
+                  "min": 15.7164,
+                  "max": 16.3086
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.33025,
+                  "min": 0.2943,
+                  "max": 1.5969
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.3295,
+                  "min": 0.294,
+                  "max": 1.5839
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0541,
+                  "min": 0.0494,
+                  "max": 0.0566
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.10005,
+                  "min": 0.0889,
+                  "max": 0.1383
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1493,
+                  "min": 0.1049,
+                  "max": 0.1878
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.17554999999999998,
+                  "min": 0.117,
+                  "max": 0.2131
+                }
+              }
+            },
+            "parameter/first-server-request": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 85.3142,
+                  "min": 82.3146,
+                  "max": 88.6103
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 23.13555,
+                  "min": 22.712,
+                  "max": 23.803
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.9289,
+                  "min": 15.536600000000004,
+                  "max": 16.5641
+                },
+                "CompleteMilliseconds": {
+                  "median": 33.700450000000004,
+                  "min": 33.2889,
+                  "max": 34.2543
+                },
+                "HeadersMilliseconds": {
+                  "median": 33.6845,
+                  "min": 33.2687,
+                  "max": 34.2484
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 119.2371,
+                  "min": 115.6118,
+                  "max": 122.2862
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.03855,
+                  "min": 0.0347,
+                  "max": 0.0498
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.10594999999999999,
+                  "min": 0.0741,
+                  "max": 0.1227
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.33885,
+                  "min": 0.2815,
+                  "max": 0.3818
+                },
+                "warmMaxMilliseconds": {
+                  "median": 4.162850000000001,
+                  "min": 3.9886,
+                  "max": 4.2976
+                }
+              }
+            },
+            "parameter/first-endpoint-after-control": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 83.461,
+                  "min": 83.3675,
+                  "max": 86.9894
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 23.1287,
+                  "min": 22.8656,
+                  "max": 23.5353
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.826899999999998,
+                  "min": 15.708399999999997,
+                  "max": 16.066499999999998
+                },
+                "CompleteMilliseconds": {
+                  "median": 1.3790499999999999,
+                  "min": 1.3488,
+                  "max": 1.4272
+                },
+                "HeadersMilliseconds": {
+                  "median": 1.37575,
+                  "min": 1.3483,
+                  "max": 1.4205
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.035,
+                  "min": 0.0335,
+                  "max": 0.0577
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.08785,
+                  "min": 0.0546,
+                  "max": 0.1228
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.12345,
+                  "min": 0.0941,
+                  "max": 0.1664
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.14105,
+                  "min": 0.1009,
+                  "max": 0.2051
+                }
+              }
+            }
+          }
+        },
+        "candidate": {
+          "environment": {
+            "runtime": ".NET 10.0.13",
+            "os": "Microsoft Windows 10.0.26300",
+            "architecture": "X64",
+            "coreSha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A",
+            "runnerSha256": "E9A15301DAE955D9D78FC9EE5C14C44D87E25AABB7AED5884EDEA4D2D63B0E3B",
+            "tieredCompilation": null,
+            "rounds": 3,
+            "traceLevel": "Information",
+            "method": "Fresh server per sample; no HTTP readiness probe; HTTP/1.1 loopback; complete bodies validated; first error aborts without retry. Cold means fresh process, not cold filesystem/OS caches. Ready notification includes runtime launch and console reporting. Request timings include the separate client HTTP stack. No latency pass/fail thresholds."
+          },
+          "samples": {
+            "controller/first-server-request": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 95.55365,
+                  "min": 93.0096,
+                  "max": 97.742
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 32.90815,
+                  "min": 32.1689,
+                  "max": 37.1569
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.91225,
+                  "min": 15.836800000000004,
+                  "max": 16.5743
+                },
+                "CompleteMilliseconds": {
+                  "median": 31.32115,
+                  "min": 30.9621,
+                  "max": 32.2553
+                },
+                "HeadersMilliseconds": {
+                  "median": 31.31615,
+                  "min": 30.9517,
+                  "max": 32.2322
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 127.0824,
+                  "min": 124.049,
+                  "max": 129.0014
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0407,
+                  "min": 0.0363,
+                  "max": 0.0551
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.12315000000000001,
+                  "min": 0.0926,
+                  "max": 0.1636
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.347,
+                  "min": 0.2992,
+                  "max": 0.3641
+                },
+                "warmMaxMilliseconds": {
+                  "median": 4.218500000000001,
+                  "min": 3.9915,
+                  "max": 4.5123
+                }
+              }
+            },
+            "controller/first-endpoint-after-control": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 93.7864,
+                  "min": 91.3454,
+                  "max": 99.4204
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 32.95585,
+                  "min": 31.9903,
+                  "max": 36.0668
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.940050000000006,
+                  "min": 15.483699999999999,
+                  "max": 16.4658
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.21725,
+                  "min": 0.2144,
+                  "max": 0.2629
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.21539999999999998,
+                  "min": 0.214,
+                  "max": 0.2559
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.04115,
+                  "min": 0.0363,
+                  "max": 0.0521
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.0937,
+                  "min": 0.0614,
+                  "max": 0.1185
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.11835,
+                  "min": 0.1016,
+                  "max": 0.1662
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.1691,
+                  "min": 0.1147,
+                  "max": 0.221
+                }
+              }
+            },
+            "json/first-server-request": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 86.14160000000001,
+                  "min": 82.3851,
+                  "max": 87.5695
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.4191,
+                  "min": 21.8393,
+                  "max": 22.9758
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.162950000000002,
+                  "min": 15.627899999999997,
+                  "max": 16.937800000000003
+                },
+                "CompleteMilliseconds": {
+                  "median": 45.285,
+                  "min": 43.6826,
+                  "max": 46.3368
+                },
+                "HeadersMilliseconds": {
+                  "median": 44.07225,
+                  "min": 43.0794,
+                  "max": 45.2547
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 131.1311,
+                  "min": 126.0732,
+                  "max": 132.9579
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0428,
+                  "min": 0.0372,
+                  "max": 0.0566
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.12975,
+                  "min": 0.0766,
+                  "max": 0.1413
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.33435000000000004,
+                  "min": 0.3161,
+                  "max": 0.4149
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.8435,
+                  "min": 2.6235,
+                  "max": 4.2717
+                }
+              }
+            },
+            "json/first-endpoint-after-control": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 83.8652,
+                  "min": 82.4905,
+                  "max": 85.2311
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.518900000000002,
+                  "min": 22.1337,
+                  "max": 22.878
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.168799999999997,
+                  "min": 15.926099999999998,
+                  "max": 16.358200000000004
+                },
+                "CompleteMilliseconds": {
+                  "median": 12.762350000000001,
+                  "min": 12.3199,
+                  "max": 18.3714
+                },
+                "HeadersMilliseconds": {
+                  "median": 12.6987,
+                  "min": 12.2634,
+                  "max": 18.2979
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0488,
+                  "min": 0.0381,
+                  "max": 0.0606
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.13885,
+                  "min": 0.1118,
+                  "max": 0.17
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1669,
+                  "min": 0.1527,
+                  "max": 0.2256
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.46409999999999996,
+                  "min": 0.3836,
+                  "max": 0.7722
+                }
+              }
+            },
+            "literal/first-server-request": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 84.63794999999999,
+                  "min": 81.9085,
+                  "max": 85.9088
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.12205,
+                  "min": 21.9021,
+                  "max": 23.336
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.359050000000003,
+                  "min": 15.669900000000002,
+                  "max": 18.733999999999998
+                },
+                "CompleteMilliseconds": {
+                  "median": 31.300649999999997,
+                  "min": 31.021,
+                  "max": 32.3124
+                },
+                "HeadersMilliseconds": {
+                  "median": 31.295900000000003,
+                  "min": 31.0121,
+                  "max": 32.2987
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 115.77985000000001,
+                  "min": 113.2649,
+                  "max": 118.2297
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0373,
+                  "min": 0.0339,
+                  "max": 0.0506
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.10155,
+                  "min": 0.0952,
+                  "max": 0.1282
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.33385,
+                  "min": 0.308,
+                  "max": 0.3807
+                },
+                "warmMaxMilliseconds": {
+                  "median": 4.2486999999999995,
+                  "min": 4.1592,
+                  "max": 4.7937
+                }
+              }
+            },
+            "literal/first-endpoint-after-control": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 83.05115,
+                  "min": 82.4164,
+                  "max": 85.0691
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.3271,
+                  "min": 22.0862,
+                  "max": 22.5916
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.123199999999997,
+                  "min": 15.8596,
+                  "max": 17.306199999999997
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.30035,
+                  "min": 0.2811,
+                  "max": 0.3388
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.3,
+                  "min": 0.2807,
+                  "max": 0.3378
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.035,
+                  "min": 0.0333,
+                  "max": 0.05
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.07325000000000001,
+                  "min": 0.0592,
+                  "max": 0.1008
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1106,
+                  "min": 0.0995,
+                  "max": 0.1281
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.1313,
+                  "min": 0.1002,
+                  "max": 0.1573
+                }
+              }
+            },
+            "literal-100/first-server-request": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 83.79775,
+                  "min": 82.8272,
+                  "max": 87.3062
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.6477,
+                  "min": 22.2367,
+                  "max": 23.0976
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.077949999999994,
+                  "min": 15.658900000000003,
+                  "max": 17.2624
+                },
+                "CompleteMilliseconds": {
+                  "median": 31.06675,
+                  "min": 30.9064,
+                  "max": 31.3839
+                },
+                "HeadersMilliseconds": {
+                  "median": 31.063699999999997,
+                  "min": 30.8995,
+                  "max": 31.3724
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 114.94149999999999,
+                  "min": 114.0066,
+                  "max": 118.4119
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0526,
+                  "min": 0.0493,
+                  "max": 0.0568
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.12075,
+                  "min": 0.0883,
+                  "max": 0.1428
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.37495,
+                  "min": 0.2958,
+                  "max": 0.3938
+                },
+                "warmMaxMilliseconds": {
+                  "median": 4.2468,
+                  "min": 4.1251,
+                  "max": 4.8429
+                }
+              }
+            },
+            "literal-100/first-endpoint-after-control": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 84.08494999999999,
+                  "min": 81.8554,
+                  "max": 85.0388
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 22.97265,
+                  "min": 22.6084,
+                  "max": 23.4016
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.822399999999998,
+                  "min": 15.6629,
+                  "max": 16.276600000000002
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.3387,
+                  "min": 0.3053,
+                  "max": 0.35
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.33415,
+                  "min": 0.3047,
+                  "max": 0.3488
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.05385,
+                  "min": 0.0513,
+                  "max": 0.068
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.11415,
+                  "min": 0.0915,
+                  "max": 0.1602
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.14375,
+                  "min": 0.1245,
+                  "max": 0.1925
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.16215,
+                  "min": 0.1355,
+                  "max": 0.2511
+                }
+              }
+            },
+            "parameter/first-server-request": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 84.29195,
+                  "min": 83.131,
+                  "max": 85.1655
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 23.1829,
+                  "min": 22.9312,
+                  "max": 23.5674
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.822750000000001,
+                  "min": 15.5303,
+                  "max": 16.186
+                },
+                "CompleteMilliseconds": {
+                  "median": 33.3825,
+                  "min": 31.9385,
+                  "max": 44.8458
+                },
+                "HeadersMilliseconds": {
+                  "median": 33.376099999999994,
+                  "min": 31.9028,
+                  "max": 44.8031
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 117.2547,
+                  "min": 115.41,
+                  "max": 129.5173
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.03895,
+                  "min": 0.0349,
+                  "max": 0.1106
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.11565,
+                  "min": 0.0903,
+                  "max": 0.2735
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.33475,
+                  "min": 0.3202,
+                  "max": 0.7619
+                },
+                "warmMaxMilliseconds": {
+                  "median": 4.2628,
+                  "min": 4.126,
+                  "max": 5.9787
+                }
+              }
+            },
+            "parameter/first-endpoint-after-control": {
+              "count": 6,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 85.5165,
+                  "min": 82.7246,
+                  "max": 97.9171
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 23.3266,
+                  "min": 22.9908,
+                  "max": 23.7552
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.06375,
+                  "min": 15.3643,
+                  "max": 17.0179
+                },
+                "CompleteMilliseconds": {
+                  "median": 1.4122,
+                  "min": 1.3839,
+                  "max": 1.4557
+                },
+                "HeadersMilliseconds": {
+                  "median": 1.40635,
+                  "min": 1.3833,
+                  "max": 1.4519
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.045700000000000005,
+                  "min": 0.0339,
+                  "max": 0.0705
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.11080000000000001,
+                  "min": 0.0786,
+                  "max": 0.1545
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1327,
+                  "min": 0.0996,
+                  "max": 0.1995
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.1538,
+                  "min": 0.1115,
+                  "max": 0.2162
+                }
+              }
+            }
+          }
+        }
+      },
+      "rawFiles": [
+        {
+          "file": "TestResults/latency-next/info-baseline-0.jsonl",
+          "sha256": "c9f33f5ef89622731cc927e639f52075a2a212c1fd6eecfc1c37ebc80442106d",
+          "samples": 30,
+          "variant": "baseline",
+          "block": 0
+        },
+        {
+          "file": "TestResults/latency-next/info-baseline-1.jsonl",
+          "sha256": "1afd589e697c7388a4a3651b9c48a117492b53f45cb71b9a63bf8388533211fd",
+          "samples": 30,
+          "variant": "baseline",
+          "block": 1
+        },
+        {
+          "file": "TestResults/latency-next/info-candidate-0.jsonl",
+          "sha256": "a3d2f2eacfa2385ebaeeded4af7079b7c0359f54b8f39654caf25ca0cbf8d228",
+          "samples": 30,
+          "variant": "candidate",
+          "block": 0
+        },
+        {
+          "file": "TestResults/latency-next/info-candidate-1.jsonl",
+          "sha256": "9f07e58ba71324087cc6212ab61fd6870d8f513a11a50e6b8db7b132514f2379",
+          "samples": 30,
+          "variant": "candidate",
+          "block": 1
+        }
+      ],
+      "measuredProcesses": 120,
+      "disposableWarmupProcesses": 4
+    },
+    "specialized": {
+      "traceLevel": "Off",
+      "order": [
+        "baseline-0",
+        "candidate-0",
+        "candidate-1",
+        "baseline-1"
+      ],
+      "variants": {
+        "baseline": {
+          "environment": {
+            "runtime": ".NET 10.0.13",
+            "os": "Microsoft Windows 10.0.26300",
+            "architecture": "X64",
+            "coreSha256": "8EB60849C00ED83176599DBB79B014CF51FD7B3B7A804DFC8ADCAD7CE56AA47D",
+            "runnerSha256": "242DA4CC064915759A2E186AB3E77123941BF42903A154FB3EAC0663281C77AD",
+            "tieredCompilation": null,
+            "rounds": 7,
+            "scenarios": [
+              "cookies",
+              "large-header"
+            ],
+            "traceLevel": "Off",
+            "method": "Fresh server per sample; no HTTP readiness probe; HTTP/1.1 loopback; complete bodies validated; first error aborts without retry. Cold means fresh process, not cold filesystem/OS caches. Ready notification includes runtime launch and console reporting. Request timings include the separate client HTTP stack. No latency pass/fail thresholds."
+          },
+          "samples": {
+            "cookies/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 83.32714999999999,
+                  "min": 82.0432,
+                  "max": 89.9989
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.63525,
+                  "min": 21.0709,
+                  "max": 26.58
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.2175,
+                  "min": 15.5776,
+                  "max": 18.297400000000003
+                },
+                "CompleteMilliseconds": {
+                  "median": 34.87365,
+                  "min": 34.1233,
+                  "max": 41.3462
+                },
+                "HeadersMilliseconds": {
+                  "median": 34.869,
+                  "min": 34.1133,
+                  "max": 41.3303
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 119.94255000000001,
+                  "min": 116.5709,
+                  "max": 124.8202
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.05165,
+                  "min": 0.0427,
+                  "max": 0.0598
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.1493,
+                  "min": 0.1012,
+                  "max": 0.1766
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.3534,
+                  "min": 0.2615,
+                  "max": 0.3776
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.9267,
+                  "min": 2.6695,
+                  "max": 4.7724
+                }
+              }
+            },
+            "cookies/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.00375,
+                  "min": 81.3401,
+                  "max": 87.3204
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.55235,
+                  "min": 21.0987,
+                  "max": 23.798
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.97255,
+                  "min": 15.538300000000003,
+                  "max": 16.821500000000004
+                },
+                "CompleteMilliseconds": {
+                  "median": 1.141,
+                  "min": 1.0836,
+                  "max": 1.3117
+                },
+                "HeadersMilliseconds": {
+                  "median": 1.13765,
+                  "min": 1.0828,
+                  "max": 1.308
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.052199999999999996,
+                  "min": 0.0408,
+                  "max": 0.0694
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.1099,
+                  "min": 0.0835,
+                  "max": 0.1845
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1486,
+                  "min": 0.1049,
+                  "max": 0.2512
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.1815,
+                  "min": 0.1085,
+                  "max": 0.2962
+                }
+              }
+            },
+            "large-header/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.14125,
+                  "min": 81.363,
+                  "max": 86.8197
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.466900000000003,
+                  "min": 20.9637,
+                  "max": 23.3709
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.9813,
+                  "min": 15.554100000000002,
+                  "max": 17.399
+                },
+                "CompleteMilliseconds": {
+                  "median": 34.4119,
+                  "min": 33.4304,
+                  "max": 34.8203
+                },
+                "HeadersMilliseconds": {
+                  "median": 34.4031,
+                  "min": 33.4265,
+                  "max": 34.81
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 116.54765,
+                  "min": 114.991,
+                  "max": 121.6475
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.07955,
+                  "min": 0.0685,
+                  "max": 0.1283
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.17354999999999998,
+                  "min": 0.1386,
+                  "max": 0.2298
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.38855,
+                  "min": 0.3625,
+                  "max": 1.2422
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.94545,
+                  "min": 2.879,
+                  "max": 4.5302
+                }
+              }
+            },
+            "large-header/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.71615,
+                  "min": 81.5573,
+                  "max": 88.0928
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.47565,
+                  "min": 20.9507,
+                  "max": 22.9211
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.92925,
+                  "min": 15.6846,
+                  "max": 18.416700000000002
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.46795,
+                  "min": 0.4387,
+                  "max": 0.7158
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.4673,
+                  "min": 0.4383,
+                  "max": 0.6965
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0828,
+                  "min": 0.0664,
+                  "max": 0.1751
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.15315,
+                  "min": 0.1093,
+                  "max": 0.2426
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.18545,
+                  "min": 0.1386,
+                  "max": 0.2501
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.22065,
+                  "min": 0.1616,
+                  "max": 1.145
+                }
+              }
+            }
+          }
+        },
+        "candidate": {
+          "environment": {
+            "runtime": ".NET 10.0.13",
+            "os": "Microsoft Windows 10.0.26300",
+            "architecture": "X64",
+            "coreSha256": "80221D6F7C5D102C43592E2D801BD84D0B4E0012C0CDCC0768CFA9FE12A43D3A",
+            "runnerSha256": "242DA4CC064915759A2E186AB3E77123941BF42903A154FB3EAC0663281C77AD",
+            "tieredCompilation": null,
+            "rounds": 7,
+            "scenarios": [
+              "cookies",
+              "large-header"
+            ],
+            "traceLevel": "Off",
+            "method": "Fresh server per sample; no HTTP readiness probe; HTTP/1.1 loopback; complete bodies validated; first error aborts without retry. Cold means fresh process, not cold filesystem/OS caches. Ready notification includes runtime launch and console reporting. Request timings include the separate client HTTP stack. No latency pass/fail thresholds."
+          },
+          "samples": {
+            "cookies/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.9947,
+                  "min": 81.4244,
+                  "max": 88.4499
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.49795,
+                  "min": 20.8715,
+                  "max": 22.1216
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.977149999999998,
+                  "min": 15.560800000000004,
+                  "max": 16.782300000000003
+                },
+                "CompleteMilliseconds": {
+                  "median": 34.03885,
+                  "min": 32.8308,
+                  "max": 41.1954
+                },
+                "HeadersMilliseconds": {
+                  "median": 34.0304,
+                  "min": 32.817,
+                  "max": 41.1877
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 118.31360000000001,
+                  "min": 114.7297,
+                  "max": 126.2395
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.0527,
+                  "min": 0.0452,
+                  "max": 0.0635
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.13685,
+                  "min": 0.1074,
+                  "max": 0.1681
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.34709999999999996,
+                  "min": 0.2306,
+                  "max": 0.437
+                },
+                "warmMaxMilliseconds": {
+                  "median": 4.0121,
+                  "min": 2.5425,
+                  "max": 4.2765
+                }
+              }
+            },
+            "cookies/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.4889,
+                  "min": 80.8062,
+                  "max": 106.8481
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.6585,
+                  "min": 20.9609,
+                  "max": 23.5448
+                },
+                "serverListenMilliseconds": {
+                  "median": 16.1509,
+                  "min": 15.598799999999997,
+                  "max": 20.2486
+                },
+                "CompleteMilliseconds": {
+                  "median": 1.2737,
+                  "min": 1.2203,
+                  "max": 1.3689
+                },
+                "HeadersMilliseconds": {
+                  "median": 1.2726,
+                  "min": 1.2199,
+                  "max": 1.3604
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.04965,
+                  "min": 0.0381,
+                  "max": 0.0635
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.10905,
+                  "min": 0.0608,
+                  "max": 0.1379
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.14750000000000002,
+                  "min": 0.098,
+                  "max": 0.1924
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.15810000000000002,
+                  "min": 0.1044,
+                  "max": 0.2489
+                }
+              }
+            },
+            "large-header/first-server-request": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 81.99889999999999,
+                  "min": 80.8757,
+                  "max": 91.2113
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.48855,
+                  "min": 21.0251,
+                  "max": 26.4357
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.936150000000001,
+                  "min": 15.709700000000002,
+                  "max": 20.037699999999997
+                },
+                "CompleteMilliseconds": {
+                  "median": 32.899100000000004,
+                  "min": 32.2642,
+                  "max": 35.7078
+                },
+                "HeadersMilliseconds": {
+                  "median": 32.89355,
+                  "min": 32.2519,
+                  "max": 35.699
+                },
+                "processToFirstCompleteMilliseconds": {
+                  "median": 115.34110000000001,
+                  "min": 113.9119,
+                  "max": 124.0341
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.08425,
+                  "min": 0.073,
+                  "max": 0.1149
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.17909999999999998,
+                  "min": 0.1495,
+                  "max": 0.2155
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.3978,
+                  "min": 0.3672,
+                  "max": 1.2142
+                },
+                "warmMaxMilliseconds": {
+                  "median": 3.9398,
+                  "min": 3.1556,
+                  "max": 5.0866
+                }
+              }
+            },
+            "large-header/first-endpoint-after-control": {
+              "count": 14,
+              "metrics": {
+                "readyNotificationMilliseconds": {
+                  "median": 82.3999,
+                  "min": 81.3871,
+                  "max": 84.7359
+                },
+                "serverConfigureMilliseconds": {
+                  "median": 21.359099999999998,
+                  "min": 21.0859,
+                  "max": 22.978
+                },
+                "serverListenMilliseconds": {
+                  "median": 15.938999999999997,
+                  "min": 15.6003,
+                  "max": 16.450799999999997
+                },
+                "CompleteMilliseconds": {
+                  "median": 0.5507,
+                  "min": 0.5121,
+                  "max": 0.8412
+                },
+                "HeadersMilliseconds": {
+                  "median": 0.54905,
+                  "min": 0.5113,
+                  "max": 0.8392
+                },
+                "warmP50Milliseconds": {
+                  "median": 0.07925,
+                  "min": 0.0691,
+                  "max": 0.1036
+                },
+                "warmP95Milliseconds": {
+                  "median": 0.13840000000000002,
+                  "min": 0.1139,
+                  "max": 0.1892
+                },
+                "warmP99Milliseconds": {
+                  "median": 0.1718,
+                  "min": 0.1201,
+                  "max": 0.2388
+                },
+                "warmMaxMilliseconds": {
+                  "median": 0.2138,
+                  "min": 0.1308,
+                  "max": 0.4061
+                }
+              }
+            }
+          }
+        }
+      },
+      "rawFiles": [
+        {
+          "file": "TestResults/latency-next/rare-baseline-0.jsonl",
+          "sha256": "96beba8cd5cfebc5583d67fb601fe21748361c877e3582f3deebe9c4af118a8c",
+          "samples": 28,
+          "variant": "baseline",
+          "block": 0
+        },
+        {
+          "file": "TestResults/latency-next/rare-baseline-1.jsonl",
+          "sha256": "2e209d3e51d13f628e82cfb2e9c24e3169c57984a6ca643330edb483583a6dd5",
+          "samples": 28,
+          "variant": "baseline",
+          "block": 1
+        },
+        {
+          "file": "TestResults/latency-next/rare-candidate-0.jsonl",
+          "sha256": "ee423c180fda3286cfc2f74dc3581a5ede7e0ec0a887e762af80d14f5d099a48",
+          "samples": 28,
+          "variant": "candidate",
+          "block": 0
+        },
+        {
+          "file": "TestResults/latency-next/rare-candidate-1.jsonl",
+          "sha256": "69c3a0bc116692eba204515db31c4c0ce433c79efb4f2cfe82c772371ebe5589",
+          "samples": 28,
+          "variant": "candidate",
+          "block": 1
+        }
+      ],
+      "measuredProcesses": 112,
+      "disposableWarmupProcesses": 4
+    }
+  },
+  "tooling": {
+    "dotnetTrace": "10.0.750501",
+    "traceReaderLibrary": "3.1.13",
+    "jitProvider": "Microsoft-Windows-DotNETRuntime:0x100003801D:5",
+    "baselineTraceSha256": "549eac335194f5f7a14ef01b13b881ed50f4af3fe6786bb5185c474f46488c88"
+  },
+  "limits": [
+    "Windows/.NET 10.0.13 x64, default tiered compilation, unencrypted loopback HTTP/1.1",
+    "Fresh process is not cold OS/filesystem cache",
+    "Readiness is stdout; no request or application handler warmup before first server request",
+    "First endpoint follows 20 control requests on another route",
+    "Every status/protocol/body and specialized header is validated; failures abort without retry",
+    "All measured samples retained; short warm windows do not establish tail latency",
+    "Benchmarks serialized while holding both heavy slots and the network lock"
+  ]
+}

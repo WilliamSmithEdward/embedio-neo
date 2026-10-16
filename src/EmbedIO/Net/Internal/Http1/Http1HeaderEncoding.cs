@@ -41,47 +41,52 @@ namespace EmbedIO.Net.Internal
 
         internal static Http1Head Encode(HttpListenerResponse response, int bodyCount, bool ending)
         {
-            var encoding = WebServer.DefaultEncoding;
             var rawCookies = response.Headers.GetValues(HttpHeaderNames.SetCookie);
-            string? cookies = null;
-            if (response.ExistingCookies != null && response.ExistingCookies.Count > 0)
-            {
-                var builder = new StringBuilder();
-                foreach (var cookie in response.ExistingCookies) ResponseCookieFields.AppendLine(builder, cookie, response);
-                cookies = builder.ToString();
-            }
+            var cookies = response.ExistingCookies != null && response.ExistingCookies.Count > 0
+                ? EncodeCookies(response) : null;
             ValidateHead(response, rawCookies);
             var version = response.ProtocolVersion == HttpVersion.Version11 ? "1.1"
                 : response.ProtocolVersion == HttpVersion.Version10 ? "1.0" : response.ProtocolVersion.ToString();
             var status = StatusText(response.StatusCode);
             var chunked = response.SendChunked && !response.SuppressesBody;
             var endingLength = ending && chunked && bodyCount != 0 ? ResponseStream.EndingLength(response) : 0;
-            byte[] buffer;
-            int size;
 #if NET10_0_OR_GREATER
-            // Common headers fit on the stack: concatenate without a builder, then
-            // perform one encoding operation. Large fields use the exact-size path.
+            // Common headers fit on the stack. Compile the large-header encoder only if needed.
             Span<char> text = stackalloc char[2048];
             var characters = new HeaderWriter(text);
             WriteHeaderFields(response, ref characters, version, status, cookies, rawCookies);
             if (!characters.Overflow)
             {
+                var encoding = WebServer.DefaultEncoding;
                 var content = text.Slice(0, characters.Position);
-                size = encoding.GetByteCount(content);
-                buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked, endingLength));
+                var size = encoding.GetByteCount(content);
+                var buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked, endingLength));
                 encoding.GetBytes(content, buffer);
+                return new Http1Head(buffer, size);
             }
-            else
 #endif
-            {
-                var writer = new HeaderWriter(encoding, null, 0);
-                WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
-                size = writer.Position;
-                buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked, endingLength));
-                writer = new HeaderWriter(encoding, buffer, 0);
-                WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
-            }
+            return EncodeLargeHead(response, bodyCount, chunked, endingLength, version, status, cookies, rawCookies);
+        }
 
+        // Keep uncommon work out of the first ordinary response's JIT compilation.
+        private static string EncodeCookies(HttpListenerResponse response)
+        {
+            var builder = new StringBuilder();
+            foreach (var cookie in response.ExistingCookies ?? throw new InvalidOperationException("Missing response cookies."))
+                ResponseCookieFields.AppendLine(builder, cookie, response);
+            return builder.ToString();
+        }
+
+        private static Http1Head EncodeLargeHead(HttpListenerResponse response, int bodyCount, bool chunked, int endingLength,
+            string version, string status, string? cookies, string[]? rawCookies)
+        {
+            var encoding = WebServer.DefaultEncoding;
+            var writer = new HeaderWriter(encoding, null, 0);
+            WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
+            var size = writer.Position;
+            var buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked, endingLength));
+            writer = new HeaderWriter(encoding, buffer, 0);
+            WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
             return new Http1Head(buffer, size);
         }
 

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The managed listener display name and startup log use `EmbedIO-Neo HTTP Listener`.
+  Original license and copyright attribution are preserved.
+
 ### Fixed
 
 - Permanent client-ban storage retries the Windows replacement error that leaves
@@ -10,6 +15,10 @@
   still propagate without a delete-first fallback.
 
 ### Performance
+
+- Separate uncommon HTTP/1 header encoding and optional log formatting from common
+  first-response compilation. See the [cold-path measurements](docs/project/cold-path-jit-latency.md)
+  for Windows results, logging configurations, specialized endpoints and limits.
 
 - Case-sensitive literal endpoint routes avoid regex construction and first-match
   compilation while preserving matching semantics. A fresh-process HTTP latency
