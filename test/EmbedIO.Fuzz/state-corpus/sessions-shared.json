@@ -1,0 +1,81 @@
+{
+  "Scenario": "sessions",
+  "Seed": 1729,
+  "Steps": [
+    {
+      "Actor": 0,
+      "Command": 1,
+      "Value": 7
+    },
+    {
+      "Actor": 0,
+      "Command": 8,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 8,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 9,
+      "Value": 23
+    },
+    {
+      "Actor": 1,
+      "Command": 2,
+      "Value": 3
+    },
+    {
+      "Actor": 0,
+      "Command": 7,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 6,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 2,
+      "Value": 3
+    },
+    {
+      "Actor": 1,
+      "Command": 1,
+      "Value": 5
+    },
+    {
+      "Actor": 1,
+      "Command": 8,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 5,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 10,
+      "Value": 0
+    }
+  ]
+}

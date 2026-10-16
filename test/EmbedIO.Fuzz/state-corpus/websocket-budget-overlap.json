@@ -1,0 +1,71 @@
+{
+  "Scenario": "websocket-budget",
+  "Seed": 1729,
+  "Steps": [
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 2,
+      "Value": 20
+    },
+    {
+      "Actor": 0,
+      "Command": 3,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 4,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 2,
+      "Value": 20
+    },
+    {
+      "Actor": 1,
+      "Command": 3,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 4,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 6,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 7,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 8,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 5,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 5,
+      "Value": 0
+    }
+  ]
+}

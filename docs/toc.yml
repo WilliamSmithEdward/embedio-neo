@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Multi-connection state-machine fuzzing
+      href: guides/multi-connection-fuzzing.md
     - name: WebSocket handshake status
       href: guides/websocket-handshake-status.md
     - name: Outstanding WebSocket deliveries (Neo v2)

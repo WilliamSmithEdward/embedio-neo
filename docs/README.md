@@ -15,6 +15,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Usage guides
 
+- [Multi-connection state-machine fuzzing](guides/multi-connection-fuzzing.md): deterministic actor traces, replay, invariant-preserving shrinking and bounded cleanup.
 - [WebSocket handshake status](guides/websocket-handshake-status.md): exact endpoints, module order, and HTTP/1 versus extended CONNECT.
 - [Outstanding WebSocket deliveries](guides/websocket-receive-limits.md): opt-in connection and module limits covering assembly, queues and unfinished callbacks.
 - [WebSockets during a graceful drain](guides/graceful-drain-websockets.md): new in Neo v2, an opt-in 1001 close on drain and the `DrainStarted` signal, over HTTP/1.1, HTTP/2 and HTTP/3.
