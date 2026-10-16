@@ -87,7 +87,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2025, macos-15]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.os == 'macos-15' && 20 || 15 }}
+    timeout-minutes: ${{ (matrix.os == 'macos-15' || (matrix.os == 'ubuntu-24.04' && github.event_name == 'push')) && 20 || 15 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -171,7 +171,7 @@ jobs:
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
           # Owner-approved macOS coverage allowance; case deadlines and discovery stay enforced.
-          EMBEDIO_REGRESSION_TIMEOUT: "${{ matrix.os == 'macos-15' && '12m' || '8m' }}"
+          EMBEDIO_REGRESSION_TIMEOUT: "${{ (matrix.os == 'macos-15' || (matrix.os == 'ubuntu-24.04' && github.event_name == 'push')) && '12m' || '8m' }}"
         run: |
           set -euo pipefail
           status=0
