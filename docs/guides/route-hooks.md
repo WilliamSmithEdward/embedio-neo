@@ -1,6 +1,6 @@
 # Route hooks and enum statuses
 
-These additions are unreleased after 2.2.0. Existing applications do not need to
+These additions require EmbedIO-Neo 2.3.0 or later. Existing applications do not need to
 change: unannotated actions still call `OnBeforeHandler()` exactly as before,
 and all existing integer status APIs remain available.
 

@@ -171,7 +171,7 @@ reports an error at build time instead:
 | EMBEDIO012 (warning) | The method returns `ValueTask` or `ValueTask<T>`, which is serialized as an object rather than awaited, as with reflection. |
 
 | EMBEDIO013 | Authorization attributes are invalid or contradictory. |
-| EMBEDIO014 | A before-handler declaration names an invalid/ambiguous hook or behavior (unreleased after 2.2.0). |
+| EMBEDIO014 | A before-handler declaration names an invalid/ambiguous hook or behavior (2.3.0+). |
 
 [Before-handler attributes](route-hooks.md) generate direct hook calls before
 parameter binding; they do not use reflection at request time. The AOT smoke host

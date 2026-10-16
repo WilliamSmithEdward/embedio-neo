@@ -1,6 +1,6 @@
 # Response-pipeline state-machine fuzzing
 
-This test-only expansion is unreleased after 2.2.0. The unpackaged
+This test-only expansion is included in the 2.3.0 source tree. The unpackaged
 `EmbedIO.Fuzz` executable exercises the real file/response pipeline through
 `response-http1`, `response-http2` and `response-http3`. Production packages,
 dependencies, APIs and defaults are unchanged.

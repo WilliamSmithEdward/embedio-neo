@@ -15,7 +15,7 @@ disagree, the guide and the source win.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current version | 2.2.0, the v2 engine. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current version | 2.3.0, the v2 engine. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x
@@ -212,7 +212,7 @@ bugs.
   before controller registration and register authentication before the API.
   Authorization runs before controller activation, preprocessing and body binding.
   `OnBeforeHandler()` remains available for application-specific checks.
-- Unreleased after 2.2.0: `[BeforeHandler(nameof(Prepare))]` on a controller or
+- In 2.3.0+: `[BeforeHandler(nameof(Prepare))]` on a controller or
   action selects a public instance `void`/`Task` hook (zero parameters or one
   `CancellationToken`). `Append` runs `OnBeforeHandler()` then the named hook;
   `Replace` runs only the named hook; `[BeforeHandler(Behavior =
@@ -223,7 +223,7 @@ bugs.
   The default controller hook disables response caching; Replace/Skip omit that
   default, so set an appropriate cache policy explicitly. Hooks are awaited;
   use request-aware activation/release for dependencies needed across the action.
-- Unreleased after 2.2.0: `HttpStatusCode` overloads cover response helpers,
+- In 2.3.0+: `HttpStatusCode` overloads cover response helpers,
   redirects, standard HTML, informational sections, problem details and OpenAPI
   responses. Use `Response.SetStatusCode(HttpStatusCode.Accepted)` to avoid a
   cast; `Response.StatusCode` remains an `int`. Existing integer APIs and their
@@ -236,7 +236,7 @@ bugs.
 Guides: [controllers](docs/guides/getting-started/controllers.md),
 [routes and parameters](docs/guides/getting-started/requests.md),
 [base routes](docs/guides/controller-base-routes.md),
-[route hooks and enum statuses](docs/guides/route-hooks.md) (unreleased).
+[route hooks and enum statuses](docs/guides/route-hooks.md) (2.3.0+).
 
 Generated bindings carry multipart and authorization metadata as well as routes.
 The OpenAPI builder describes `multipart/form-data` request bodies and can derive
@@ -399,10 +399,10 @@ writer lease; dispose it before reopening the store. Changes save before the
 in-memory ban/unban is confirmed, and persistence errors propagate. Do not edit
 the active file externally or treat this local store as distributed state.
 
-The unreleased storage correction retries only Windows replacement error 1175,
+The 2.3.0 storage correction retries only Windows replacement error 1175,
 which leaves both filenames intact, at most three times. Other failures and
 exhausted retries still throw; there is no delete-first or permission-bypassing
-fallback. Published 2.2.0 does not contain this correction. See
+fallback. Earlier releases, including 2.2.0, do not contain this correction. See
 [persistent client banning](docs/user-reports/context-client-banning.md#persistence-contract).
 
 ### Bearer authentication and authorization (2.2.0+)
@@ -435,7 +435,7 @@ Guide: [bearer authentication and authorization](docs/guides/bearer-authenticati
 
 ## 14. Diagnostics and telemetry
 
-- Unreleased after 2.2.0: the managed listener display name is
+- In 2.3.0+: the managed listener display name is
   `EmbedIO-Neo HTTP Listener`, including the startup log. The `EmbedIO`
   namespace, trace-source identity, and upstream license attribution are preserved.
 - Logging goes to the `TraceSource` named `EmbedIO`
@@ -474,7 +474,7 @@ api.WithController(ApiControllers.ItemsController)
 - Use `SendDataWithMetadataAsync`, `GetRequestDataWithMetadataAsync` and
   `Json.SerializeWithMetadata` with source-generated `JsonTypeInfo`.
 - Generator diagnostics EMBEDIO001-014 explain unsupported controllers and invalid
-  authorization/hook attributes (014 is unreleased after 2.2.0). `[MultipartForm]`,
+  authorization/hook attributes (014 requires 2.3.0+). `[MultipartForm]`,
   authorization and before-handler attributes work with generated bindings as well
   as reflection registration. Generated hooks use direct calls without runtime reflection.
 
@@ -511,9 +511,9 @@ first use of each endpoint and warm request latency are different costs.
 
 The repository's fresh-process runner is documented in
 [performance checks](test/EmbedIO.Performance/README.md#first-endpoint-latency).
-The [first-endpoint report](docs/project/first-endpoint-latency.md) describes an
-unreleased literal-route optimization and its measured limits. Do not assume it
-is in the published 2.2.0 packages. Preserve existing public APIs and behavior
+The [first-endpoint report](docs/project/first-endpoint-latency.md) describes the
+literal-route optimization included in 2.3.0 and its measured limits. It is absent
+from 2.2.0 packages. Preserve existing public APIs and behavior
 when changing the library; follow [CONTRIBUTING.md](CONTRIBUTING.md).
 
 The [cold-path experiment](docs/project/cold-path-jit-latency.md) retains
@@ -523,7 +523,7 @@ describe experimental binaries, not current production behavior. The requested
 listener display name is `EmbedIO-Neo HTTP Listener`. The measurement runner,
 wire regressions and evidence remain available for future investigations.
 
-### Response-pipeline validation (unreleased after 2.2.0)
+### Response-pipeline validation (2.3.0 source tree)
 
 The test-only response state machines combine file ranges, conditional requests,
 gzip/deflate, HEAD metadata, cookies, trailers and cancellation over real HTTP/1,
