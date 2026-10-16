@@ -461,6 +461,11 @@ Guide: [trimming and Native AOT](docs/guides/trimming-and-native-aot.md).
 
 ### Startup and first-endpoint latency
 
+Prioritize warm steady-state and tail latency when a cold/warm tradeoff is
+necessary; aim to improve both. A cold-start gain alone does not justify a
+meaningful warm regression. Measure and report each separately, using Windows
+desktop / embedded hosting as the lead environment.
+
 Windows desktop / embedded hosting is the current primary performance target.
 Measure your deployed application: listener readiness, first complete response,
 first use of each endpoint and warm request latency are different costs.
@@ -489,6 +494,18 @@ The [first-endpoint report](docs/project/first-endpoint-latency.md) describes an
 unreleased literal-route optimization and its measured limits. Do not assume it
 is in the published 2.2.0 packages. Preserve existing public APIs and behavior
 when changing the library; follow [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Response-pipeline validation (unreleased after 2.2.0)
+
+The test-only response state machines combine file ranges, conditional requests,
+gzip/deflate, HEAD metadata, cookies, trailers and cancellation over real HTTP/1,
+HTTP/2 and HTTP/3. They cover cached/streamed and empty/large representations,
+actual multi-client overlap and a flushed-prefix cancellation boundary.
+Expected bodies/ranges are independent of production helpers; negative oracle
+self-tests must reject deliberately corrupted responses. See
+[response-pipeline fuzzing](docs/guides/response-pipeline-fuzzing.md) for commands,
+corpus and limits. These checks validate correctness and cleanup; they do not
+establish latency or exhaustive coverage, and configured CI is not a passing run.
 
 ## 17. Pitfalls checklist
 

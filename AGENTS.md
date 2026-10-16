@@ -1,3 +1,7 @@
+## Performance priorities
+
+- William's preference (2026-10-16): prioritize warm steady-state and tail latency over cold-start latency when a tradeoff is necessary, while aiming to improve both. Measure cold and warm behavior separately; do not accept a meaningful warm regression solely for a cold-start gain. Windows desktop / embedded hosting remains the lead measurement environment.
+
 ## Primer maintenance
 
 - William's standing preference (2026-10-16): keep `AGENT_PRIMER.md` up to date as part of every relevant change. Check APIs, defaults, behavior, supported runtimes/configurations, package/version guidance, security and ownership rules, examples, pitfalls and guide links. Update the primer in the same PR when affected; release preparation must verify its version and feature availability against the actual release.

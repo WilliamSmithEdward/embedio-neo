@@ -239,7 +239,7 @@ internal static class ConnectionIsolationFuzz
         return new HttpClient(handler) { DefaultRequestVersion = Version(protocol), DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact, Timeout = Timeout.InfiniteTimeSpan };
     }
 
-    private static string Prefix(bool quic)
+    internal static string Prefix(bool quic)
     {
         using var socket = new Socket(AddressFamily.InterNetwork, quic ? SocketType.Dgram : SocketType.Stream, quic ? ProtocolType.Udp : ProtocolType.Tcp);
         socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
@@ -247,7 +247,7 @@ internal static class ConnectionIsolationFuzz
         return (quic ? "https" : "http") + "://127.0.0.1:" + port + "/";
     }
 
-    private static X509Certificate2 Certificate()
+    internal static X509Certificate2 Certificate()
     {
         using var key = RSA.Create(2048);
         var request = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);

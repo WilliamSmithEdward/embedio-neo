@@ -29,6 +29,7 @@ values 0–63; their interpretation belongs to the scenario.
 | `auth-jwt` | Explicit-key JWT trust, lifetime, cancellation and concurrent principal isolation |
 | `auth-http1` | Real HTTP/1 authentication across overlapping and reused connections |
 | `auth-http2` | Real HTTP/2 authentication across overlapping and reused connections |
+| `response-http1`, `response-http2`, `response-http3` | File ranges/validators, compression, HEAD, cookies/trailers and response cancellation over real protocol connections |
 | `http1-connections` | Real HTTP/1 connection isolation |
 | `http2-connections` | Real HTTP/2 connection isolation |
 | `http3-connections` | Real HTTP/3 connection isolation; requires working native QUIC support |
@@ -45,14 +46,18 @@ complement the existing parser fuzzers and do not replace their coverage feedbac
 The state-machine campaigns use generated traces and explicit invariant checks;
 they are not coverage-guided fuzzers.
 
+See [response-pipeline fuzzing](response-pipeline-fuzzing.md) for the response
+oracles, command mapping, boundary corpus and negative self-test.
+
 ## CI campaigns
 
-The Fuzz workflow runs shared models, runner self-tests, every checked-in corpus
-trace, and real HTTP/1 and HTTP/2 connection cases on Ubuntu 24.04 and Windows
+The Fuzz workflow runs shared models, runner self-tests, the native-independent corpus
+traces, and real HTTP/1 and HTTP/2 connection cases on Ubuntu 24.04 and Windows
 2025. Pull-request and other nonscheduled runs execute 500 cases per model and
 32 cases per network protocol; scheduled runs execute 5,000 and 128 respectively.
 A separate Ubuntu job requires HTTP/3, using the SHA-256-verified libmsquic 2.6.2
-package pinned by the repository's main CI. It executes 32 HTTP/3 cases normally
+package pinned by the repository's main CI. It also replays QUIC-dependent traces under `state-corpus/quic` and runs the
+response HTTP/3 campaign. Each network campaign executes 32 HTTP/3 cases normally
 and 128 on the schedule. Unsupported QUIC does not silently skip this job.
 
 These are configured validation jobs, not a claim that a particular run passed.
