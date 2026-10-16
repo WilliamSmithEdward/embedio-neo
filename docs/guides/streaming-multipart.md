@@ -1,6 +1,6 @@
 # Streaming multipart file uploads
 
-This feature is under development and is not included in NuGet 2.0.1.
+Streaming multipart uploads are introduced in EmbedIO-Neo 2.1.0.
 `MultipartReader` reads `multipart/form-data` one section at a time. File bytes
 flow directly to your destination stream; the reader does not buffer whole files
 or create temporary files. Existing JSON and URL-encoded form bindings are unchanged.
@@ -8,7 +8,7 @@ or create temporary files. Existing JSON and URL-encoded form bindings are uncha
 ## A controller that publishes one fully validated upload
 
 The following complete program accepts one file at `POST /api/uploads`. Build it
-against the source containing this feature. It writes to a private staging
+against EmbedIO-Neo 2.1.0 or later. It writes to a private staging
 directory, validates the complete multipart request, and only then moves the file
 to its final name. Both directories live on the same filesystem. Keep the upload
 root outside any static-file mount and grant write access only to the server account.
