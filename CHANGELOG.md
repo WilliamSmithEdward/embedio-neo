@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-16
+
 ### Added
 
 - Test-only trusted-proxy, CORS and conditional/range policy fuzzing with
@@ -45,6 +47,14 @@
   compilation while preserving matching semantics. A fresh-process HTTP latency
   harness separates startup, first server request, first endpoint use and warm
   requests; see the [measurement report](docs/project/first-endpoint-latency.md).
+
+### Compatibility
+
+- Existing integer status APIs, unannotated controller hooks, public APIs, request
+  defaults, target frameworks and runtime dependency groups are preserved.
+- The experimental HTTP/1 header/logging extraction was deferred after mixed warm
+  measurements and is not included. Its retained evidence is not a performance
+  claim for the released binaries.
 
 ## [2.2.0] - 2026-10-16
 

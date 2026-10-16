@@ -1,6 +1,6 @@
 # Stateful application-surface fuzzing
 
-These test-only campaigns are unreleased after 2.2.0. They extend
+These test-only campaigns are included in the 2.3.0 source tree. They extend
 [response-pipeline fuzzing](response-pipeline-fuzzing.md) using the existing
 [state-machine runner](multi-connection-fuzzing.md), without changing production
 APIs, defaults, targets or dependency groups. The fuzz executable now references

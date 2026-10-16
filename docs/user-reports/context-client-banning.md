@@ -184,7 +184,7 @@ may remain on disk after disposal; the open lease determines ownership. Do not e
 the file externally or share it with noncooperating writers. Same-directory atomic
 replacement requires filesystem support; no fallback deletes the old file first.
 
-The unreleased Windows correction retains `File.Replace` and its metadata/ACL
+The Windows correction in 2.3.0 retains `File.Replace` and its metadata/ACL
 handling. It retries only `ERROR_UNABLE_TO_REMOVE_REPLACED` (1175), for which
 [Microsoft documents that both filenames remain intact](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilea).
 There are at most three retries, with requested waits of 1, 2 and 4 ms; scheduling
@@ -198,14 +198,14 @@ This was reproduced independently of EmbedIO on Windows 10.0.26300 / .NET 10.0.1
 retry with the same paths. The interfering actor was not identified. Ten new
 regression cases cover recovery, bounded failure, other error codes and real
 sharing failures that preserve disk/memory state and clean temporary files.
-This correction is not in published 2.2.0.
+This correction requires 2.3.0 or later; 2.2.0 does not contain it.
 This is a single-host application store, not distributed state or a transaction
 across processes. It does not promise recovery from every power-loss/filesystem
 failure. Existing abandoned temporary files are not treated as committed bans.
 
 ## Validation
 
-The implementation is being validated before merge. Coverage includes live
+Regression coverage includes live
 ban/unban on both listeners; real same-port restart recovery; removal surviving
 another restart; corrupt-file rejection; write-failure memory/disk consistency;
 Unicode round trips; writer leases; concurrent updates; permanent/temporary
