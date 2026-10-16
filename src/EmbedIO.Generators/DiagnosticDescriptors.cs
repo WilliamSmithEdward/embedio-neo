@@ -94,6 +94,10 @@ namespace EmbedIO.Generators
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
+        internal static readonly DiagnosticDescriptor InvalidBeforeHandler = new(
+            "EMBEDIO014", "Invalid before-handler hook", "Before-handler hook on '{0}' is invalid: {1}",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
         internal static readonly DiagnosticDescriptor InvalidAuthorization = new(
             "EMBEDIO013",
             "Invalid authorization attribute",

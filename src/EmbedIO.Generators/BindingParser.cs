@@ -13,7 +13,7 @@ namespace EmbedIO.Generators
     // Reads one class marked with GeneratedControllerBindingAttribute and produces its
     // generated source. Each rule mirrors WebApiModuleBase's reflection binder, so a
     // generated binding registers the same routes and binds parameters the same way.
-    internal sealed class BindingParser
+    internal sealed partial class BindingParser
     {
         private const string Services = "global::EmbedIO.WebApi.ControllerBindingServices";
         private const string TaskType = "global::System.Threading.Tasks.Task";
@@ -162,9 +162,11 @@ namespace EmbedIO.Generators
                     failed = true;
                     continue;
                 }
+                var before = ReadBeforeHandler(controller, method);
+                if (!before.Valid) { failed = true; continue; }
                 var operationName = "__EmbedIO_" + propertyName + "_Operation" + Literals.Int(invokerCount);
                 var invokerName = "__EmbedIO_" + propertyName + "_Invoker" + Literals.Int(invokerCount++);
-                var invoker = GenerateInvoker(controller, method, routeAttributes, jsonContext, invokerName, operationName, location);
+                var invoker = GenerateInvoker(controller, method, routeAttributes, jsonContext, invokerName, operationName, location, before.Code, before.Awaits);
                 if (invoker is null)
                 {
                     failed = true;
@@ -177,7 +179,8 @@ namespace EmbedIO.Generators
                 {
                     routes.Add("new global::EmbedIO.WebApi.WebApiRouteBinding<" + controllerName + ">((global::EmbedIO.HttpVerbs)("
                         + Literals.Int(route.Verb) + "), " + Literals.String(route.Route) + ", " + (route.IsBaseRoute ? "true" : "false")
-                        + ", " + handlerId + ", " + invokerName + (_types.WebApiOperation is null ? string.Empty : ", " + operationName) + ")");
+                        + ", " + handlerId + ", " + invokerName + (_types.WebApiOperation is null ? string.Empty : ", " + operationName)
+                        + (before.Code is null ? string.Empty : ", " + operationName + ".Authorization, false") + ")");
                 }
             }
 
@@ -330,14 +333,15 @@ namespace EmbedIO.Generators
             return new RouteInfo(verb, route, isBaseRoute);
         }
 
-        private string? GenerateInvoker(INamedTypeSymbol controller, IMethodSymbol method, List<RouteInfo> routes, INamedTypeSymbol? jsonContext, string invokerName, string operationName, Location? fallback)
+        private string? GenerateInvoker(INamedTypeSymbol controller, IMethodSymbol method, List<RouteInfo> routes, INamedTypeSymbol? jsonContext, string invokerName, string operationName, Location? fallback, string? preprocessing, bool preprocessingAwaits)
         {
             var methodLocation = method.Locations.FirstOrDefault(l => l.IsInSource) ?? fallback;
             var setup = new StringBuilder();
             var body = new StringBuilder();
             var arguments = new List<string>();
             var metadata = new List<string>();
-            var awaits = false;
+            var awaits = preprocessingAwaits;
+            if (preprocessing != null) body.Append(preprocessing);
             var failed = false;
             var routeParameters = RouteParameterNames(routes);
 

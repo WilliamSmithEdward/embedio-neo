@@ -212,6 +212,22 @@ bugs.
   before controller registration and register authentication before the API.
   Authorization runs before controller activation, preprocessing and body binding.
   `OnBeforeHandler()` remains available for application-specific checks.
+- Unreleased after 2.2.0: `[BeforeHandler(nameof(Prepare))]` on a controller or
+  action selects a public instance `void`/`Task` hook (zero parameters or one
+  `CancellationToken`). `Append` runs `OnBeforeHandler()` then the named hook;
+  `Replace` runs only the named hook; `[BeforeHandler(Behavior =
+  BeforeHandlerBehavior.Skip)]` runs neither. The action attribute replaces the
+  class selection, including inherited defaults. Hooks run after authorization
+  and activation, before body/parameter binding. They cannot bypass authentication,
+  authorization or earlier modules. Unannotated controllers behave as before.
+  The default controller hook disables response caching; Replace/Skip omit that
+  default, so set an appropriate cache policy explicitly. Hooks are awaited;
+  use request-aware activation/release for dependencies needed across the action.
+- Unreleased after 2.2.0: `HttpStatusCode` overloads cover response helpers,
+  redirects, standard HTML, informational sections, problem details and OpenAPI
+  responses. Use `Response.SetStatusCode(HttpStatusCode.Accepted)` to avoid a
+  cast; `Response.StatusCode` remains an `int`. Existing integer APIs and their
+  validation still apply, including custom numeric statuses where supported.
 - Controllers need a public parameterless constructor for
   `WithController<T>()`, or use `WithController<T>(() => new T(...))`.
 - `CaseInsensitiveRoutes` on the Web API module enables case-insensitive literal
@@ -219,7 +235,8 @@ bugs.
 
 Guides: [controllers](docs/guides/getting-started/controllers.md),
 [routes and parameters](docs/guides/getting-started/requests.md),
-[base routes](docs/guides/controller-base-routes.md).
+[base routes](docs/guides/controller-base-routes.md),
+[route hooks and enum statuses](docs/guides/route-hooks.md) (unreleased).
 
 Generated bindings carry multipart and authorization metadata as well as routes.
 The OpenAPI builder describes `multipart/form-data` request bodies and can derive
@@ -453,9 +470,10 @@ api.WithController(ApiControllers.ItemsController)
 
 - Use `SendDataWithMetadataAsync`, `GetRequestDataWithMetadataAsync` and
   `Json.SerializeWithMetadata` with source-generated `JsonTypeInfo`.
-- Generator diagnostics EMBEDIO001-013 explain unsupported controllers and invalid
-  authorization attributes. `[MultipartForm]` and authorization attributes work
-  with generated bindings as well as reflection registration.
+- Generator diagnostics EMBEDIO001-014 explain unsupported controllers and invalid
+  authorization/hook attributes (014 is unreleased after 2.2.0). `[MultipartForm]`,
+  authorization and before-handler attributes work with generated bindings as well
+  as reflection registration. Generated hooks use direct calls without runtime reflection.
 
 Guide: [trimming and Native AOT](docs/guides/trimming-and-native-aot.md).
 
