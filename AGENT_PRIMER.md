@@ -464,6 +464,11 @@ Guide: [trimming and Native AOT](docs/guides/trimming-and-native-aot.md).
 
 ### Startup and first-endpoint latency
 
+Prioritize warm steady-state and tail latency when a cold/warm tradeoff is
+necessary; aim to improve both. A cold-start gain alone does not justify a
+meaningful warm regression. Measure and report each separately, using Windows
+desktop / embedded hosting as the lead environment.
+
 Windows desktop / embedded hosting is the current primary performance target.
 Measure your deployed application: listener readiness, first complete response,
 first use of each endpoint and warm request latency are different costs.
@@ -499,6 +504,10 @@ specialized endpoints and their deferred JIT tradeoff. These changes are also un
 not cache response data or execute application handlers during startup. Compare
 both first-request and total launch latency; no general JSON or tail-latency
 improvement is established.
+
+The [warm follow-up](docs/project/cold-path-jit-latency.md#warm-latency-follow-up-and-merge-decision)
+retains mixed light-load results. The cold-path candidate remains unmerged;
+its cold gains do not establish warm or tail-latency non-regression.
 
 ## 17. Pitfalls checklist
 

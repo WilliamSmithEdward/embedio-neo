@@ -136,6 +136,61 @@ first-request cost for these small deferred costs; it is not a uniform
 first-endpoint improvement. Applications prioritizing those specialized paths
 should evaluate this tradeoff with their own request sequence.
 
+## Warm-latency follow-up and merge decision
+
+William's priority is warm steady-state and tail latency when a cold/warm
+tradeoff is necessary, while aiming to improve both. The candidate remains
+unmerged: the following warm evidence establishes neither a consistent warm
+improvement nor a sufficiently strong non-regression conclusion.
+
+The sustained comparison used the same baseline and candidate binaries as the
+cold comparison, on the same Windows/.NET host. Four rounds alternated engine
+order, with five seconds of warmup and 15 seconds of measurement per sample.
+The server used CPUs 0-3 and the client CPUs 4-7. Both heavy slots and the network
+lock were held throughout; builds and fuzz campaigns ran afterward.
+
+All scenarios used **eight actual connections**, overriding their historical
+names. This is paced light load at 64 aggregate requests/second (about 65 for
+16-request pipeline batches), not saturation or a throughput comparison. Prefix
+scenario selection also included the close-after-100-requests control. All 32
+samples completed without client errors, unanswered pipeline requests or forced
+process termination. Each ordinary sample contains about 960 measured requests;
+tail estimates, especially correlated pipeline batches, have limited precision.
+
+Values below are medians of four per-sample percentiles, not pooled percentiles.
+The evidence retains every sample and its p50/p95/p99 range.
+
+| Scenario | p50 before/after ms | p95 before/after ms | p99 before/after ms | p99 before range ms | p99 after range ms |
+|---|---:|---:|---:|---:|---:|
+| Small keep-alive | 0.1831 / 0.1839 | 0.2287 / 0.2271 | 0.2495 / 0.2463 | 0.2431-0.2559 | 0.2399-0.5439 |
+| Pipeline 16 | 0.3983 / 0.3839 | 0.6399 / 0.6271 | 0.7295 / 0.7647 | 0.7103-0.7743 | 0.7039-0.7935 |
+| Small close-100 control | 0.1831 / 0.1831 | 0.2271 / 0.2255 | 0.2495 / 0.2527 | 0.2431-0.2623 | 0.2463-0.2719 |
+| JSON 1 KiB | 0.2319 / 0.2399 | 0.2879 / 0.2879 | 0.3407 / 0.3407 | 0.3071-0.9599 | 0.3295-0.4223 |
+
+Small-response medians are close. Pipeline median p99 rises by 0.0352 ms
+(about 4.8%), while its p50/p95 decrease; JSON p50 rises by 0.0080 ms
+(about 3.4%), with unchanged median p95/p99. The individual rounds vary, and the
+candidate has a small-response p99 outlier. These observations must not be
+reported as a warm win or dismissed solely because cold response medians improved.
+Longer representative-load measurements are needed before accepting the tradeoff.
+
+A separate socket-free counting-transport ABBA check ran with tiered compilation
+disabled, five internal rounds per sample. Warm first fixed 13-byte writes were
+1,830-1,870 ns before and 1,836-1,878 ns after; first chunked writes were
+1,873-1,889 ns before and 1,805-1,851 ns after. Managed bytes and transport-write
+counts match for corresponding rows. This short component check does not
+establish end-to-end tail behavior or settle the mixed network result.
+
+An earlier connection-churning driver failed with Windows socket error 10055
+before producing valid comparison samples. Its failure logs are retained; it
+does not demonstrate a production defect or contribute timing results here.
+
+The [warm evidence](evidence/warm-response-latency-20261016.json) records all
+rounds, component rows, binary identities and raw-file hashes. The response
+pipeline fuzz expansion in PR #469 also passed 128 generated cases per protocol
+against this candidate core, plus its six negative oracle checks; correctness
+validation does not supply performance evidence.
+
 ## Validation and limits
 
 Existing response-write regressions now exercise common, boundary-sized and large
