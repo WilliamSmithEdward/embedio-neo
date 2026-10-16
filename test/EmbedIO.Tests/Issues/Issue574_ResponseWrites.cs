@@ -126,14 +126,23 @@ namespace EmbedIO.Tests.Issues
         [TestCase(true)]
         public async Task LargeHeadersDoNotProduceNegativeBodyPrefixLength(bool asynchronous)
         {
-            using var fixture = await Fixture.Create(false);
-            fixture.Response.Headers.Set("X-Large", new string('x', 17000));
-            var payload = Encoding.ASCII.GetBytes("ABCDEF");
-            if (asynchronous) await fixture.Stream.WriteAsync(payload, 0, payload.Length);
-            else fixture.Stream.Write(payload, 0, payload.Length);
-            fixture.Stream.Dispose();
-            var wire = Encoding.ASCII.GetString(fixture.Transport.ToArray());
-            Assert.That(wire, Does.EndWith("\r\n\r\nABCDEF"));
+            foreach (var length in new[] { 128, 2048, 17000 })
+            {
+                using var fixture = await Fixture.Create(false);
+                var field = new string('x', length);
+                fixture.Response.Headers.Set("X-Large", field);
+                fixture.Response.Headers.Add(HttpHeaderNames.SetCookie, "raw=one; Path=/");
+                fixture.Response.SetCookie(new System.Net.Cookie("structured", "two", "/"));
+                var payload = Encoding.ASCII.GetBytes("ABCDEF");
+                if (asynchronous) await fixture.Stream.WriteAsync(payload, 0, payload.Length);
+                else fixture.Stream.Write(payload, 0, payload.Length);
+                fixture.Stream.Dispose();
+                var wire = Encoding.ASCII.GetString(fixture.Transport.ToArray());
+                Assert.That(wire, Does.Contain("X-Large: " + field + "\r\n"));
+                Assert.That(wire, Does.Contain("Set-Cookie: raw=one; Path=/\r\n"));
+                Assert.That(wire, Does.Contain("Set-Cookie: structured=two; Path=/\r\n"));
+                Assert.That(wire, Does.EndWith("\r\n\r\nABCDEF"));
+            }
         }
 
         [Test]
