@@ -105,3 +105,6 @@ establish exhaustive protocol conformance or cover every possible interleaving.
 Files remain immutable during a case; resource mutation, precompressed variants,
 all content negotiation grammars and general malformed-header parsing remain
 separate coverage areas.
+
+For mutable files and additional application/lifetime seams, see
+[stateful application-surface fuzzing](stateful-surface-fuzzing.md).

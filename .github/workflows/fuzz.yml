@@ -100,6 +100,7 @@ jobs:
           set -euo pipefail
           dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machine-selftest 2>&1 | tee TestResults/fuzz/selftest.log
           dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --response-pipeline-selftest 2>&1 | tee TestResults/fuzz/response-selftest.log
+          dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --extended-state-selftest 2>&1 | tee TestResults/fuzz/extended-selftest.log
       - name: Replay native-independent checked-in state traces
         shell: bash
         run: |
@@ -116,7 +117,7 @@ jobs:
           set -euo pipefail
           seed=$((GITHUB_RUN_ID % 2147483647))
           if (( seed == 0 )); then seed=1; fi
-          for scenario in websocket-budget rate-limits routes tunnels sessions auth-state auth-jwt; do
+          for scenario in websocket-budget rate-limits routes tunnels sessions auth-state auth-jwt controller-parity multipart-lifetime; do
             dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines "$seed" "$MODEL_CASES" "$scenario" 2>&1 | tee "TestResults/fuzz/$scenario.log"
           done
       - name: Exercise real HTTP/1 and HTTP/2 connections
@@ -125,7 +126,7 @@ jobs:
           set -euo pipefail
           seed=$((GITHUB_RUN_ID % 2147483647))
           if (( seed == 0 )); then seed=1; fi
-          for scenario in http1-connections http2-connections auth-http1 auth-http2 response-http1 response-http2; do
+          for scenario in http1-connections http2-connections auth-http1 auth-http2 response-http1 response-http2 server-lifecycle file-mutation request-codings permanent-bans; do
             dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines "$seed" "$CONNECTION_CASES" "$scenario" 2>&1 | tee "TestResults/fuzz/$scenario.log"
           done
       - name: Retain traces, provenance and transition counts

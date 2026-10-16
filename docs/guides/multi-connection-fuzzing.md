@@ -163,3 +163,7 @@ connection for three physical connections. HTTP/3 scenarios do not perform QUIC
 connection migration, address rebinding or packet-loss simulation.
 Post-drain listener endpoint rebinding is checked for HTTP/1 and HTTP/2 only;
 HTTP/3 native listener retirement remains covered by its separate runtime tests.
+
+Additional [stateful application campaigns](stateful-surface-fuzzing.md) cover
+controller parity, persistence rollback, lifecycle, mutable files, request
+codings and multipart ownership, with their own negative oracle checks.

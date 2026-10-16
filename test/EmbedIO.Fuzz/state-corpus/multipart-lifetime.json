@@ -1,0 +1,126 @@
+{
+  "Scenario": "multipart-lifetime",
+  "Seed": 1729,
+  "Steps": [
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 1,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 2,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 3,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 4,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 5,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 6,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 7,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 8,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 9,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 10,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 11,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 63
+    },
+    {
+      "Actor": 1,
+      "Command": 1,
+      "Value": 63
+    },
+    {
+      "Actor": 2,
+      "Command": 2,
+      "Value": 63
+    },
+    {
+      "Actor": 0,
+      "Command": 3,
+      "Value": 63
+    },
+    {
+      "Actor": 1,
+      "Command": 4,
+      "Value": 63
+    },
+    {
+      "Actor": 2,
+      "Command": 5,
+      "Value": 63
+    },
+    {
+      "Actor": 0,
+      "Command": 6,
+      "Value": 63
+    },
+    {
+      "Actor": 1,
+      "Command": 7,
+      "Value": 63
+    },
+    {
+      "Actor": 2,
+      "Command": 8,
+      "Value": 63
+    },
+    {
+      "Actor": 0,
+      "Command": 9,
+      "Value": 63
+    },
+    {
+      "Actor": 1,
+      "Command": 10,
+      "Value": 63
+    },
+    {
+      "Actor": 2,
+      "Command": 11,
+      "Value": 63
+    }
+  ]
+}
