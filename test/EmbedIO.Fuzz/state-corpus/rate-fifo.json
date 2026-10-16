@@ -1,0 +1,71 @@
+{
+  "Scenario": "rate-limits",
+  "Seed": 1729,
+  "Steps": [
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 1
+    },
+    {
+      "Actor": 1,
+      "Command": 0,
+      "Value": 1
+    },
+    {
+      "Actor": 2,
+      "Command": 0,
+      "Value": 6
+    },
+    {
+      "Actor": 1,
+      "Command": 0,
+      "Value": 11
+    },
+    {
+      "Actor": 2,
+      "Command": 4,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 2,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 2,
+      "Value": 1
+    },
+    {
+      "Actor": 1,
+      "Command": 2,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 2,
+      "Value": 6
+    },
+    {
+      "Actor": 1,
+      "Command": 2,
+      "Value": 11
+    }
+  ]
+}

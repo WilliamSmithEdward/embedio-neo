@@ -2,9 +2,24 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using EmbedIO.Utilities;
 
 if (FsCheckProperties.Run(args)) return;
+if (await StateMachineSelfTest.RunAsync(args)) return;
+
+if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateMachineTrace, CancellationToken, Task>>
+{
+    ["websocket-budget"] = SharedBudgetFuzz.RunAsync,
+    ["rate-limits"] = SharedRateLimitFuzz.RunAsync,
+    ["routes"] = SharedRoutesFuzz.RunAsync,
+    ["tunnels"] = SharedTunnelFuzz.RunAsync,
+    ["sessions"] = SharedSessionFuzz.RunAsync,
+    ["http1-connections"] = ConnectionIsolationFuzz.Http1Async,
+    ["http2-connections"] = ConnectionIsolationFuzz.Http2Async,
+    ["http3-connections"] = ConnectionIsolationFuzz.Http3Async,
+})) return;
 
 if (HpackInterop.Run(args) || Http1HeadFuzz.Run(args) || await Http2TransportFuzz.RunAsync(args) || await Http3TransportFuzz.RunAsync(args) || await WebSocketFuzz.RunAsync(args)) return;
 

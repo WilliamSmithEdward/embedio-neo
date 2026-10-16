@@ -1,0 +1,13 @@
+{
+  "Scenario": "sessions",
+  "Seed": 8378320,
+  "Steps": [
+    { "Actor": 2, "Command": 4, "Value": 58 },
+    { "Actor": 2, "Command": 8, "Value": 48 },
+    { "Actor": 0, "Command": 8, "Value": 45 },
+    { "Actor": 0, "Command": 0, "Value": 38 },
+    { "Actor": 1, "Command": 6, "Value": 40 },
+    { "Actor": 2, "Command": 9, "Value": 46 },
+    { "Actor": 0, "Command": 5, "Value": 41 }
+  ]
+}

@@ -2,9 +2,9 @@ name: Fuzz
 on:
   push:
     branches: [main]
-    paths: [src/EmbedIO/Http/Multipart/**, src/EmbedIO/Http/HttpContextExtensions.Multipart.cs, src/EmbedIO/Tunnels/HttpCapsule*.cs, src/EmbedIO/Tunnels/HttpTunnel.cs, src/EmbedIO/Tunnels/IHttpTunnelContext.cs, src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
+    paths: [src/**, test/EmbedIO.Fuzz/**, Directory.Build.props, Directory.Packages.props, global.json, .editorconfig, .github/workflows/fuzz.yml]
   pull_request:
-    paths: [src/EmbedIO/Http/Multipart/**, src/EmbedIO/Http/HttpContextExtensions.Multipart.cs, src/EmbedIO/Tunnels/HttpCapsule*.cs, src/EmbedIO/Tunnels/HttpTunnel.cs, src/EmbedIO/Tunnels/IHttpTunnelContext.cs, src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
+    paths: [src/**, test/EmbedIO.Fuzz/**, Directory.Build.props, Directory.Packages.props, global.json, .editorconfig, .github/workflows/fuzz.yml]
   schedule:
     - cron: '23 4 * * *'
   workflow_dispatch:
@@ -66,5 +66,116 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: http-transport-fuzz
+          path: TestResults/fuzz
+          if-no-files-found: ignore
+  shared-state:
+    name: Shared state and HTTP connections (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      MODEL_CASES: ${{ github.event_name == 'schedule' && '5000' || '500' }}
+      CONNECTION_CASES: ${{ github.event_name == 'schedule' && '128' || '32' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Build the locked state-machine harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p TestResults/fuzz
+          printf '%s\n' "$GITHUB_SHA" > TestResults/fuzz/source.txt
+          dotnet restore test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj --locked-mode 2>&1 | tee TestResults/fuzz/restore.log
+          dotnet build test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj -c Release --no-restore 2>&1 | tee TestResults/fuzz/build.log
+      - name: Verify replay, shrinking and cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machine-selftest 2>&1 | tee TestResults/fuzz/selftest.log
+      - name: Replay every checked-in state trace
+        shell: bash
+        run: |
+          set -euo pipefail
+          traces=(test/EmbedIO.Fuzz/state-corpus/*.json)
+          test -f "${traces[0]}"
+          for trace in "${traces[@]}"; do
+            name="$(basename "$trace" .json)"
+            dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines-replay "$trace" 2>&1 | tee "TestResults/fuzz/$name.log"
+          done
+      - name: Exercise shared resource models
+        shell: bash
+        run: |
+          set -euo pipefail
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          if (( seed == 0 )); then seed=1; fi
+          for scenario in websocket-budget rate-limits routes tunnels sessions; do
+            dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines "$seed" "$MODEL_CASES" "$scenario" 2>&1 | tee "TestResults/fuzz/$scenario.log"
+          done
+      - name: Exercise real HTTP/1 and HTTP/2 connections
+        shell: bash
+        run: |
+          set -euo pipefail
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          if (( seed == 0 )); then seed=1; fi
+          for scenario in http1-connections http2-connections; do
+            dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines "$seed" "$CONNECTION_CASES" "$scenario" 2>&1 | tee "TestResults/fuzz/$scenario.log"
+          done
+      - name: Retain traces, provenance and transition counts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: state-machine-fuzz-${{ matrix.os }}
+          path: TestResults/fuzz
+          if-no-files-found: ignore
+  http3-connections:
+    name: Real HTTP/3 connection state machines
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CONNECTION_CASES: ${{ github.event_name == 'schedule' && '128' || '32' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Install pinned Linux QUIC prerequisite
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p TestResults/fuzz
+          package="$RUNNER_TEMP/libmsquic_2.6.2_amd64.deb"
+          curl --fail --location --retry 3 --output "$package" https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/libm/libmsquic/libmsquic_2.6.2_amd64.deb
+          printf '%s  %s\n' 9ac90841ad45d99c1ff85b427d6dc7f0849291d596f0049d13db779a5a66ba4e "$package" | sha256sum --check
+          sudo apt-get update
+          sudo apt-get install --yes "$package"
+          dpkg-query --show libmsquic | tee TestResults/fuzz/quic-native.log
+      - name: Build the locked state-machine harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$GITHUB_SHA" > TestResults/fuzz/source.txt
+          dotnet restore test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj --locked-mode 2>&1 | tee TestResults/fuzz/restore.log
+          dotnet build test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj -c Release --no-restore 2>&1 | tee TestResults/fuzz/build.log
+      - name: Exercise real HTTP/3 connections
+        shell: bash
+        run: |
+          set -euo pipefail
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          if (( seed == 0 )); then seed=1; fi
+          dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines "$seed" "$CONNECTION_CASES" http3-connections 2>&1 | tee TestResults/fuzz/http3-connections.log
+      - name: Retain QUIC traces, provenance and transition counts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: state-machine-fuzz-http3-linux
           path: TestResults/fuzz
           if-no-files-found: ignore

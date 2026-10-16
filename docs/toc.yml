@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Multi-connection state-machine fuzzing
+      href: guides/multi-connection-fuzzing.md
     - name: Streaming multipart uploads
       href: guides/streaming-multipart.md
     - name: WebSocket handshake status
